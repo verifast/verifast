@@ -152,11 +152,15 @@ int length(struct llist *list)
   struct node *l = list->last;
   int c = 0;
   while (n != l)
-    //@ invariant readonly(lseg(n, l, _ls)) &*& c + len(_ls) == len(_v);
+    //@ invariant lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v = list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
   {
-    //@ open_readonly lseg(n, l, _);
-    //@ open_readonly node(n, _);
-    n = n->next;
+    //@ open lseg(n, l, _);
+    //@ open node(n, _, _);
+    struct node *next = n->next;
+    //@ close node(n, n->next, n->value);
+    //@ close lseg(next, l, _);
+    //@ lseg_add(f, n, next);
+    n = next;
     c = c + 1;
   }
   //@ close llist(list, _v);
@@ -185,14 +189,19 @@ int lookup(struct llist *list, int index)
   //@ ensures llist(list, _v) &*& result == ith(_v, index);
 {
   //@ open llist(list, _);
+  struct node *f = list->first;
   struct node *l = list->last;
-  struct node *n = list->first;
+  struct node *n = f;
   int i = 0;
   while (i < index)
-    //@ invariant i <= index &*& readonly(lseg(n, l, _ls)) &*& _ls == drop(i, _v);
+    //@ invariant i <= index &*& lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v = list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
   {
-    //@ open_readonly lseg(n, l, _);
-    //@ open_readonly node(n, _);
+    //@ open lseg(n, l, _);
+    //@ open node(n, _, _);
+    struct node *next = n->next;
+    //@ close node(n, _, _);
+    //@ close lseg(next, l, _);
+    //@ lseg_add(f, n, next);
     n = n->next;
     i = i + 1;
   }
