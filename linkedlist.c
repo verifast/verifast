@@ -11,7 +11,7 @@ struct llist {
 //@ predicate node(struct node *node, struct node *next, int value)
 //@   requires node->next |-> next &*& node->value |-> value &*& malloc_block(node);
 
-//@ inductive intlist = nil | cons(int, intlist);
+//@ inductive intlist = | nil | cons(int, intlist);
 
 //@ fixpoint int len(intlist v) {
 //@   switch (v) {
@@ -63,7 +63,7 @@ struct llist *create_llist()
 //@   } else {
 //@     lseg_add(n1->next, n2, n3);
 //@   }
-//@   close lseg(n1, n3, list_add(_v, _x);
+//@   close lseg(n1, n3, list_add(_v, _x));
 //@ }
 
 void add(struct llist *list, int x)
@@ -170,7 +170,7 @@ int length(struct llist *list)
 //@ fixpoint intlist drop(int i, intlist v) {
 //@   switch (v) {
 //@     case nil: return nil;
-//@     case cons(x, v): i == 0 ? cons(x, v) : drop(i - 1, v);
+//@     case cons(x, v): return i == 0 ? cons(x, v) : drop(i - 1, v);
 //@   }
 //@ }
 
@@ -194,7 +194,7 @@ int lookup(struct llist *list, int index)
   struct node *n = f;
   int i = 0;
   while (i < index)
-    //@ invariant i <= index &*& lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v = list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
+    //@ invariant i <= index &*& lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
   {
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);
