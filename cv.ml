@@ -196,19 +196,8 @@ let make_lexer keywords stream =
     | _ -> Some (keyword_or_error '/')
   and comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
-      Some '@' -> Stream.junk strm__; next_token strm__
-    | Some '\010' | '\013' -> next_token strm__
-    | Some c -> Stream.junk strm__; comment strm__
-    | _ -> raise Stream.Failure
-  and maybe_nested_comment (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
-      Some '*' -> Stream.junk strm__; let s = strm__ in comment s; comment s
-    | Some c -> Stream.junk strm__; comment strm__
-    | _ -> raise Stream.Failure
-  and maybe_end_comment (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
-      Some ')' -> Stream.junk strm__; ()
-    | Some '*' -> Stream.junk strm__; maybe_end_comment strm__
+      Some '@' -> Stream.junk strm__
+    | Some '\010' | Some '\013' -> ()
     | Some c -> Stream.junk strm__; comment strm__
     | _ -> raise Stream.Failure
   in
@@ -226,14 +215,14 @@ and
   | CallExpr of loc * string * expr list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
-  | SizeofExpr of loc * type
+  | SizeofExpr of loc * type_expr
 and
   switch_expr_clause =
-  | SwitchExprClause of loc * string * string list * expr
+    SwitchExprClause of loc * string * string list * expr
 and
   stmt =
     Assign of loc * string * expr
-  | DeclStmt of loc * type * string * expr
+  | DeclStmt of loc * type_expr * string * expr
   | Write of loc * expr * string * expr
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
@@ -266,16 +255,16 @@ and
   decl =
   | Inductive of loc * string * ctor list
   | Struct of loc * string * field list
-  | PredDecl of loc * string * (type * string) list * pred
-  | Func of loc * func_kind * type option * string * (type * string) list * (pred * pred) option * stmt list
+  | PredDecl of loc * string * (type_expr * string) list * pred
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list
 and
   field =
-  | Field of type * string
+  | Field of type_expr * string
 and
   ctor =
-  | Ctor of loc * string * type list
+  | Ctor of loc * string * type_expr list
 and
-  type =
+  type_expr =
   | TypeName of loc * string
   | PtrType of loc * string   (* Always pointer-to-struct for now. *)
 and
@@ -289,10 +278,10 @@ let expr_loc e =
     Var (l, x) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
-  | Call (l, g, es) -> l
+  | CallExpr (l, g, es) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs) -> l
-  | SizeofExpr (l, t) ) -> l
+  | SizeofExpr (l, t) -> l
 
 let pred_loc p =
   match p with
@@ -329,10 +318,10 @@ and
   [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = parse_ctors; '(_, Kwd ";") >] -> Inductive (l, i, cs)
 | [< '(l, Kwd "struct"); '(_, Ident s); '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
 | [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> PredDecl (l, g, ps, p)
-| [< k = parse_kind; t = parse_return_type; '(l, Ident g); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
+| [< k = parse_func_kind; t = parse_return_type; '(l, Ident g); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
 and
   parse_ctors = parser
-  [< '(_, Kwd "|"); '(l, Ident cn); '(_, Kwd "("); ts = parse_types; cs = parse_ctors >] -> Ctor (cn, ts)::cs
+  [< '(_, Kwd "|"); '(l, Ident cn); '(_, Kwd "("); ts = parse_types; cs = parse_ctors >] -> Ctor (l, cn, ts)::cs
 | [< >] -> []
 and
   parse_types = parser
@@ -344,7 +333,7 @@ and
 | [< '(_, Kwd ")") >] -> []
 and
   parse_fields = parser
-  [< '(_, Kwd "}" >] -> []
+  [< '(_, Kwd "}") >] -> []
 | [< f = parse_field; fs = parse_fields >] -> f::fs
 and
   parse_field = parser
@@ -421,7 +410,7 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []; '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, xs, ss)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
 and
   parse_pred = parser
   [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
@@ -431,7 +420,7 @@ and
 | [< >] -> p1
 and
   parse_pred0 = parser
-  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"; cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchPred (l, e, cs)
+  [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchPred (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpPred l
 | [< e = parse_conj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_expr >] ->
@@ -465,9 +454,6 @@ and
   parse_expr_suffix = parser
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
-  parse_funcall = parser
-  [< e = parse_expr_suffix >] -> (match e with FunCall (l, e, g, es) -> (l, e, g, es) | _ -> raise (Stream.Error "call expected"))
-and
   parse_expr_primary = parser
   [< '(l, Ident x); e = parser [< args = parse_arglist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
 | [< '(l, Int i) >] -> Operation (l, string_of_int i, [])
@@ -483,7 +469,7 @@ and
 and
   parse_expr_arith_rest e0 = parser
   [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, "+", [e0; e1])) >] -> e
-  [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, "-", [e0; e1])) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, "-", [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
