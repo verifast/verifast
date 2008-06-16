@@ -814,12 +814,12 @@ let verify_program path =
   let match_chunk env g pats (g', ts0) =
     let rec iter env pats ts =
       match (pats, ts) with
-        (ExprPat e::pats, t::ts) -> if eval env e == t then iter env pats ts else None
+        (ExprPat e::pats, t::ts) -> if eval env e = t then iter env pats ts else None
       | (VarPat x::pats, t::ts) -> iter (update env x t) pats ts
       | (DummyPat::pats, t::ts) -> iter env pats ts
       | ([], []) -> Some (ts0, env)
     in
-      if g == g' then
+      if g = g' then
         iter env pats ts0
       else
         None
@@ -964,14 +964,14 @@ let verify_program path =
       iter cs
     | Open (l, g, pats) ->
       assert_chunk h env l g pats (fun h ts _ ->
-        let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
+        let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
         assume_pred h env' p (fun h _ ->
           cont h env))
     | Close (l, g, pats) ->
       let ts = List.map (function ExprPat e -> ev e) pats in
-      let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
       let ys = List.map (function (t, p) -> p) ps in
       let Some env' = zip ys ts in
       assert_pred h env' p (fun h _ ->
