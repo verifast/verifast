@@ -216,6 +216,7 @@ and
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
   | SizeofExpr of loc * type_expr
+  | TypeExpr of loc * type_expr
 and
   switch_expr_clause =
     SwitchExprClause of loc * string * string list * expr
@@ -227,8 +228,8 @@ and
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
   | SwitchStmt of loc * expr * switch_stmt_clause list
-  | Open of loc * expr * string * expr list
-  | Close of loc * expr * string * expr list
+  | Open of loc * string * expr list
+  | Close of loc * string * expr list
   | ReturnStmt of loc * expr option
   | WhileStmt of loc * expr * pred * stmt list
 and
@@ -236,7 +237,7 @@ and
   | SwitchStmtClause of loc * string * string list * stmt list
 and
   pred =
-    Access of loc * expr * expr
+    Access of loc * expr * string * expr
   | CallPred of loc * string * expr list
   | ExprPred of loc * expr
   | Sep of loc * pred * pred
@@ -259,7 +260,7 @@ and
   | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list
 and
   field =
-  | Field of type_expr * string
+  | Field of loc * type_expr * string
 and
   ctor =
   | Ctor of loc * string * type_expr list
@@ -282,10 +283,11 @@ let expr_loc e =
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs) -> l
   | SizeofExpr (l, t) -> l
+  | TypeExpr (l, t) -> l
 
 let pred_loc p =
   match p with
-    Access (l, e, f) -> l
+    Access (l, e, f, rhs) -> l
   | CallPred (l, g, es) -> l
   | ExprPred (l, e) -> l
   | Sep (l, p1, p2) -> l
@@ -364,7 +366,7 @@ and
 | [< p = parse_param; ps = parse_more_params >] -> p::ps
 and
   parse_param = parser
-  [< t = parse_type; '(l, Ident pn) >] -> (t, p)
+  [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
 and
   parse_more_params = parser
   [< '(_, Kwd ","); p = parse_param; ps = parse_more_params >] -> p::ps
@@ -385,23 +387,23 @@ and
   [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}"); '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (StreamError "Body of open statement must be call expression."))
+  (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (Stream.Error "Body of open statement must be call expression."))
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (StreamError "Body of close statement must be call expression."))
-| [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> Return (l, eo)
-| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "invariant"); p = parse_pred; b = parse_block >] -> While (l, e, p, b)
+  (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (Stream.Error "Body of close statement must be call expression."))
+| [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
+| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "invariant"); p = parse_pred; b = parse_block >] -> WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, es) | _ -> raise (StreamError "An expression used as a statement must be a call expression."))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, es) | _ -> raise (Stream.Error "An expression used as a statement must be a call expression."))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (_, x) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
-     | _ -> raise (StreamError "The left-hand side of an assignment must be an identifier or a field dereference expression.")
+     | _ -> raise (Stream.Error "The left-hand side of an assignment must be an identifier or a field dereference expression.")
     )
-  | [< '(_, Ident x); '(_, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+  | [< '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | TypeExpr (_, t) -> DeclStmt (l, t, x, rhs)
-     | _ -> raise (StreamError "A local variable declaration statement must start with a type expression.")
+     | _ -> raise (Stream.Error "A local variable declaration statement must start with a type expression.")
     )
   >] -> s
 and
@@ -411,6 +413,10 @@ and
 and
   parse_switch_stmt_clause = parser
   [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
+and
+  parse_more_pats = parser
+  [< '(_, Kwd ")") >] -> []
+| [< '(_, Kwd ","); '(_, Ident x); xs = parse_more_pats >] -> x::xs
 and
   parse_pred = parser
   [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
@@ -426,7 +432,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_expr >] ->
     (match e with
      | Read (_, e, f) -> Access (l, e, f, rhs)
-     | _ -> raise (StreamError "Left-hand side of access predicate must be a field dereference expression.")
+     | _ -> raise (Stream.Error "Left-hand side of access predicate must be a field dereference expression.")
     )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
@@ -435,6 +441,13 @@ and
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
+and
+  parse_switch_pred_clauses = parser
+  [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs
+| [< >] -> []
+and
+  parse_switch_pred_clause = parser
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, p)
 and
   parse_expr = parser
   [< e0 = parse_conj_expr; e = parser
@@ -462,6 +475,13 @@ and
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
+and
+  parse_switch_expr_clauses = parser
+  [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
+| [< >] -> []
+and
+  parse_switch_expr_clause = parser
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
