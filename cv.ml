@@ -604,10 +604,14 @@ let rec conj ts : formula =
     [] -> True
   | t :: ts -> And (t, conj ts)
 
+let lookup env x = if List.mem_assoc x env then List.assoc x env else Symb x
+let update env x t = (x, t)::env
+let string_of_env env = slist (List.map (function (x, t) -> slist [x; simpt t]) env)
+
 let rec eval env e =
   let ev = eval env in
   match e with
-    Var (l, x) -> env x
+    Var (l, x) -> lookup env x
   | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
 (*  | Read (l, e, f) ->  *)
   | CallExpr (l, g, pats) -> FunApp (g, List.map (function (ExprPat e) -> ev e) pats)
@@ -628,8 +632,6 @@ let rec exptrue env e =
   | Operation (_, "lt", [e1; e2]) -> PredApp ("<", [ev e1; ev e2])
   | Operation (_, "&&", [e1; e2]) -> And (etrue e1, etrue e2)
   | _ -> Eq (ev e, Symb "true")
-
-let update env x t y = if y == x then t else env y
 
 let zip xs ys =
   let rec iter xs ys zs =
@@ -675,7 +677,6 @@ let verify_program path =
   in
   
   let indaxs =
-    let env x = Symb x in
     flatmap
     (function
        Inductive (l, i, cs) ->
@@ -711,10 +712,11 @@ let verify_program path =
          (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
             let xs' = flatmap (fun y -> if y = x then pats else [y]) xs in
             let args = List.map (fun y -> if y = x then match pats with [] -> cn | _ -> slist (cn :: pats) else y) xs in
+            let env = List.map (fun x -> (x, Symb x)) xs' in
+            let body = slist ["EQ"; slist (g :: args); simpt (eval env e)] in
             match xs' with
-              [] -> slist ["EQ"; slist (g :: args); simpt (eval env e)]
-            | _ ->
-              slist ["FORALL"; slist xs'; slist ["PATS"; slist (g :: args)]; slist ["EQ"; slist (g :: args); simpt (eval env e)]]
+              [] -> body
+            | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (g :: args)]; body]
          )
          cs
      | _ -> []
@@ -888,11 +890,13 @@ let verify_program path =
   in
   
   let get_field h t f l cont =
-    assert_chunk h (fun x -> List.assoc x [("x", t)]) l ("field_" ^ f) [ExprPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts env ->
-      cont h (env "y"))
+    assert_chunk h [("x", t)] l ("field_" ^ f) [ExprPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts env ->
+      cont h (lookup env "y"))
   in
 
   let rec verify_stmt tenv h env s tcont =
+    let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
+    let _ = print_endline ("Env: " ^ string_of_env env) in
     let ev = eval env in
     let etrue = exptrue env in
     let cont = tcont tenv in
@@ -912,7 +916,7 @@ let verify_program path =
       let rec iter h fds =
         match fds with
           [] -> cont h env
-        | (Field (lf, t, f))::fds -> get_field h (env x) f l (fun h _ -> iter h fds)
+        | (Field (lf, t, f))::fds -> get_field h (lookup env x) f l (fun h _ -> iter h fds)
       in
       assert_chunk h env l ("malloc_block_" ^ tn) [ExprPat (Var (lv, x))] (fun h _ _ -> iter h fds)
     | Assign (l, x, CallExpr (lc, g, pats)) ->
@@ -923,8 +927,7 @@ let verify_program path =
         [] -> cont h (update env x (FunApp (g, ts)))
       | [(ps, pre, post)] ->
         let ys = List.map (function (t, p) -> p) ps in
-        let Some bindings = zip ys ts in
-        let env' x = List.assoc x bindings in
+        let Some env' = zip ys ts in
         assert_pred h env' pre (fun h env' ->
           let r = get_unique_symb "result" in
           let env'' = update env' "result" r in
@@ -935,7 +938,7 @@ let verify_program path =
     | Assign (l, x, e) ->
       cont h (update env x (ev e))
     | DeclStmt (l, t, x, e) ->
-      verify_stmt (update tenv x t) h env (Assign (l, x, e)) tcont
+      verify_stmt (fun y -> if y = x then t else tenv y) h env (Assign (l, x, e)) tcont
     | Write (l, e, f, rhs) ->
       let t = ev e in
       get_field h t f l (fun h _ ->
@@ -963,16 +966,14 @@ let verify_program path =
       assert_chunk h env l g pats (fun h ts _ ->
         let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
         let ys = List.map (function (t, p) -> p) ps in
-        let Some bs = zip ys ts in
-        let env' x = List.assoc x bs in
-          assume_pred h env' p (fun h _ ->
-            cont h env))
+        let Some env' = zip ys ts in
+        assume_pred h env' p (fun h _ ->
+          cont h env))
     | Close (l, g, pats) ->
       let ts = List.map (function ExprPat e -> ev e) pats in
       let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
       let ys = List.map (function (t, p) -> p) ps in
-      let Some bs = zip ys ts in
-      let env' x = List.assoc x bs in
+      let Some env' = zip ys ts in
       assert_pred h env' p (fun h _ ->
         cont ((g, ts)::h) env)
     | ReturnStmt (l, Some e) ->
@@ -983,7 +984,7 @@ let verify_program path =
       assert_pred h env p (fun h env ->
         let ts = List.map get_unique_symb xs in
         let Some bs = zip xs ts in
-        let env x = if List.mem x xs then List.assoc x bs else env x in
+        let env = bs @ env in
         branch
           (fun _ ->
              assume_pred [] env p (fun h env ->
@@ -1014,7 +1015,7 @@ let verify_program path =
     match d with
       Func (l, Fixpoint, _, _, _, _, _) -> ()
     | Func (l, _, _, g, ps, Some (pre, post), ss) ->
-      let env x = Symb x in
+      let env = List.map (function (t, p) -> (p, Symb p)) ps in
       let pts = List.map (function (t, p) -> (p, t)) ps in
       let tenv x = List.assoc x pts in
       assume_pred [] env pre (fun h env ->
