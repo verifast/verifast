@@ -78,7 +78,7 @@ void add(struct llist *list, int x)
   //@ struct node *next = n->next;
   //@ int value = n->value;
   //@ close node(n, next, value);
-  struct node *f = list->first;
+  //@ struct node *f = list->first;
   struct node *l = list->last;
   l->next = n;
   l->value = x;

@@ -316,7 +316,7 @@ let read_program s =
   let c = open_in s in
   let (loc, token_stream) = lexer (Stream.of_channel c) in
 let rec parse_program = parser
-  [< ds = parse_decls; _ = let _ = print_endline "eof" in Stream.empty >] -> Program ds
+  [< ds = parse_decls; _ = Stream.empty >] -> Program ds
 and
   parse_decls = parser
   [< d = parse_decl; ds = parse_decls >] -> d::ds
@@ -613,7 +613,10 @@ let rec eval env e =
   | CallExpr (l, g, pats) -> FunApp (g, List.map (function (ExprPat e) -> ev e) pats)
   | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
 (*  | SwitchExpr (l, e, cs) *)
-(*  | SizeofExpr (l, t) *)
+  | SizeofExpr (l, t) ->
+    match t with
+      TypeName (_, tn) -> Symb ("sizeof_" ^ tn)
+    | PtrType (_, tn) -> Symb "sizeof_ptr"
 
 let rec exptrue env e =
   let etrue = exptrue env in
@@ -897,9 +900,11 @@ let verify_program path =
       let t = ev e in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
+    | Assign (l, x, CallExpr (lc, "malloc", [ExprPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
+      let sds = flatmap (function (Struct (ls, sn, fds) -> 
     | Assign (l, x, CallExpr (lc, g, pats)) ->
       let ts = List.map (function (ExprPat e) -> ev e) pats in
-      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
+      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
       (
       match fds with
         [] -> cont h (update env x (FunApp (g, ts)))
