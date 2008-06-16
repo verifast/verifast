@@ -804,7 +804,9 @@ let verify_program path =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
           branch
-            (fun _ -> assume (Eq (t, FunApp(cn, List.map (fun x -> Symb x) pats))) (fun _ -> assume_pred h env p cont))
+            (fun _ ->
+               let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
+               assume (Eq (t, FunApp(cn, List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -962,8 +964,9 @@ let verify_program path =
         match cs with
           [] -> success()
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+          let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun x -> Symb x) pats))) (fun _ -> verify_cont tenv h env ss tcont))
+            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont tenv h (xts @ env) ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
