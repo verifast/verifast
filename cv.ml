@@ -212,11 +212,16 @@ and
     Var of loc * string
   | Operation of loc * operator * expr list
   | Read of loc * expr * string
-  | CallExpr of loc * string * expr list
+  | CallExpr of loc * string * pat list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
   | SizeofExpr of loc * type_expr
   | TypeExpr of loc * type_expr
+and
+  pat =
+    ExprPat of expr
+  | VarPat of string
+  | DummyPat
 and
   switch_expr_clause =
     SwitchExprClause of loc * string * string list * expr
@@ -228,8 +233,8 @@ and
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
   | SwitchStmt of loc * expr * switch_stmt_clause list
-  | Open of loc * string * expr list
-  | Close of loc * string * expr list
+  | Open of loc * string * pat list
+  | Close of loc * string * pat list
   | ReturnStmt of loc * expr option
   | WhileStmt of loc * expr * pred * stmt list
 and
@@ -237,8 +242,8 @@ and
   | SwitchStmtClause of loc * string * string list * stmt list
 and
   pred =
-    Access of loc * expr * string * expr
-  | CallPred of loc * string * expr list
+    Access of loc * expr * string * pat
+  | CallPred of loc * string * pat list
   | ExprPred of loc * expr
   | Sep of loc * pred * pred
   | IfPred of loc * expr * pred * pred
@@ -279,7 +284,7 @@ let expr_loc e =
     Var (l, x) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
-  | CallExpr (l, g, es) -> l
+  | CallExpr (l, g, pats) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs) -> l
   | SizeofExpr (l, t) -> l
@@ -304,7 +309,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "true"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"; "_"
 ]
 
 let read_program s =
@@ -434,7 +439,7 @@ and
   [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchPred (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpPred l
 | [< e = parse_conj_expr; p = parser
-    [< '(l, Kwd "|->"); rhs = parse_expr >] ->
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] ->
     (match e with
      | Read (_, e, f) -> Access (l, e, f, rhs)
      | _ -> raise (Stream.Error "Left-hand side of access predicate must be a field dereference expression.")
@@ -442,10 +447,15 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, es) -> CallPred (l, g, es)
+     | CallExpr (l, g, pats) -> CallPred (l, g, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
+and
+  parse_pattern = parser
+  [< '(_, Kwd "_") >] -> DummyPat
+| [< '(_, Kwd "?"); '(_, Ident x) >] -> VarPat x
+| [< e = parse_expr >] -> ExprPat e
 and
   parse_switch_pred_clauses = parser
   [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs
@@ -473,7 +483,7 @@ and
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
   parse_expr_primary = parser
-  [< '(l, Ident x); e = parser [< args = parse_arglist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
+  [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
 | [< '(l, Int i) >] -> Operation (l, string_of_int i, [])
 | [< '(l, Kwd "true") >] -> Operation (l, "true", [])
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
@@ -514,6 +524,13 @@ and
 and
   parse_arglist_rest = parser
   [< '(_, Kwd ","); e0 = parse_expr; es = parse_arglist_rest >] -> e0::es
+| [< '(_, Kwd ")") >] -> []
+and
+  parse_patlist = parser
+  [< '(l, Kwd "("); pats = parser [< '(_, Kwd ")") >] -> [] | [< pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats >] -> pats
+and
+  parse_patlist_rest = parser
+  [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
 in
   try
@@ -593,7 +610,7 @@ let rec eval e =
     Var (l, x) -> Symb x
   | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
 (*  | Read (l, e, f) ->  *)
-  | CallExpr (l, g, es) -> FunApp (g, List.map ev es)
+  | CallExpr (l, g, pats) -> FunApp (g, List.map (function (ExprPat e) -> ev e) es)
   | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
 (*  | SwitchExpr (l, e, cs) *)
 (*  | SizeofExpr (l, t) *)
@@ -702,14 +719,27 @@ let verify_program path =
 	  [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then [] else input_reply())
 	in
 	
+	let evalpat env pat cont =
+	  match pat with
+	    ExprPat e -> cont env (eval env e)
+	  | VarPat x -> let t = get_unique_symb x in cont (update env x t) t
+	  | DummyPat -> let t = get_unique_symb "dummy" in cont env t
+	in
+	
+	let evalpats env pats cont =
+	  match pats with
+	    [] -> cont env []
+	  | pat::pats -> evalpat env pat (fun env t -> evalpats env pats (fun env ts -> cont env (t::ts)))
+	in
+	
 	let assume_pred h env p cont =
 	  let ev = eval env in
 	  let etrue = exptrue env in
 	  match p with
-	  | Access (l, e, f, rhs) -> cont (("field_" ^ f, [ev e; ev rhs])::h)
-	  | CallPred (l, g, es) -> cont ((g, List.map ev es)::h)
-	  | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h)
-	  | Sep (l, p1, p2) -> assume_pred h env p1 (fun h -> assume_pred h env p2 cont)
+	  | Access (l, e, f, rhs) -> let te = ev e in evalpat env rhs (fun env t -> cont (("field_" ^ f, [te; t])::h) env)
+	  | CallPred (l, g, pats) -> evalpats env pats (fun env ts -> cont ((g, ts)::h) env)
+	  | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h env)
+	  | Sep (l, p1, p2) -> assume_pred h env p1 (fun h env -> assume_pred h env p2 cont)
 	  | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (etrue e) (fun _ -> assume_pred h env p1 cont)) (fun _ -> assume (Not (etrue e)) (fun _ -> assume_pred h env p2 cont))
 	  | SwitchPred (l, e, cs) ->
 	    let t = ev e in
@@ -722,18 +752,74 @@ let verify_program path =
 	      | [] -> success()
 	    in
 	    iter cs
-	  | EmpPred l -> cont h
+	  | EmpPred l -> cont h env
 	in
+	
+	let match_chunk env g pats (g', ts0) =
+	  let rec iter env pats ts =
+	    match (pats, ts) with
+	      (ExprPat e::pats, t::ts) -> if eval env e == t then iter env pats ts else None
+	    | (VarPat x::pats, t::ts) -> iter (update env x t) pats ts
+	    | (DummyPat::pats, t::ts) -> iter env pats ts
+	    | ([], []) -> Some (ts0, env)
+	  in
+	    if g == g' then
+	      iter env pats ts0
+	    else
+	      None
+	in
+	
+	let assert_chunk h env l g pats cont =
+	  let iter hprefix h =
+	    match h with
+	      [] -> []
+	    | chunk::h ->
+	      let matches =
+	        match match_chunk env g pats chunk with
+	          None -> []
+	        | Some (ts, env) -> (hprefix @ h, ts, env)
+	      in
+	        match @ iter (h::hprefix) h
+	  in
+	  match iter [] h with
+	    [] -> assert False l "No matching heap chunks." (fun _ -> success())
+	  | [(h, ts, env)] -> cont h ts env
+	  | _ -> assert False l "Multiple matching heap chunks." (fun _ -> success())
 	
 	let assert_pred h env p cont =
 	  let ev = eval env in
 	  let etrue = exptrue env in
 	  match p with
 	  | Access (l, e, f, rhs) ->
+	    assert_chunk h env ("field_" ^ f) [ExprPat e; rhs] (fun h ts env -> cont h env)
+	  | CallPred (l, g, pats) ->
+	    assert_chunk h env g pats (fun h ts env -> cont h env)
+	  | ExprPred (l, e) ->
+	    assert (etrue e) (fun _ -> cont h env)
+	  | Sep (l, p1, p2) ->
+	    assert_pred h env p1 (fun h env -> assert_pred h env p2 cont)
+	  | IfPred (l, e, p1, p2) ->
+	    branch
+	      (fun _ ->
+	         assume (etrue e) (fun _ ->
+	           assert_pred h env p1 cont))
+	      (fun _ ->
+	         assume (Not (etrue e)) (fun _ ->
+	           assert_pred h env p2 cont))
+	  | SwitchPred (l, e, cs) ->
 	    let t = ev e in
-	    get_field h t f (fun h v ->
-	      assert (
-  
+	    let rec iter cs =
+	      match cs with
+	        SwitchPredClause (lc, cn, pats, p)::cs ->
+	        branch
+	          (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun x -> Symb x) pats))) (fun _ -> assert_pred h env p cont))
+	          (fun _ -> iter cs)
+	      | [] -> success()
+	    in
+	    iter cs
+	  | EmpPred l -> cont h env
+	in
+
   let update env x t y = if y == x then t else env y in
   
   let zip xs ys =
@@ -757,6 +843,10 @@ let verify_program path =
     | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
   in
   
+  let get_field h t f l cont =
+    assert_chunk h (fun x -> List.assoc x [("x", t)]) ("field_" ^ f) [ExprPat (Var "x"); VarPat "y"] (fun h ts env ->
+      cont h (env "y"))
+
   let rec verify_stmt h env s cont =
     let ev = eval env in
     match s with
@@ -764,22 +854,19 @@ let verify_program path =
       let t = ev e in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
-    | Assign (l, x, CallExpr (lc, g, es)) ->
-      let ts = List.map ev es in
-      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (xs, pre, post), _) when k != Fixpoint -> [(ps, xs, pre, post)] | _ -> []) ds in
+    | Assign (l, x, CallExpr (lc, g, pats)) ->
+      let ts = List.map (function (ExprPat e) -> ev e) es in
+      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _) when k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
       match fds with
         [] -> cont h (update env x (FunApp (g, ts)))
-      | [(ps, xs, pre, post)] ->
+      | [(ps, pre, post)] ->
         let ys = List.map (function (t, p) -> p) ps in
         let Some bindings = zip ys ts in
-        let zs = List.map get_unique_symb xs in
-        let Some bindings' = zip xs zs in
-        let bindings'' = bindings @ bindings' in
-        let env' x = List.assoc x bindings'' in
-        assert_pred h env' pre (fun h ->
+        let env' x = List.assoc x bindings' in
+        assert_pred h env' pre (fun h env' ->
           let r = get_unique_symb "result" in
-          let env'' x = update env' "result" r in
-          assume_pred h env'' post (fun h ->
+          let env'' = update env' "result" r in
+          assume_pred h env'' post (fun h _ ->
             cont h (update env x r))
         )
     | Assign (l, x, e) ->
@@ -791,7 +878,7 @@ let verify_program path =
       get_field h t f (fun h _ ->
         cont (("field_" ^ f, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
-      let x = get_unique_id "result" in
+      let x = get_unique_id "|<result>|" in   (* HACK *)
       verify_stmt h env (Assign (l, x, CallExpr (l, g, es))) cont
     | IfStmt (l, e, ss1, ss2) ->
       let phi = etrue e in
@@ -809,34 +896,26 @@ let verify_program path =
             (fun _ -> iter cs)
       in
       iter cs
-    | Open (l, g, es) ->
-      let ts = List.map ev es in
-      let [(lpd, ps, xs, p)] = flatmap (function Predicate (lpd, g', ps, xs, p) when g == g' -> [(lpd, ps, xs, p)] | _ -> []) ds in
+    | Open (l, g, pats) ->
+      assert_chunk h env g pats l (fun h ts _ ->
+        let [(lpd, ps, p)] = flatmap (function Predicate (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
+        let ys = List.map (function (t, p) -> p) ps in
+        let Some bs = zip ys ts in
+        let env' x = List.assoc x bs in
+          assume_pred h env' p (fun h _ ->
+            cont h env))
+    | Close (l, g, pats) ->
+      let ts = List.map (function ExprPat e -> ev e) pats in
+      let [(lpd, ps, p)] = flatmap (function Predicate (lpd, g', ps, p) when g == g' -> [(lpd, ps, p)] | _ -> []) ds in
       let ys = List.map (function (t, p) -> p) ps in
-      let zs = List.map get_unique_symb xs in
-      let Some bs1 = zip ys ts in
-      let Some bs2 = zip xs zs in
-      let bs = bs1 @ bs2 in
+      let Some bs = zip ys ts in
       let env' x = List.assoc x bs in
-      get_chunk g ts l (fun h ->
-        assume_pred h env' p (fun h ->
-          cont h env))
-    | Close (l, g, es) ->
-      let ts = List.map ev es in
-      let [(lpd, ps, xs, p)] = flatmap (function Predicate (lpd, g', ps, xs, p) when g == g' -> [(lpd, ps, xs, p)] | _ -> []) ds in
-      let ys = List.map (function (t, p) -> p) ps in
-      let zs = List.map get_unique_symb xs in
-      let Some bs1 = zip ys ts in
-      let Some bs2 = zip xs zs in
-      let bs = bs1 @ bs2 in
-      let env' x = List.assoc x bs in
-      assert_pred h env' p (fun h ->
+      assert_pred h env' p (fun h _ ->
         cont ((g, ts)::h) env)
     | ReturnStmt (l, Some e) ->
       cont h (update env "result" (ev e))
     | ReturnStmt (l, None) -> cont h env
     | WhileStmt (l, e, p, ss) ->
-      let phi = etrue e in
       let xs = block_assigned_variables ss in
       assert_pred h env p (fun h ->
         let ts = List.map get_unique_symb xs in
@@ -844,10 +923,10 @@ let verify_program path =
         let env x = if List.mem x xs then List.assoc x bs else env x in
         branch
           (fun _ ->
-             assume_pred [] env p (fun h ->
-               assume (Not phi) (fun _ ->
+             assume_pred [] env p (fun h env ->
+               assume (Not (exptrue env e)) (fun _ ->
                  verify_cont h env ss (fun h env ->
-                   assert_pred h env phi (fun h ->
+                   assert_pred h env phi (fun h _ ->
                      match h with
                        [] -> success()
                      | _ -> assert False l "Loop leaks heap chunks." (fun _ -> success())
@@ -857,8 +936,8 @@ let verify_program path =
              )
            )
            (fun _ ->
-              assume_pred h env p (fun h ->
-                assume phi (fun _ ->
+              assume_pred h env p (fun h _ ->
+                assume (exptrue env e) (fun _ ->
                   cont h env)))
       )
   and

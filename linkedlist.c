@@ -39,7 +39,9 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
-  //@ close node(n, _, _);
+  //@ struct node *next = n->next;
+  //@ int value = n->value;
+  //@ close node(n, next, value);
   //@ close lseg(n, n, nil);
   l->first = n;
   l->last = n;
@@ -73,7 +75,9 @@ void add(struct llist *list, int x)
 {
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
-  //@ close node(n, _, _);
+  //@ struct node *next = n->next;
+  //@ int value = n->value;
+  //@ close node(n, next, value);
   struct node *f = list->first;
   struct node *l = list->last;
   l->next = n;
@@ -166,7 +170,6 @@ int length(struct llist *list)
     struct node *next = n->next;
 	//@ int value = n->value;
     //@ close node(n, next, value);
-    //@ close lseg(next, l, _);
     //@ lseg_add(f, n, next);
     n = next;
     c = c + 1;
@@ -207,10 +210,10 @@ int lookup(struct llist *list, int index)
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     struct node *next = n->next;
-    //@ close node(n, _, _);
-    //@ close lseg(next, l, _);
+	//@ int value = n->value;
+    //@ close node(n, next, value);
     //@ lseg_add(f, n, next);
-    n = n->next;
+    n = next;
     i = i + 1;
   }
   //@ drop_ith(_v, index);
