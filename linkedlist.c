@@ -9,7 +9,7 @@ struct llist {
 };
 
 //@ predicate node(struct node *node, struct node *next, int value)
-//@   requires node->next |-> next &*& node->value |-> value &*& malloc_block(node);
+//@   requires node->next |-> next &*& node->value |-> value &*& malloc_block_node(node);
 
 //@ inductive intlist = | nil | cons(int, intlist);
 
@@ -31,7 +31,7 @@ struct llist {
 //@   requires switch (v) { case nil: return n1 == n2; case cons(x, v): return node(n1, ?_n, x) &*& lseg(_n, n2, v); };
 
 //@ predicate llist(struct llist *list, intlist v)
-//@   requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block(list);
+//@   requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
 
 struct llist *create_llist()
 //@   requires true;
@@ -62,6 +62,7 @@ struct llist *create_llist()
 //@ {
 //@   open lseg(n1, n2, _v);
 //@   if (n1 == n2) {
+//@     close lseg(n3, n3, nil);
 //@   } else {
 //@     struct node *next = n1->next;
 //@     lseg_add(next, n2, n3);
