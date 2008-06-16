@@ -499,10 +499,10 @@ and
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "EQ", [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "NEQ", [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "<=", [e0; e1])) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "<", [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "==", [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "!=", [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "le", [e0; e1])) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "lt", [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_conj_rest e0 = parser
@@ -522,6 +522,186 @@ in
     with Stream.Error msg -> let (line, column) = loc() in raise (Stream.Error (msg ^ " at (" ^ string_of_int line ^ ":" ^ string_of_int column ^ ")"))
   with ex -> close_in c; raise ex
 
-let _ = read_program "linkedlist.c"
+let flatmap f xs = List.concat (List.map f xs)
+
+let theory = [
+  "(DISTINCT true false)";
+  "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
+  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))"
+]
+
+type
+  term =
+    Int of int
+  | Symb of string
+  | FunApp of string * term list
+  | IfTerm of term * term * term
+and
+  formula =
+    True
+  | PredApp of string * term list
+  | Eq of term * term
+  | Not of formula
+  | And of formula * formula
+  | Or of formula * formula
+  | Imp of formula * formula
+  | Iff of formula * formula
+  | IfFormula of formula * formula * formula
+  | Forall of string list * formula
+
+let slist ss =
+  let rec args ss =
+    match ss with
+      [] -> ""
+    | [s] -> s
+    | (s::ss) -> s ^ " " ^ args ss
+  in
+    "(" ^ args ss ^ ")"
+
+let rec simpt t =
+  match t with
+    Int i -> string_of_int i
+  | Symb s -> s
+  | FunApp (f, ts) -> slist ([f] @ List.map simpt ts)
+  | IfTerm (t1, t2, t3) -> slist ["IF"; simpt t1; simpt t2; simpt t3]
+
+let rec simp f =
+  match f with
+    True -> "TRUE"
+  | PredApp (p, ts) -> slist ["EQ"; slist ([p] @ List.map simpt ts); "true"]
+  | Eq (t1, t2) -> "(EQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
+  | Not f -> "(NOT " ^ simp f ^ ")"
+  | And (f1, f2) -> "(AND " ^ simp f1 ^ " " ^ simp f2 ^ ")"
+  | Or (f1, f2) -> "(OR " ^ simp f1 ^ " " ^ simp f2 ^ ")"
+  | Imp (f1, f2) -> slist ["IMPLIES"; simp f1; simp f2]
+  | Iff (f1, f2) -> slist ["IFF"; simp f1; simp f2]
+  | IfFormula (f1, f2, f3) -> let s1 = simp f1 in slist ["AND"; slist ["IMPLIES"; s1; simp f2]; slist ["IMPLIES"; slist ["NOT"; s1]; simp f3]]
+  | Forall (xs, f) -> slist ["FORALL"; slist xs; simp f]
+
+let rec conj ts : formula =
+  match ts with
+    [] -> True
+  | t :: ts -> And (t, conj ts)
+
+let rec eval e =
+  let ev = eval in
+  match e with
+    Var (l, x) -> Symb x
+  | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
+(*  | Read (l, e, f) ->  *)
+  | CallExpr (l, g, es) -> FunApp (g, List.map ev es)
+  | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
+(*  | SwitchExpr (l, e, cs) *)
+(*  | SizeofExpr (l, t) *)
+
+let verify_program path =
+
+  let verbose = ref true in
+
+  let verbose_print_endline s = if !verbose then print_endline s else () in
+  let verbose_print_string s = if !verbose then print_string s else () in
+
+  let unique_number_counter = ref 0 in
+
+  let get_unique_number () =
+    let n = !unique_number_counter in
+    unique_number_counter := n + 1;
+    n
+  in
+
+  let get_unique_id s =
+    s ^ string_of_int (get_unique_number ())
+  in
+
+  let Program ds = read_program "linkedlist.c" in
+  
+  let (simp_in, simp_out) = Unix.open_process "z3 /si" in
+  
+  let imap f xs =
+    let rec imapi i xs =
+      match xs with
+        [] -> []
+      | x::xs -> f i x::imapi (i + 1) xs
+    in
+    imapi 0 xs
+  in
+  
+  let indaxs =
+    flatmap
+    (function
+       Inductive (l, i, cs) ->
+       let tags = List.map (function (Ctor (l, c, ps)) -> "ctortag_" ^ c) cs in
+       let da = slist ("DISTINCT" :: tags) in
+       let tagaxs =
+         List.map
+           (function (Ctor (l, c, ps)) ->
+              match ps with
+                [] -> slist ["EQ"; slist ["tagfunc_" ^ i; c]; "ctortag_" ^ c]
+              | _ ->
+                let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
+                slist ["FORALL"; slist xs; slist ["PATS"; slist (c :: xs)]; slist ["EQ"; slist ["tagfunc_" ^ i; slist (c :: xs)]; "ctortag_" ^ c]]
+           )
+           cs
+       in
+       let projaxs =
+         flatmap
+           (function (Ctor (l, c, ps)) ->
+              let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
+              List.map
+                (fun x ->
+                   slist ["FORALL"; slist xs; slist ["PATS"; slist (c :: xs)]; slist ["EQ"; slist ["projfunc_" ^ c ^ "_" ^ x; slist (c :: xs)]; x]]
+                )
+                xs
+           )
+           cs
+       in
+       da :: tagaxs @ projaxs
+     | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
+       let xs = List.map (fun (t, x) -> x) ps in
+       List.map
+         (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
+            let xs' = flatmap (fun y -> if y = x then pats else [y]) xs in
+            let args = List.map (fun y -> if y = x then match pats with [] -> cn | _ -> slist (cn :: pats) else y) xs in
+            match xs' with
+              [] -> slist ["EQ"; slist (g :: args); simpt (eval e)]
+            | _ ->
+              slist ["FORALL"; slist xs'; slist ["PATS"; slist (g :: args)]; slist ["EQ"; slist (g :: args); simpt (eval e)]]
+         )
+         cs
+     | _ -> []
+    )
+    ds
+  in
+
+  let send_command c =
+    verbose_print_endline c;
+    output_string simp_out c;
+    output_string simp_out "\r\n";
+    flush simp_out
+  in
+
+  let bg_push s = send_command (slist ["BG_PUSH"; s]) in
+
+  let _ = bg_push (slist ("AND" :: theory)) in
+  
+  let _ = bg_push (slist ("AND" :: List.map (fun s -> s ^ "\r\n") indaxs)) in
+
+	let getch() = input_char simp_in in
+	
+	let getline() = input_line simp_in in
+	
+	let rec input_reply() =
+	  let line = getline() in
+	  let line = String.sub line 0 (String.length line - 1) in
+	  [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then [] else input_reply())
+	in
+  
+  input_reply()
+
+let _ = verify_program "linkedlist.c"
 
 end
