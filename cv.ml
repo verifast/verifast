@@ -892,16 +892,29 @@ let verify_program path =
       cont h (env "y"))
   in
 
-  let rec verify_stmt h env s cont =
+  let rec verify_stmt tenv h env s tcont =
     let ev = eval env in
     let etrue = exptrue env in
+    let cont = tcont tenv in
     match s with
       Assign (l, x, Read (lr, e, f)) ->
       let t = ev e in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
     | Assign (l, x, CallExpr (lc, "malloc", [ExprPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
-      let sds = flatmap (function (Struct (ls, sn, fds) -> 
+      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let result = get_unique_symb "block" in
+      let chunks = List.map (function (Field (lf, t, f)) -> ("field_" ^ f, [result; get_unique_symb "value"])) fds in
+      cont (h @ chunks @ [("malloc_block_" ^ tn, [result])]) (update env x result)
+    | CallStmt (l, "free", [Var (lv, x)]) ->
+      let (PtrType (_, tn)) = tenv x in
+      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let rec iter h fds =
+        match fds with
+          [] -> cont h env
+        | (Field (lf, t, f))::fds -> get_field h (env x) f l (fun h _ -> iter h fds)
+      in
+      assert_chunk h env l ("malloc_block_" ^ tn) [ExprPat (Var (lv, x))] (fun h _ _ -> iter h fds)
     | Assign (l, x, CallExpr (lc, g, pats)) ->
       let ts = List.map (function (ExprPat e) -> ev e) pats in
       let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
@@ -922,19 +935,19 @@ let verify_program path =
     | Assign (l, x, e) ->
       cont h (update env x (ev e))
     | DeclStmt (l, t, x, e) ->
-      verify_stmt h env (Assign (l, x, e)) cont
+      verify_stmt (update tenv x t) h env (Assign (l, x, e)) tcont
     | Write (l, e, f, rhs) ->
       let t = ev e in
       get_field h t f l (fun h _ ->
         cont (("field_" ^ f, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
       let x = get_unique_id "|<result>|" in   (* HACK *)
-      verify_stmt h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> ExprPat e) es))) cont
+      verify_stmt tenv h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> ExprPat e) es))) tcont
     | IfStmt (l, e, ss1, ss2) ->
       let phi = etrue e in
       branch
-        (fun _ -> assume phi (fun _ -> verify_cont h env ss1 cont))
-        (fun _ -> assume (Not phi) (fun _ -> verify_cont h env ss2 cont))
+        (fun _ -> assume phi (fun _ -> verify_cont tenv h env ss1 tcont))
+        (fun _ -> assume (Not phi) (fun _ -> verify_cont tenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -942,7 +955,7 @@ let verify_program path =
           [] -> success()
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun x -> Symb x) pats))) (fun _ -> verify_cont h env ss cont))
+            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun x -> Symb x) pats))) (fun _ -> verify_cont tenv h env ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
@@ -975,7 +988,7 @@ let verify_program path =
           (fun _ ->
              assume_pred [] env p (fun h env ->
                assume (Not (exptrue env e)) (fun _ ->
-                 verify_cont h env ss (fun h env ->
+                 verify_cont tenv h env ss (fun tenv h env ->
                    assert_pred h env p (fun h _ ->
                      match h with
                        [] -> success()
@@ -991,10 +1004,10 @@ let verify_program path =
                  cont h env)))
       )
   and
-    verify_cont h env ss cont =
+    verify_cont tenv h env ss cont =
     match ss with
-      [] -> cont h env
-    | s::ss -> verify_stmt h env s (fun h env -> verify_cont h env ss cont)
+      [] -> cont tenv h env
+    | s::ss -> verify_stmt tenv h env s (fun tenv h env -> verify_cont tenv h env ss cont)
   in
   
   let verify_decl d =
@@ -1002,8 +1015,10 @@ let verify_program path =
       Func (l, Fixpoint, _, _, _, _, _) -> ()
     | Func (l, _, _, g, ps, Some (pre, post), ss) ->
       let env x = Symb x in
+      let pts = List.map (function (t, p) -> (p, t)) ps in
+      let tenv x = List.assoc x pts in
       assume_pred [] env pre (fun h env ->
-        verify_cont h env ss (fun h _ ->
+        verify_cont tenv h env ss (fun _ h _ ->
           assert_pred h env post (fun h _ ->
             match h with
               [] -> success()
