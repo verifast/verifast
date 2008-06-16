@@ -28,10 +28,10 @@ struct llist {
 //@ }
 
 //@ predicate lseg(struct node *n1, struct node *n2, intlist v)
-//@   requires switch (v) { case nil: return n1 == n2; case cons(x, v): return node(n1, _n, x) &*& lseg(_n, n2, v); };
+//@   requires switch (v) { case nil: return n1 == n2; case cons(x, v): return node(n1, ?_n, x) &*& lseg(_n, n2, v); };
 
 //@ predicate llist(struct llist *list, intlist v)
-//@   requires list->first |-> _f &*& list->last |-> _l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block(list);
+//@   requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block(list);
 
 struct llist *create_llist()
 //@   requires true;
@@ -39,7 +39,7 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
-  //@ close node(n, n->next, n->value);
+  //@ close node(n, _, _);
   //@ close lseg(n, n, nil);
   l->first = n;
   l->last = n;
@@ -55,29 +55,31 @@ struct llist *create_llist()
 //@ }
 
 //@ lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, _v) &*& node(n2, n3, _x);
+//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x);
 //@   ensures lseg(n1, n3, list_add(_v, _x));
 //@ {
 //@   open lseg(n1, n2, _v);
 //@   if (n1 == n2) {
 //@   } else {
-//@     lseg_add(n1->next, n2, n3);
+//@     struct node *next = n1->next;
+//@     lseg_add(next, n2, n3);
 //@   }
 //@   close lseg(n1, n3, list_add(_v, _x));
 //@ }
 
 void add(struct llist *list, int x)
-//@   requires llist(list, _v);
+//@   requires llist(list, ?_v);
 //@   ensures llist(list, list_add(_v, x));
 {
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
-  //@ close node(n, n->next, n->value);
+  //@ close node(n, _, _);
+  struct node *f = list->first;
   struct node *l = list->last;
   l->next = n;
   l->value = x;
   list->last = n;
-  //@ lseg_add(list->first, l, n);
+  //@ lseg_add(f, l, n);
   //@ close llist(list, list_add(_v, x));
 }
 
@@ -89,33 +91,38 @@ void add(struct llist *list, int x)
 //@ }
 
 //@ lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, _v1) &*& lseg(n2, n3, _v2);
+//@   requires lseg(n1, n2, ?_v1) &*& lseg(n2, n3, ?_v2);
 //@   ensures lseg(n1, n3, list_append(_v1, _v2));
 //@ {
 //@   open lseg(n1, n2, _v1);
 //@   if (n1 == n2) {
 //@   } else {
-//@     lseg_append(n1->next, n2, n3);
+//@     struct node *next = n1->next;
+//@     lseg_append(next, n2, n3);
 //@   }
 //@   close lseg(n1, n3, list_append(_v1, _v2));
 //@ }
 
 void append(struct llist *list1, struct llist *list2)
-//@   requires llist(list1, _v1) &*& llist(list2, _v2);
+//@   requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
 //@   ensures llist(list1, list_append(_v1, _v2));
 {
 //@   open llist(list1, _v1);
 //@   open llist(list2, _v2);
   struct llist *l = list1->last;
   struct llist *f = list2->first;
-//@   open lseg(f, list2->last, _v2);  // Causes case split.
+//@   open lseg(f, _, _);  // Causes case split.
 //@   open node(l, _);
 //@   open node(f, _);
-  l->next = f->next;
-  l->value = f->value;
-  list1->last = list2->last;
-//@   close lseg(l, list2->last, _v2);
-//@   lseg_append(list1->first, l, list2->last);
+  struct llist *next = f->next;
+  l->next = next;
+  int value = f->value;
+  l->value = value;
+  struct llist *last2 = list2->last;
+  list1->last = last2;
+//@   close lseg(l, last2, _v2);
+//@   struct llist *f1 = list1->first;
+//@   lseg_append(f1, l, last2);
 //@   close llist(list1, list_append(_v1, _v2));
   free(f);
   free(list2);
@@ -143,7 +150,7 @@ void dispose(struct llist *list)
 }
 
 int length(struct llist *list)
-//@   requires llist(list, _v);
+//@   requires llist(list, ?_v);
 //@   ensures llist(list, _v) &*& result == len(_v);
 {
   //@ open llist(list, _v);
@@ -152,12 +159,13 @@ int length(struct llist *list)
   struct node *l = list->last;
   int c = 0;
   while (n != l)
-    //@ invariant lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v == list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
+    //@ invariant lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
   {
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     struct node *next = n->next;
-    //@ close node(n, n->next, n->value);
+	//@ int value = n->value;
+    //@ close node(n, next, value);
     //@ close lseg(next, l, _);
     //@ lseg_add(f, n, next);
     n = next;
@@ -185,7 +193,7 @@ int length(struct llist *list)
 //@ }
 
 int lookup(struct llist *list, int index)
-  //@ requires llist(list, _v) &*& 0 <= index &*& index < len(_v);
+  //@ requires llist(list, ?_v) &*& 0 <= index &*& index < len(_v);
   //@ ensures llist(list, _v) &*& result == ith(_v, index);
 {
   //@ open llist(list, _);
@@ -194,7 +202,7 @@ int lookup(struct llist *list, int index)
   struct node *n = f;
   int i = 0;
   while (i < index)
-    //@ invariant i <= index &*& lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
+    //@ invariant i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
   {
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);

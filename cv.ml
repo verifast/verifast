@@ -304,7 +304,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "true"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"
 ]
 
 let read_program s =
@@ -323,7 +323,7 @@ and
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
   | [< t = parse_type_suffix l s; d = parse_func_rest Regular (Some t) >] -> d
   >] -> d
-| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
+| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, xs, p)
 | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
 | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
@@ -616,6 +616,8 @@ let verify_program path =
   let get_unique_id s =
     s ^ string_of_int (get_unique_number ())
   in
+  
+  let get_unique_symb s = Symb (get_unique_id s) in
 
   let Program ds = read_program "linkedlist.c" in
   
@@ -699,8 +701,190 @@ let verify_program path =
 	  let line = String.sub line 0 (String.length line - 1) in
 	  [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then [] else input_reply())
 	in
+	
+	let assume_pred h env p cont =
+	  let ev = eval env in
+	  let etrue = exptrue env in
+	  match p with
+	  | Access (l, e, f, rhs) -> cont (("field_" ^ f, [ev e; ev rhs])::h)
+	  | CallPred (l, g, es) -> cont ((g, List.map ev es)::h)
+	  | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h)
+	  | Sep (l, p1, p2) -> assume_pred h env p1 (fun h -> assume_pred h env p2 cont)
+	  | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (etrue e) (fun _ -> assume_pred h env p1 cont)) (fun _ -> assume (Not (etrue e)) (fun _ -> assume_pred h env p2 cont))
+	  | SwitchPred (l, e, cs) ->
+	    let t = ev e in
+	    let rec iter cs =
+	      match cs with
+	        SwitchPredClause (lc, cn, pats, p)::cs ->
+	        branch
+	          (fun _ -> assume (Eq (t, FunApp(cn, List.map (fun x -> Symb x) pats))) (fun _ -> assume_pred h env p cont))
+	          (fun _ -> iter cs)
+	      | [] -> success()
+	    in
+	    iter cs
+	  | EmpPred l -> cont h
+	in
+	
+	let assert_pred h env p cont =
+	  let ev = eval env in
+	  let etrue = exptrue env in
+	  match p with
+	  | Access (l, e, f, rhs) ->
+	    let t = ev e in
+	    get_field h t f (fun h v ->
+	      assert (
   
-  input_reply()
+  let update env x t y = if y == x then t else env y in
+  
+  let zip xs ys =
+    let iter xs ys zs =
+      match (xs, ys) with
+        ([], []) -> Some (List.rev zs)
+      | (x::xs, y::ys) -> iter xs ys ((x, y)::zs)
+      | _ -> None
+    in
+    iter xs ys []
+    
+  let rec block_assigned_variables ss =
+    match ss with
+      [] -> []
+    | s::ss -> assigned_variables s @ block_assigned_variables ss
+  and assigned_variables s =
+    match s with
+      Assign (l, x, e) -> [x]
+    | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
+    | SwitchStmt (l, e cs) -> failwith (string_of_loc l ^ ": Switch statements inside loops are not supported.")
+    | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
+  in
+  
+  let rec verify_stmt h env s cont =
+    let ev = eval env in
+    match s with
+      Assign (l, x, Read (lr, e, f)) ->
+      let t = ev e in
+      get_field h t f l (fun _ v ->
+        cont h (update env x v))
+    | Assign (l, x, CallExpr (lc, g, es)) ->
+      let ts = List.map ev es in
+      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (xs, pre, post), _) when k != Fixpoint -> [(ps, xs, pre, post)] | _ -> []) ds in
+      match fds with
+        [] -> cont h (update env x (FunApp (g, ts)))
+      | [(ps, xs, pre, post)] ->
+        let ys = List.map (function (t, p) -> p) ps in
+        let Some bindings = zip ys ts in
+        let zs = List.map get_unique_symb xs in
+        let Some bindings' = zip xs zs in
+        let bindings'' = bindings @ bindings' in
+        let env' x = List.assoc x bindings'' in
+        assert_pred h env' pre (fun h ->
+          let r = get_unique_symb "result" in
+          let env'' x = update env' "result" r in
+          assume_pred h env'' post (fun h ->
+            cont h (update env x r))
+        )
+    | Assign (l, x, e) ->
+      cont h (update env x (ev e))
+    | DeclStmt (l, t, x, e) ->
+      verify_stmt h env (Assign (l, x, e)) cont
+    | Write (l, e, f, rhs) ->
+      let t = ev e in
+      get_field h t f (fun h _ ->
+        cont (("field_" ^ f, [t; ev rhs])::h) env)
+    | CallStmt (l, g, es) ->
+      let x = get_unique_id "result" in
+      verify_stmt h env (Assign (l, x, CallExpr (l, g, es))) cont
+    | IfStmt (l, e, ss1, ss2) ->
+      let phi = etrue e in
+      branch
+        (fun _ -> assume phi (fun _ -> verify_cont h env ss1 cont))
+        (fun _ -> assume (Not phi) (fun _ -> verify_cont h env ss2 cont))
+    | SwitchStmt (l, e, cs) ->
+      let t = ev e in
+      let iter cs =
+        match cs with
+          [] -> success()
+        | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+          branch
+            (fun _ -> assume (Eq (t, FunApp (cn, pats))) (fun _ -> verify_cont h env ss cont))
+            (fun _ -> iter cs)
+      in
+      iter cs
+    | Open (l, g, es) ->
+      let ts = List.map ev es in
+      let [(lpd, ps, xs, p)] = flatmap (function Predicate (lpd, g', ps, xs, p) when g == g' -> [(lpd, ps, xs, p)] | _ -> []) ds in
+      let ys = List.map (function (t, p) -> p) ps in
+      let zs = List.map get_unique_symb xs in
+      let Some bs1 = zip ys ts in
+      let Some bs2 = zip xs zs in
+      let bs = bs1 @ bs2 in
+      let env' x = List.assoc x bs in
+      get_chunk g ts l (fun h ->
+        assume_pred h env' p (fun h ->
+          cont h env))
+    | Close (l, g, es) ->
+      let ts = List.map ev es in
+      let [(lpd, ps, xs, p)] = flatmap (function Predicate (lpd, g', ps, xs, p) when g == g' -> [(lpd, ps, xs, p)] | _ -> []) ds in
+      let ys = List.map (function (t, p) -> p) ps in
+      let zs = List.map get_unique_symb xs in
+      let Some bs1 = zip ys ts in
+      let Some bs2 = zip xs zs in
+      let bs = bs1 @ bs2 in
+      let env' x = List.assoc x bs in
+      assert_pred h env' p (fun h ->
+        cont ((g, ts)::h) env)
+    | ReturnStmt (l, Some e) ->
+      cont h (update env "result" (ev e))
+    | ReturnStmt (l, None) -> cont h env
+    | WhileStmt (l, e, p, ss) ->
+      let phi = etrue e in
+      let xs = block_assigned_variables ss in
+      assert_pred h env p (fun h ->
+        let ts = List.map get_unique_symb xs in
+        let Some bs = zip xs ts in
+        let env x = if List.mem x xs then List.assoc x bs else env x in
+        branch
+          (fun _ ->
+             assume_pred [] env p (fun h ->
+               assume (Not phi) (fun _ ->
+                 verify_cont h env ss (fun h env ->
+                   assert_pred h env phi (fun h ->
+                     match h with
+                       [] -> success()
+                     | _ -> assert False l "Loop leaks heap chunks." (fun _ -> success())
+                   )
+                 )
+               )
+             )
+           )
+           (fun _ ->
+              assume_pred h env p (fun h ->
+                assume phi (fun _ ->
+                  cont h env)))
+      )
+  and
+    verify_cont h env ss cont =
+    match ss with
+      [] -> cont h env
+    | s::ss -> verify_stmt h env s (fun h env -> verify_cont h env ss cont)
+  
+  let verify_decl d =
+    match d with
+      Func (l, Fixpoint, _, _, _, _, _) -> ()
+    | Func (l, _, _, g, ps, Some (xs, pre, post), ss) ->
+      let env x = Symb x in
+      assume_pred [] pre (fun h ->
+        verify_cont h env ss (fun h _ ->
+          assert_pred h env post (fun h ->
+            match h with
+              [] -> success()
+            | _ -> assert (False, l, "Function leaks heap chunks.") (fun _ -> success())
+          )
+        )
+      )
+    | _ -> ()
+  in
+  
+  List.iter verify_decl ds
 
 let _ = verify_program "linkedlist.c"
 
