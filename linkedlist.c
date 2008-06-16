@@ -152,7 +152,7 @@ int length(struct llist *list)
   struct node *l = list->last;
   int c = 0;
   while (n != l)
-    //@ invariant lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v = list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
+    //@ invariant lseg(f, n, _ls1) &*& lseg(n, l, _ls2) &*& _v == list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
   {
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);

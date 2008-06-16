@@ -303,27 +303,36 @@ let type_loc t =
 let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
-  "return"; "+"; "=="; "?"; "true"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="
+  "return"; "+"; "-"; "=="; "?"; "true"; "ensures"; "sizeof"; "close"; "void"; "lemma";
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"
 ]
 
 let read_program s =
   let c = open_in s in
   let (loc, token_stream) = lexer (Stream.of_channel c) in
 let rec parse_program = parser
-  [< ds = parse_decls; _ = Stream.empty >] -> Program ds
+  [< ds = parse_decls; _ = let _ = print_endline "eof" in Stream.empty >] -> Program ds
 and
   parse_decls = parser
   [< d = parse_decl; ds = parse_decls >] -> d::ds
+| [< >] -> []
 and
   parse_decl = parser
   [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = parse_ctors; '(_, Kwd ";") >] -> Inductive (l, i, cs)
-| [< '(l, Kwd "struct"); '(_, Ident s); '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
-| [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> PredDecl (l, g, ps, p)
-| [< k = parse_func_kind; t = parse_return_type; '(l, Ident g); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
+| [< '(l, Kwd "struct"); '(_, Ident s); d = parser
+    [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
+  | [< t = parse_type_suffix l s; d = parse_func_rest Regular (Some t) >] -> d
+  >] -> d
+| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
+| [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
+| [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
+| [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
+and
+  parse_func_rest k t = parser
+  [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
 and
   parse_ctors = parser
-  [< '(_, Kwd "|"); '(l, Ident cn); '(_, Kwd "("); ts = parse_types; cs = parse_ctors >] -> Ctor (l, cn, ts)::cs
+  [< '(_, Kwd "|"); '(l, Ident cn); ts = (parser [< '(_, Kwd "("); ts = parse_types >] -> ts | [< >] -> []); cs = parse_ctors >] -> Ctor (l, cn, ts)::cs
 | [< >] -> []
 and
   parse_types = parser
@@ -341,11 +350,6 @@ and
   parse_field = parser
   [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f)
 and
-  parse_func_kind = parser
-  [< '(_, Kwd "fixpoint") >] -> Fixpoint
-| [< '(_, Kwd "lemma") >] -> Lemma
-| [< >] -> Regular
-and
   parse_return_type = parser
   [< '(_, Kwd "void") >] -> None
 | [< t = parse_type >] -> Some t
@@ -355,6 +359,7 @@ and
 and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> (l, s)
+| [< '(l, Kwd "int") >] -> (l, "int")
 | [< '(l, Ident n) >] -> (l, n)
 and
   parse_type_suffix tnl tn = parser
@@ -385,13 +390,13 @@ and
 and
   parse_stmt = parser
   [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
-| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}"); '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
+| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (Stream.Error "Body of open statement must be call expression."))
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (Stream.Error "Body of close statement must be call expression."))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
-| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "invariant"); p = parse_pred; b = parse_block >] -> WhileStmt (l, e, p, b)
+| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); b = parse_block >] -> WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, es) | _ -> raise (Stream.Error "An expression used as a statement must be a call expression."))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
@@ -475,6 +480,7 @@ and
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
+| [< '(l, Kwd "int") >] -> TypeExpr (l, TypeName (l, "int"))
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
