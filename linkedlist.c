@@ -28,7 +28,7 @@ struct llist {
 //@ }
 
 //@ predicate lseg(struct node *n1, struct node *n2, intlist v)
-//@   requires switch (v) { case nil: return n1 == n2; case cons(x, v): return node(n1, ?_n, x) &*& lseg(_n, n2, v); };
+//@   requires n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
 
 //@ predicate llist(struct llist *list, intlist v)
 //@   requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
@@ -57,20 +57,20 @@ struct llist *create_llist()
 //@ }
 
 //@ lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x);
+//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x) &*& n1 != n3 &*& n2 != n3;
 //@   ensures lseg(n1, n3, list_add(_v, _x));
 //@ {
 //@   open lseg(n1, n2, _v);
-//@   switch (_v) {
-//@     case nil:
-//@       close lseg(n3, n3, nil);
-//@     case cons(x, v):
-//@       open node(n1, _, _);
-//@       struct node *next = n1->next;
-//@       int value = n1->value;
-//@       close node(n1, next, value);
-//@       lseg_add(next, n2, n3);
+//@   if (n1 == n2) {
+//@     close lseg(n3, n3, nil);
+//@   } else {
+//@     open node(n1, _, _);
+//@     struct node *next = n1->next;
+//@     int value = n1->value;
+//@     close node(n1, next, value);
+//@     lseg_add(next, n2, n3);
 //@   }
+//@   
 //@   close lseg(n1, n3, list_add(_v, _x));
 //@ }
 
