@@ -299,6 +299,19 @@ let pred_loc p =
   | IfPred (l, e, p1, p2) -> l
   | SwitchPred (l, e, spcs) -> l
   | EmpPred l -> l
+  
+let stmt_loc s =
+  match s with
+    Assign (l, _, _) -> l
+  | DeclStmt (l, _, _, _) -> l
+  | Write (l, _, _, _) -> l
+  | CallStmt (l,  _, _) -> l
+  | IfStmt (l, _, _, _) -> l
+  | SwitchStmt (l, _, _) -> l
+  | Open (l, _, _) -> l
+  | Close (l, _, _) -> l
+  | ReturnStmt (l, _) -> l
+  | WhileStmt (l, _, _, _) -> l
 
 let type_loc t =
   match t with
@@ -875,8 +888,9 @@ let verify_program path =
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
+          let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun x -> Symb x) pats))) (fun _ -> assert_pred h env p cont))
+            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -902,6 +916,8 @@ let verify_program path =
   in
 
   let rec verify_stmt tenv h env s tcont =
+    let (line, col) = stmt_loc s in
+    let _ = print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
     let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
     let _ = print_endline ("Env: " ^ string_of_env env) in
     let ev = eval env in

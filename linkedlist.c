@@ -61,11 +61,15 @@ struct llist *create_llist()
 //@   ensures lseg(n1, n3, list_add(_v, _x));
 //@ {
 //@   open lseg(n1, n2, _v);
-//@   if (n1 == n2) {
-//@     close lseg(n3, n3, nil);
-//@   } else {
-//@     struct node *next = n1->next;
-//@     lseg_add(next, n2, n3);
+//@   switch (_v) {
+//@     case nil:
+//@       close lseg(n3, n3, nil);
+//@     case cons(x, v):
+//@       open node(n1, _, _);
+//@       struct node *next = n1->next;
+//@       int value = n1->value;
+//@       close node(n1, next, value);
+//@       lseg_add(next, n2, n3);
 //@   }
 //@   close lseg(n1, n3, list_add(_v, _x));
 //@ }
@@ -81,8 +85,10 @@ void add(struct llist *list, int x)
   //@ close node(n, next, value);
   //@ struct node *f = list->first;
   struct node *l = list->last;
+  //@ open node(l, _, _);
   l->next = n;
   l->value = x;
+  //@ close node(l, n, x);
   list->last = n;
   //@ lseg_add(f, l, n);
   //@ close llist(list, list_add(_v, x));
@@ -100,37 +106,46 @@ void add(struct llist *list, int x)
 //@   ensures lseg(n1, n3, list_append(_v1, _v2));
 //@ {
 //@   open lseg(n1, n2, _v1);
-//@   if (n1 == n2) {
-//@   } else {
-//@     struct node *next = n1->next;
-//@     lseg_append(next, n2, n3);
+//@   switch (_v1) {
+//@     case nil:
+//@     case cons(x, v):
+//@       open node(n1, _, _);
+//@       struct node *next = n1->next;
+//@       int value = n1->value;
+//@       close node(n1, next, value);
+//@       lseg_append(next, n2, n3);
+//@       close lseg(n1, n3, list_append(_v1, _v2));
 //@   }
-//@   close lseg(n1, n3, list_append(_v1, _v2));
 //@ }
 
 void append(struct llist *list1, struct llist *list2)
-//@   requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
-//@   ensures llist(list1, list_append(_v1, _v2));
+  //@ requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
+  //@ ensures llist(list1, list_append(_v1, _v2));
 {
-//@   open llist(list1, _v1);
-//@   open llist(list2, _v2);
-  struct llist *l = list1->last;
-  struct llist *f = list2->first;
-//@   open lseg(f, _, _);  // Causes case split.
-//@   open node(l, _);
-//@   open node(f, _);
-  struct llist *next = f->next;
-  l->next = next;
-  int value = f->value;
-  l->value = value;
-  struct llist *last2 = list2->last;
-  list1->last = last2;
-//@   close lseg(l, last2, _v2);
-//@   struct llist *f1 = list1->first;
-//@   lseg_append(f1, l, last2);
-//@   close llist(list1, list_append(_v1, _v2));
-  free(f);
-  free(list2);
+  //@ open llist(list1, _v1);
+  //@ open llist(list2, _v2);
+  struct llist *l1 = list1->last;
+  struct llist *f2 = list2->first;
+  struct llist *l2 = list2->last;
+  //@ open lseg(f, _, _);  // Causes case split.
+  if (f2 == l2) {
+    free(l2);
+	free(list2);
+  } else {
+    //@ open node(l, _, _);
+    //@ open node(f, _, _);
+    struct llist *next = f2->next;
+    l1->next = next;
+    int value = f2->value;
+    l1->value = value;
+    list1->last = l2;
+    //@   close lseg(l1, l2, _v2);
+    //@   struct llist *f1 = list1->first;
+    //@   lseg_append(f1, l, last2);
+    //@   close llist(list1, list_append(_v1, _v2));
+    free(f2);
+    free(list2);
+  }
 }
 
 void dispose(struct llist *list)
