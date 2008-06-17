@@ -802,14 +802,14 @@ let verify_program path =
     | pat::pats -> evalpat env pat (fun env t -> evalpats env pats (fun env ts -> cont env (t::ts)))
   in
   
-  let assume_field h f tp tv cont =
+  let assume_field h0 f tp tv cont =
     let rec iter h =
       match h with
-        [] -> cont (("field_" ^ f, [tp; tv])::h)
+        [] -> cont (("field_" ^ f, [tp; tv])::h0)
       | (g, [tp'; _])::h when g = "field_" ^ f -> assume (Not (Eq (tp, tp'))) (fun _ -> iter h)
       | _::h -> iter h
     in
-    iter h
+    iter h0
   in
   
   let rec assume_pred h env p cont =
