@@ -249,12 +249,12 @@ int length(struct llist *list)
 //@ }
 
 //@ lemma void drop_ith(intlist v, int i)
-//@   requires 0 <= i && i < len(v);
-//@   ensures ith(v, i) == ith(0, drop(i, v));
+//@   requires 0 <= i &*& i < len(v);
+//@   ensures ith(v, i) == ith(drop(i, v), 0);
 //@ {
 //@   switch (v) {
-//@     case nil: return;
-//@     case cons(x, v): drop_ith(v, i - 1); return;
+//@     case nil:
+//@     case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1); }
 //@   }
 //@ }
 

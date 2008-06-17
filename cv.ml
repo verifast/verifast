@@ -602,7 +602,7 @@ let rec simpt t =
 let rec simp f =
   match f with
     True -> "TRUE"
-  | PredApp (p, ts) -> slist ["EQ"; slist ([p] @ List.map simpt ts); "true"]
+  | PredApp (p, ts) -> slist (p :: List.map simpt ts)
   | Eq (t1, t2) -> "(EQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
   | Not f -> "(NOT " ^ simp f ^ ")"
   | And (f1, f2) -> "(AND " ^ simp f1 ^ " " ^ simp f2 ^ ")"
@@ -985,10 +985,10 @@ let verify_program path =
       let x = get_unique_id "|<result>|" in   (* HACK *)
       verify_stmt tenv h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> LitPat e) es))) tcont
     | IfStmt (l, e, ss1, ss2) ->
-      let phi = etrue e in
+      let t = ev e in
       branch
-        (fun _ -> assume phi (fun _ -> verify_cont tenv h env ss1 tcont))
-        (fun _ -> assume (Not phi) (fun _ -> verify_cont tenv h env ss2 tcont))
+        (fun _ -> assume (Eq (t, Symb "true")) (fun _ -> verify_cont tenv h env ss1 tcont))
+        (fun _ -> assume (Eq (t, Symb "false")) (fun _ -> verify_cont tenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1058,8 +1058,8 @@ let verify_program path =
       let pts = List.map (function (t, p) -> (p, t)) ps in
       let tenv x = List.assoc x pts in
       assume_pred [] env pre (fun h env ->
-        verify_cont tenv h env ss (fun _ h env ->
-          assert_pred h (update env "result" (lookup env "result")) post (fun h _ ->
+        verify_cont tenv h env ss (fun _ h env' ->
+          assert_pred h (update env "result" (lookup env' "result")) post (fun h _ ->
             match h with
               [] -> success()
             | _ -> assert_formula (Not True) l "Function leaks heap chunks." (fun _ -> success())
