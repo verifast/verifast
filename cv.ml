@@ -918,6 +918,7 @@ let verify_program path =
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
     | SwitchStmt (l, e, cs) -> failwith (string_of_loc l ^ ": Switch statements inside loops are not supported.")
     | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
+    | _ -> []
   in
   
   let get_field h t f l cont =
@@ -1001,7 +1002,7 @@ let verify_program path =
       in
       iter cs
     | Open (l, g, pats) ->
-      assert_chunk h env l g pats (fun h ts _ ->
+      assert_chunk h env l g pats (fun h ts env ->
         let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
@@ -1026,7 +1027,7 @@ let verify_program path =
         branch
           (fun _ ->
              assume_pred [] env p (fun h env ->
-               assume (Not (exptrue env e)) (fun _ ->
+               assume (exptrue env e) (fun _ ->
                  verify_cont tenv h env ss (fun tenv h env ->
                    assert_pred h env p (fun h _ ->
                      match h with
@@ -1038,8 +1039,8 @@ let verify_program path =
              )
           )
           (fun _ ->
-             assume_pred h env p (fun h _ ->
-               assume (exptrue env e) (fun _ ->
+             assume_pred h env p (fun h env ->
+               assume (Not (exptrue env e)) (fun _ ->
                  cont h env)))
       )
   and

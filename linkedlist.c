@@ -188,15 +188,27 @@ void dispose(struct llist *list)
     //@ invariant lseg(n, l, _);
   {
     //@ open lseg(n, l, _);
-    //@ open node(n, _);
+    //@ open node(n, _, _);
     struct node *next = n->next;
     free(n);
     n = next;
   }
-  //@ open node(l, _);
+  //@ open lseg(n, _, _);  // Clean up empty lseg.
+  //@ open node(l, _, _);
   free(l);
   free(list);
 }
+
+//@ lemma void add_append_lemma(intlist v1, int x, intlist v2)
+//@   requires emp;
+//@   ensures list_append(v1, cons(x, v2)) == list_append(list_add(v1, x), v2);
+//@ {
+//@   switch (v1) {
+//@     case nil:
+//@     case cons(h, t):
+//@       add_append_lemma(t, x, v2);
+//@   }
+//@ }
 
 int length(struct llist *list)
 //@   requires llist(list, ?_v);
@@ -207,18 +219,24 @@ int length(struct llist *list)
   struct node *n = f;
   struct node *l = list->last;
   int c = 0;
+  //@ close lseg(f, f, nil);
   while (n != l)
-    //@ invariant lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
+    //@ invariant lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& node(l, _, _) &*& _v == list_append(_ls1, _ls2) &*& c + len(_ls2) == len(_v);
   {
-    //@ open lseg(n, l, _);
+    //@ open lseg(n, l, _ls2);
     //@ open node(n, _, _);
     struct node *next = n->next;
 	//@ int value = n->value;
     //@ close node(n, next, value);
+	//@ open lseg(next, l, ?ls3); // To produce a witness node for next.
     //@ lseg_add(f, n, next);
+	//@ close lseg(next, l, ls3);
     n = next;
     c = c + 1;
+	//@ add_append_lemma(_ls1, value, ls3);
   }
+  //@ open lseg(n, l, _ls2);
+  //@ list_append_nil(_ls1);
   //@ close llist(list, _v);
   return c;
 }
