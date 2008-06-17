@@ -1,11 +1,6 @@
 module CVerifier =
 struct
 
-let verbose = ref false
-
-let verbose_print_endline s = if !verbose then print_endline s else ()
-let verbose_print_string s = if !verbose then print_string s else ()
-
 type token =
     Kwd of string
   | Ident of string
@@ -658,7 +653,7 @@ let zip xs ys =
   
 let verify_program path =
 
-  let verbose = ref true in
+  let verbose = ref false in
 
   let verbose_print_endline s = if !verbose then print_endline s else () in
   let verbose_print_string s = if !verbose then print_string s else () in
@@ -929,9 +924,9 @@ let verify_program path =
 
   let rec verify_stmt tenv h env s tcont =
     let (line, col) = stmt_loc s in
-    let _ = print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
-    let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
-    let _ = print_endline ("Env: " ^ string_of_env env) in
+    let _ = verbose_print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
+    let _ = verbose_print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
+    let _ = verbose_print_endline ("Env: " ^ string_of_env env) in
     let ev = eval env in
     let etrue = exptrue env in
     let cont = tcont tenv in
@@ -1075,6 +1070,13 @@ let verify_program path =
   List.iter verify_decl ds;
   print_endline "0 errors found"
 
-let _ = verify_program "linkedlist.c"
+let _ =
+  match Sys.argv with
+    [| path |] -> verify_program path
+  | [| "-verbose"; path |] -> verbose := true; verify_program path
+  | _ ->
+    print_endline "Verifast 0.2 for C";
+    print_endline "Usage: verifast [-verbose] filepath";
+    print_endline "Note: Requires z3.exe."
 
 end
