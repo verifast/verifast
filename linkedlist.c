@@ -57,8 +57,8 @@ struct llist *create_llist()
 //@ }
 
 //@ lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x) &*& n1 != n3 &*& n2 != n3;
-//@   ensures lseg(n1, n3, list_add(_v, _x));
+//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x) &*& node(n3, ?n3next, ?n3value);
+//@   ensures lseg(n1, n3, list_add(_v, _x)) &*& node(n3, n3next, n3value);
 //@ {
 //@   open lseg(n1, n2, _v);
 //@   if (n1 == n2) {

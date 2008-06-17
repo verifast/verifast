@@ -802,11 +802,21 @@ let verify_program path =
     | pat::pats -> evalpat env pat (fun env t -> evalpats env pats (fun env ts -> cont env (t::ts)))
   in
   
+  let assume_field h f tp tv cont =
+    let rec iter h =
+      match h with
+        [] -> cont (("field_" ^ f, [tp; tv])::h)
+      | (g, [tp'; _])::h when g = "field_" ^ f -> assume (Not (Eq (tp, tp'))) (fun _ -> iter h)
+      | _::h -> iter h
+    in
+    iter h
+  in
+  
   let rec assume_pred h env p cont =
     let ev = eval env in
     let etrue = exptrue env in
     match p with
-    | Access (l, e, f, rhs) -> let te = ev e in evalpat env rhs (fun env t -> cont (("field_" ^ f, [te; t])::h) env)
+    | Access (l, e, f, rhs) -> let te = ev e in evalpat env rhs (fun env t -> assume_field h f te t (fun h -> cont h env))
     | CallPred (l, g, pats) -> evalpats env pats (fun env ts -> cont ((g, ts)::h) env)
     | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h env)
     | Sep (l, p1, p2) -> assume_pred h env p1 (fun h env -> assume_pred h env p2 cont)
@@ -931,8 +941,12 @@ let verify_program path =
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let result = get_unique_symb "block" in
-      let chunks = List.map (function (Field (lf, t, f)) -> ("field_" ^ f, [result; get_unique_symb "value"])) fds in
-      cont (h @ chunks @ [("malloc_block_" ^ tn, [result])]) (update env x result)
+      let rec iter h fds =
+        match fds with
+          [] -> cont (h @ [("malloc_block_" ^ tn, [result])]) (update env x result)
+        | Field (lf, t, f)::fds -> assume_field h f result (get_unique_symb "value") (fun h -> iter h fds)
+      in
+      iter h fds
     | CallStmt (l, "free", [Var (lv, x)]) ->
       let (PtrType (_, tn)) = tenv x in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
