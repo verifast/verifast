@@ -248,13 +248,54 @@ int length(struct llist *list)
 //@   }
 //@ }
 
-//@ lemma void drop_ith(intlist v, int i)
-//@   requires 0 <= i &*& i < len(v);
-//@   ensures ith(v, i) == ith(drop(i, v), 0);
+//@ lemma void drop_ith(intlist v, int i, int h)
+//@   requires 0 <= i &*& i < len(v) &*& ith(drop(i, v), 0) == h;
+//@   ensures ith(v, i) == h;
 //@ {
 //@   switch (v) {
 //@     case nil:
-//@     case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1); }
+//@     case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1, h); }
+//@   }
+//@ }
+
+//@ lemma void drop_0_lemma(intlist v)
+//@   requires true;
+//@   ensures drop(0,v) == v;
+//@ {
+//@   switch (v) {
+//@     case nil:
+//@     case cons(x, v):
+//@   }
+//@ }
+
+//@ lemma void drop_len_lemma(int i, intlist v)
+//@   requires 0 <= i &*& i <= len(v);
+//@   ensures len(drop(i, v)) == len(v) - i;
+//@ {
+//@   switch (v) {
+//@     case nil:
+//@     case cons(h, t):
+//@       if (i == 0) {
+//@       } else {
+//@         drop_len_lemma(i - 1, t);
+//@       }
+//@   }
+//@ }
+
+//@ lemma void drop_cons_lemma(int i, intlist v, int h, intlist t)
+//@   requires 0 <= i &*& drop(i, v) == cons(h, t);
+//@   ensures drop(i + 1, v) == t;
+//@ {
+//@   switch (v) {
+//@     case nil:
+//@     case cons(h2, t2):
+//@       if (i == 0) {
+//@         drop_0_lemma(v);
+//@         if (1 == 0) { } else { drop_0_lemma(t); }
+//@       } else {
+//@         drop_cons_lemma(i - 1, t2, h, t);
+//@         if (i + 1 == 0) { } else { }
+//@       }
 //@   }
 //@ }
 
@@ -267,20 +308,34 @@ int lookup(struct llist *list, int index)
   struct node *l = list->last;
   struct node *n = f;
   int i = 0;
+  //@ close lseg(f, n, nil);
+  //@ drop_0_lemma(_v);
   while (i < index)
-    //@ invariant i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v);
+    //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + len(_ls2) == len(_v);
   {
+    //@ drop_len_lemma(i, _v);
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     struct node *next = n->next;
 	//@ int value = n->value;
     //@ close node(n, next, value);
+	//@ open lseg(next, l, ?ls3); // To produce a witness node for next.
     //@ lseg_add(f, n, next);
+	//@ close lseg(next, l, ls3);
+	//@ drop_cons_lemma(i, _v, value, ls3);
     n = next;
     i = i + 1;
+	//@ add_append_lemma(_ls1, value, ls3);
   }
-  //@ drop_ith(_v, index);
-  return n->value;
+  //@ open lseg(n, l, _ls2);
+  //@ open node(n, ?nnext, _);
+  int value = n->value;
+  //@ close node(n, nnext, value);
+  //@ close lseg(n, l, _ls2);
+  //@ lseg_append(f, n, l);
+  //@ close llist(list, _v);
+  //@ drop_ith(_v, index, value);
+  return value;
 }
 
 void main()
