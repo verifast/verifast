@@ -939,6 +939,8 @@ let verify_program path =
       let t = ev e in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
+    | Assign (l, x, CallExpr (lc, "assert", [LitPat e])) ->
+      assert_formula (etrue e) l "Assertion failure." (fun _ -> cont h env)
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let result = get_unique_symb "block" in
@@ -1069,7 +1071,8 @@ let verify_program path =
     | _ -> ()
   in
   
-  List.iter verify_decl ds
+  List.iter verify_decl ds;
+  print_endline "0 errors found"
 
 let _ = verify_program "linkedlist.c"
 

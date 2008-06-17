@@ -342,8 +342,8 @@ void main()
   //@ requires emp;
   //@ ensures emp;
 {
-  struct llist *l1 = create_list();
-  struct llist *l2 = create_list();
+  struct llist *l1 = create_llist();
+  struct llist *l2 = create_llist();
   add(l1, 10);
   add(l1, 20);
   add(l1, 30);
@@ -351,12 +351,17 @@ void main()
   add(l2, 50);
   add(l2, 60);
   append(l1, l2);
-  assert(length(l1) == 6);
-  assert(lookup(l1, 0) == 10);
-  assert(lookup(l1, 1) == 20);
-  assert(lookup(l1, 2) == 30);
-  assert(lookup(l1, 3) == 40);
-  assert(lookup(l1, 4) == 50);
-  assert(lookup(l1, 5) == 60);
+  int n = length(l1); assert(n == 6);
+  int e0 = lookup(l1, 0); assert(e0 == 10);
+  //@ if (1 == 0) {} else {}
+  int e1 = lookup(l1, 1); assert(e1 == 20);
+  //@ if (2 == 0) {} else {}
+  int e2 = lookup(l1, 2); assert(e1 == 30);
+  //@ if (3 == 0) {} else {}
+  int e3 = lookup(l1, 3); assert(e1 == 40);
+  //@ if (4 == 0) {} else {}
+  int e4 = lookup(l1, 4); assert(e1 == 50);
+  //@ if (5 == 0) {} else {}
+  int e5 = lookup(l1, 5); assert(e1 == 60);
   dispose(l1);
 }
