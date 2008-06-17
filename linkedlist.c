@@ -353,15 +353,10 @@ void main()
   append(l1, l2);
   int n = length(l1); assert(n == 6);
   int e0 = lookup(l1, 0); assert(e0 == 10);
-  //@ if (1 == 0) {} else {}
   int e1 = lookup(l1, 1); assert(e1 == 20);
-  //@ if (2 == 0) {} else {}
-  int e2 = lookup(l1, 2); assert(e1 == 30);
-  //@ if (3 == 0) {} else {}
-  int e3 = lookup(l1, 3); assert(e1 == 40);
-  //@ if (4 == 0) {} else {}
-  int e4 = lookup(l1, 4); assert(e1 == 50);
-  //@ if (5 == 0) {} else {}
-  int e5 = lookup(l1, 5); assert(e1 == 60);
+  int e2 = lookup(l1, 2); assert(e2 == 30);
+  int e3 = lookup(l1, 3); assert(e3 == 40);
+  int e4 = lookup(l1, 4); assert(e4 == 50);
+  int e5 = lookup(l1, 5); assert(e5 == 60);
   dispose(l1);
 }

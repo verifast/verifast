@@ -557,7 +557,8 @@ let flatmap f xs = List.concat (List.map f xs)
 let theory = [
   "(DISTINCT true false)";
   "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
-  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";
+(*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
+  "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
   "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
