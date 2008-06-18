@@ -1200,6 +1200,19 @@ let verify_program verbose path =
     assert_chunk h [("x", t)] l ("field_" ^ f) [LitPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts env ->
       cont h (lookup env "y"))
   in
+  
+  let predmap =
+    let rec iter predmap ds =
+      match ds with
+        [] -> predmap
+      | PredDecl (l, pn, ps, p)::ds ->
+        let _ = if List.mem_assoc pn predmap then static_error l "Duplicate predicate name." in
+        let _ = if startswith pn "field_" || startswith pn "malloc_block_" then static_error l "A predicate name cannot start with 'field_' or 'malloc_block_'." in
+        iter ((pn, (ps, p))::predmap) ds
+      | _::ds -> iter predmap ds
+    in
+    iter [] ds
+  in
 
   let rec verify_stmt pure leminfo sizemap tenv h env s tcont =
     let (line, col) = stmt_loc s in
