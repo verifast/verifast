@@ -651,12 +651,10 @@ let zip xs ys =
   in
   iter xs ys []
   
-let verify_program path =
+let verify_program verbose path =
 
-  let verbose = ref false in
-
-  let verbose_print_endline s = if !verbose then print_endline s else () in
-  let verbose_print_string s = if !verbose then print_string s else () in
+  let verbose_print_endline s = if verbose then print_endline s else () in
+  let verbose_print_string s = if verbose then print_string s else () in
 
   let unique_number_counter = ref 0 in
 
@@ -672,7 +670,7 @@ let verify_program path =
   
   let get_unique_symb s = Symb (get_unique_id s) in
 
-  let Program ds = read_program "linkedlist.c" in
+  let Program ds = read_program path in
   
   let (simp_in, simp_out) = Unix.open_process "z3 /si" in
   
@@ -1067,13 +1065,15 @@ let verify_program path =
     | _ -> ()
   in
   
-  List.iter verify_decl ds;
-  print_endline "0 errors found"
+  (
+    List.iter verify_decl ds;
+    print_endline "0 errors found"
+  )
 
 let _ =
   match Sys.argv with
-    [| path |] -> verify_program path
-  | [| "-verbose"; path |] -> verbose := true; verify_program path
+    [| _; path |] -> verify_program false path
+  | [| _; "-verbose"; path |] -> verify_program true path
   | _ ->
     print_endline "Verifast 0.2 for C";
     print_endline "Usage: verifast [-verbose] filepath";

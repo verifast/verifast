@@ -1,0 +1,1 @@
+ocamlrun -b verifast.exe linkedlist.c
