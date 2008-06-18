@@ -557,14 +557,14 @@ let rec try_assoc x xys =
   | _::xys -> try_assoc x xys
 
 let theory = [
-  "(DISTINCT true false)";
-  "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
-(*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
-  "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
-  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))"
+  "(DISTINCT true_ false_)";
+  "(FORALL (e1 e2) (EQ (IF true_ e1 e2) e1))";
+(*  "(FORALL (e1 e2) (EQ (IF false_ e1 e2) e2))";   *)
+  "(FORALL (b e1 e2) (IMPLIES (NEQ b true_) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true_) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true_) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true_) (<= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true_) (< e1 e2)))"
 ]
 
 type
@@ -620,24 +620,35 @@ let rec conj ts : formula =
     [] -> True
   | t :: ts -> And (t, conj ts)
 
-let lookup env x = if List.mem_assoc x env then List.assoc x env else Symb x
+(* Logical symbol generation:
+ * Suffix   Category
+ * _        constructor or fixpoint function
+ * _tag     Constructor tag
+ * _tagfunc Tag function
+ * _proj    Projection function
+ * _access  Accessor function
+ * _0       variable
+ * _size    sizeof value
+ *)
+
+let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = slist (List.map (function (x, t) -> slist [x; simpt t]) env)
 
 let rec eval env e =
   let ev = eval env in
   match e with
-    Var (l, x) -> lookup env x
+    Var (l, x) -> (match try_assoc x env with None -> (* It's a constructor *) Symb (x ^ "_") | Some t -> t)
   | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
   | IntLit (l, n) -> Int n
 (*  | Read (l, e, f) ->  *)
-  | CallExpr (l, g, pats) -> FunApp (g, List.map (function (LitPat e) -> ev e) pats)
+  | CallExpr (l, g, pats) -> FunApp (g ^ "_", List.map (function (LitPat e) -> ev e) pats)
   | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
 (*  | SwitchExpr (l, e, cs) *)
   | SizeofExpr (l, t) ->
     match t with
-      TypeName (_, tn) -> Symb ("sizeof_" ^ tn)
-    | PtrType (_, tn) -> Symb "sizeof_ptr"
+      TypeName (_, tn) -> Symb (tn ^ "_size")
+    | PtrType (_, tn) -> Symb "ptrsize"
 
 let rec exptrue env e =
   let etrue = exptrue env in
@@ -648,7 +659,7 @@ let rec exptrue env e =
   | Operation (_, "le", [e1; e2]) -> PredApp ("<=", [ev e1; ev e2])
   | Operation (_, "lt", [e1; e2]) -> PredApp ("<", [ev e1; ev e2])
   | Operation (_, "&&", [e1; e2]) -> And (etrue e1, etrue e2)
-  | _ -> Eq (ev e, Symb "true")
+  | _ -> Eq (ev e, Symb "true_")
 
 let zip xs ys =
   let rec iter xs ys zs =
@@ -681,6 +692,8 @@ let verify_program verbose path =
   in
   
   let get_unique_symb s = Symb (get_unique_id s) in
+  
+  let get_unique_var_symb s = get_unique_symb (s ^ "_") in
 
   let (simp_in, simp_out) = Unix.open_process "z3 /si" in
   
@@ -948,16 +961,16 @@ let verify_program verbose path =
     flatmap
     (function
        Inductive (l, i, cs) ->
-       let tags = List.map (function (Ctor (l, c, ps)) -> "ctortag_" ^ c) cs in
+       let tags = List.map (function (Ctor (l, c, ps)) -> c ^ "_tag") cs in
        let da = slist ("DISTINCT" :: tags) in
        let tagaxs =
          List.map
            (function (Ctor (l, c, ps)) ->
               match ps with
-                [] -> slist ["EQ"; slist ["tagfunc_" ^ i; c]; "ctortag_" ^ c]
+                [] -> slist ["EQ"; slist [i ^ "_tagfunc"; c ^ "_"]; c ^ "_tag"]
               | _ ->
                 let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
-                slist ["FORALL"; slist xs; slist ["PATS"; slist (c :: xs)]; slist ["EQ"; slist ["tagfunc_" ^ i; slist (c :: xs)]; "ctortag_" ^ c]]
+                slist ["FORALL"; slist xs; slist ["PATS"; slist ((c ^ "_") :: xs)]; slist ["EQ"; slist [i ^ "_tagfunc"; slist ((c ^ "_") :: xs)]; c ^ "_tag"]]
            )
            cs
        in
@@ -967,7 +980,7 @@ let verify_program verbose path =
               let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
               List.map
                 (fun x ->
-                   slist ["FORALL"; slist xs; slist ["PATS"; slist (c :: xs)]; slist ["EQ"; slist ["projfunc_" ^ c ^ "_" ^ x; slist (c :: xs)]; x]]
+                   slist ["FORALL"; slist xs; slist ["PATS"; slist ((c ^ "_") :: xs)]; slist ["EQ"; slist [c ^ "_proj" ^ x; slist ((c ^ "_") :: xs)]; x]]
                 )
                 xs
            )
@@ -975,16 +988,20 @@ let verify_program verbose path =
        in
        da :: tagaxs @ projaxs
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
-       let xs = List.map (fun (t, x) -> x) ps in
+       let penv = List.map (fun (t, x) -> (x, Symb (x ^ "_0"))) ps in
        List.map
          (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-            let xs' = flatmap (fun y -> if y = x then pats else [y]) xs in
-            let args = List.map (fun y -> if y = x then match pats with [] -> cn | _ -> slist (cn :: pats) else y) xs in
-            let env = List.map (fun x -> (x, Symb x)) xs' in
-            let body = slist ["EQ"; slist (g :: args); simpt (eval env e)] in
+            let patenv = List.map (fun x -> (x, Symb (x ^ "_1"))) pats in
+            let patvals = List.map (fun x -> x ^ "_1") pats in
+            let xs' = flatmap (fun (t, p) -> if p = x then patvals else [p ^ "_0"]) ps in
+            let csymb = cn ^ "_" in
+            let args = List.map (fun (t, p) -> if p = x then match pats with [] -> csymb | _ -> slist (csymb :: patvals) else p ^ "_0") ps in
+            let gsymb = g ^ "_" in
+            let env = patenv @ penv in
+            let body = slist ["EQ"; slist (gsymb :: args); simpt (eval env e)] in
             match xs' with
               [] -> body
-            | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (g :: args)]; body]
+            | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (gsymb :: args)]; body]
          )
          cs
      | _ -> []
@@ -1047,7 +1064,7 @@ let verify_program verbose path =
   let evalpat env pat cont =
     match pat with
       LitPat e -> cont env (eval env e)
-    | VarPat x -> let t = get_unique_symb x in cont (update env x t) t
+    | VarPat x -> let t = get_unique_var_symb x in cont (update env x t) t
     | DummyPat -> let t = get_unique_symb "dummy" in cont env t
   in
   
@@ -1083,8 +1100,8 @@ let verify_program verbose path =
           SwitchPredClause (lc, cn, pats, p)::cs ->
           branch
             (fun _ ->
-               let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
-               assume (Eq (t, FunApp(cn, List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (xts @ env) p cont))
+               let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
+               assume (Eq (t, FunApp(cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1153,9 +1170,9 @@ let verify_program verbose path =
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
-          let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
+          let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (xts @ env) p cont))
+            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1219,7 +1236,7 @@ let verify_program verbose path =
       let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
       (
       match fds with
-        [] -> cont h (update env x (FunApp (g, ts)))
+        [] -> cont h (update env x (FunApp (g ^ "_", ts)))
       | [(ps, pre, post)] ->
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
@@ -1244,17 +1261,17 @@ let verify_program verbose path =
     | IfStmt (l, e, ss1, ss2) ->
       let t = ev e in
       branch
-        (fun _ -> assume (Eq (t, Symb "true")) (fun _ -> verify_cont tenv h env ss1 tcont))
-        (fun _ -> assume (Eq (t, Symb "false")) (fun _ -> verify_cont tenv h env ss2 tcont))
+        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont tenv h env ss1 tcont))
+        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont tenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
         match cs with
           [] -> success()
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
-          let xts = List.map (fun x -> (x, get_unique_symb x)) pats in
+          let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont tenv h (xts @ env) ss tcont))
+            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont tenv h (xts @ env) ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
@@ -1273,12 +1290,12 @@ let verify_program verbose path =
       assert_pred h env' p (fun h _ ->
         cont ((g, ts)::h) env)
     | ReturnStmt (l, Some e) ->
-      cont h (update env "result" (ev e))
+      cont h (update env "#result" (ev e))
     | ReturnStmt (l, None) -> cont h env
     | WhileStmt (l, e, p, ss) ->
       let xs = block_assigned_variables ss in
       assert_pred h env p (fun h env ->
-        let ts = List.map get_unique_symb xs in
+        let ts = List.map get_unique_var_symb xs in
         let Some bs = zip xs ts in
         let env = bs @ env in
         branch
@@ -1310,13 +1327,22 @@ let verify_program verbose path =
   let verify_decl d =
     match d with
     | Func (l, Fixpoint, _, _, _, _, _) -> ()
-    | Func (l, _, _, g, ps, Some (pre, post), ss) ->
-      let env = List.map (function (t, p) -> (p, Symb p)) ps in
+    | Func (l, _, rt, g, ps, Some (pre, post), ss) ->
+      let env = List.map (function (t, p) -> (p, Symb (p ^ "_0"))) ps in
       let pts = List.map (function (t, p) -> (p, t)) ps in
       let tenv x = List.assoc x pts in
       assume_pred [] env pre (fun h env ->
         verify_cont tenv h env ss (fun _ h env' ->
-          assert_pred h (update env "result" (lookup env' "result")) post (fun h _ ->
+          let env_post =
+            match rt with
+              None -> env
+            | Some t -> (
+              match try_assoc "#result" env' with
+                None -> assert_formula (Not True) l "Function does not specify a return value." (fun _ -> failwith "Unreachable")
+              | Some t -> update env "result" t
+              )
+          in
+          assert_pred h env_post post (fun h _ ->
             match h with
               [] -> success()
             | _ -> assert_formula (Not True) l "Function leaks heap chunks." (fun _ -> success())
