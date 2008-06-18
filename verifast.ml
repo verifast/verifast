@@ -691,6 +691,10 @@ exception StaticError of loc * string
 
 let static_error l msg = raise (StaticError (l, msg))
 
+type heap = (string * term list) list
+type env = (string * term) list
+exception SymbolicExecutionError of string list * heap * env * formula * loc * string * (loc * string) list
+
 let rec eval env e =
   let ev = eval env in
   match e with
@@ -1106,15 +1110,38 @@ let verify_program verbose path =
     success
   in
   
-  let assume phi cont =
-    bg_push (simp phi);
+  let assumptionStack = ref ([]: string list) in
+  
+  let contextStack = ref ([]: (loc * string) list) in
+  
+  let push_context l msg = let _ = contextStack := (l, msg)::!contextStack in () in
+  let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
+    
+  let with_context l msg cont =
+    push_context l msg;
     cont();
-    send_command "(BG_POP)"
+    pop_context();
+    ()
   in
   
-  let assert_formula phi l msg cont =
-    (if not (query_formula phi) then failwith (string_of_loc l ^ msg));
+  let assume phi cont =
+    let s = simp phi in
+    let oldStack = !assumptionStack in
+    bg_push s;
+    assumptionStack := s::!assumptionStack;
+    cont();
+    send_command "(BG_POP)";
+    assumptionStack := oldStack;
+    ()
+  in
+  
+  let assert_formula phi h env l msg cont =
+    (if not (query_formula phi) then raise (SymbolicExecutionError (!assumptionStack, h, env, phi, l, msg, !contextStack)));
     cont()
+  in
+  
+  let assert_false h env l msg =
+    assert_formula (Not True) h env l msg (fun _ -> ())
   in
   
   let success() = () in
@@ -1203,9 +1230,9 @@ let verify_program verbose path =
           matches @ iter (chunk::hprefix) h
     in
     match iter [] h with
-      [] -> assert_formula (Not True) l "No matching heap chunks." (fun _ -> success())
+      [] -> assert_false h env l "No matching heap chunks."
     | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
-    | _ -> assert_formula (Not True) l "Multiple matching heap chunks." (fun _ -> success())
+    | _ -> assert_false h env l "Multiple matching heap chunks."
   in
   
   let rec assert_pred h ghostenv env p cont =
@@ -1217,7 +1244,7 @@ let verify_program verbose path =
     | CallPred (l, g, pats) ->
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env -> cont h ghostenv env)
     | ExprPred (l, e) ->
-      assert_formula (etrue e) l "Expression is false." (fun _ -> cont h ghostenv env)
+      assert_formula (etrue e) h env l "Expression is false." (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) ->
       assert_pred h ghostenv env p1 (fun h ghostenv env -> assert_pred h ghostenv env p2 cont)
     | IfPred (l, e, p1, p2) ->
@@ -1251,7 +1278,7 @@ let verify_program verbose path =
     match s with
       Assign (l, x, e) -> [x]
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
-    | SwitchStmt (l, e, cs) -> failwith (string_of_loc l ^ ": Switch statements inside loops are not supported.")
+    | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
     | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
     | _ -> []
   in
@@ -1275,10 +1302,6 @@ let verify_program verbose path =
   in
 
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
-    let (line, col) = stmt_loc s in
-    let _ = verbose_print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
-    let _ = verbose_print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
-    let _ = verbose_print_endline ("Env: " ^ string_of_env env) in
     let l = stmt_loc s in
     let ev e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
     let etrue e = let _ = if not pure then check_ghost ghostenv l e in exptrue env e in
@@ -1324,11 +1347,11 @@ let verify_program verbose path =
                   ()
                 else (
                   match indinfo with
-                    None -> assert_formula (Not True) l "Recursive lemma call does not decrease the heap and there is no inductive parameter." (fun _ -> failwith "Unreachable.")
+                    None -> assert_false h env l "Recursive lemma call does not decrease the heap and there is no inductive parameter."
                   | Some x -> (
                     match try_assoc (List.assoc x env') sizemap with
                       Some k when k < 0 -> ()
-                    | _ -> assert_formula (Not True) l "Recursive lemma call does not decrease the heap or the inductive parameter." (fun _ -> failwith "Unreachable")
+                    | _ -> assert_false h env l "Recursive lemma call does not decrease the heap or the inductive parameter."
                     )
                 )
               else
@@ -1357,7 +1380,7 @@ let verify_program verbose path =
       get_field h t f l (fun _ v ->
         cont h (update env x v))
     | CallStmt (l, "assert", [e]) ->
-      assert_formula (etrue e) l "Assertion failure." (fun _ -> cont h env)
+      assert_formula (etrue e) h env l "Assertion failure." (fun _ -> cont h env)
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
       let _ = check_assign l x in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
@@ -1447,7 +1470,7 @@ let verify_program verbose path =
                    assert_pred h ghostenv env p (fun h _ _ ->
                      match h with
                        [] -> success()
-                     | _ -> assert_formula (Not True) l "Loop leaks heap chunks." (fun _ -> success())
+                     | _ -> assert_false h env l "Loop leaks heap chunks."
                    )
                  )
                )
@@ -1462,7 +1485,11 @@ let verify_program verbose path =
     verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
-    | s::ss -> verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env -> verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
+    | s::ss ->
+      with_context (stmt_loc s) "(while verifying this statement)" (fun _ ->
+        verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
+      )
   in
 
   let rec verify_decls lems ds =
@@ -1491,19 +1518,23 @@ let verify_program verbose path =
       let _ =
       assume_pred [] [] env pre (fun h ghostenv env ->
         verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
-          let env_post =
+          let get_env_post cont =
             match rt with
-              None -> env
+              None -> cont env
             | Some t -> (
               match try_assoc "#result" env' with
-                None -> assert_formula (Not True) l "Function does not specify a return value." (fun _ -> failwith "Unreachable")
-              | Some t -> update env "result" t
+                None -> assert_false h env l "Function does not specify a return value."
+              | Some t -> cont (update env "result" t)
               )
           in
+          get_env_post (fun env_post ->
+          with_context l "(while verifying the postcondition of this function)" (fun _ ->
           assert_pred h ghostenv env_post post (fun h _ _ ->
             match h with
               [] -> success()
-            | _ -> assert_formula (Not True) l "Function leaks heap chunks." (fun _ -> success())
+            | _ -> assert_false h env l "Function leaks heap chunks."
+          )
+          )
           )
         )
       )
@@ -1516,11 +1547,23 @@ let verify_program verbose path =
   print_endline "0 errors found"
 
 let _ =
+  let print_msg path (line, col) msg =
+    print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": " ^ msg)
+  in
   let verify verbose path =
     try
       verify_program verbose path
     with
-      StaticError ((line, col), msg) -> print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": " ^ msg)
+      StaticError (l, msg) -> print_msg path l msg
+    | SymbolicExecutionError (ass, h, env, phi, l, msg, ctxts) ->
+        let _ = print_endline "Assumptions:" in
+        let _ = List.iter print_endline ass in
+        let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
+        let _ = print_endline ("Env: " ^ string_of_env env) in
+        let _ = print_endline ("Failed query: " ^ simp phi) in
+        let _ = print_msg path l msg in
+        let _ = match ctxts with [] -> () | (l, msg)::_ -> print_msg path l msg in
+        ()
   in
   match Sys.argv with
     [| _; path |] -> verify false path
