@@ -8,34 +8,36 @@ struct llist {
   struct node *last;
 };
 
-//@ predicate node(struct node *node, struct node *next, int value)
-//@   requires node->next |-> next &*& node->value |-> value &*& malloc_block_node(node);
+/*@
+predicate node(struct node *node, struct node *next, int value)
+  requires node->next |-> next &*& node->value |-> value &*& malloc_block_node(node);
 
-//@ inductive intlist = | nil | cons(int, intlist);
+inductive intlist = | nil | cons(int, intlist);
 
-//@ fixpoint int len(intlist v) {
-//@   switch (v) {
-//@     case nil: return 0;
-//@     case cons(x, v): return 1 + len(v);
-//@   }
-//@ }
+fixpoint int len(intlist v) {
+  switch (v) {
+    case nil: return 0;
+    case cons(x, v): return 1 + len(v);
+  }
+}
 
-//@ fixpoint int ith(intlist v, int i) {
-//@   switch (v) {
-//@     case nil: return 0;
-//@     case cons(x, v): return (i == 0 ? x : ith(v, i - 1));
-//@   }
-//@ }
+fixpoint int ith(intlist v, int i) {
+  switch (v) {
+    case nil: return 0;
+    case cons(x, v): return (i == 0 ? x : ith(v, i - 1));
+  }
+}
 
-//@ predicate lseg(struct node *n1, struct node *n2, intlist v)
-//@   requires n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
+predicate lseg(struct node *n1, struct node *n2, intlist v)
+  requires n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
 
-//@ predicate llist(struct llist *list, intlist v)
-//@   requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
+predicate llist(struct llist *list, intlist v)
+  requires list->first |-> ?_f &*& list->last |-> ?_l &*& lseg(_f, _l, v) &*& node(_l, _, _) &*& malloc_block_llist(list);
+@*/
 
 struct llist *create_llist()
-//@   requires true;
-//@   ensures llist(result, nil);
+  //@ requires true;
+  //@ ensures llist(result, nil);
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
@@ -49,46 +51,48 @@ struct llist *create_llist()
   return l;
 }
 
-//@ fixpoint intlist list_add(intlist v, int x) {
-//@   switch (v) {
-//@     case nil: return cons(x, nil);
-//@     case cons(y, v): return cons(y, list_add(v, x));
-//@   }
-//@ }
+/*@
+fixpoint intlist list_add(intlist v, int x) {
+  switch (v) {
+    case nil: return cons(x, nil);
+    case cons(y, v): return cons(y, list_add(v, x));
+  }
+}
 
-//@ lemma void distinct_nodes(struct node *n1, struct node *n2)
-//@   requires node(n1, ?n1n, ?n1v) &*& node(n2, ?n2n, ?n2v);
-//@   ensures node(n1, n1n, n1v) &*& node(n2, n2n, n2v) &*& n1 != n2;
-//@ {
-//@   open node(n1, _, _);
-//@   open node(n2, _, _);
-//@   close node(n1, n1n, n1v);
-//@   close node(n2, n2n, n2v);
-//@ }
+lemma void distinct_nodes(struct node *n1, struct node *n2)
+  requires node(n1, ?n1n, ?n1v) &*& node(n2, ?n2n, ?n2v);
+  ensures node(n1, n1n, n1v) &*& node(n2, n2n, n2v) &*& n1 != n2;
+{
+  open node(n1, _, _);
+  open node(n2, _, _);
+  close node(n1, n1n, n1v);
+  close node(n2, n2n, n2v);
+}
 
-//@ lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x) &*& node(n3, ?n3next, ?n3value);
-//@   ensures lseg(n1, n3, list_add(_v, _x)) &*& node(n3, n3next, n3value);
-//@ {
-//@   distinct_nodes(n2, n3);
-//@   open lseg(n1, n2, _v);
-//@   if (n1 == n2) {
-//@     close lseg(n3, n3, nil);
-//@   } else {
-//@     distinct_nodes(n1, n3);
-//@     open node(n1, _, _);
-//@     struct node *next = n1->next;
-//@     int value = n1->value;
-//@     lseg_add(next, n2, n3);
-//@     close node(n1, next, value);
-//@   }
-//@   
-//@   close lseg(n1, n3, list_add(_v, _x));
-//@ }
+lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
+  requires lseg(n1, n2, ?_v) &*& node(n2, n3, ?_x) &*& node(n3, ?n3next, ?n3value);
+  ensures lseg(n1, n3, list_add(_v, _x)) &*& node(n3, n3next, n3value);
+{
+  distinct_nodes(n2, n3);
+  open lseg(n1, n2, _v);
+  if (n1 == n2) {
+    close lseg(n3, n3, nil);
+  } else {
+    distinct_nodes(n1, n3);
+    open node(n1, _, _);
+    struct node *next = n1->next;
+    int value = n1->value;
+    lseg_add(next, n2, n3);
+    close node(n1, next, value);
+  }
+  
+  close lseg(n1, n3, list_add(_v, _x));
+}
+@*/
 
 void add(struct llist *list, int x)
-//@   requires llist(list, ?_v);
-//@   ensures llist(list, list_add(_v, x));
+  //@ requires llist(list, ?_v);
+  //@ ensures llist(list, list_add(_v, x));
 {
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
@@ -106,41 +110,43 @@ void add(struct llist *list, int x)
   //@ close llist(list, list_add(_v, x));
 }
 
-//@ fixpoint intlist list_append(intlist l1, intlist l2) {
-//@   switch (l1) {
-//@     case nil: return l2;
-//@     case cons(x, v): return cons(x, list_append(v, l2));
-//@   }
-//@ }
+/*@
+fixpoint intlist list_append(intlist l1, intlist l2) {
+  switch (l1) {
+    case nil: return l2;
+    case cons(x, v): return cons(x, list_append(v, l2));
+  }
+}
 
-//@ lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
-//@   requires lseg(n1, n2, ?_v1) &*& lseg(n2, n3, ?_v2) &*& node(n3, ?n3n, ?n3v);
-//@   ensures lseg(n1, n3, list_append(_v1, _v2)) &*& node(n3, n3n, n3v);
-//@ {
-//@   open lseg(n1, n2, _v1);
-//@   switch (_v1) {
-//@     case nil:
-//@     case cons(x, v):
-//@       distinct_nodes(n1, n3);
-//@       open node(n1, _, _);
-//@       struct node *next = n1->next;
-//@       int value = n1->value;
-//@       lseg_append(next, n2, n3);
-//@       close node(n1, next, value);
-//@       close lseg(n1, n3, list_append(_v1, _v2));
-//@   }
-//@ }
+lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
+  requires lseg(n1, n2, ?_v1) &*& lseg(n2, n3, ?_v2) &*& node(n3, ?n3n, ?n3v);
+  ensures lseg(n1, n3, list_append(_v1, _v2)) &*& node(n3, n3n, n3v);
+{
+  open lseg(n1, n2, _v1);
+  switch (_v1) {
+    case nil:
+    case cons(x, v):
+      distinct_nodes(n1, n3);
+      open node(n1, _, _);
+      struct node *next = n1->next;
+      int value = n1->value;
+      lseg_append(next, n2, n3);
+      close node(n1, next, value);
+      close lseg(n1, n3, list_append(_v1, _v2));
+  }
+}
 
-//@ lemma void list_append_nil(intlist v)
-//@   requires emp;
-//@   ensures list_append(v, nil) == v;
-//@ {
-//@   switch (v) {
-//@     case nil:
-//@     case cons(h, t):
-//@       list_append_nil(t);
-//@   }
-//@ }
+lemma void list_append_nil(intlist v)
+  requires emp;
+  ensures list_append(v, nil) == v;
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      list_append_nil(t);
+  }
+}
+@*/
 
 void append(struct llist *list1, struct llist *list2)
   //@ requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
@@ -178,8 +184,8 @@ void append(struct llist *list1, struct llist *list2)
 }
 
 void dispose(struct llist *list)
-//@   requires llist(list, _);
-//@   ensures emp;
+  //@ requires llist(list, _);
+  //@ ensures emp;
 {
   //@ open llist(list, _);
   struct node *n = list->first;
@@ -199,20 +205,22 @@ void dispose(struct llist *list)
   free(list);
 }
 
-//@ lemma void add_append_lemma(intlist v1, int x, intlist v2)
-//@   requires emp;
-//@   ensures list_append(v1, cons(x, v2)) == list_append(list_add(v1, x), v2);
-//@ {
-//@   switch (v1) {
-//@     case nil:
-//@     case cons(h, t):
-//@       add_append_lemma(t, x, v2);
-//@   }
-//@ }
+/*@
+lemma void add_append_lemma(intlist v1, int x, intlist v2)
+  requires emp;
+  ensures list_append(v1, cons(x, v2)) == list_append(list_add(v1, x), v2);
+{
+  switch (v1) {
+    case nil:
+    case cons(h, t):
+      add_append_lemma(t, x, v2);
+  }
+}
+@*/
 
 int length(struct llist *list)
-//@   requires llist(list, ?_v);
-//@   ensures llist(list, _v) &*& result == len(_v);
+  //@ requires llist(list, ?_v);
+  //@ ensures llist(list, _v) &*& result == len(_v);
 {
   //@ open llist(list, _v);
   struct node *f = list->first;
@@ -241,63 +249,65 @@ int length(struct llist *list)
   return c;
 }
 
-//@ fixpoint intlist drop(int i, intlist v) {
-//@   switch (v) {
-//@     case nil: return nil;
-//@     case cons(x, v): return i == 0 ? cons(x, v) : drop(i - 1, v);
-//@   }
-//@ }
+/*@
+fixpoint intlist drop(int i, intlist v) {
+  switch (v) {
+    case nil: return nil;
+    case cons(x, v): return i == 0 ? cons(x, v) : drop(i - 1, v);
+  }
+}
 
-//@ lemma void drop_ith(intlist v, int i, int h)
-//@   requires 0 <= i &*& i < len(v) &*& ith(drop(i, v), 0) == h;
-//@   ensures ith(v, i) == h;
-//@ {
-//@   switch (v) {
-//@     case nil:
-//@     case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1, h); }
-//@   }
-//@ }
+lemma void drop_ith(intlist v, int i, int h)
+  requires 0 <= i &*& i < len(v) &*& ith(drop(i, v), 0) == h;
+  ensures ith(v, i) == h;
+{
+  switch (v) {
+    case nil:
+    case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1, h); }
+  }
+}
 
-//@ lemma void drop_0_lemma(intlist v)
-//@   requires true;
-//@   ensures drop(0,v) == v;
-//@ {
-//@   switch (v) {
-//@     case nil:
-//@     case cons(x, v):
-//@   }
-//@ }
+lemma void drop_0_lemma(intlist v)
+  requires true;
+  ensures drop(0,v) == v;
+{
+  switch (v) {
+    case nil:
+    case cons(x, v):
+  }
+}
 
-//@ lemma void drop_len_lemma(int i, intlist v)
-//@   requires 0 <= i &*& i <= len(v);
-//@   ensures len(drop(i, v)) == len(v) - i;
-//@ {
-//@   switch (v) {
-//@     case nil:
-//@     case cons(h, t):
-//@       if (i == 0) {
-//@       } else {
-//@         drop_len_lemma(i - 1, t);
-//@       }
-//@   }
-//@ }
+lemma void drop_len_lemma(int i, intlist v)
+  requires 0 <= i &*& i <= len(v);
+  ensures len(drop(i, v)) == len(v) - i;
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      if (i == 0) {
+      } else {
+        drop_len_lemma(i - 1, t);
+      }
+  }
+}
 
-//@ lemma void drop_cons_lemma(int i, intlist v, int h, intlist t)
-//@   requires 0 <= i &*& drop(i, v) == cons(h, t);
-//@   ensures drop(i + 1, v) == t;
-//@ {
-//@   switch (v) {
-//@     case nil:
-//@     case cons(h2, t2):
-//@       if (i == 0) {
-//@         drop_0_lemma(v);
-//@         if (1 == 0) { } else { drop_0_lemma(t); }
-//@       } else {
-//@         drop_cons_lemma(i - 1, t2, h, t);
-//@         if (i + 1 == 0) { } else { }
-//@       }
-//@   }
-//@ }
+lemma void drop_cons_lemma(int i, intlist v, int h, intlist t)
+  requires 0 <= i &*& drop(i, v) == cons(h, t);
+  ensures drop(i + 1, v) == t;
+{
+  switch (v) {
+    case nil:
+    case cons(h2, t2):
+      if (i == 0) {
+        drop_0_lemma(v);
+        if (1 == 0) { } else { drop_0_lemma(t); }
+      } else {
+        drop_cons_lemma(i - 1, t2, h, t);
+        if (i + 1 == 0) { } else { }
+      }
+  }
+}
+@*/
 
 int lookup(struct llist *list, int index)
   //@ requires llist(list, ?_v) &*& 0 <= index &*& index < len(_v);

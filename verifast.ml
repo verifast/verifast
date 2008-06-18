@@ -41,6 +41,8 @@ let make_lexer keywords stream =
   let linepos = ref 0 in  (* Stream count at start of line *)
   let tokenpos = ref 0 in
 
+  let in_single_line_annotation = ref false in
+  
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
   let ident_or_keyword id =
@@ -53,16 +55,24 @@ let make_lexer keywords stream =
   in
   let start_token() = tokenpos := Stream.count stream in
   let rec next_token (strm__ : _ Stream.t) =
+    let new_line strm__ =
+      line := !line + 1;
+      linepos := Stream.count strm__;
+      if !in_single_line_annotation then (
+        in_single_line_annotation := false;
+        Some (Kwd "@//")
+      ) else
+        next_token strm__
+    in
     match Stream.peek strm__ with
       Some (' ' | '\009' | '\026' | '\012') ->
         Stream.junk strm__; next_token strm__
     | Some '\010' ->
-        Stream.junk strm__; line := !line + 1; linepos := Stream.count strm__; next_token strm__
+        Stream.junk strm__; new_line strm__
     | Some '\013' ->
         Stream.junk strm__;
         if Stream.peek strm__ = Some '\010' then Stream.junk strm__;
-        line := !line + 1; linepos := Stream.count strm__;
-        next_token strm__
+        new_line strm__
     | Some ('A'..'Z' | 'a'..'z' | '_' | '\192'..'\255' as c) ->
         start_token();
         Stream.junk strm__;
@@ -187,14 +197,42 @@ let make_lexer keywords stream =
   and maybe_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some '/' ->
-        Stream.junk strm__; let s = strm__ in comment s; next_token s
+      Stream.junk strm__;
+      (
+        match Stream.peek strm__ with
+          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; Some (Kwd "//@"))
+        | _ ->
+          if !in_single_line_annotation then (
+            in_single_line_annotation := false; single_line_comment strm__; Some (Kwd "@//")
+          ) else (
+            single_line_comment strm__; next_token strm__
+          )
+      )
+    | Some '*' ->
+      Stream.junk strm__;
+      (
+        match Stream.peek strm__ with
+          Some '@' -> (Stream.junk strm__; Some (Kwd "/*@"))
+        | _ -> (multiline_comment strm__; next_token strm__)
+      )
     | _ -> Some (keyword_or_error '/')
-  and comment (strm__ : _ Stream.t) =
+  and single_line_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
-      Some '@' -> Stream.junk strm__
-    | Some '\010' | Some '\013' -> ()
-    | Some c -> Stream.junk strm__; comment strm__
+      Some '\010' | Some '\013' -> ()
+    | Some c -> Stream.junk strm__; single_line_comment strm__
     | _ -> raise Stream.Failure
+  and multiline_comment (strm__ : _ Stream.t) =
+    match Stream.peek strm__ with
+      Some '*' ->
+      (
+        Stream.junk strm__;
+        (
+          match Stream.peek strm__ with
+            Some '/' -> (Stream.junk strm__; ())
+          | _ -> multiline_comment strm__
+        )
+      )
+    | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
   ((fun () -> (!line, Stream.count stream - !linepos + 1)), Stream.from (fun count -> (match next_token stream with Some t -> Some ((!line, !tokenpos - !linepos + 1), t) | None -> None)))
 
@@ -223,7 +261,8 @@ and
     SwitchExprClause of loc * string * string list * expr
 and
   stmt =
-    Assign of loc * string * expr
+    PureStmt of loc * stmt
+  | Assign of loc * string * expr
   | DeclStmt of loc * type_expr * string * expr
   | Write of loc * expr * string * expr
   | CallStmt of loc * string * expr list
@@ -299,7 +338,8 @@ let pred_loc p =
   
 let stmt_loc s =
   match s with
-    Assign (l, _, _) -> l
+    PureStmt (l, _) -> l
+  | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
   | CallStmt (l,  _, _) -> l
@@ -319,7 +359,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"; "_"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"; "_"; "@*/"
 ]
 
 let read_program s =
@@ -330,18 +370,25 @@ let rec parse_program = parser
 and
   parse_decls = parser
   [< d = parse_decl; ds = parse_decls >] -> d::ds
+| [< '(_, Kwd "/*@"); ds = parse_pure_decls; '(_, Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
 | [< >] -> []
 and
   parse_decl = parser
-  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = parse_ctors; '(_, Kwd ";") >] -> Inductive (l, i, cs)
-| [< '(l, Kwd "struct"); '(_, Ident s); d = parser
+  [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
   | [< t = parse_type_suffix l s; d = parse_func_rest Regular (Some t) >] -> d
   >] -> d
-| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
-| [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
-| [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
+and
+  parse_pure_decls = parser
+  [< d = parse_pure_decl; ds = parse_pure_decls >] -> d::ds
+| [< >] -> []
+and
+  parse_pure_decl = parser
+  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = parse_ctors; '(_, Kwd ";") >] -> Inductive (l, i, cs)
+| [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
+| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
+| [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
 and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
@@ -393,7 +440,8 @@ and
 | [< '(_, Kwd ")") >] -> []
 and
   parse_contract_opt = parser
-  [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Some (p, q)
+  [< '(_, Kwd "//@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//"); '(_, Kwd "//@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//") >] -> Some (p, q)
+| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Some (p, q)
 | [< >] -> None
 and
   parse_block = parser
@@ -404,14 +452,15 @@ and
 | [< >] -> []
 and
   parse_stmt = parser
-  [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
+  [< '(l, Kwd "//@"); s = parse_stmt; '(_, Kwd "@//") >] -> PureStmt (l, s)
+| [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (Stream.Error "Body of open statement must be call expression."))
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (Stream.Error "Body of close statement must be call expression."))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
-| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); b = parse_block >] -> WhileStmt (l, e, p, b)
+| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "//@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//"); b = parse_block >] -> WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (Stream.Error "An expression used as a statement must be a call expression."))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
@@ -1223,7 +1272,9 @@ let verify_program verbose path =
     let etrue = exptrue env in
     let cont = tcont sizemap tenv in
     match s with
-      Assign (l, x, Read (lr, e, f)) ->
+      PureStmt (l, s) ->
+      verify_stmt true leminfo sizemap tenv h env s tcont
+    | Assign (l, x, Read (lr, e, f)) ->
       let t = ev e in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
