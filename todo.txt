@@ -1,0 +1,8 @@
+Soundness todos:
+S001 Check well-formedness of inductive datatype definitions (including direct or indirect recursion)
+S002 Check fixpoint function well-formedness (including termination)
+S003 Check lemma recursion (direct and indirect)
+S004 Fix generation of logical symbols to avoid clashes
+S005 Check that commented items have no influence on the real C program
+S006 Check for duplicate names
+S007 Perform type checking of variable expressions, call expressions, etc.
