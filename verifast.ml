@@ -687,6 +687,10 @@ let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = slist (List.map (function (x, t) -> slist [x; simpt t]) env)
 
+exception StaticError of loc * string
+
+let static_error l msg = raise (StaticError (l, msg))
+
 let rec eval env e =
   let ev = eval env in
   match e with
@@ -701,6 +705,17 @@ let rec eval env e =
     match t with
       TypeName (_, tn) -> Symb (tn ^ "_size")
     | PtrType (_, tn) -> Symb "ptrsize"
+
+let check_ghost ghostenv l e =
+  let rec iter e =
+    match e with
+      Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
+    | Operation (l, _, es) -> List.iter iter es
+    | CallExpr (l, _, pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
+    | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
+    | _ -> ()
+  in
+  iter e
 
 let rec exptrue env e =
   let etrue = exptrue env in
@@ -721,10 +736,6 @@ let zip xs ys =
     | _ -> None
   in
   iter xs ys []
-
-exception StaticError of loc * string
-
-let static_error l msg = raise (StaticError (l, msg))
 
 let verify_program verbose path =
 
@@ -1113,17 +1124,17 @@ let verify_program verbose path =
     cont2()
   in
   
-  let evalpat env pat cont =
+  let evalpat ghostenv env pat cont =
     match pat with
-      LitPat e -> cont env (eval env e)
-    | VarPat x -> let t = get_unique_var_symb x in cont (update env x t) t
-    | DummyPat -> let t = get_unique_symb "dummy" in cont env t
+      LitPat e -> cont ghostenv env (eval env e)
+    | VarPat x -> let t = get_unique_var_symb x in cont (x::ghostenv) (update env x t) t
+    | DummyPat -> let t = get_unique_symb "dummy" in cont ghostenv env t
   in
   
-  let rec evalpats env pats cont =
+  let rec evalpats ghostenv env pats cont =
     match pats with
-      [] -> cont env []
-    | pat::pats -> evalpat env pat (fun env t -> evalpats env pats (fun env ts -> cont env (t::ts)))
+      [] -> cont ghostenv env []
+    | pat::pats -> evalpat ghostenv env pat (fun ghostenv env t -> evalpats ghostenv env pats (fun ghostenv env ts -> cont ghostenv env (t::ts)))
   in
   
   let assume_field h0 f tp tv cont =
@@ -1136,15 +1147,15 @@ let verify_program verbose path =
     iter h0
   in
   
-  let rec assume_pred h env p cont =
+  let rec assume_pred h ghostenv env p cont =
     let ev = eval env in
     let etrue = exptrue env in
     match p with
-    | Access (l, e, f, rhs) -> let te = ev e in evalpat env rhs (fun env t -> assume_field h f te t (fun h -> cont h env))
-    | CallPred (l, g, pats) -> evalpats env pats (fun env ts -> cont ((g, ts)::h) env)
-    | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h env)
-    | Sep (l, p1, p2) -> assume_pred h env p1 (fun h env -> assume_pred h env p2 cont)
-    | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (etrue e) (fun _ -> assume_pred h env p1 cont)) (fun _ -> assume (Not (etrue e)) (fun _ -> assume_pred h env p2 cont))
+    | Access (l, e, f, rhs) -> let te = ev e in evalpat ghostenv env rhs (fun ghostenv env t -> assume_field h f te t (fun h -> cont h ghostenv env))
+    | CallPred (l, g, pats) -> evalpats ghostenv env pats (fun ghostenv env ts -> cont ((g, ts)::h) ghostenv env)
+    | ExprPred (l, e) -> assume (etrue e) (fun _ -> cont h ghostenv env)
+    | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 (fun h ghostenv env -> assume_pred h ghostenv env p2 cont)
+    | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (etrue e) (fun _ -> assume_pred h ghostenv env p1 cont)) (fun _ -> assume (Not (etrue e)) (fun _ -> assume_pred h ghostenv env p2 cont))
     | SwitchPred (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1153,70 +1164,70 @@ let verify_program verbose path =
           branch
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-               assume (Eq (t, FunApp(cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (xts @ env) p cont))
+               assume (Eq (t, FunApp(cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
-    | EmpPred l -> cont h env
+    | EmpPred l -> cont h ghostenv env
   in
   
   let definitely_equal t1 t2 =
     if t1 = t2 then true else query_formula (Eq (t1, t2))
   in
   
-  let match_chunk env g pats (g', ts0) =
-    let rec iter env pats ts =
+  let match_chunk ghostenv env g pats (g', ts0) =
+    let rec iter ghostenv env pats ts =
       match (pats, ts) with
-        (LitPat e::pats, t::ts) -> if definitely_equal (eval env e) t then iter env pats ts else None
-      | (VarPat x::pats, t::ts) -> iter (update env x t) pats ts
-      | (DummyPat::pats, t::ts) -> iter env pats ts
-      | ([], []) -> Some (ts0, env)
+        (LitPat e::pats, t::ts) -> if definitely_equal (eval env e) t then iter ghostenv env pats ts else None
+      | (VarPat x::pats, t::ts) -> iter (x::ghostenv) (update env x t) pats ts
+      | (DummyPat::pats, t::ts) -> iter ghostenv env pats ts
+      | ([], []) -> Some (ts0, ghostenv, env)
     in
       if g = g' then
-        iter env pats ts0
+        iter ghostenv env pats ts0
       else
         None
   in
   
-  let assert_chunk h env l g pats cont =
+  let assert_chunk h ghostenv env l g pats cont =
     let rec iter hprefix h =
       match h with
         [] -> []
       | chunk::h ->
         let matches =
-          match match_chunk env g pats chunk with
+          match match_chunk ghostenv env g pats chunk with
             None -> []
-          | Some (ts, env) -> [(hprefix @ h, ts, env)]
+          | Some (ts, ghostenv, env) -> [(hprefix @ h, ts, ghostenv, env)]
         in
           matches @ iter (chunk::hprefix) h
     in
     match iter [] h with
       [] -> assert_formula (Not True) l "No matching heap chunks." (fun _ -> success())
-    | [(h, ts, env)] -> cont h ts env
+    | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
     | _ -> assert_formula (Not True) l "Multiple matching heap chunks." (fun _ -> success())
   in
   
-  let rec assert_pred h env p cont =
+  let rec assert_pred h ghostenv env p cont =
     let ev = eval env in
     let etrue = exptrue env in
     match p with
     | Access (l, e, f, rhs) ->
-      assert_chunk h env l ("field_" ^ f) [LitPat e; rhs] (fun h ts env -> cont h env)
+      assert_chunk h ghostenv env l ("field_" ^ f) [LitPat e; rhs] (fun h ts ghostenv env -> cont h ghostenv env)
     | CallPred (l, g, pats) ->
-      assert_chunk h env l g pats (fun h ts env -> cont h env)
+      assert_chunk h ghostenv env l g pats (fun h ts ghostenv env -> cont h ghostenv env)
     | ExprPred (l, e) ->
-      assert_formula (etrue e) l "Expression is false." (fun _ -> cont h env)
+      assert_formula (etrue e) l "Expression is false." (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) ->
-      assert_pred h env p1 (fun h env -> assert_pred h env p2 cont)
+      assert_pred h ghostenv env p1 (fun h ghostenv env -> assert_pred h ghostenv env p2 cont)
     | IfPred (l, e, p1, p2) ->
       branch
         (fun _ ->
            assume (etrue e) (fun _ ->
-             assert_pred h env p1 cont))
+             assert_pred h ghostenv env p1 cont))
         (fun _ ->
            assume (Not (etrue e)) (fun _ ->
-             assert_pred h env p2 cont))
+             assert_pred h ghostenv env p2 cont))
     | SwitchPred (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1224,12 +1235,12 @@ let verify_program verbose path =
           SwitchPredClause (lc, cn, pats, p)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (xts @ env) p cont))
+            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
-    | EmpPred l -> cont h env
+    | EmpPred l -> cont h ghostenv env
   in
 
   let rec block_assigned_variables ss =
@@ -1246,7 +1257,7 @@ let verify_program verbose path =
   in
   
   let get_field h t f l cont =
-    assert_chunk h [("x", t)] l ("field_" ^ f) [LitPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts env ->
+    assert_chunk h [] [("x", t)] l ("field_" ^ f) [LitPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts ghostenv env ->
       cont h (lookup env "y"))
   in
   
@@ -1263,53 +1274,39 @@ let verify_program verbose path =
     iter [] ds
   in
 
-  let rec verify_stmt pure leminfo sizemap tenv h env s tcont =
+  let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     let (line, col) = stmt_loc s in
     let _ = verbose_print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
     let _ = verbose_print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
     let _ = verbose_print_endline ("Env: " ^ string_of_env env) in
-    let ev = eval env in
-    let etrue = exptrue env in
-    let cont = tcont sizemap tenv in
-    match s with
-      PureStmt (l, s) ->
-      verify_stmt true leminfo sizemap tenv h env s tcont
-    | Assign (l, x, Read (lr, e, f)) ->
-      let t = ev e in
-      get_field h t f l (fun _ v ->
-        cont h (update env x v))
-    | Assign (l, x, CallExpr (lc, "assert", [LitPat e])) ->
-      assert_formula (etrue e) l "Assertion failure." (fun _ -> cont h env)
-    | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
-      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
-      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
-      let result = get_unique_symb "block" in
-      let rec iter h fds =
-        match fds with
-          [] -> cont (h @ [("malloc_block_" ^ tn, [result])]) (update env x result)
-        | Field (lf, t, f)::fds -> assume_field h f result (get_unique_symb "value") (fun h -> iter h fds)
-      in
-      iter h fds
-    | CallStmt (l, "free", [Var (lv, x)]) ->
-      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
-      let (PtrType (_, tn)) = tenv x in
-      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
-      let rec iter h fds =
-        match fds with
-          [] -> cont h env
-        | (Field (lf, t, f))::fds -> get_field h (lookup env x) f l (fun h _ -> iter h fds)
-      in
-      assert_chunk h env l ("malloc_block_" ^ tn) [LitPat (Var (lv, x))] (fun h _ _ -> iter h fds)
-    | Assign (l, x, CallExpr (lc, g, pats)) ->
+    let l = stmt_loc s in
+    let ev e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
+    let etrue e = let _ = if not pure then check_ghost ghostenv l e in exptrue env e in
+    let cont = tcont sizemap tenv ghostenv in
+    let check_assign l x =
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
+    in
+    let call_stmt l xo g pats =
       let ts = List.map (function (LitPat e) -> ev e) pats in
-      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(ps, pre, post)] | _ -> []) ds in
+      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(k, ps, pre, post)] | _ -> []) ds in
       (
       match fds with
-        [] -> cont h (update env x (FunApp (g ^ "_", ts)))
-      | [(ps, pre, post)] ->
+        [] -> (
+        match try_assoc g purefuncmap with
+          None -> static_error l "No such function."
+        | Some _ -> (
+          match xo with
+            None -> static_error l "Cannot write call of pure function as statement."
+          | Some x ->
+            let _ = check_assign l x in
+            cont h (update env x (FunApp (g ^ "_", ts)))
+          )
+        )
+      | [(k, ps, pre, post)] ->
+        let _ = if pure && k = Regular then static_error l "Cannot call regular methods in a pure context." in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
-        assert_pred h env' pre (fun h env' ->
+        assert_pred h ghostenv env' pre (fun h ghostenv' env' ->
           let _ =
             match leminfo with
               None -> ()
@@ -1339,27 +1336,68 @@ let verify_program verbose path =
           in
           let r = get_unique_symb "result" in
           let env'' = update env' "result" r in
-          assume_pred h env'' post (fun h _ ->
-            cont h (update env x r))
+          assume_pred h ghostenv' env'' post (fun h _ _ ->
+            let env =
+              match xo with
+                None -> env
+              | Some x ->
+                let _ = check_assign l x in
+                update env x r
+            in
+            cont h env)
         )
       )
+    in
+    match s with
+      PureStmt (l, s) ->
+      verify_stmt true leminfo sizemap tenv ghostenv h env s tcont
+    | Assign (l, x, Read (lr, e, f)) ->
+      let _ = check_assign l x in
+      let t = ev e in
+      get_field h t f l (fun _ v ->
+        cont h (update env x v))
+    | CallStmt (l, "assert", [e]) ->
+      assert_formula (etrue e) l "Assertion failure." (fun _ -> cont h env)
+    | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
+      let _ = check_assign l x in
+      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let result = get_unique_symb "block" in
+      let rec iter h fds =
+        match fds with
+          [] -> cont (h @ [("malloc_block_" ^ tn, [result])]) (update env x result)
+        | Field (lf, t, f)::fds -> assume_field h f result (get_unique_symb "value") (fun h -> iter h fds)
+      in
+      iter h fds
+    | CallStmt (l, "free", [Var (lv, x)]) ->
+      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
+      let (PtrType (_, tn)) = tenv x in
+      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let rec iter h fds =
+        match fds with
+          [] -> cont h env
+        | (Field (lf, t, f))::fds -> get_field h (lookup env x) f l (fun h _ -> iter h fds)
+      in
+      assert_chunk h ghostenv env l ("malloc_block_" ^ tn) [LitPat (Var (lv, x))] (fun h _ _ _ -> iter h fds)
+    | Assign (l, x, CallExpr (lc, g, pats)) ->
+      call_stmt l (Some x) g pats
     | Assign (l, x, e) ->
+      let _ = if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." in
       cont h (update env x (ev e))
     | DeclStmt (l, t, x, e) ->
-      verify_stmt pure leminfo sizemap (fun y -> if y = x then t else tenv y) h env (Assign (l, x, e)) tcont
+      let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
+      verify_stmt pure leminfo sizemap (fun y -> if y = x then t else tenv y) ghostenv h env (Assign (l, x, e)) tcont
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
       let t = ev e in
       get_field h t f l (fun h _ ->
         cont (("field_" ^ f, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
-      let x = get_unique_id "|<result>|" in   (* HACK *)
-      verify_stmt pure leminfo sizemap tenv h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> LitPat e) es))) tcont
+      call_stmt l None g (List.map (fun e -> LitPat e) es)
     | IfStmt (l, e, ss1, ss2) ->
       let t = ev e in
       branch
-        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont pure leminfo sizemap tenv h env ss1 tcont))
-        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont pure leminfo sizemap tenv h env ss2 tcont))
+        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
+        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1373,23 +1411,23 @@ let verify_program verbose path =
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv h (xts @ env) ss tcont))
+            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
     | Open (l, g, pats) ->
-      assert_chunk h env l g pats (fun h ts env ->
+      assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
         let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
-        assume_pred h env' p (fun h _ ->
+        assume_pred h ghostenv env' p (fun h _ _ ->
           cont h env))
     | Close (l, g, pats) ->
       let ts = List.map (function LitPat e -> ev e) pats in
       let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
       let ys = List.map (function (t, p) -> p) ps in
       let Some env' = zip ys ts in
-      assert_pred h env' p (fun h _ ->
+      assert_pred h ghostenv env' p (fun h _ _ ->
         cont ((g, ts)::h) env)
     | ReturnStmt (l, Some e) ->
       cont h (update env "#result" (ev e))
@@ -1397,16 +1435,16 @@ let verify_program verbose path =
     | WhileStmt (l, e, p, ss) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let xs = block_assigned_variables ss in
-      assert_pred h env p (fun h env ->
+      assert_pred h ghostenv env p (fun h ghostenv env ->
         let ts = List.map get_unique_var_symb xs in
         let Some bs = zip xs ts in
         let env = bs @ env in
         branch
           (fun _ ->
-             assume_pred [] env p (fun h env ->
+             assume_pred [] ghostenv env p (fun h ghostenv env ->
                assume (exptrue env e) (fun _ ->
-                 verify_cont pure leminfo sizemap tenv h env ss (fun sizemap tenv h env ->
-                   assert_pred h env p (fun h _ ->
+                 verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+                   assert_pred h ghostenv env p (fun h _ _ ->
                      match h with
                        [] -> success()
                      | _ -> assert_formula (Not True) l "Loop leaks heap chunks." (fun _ -> success())
@@ -1416,15 +1454,15 @@ let verify_program verbose path =
              )
           )
           (fun _ ->
-             assume_pred h env p (fun h env ->
+             assume_pred h ghostenv env p (fun h ghostenv env ->
                assume (Not (exptrue env e)) (fun _ ->
                  cont h env)))
       )
   and
-    verify_cont pure leminfo sizemap tenv h env ss cont =
+    verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =
     match ss with
-      [] -> cont sizemap tenv h env
-    | s::ss -> verify_stmt pure leminfo sizemap tenv h env s (fun sizemap tenv h env -> verify_cont pure leminfo sizemap tenv h env ss cont)
+      [] -> cont sizemap tenv ghostenv h env
+    | s::ss -> verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env -> verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
   in
 
   let rec verify_decls lems ds =
@@ -1451,8 +1489,8 @@ let verify_program verbose path =
           (false, None, lems)
       in
       let _ =
-      assume_pred [] env pre (fun h env ->
-        verify_cont in_pure_context leminfo sizemap tenv h env ss (fun _ _ h env' ->
+      assume_pred [] [] env pre (fun h ghostenv env ->
+        verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
           let env_post =
             match rt with
               None -> env
@@ -1462,7 +1500,7 @@ let verify_program verbose path =
               | Some t -> update env "result" t
               )
           in
-          assert_pred h env_post post (fun h _ ->
+          assert_pred h ghostenv env_post post (fun h _ _ ->
             match h with
               [] -> success()
             | _ -> assert_formula (Not True) l "Function leaks heap chunks." (fun _ -> success())
