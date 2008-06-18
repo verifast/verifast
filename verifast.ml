@@ -556,6 +556,9 @@ let rec try_assoc x xys =
   | (x', y)::xys when x' = x -> Some y
   | _::xys -> try_assoc x xys
 
+let startswith s s0 =
+  String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
+
 let theory = [
   "(DISTINCT true_ false_)";
   "(FORALL (e1 e2) (EQ (IF true_ e1 e2) e1))";
@@ -1198,14 +1201,14 @@ let verify_program verbose path =
       cont h (lookup env "y"))
   in
 
-  let rec verify_stmt tenv h env s tcont =
+  let rec verify_stmt pure leminfo sizemap tenv h env s tcont =
     let (line, col) = stmt_loc s in
     let _ = verbose_print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": Checking statement...") in
     let _ = verbose_print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
     let _ = verbose_print_endline ("Env: " ^ string_of_env env) in
     let ev = eval env in
     let etrue = exptrue env in
-    let cont = tcont tenv in
+    let cont = tcont sizemap tenv in
     match s with
       Assign (l, x, Read (lr, e, f)) ->
       let t = ev e in
@@ -1214,6 +1217,7 @@ let verify_program verbose path =
     | Assign (l, x, CallExpr (lc, "assert", [LitPat e])) ->
       assert_formula (etrue e) l "Assertion failure." (fun _ -> cont h env)
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
+      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let result = get_unique_symb "block" in
       let rec iter h fds =
@@ -1223,6 +1227,7 @@ let verify_program verbose path =
       in
       iter h fds
     | CallStmt (l, "free", [Var (lv, x)]) ->
+      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
       let (PtrType (_, tn)) = tenv x in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let rec iter h fds =
@@ -1241,6 +1246,33 @@ let verify_program verbose path =
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
         assert_pred h env' pre (fun h env' ->
+          let _ =
+            match leminfo with
+              None -> ()
+            | Some (lems, g0, indinfo) ->
+              if List.mem g lems then
+                ()
+              else if g = g0 then
+                let rec nonempty h =
+                  match h with
+                    [] -> false
+                  | (p, ts)::_ when startswith p "field_" -> true
+                  | _::h -> nonempty h
+                in
+                if nonempty h then
+                  ()
+                else (
+                  match indinfo with
+                    None -> assert_formula (Not True) l "Recursive lemma call does not decrease the heap and there is no inductive parameter." (fun _ -> failwith "Unreachable.")
+                  | Some x -> (
+                    match try_assoc (List.assoc x env') sizemap with
+                      Some k when k < 0 -> ()
+                    | _ -> assert_formula (Not True) l "Recursive lemma call does not decrease the heap or the inductive parameter." (fun _ -> failwith "Unreachable")
+                    )
+                )
+              else
+                static_error l "A lemma can call only preceding lemmas or itself."
+          in
           let r = get_unique_symb "result" in
           let env'' = update env' "result" r in
           assume_pred h env'' post (fun h _ ->
@@ -1250,19 +1282,20 @@ let verify_program verbose path =
     | Assign (l, x, e) ->
       cont h (update env x (ev e))
     | DeclStmt (l, t, x, e) ->
-      verify_stmt (fun y -> if y = x then t else tenv y) h env (Assign (l, x, e)) tcont
+      verify_stmt pure leminfo sizemap (fun y -> if y = x then t else tenv y) h env (Assign (l, x, e)) tcont
     | Write (l, e, f, rhs) ->
+      let _ = if pure then static_error l "Cannot write in a pure context." in
       let t = ev e in
       get_field h t f l (fun h _ ->
         cont (("field_" ^ f, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
       let x = get_unique_id "|<result>|" in   (* HACK *)
-      verify_stmt tenv h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> LitPat e) es))) tcont
+      verify_stmt pure leminfo sizemap tenv h env (Assign (l, x, CallExpr (l, g, List.map (fun e -> LitPat e) es))) tcont
     | IfStmt (l, e, ss1, ss2) ->
       let t = ev e in
       branch
-        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont tenv h env ss1 tcont))
-        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont tenv h env ss2 tcont))
+        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont pure leminfo sizemap tenv h env ss1 tcont))
+        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont pure leminfo sizemap tenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1270,8 +1303,13 @@ let verify_program verbose path =
           [] -> success()
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
+          let sizemap =
+            match try_assoc t sizemap with
+              None -> sizemap
+            | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
+          in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont tenv h (xts @ env) ss tcont))
+            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv h (xts @ env) ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
@@ -1293,6 +1331,7 @@ let verify_program verbose path =
       cont h (update env "#result" (ev e))
     | ReturnStmt (l, None) -> cont h env
     | WhileStmt (l, e, p, ss) ->
+      let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let xs = block_assigned_variables ss in
       assert_pred h env p (fun h env ->
         let ts = List.map get_unique_var_symb xs in
@@ -1302,7 +1341,7 @@ let verify_program verbose path =
           (fun _ ->
              assume_pred [] env p (fun h env ->
                assume (exptrue env e) (fun _ ->
-                 verify_cont tenv h env ss (fun tenv h env ->
+                 verify_cont pure leminfo sizemap tenv h env ss (fun sizemap tenv h env ->
                    assert_pred h env p (fun h _ ->
                      match h with
                        [] -> success()
@@ -1318,21 +1357,38 @@ let verify_program verbose path =
                  cont h env)))
       )
   and
-    verify_cont tenv h env ss cont =
+    verify_cont pure leminfo sizemap tenv h env ss cont =
     match ss with
-      [] -> cont tenv h env
-    | s::ss -> verify_stmt tenv h env s (fun tenv h env -> verify_cont tenv h env ss cont)
+      [] -> cont sizemap tenv h env
+    | s::ss -> verify_stmt pure leminfo sizemap tenv h env s (fun sizemap tenv h env -> verify_cont pure leminfo sizemap tenv h env ss cont)
   in
-  
-  let verify_decl d =
-    match d with
-    | Func (l, Fixpoint, _, _, _, _, _) -> ()
-    | Func (l, _, rt, g, ps, Some (pre, post), ss) ->
+
+  let rec verify_decls lems ds =
+    match ds with
+    | [] -> ()
+    | Func (l, Fixpoint, _, _, _, _, _)::ds -> verify_decls lems ds
+    | Func (l, k, rt, g, ps, Some (pre, post), ss)::ds ->
       let env = List.map (function (t, p) -> (p, Symb (p ^ "_0"))) ps in
+      let (sizemap, indinfo) =
+        match ss with
+          [SwitchStmt (_, Var (_, x), _)] -> (
+          match try_assoc x env with
+            None -> ([], None)
+          | Some t -> ([(t, 0)], Some x)
+          )
+        | _ -> ([], None)
+      in
       let pts = List.map (function (t, p) -> (p, t)) ps in
       let tenv x = List.assoc x pts in
+      let (in_pure_context, leminfo, lems') =
+        if k = Lemma then
+          (true, Some (lems, g, indinfo), g::lems)
+        else
+          (false, None, lems)
+      in
+      let _ =
       assume_pred [] env pre (fun h env ->
-        verify_cont tenv h env ss (fun _ h env' ->
+        verify_cont in_pure_context leminfo sizemap tenv h env ss (fun _ _ h env' ->
           let env_post =
             match rt with
               None -> env
@@ -1349,10 +1405,12 @@ let verify_program verbose path =
           )
         )
       )
-    | _ -> ()
+      in
+      verify_decls lems' ds
+    | _::ds -> verify_decls lems ds
   in
   
-  let _ = List.iter verify_decl ds in
+  let _ = verify_decls [] ds in
   print_endline "0 errors found"
 
 let _ =

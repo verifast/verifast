@@ -1,5 +1,5 @@
 Soundness todos:
-S003 Check lemma recursion (direct and indirect)
 S005 Check that commented items have no influence on the real C program
 S006 Check for duplicate names
 S007 Perform type checking of variable expressions, call expressions, etc.
+S008 Make sure abstract predicate names do not clash with field chunk names or malloc block chunk names

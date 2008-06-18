@@ -79,8 +79,8 @@ struct llist *create_llist()
 //@     open node(n1, _, _);
 //@     struct node *next = n1->next;
 //@     int value = n1->value;
-//@     close node(n1, next, value);
 //@     lseg_add(next, n2, n3);
+//@     close node(n1, next, value);
 //@   }
 //@   
 //@   close lseg(n1, n3, list_add(_v, _x));
@@ -125,8 +125,8 @@ void add(struct llist *list, int x)
 //@       open node(n1, _, _);
 //@       struct node *next = n1->next;
 //@       int value = n1->value;
-//@       close node(n1, next, value);
 //@       lseg_append(next, n2, n3);
+//@       close node(n1, next, value);
 //@       close lseg(n1, n3, list_append(_v1, _v2));
 //@   }
 //@ }
