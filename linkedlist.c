@@ -49,7 +49,7 @@ struct llist *create_llist()
   return l;
 }
 
-//@ fixpoint int list_add(intlist v, int x) {
+//@ fixpoint intlist list_add(intlist v, int x) {
 //@   switch (v) {
 //@     case nil: return cons(x, nil);
 //@     case cons(y, v): return cons(y, list_add(v, x));

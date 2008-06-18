@@ -206,6 +206,7 @@ and
   expr =
     Var of loc * string
   | Operation of loc * operator * expr list
+  | IntLit of loc * int
   | Read of loc * expr * string
   | CallExpr of loc * string * pat list
   | IfExpr of loc * expr * expr * expr
@@ -277,6 +278,7 @@ let string_of_loc (l,c) = "(" ^ string_of_int l ^ ":" ^ string_of_int c ^ ")"
 let expr_loc e =
   match e with
     Var (l, x) -> l
+  | IntLit (l, n) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
   | CallExpr (l, g, pats) -> l
@@ -316,7 +318,7 @@ let type_loc t =
 let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
-  "return"; "+"; "-"; "=="; "?"; "true"; "ensures"; "sizeof"; "close"; "void"; "lemma";
+  "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"; "_"
 ]
 
@@ -492,8 +494,7 @@ and
 and
   parse_expr_primary = parser
   [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
-| [< '(l, Int i) >] -> Operation (l, string_of_int i, [])
-| [< '(l, Kwd "true") >] -> Operation (l, "true", [])
+| [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
@@ -548,6 +549,12 @@ in
   with ex -> close_in c; raise ex
 
 let flatmap f xs = List.concat (List.map f xs)
+
+let rec try_assoc x xys =
+  match xys with
+    [] -> None
+  | (x', y)::xys when x' = x -> Some y
+  | _::xys -> try_assoc x xys
 
 let theory = [
   "(DISTINCT true false)";
@@ -622,6 +629,7 @@ let rec eval env e =
   match e with
     Var (l, x) -> lookup env x
   | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
+  | IntLit (l, n) -> Int n
 (*  | Read (l, e, f) ->  *)
   | CallExpr (l, g, pats) -> FunApp (g, List.map (function (LitPat e) -> ev e) pats)
   | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
@@ -650,7 +658,11 @@ let zip xs ys =
     | _ -> None
   in
   iter xs ys []
-  
+
+exception StaticError of loc * string
+
+let static_error l msg = raise (StaticError (l, msg))
+
 let verify_program verbose path =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
@@ -670,8 +682,6 @@ let verify_program verbose path =
   
   let get_unique_symb s = Symb (get_unique_id s) in
 
-  let Program ds = read_program path in
-  
   let (simp_in, simp_out) = Unix.open_process "z3 /si" in
   
   let imap f xs =
@@ -681,6 +691,257 @@ let verify_program verbose path =
       | x::xs -> f i x::imapi (i + 1) xs
     in
     imapi 0 xs
+  in
+  
+  let Program ds = read_program path in
+
+  let structdeclmap =
+    let rec iter sdm ds =
+      match ds with
+        [] -> sdm
+      | Struct (l, sn, fds)::ds ->
+        if List.mem_assoc sn sdm then
+          static_error l "Duplicate struct name."
+        else
+          iter ((sn, (l, fds))::sdm) ds
+      | _::ds -> iter sdm ds
+    in
+    iter [] ds
+  in
+  
+  let structmap =
+    List.map
+      (fun (sn, (l, fds)) ->
+         let rec iter fmap fds =
+           match fds with
+             [] -> (sn, (l, List.rev fmap))
+           | Field (lf, t, f)::fds ->
+             if List.mem_assoc f fmap then
+               static_error lf "Duplicate field name."
+             else (
+               let _ =
+                 match t with
+                   TypeName (_, "int") -> ()
+                 | PtrType (lt, sn) ->
+                   if List.mem_assoc sn structdeclmap then
+                     ()
+                   else
+                     static_error lt "No such struct."
+               in
+               iter ((f, (lf, t))::fmap) fds
+             )
+         in
+         iter [] fds
+      )
+      structdeclmap
+  in
+  
+  let inductivedeclmap =
+    let rec iter idm ds =
+      match ds with
+        [] -> idm
+      | (Inductive (l, i, ctors))::ds ->
+        if i = "int" || List.mem_assoc i idm then
+          static_error l "Duplicate datatype name."
+        else
+          iter ((i, (l, ctors))::idm) ds
+      | _::ds -> iter idm ds
+    in
+    iter [("bool", ((0, 0), []))] ds
+  in
+  
+  let check_pure_type t =
+    match t with
+      TypeName (l, tn) ->
+      if not (tn = "int" || List.mem_assoc tn inductivedeclmap) then
+        static_error l "No such datatype."
+    | PtrType (l, sn) ->
+      if not (List.mem_assoc sn structmap) then
+        static_error l "No such struct."
+  in 
+  
+  let boolt = TypeName ((0, 0), "bool") in
+  let intt = TypeName ((0, 0), "int") in
+  
+  let string_of_type t =
+    match t with
+      TypeName (_, tn) -> tn
+    | PtrType (_, tn) -> "struct " ^ tn ^ " *"
+  in
+  
+  let (inductivemap, purefuncmap) =
+    let rec iter imap pfm ds =
+      match ds with
+        [] -> (List.rev imap, List.rev pfm)
+      | Inductive (l, i, ctors)::ds ->
+        let rec citer ctormap pfm ctors =
+          match ctors with
+            [] -> iter ((i, (l, List.rev ctormap))::imap) pfm ds
+          | Ctor (lc, cn, ts)::ctors ->
+            if List.mem_assoc cn pfm then
+              static_error lc "Duplicate pure function name."
+            else (
+              List.iter check_pure_type ts;
+              let entry = (cn, (lc, ts)) in
+              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts))::pfm) ctors
+            )
+        in
+        citer [] pfm ctors
+      | Func (l, Fixpoint, rto, g, ps, contract, body)::ds ->
+        let _ =
+          if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
+        in
+        let rt =
+          match rto with
+            None -> static_error l "Return type of fixpoint functions cannot be void."
+          | Some rt -> (check_pure_type rt; rt)
+        in
+        let _ =
+          match contract with
+            None -> ()
+          | Some _ -> static_error l "Fixpoint functions cannot have a contract."
+        in
+        let pmap =
+          let rec iter pmap ps =
+            match ps with
+              [] -> List.rev pmap
+            | (t, p)::ps ->
+              let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." in
+              let _ = check_pure_type t in
+              iter ((p, t)::pmap) ps
+          in
+          iter [] ps
+        in
+        let _ = 
+          match body with
+            [SwitchStmt (ls, e, cs)] -> (
+            match e with
+              Var (l, x) -> (
+              match try_assoc x pmap with
+                None -> static_error l "Fixpoint function must switch on a parameter."
+              | Some (TypeName (lt, "int")) -> static_error ls "Cannot switch on int."
+              | Some (TypeName (lt, i)) -> (
+                match try_assoc i imap with
+                  None -> static_error ls "Switch statement cannot precede inductive declaration."
+                | Some (l, ctormap) ->
+                  let rec iter ctormap cs =
+                    match cs with
+                      [] ->
+                      let _ = 
+                        match ctormap with
+                          [] -> ()
+                        | (cn, _)::_ ->
+                          static_error ls ("Missing case: '" ^ cn ^ "'.")
+                      in ()
+                    | SwitchStmtClause (lc, cn, xs, body)::cs -> (
+                      match try_assoc cn ctormap with
+                        None -> static_error lc "No such constructor."
+                      | Some (_, ts) ->
+                        let xmap =
+                          let rec iter xmap ts xs =
+                            match (ts, xs) with
+                              ([], []) -> xmap
+                            | (t::ts, x::xs) ->
+                              let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
+                              iter ((x, t)::xmap) ts xs
+                            | ([], _) -> static_error lc "Too many pattern variables."
+                            | _ -> static_error lc "Too few pattern variables."
+                          in
+                          iter [] ts xs
+                        in
+                        let tenv = xmap @ pmap in
+                        let body =
+                          match body with
+                            [ReturnStmt (_, Some e)] -> e
+                          | _ -> static_error lc "Body of switch clause must be a return statement with a result expression."
+                        in
+                        let rec check e =
+                          match e with
+                            Var (l, x) -> (
+                            match try_assoc x tenv with
+                              None -> (
+                                match try_assoc x pfm with
+                                  Some (_, t, []) -> t
+                                | _ -> static_error l "No such variable or constructor."
+                              )
+                            | Some t -> t
+                            )
+                          | Operation (l, ("==" | "!="), [e1; e2]) ->
+                            let t = check e1 in
+                            let _ = checkt e2 t in
+                            boolt
+                          | Operation (l, ("le" | "lt"), [e1; e2]) ->
+                            let _ = checkt e1 intt in
+                            let _ = checkt e2 intt in
+                            boolt
+                          | Operation (l, ("+" | "-"), [e1; e2]) ->
+                            let _ = checkt e1 intt in
+                            let _ = checkt e2 intt in
+                            intt
+                          | IntLit (l, n) -> intt
+                          | CallExpr (l, g', pats) -> (
+                            match try_assoc g' pfm with
+                              Some (l, t, ts) -> (
+                              match zip pats ts with
+                                None -> static_error l "Incorrect argument count."
+                              | Some pts -> (
+                                List.iter (fun (pat, t) ->
+                                  match pat with
+                                    LitPat e -> checkt e t
+                                  | _ -> static_error l "Patterns are not allowed here."
+                                ) pts;
+                                t
+                                )
+                              )
+                            | None ->
+                              if g' = g then
+                                match zip pmap pats with
+                                  None -> static_error l "Incorrect argument count."
+                                | Some pts ->
+                                  let _ =
+                                    List.iter (fun ((p, t), pat) ->
+                                      match pat with
+                                        LitPat e -> checkt e t
+                                      | _ -> static_error l "Patterns are not allowed here."
+                                    ) pts
+                                  in
+                                  let _ =
+                                    match flatmap (function ((p, t), LitPat e) -> if p = x then [e] else []) pts with
+                                      [Var (l, x)] when List.mem_assoc x xmap -> ()
+                                    | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
+                                  in
+                                  rt
+                              else
+                                static_error l "No such pure function."
+                            )
+                          | IfExpr (l, e1, e2, e3) ->
+                            let _ = checkt e1 boolt in
+                            let t = check e2 in
+                            let _ = checkt e3 t in
+                            t
+                          | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
+                        and checkt e t0 =
+                          let t = check e in
+                          match (t, t0) with
+                            (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
+                          | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
+                          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+                        in
+                        let _ = checkt body rt in
+                        iter (List.remove_assoc cn ctormap) cs
+                      )
+                  in
+                  iter ctormap cs
+                )
+              | _ -> static_error l "Cannot switch on a pointer type."
+              )
+            )
+          | _ -> static_error l "Body of fixpoint function must be switch statement."
+        in
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap))::pfm) ds
+      | _::ds -> iter imap pfm ds
+    in
+    iter [("bool", ((0, 0), [("true", ((0, 0), [])); ("false", ((0, 0), []))]))] [("true", ((0, 0), boolt, [])); ("false", ((0, 0), boolt, []))] ds
   in
   
   let indaxs =
@@ -1048,7 +1309,7 @@ let verify_program verbose path =
   
   let verify_decl d =
     match d with
-      Func (l, Fixpoint, _, _, _, _, _) -> ()
+    | Func (l, Fixpoint, _, _, _, _, _) -> ()
     | Func (l, _, _, g, ps, Some (pre, post), ss) ->
       let env = List.map (function (t, p) -> (p, Symb p)) ps in
       let pts = List.map (function (t, p) -> (p, t)) ps in
@@ -1065,15 +1326,19 @@ let verify_program verbose path =
     | _ -> ()
   in
   
-  (
-    List.iter verify_decl ds;
-    print_endline "0 errors found"
-  )
+  let _ = List.iter verify_decl ds in
+  print_endline "0 errors found"
 
 let _ =
+  let verify verbose path =
+    try
+      verify_program verbose path
+    with
+      StaticError ((line, col), msg) -> print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": " ^ msg)
+  in
   match Sys.argv with
-    [| _; path |] -> verify_program false path
-  | [| _; "-verbose"; path |] -> verify_program true path
+    [| _; path |] -> verify false path
+  | [| _; "-verbose"; path |] -> verify true path
   | _ ->
     print_endline "Verifast 0.2 for C";
     print_endline "Usage: verifast [-verbose] filepath";
