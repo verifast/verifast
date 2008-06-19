@@ -8,11 +8,9 @@ struct RedBlackNode
     int    Color;
 };
 
-static struct RedBlackNode * NullNode = NULL;  /* Needs initialization */
-
 /* Initialization procedure */
 struct RedBlackNode *
-Initialize( void )
+Initialize( struct RedBlackNode * NullNode )
 {
     struct RedBlackNode * T;
 
@@ -47,57 +45,57 @@ Output( int Element )
 /* and skip header */
 
 static void
-DoPrint( struct RedBlackNode * T )
+DoPrint( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     if( T != NullNode )
     {
-        DoPrint( T->Left );
+        DoPrint( T->Left, NullNode );
         Output( T->Element );
-        DoPrint( T->Right );
+        DoPrint( T->Right, NullNode );
     }
 }
 
 void
-PrintTree( struct RedBlackNode * T )
+PrintTree( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
-    DoPrint( T->Right );
+    DoPrint( T->Right, NullNode );
 }
 
 static struct RedBlackNode *
-MakeEmptyRec( struct RedBlackNode * T )
+MakeEmptyRec( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     if( T != NullNode )
     {
-        MakeEmptyRec( T->Left );
-        MakeEmptyRec( T->Right );
+        MakeEmptyRec( T->Left, NullNode );
+        MakeEmptyRec( T->Right, NullNode );
         free( T );
     }
     return NullNode;
 }
 
 struct RedBlackNode *
-MakeEmpty( struct RedBlackNode * T )
+MakeEmpty( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
-    T->Right = MakeEmptyRec( T->Right );
+    T->Right = MakeEmptyRec( T->Right, NullNode );
     return T;
 }
 
 struct RedBlackNode *
-Find( int X, struct RedBlackNode * T )
+Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     if( T == NullNode )
         return NullNode;
     if( X < T->Element )
-        return Find( X, T->Left );
+        return Find( X, T->Left, NullNode );
     else
     if( X > T->Element )
-        return Find( X, T->Right );
+        return Find( X, T->Right, NullNode );
     else
         return T;
 }
 
 struct RedBlackNode *
-FindMin( struct RedBlackNode * T )
+FindMin( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     T = T->Right;
     while( T->Left != NullNode )
@@ -107,7 +105,7 @@ FindMin( struct RedBlackNode * T )
 }
 
 struct RedBlackNode *
-FindMax( struct RedBlackNode * T )
+FindMax( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     while( T->Right != NullNode )
         T = T->Right;
@@ -120,7 +118,7 @@ FindMax( struct RedBlackNode * T )
 /* Update heights, then return new root */
 
 static struct RedBlackNode *
-SingleRotateWithLeft( struct RedBlackNode * K2 )
+SingleRotateWithLeft( struct RedBlackNode * K2, struct RedBlackNode * NullNode )
 {
     struct RedBlackNode * K1;
 
@@ -136,7 +134,7 @@ SingleRotateWithLeft( struct RedBlackNode * K2 )
 /* Update heights, then return new root */
 
 static struct RedBlackNode *
-SingleRotateWithRight( struct RedBlackNode * K1 )
+SingleRotateWithRight( struct RedBlackNode * K1, struct RedBlackNode * NullNode )
 {
     struct RedBlackNode * K2;
 
@@ -152,23 +150,23 @@ SingleRotateWithRight( struct RedBlackNode * K1 )
 /* The child is deduced by examining Item */
 
 static struct RedBlackNode *
-Rotate( int Item, struct RedBlackNode * Parent )
+Rotate( int Item, struct RedBlackNode * Parent, struct RedBlackNode * NullNode )
 {
 
     if( Item < Parent->Element )
         return Parent->Left = Item < Parent->Left->Element ?
-            SingleRotateWithLeft( Parent->Left ) :
-            SingleRotateWithRight( Parent->Left );
+            SingleRotateWithLeft( Parent->Left, NullNode ) :
+            SingleRotateWithRight( Parent->Left, NullNode );
     else
         return Parent->Right = Item < Parent->Right->Element ?
-            SingleRotateWithLeft( Parent->Right ) :
-            SingleRotateWithRight( Parent->Right );
+            SingleRotateWithLeft( Parent->Right, NullNode ) :
+            SingleRotateWithRight( Parent->Right, NullNode );
 }
 
 static struct RedBlackNode * X, P, GP, GGP;
 
 static
-void HandleReorient( int Item, struct RedBlackNode * T )
+void HandleReorient( int Item, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     X->Color = (0 /* Red */);        /* Do the color flip */
     X->Left->Color = (1 /* Black */);
@@ -179,14 +177,14 @@ void HandleReorient( int Item, struct RedBlackNode * T )
         GP->Color = (0 /* Red */);
         if( (Item < GP->Element) != (Item < P->Element) )
             P = Rotate( Item, GP );  /* Start double rotate */
-        X = Rotate( Item, GGP );
+        X = Rotate( Item, GGP, NullNode );
         X->Color = (1 /* Black */);
     }
     T->Right->Color = (1 /* Black */);  /* Make root black */
 }
 
 struct RedBlackNode *
-Insert( int Item, struct RedBlackNode * T )
+Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
     X = P = GP = T;
     NullNode->Element = Item;
@@ -198,7 +196,7 @@ Insert( int Item, struct RedBlackNode * T )
         else
             X = X->Right;
         if( X->Left->Color == (0 /* Red */) && X->Right->Color == (0 /* Red */) )
-            HandleReorient( Item, T );
+            HandleReorient( Item, T, NullNode );
     }
 
     if( X != NullNode )
@@ -214,23 +212,7 @@ Insert( int Item, struct RedBlackNode * T )
         P->Left = X;
     else
         P->Right = X;
-    HandleReorient( Item, T ); /* Color it red; maybe rotate */
+    HandleReorient( Item, T, NullNode ); /* Color it red; maybe rotate */
 
     return T;
 }
-
-struct RedBlackNode *
-Remove( int Item, struct RedBlackNode * T )
-{
-    printf( "Remove is unimplemented\n" );
-    if( Item )
-        return T;
-    return T;
-}
-
-int
-Retrieve( struct RedBlackNode * P )
-{
-    return P->Element;
-}
-
