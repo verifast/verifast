@@ -1,4 +1,4 @@
-// typedef enum ColorType { Red = 0, Black = 1 } ColorType;
+/* typedef enum ColorType { Red = 0, Black = 1 } ColorType; */
 
 struct RedBlackNode
 {
@@ -8,29 +8,41 @@ struct RedBlackNode
     int    Color;
 };
 
-/* Initialization procedure */
-struct RedBlackNode *
-Initialize( struct RedBlackNode * NullNode )
-{
-    if( NullNode == 0 )
-    {
-        NullNode = malloc( sizeof( struct RedBlackNode ) );
-        NullNode->Left = NullNode;
-		NullNode->Right = NullNode;
-        NullNode->Color = (1 /* Black */);
-        NullNode->Element = 12345;
-    }
-	else
-	{
-	}
+/*@
+predicate tree(struct RedBlackNode * root, struct RedBlackNode * NullNode)
+  requires root->Element |-> _ &*& root->Left |-> ?l &*& root->Right |-> ?r &*& root->Color |-> _ &*& malloc_block_RedBlackNode(root)
+    &*& (l == NullNode ? emp : tree(l, NullNode)) &*& (r == NullNode ? emp : tree(r, NullNode));
+@*/
 
+struct RedBlackNode *
+MakeNullNode()
+  //@ requires emp;
+  //@ ensures tree(result, result);
+{
+	struct RedBlackNode *NullNode = malloc( sizeof( struct RedBlackNode ) );
+    NullNode->Left = NullNode;
+	NullNode->Right = NullNode;
+    NullNode->Color = (1 /* Black */);
+    NullNode->Element = 12345;
+	//@ close tree(NullNode, NullNode);
+	return NullNode;
+}
+
+struct RedBlackNode *
+MakeRootNode(struct RedBlackNode * NullNode)
+  //@ requires tree(NullNode, NullNode);
+  //@ ensures tree(result, NullNode) &*& tree(NullNode, NullNode);
+{
     /* Create the header node */
     struct RedBlackNode * T = malloc( sizeof( struct RedBlackNode ) );
-    T->Element = (-10000);
+	/* To prove disjointness */
+	//@ open tree(NullNode, NullNode);
+	//@ close tree(NullNode, NullNode);
+    T->Element = (0 - 10000);
     T->Left = NullNode;
 	T->Right = NullNode;
     T->Color = (1 /* Black */);
-
+    //@ close tree(T, NullNode);
     return T;
 }
 
@@ -39,14 +51,18 @@ Initialize( struct RedBlackNode * NullNode )
 
 void
 DoPrint( struct RedBlackNode * T, struct RedBlackNode * NullNode )
+  //@ requires T == NullNode ? emp : tree(T, NullNode);
+  //@ ensures T == NullNode ? emp : tree(T, NullNode);
 {
     if( T != NullNode )
     {
+		//@ open tree(T, NullNode);
 		struct RedBlackNode * left = T->Left;
         DoPrint( left, NullNode );
         // Output( T->Element );
 		struct RedBlackNode * right = T->Right;
         DoPrint( right, NullNode );
+		//@ close tree(T, NullNode);
     }
 	else
 	{
@@ -99,7 +115,7 @@ Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 			return result;
 		} else {
 			struct RedBlackNode * left = T->Element;
-			if( X > left ) {
+			if( left < X ) {
 				struct RedBlackNode * right = T->Right;
 				struct RedBlackNode * result = Find( X, right, NullNode );
 				return result;
@@ -116,6 +132,7 @@ FindMin( struct RedBlackNode * T, struct RedBlackNode * NullNode )
     T = T->Right;
 	struct RedBlackNode * left = T->Left;
     while( left != NullNode )
+	  //@ invariant true;
 	{
         T = T->Left;
 		left = T->Left;
@@ -129,6 +146,7 @@ FindMax( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
 	struct RedBlackNode * right = T->Right;
     while( right != NullNode )
+	  //@ invariant true;
 	{
         T = T->Right;
 		right = T->Right;
@@ -221,20 +239,25 @@ void HandleReorient( int Item, struct RedBlackNode * T, struct RedBlackNode * X,
         X = Rotate( Item, GGP, NullNode );
         X->Color = (1 /* Black */);
     }
+	else
+	{
+	}
 	struct RedBlackNode * t_right = T->Right;
     t_right->Color = (1 /* Black */);  /* Make root black */
 }
 
 struct RedBlackNode *
-Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBlackNode * P, struct RedBlackNode * GP, struct RedBlackNode * GGP, struct RedBlackNode * NullNode )
+Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBlackNode * NullNode )
 {
-    X = T;
-	G = T;
-	P = T;
-	GP = T;
+    struct RedBlackNode * X = T;
+	struct RedBlackNode * G = T;
+	struct RedBlackNode * P = T;
+	struct RedBlackNode * GP = T;
+	struct RedBlackNode * GGP = 0;
     NullNode->Element = Item;
 	struct RedBlackNode * x_element = X->Element;
     while( X->Element != Item )  /* Descend down the tree */
+	  //@ invariant true;
     {
         GGP = GP;
 		GP = P;

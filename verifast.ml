@@ -497,6 +497,7 @@ and
   parse_pred0 = parser
   [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchPred (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpPred l
+| [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< e = parse_conj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] ->
     (match e with
@@ -774,7 +775,7 @@ let verify_program verbose path =
   in
   
   let Program ds = read_program path in
-
+  
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
