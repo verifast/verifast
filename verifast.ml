@@ -312,7 +312,24 @@ and
   program =
     Program of decl list
 
-let string_of_loc (l,c) = "(" ^ string_of_int l ^ ":" ^ string_of_int c ^ ")"
+(*
+Visual Studio format:
+C:\ddd\sss.xyz(123): error VF0001: blah
+C:\ddd\sss.xyz(123,456): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789,123): error VF0001: blah
+GNU format:
+C:\ddd\sss.xyz:123: error VF0001: blah
+C:\ddd\sss.xyz:123.456: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789.123: error VF0001: blah
+See
+http://blogs.msdn.com/msbuild/archive/2006/11/03/msbuild-visual-studio-aware-error-messages-and-message-formats.aspx
+and
+http://www.gnu.org/prep/standards/standards.html#Errors
+*)
+
+let string_of_loc (l,c) = "(" ^ string_of_int l ^ "," ^ string_of_int c ^ "): error VF0001"
 
 let expr_loc e =
   match e with
@@ -639,6 +656,27 @@ and
   | IfFormula of formula * formula * formula
   | Forall of string list * formula
 
+let pprint_t t =
+  let rec iter level t =
+    let (l, s) =
+      match t with
+        Int n -> (0, string_of_int n)
+      | Symb s -> (0, s)
+      | FunApp ("*", [t1; t2]) -> (20, iter 20 t1 ^ " * " ^ iter 20 t2)
+      | FunApp ("/", [t1; t2]) -> (20, iter 20 t1 ^ " / " ^ iter 10 t2)
+      | FunApp ("+", [t1; t2]) -> (30, iter 30 t1 ^ " + " ^ iter 30 t2)
+      | FunApp ("-", [t1; t2]) -> (30, iter 30 t1 ^ " - " ^ iter 20 t2)
+      | FunApp ("==", [t1; t2]) -> (40, iter 30 t1 ^ " == " ^ iter 30 t2)
+      | FunApp ("!=", [t1; t2]) -> (40, iter 30 t1 ^ " != " ^ iter 30 t2)
+      | FunApp ("le", [t1; t2]) -> (40, iter 30 t1 ^ " le " ^ iter 30 t2)
+      | FunApp ("lt", [t1; t2]) -> (40, iter 30 t1 ^ " lt " ^ iter 30 t2)
+      | FunApp (g, ts) -> (0, g ^ "(" ^ (match ts with [] -> "" | t::ts -> iter 100 t ^ (let rec iter' ts = match ts with [] -> "" | t::ts -> ", " ^ iter 100 t ^ iter' ts in iter' ts)) ^ ")")
+      | IfTerm (t1, t2, t3) -> (50, iter 40 t1 ^ " ? " ^ iter 50 t2 ^ " : " ^ iter 50 t3)
+    in
+    if l <= level then s else "(" ^ s ^ ")"
+  in
+  iter 100 t
+
 let slist ss =
   let rec args ss =
     match ss with
@@ -647,6 +685,24 @@ let slist ss =
     | (s::ss) -> s ^ " " ^ args ss
   in
     "(" ^ args ss ^ ")"
+
+let pretty_print f =
+  let rec iter level f =
+    let (l, s) =
+      match f with
+        True -> (100, "TRUE")
+      | PredApp (p, [t1; t2]) -> (100, pprint_t t1 ^ " " ^ p ^ " " ^ pprint_t t2)
+      | Eq (t1, t2) -> (100, pprint_t t1 ^ " EQ " ^ pprint_t t2)
+      | Not f -> (100, "NOT " ^ iter 100 f)
+      | And (f1, f2) -> (110, iter 110 f1 ^ " AND " ^ iter 110 f2)
+      | Or (f1, f2) -> (120, iter 120 f1 ^ " OR " ^ iter 120 f2)
+      | Imp (f1, f2) -> (130, iter 120 f1 ^ " IMPLIES " ^ iter 130 f2)
+      | Iff (f1, f2) -> (140, iter 100 f1 ^ " IFF " ^ iter 100 f2)
+      | Forall (xs, f) -> (150, "FORALL " ^ slist xs ^ ". " ^ iter 150 f)
+    in
+    if l <= level then s else "(" ^ s ^ ")"
+  in
+  iter 200 f
 
 let rec simpt t =
   match t with
@@ -694,7 +750,7 @@ let static_error l msg = raise (StaticError (l, msg))
 
 type heap = (string * term list) list
 type env = (string * term) list
-exception SymbolicExecutionError of string list * heap * env * formula * loc * string * (loc * string) list
+exception SymbolicExecutionError of string list * formula * loc * string
 
 let rec eval env e =
   let ev = eval env in
@@ -1111,15 +1167,13 @@ let verify_program verbose path =
     success
   in
   
-  let assumptionStack = ref ([]: string list) in
+  let contextStack = ref ([]: string list) in
   
-  let contextStack = ref ([]: (loc * string) list) in
-  
-  let push_context l msg = let _ = contextStack := (l, msg)::!contextStack in () in
+  let push_context msg = let _ = contextStack := msg::!contextStack in () in
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
     
-  let with_context l msg cont =
-    push_context l msg;
+  let with_context msg cont =
+    push_context msg;
     cont();
     pop_context();
     ()
@@ -1127,17 +1181,16 @@ let verify_program verbose path =
   
   let assume phi cont =
     let s = simp phi in
-    let oldStack = !assumptionStack in
+    push_context ("Assuming " ^ pretty_print phi);
     bg_push s;
-    assumptionStack := s::!assumptionStack;
     cont();
+    pop_context ();
     send_command "(BG_POP)";
-    assumptionStack := oldStack;
     ()
   in
   
   let assert_formula phi h env l msg cont =
-    (if not (query_formula phi) then raise (SymbolicExecutionError (!assumptionStack, h, env, phi, l, msg, !contextStack)));
+    (if not (query_formula phi) then raise (SymbolicExecutionError (!contextStack, phi, l, msg)));
     cont()
   in
   
@@ -1487,7 +1540,7 @@ let verify_program verbose path =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
-      with_context (stmt_loc s) "(while verifying this statement)" (fun _ ->
+      with_context (path ^ string_of_loc (stmt_loc s) ^ ": (while verifying this statement)") (fun _ ->
         verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
           verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
       )
@@ -1517,28 +1570,30 @@ let verify_program verbose path =
           (false, None, lems)
       in
       let _ =
-      assume_pred [] [] env pre (fun h ghostenv env ->
-        verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
-          let get_env_post cont =
-            match rt with
-              None -> cont env
-            | Some t -> (
-              match try_assoc "#result" env' with
-                None -> assert_false h env l "Function does not specify a return value."
-              | Some t -> cont (update env "result" t)
+        with_context (path ^ string_of_loc l ^ ": (while verifying this function)") (fun _ ->
+          assume_pred [] [] env pre (fun h ghostenv env ->
+            verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
+              let get_env_post cont =
+                match rt with
+                  None -> cont env
+                | Some t -> (
+                  match try_assoc "#result" env' with
+                    None -> assert_false h env l "Function does not specify a return value."
+                  | Some t -> cont (update env "result" t)
+                  )
+              in
+              get_env_post (fun env_post ->
+              with_context (path ^ string_of_loc l ^ ": (while verifying the postcondition of this function)") (fun _ ->
+              assert_pred h ghostenv env_post post (fun h _ _ ->
+                match h with
+                  [] -> success()
+                | _ -> assert_false h env l "Function leaks heap chunks."
               )
-          in
-          get_env_post (fun env_post ->
-          with_context l "(while verifying the postcondition of this function)" (fun _ ->
-          assert_pred h ghostenv env_post post (fun h _ _ ->
-            match h with
-              [] -> success()
-            | _ -> assert_false h env l "Function leaks heap chunks."
-          )
-          )
+              )
+              )
+            )
           )
         )
-      )
       in
       verify_decls lems' ds
     | _::ds -> verify_decls lems ds
@@ -1548,22 +1603,23 @@ let verify_program verbose path =
   print_endline "0 errors found"
 
 let _ =
-  let print_msg path (line, col) msg =
-    print_endline (path ^ ":" ^ string_of_int line ^ ":" ^ string_of_int col ^ ": " ^ msg)
+  let print_msg path l msg =
+    print_endline (path ^ string_of_loc l ^ ": " ^ msg)
   in
   let verify verbose path =
     try
       verify_program verbose path
     with
       StaticError (l, msg) -> print_msg path l msg
-    | SymbolicExecutionError (ass, h, env, phi, l, msg, ctxts) ->
-        let _ = print_endline "Assumptions:" in
-        let _ = List.iter print_endline ass in
+    | SymbolicExecutionError (ctxts, phi, l, msg) ->
+        let _ = print_endline "Trace:" in
+        let _ = List.iter print_endline (List.rev ctxts) in
+        (*
         let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
         let _ = print_endline ("Env: " ^ string_of_env env) in
+        *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
         let _ = print_msg path l msg in
-        let _ = match ctxts with [] -> () | (l, msg)::_ -> print_msg path l msg in
         ()
   in
   match Sys.argv with

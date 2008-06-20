@@ -1,1 +1,1 @@
-ocamlrun -b verifast.exe -verbose %1
+ocamlrun -b verifast.exe %1
