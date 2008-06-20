@@ -124,10 +124,12 @@ predicate tseg(struct RedBlackNode * root, struct RedBlackNode * NullNode, struc
           &*& (r == hole ? emp : tseg(r, NullNode, hole, holeValue));
 @*/
 
+// Returns the node containing value X, or NullNode if X is not in the tree.
+
 struct RedBlackNode *
 Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
   //@ requires T == NullNode ? emp : tree(T, NullNode);
-  //@ ensures T == NullNode ? emp &*& result == NullNode : result == T ? tree(result, NullNode) : tseg(T, NullNode, result, X) &*& tree(result, NullNode);
+  //@ ensures T == NullNode ? result == NullNode : result == NullNode ? tree(T, NullNode) : result == T ? tree(result, NullNode) : tseg(T, NullNode, result, X) &*& tree(result, NullNode);
 {
     if( T == NullNode ) {
         return NullNode;
@@ -137,16 +139,17 @@ Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
         if( X < element ) {
             struct RedBlackNode * left = T->Left;
             struct RedBlackNode * result = Find( X, left, NullNode );
-            //@ close tseg(T, NullNode, result, X);
+            //@ if (left == NullNode) { close tree(T, NullNode); } else { close tseg(T, NullNode, result, X); }
             return result;
         } else {
-            struct RedBlackNode * left = T->Element;
-            if( left < X ) {
+            int element = T->Element;
+            if( element < X ) {
                 struct RedBlackNode * right = T->Right;
                 struct RedBlackNode * result = Find( X, right, NullNode );
-                //@ close tseg(T, NullNode, result, X);
+                //@ if (right == NullNode) { close tree(T, NullNode); } else { close tseg(T, NullNode, result, X); }
                 return result;
             } else {
+                //@ close tree(T, NullNode);
                 return T;
             }
         }
