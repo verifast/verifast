@@ -11,7 +11,9 @@ type token =
 
 (* The lexer *)
 
-let make_lexer keywords stream =
+let make_lexer keywords path =
+  let channel = open_in path in
+  let stream = Stream.of_channel channel in
   let initial_buffer = String.create 32
   in
 
@@ -234,12 +236,12 @@ let make_lexer keywords stream =
       )
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
-  ((fun () -> (!line, Stream.count stream - !linepos + 1)), Stream.from (fun count -> (match next_token stream with Some t -> Some ((!line, !tokenpos - !linepos + 1), t) | None -> None)))
+  (channel, (fun () -> (path, !line, Stream.count stream - !linepos + 1)), Stream.from (fun count -> (match next_token stream with Some t -> Some ((path, !line, !tokenpos - !linepos + 1), t) | None -> None)))
 
 type
   operator = string
 and
-  loc = (int * int)
+ loc = (string * int * int)
 and
   expr =
     Var of loc * string
@@ -329,7 +331,7 @@ and
 http://www.gnu.org/prep/standards/standards.html#Errors
 *)
 
-let string_of_loc (l,c) = "(" ^ string_of_int l ^ "," ^ string_of_int c ^ "): error VF0001"
+let string_of_loc (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
 let expr_loc e =
   match e with
@@ -380,8 +382,7 @@ let lexer = make_lexer [
 ]
 
 let read_program s =
-  let c = open_in s in
-  let (loc, token_stream) = lexer (Stream.of_channel c) in
+  let (c, loc, token_stream) = lexer s in
 let rec parse_program = parser
   [< ds = parse_decls; _ = Stream.empty >] -> Program ds
 and
@@ -612,7 +613,7 @@ in
   try
     try
       let p = parse_program token_stream in close_in c; p
-    with Stream.Error msg -> let (line, column) = loc() in raise (Stream.Error (msg ^ " at (" ^ string_of_int line ^ ":" ^ string_of_int column ^ ")"))
+    with Stream.Error msg -> raise (Stream.Error (string_of_loc (loc()) ^ ": " ^ msg))
   with ex -> close_in c; raise ex
 
 let flatmap f xs = List.concat (List.map f xs)
@@ -750,7 +751,18 @@ let static_error l msg = raise (StaticError (l, msg))
 
 type heap = (string * term list) list
 type env = (string * term) list
-exception SymbolicExecutionError of string list * formula * loc * string
+type context =
+  Assuming of formula
+| Executing of heap * env * loc * string
+
+let string_of_heap h = slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)
+  
+let string_of_context c =
+  match c with
+    Assuming f -> pretty_print f
+  | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
+
+exception SymbolicExecutionError of context list * formula * loc * string
 
 let rec eval env e =
   let ev = eval env in
@@ -873,6 +885,8 @@ let verify_program verbose path =
       structdeclmap
   in
   
+  let dummy_loc = ("prelude", 0, 0) in
+  
   let inductivedeclmap =
     let rec iter idm ds =
       match ds with
@@ -884,7 +898,7 @@ let verify_program verbose path =
           iter ((i, (l, ctors))::idm) ds
       | _::ds -> iter idm ds
     in
-    iter [("bool", ((0, 0), []))] ds
+    iter [("bool", (dummy_loc, []))] ds
   in
   
   let check_pure_type t =
@@ -897,8 +911,8 @@ let verify_program verbose path =
         static_error l "No such struct."
   in 
   
-  let boolt = TypeName ((0, 0), "bool") in
-  let intt = TypeName ((0, 0), "int") in
+  let boolt = TypeName (dummy_loc, "bool") in
+  let intt = TypeName (dummy_loc, "int") in
   
   let string_of_type t =
     match t with
@@ -1078,7 +1092,7 @@ let verify_program verbose path =
         iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
-    iter [("bool", ((0, 0), [("true", ((0, 0), [])); ("false", ((0, 0), []))]))] [("true", ((0, 0), boolt, [])); ("false", ((0, 0), boolt, []))] ds
+    iter [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]))] [("true", (dummy_loc, boolt, [])); ("false", (dummy_loc, boolt, []))] ds
   in
   
   let indaxs =
@@ -1167,7 +1181,7 @@ let verify_program verbose path =
     success
   in
   
-  let contextStack = ref ([]: string list) in
+  let contextStack = ref ([]: context list) in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
@@ -1181,7 +1195,7 @@ let verify_program verbose path =
   
   let assume phi cont =
     let s = simp phi in
-    push_context ("Assuming " ^ pretty_print phi);
+    push_context (Assuming phi);
     bg_push s;
     cont();
     pop_context ();
@@ -1229,6 +1243,7 @@ let verify_program verbose path =
   in
   
   let rec assume_pred h ghostenv env p cont =
+    with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
     let ev = eval env in
     let etrue = exptrue env in
     match p with
@@ -1251,6 +1266,7 @@ let verify_program verbose path =
       in
       iter cs
     | EmpPred l -> cont h ghostenv env
+    )
   in
   
   let definitely_equal t1 t2 =
@@ -1290,6 +1306,7 @@ let verify_program verbose path =
   in
   
   let rec assert_pred h ghostenv env p cont =
+    with_context (Executing (h, env, pred_loc p, "Asserting predicate")) (fun _ ->
     let ev = eval env in
     let etrue = exptrue env in
     match p with
@@ -1322,6 +1339,7 @@ let verify_program verbose path =
       in
       iter cs
     | EmpPred l -> cont h ghostenv env
+    )
   in
 
   let rec block_assigned_variables ss =
@@ -1338,7 +1356,7 @@ let verify_program verbose path =
   in
   
   let get_field h t f l cont =
-    assert_chunk h [] [("x", t)] l ("field_" ^ f) [LitPat (Var ((0, 0), "x")); VarPat "y"] (fun h ts ghostenv env ->
+    assert_chunk h [] [("x", t)] l ("field_" ^ f) [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h ts ghostenv env ->
       cont h (lookup env "y"))
   in
   
@@ -1540,7 +1558,7 @@ let verify_program verbose path =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
-      with_context (path ^ string_of_loc (stmt_loc s) ^ ": (while verifying this statement)") (fun _ ->
+      with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
         verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
           verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
       )
@@ -1570,27 +1588,23 @@ let verify_program verbose path =
           (false, None, lems)
       in
       let _ =
-        with_context (path ^ string_of_loc l ^ ": (while verifying this function)") (fun _ ->
-          assume_pred [] [] env pre (fun h ghostenv env ->
-            verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
-              let get_env_post cont =
-                match rt with
-                  None -> cont env
-                | Some t -> (
-                  match try_assoc "#result" env' with
-                    None -> assert_false h env l "Function does not specify a return value."
-                  | Some t -> cont (update env "result" t)
-                  )
-              in
-              get_env_post (fun env_post ->
-              with_context (path ^ string_of_loc l ^ ": (while verifying the postcondition of this function)") (fun _ ->
-              assert_pred h ghostenv env_post post (fun h _ _ ->
-                match h with
-                  [] -> success()
-                | _ -> assert_false h env l "Function leaks heap chunks."
-              )
-              )
-              )
+        assume_pred [] [] env pre (fun h ghostenv env ->
+          verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
+            let get_env_post cont =
+              match rt with
+                None -> cont env
+              | Some t -> (
+                match try_assoc "#result" env' with
+                  None -> assert_false h env l "Function does not specify a return value."
+                | Some t -> cont (update env "result" t)
+                )
+            in
+            get_env_post (fun env_post ->
+            assert_pred h ghostenv env_post post (fun h _ _ ->
+              match h with
+                [] -> success()
+              | _ -> assert_false h env l "Function leaks heap chunks."
+            )
             )
           )
         )
@@ -1613,9 +1627,9 @@ let _ =
       StaticError (l, msg) -> print_msg path l msg
     | SymbolicExecutionError (ctxts, phi, l, msg) ->
         let _ = print_endline "Trace:" in
-        let _ = List.iter print_endline (List.rev ctxts) in
+        let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
         (*
-        let _ = print_endline ("Heap: " ^ slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)) in
+        let _ = print_endline ("Heap: " ^ string_of_heap h) in
         let _ = print_endline ("Env: " ^ string_of_env env) in
         *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
