@@ -471,6 +471,7 @@ and
 and
   parse_stmt = parser
   [< '(l, Kwd "//@"); s = parse_stmt; '(_, Kwd "@//") >] -> PureStmt (l, s)
+| [< '(l, Kwd "/*@"); s = parse_stmt; '(_, Kwd "@*/") >] -> PureStmt (l, s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
@@ -509,7 +510,7 @@ and
   [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
 and
   parse_sep_rest p1 = parser
-  [< '(l, Kwd "&*&"); p2 = parse_pred0; p = parse_sep_rest (Sep (l, p1, p2)) >] -> p
+  [< '(l, Kwd "&*&"); p2 = parse_pred >] -> Sep (l, p1, p2)
 | [< >] -> p1
 and
   parse_pred0 = parser
@@ -759,7 +760,7 @@ let string_of_heap h = slist (List.map (function (g, ts) -> slist (g::List.map s
   
 let string_of_context c =
   match c with
-    Assuming f -> pretty_print f
+    Assuming f -> "Assuming " ^ pretty_print f
   | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
 
 exception SymbolicExecutionError of context list * formula * loc * string
@@ -1601,9 +1602,11 @@ let verify_program verbose path =
             in
             get_env_post (fun env_post ->
             assert_pred h ghostenv env_post post (fun h _ _ ->
+              with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
               match h with
                 [] -> success()
               | _ -> assert_false h env l "Function leaks heap chunks."
+              )
             )
             )
           )

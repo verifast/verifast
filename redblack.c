@@ -122,6 +122,17 @@ predicate tseg(struct RedBlackNode * root, struct RedBlackNode * NullNode, struc
           &*& (r == NullNode ? emp : tree(r, NullNode))
         : (l == NullNode ? emp : tree(l, NullNode))
           &*& (r == hole ? emp : tseg(r, NullNode, hole, holeValue));
+
+lemma void tseg_tree_distinct_lemma(struct RedBlackNode * root, struct RedBlackNode * hole, int holeValue, struct RedBlackNode * NullNode)
+  requires tseg(root, NullNode, hole, holeValue) &*& tree(hole, NullNode);
+  ensures tseg(root, NullNode, hole, holeValue) &*& tree(hole, NullNode) &*& root != hole;
+{
+  open tseg(root, NullNode, hole, holeValue);
+  open tree(hole, NullNode);
+  close tree(hole, NullNode);
+  close tseg(root, NullNode, hole, holeValue);
+}   
+
 @*/
 
 // Returns the node containing value X, or NullNode if X is not in the tree.
@@ -139,14 +150,30 @@ Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
         if( X < element ) {
             struct RedBlackNode * left = T->Left;
             struct RedBlackNode * result = Find( X, left, NullNode );
-            //@ if (left == NullNode) { close tree(T, NullNode); } else { close tseg(T, NullNode, result, X); }
+            /*@
+			if (result == NullNode) {
+			  close tree(T, NullNode);
+			} else {
+			  open tree(result, NullNode); // To obtain distinctness.
+			  close tree(result, NullNode);
+			  close tseg(T, NullNode, result, X);
+		    }
+		    @*/
             return result;
         } else {
             int element = T->Element;
             if( element < X ) {
                 struct RedBlackNode * right = T->Right;
                 struct RedBlackNode * result = Find( X, right, NullNode );
-                //@ if (right == NullNode) { close tree(T, NullNode); } else { close tseg(T, NullNode, result, X); }
+				/*@
+                if (result == NullNode) {
+				  close tree(T, NullNode);
+			    } else {
+				  open tree(result, NullNode); // To obtain result != T
+				  close tree(result, NullNode);
+				  close tseg(T, NullNode, result, X);
+			    }
+				@*/
                 return result;
             } else {
                 //@ close tree(T, NullNode);
