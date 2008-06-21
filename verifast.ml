@@ -62,7 +62,7 @@ let make_lexer keywords path =
       linepos := Stream.count strm__;
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
-        Some (Kwd "@//")
+        Some (Kwd "@*/")
       ) else
         next_token strm__
     in
@@ -202,10 +202,10 @@ let make_lexer keywords path =
       Stream.junk strm__;
       (
         match Stream.peek strm__ with
-          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; Some (Kwd "//@"))
+          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; Some (Kwd "/*@"))
         | _ ->
           if !in_single_line_annotation then (
-            in_single_line_annotation := false; single_line_comment strm__; Some (Kwd "@//")
+            in_single_line_annotation := false; single_line_comment strm__; Some (Kwd "@*/")
           ) else (
             single_line_comment strm__; next_token strm__
           )
@@ -458,7 +458,7 @@ and
 | [< '(_, Kwd ")") >] -> []
 and
   parse_contract_opt = parser
-  [< '(_, Kwd "//@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//"); '(_, Kwd "//@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//") >] -> Some (p, q)
+  [< '(_, Kwd "/*@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/"); '(_, Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some (p, q)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Some (p, q)
 | [< >] -> None
 and
@@ -470,8 +470,7 @@ and
 | [< >] -> []
 and
   parse_stmt = parser
-  [< '(l, Kwd "//@"); s = parse_stmt; '(_, Kwd "@//") >] -> PureStmt (l, s)
-| [< '(l, Kwd "/*@"); s = parse_stmt; '(_, Kwd "@*/") >] -> PureStmt (l, s)
+  [< '(l, Kwd "/*@"); s = parse_stmt; '(_, Kwd "@*/") >] -> PureStmt (l, s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
@@ -479,7 +478,7 @@ and
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (Stream.Error "Body of close statement must be call expression."))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
-| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "//@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@//"); b = parse_block >] -> WhileStmt (l, e, p, b)
+| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/"); b = parse_block >] -> WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (Stream.Error "An expression used as a statement must be a call expression."))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->

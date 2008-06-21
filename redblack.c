@@ -9,35 +9,39 @@ struct RedBlackNode
 };
 
 /*@
-predicate tree(struct RedBlackNode * root, struct RedBlackNode * NullNode)
+predicate subtree(struct RedBlackNode * root, struct RedBlackNode * NullNode)
   requires root->Element |-> _ &*& root->Left |-> ?l &*& root->Right |-> ?r &*& root->Color |-> _ &*& malloc_block_RedBlackNode(root)
-    &*& (l == NullNode ? emp : tree(l, NullNode)) &*& (r == NullNode ? emp : tree(r, NullNode));
+    &*& (l == NullNode ? emp : subtree(l, NullNode)) &*& (r == NullNode ? emp : subtree(r, NullNode));
+
+predicate tree(struct RedBlackNode * root, struct RedBlackNode * NullNode)
+  requires root->Element |-> _ &*& root->Left |-> NullNode &*& root->Right |-> ?r &*& root->Color |-> _ &*& malloc_block_RedBlackNode(root)
+    &*& (r == NullNode ? emp : subtree(r, NullNode));
 @*/
 
 struct RedBlackNode *
 MakeNullNode()
   //@ requires emp;
-  //@ ensures tree(result, result);
+  //@ ensures subtree(result, result);
 {
     struct RedBlackNode *NullNode = malloc( sizeof( struct RedBlackNode ) );
     NullNode->Left = NullNode;
     NullNode->Right = NullNode;
     NullNode->Color = (1 /* Black */);
     NullNode->Element = 12345;
-    //@ close tree(NullNode, NullNode);
+    //@ close subtree(NullNode, NullNode);
     return NullNode;
 }
 
 struct RedBlackNode *
 MakeRootNode(struct RedBlackNode * NullNode)
-  //@ requires tree(NullNode, NullNode);
-  //@ ensures tree(result, NullNode) &*& tree(NullNode, NullNode);
+  //@ requires subtree(NullNode, NullNode);
+  //@ ensures tree(result, NullNode) &*& subtree(NullNode, NullNode);
 {
     /* Create the header node */
     struct RedBlackNode * T = malloc( sizeof( struct RedBlackNode ) );
     /* To prove disjointness */
-    //@ open tree(NullNode, NullNode);
-    //@ close tree(NullNode, NullNode);
+    //@ open subtree(NullNode, NullNode);
+    //@ close subtree(NullNode, NullNode);
     T->Element = (0 - 10000);
     T->Left = NullNode;
     T->Right = NullNode;
@@ -46,23 +50,23 @@ MakeRootNode(struct RedBlackNode * NullNode)
     return T;
 }
 
-/* Print the tree, watch out for NullNode, */
+/* Print the subtree, watch out for NullNode, */
 /* and skip header */
 
 void
 DoPrint( struct RedBlackNode * T, struct RedBlackNode * NullNode )
-  //@ requires T == NullNode ? emp : tree(T, NullNode);
-  //@ ensures T == NullNode ? emp : tree(T, NullNode);
+  //@ requires T == NullNode ? emp : subtree(T, NullNode);
+  //@ ensures T == NullNode ? emp : subtree(T, NullNode);
 {
     if( T != NullNode )
     {
-        //@ open tree(T, NullNode);
+        //@ open subtree(T, NullNode);
         struct RedBlackNode * left = T->Left;
         DoPrint( left, NullNode );
         // Output( T->Element );
         struct RedBlackNode * right = T->Right;
         DoPrint( right, NullNode );
-        //@ close tree(T, NullNode);
+        //@ close subtree(T, NullNode);
     }
     else
     {
@@ -82,12 +86,12 @@ PrintTree( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 
 struct RedBlackNode *
 MakeEmptyRec( struct RedBlackNode * T, struct RedBlackNode * NullNode )
-  //@ requires T == NullNode ? emp : tree(T, NullNode);
+  //@ requires T == NullNode ? emp : subtree(T, NullNode);
   //@ ensures emp &*& result == NullNode;
 {
     if( T != NullNode )
     {
-        //@ open tree(T, NullNode);
+        //@ open subtree(T, NullNode);
         struct RedBlackNode * left = T->Left;
         MakeEmptyRec( left, NullNode );
         struct RedBlackNode * right = T->Right;
@@ -119,43 +123,43 @@ predicate tseg(struct RedBlackNode * root, struct RedBlackNode * NullNode, struc
     root->Element |-> ?e &*& root->Left |-> ?l &*& root->Right |-> ?r &*& root->Color |-> _ &*& malloc_block_RedBlackNode(root)
     &*& holeValue < e
         ? (l == hole ? emp : tseg(l, NullNode, hole, holeValue))
-          &*& (r == NullNode ? emp : tree(r, NullNode))
-        : (l == NullNode ? emp : tree(l, NullNode))
+          &*& (r == NullNode ? emp : subtree(r, NullNode))
+        : (l == NullNode ? emp : subtree(l, NullNode))
           &*& (r == hole ? emp : tseg(r, NullNode, hole, holeValue));
 
 lemma void tseg_tree_distinct_lemma(struct RedBlackNode * root, struct RedBlackNode * hole, int holeValue, struct RedBlackNode * NullNode)
-  requires tseg(root, NullNode, hole, holeValue) &*& tree(hole, NullNode);
-  ensures tseg(root, NullNode, hole, holeValue) &*& tree(hole, NullNode) &*& root != hole;
+  requires tseg(root, NullNode, hole, holeValue) &*& subtree(hole, NullNode);
+  ensures tseg(root, NullNode, hole, holeValue) &*& subtree(hole, NullNode) &*& root != hole;
 {
   open tseg(root, NullNode, hole, holeValue);
-  open tree(hole, NullNode);
-  close tree(hole, NullNode);
+  open subtree(hole, NullNode);
+  close subtree(hole, NullNode);
   close tseg(root, NullNode, hole, holeValue);
 }   
 
 @*/
 
-// Returns the node containing value X, or NullNode if X is not in the tree.
+// Returns the node containing value X, or NullNode if X is not in the subtree.
 
 struct RedBlackNode *
 Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
-  //@ requires T == NullNode ? emp : tree(T, NullNode);
-  //@ ensures T == NullNode ? result == NullNode : result == NullNode ? tree(T, NullNode) : result == T ? tree(result, NullNode) : tseg(T, NullNode, result, X) &*& tree(result, NullNode);
+  //@ requires T == NullNode ? emp : subtree(T, NullNode);
+  //@ ensures T == NullNode ? result == NullNode : result == NullNode ? subtree(T, NullNode) : result == T ? subtree(result, NullNode) : tseg(T, NullNode, result, X) &*& subtree(result, NullNode);
 {
     if( T == NullNode ) {
         return NullNode;
     } else {
-        //@ open tree(T, NullNode);
+        //@ open subtree(T, NullNode);
         int element = T->Element;
         if( X < element ) {
             struct RedBlackNode * left = T->Left;
             struct RedBlackNode * result = Find( X, left, NullNode );
             /*@
 			if (result == NullNode) {
-			  close tree(T, NullNode);
+			  close subtree(T, NullNode);
 			} else {
-			  open tree(result, NullNode); // To obtain distinctness.
-			  close tree(result, NullNode);
+			  open subtree(result, NullNode); // To obtain distinctness.
+			  close subtree(result, NullNode);
 			  close tseg(T, NullNode, result, X);
 		    }
 		    @*/
@@ -167,16 +171,16 @@ Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
                 struct RedBlackNode * result = Find( X, right, NullNode );
 				/*@
                 if (result == NullNode) {
-				  close tree(T, NullNode);
+				  close subtree(T, NullNode);
 			    } else {
-				  open tree(result, NullNode); // To obtain result != T
-				  close tree(result, NullNode);
+				  open subtree(result, NullNode); // To obtain result != T
+				  close subtree(result, NullNode);
 				  close tseg(T, NullNode, result, X);
 			    }
 				@*/
                 return result;
             } else {
-                //@ close tree(T, NullNode);
+                //@ close subtree(T, NullNode);
                 return T;
             }
         }
@@ -218,6 +222,8 @@ FindMax( struct RedBlackNode * T, struct RedBlackNode * NullNode )
 
 struct RedBlackNode *
 SingleRotateWithLeft( struct RedBlackNode * K2, struct RedBlackNode * NullNode )
+  //@ requires K2->Left |-> ?k1 &*& k1->Right |-> ?k1_right;
+  //@ ensures K2->Left |-> k1_right &*& k1->Right |-> K2 &*& result == k1;
 {
     struct RedBlackNode * K1 = K2->Left;
     struct RedBlackNode * right = K1->Right;
@@ -233,6 +239,8 @@ SingleRotateWithLeft( struct RedBlackNode * K2, struct RedBlackNode * NullNode )
 
 struct RedBlackNode *
 SingleRotateWithRight( struct RedBlackNode * K1, struct RedBlackNode * NullNode )
+  //@ requires K1->Right |-> ?k2 &*& k2->Left |-> ?k2_left;
+  //@ ensures K1->Right |-> k2_left &*& k2->Left |-> K1 &*& result == k2;
 {
     struct RedBlackNode * K2 = K1->Right;
     struct RedBlackNode * left = K2->Left;
@@ -246,30 +254,77 @@ SingleRotateWithRight( struct RedBlackNode * K1, struct RedBlackNode * NullNode 
 /* (whose parent is passed as a parameter) */
 /* The child is deduced by examining Item */
 
+/*@
+predicate node(struct RedBlackNode * n, int elem, struct RedBlackNode * left, struct RedBlackNode * right)
+  requires n->Element |-> elem &*& n->Left |-> left &*& n->Right |-> right &*& n->Color |-> _ &*& malloc_block_RedBlackNode(n);
+@*/
+
 struct RedBlackNode *
 Rotate( int Item, struct RedBlackNode * Parent, struct RedBlackNode * NullNode )
+  /*@ requires
+        node(Parent, ?elem, ?left, ?right)
+		&*& Item < elem
+		    ? node(left, ?leftElem, ?leftLeft, ?leftRight)
+			  &*& Item < leftElem
+			      ? node(leftLeft, ?leftLeftElem, ?leftLeftLeft, ?leftLeftRight)
+				  : node(leftRight, ?leftRightElem, ?leftRightLeft, ?leftRightRight)
+		    : node(right, ?rightElem, ?rightLeft, ?rightRight)
+			  &*& Item < rightElem
+			      ? node(rightLeft, ?rightLeftElem, ?rightLeftLeft, ?rightLeftRight)
+				  : node(rightRight, ?rightRightElem, ?rightRightLeft, ?rightRightRight);
+  @*/
+  /*@ ensures
+        Item < elem
+		? Item < leftElem
+		  ? node(Parent, elem, leftLeft, right) &*& node(leftLeft, leftLeftElem, leftLeftLeft, left) &*& node(left, leftElem, leftLeftRight, leftRight)
+		  : node(Parent, elem, leftRight, right) &*& node(leftRight, leftRightElem, left, leftRightRight) &*& node(left, leftElem, leftLeft, leftRightLeft)
+        : Item < rightElem
+		  ? node(Parent, elem, left, rightLeft) &*& node(rightLeft, rightLeftElem, rightLeftLeft, right) &*& node(right, rightElem, rightLeftRight, rightRight)
+		  : node(Parent, elem, left, rightRight) &*& node(rightRight, rightRightElem, right, rightRightRight) &*& node(right, rightElem, rightLeft, rightRightLeft);
+  @*/
 {
+	//@ open node(Parent, _, _, _);
     int element = Parent->Element;
     if( Item < element ) {
         struct RedBlackNode * left = Parent->Left;
+		//@ open node(left, _, _, _);
         int leftElement = left->Element;
         if (Item < leftElement) {
-            struct RedBlackNode * result = SingleRotateWithLeft( leftElement, NullNode );
+			//@ open node(leftLeft, _, _, _);
+            struct RedBlackNode * result = SingleRotateWithLeft( left, NullNode );
             Parent->Left = result;
+			//@ close node(Parent, elem, leftLeft, right);
+			//@ close node(leftLeft, leftLeftElem, leftLeftLeft, left);
+			//@ close node(left, leftElem, leftLeftRight, leftRight);
             return result;
         } else {
-            struct RedBlackNode * result = SingleRotateWithRight( leftElement, NullNode );
+			//@ open node(leftRight, _, _, _);
+            struct RedBlackNode * result = SingleRotateWithRight( left, NullNode );
             Parent->Left = result;
+		    //@ close node(Parent, elem, leftRight, right);
+		    //@ close node(leftRight, leftRightElem, left, leftRightRight);
+		    //@ close node(left, leftElem, leftLeft, leftRightLeft);
             return result;
         }
     } else {
-        if (Item < Parent->Right->Element) {
-            struct RedBlackNode * result = SingleRotateWithLeft( Parent->Right, NullNode );
+		//@ open node(right, _, _, _);
+	    struct RedBlackNode * right = Parent->Right;
+		int element = right->Element;
+        if (Item < element) {
+			//@ open node(rightLeft, _, _, _);
+            struct RedBlackNode * result = SingleRotateWithLeft( right, NullNode );
             Parent->Right = result;
+			//@ close node(Parent, elem, left, rightLeft);
+			//@ close node(rightLeft, rightLeftElem, rightLeftLeft, right);
+			//@ close node(right, rightElem, rightLeftRight, rightRight);
             return result;
         } else {
-            struct RedBlackNode * result = SingleRotateWithRight( Parent->Right, NullNode );
+			//@ open node(rightRight, _, _, _);
+            struct RedBlackNode * result = SingleRotateWithRight( right, NullNode );
             Parent->Right = result;
+			//@ close node(Parent, elem, left, rightRight);
+			//@ close node(rightRight, rightRightElem, right, rightRightRight);
+			//@ close node(right, rightElem, rightLeft, rightRightLeft);
             return result;
         }
     }
