@@ -647,8 +647,10 @@ type
 and
   formula =
     True
+  | False
   | PredApp of string * term list
   | Eq of term * term
+  | Neq of term * term
   | Not of formula
   | And of formula * formula
   | Or of formula * formula
@@ -669,8 +671,8 @@ let rec pprint_t t =
       | FunApp ("-", [t1; t2]) -> (30, iter 30 t1 ^ " - " ^ iter 20 t2)
       | FunApp ("==", [t1; t2]) -> (40, iter 30 t1 ^ " == " ^ iter 30 t2)
       | FunApp ("!=", [t1; t2]) -> (40, iter 30 t1 ^ " != " ^ iter 30 t2)
-      | FunApp ("le", [t1; t2]) -> (40, iter 30 t1 ^ " le " ^ iter 30 t2)
-      | FunApp ("lt", [t1; t2]) -> (40, iter 30 t1 ^ " lt " ^ iter 30 t2)
+      | FunApp ("le", [t1; t2]) -> (40, iter 30 t1 ^ " <= " ^ iter 30 t2)
+      | FunApp ("lt", [t1; t2]) -> (40, iter 30 t1 ^ " < " ^ iter 30 t2)
       | FunApp (g, ts) -> (0, g ^ "(" ^ pprint_ts ts ^ ")")
       | IfTerm (t1, t2, t3) -> (50, iter 40 t1 ^ " ? " ^ iter 50 t2 ^ " : " ^ iter 50 t3)
     in
@@ -679,6 +681,14 @@ let rec pprint_t t =
   iter 100 t
 and pprint_ts ts =
   match ts with [] -> "" | t::ts -> pprint_t t ^ (let rec iter' ts = match ts with [] -> "" | t::ts -> ", " ^ pprint_t t ^ iter' ts in iter' ts)
+
+let negate_t t =
+  match t with
+    FunApp ("==", [t1; t2]) -> FunApp ("!=", [t1; t2])
+  | FunApp ("!=", [t1; t2]) -> FunApp ("==", [t1; t2])
+  | FunApp ("le", [t1; t2]) -> FunApp ("lt", [t2; t1])
+  | FunApp ("lt", [t1; t2]) -> FunApp ("le", [t2; t1])
+  | t -> FunApp ("==", [t; Symb "false_"])
 
 let slist ss =
   let rec args ss =
@@ -694,8 +704,18 @@ let pretty_print f =
     let (l, s) =
       match f with
         True -> (100, "TRUE")
+      | False -> (100, "FALSE")
       | PredApp (p, [t1; t2]) -> (100, pprint_t t1 ^ " " ^ p ^ " " ^ pprint_t t2)
-      | Eq (t1, t2) -> (100, pprint_t t1 ^ " EQ " ^ pprint_t t2)
+      | Eq (t1, Symb "true_") -> (100, pprint_t t1)
+      | Eq (t1, Symb "false_") -> (100, pprint_t (negate_t t1))
+      | Neq (t1, t2) -> (100, pprint_t t1 ^ " != " ^ pprint_t t2)
+      | Eq (t1, t2) -> (100, pprint_t t1 ^ " == " ^ pprint_t t2)
+      | Not True -> (100, iter 100 False)
+      | Not False -> (100, iter 100 True)
+      | Not (Eq (t1, t2)) -> (100, iter 100 (Neq (t1, t2)))
+      | Not (Neq (t1, t2)) -> (100, iter 100 (Eq (t1, t2)))
+      | Not (PredApp ("<", [t1; t2])) -> (100, iter 100 (PredApp ("<=", [t2; t1])))
+      | Not (PredApp ("<=", [t1; t2])) -> (100, iter 100 (PredApp ("<", [t2; t1])))
       | Not f -> (100, "NOT " ^ iter 100 f)
       | And (f1, f2) -> (110, iter 110 f1 ^ " AND " ^ iter 110 f2)
       | Or (f1, f2) -> (120, iter 120 f1 ^ " OR " ^ iter 120 f2)
@@ -717,8 +737,10 @@ let rec simpt t =
 let rec simp f =
   match f with
     True -> "TRUE"
+  | False -> "FALSE"
   | PredApp (p, ts) -> slist (p :: List.map simpt ts)
   | Eq (t1, t2) -> "(EQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
+  | Neq (t1, t2) -> "(NEQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
   | Not f -> "(NOT " ^ simp f ^ ")"
   | And (f1, f2) -> "(AND " ^ simp f1 ^ " " ^ simp f2 ^ ")"
   | Or (f1, f2) -> "(OR " ^ simp f1 ^ " " ^ simp f2 ^ ")"
