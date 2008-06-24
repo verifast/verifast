@@ -1197,7 +1197,7 @@ let verify_program verbose path =
     let s = simp phi in
     push_context (Assuming phi);
     bg_push s;
-    cont();
+    (if not (query_formula (Not True)) then cont());
     pop_context ();
     send_command "(BG_POP)";
     ()

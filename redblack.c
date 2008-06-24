@@ -177,7 +177,7 @@ Find( int X, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 			    } else {
 				  open subtree(result, NullNode); // To obtain result != T
 				  close subtree(result, NullNode);
-				  close tseg(T, NullNode, result, X);
+				  // close tseg(T, NullNode, result, X);
 			    }
 				@*/
                 return result;
