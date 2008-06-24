@@ -824,14 +824,39 @@ let verify_program verbose path =
     unique_number_counter := n + 1;
     n
   in
+  
+  let index_table = ref ([]: (string * int) list) in
+  let index_table_stack = ref ([]: (string * int) list list) in
+  
+  let push_index_table() =
+    index_table_stack := !index_table::!index_table_stack
+  in
+  
+  let pop_index_table() =
+    let (h::t) = !index_table_stack in
+    let _ = index_table := h in
+    index_table_stack := t
+  in
+  
+  let with_index_table cont =
+    push_index_table();
+    cont();
+    pop_index_table()
+  in
+  
+  let alloc_unique_id s =
+    match try_assoc s !index_table with
+      None -> (index_table := (s, 0)::!index_table; s)
+    | Some k -> (index_table := (s, k + 1)::!index_table; s ^ string_of_int k)
+  in
 
   let get_unique_id s =
-    s ^ string_of_int (get_unique_number ())
+    alloc_unique_id s
   in
   
   let get_unique_symb s = Symb (get_unique_id s) in
   
-  let get_unique_var_symb s = get_unique_symb (s ^ "_") in
+  let get_unique_var_symb s = (* get_unique_symb (s ^ "_") *) get_unique_symb s in
 
   let (simp_in, simp_out) = Unix.open_process "z3 /si" in
   
@@ -1196,13 +1221,15 @@ let verify_program verbose path =
   in
   
   let assume phi cont =
-    let s = simp phi in
-    push_context (Assuming phi);
-    bg_push s;
-    (if not (query_formula (Not True)) then cont());
-    pop_context ();
-    send_command "(BG_POP)";
-    ()
+    if query_formula phi then cont() else (
+      let s = simp phi in
+      push_context (Assuming phi);
+      bg_push s;
+      (if not (query_formula (Not True)) then cont());
+      pop_context ();
+      send_command "(BG_POP)";
+      ()
+    )
   in
   
   let assert_formula phi h env l msg cont =
@@ -1217,8 +1244,8 @@ let verify_program verbose path =
   let success() = () in
   
   let branch cont1 cont2 =
-    cont1();
-    cont2()
+    with_index_table (fun _ -> cont1());
+    with_index_table (fun _ -> cont2())
   in
   
   let evalpat ghostenv env pat cont =
@@ -1571,7 +1598,8 @@ let verify_program verbose path =
     | [] -> ()
     | Func (l, Fixpoint, _, _, _, _, _)::ds -> verify_decls lems ds
     | Func (l, k, rt, g, ps, Some (pre, post), ss)::ds ->
-      let env = List.map (function (t, p) -> (p, Symb (p ^ "_0"))) ps in
+      let _ = push_index_table() in
+      let env = List.map (function (t, p) -> (p, get_unique_var_symb p)) ps in
       let (sizemap, indinfo) =
         match ss with
           [SwitchStmt (_, Var (_, x), _)] -> (
@@ -1613,6 +1641,7 @@ let verify_program verbose path =
           )
         )
       in
+      let _ = pop_index_table() in
       verify_decls lems' ds
     | _::ds -> verify_decls lems ds
   in
@@ -1622,7 +1651,7 @@ let verify_program verbose path =
 
 open Tk
 
-let browse_trace path ctxts_lifo =
+let browse_trace path ctxts_lifo msg =
   let root = openTk() in
   let srcFrame = Frame.create root in
   let srcText = Text.create srcFrame ~font:"Courier 10" ~wrap:`None in
@@ -1708,6 +1737,7 @@ let browse_trace path ctxts_lifo =
     let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) env) in
     ()
   ) in
+  let _ = Wm.title_set root ("VeriFast Failed Path Browser - " ^ msg) in
   mainLoop()
 
 let _ =
@@ -1728,7 +1758,7 @@ let _ =
         *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
         let _ = print_msg path l msg in
-        let _ = browse_trace path ctxts in
+        let _ = browse_trace path ctxts msg in
         ()
   in
   match Sys.argv with
