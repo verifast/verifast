@@ -657,7 +657,7 @@ and
   | IfFormula of formula * formula * formula
   | Forall of string list * formula
 
-let pprint_t t =
+let rec pprint_t t =
   let rec iter level t =
     let (l, s) =
       match t with
@@ -671,12 +671,14 @@ let pprint_t t =
       | FunApp ("!=", [t1; t2]) -> (40, iter 30 t1 ^ " != " ^ iter 30 t2)
       | FunApp ("le", [t1; t2]) -> (40, iter 30 t1 ^ " le " ^ iter 30 t2)
       | FunApp ("lt", [t1; t2]) -> (40, iter 30 t1 ^ " lt " ^ iter 30 t2)
-      | FunApp (g, ts) -> (0, g ^ "(" ^ (match ts with [] -> "" | t::ts -> iter 100 t ^ (let rec iter' ts = match ts with [] -> "" | t::ts -> ", " ^ iter 100 t ^ iter' ts in iter' ts)) ^ ")")
+      | FunApp (g, ts) -> (0, g ^ "(" ^ pprint_ts ts ^ ")")
       | IfTerm (t1, t2, t3) -> (50, iter 40 t1 ^ " ? " ^ iter 50 t2 ^ " : " ^ iter 50 t3)
     in
     if l <= level then s else "(" ^ s ^ ")"
   in
   iter 100 t
+and pprint_ts ts =
+  match ts with [] -> "" | t::ts -> pprint_t t ^ (let rec iter' ts = match ts with [] -> "" | t::ts -> ", " ^ pprint_t t ^ iter' ts in iter' ts)
 
 let slist ss =
   let rec args ss =
@@ -1618,6 +1620,96 @@ let verify_program verbose path =
   let _ = verify_decls [] ds in
   print_endline "0 errors found"
 
+open Tk
+
+let browse_trace path ctxts_lifo =
+  let root = openTk() in
+  let srcFrame = Frame.create root in
+  let srcText = Text.create srcFrame ~font:"Courier 10" ~wrap:`None in
+  let srcXScroll = Scrollbar.create srcFrame ~orient:`Horizontal ~command:(Text.xview srcText) in
+  let srcYScroll = Scrollbar.create srcFrame ~orient:`Vertical ~command:(Text.yview srcText) in
+  let _ = Text.configure srcText ~xscrollcommand:(Scrollbar.set srcXScroll) in
+  let _ = Text.configure srcText ~yscrollcommand:(Scrollbar.set srcYScroll) in
+  let _ =
+    let chan = open_in path in
+    let buf = String.create 60000 in
+    let rec iter () =
+      let result = input chan buf 0 60000 in
+      if result = 0 then () else (Text.insert (`End, []) (String.sub buf 0 result) srcText; iter())
+    in
+    let _ = iter() in
+    let _ = close_in chan in
+    ()
+  in
+  let _ = grid [srcText] ~row:0 ~column:0 ~sticky:"nsew" in
+  let _ = grid [srcXScroll] ~row:1 ~column:0 ~sticky:"ew" in
+  let _ = grid [srcYScroll] ~row:0 ~column:1 ~sticky:"ns" in
+  let _ = Grid.column_configure srcFrame 0 ~weight:1 in
+  let _ = Grid.row_configure srcFrame 0 ~weight:1 in
+  let _ = Text.configure srcText ~state:`Disabled in
+  let bottomFrame = Frame.create root in
+  let create_listbox parent =
+    let frame = Frame.create parent in
+    let lb = Listbox.create frame in
+    let sx = Scrollbar.create frame ~orient:`Horizontal ~command:(Listbox.xview lb) in
+    let sy = Scrollbar.create frame ~orient:`Vertical ~command:(Listbox.yview lb) in
+    let _ = Listbox.configure lb ~xscrollcommand:(Scrollbar.set sx) in
+    let _ = Listbox.configure lb ~yscrollcommand:(Scrollbar.set sy) in
+    let _ = grid [lb] ~row:0 ~column:0 ~sticky:"nsew" in
+    let _ = grid [sx] ~row:1 ~column:0 ~sticky:"ew" in
+    let _ = grid [sy] ~row:0 ~column:1 ~sticky:"ns" in
+    let _ = Grid.row_configure frame 0 ~weight:1 in
+    let _ = Grid.column_configure frame 0 ~weight:1 in
+    (frame, lb)
+  in
+  let (steplistFrame, stepList) = create_listbox bottomFrame in
+  let (assumptionsFrame, assumptionsList) = create_listbox bottomFrame in
+  let _ = Listbox.configure assumptionsList ~takefocus:true in
+  let (chunksFrame, chunksList) = create_listbox bottomFrame in
+  let (envFrame, envList) = create_listbox bottomFrame in
+  let ctxts_fifo = List.rev ctxts_lifo in
+  let stepItems =
+    let rec iter ass ctxts =
+      match ctxts with
+        [] -> []
+      | Assuming phi::cs -> iter (phi::ass) cs
+      | Executing (h, env, l, msg)::cs -> (ass, h, env, l, msg)::iter ass cs
+    in
+    iter [] ctxts_fifo
+  in
+  let _ = Listbox.insert stepList `End (List.map (fun (ass, h, env, l, msg) -> msg) stepItems) in
+  let _ = grid [steplistFrame] ~row:0 ~column:0 ~sticky:"nsew" in
+  let _ = grid [assumptionsFrame] ~row:0 ~column:1 ~sticky:"nsew" in
+  let _ = grid [chunksFrame] ~row:0 ~column:2 ~sticky:"nsew" in
+  let _ = grid [envFrame] ~row:0 ~column:3 ~sticky:"nsew" in
+  let _ = Grid.column_configure bottomFrame 0 ~weight:1 in
+  let _ = Grid.column_configure bottomFrame 1 ~weight:1 in
+  let _ = Grid.column_configure bottomFrame 2 ~weight:1 in
+  let _ = Grid.column_configure bottomFrame 3 ~weight:1 in
+  let _ = Grid.row_configure bottomFrame 0 ~weight:1 in
+  let _ = grid [srcFrame] ~row:0 ~column:0 ~sticky:"nsew" in
+  let _ = grid [bottomFrame] ~row:1 ~column:0 ~sticky:"nsew" in
+  let _ = Grid.column_configure root 0 ~weight:1 in
+  let _ = Grid.row_configure root 0 ~weight:1 in
+  let _ = Grid.row_configure root 0 ~weight:1 in
+  let _ = bind stepList ~events:[`Virtual "ListboxSelect"] ~action:(fun _ ->
+    let [`Num k] = Listbox.curselection stepList in
+    let (ass, h, env, l, msg) = List.nth stepItems k in
+    let (path, line, col) = l in
+    let _ = Text.tag_delete srcText ["currentLine"] in
+    let _ = Text.tag_add srcText ~tag:"currentLine" ~start:(`Linechar (line, col - 1), []) ~stop:(`Linechar (line, col), []) in
+    let _ = Text.tag_configure srcText ~tag:"currentLine" ~background:`Yellow in
+    let _ = Text.see srcText (`Linechar (line, col - 1), []) in
+    let _ = Listbox.delete assumptionsList ~first:(`Num 0) ~last:`End in
+    let _ = Listbox.insert assumptionsList `End (List.map (fun phi -> pretty_print phi) ass) in
+    let _ = Listbox.delete chunksList ~first:(`Num 0) ~last:`End in
+    let _ = Listbox.insert chunksList `End (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
+    let _ = Listbox.delete envList ~first:(`Num 0) ~last:`End in
+    let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) env) in
+    ()
+  ) in
+  mainLoop()
+
 let _ =
   let print_msg path l msg =
     print_endline (path ^ string_of_loc l ^ ": " ^ msg)
@@ -1636,6 +1728,7 @@ let _ =
         *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
         let _ = print_msg path l msg in
+        let _ = browse_trace path ctxts in
         ()
   in
   match Sys.argv with
