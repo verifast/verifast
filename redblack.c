@@ -1,3 +1,5 @@
+// C code from Mark Allen Weiss, Data Structures and Algorithm Analysis in C (Second Edition) (downloaded from http://www.cs.fiu.edu/~weiss/dsaa_c2e/redblack.c).
+
 /* typedef enum ColorType { Red = 0, Black = 1 } ColorType; */
 
 struct RedBlackNode
@@ -330,8 +332,20 @@ Rotate( int Item, struct RedBlackNode * Parent, struct RedBlackNode * NullNode )
     }
 }
 
-void HandleReorient( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBlackNode * P, struct RedBlackNode * GP, struct RedBlackNode * GGP, struct RedBlackNode * NullNode )
+struct Path {
+	struct RedBlackNode * X;
+	struct RedBlackNode * P;
+	struct RedBlackNode * GP;
+	struct RedBlackNode * GGP;
+};
+
+void HandleReorient( int Item, struct RedBlackNode * T, struct Path * path, struct RedBlackNode * NullNode )
+  
 {
+	struct RedBlackNode * X = path->X;
+	struct RedBlackNode * P = path->P;
+	struct RedBlackNode * GP = path->GP;
+	struct RedBlackNode * GGP = path->GGP;
     X->Color = (0 /* Red */);        /* Do the color flip */
     struct RedBlackNode * left = X->Left;
     left->Color = (1 /* Black */);
@@ -345,7 +359,7 @@ void HandleReorient( int Item, struct RedBlackNode * T, struct RedBlackNode * X,
         struct RedBlackNode * gp_element = GP->Element;
         struct RedBlackNode * p_element = P->Element;
         if( (Item < gp_element) != (Item < p_element) ) {
-            P = Rotate( Item, GP );  /* Start double rotate */
+            P = Rotate( Item, GP, NullNode );  /* Start double rotate */
         } else {
         }
         X = Rotate( Item, GGP, NullNode );
@@ -356,11 +370,17 @@ void HandleReorient( int Item, struct RedBlackNode * T, struct RedBlackNode * X,
     }
     struct RedBlackNode * t_right = T->Right;
     t_right->Color = (1 /* Black */);  /* Make root black */
+
+	path->X = X;
+	path->P = P;
+	path->GP = GP;
+	path->GGP = GGP;
 }
 
 struct RedBlackNode *
-Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBlackNode * NullNode )
+Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * NullNode )
 {
+	struct Path * path = malloc(sizeof(Path));
     struct RedBlackNode * X = T;
     struct RedBlackNode * G = T;
     struct RedBlackNode * P = T;
@@ -368,7 +388,7 @@ Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBl
     struct RedBlackNode * GGP = 0;
     NullNode->Element = Item;
     struct RedBlackNode * x_element = X->Element;
-    while( X->Element != Item )  /* Descend down the tree */
+    while( x_element != Item )  /* Descend down the tree */
       //@ invariant true;
     {
         GGP = GP;
@@ -384,7 +404,15 @@ Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBl
         struct RedBlackNode * x_right = X->Right;
         int x_right_color = x_right->Color;
         if( x_left_color == (0 /* Red */) && x_right_color == (0 /* Red */) ) {
-            HandleReorient( Item, T, P, GP, GGP, NullNode );
+			path->X = X;
+			path->P = P;
+			path->GP = GP;
+			path->GGP = GGP;
+            HandleReorient( Item, T, path, NullNode );
+			X = path->X;
+			P = path->P;
+			GP = path->GP;
+			GGP = path->GGP;
         } else {
         }
         x_element = X->Element;
@@ -406,7 +434,15 @@ Insert( int Item, struct RedBlackNode * T, struct RedBlackNode * X, struct RedBl
     } else {
         P->Right = X;
     }
-    HandleReorient( Item, T, NullNode ); /* Color it red; maybe rotate */
+	path->X = X;
+	path->P = P;
+	path->GP = GP;
+	path->GGP = GGP;
+    HandleReorient( Item, T, path, NullNode );  /* Color it red; maybe rotate */
+	X = path->X;
+	P = path->P;
+	GP = path->GP;
+	GGP = path->GGP;
 
     return T;
 }
