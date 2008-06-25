@@ -378,7 +378,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "forall"; "_"; "@*/"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"
 ]
 
 let read_program s =
@@ -593,7 +593,8 @@ and
 | [< >] -> e0
 and
   parse_expr_conj_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, "AND", [e0; e1])) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, "&&", [e0; e1])) >] -> e
+| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, "||", [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_arglist = parser
@@ -637,7 +638,9 @@ let theory = [
   "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))"
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) true) (AND (EQ e1 true) (EQ e2 true))))";
+  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) true) (OR (EQ e1 true) (EQ e2 true))))"
 ]
 
 type
@@ -1075,7 +1078,7 @@ let verify_program verbose path =
                                   in
                                   rt
                               else
-                                static_error l "No such pure function."
+                                static_error l ("No such pure function: " ^ g')
                             )
                           | IfExpr (l, e1, e2, e3) ->
                             let _ = checkt e1 boolt in
@@ -1158,6 +1161,7 @@ let verify_program verbose path =
     | Operation (_, "le", [e1; e2]) -> PredApp ("<=", [ev e1; ev e2])
     | Operation (_, "lt", [e1; e2]) -> PredApp ("<", [ev e1; ev e2])
     | Operation (_, "&&", [e1; e2]) -> And (etrue e1, etrue e2)
+    | Operation (_, "||", [e1; e2]) -> Or (etrue e1, etrue e2)
     | _ -> Eq (ev e, Symb (Atom "true"))
   in
 
@@ -1472,7 +1476,7 @@ let verify_program verbose path =
       match fds with
         [] -> (
         match try_assoc g purefuncmap with
-          None -> static_error l "No such function."
+          None -> static_error l ("No such function: " ^ g)
         | Some (lg, rt, pts, ag) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
