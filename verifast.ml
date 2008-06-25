@@ -1387,7 +1387,7 @@ let verify_program verbose path =
           matches @ iter (chunk::hprefix) h
     in
     match iter [] h with
-      [] -> assert_false h env l "No matching heap chunks."
+      [] -> assert_false h env l ("No matching heap chunks: " ^ g)
     | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
     | _ -> assert_false h env l "Multiple matching heap chunks."
   in
