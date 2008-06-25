@@ -627,22 +627,26 @@ let rec try_assoc x xys =
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
+let theoryAtoms = ["true"; "false"; "le"; "lt"]
+
 let theory = [
-  "(DISTINCT true_ false_)";
-  "(FORALL (e1 e2) (EQ (IF true_ e1 e2) e1))";
-(*  "(FORALL (e1 e2) (EQ (IF false_ e1 e2) e2))";   *)
-  "(FORALL (b e1 e2) (IMPLIES (NEQ b true_) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
-  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true_) (EQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true_) (NEQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true_) (<= e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true_) (< e1 e2)))"
+  "(DISTINCT true false)";
+  "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
+(*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
+  "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))"
 ]
 
 type
+  atom = Atom of string
+and
   term =
     Int of int
-  | Symb of string
-  | FunApp of string * term list
+  | Symb of atom
+  | FunApp of atom * term list
   | IfTerm of term * term * term
 and
   formula =
@@ -657,23 +661,23 @@ and
   | Imp of formula * formula
   | Iff of formula * formula
   | IfFormula of formula * formula * formula
-  | Forall of string list * formula
+  | Forall of atom list * formula
 
 let rec pprint_t t =
   let rec iter level t =
     let (l, s) =
       match t with
         Int n -> (0, string_of_int n)
-      | Symb s -> (0, s)
-      | FunApp ("*", [t1; t2]) -> (20, iter 20 t1 ^ " * " ^ iter 20 t2)
-      | FunApp ("/", [t1; t2]) -> (20, iter 20 t1 ^ " / " ^ iter 10 t2)
-      | FunApp ("+", [t1; t2]) -> (30, iter 30 t1 ^ " + " ^ iter 30 t2)
-      | FunApp ("-", [t1; t2]) -> (30, iter 30 t1 ^ " - " ^ iter 20 t2)
-      | FunApp ("==", [t1; t2]) -> (40, iter 30 t1 ^ " == " ^ iter 30 t2)
-      | FunApp ("!=", [t1; t2]) -> (40, iter 30 t1 ^ " != " ^ iter 30 t2)
-      | FunApp ("le", [t1; t2]) -> (40, iter 30 t1 ^ " <= " ^ iter 30 t2)
-      | FunApp ("lt", [t1; t2]) -> (40, iter 30 t1 ^ " < " ^ iter 30 t2)
-      | FunApp (g, ts) -> (0, g ^ "(" ^ pprint_ts ts ^ ")")
+      | Symb (Atom s) -> (0, s)
+      | FunApp (Atom "*", [t1; t2]) -> (20, iter 20 t1 ^ " * " ^ iter 20 t2)
+      | FunApp (Atom "/", [t1; t2]) -> (20, iter 20 t1 ^ " / " ^ iter 10 t2)
+      | FunApp (Atom "+", [t1; t2]) -> (30, iter 30 t1 ^ " + " ^ iter 30 t2)
+      | FunApp (Atom "-", [t1; t2]) -> (30, iter 30 t1 ^ " - " ^ iter 20 t2)
+      | FunApp (Atom "==", [t1; t2]) -> (40, iter 30 t1 ^ " == " ^ iter 30 t2)
+      | FunApp (Atom "!=", [t1; t2]) -> (40, iter 30 t1 ^ " != " ^ iter 30 t2)
+      | FunApp (Atom "le", [t1; t2]) -> (40, iter 30 t1 ^ " <= " ^ iter 30 t2)
+      | FunApp (Atom "lt", [t1; t2]) -> (40, iter 30 t1 ^ " < " ^ iter 30 t2)
+      | FunApp (Atom g, ts) -> (0, g ^ "(" ^ pprint_ts ts ^ ")")
       | IfTerm (t1, t2, t3) -> (50, iter 40 t1 ^ " ? " ^ iter 50 t2 ^ " : " ^ iter 50 t3)
     in
     if l <= level then s else "(" ^ s ^ ")"
@@ -684,11 +688,11 @@ and pprint_ts ts =
 
 let negate_t t =
   match t with
-    FunApp ("==", [t1; t2]) -> FunApp ("!=", [t1; t2])
-  | FunApp ("!=", [t1; t2]) -> FunApp ("==", [t1; t2])
-  | FunApp ("le", [t1; t2]) -> FunApp ("lt", [t2; t1])
-  | FunApp ("lt", [t1; t2]) -> FunApp ("le", [t2; t1])
-  | t -> FunApp ("==", [t; Symb "false_"])
+    FunApp (Atom "==", [t1; t2]) -> FunApp (Atom "!=", [t1; t2])
+  | FunApp (Atom "!=", [t1; t2]) -> FunApp (Atom "==", [t1; t2])
+  | FunApp (Atom "le", [t1; t2]) -> FunApp (Atom "lt", [t2; t1])
+  | FunApp (Atom "lt", [t1; t2]) -> FunApp (Atom "le", [t2; t1])
+  | t -> FunApp (Atom "==", [t; Symb (Atom "false")])
 
 let slist ss =
   let rec args ss =
@@ -706,8 +710,8 @@ let pretty_print f =
         True -> (100, "TRUE")
       | False -> (100, "FALSE")
       | PredApp (p, [t1; t2]) -> (100, pprint_t t1 ^ " " ^ p ^ " " ^ pprint_t t2)
-      | Eq (t1, Symb "true_") -> (100, pprint_t t1)
-      | Eq (t1, Symb "false_") -> (100, pprint_t (negate_t t1))
+      | Eq (t1, Symb (Atom "true")) -> (100, pprint_t t1)
+      | Eq (t1, Symb (Atom "false")) -> (100, pprint_t (negate_t t1))
       | Neq (t1, t2) -> (100, pprint_t t1 ^ " != " ^ pprint_t t2)
       | Eq (t1, t2) -> (100, pprint_t t1 ^ " == " ^ pprint_t t2)
       | Not True -> (100, iter 100 False)
@@ -721,7 +725,7 @@ let pretty_print f =
       | Or (f1, f2) -> (120, iter 120 f1 ^ " OR " ^ iter 120 f2)
       | Imp (f1, f2) -> (130, iter 120 f1 ^ " IMPLIES " ^ iter 130 f2)
       | Iff (f1, f2) -> (140, iter 100 f1 ^ " IFF " ^ iter 100 f2)
-      | Forall (xs, f) -> (150, "FORALL " ^ slist xs ^ ". " ^ iter 150 f)
+      | Forall (xs, f) -> (150, "FORALL " ^ slist (List.map (function (Atom s) -> s) xs) ^ ". " ^ iter 150 f)
     in
     if l <= level then s else "(" ^ s ^ ")"
   in
@@ -730,8 +734,8 @@ let pretty_print f =
 let rec simpt t =
   match t with
     Int i -> string_of_int i
-  | Symb s -> s
-  | FunApp (f, ts) -> slist ([f] @ List.map simpt ts)
+  | Symb (Atom s) -> s
+  | FunApp (Atom f, ts) -> slist ([f] @ List.map simpt ts)
   | IfTerm (t1, t2, t3) -> slist ["IF"; simpt t1; simpt t2; simpt t3]
 
 let rec simp f =
@@ -747,23 +751,12 @@ let rec simp f =
   | Imp (f1, f2) -> slist ["IMPLIES"; simp f1; simp f2]
   | Iff (f1, f2) -> slist ["IFF"; simp f1; simp f2]
   | IfFormula (f1, f2, f3) -> let s1 = simp f1 in slist ["AND"; slist ["IMPLIES"; s1; simp f2]; slist ["IMPLIES"; slist ["NOT"; s1]; simp f3]]
-  | Forall (xs, f) -> slist ["FORALL"; slist xs; simp f]
+  | Forall (xs, f) -> slist ["FORALL"; slist (List.map (function (Atom x) -> x) xs); simp f]
 
 let rec conj ts : formula =
   match ts with
     [] -> True
   | t :: ts -> And (t, conj ts)
-
-(* Logical symbol generation:
- * Suffix   Category
- * _        constructor or fixpoint function
- * _tag     Constructor tag
- * _tagfunc Tag function
- * _proj    Projection function
- * _access  Accessor function
- * _0       variable
- * _size    sizeof value
- *)
 
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
@@ -788,43 +781,6 @@ let string_of_context c =
 
 exception SymbolicExecutionError of context list * formula * loc * string
 
-let rec eval env e =
-  let ev = eval env in
-  match e with
-    Var (l, x) -> (match try_assoc x env with None -> (* It's a constructor *) Symb (x ^ "_") | Some t -> t)
-  | Operation (l, op, es) -> (match es with [] -> Symb op | _ -> FunApp (op, List.map ev es))
-  | IntLit (l, n) -> Int n
-(*  | Read (l, e, f) ->  *)
-  | CallExpr (l, g, pats) -> FunApp (g ^ "_", List.map (function (LitPat e) -> ev e) pats)
-  | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
-(*  | SwitchExpr (l, e, cs) *)
-  | SizeofExpr (l, t) ->
-    match t with
-      TypeName (_, tn) -> Symb (tn ^ "_size")
-    | PtrType (_, tn) -> Symb "ptrsize"
-
-let check_ghost ghostenv l e =
-  let rec iter e =
-    match e with
-      Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
-    | Operation (l, _, es) -> List.iter iter es
-    | CallExpr (l, _, pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
-    | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
-    | _ -> ()
-  in
-  iter e
-
-let rec exptrue env e =
-  let etrue = exptrue env in
-  let ev = eval env in
-  match e with
-    Operation (_, "==", [e1; e2]) -> Eq (ev e1, ev e2)
-  | Operation (_, "!=", [e1; e2]) -> Not (Eq (ev e1, ev e2))
-  | Operation (_, "le", [e1; e2]) -> PredApp ("<=", [ev e1; ev e2])
-  | Operation (_, "lt", [e1; e2]) -> PredApp ("<", [ev e1; ev e2])
-  | Operation (_, "&&", [e1; e2]) -> And (etrue e1, etrue e2)
-  | _ -> Eq (ev e, Symb "true_")
-
 let zip xs ys =
   let rec iter xs ys zs =
     match (xs, ys) with
@@ -847,17 +803,20 @@ let verify_program verbose path =
     n
   in
   
-  let index_table = ref ([]: (string * int) list) in
-  let index_table_stack = ref ([]: (string * int) list list) in
+  let simplifyKeywords = [
+    "AND"; "BG_POP"; "BG_PUSH"; "DEFPRED"; "DISTINCT"; "EQ"; "EXISTS";
+    "FALSE"; "FORALL"; "IFF"; "IMPLIES"; "MPATS"; "NEQ"; "NOT"; "OR"; "PATS"; "TRUE"] in
+  let used_ids = ref (simplifyKeywords @ theoryAtoms) in
+  let used_ids_stack = ref ([]: string list list) in
   
   let push_index_table() =
-    index_table_stack := !index_table::!index_table_stack
+    used_ids_stack := !used_ids::!used_ids_stack
   in
   
   let pop_index_table() =
-    let (h::t) = !index_table_stack in
-    let _ = index_table := h in
-    index_table_stack := t
+    let (ids::t) = !used_ids_stack in
+    let _ = used_ids := ids in
+    used_ids_stack := t
   in
   
   let with_index_table cont =
@@ -867,16 +826,20 @@ let verify_program verbose path =
   in
   
   let alloc_unique_id s =
-    match try_assoc s !index_table with
-      None -> (index_table := (s, 0)::!index_table; s)
-    | Some k -> (index_table := (s, k + 1)::!index_table; s ^ string_of_int k)
+    let rec iter k =
+      let sk = s ^ string_of_int k in
+      if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
+    in
+    if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s)
   in
 
   let get_unique_id s =
     alloc_unique_id s
   in
   
-  let get_unique_symb s = Symb (get_unique_id s) in
+  let alloc_atom s = Atom (alloc_unique_id s) in
+  
+  let get_unique_symb s = Symb (alloc_atom s) in
   
   let get_unique_var_symb s = (* get_unique_symb (s ^ "_") *) get_unique_symb s in
 
@@ -983,7 +946,7 @@ let verify_program verbose path =
             else (
               List.iter check_pure_type ts;
               let entry = (cn, (lc, ts)) in
-              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts))::pfm) ctors
+              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, alloc_atom cn))::pfm) ctors
             )
         in
         citer [] pfm ctors
@@ -1061,7 +1024,7 @@ let verify_program verbose path =
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
-                                  Some (_, t, []) -> t
+                                  Some (_, t, [], _) -> t
                                 | _ -> static_error l "No such variable or constructor."
                               )
                             | Some t -> t
@@ -1081,7 +1044,7 @@ let verify_program verbose path =
                           | IntLit (l, n) -> intt
                           | CallExpr (l, g', pats) -> (
                             match try_assoc g' pfm with
-                              Some (l, t, ts) -> (
+                              Some (l, t, ts, _) -> (
                               match zip pats ts with
                                 None -> static_error l "Incorrect argument count."
                               | Some pts -> (
@@ -1138,59 +1101,127 @@ let verify_program verbose path =
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap))::pfm) ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_atom g))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
-    iter [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]))] [("true", (dummy_loc, boolt, [])); ("false", (dummy_loc, boolt, []))] ds
+    iter [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]))] [("true", (dummy_loc, boolt, [], Atom "true")); ("false", (dummy_loc, boolt, [], Atom "false"))] ds
   in
   
+  let rec eval env e =
+    let ev = eval env in
+    match e with
+      Var (l, x) ->
+      (match try_assoc x env with
+         None ->
+         (match try_assoc x purefuncmap with
+            None -> static_error l "No such variable or constructor."
+          | Some (lg, t, [], a) -> Symb a
+          | _ -> static_error l "Missing argument list."
+         )
+       | Some t -> t)
+    | Operation (l, op, es) -> (match es with [] -> Symb (Atom op) | _ -> FunApp (Atom op, List.map ev es))
+    | IntLit (l, n) -> Int n
+  (*  | Read (l, e, f) ->  *)
+    | CallExpr (l, g, pats) -> (
+        match try_assoc g purefuncmap with
+          None -> static_error l "No such pure function."
+        | Some (lg, t, pts, a) -> FunApp (a, List.map (function (LitPat e) -> ev e) pats)
+      )
+    | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3)
+  (*  | SwitchExpr (l, e, cs) *)
+  (*
+    | SizeofExpr (l, t) ->
+      match t with
+        TypeName (_, tn) -> Symb (tn ^ "_size")
+      | PtrType (_, tn) -> Symb "ptrsize"
+   *)
+  in
+
+  let check_ghost ghostenv l e =
+    let rec iter e =
+      match e with
+        Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
+      | Operation (l, _, es) -> List.iter iter es
+      | CallExpr (l, _, pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
+      | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
+      | _ -> ()
+    in
+    iter e
+  in
+
+  let rec exptrue env e =
+    let etrue = exptrue env in
+    let ev = eval env in
+    match e with
+      Operation (_, "==", [e1; e2]) -> Eq (ev e1, ev e2)
+    | Operation (_, "!=", [e1; e2]) -> Not (Eq (ev e1, ev e2))
+    | Operation (_, "le", [e1; e2]) -> PredApp ("<=", [ev e1; ev e2])
+    | Operation (_, "lt", [e1; e2]) -> PredApp ("<", [ev e1; ev e2])
+    | Operation (_, "&&", [e1; e2]) -> And (etrue e1, etrue e2)
+    | _ -> Eq (ev e, Symb (Atom "true"))
+  in
+
   let indaxs =
     flatmap
     (function
        Inductive (l, i, cs) ->
-       let tags = List.map (function (Ctor (l, c, ps)) -> c ^ "_tag") cs in
-       let da = slist ("DISTINCT" :: tags) in
+       let tagfunc = alloc_unique_id (i ^ "_tagfunc") in
+       let tags = List.map (function (Ctor (l, c, ps)) -> (c, ps, alloc_unique_id (c ^ "_tag"))) cs in
+       let da = slist ("DISTINCT" :: (List.map (function (c, ps, t) -> t) tags)) in
        let tagaxs =
          List.map
-           (function (Ctor (l, c, ps)) ->
+           (function ((c, ps, at)) ->
+              let (_, _, _, Atom ac) = List.assoc c purefuncmap in
               match ps with
-                [] -> slist ["EQ"; slist [i ^ "_tagfunc"; c ^ "_"]; c ^ "_tag"]
+                [] -> slist ["EQ"; slist [tagfunc; ac]; at]
               | _ ->
-                let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
-                slist ["FORALL"; slist xs; slist ["PATS"; slist ((c ^ "_") :: xs)]; slist ["EQ"; slist [i ^ "_tagfunc"; slist ((c ^ "_") :: xs)]; c ^ "_tag"]]
+                let _ = push_index_table() in
+                let xs = imap (fun i t -> alloc_unique_id ("x" ^ string_of_int i)) ps in
+                let _ = pop_index_table() in
+                slist ["FORALL"; slist xs; slist ["PATS"; slist (ac :: xs)]; slist ["EQ"; slist [tagfunc; slist (ac :: xs)]; at]]
            )
-           cs
+           tags
        in
        let projaxs =
          flatmap
            (function (Ctor (l, c, ps)) ->
-              let xs = imap (fun i t -> "x" ^ string_of_int i) ps in
+              let (_, _, _, Atom ac) = List.assoc c purefuncmap in
+              let projfuncs = imap (fun i t -> alloc_unique_id (c ^ "_proj" ^ string_of_int i)) ps in
+              let _ = push_index_table() in
+              let xs = imap (fun i t -> alloc_unique_id ("x" ^ string_of_int i)) ps in
+              let _ = pop_index_table() in
+              let Some fxs = zip projfuncs xs in
               List.map
-                (fun x ->
-                   slist ["FORALL"; slist xs; slist ["PATS"; slist ((c ^ "_") :: xs)]; slist ["EQ"; slist [c ^ "_proj" ^ x; slist ((c ^ "_") :: xs)]; x]]
+                (fun (f, x) ->
+                   slist ["FORALL"; slist xs; slist ["PATS"; slist (ac :: xs)]; slist ["EQ"; slist [f; slist (ac :: xs)]; x]]
                 )
-                xs
+                fxs
            )
            cs
        in
        da :: tagaxs @ projaxs
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
-       let penv = List.map (fun (t, x) -> (x, Symb (x ^ "_0"))) ps in
-       List.map
-         (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-            let patenv = List.map (fun x -> (x, Symb (x ^ "_1"))) pats in
-            let patvals = List.map (fun x -> x ^ "_1") pats in
-            let xs' = flatmap (fun (t, p) -> if p = x then patvals else [p ^ "_0"]) ps in
-            let csymb = cn ^ "_" in
-            let args = List.map (fun (t, p) -> if p = x then match pats with [] -> csymb | _ -> slist (csymb :: patvals) else p ^ "_0") ps in
-            let gsymb = g ^ "_" in
-            let env = patenv @ penv in
-            let body = slist ["EQ"; slist (gsymb :: args); simpt (eval env e)] in
-            match xs' with
-              [] -> body
-            | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (gsymb :: args)]; body]
-         )
-         cs
+       let _ = push_index_table() in
+       let penv = List.map (fun (t, x) -> (x, get_unique_symb x)) ps in
+       let axs =
+         List.map
+           (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
+              let patenv = List.map (fun x -> (x, get_unique_symb x)) pats in
+              let patvals = List.map (function (x, Symb (Atom a)) -> a) patenv in
+              let xs' = flatmap (fun (p, Symb (Atom a)) -> if p = x then patvals else [a]) penv in
+              let (_, _, _, Atom csymb) = List.assoc cn purefuncmap in
+              let args = List.map (fun (p, Symb (Atom a)) -> if p = x then match pats with [] -> csymb | _ -> slist (csymb :: patvals) else a) penv in
+              let (_, _, _, Atom gsymb) = List.assoc g purefuncmap in
+              let env = patenv @ penv in
+              let body = slist ["EQ"; slist (gsymb :: args); simpt (eval env e)] in
+              match xs' with
+                [] -> body
+              | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (gsymb :: args)]; body]
+           )
+           cs
+       in
+       let _ = pop_index_table() in
+       axs
      | _ -> []
     )
     ds
@@ -1311,7 +1342,8 @@ let verify_program verbose path =
           branch
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-               assume (Eq (t, FunApp(cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               let (_, _, _, ac) = List.assoc cn purefuncmap in
+               assume (Eq (t, FunApp(ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1383,8 +1415,9 @@ let verify_program verbose path =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
+          let (_, _, _, ac) = List.assoc cn purefuncmap in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1440,12 +1473,12 @@ let verify_program verbose path =
         [] -> (
         match try_assoc g purefuncmap with
           None -> static_error l "No such function."
-        | Some _ -> (
+        | Some (lg, rt, pts, ag) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let _ = check_assign l x in
-            cont h (update env x (FunApp (g ^ "_", ts)))
+            cont h (update env x (FunApp (ag, ts)))
           )
         )
       | [(k, ps, pre, post)] ->
@@ -1542,8 +1575,8 @@ let verify_program verbose path =
     | IfStmt (l, e, ss1, ss2) ->
       let t = ev e in
       branch
-        (fun _ -> assume (Eq (t, Symb "true_")) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
-        (fun _ -> assume (Eq (t, Symb "false_")) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
+        (fun _ -> assume (Eq (t, Symb (Atom "true"))) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
+        (fun _ -> assume (Eq (t, Symb (Atom "false"))) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1551,13 +1584,14 @@ let verify_program verbose path =
           [] -> success()
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
+          let (_, _, _, ac) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assoc t sizemap with
               None -> sizemap
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume (Eq (t, FunApp (cn ^ "_", List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter cs)
       in
       iter cs
