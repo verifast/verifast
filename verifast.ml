@@ -56,10 +56,13 @@ let make_lexer keywords path =
       Not_found -> raise (Stream.Error ("Illegal character " ^ s))
   in
   let start_token() = tokenpos := Stream.count stream in
+  let new_loc_line strm__ =
+      line := !line + 1;
+      linepos := Stream.count strm__
+  in
   let rec next_token (strm__ : _ Stream.t) =
     let new_line strm__ =
-      line := !line + 1;
-      linepos := Stream.count strm__;
+      new_loc_line strm__;
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
         Some (Kwd "@*/")
@@ -233,6 +236,15 @@ let make_lexer keywords path =
             Some '/' -> (Stream.junk strm__; ())
           | _ -> multiline_comment strm__
         )
+      )
+    | Some '\010' -> (Stream.junk strm__; new_loc_line strm__; multiline_comment strm__)
+    | Some '\013' ->
+      (Stream.junk strm__;
+       (match Stream.peek strm__ with
+        | Some '\010' -> Stream.junk strm__
+        | _ -> ());
+       new_loc_line strm__;
+       multiline_comment strm__
       )
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
@@ -1507,11 +1519,11 @@ let verify_program verbose path =
                   ()
                 else (
                   match indinfo with
-                    None -> assert_false h env l "Recursive lemma call does not decrease the heap and there is no inductive parameter."
+                    None -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) and there is no inductive parameter."
                   | Some x -> (
                     match try_assoc (List.assoc x env') sizemap with
                       Some k when k < 0 -> ()
-                    | _ -> assert_false h env l "Recursive lemma call does not decrease the heap or the inductive parameter."
+                    | _ -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) or the inductive parameter."
                     )
                 )
               else
@@ -1781,7 +1793,7 @@ let browse_trace path ctxts_lifo msg =
   let _ = Grid.column_configure root 0 ~weight:1 in
   let _ = Grid.row_configure root 0 ~weight:1 in
   let _ = Grid.row_configure root 0 ~weight:1 in
-  let _ = bind stepList ~events:[`Virtual "ListboxSelect"] ~action:(fun _ ->
+  let stepSelected _ =
     let [`Num k] = Listbox.curselection stepList in
     let (ass, h, env, l, msg) = List.nth stepItems k in
     let (path, line, col) = l in
@@ -1796,19 +1808,24 @@ let browse_trace path ctxts_lifo msg =
     let _ = Listbox.delete envList ~first:(`Num 0) ~last:`End in
     let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) env) in
     ()
-  ) in
+  in
+  let _ = bind stepList ~events:[`Virtual "ListboxSelect"] ~action:stepSelected in
   let _ = Wm.title_set root ("VeriFast Failed Path Browser - " ^ msg) in
+  let _ = Focus.set stepList in
+  let _ = Listbox.selection_set stepList ~first:`End ~last:`End in
+  let _ = Listbox.see stepList ~index:`End in
+  let _ = stepSelected() in
   mainLoop()
 
 let _ =
-  let print_msg path l msg =
-    print_endline (path ^ string_of_loc l ^ ": " ^ msg)
+  let print_msg l msg =
+    print_endline (string_of_loc l ^ ": " ^ msg)
   in
   let verify verbose path =
     try
       verify_program verbose path
     with
-      StaticError (l, msg) -> print_msg path l msg
+      StaticError (l, msg) -> print_msg l msg
     | SymbolicExecutionError (ctxts, phi, l, msg) ->
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
@@ -1817,7 +1834,7 @@ let _ =
         let _ = print_endline ("Env: " ^ string_of_env env) in
         *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
-        let _ = print_msg path l msg in
+        let _ = print_msg l msg in
         let _ = browse_trace path ctxts msg in
         ()
   in
