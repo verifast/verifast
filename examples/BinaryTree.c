@@ -163,14 +163,127 @@ lemma void treen2treeseg(struct Node* root, struct Node * nullNode, struct Node 
 	int myvalue = root->value;
 	struct Node * myleft = root->left;
 	struct Node * myright = root->right;
-	close node(root, myleft, myright, myvalue);
+	
   if (myleft != nullNode) {
 	  treen2treeseg(myleft, nullNode, stop);
 	} else {}
 	if (myright != nullNode) {
 	  treen2treeseg(myright, nullNode, stop);
 	} else {}
+	close node(root, myleft, myright, myvalue);
 	close treeseg(root, nullNode, stop);
 }
 @*/
+
+
+/*@
+lemma void combineTreeSegL(struct Node * root, struct Node * nullNode, struct Node * oldCurrent, struct Node * newCurrent, struct Node * oldcurrentleft)
+  requires treeseg(root, nullNode, oldCurrent) &*&
+	         node(nullNode, ?_nl, ?_nr, ?_nv) &*&
+					 node(oldCurrent, oldcurrentleft, newCurrent, ?ocv) &*&
+           node(newCurrent, ?_ncl, ?_ncr, ?_ncv) &*&
+           (oldcurrentleft == nullNode? emp : treeseg(oldcurrentleft, nullNode, newCurrent));
+	ensures treeseg(root, nullNode, newCurrent) &*& node(nullNode, _nl, _nr, _nv) &*& node(newCurrent, _ncl, _ncr, _ncv);
+{
+  open treeseg(root, nullNode, oldCurrent);
+	distinctNodes(oldCurrent, nullNode);
+	distinctNodes(newCurrent, nullNode);
+	distinctNodes(oldCurrent, newCurrent);
+	if(root == oldCurrent){
+	  close treeseg(newCurrent, nullNode, newCurrent);
+		close treeseg(oldCurrent, nullNode, newCurrent);
+	} else {
+		distinctNodes(oldCurrent, root);
+	  distinctNodes(newCurrent, root);
+	  distinctNodes(oldCurrent, root);
+		open node(root, _, _, _);
+	  int rootvalue = root->value;
+	  struct Node * rootleft = root->left;
+	  struct Node * rootright = root->right;
+		
+		if(rootleft != nullNode){
+		  combineTreeSegL(rootleft, nullNode, oldCurrent, newCurrent, oldcurrentleft);
+		} else {}
+		if(rootright != nullNode){
+			combineTreeSegL(rootright, nullNode, oldCurrent, newCurrent, oldcurrentleft);
+		} else {}
+		close node(root, rootleft, rootright, rootvalue);
+		close treeseg(root, nullNode, newCurrent);
+	}
+}
+@*/
+
+/*@
+lemma void combineTreeSegR(struct Node * root, struct Node * nullNode, struct Node * oldCurrent, struct Node * newCurrent, struct Node * oldcurrentright)
+  requires treeseg(root, nullNode, oldCurrent) &*&
+	         node(nullNode, ?_nl, ?_nr, ?_nv) &*&
+					 node(oldCurrent, newCurrent, oldcurrentright, ?_ocv) &*&
+           node(newCurrent, ?_ncl, ?_ncr, ?_ncv) &*&
+           (oldcurrentright == nullNode ? emp : treeseg(oldcurrentright, nullNode, newCurrent));
+	ensures treeseg(root, nullNode, newCurrent) &*& node(nullNode, _nl, _nr, _nv) &*& node(newCurrent, _ncl, _ncr, _ncv);
+{
+  open treeseg(root, nullNode, oldCurrent);
+	if(root == oldCurrent){
+		distinctNodes(oldCurrent, nullNode);
+		distinctNodes(newCurrent, nullNode);
+		distinctNodes(oldCurrent, newCurrent);
+	  close treeseg(newCurrent, nullNode, newCurrent);
+		close treeseg(oldCurrent, nullNode, newCurrent);
+	} else {
+		open node(root, _, _, _);
+	  int rootvalue = root->value;
+	  struct Node * rootleft = root->left;
+	  struct Node * rootright = root->right;
+		
+		if(l!=nullNode){
+		  combineTreeSegR(rootleft, nullNode, oldCurrent, newCurrent, oldcurrentright);
+		} else {}
+		if(r!=nullNode){
+			combineTreeSegR(rootright, nullNode, oldCurrent, newCurrent, oldcurrentright);
+		} else {}
+		close node(root, rootleft, rootright, rootvalue);
+		close treeseg(root, nullNode, newCurrent);
+	}
+}
+@*/
+
+/*@
+lemma void maketreeseg(struct Node * root, struct Node * nullNode, struct Node * oldCurrent, struct Node * newCurrent, struct Node * otherhalf)
+  requires treeseg(root, nullNode, oldCurrent)&*&
+	             node(nullNode, ?_nl, ?_nr, ?_nv) &*&
+							 node(oldCurrent, ?_ocl, ?_ocr, ?_ocv) &*&
+							 (otherhalf == nullNode ? emp : treen(otherhalf, _, _)) &*&
+							 (newCurrent == _ocr ? _ocl == otherhalf : (otherhalf == _ocr &*& newCurrent == _ocl)) &*&
+							 node(newCurrent, ?_ncl, ?_ncr, ?_ncv);
+	ensures (otherhalf == _ocl ? treeseg(root, nullNode, _ocr) : treeseg(root, nullNode, _ocl)) &*& node(newCurrent, _ncl, _ncr, _ncv) &*& node(nullNode, _nl, _nr, _nv);
+{
+  open node(oldCurrent, _, _, _);
+	int oldcurrentvalue = oldCurrent->value;
+	struct Node * oldcurrentleft = oldCurrent->left;
+	struct Node * oldcurrentright = oldCurrent->right;
+	close node(oldCurrent, oldcurrentleft, oldcurrentright, oldcurrentvalue);
+	
+	if(otherhalf == oldcurrentleft){
+	  // treeseg(root, nullNode, oldCurrent)
+		// node(oldCurrent, ?_ocl, ?_ocr, ?_ocv)
+		// treen(oldcurrentleft, _, _)
+		// node (newCurrent, _, _, _)
+		if(oldcurrentleft != nullNode){
+		  treen2treeseg(oldcurrentleft, nullNode, newCurrent);
+		} else {}
+		// treeseg(root, nullNode, oldCurrent)
+		// node(oldCurrent, oldcurrentLeft, newCurrent, ?_ocv)
+		// treeseg(oldcurrentleft, _, newCurrent)
+		// node (newCurrent, _, _, _)
+		combineTreeSegL(root, nullNode, oldCurrent, newCurrent, oldcurrentleft);
+	} else {
+		if(oldcurrentright != nullNode) {
+		  treen2lseg(oldcurrentright, nullNode, newCurrent);
+		} else {}
+		combineTreeSegR(root, nullNode, oldCurrent, newCurrent, oldcurrentleft);
+	}
+}
+@*/
+
+
 
