@@ -36,6 +36,13 @@ predicate treen(struct Node* root, struct Node* nullNode, inttree tv)
 @*/ 
 
 /*@
+predicate treeseg(struct Node* root, struct Node* nullNode, struct Node* stop)
+  requires root == stop ? 
+	  emp :
+		node(root, ?_l, ?_r, ?_v) &*& (_l == nullNode ? (_r == nullNode ? emp : treeseg(_r, nullNode, stop) ) : treeseg(_l, nullNode, stop) &*& (_r == nullNode ? emp  : treeseg(_r, nullNode, stop) ));
+@*/
+
+/*@
 lemma void distinctNodes(struct Node * node1, struct Node * node2)
   requires node(node1, ?_l1, ?_r1, ?_v1) &*& node(node2, ?_l2, ?_r2, ?_v2);
   ensures node(node1, _l1, _r1, _v1) &*& node(node2, _l2, _r2, _v2) &*& node1 != node2;
@@ -94,6 +101,7 @@ void insert(struct Tree * t, int x)
 	//@ close tree(t, mynull, doInsert(_tv, x));
 }
 
+
 /*
  * Recursive insert.
  */ 
@@ -142,3 +150,27 @@ void insertNode(struct Node * root, struct Node * nullNode, int x)
 	}
 	//@ close treen(root, nullNode, doInsert(_tv, x));
 }
+
+/*@
+lemma void treen2treeseg(struct Node* root, struct Node * nullNode, struct Node * stop) 
+  requires treen(root, nullNode, ?_rvalue) &*& node(nullNode, ?_nl, ?_nr, ?_nv) &*& node(stop, ?_stopleft, ?_stopright, ?_stopvalue);
+  ensures treeseg(root, nullNode, stop) &*& node(nullNode, ?_nl, ?_nr, ?_nv) &*& node(stop, ?_stopleft, ?_stopright, ?_stopvalue);
+{
+  open treen(root, nullNode, _rvalue);
+	distinctNodes(root, stop);
+	distinctNodes(root, nullNode);
+	open node(root, _, _, _);
+	int myvalue = root->value;
+	struct Node * myleft = root->left;
+	struct Node * myright = root->right;
+	close node(root, myleft, myright, myvalue);
+  if (myleft != nullNode) {
+	  treen2treeseg(myleft, nullNode, stop);
+	} else {}
+	if (myright != nullNode) {
+	  treen2treeseg(myright, nullNode, stop);
+	} else {}
+	close treeseg(root, nullNode, stop);
+}
+@*/
+
