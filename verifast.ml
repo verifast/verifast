@@ -82,8 +82,9 @@ let make_lexer keywords path =
         start_token();
         Stream.junk strm__;
         let s = strm__ in reset_buffer (); store c; ident s
+    | Some '(' -> Stream.junk strm__; Some(ident_or_keyword("("))
     | Some
-        ('!' | '%' | '&' | '$' | '#' | '+' | '(' | ':' | '<' | '=' | '>' |
+        ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
          '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
         start_token();
         Stream.junk strm__;
@@ -1150,6 +1151,7 @@ let verify_program verbose path =
         TypeName (_, tn) -> Symb (tn ^ "_size")
       | PtrType (_, tn) -> Symb "ptrsize"
    *)
+    | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
   in
 
   let check_ghost ghostenv l e =
