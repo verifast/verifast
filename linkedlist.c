@@ -367,6 +367,6 @@ void main()
   int e2 = lookup(l1, 2); assert(e2 == 30);
   int e3 = lookup(l1, 3); assert(e3 == 40);
   int e4 = lookup(l1, 4); assert(e4 == 50);
-  int e5 = lookup(l1, 5); assert(e5 == 61);
+  int e5 = lookup(l1, 5); assert(e5 == 60);
   dispose(l1);
 }

@@ -1132,19 +1132,26 @@ let verify_program verbose path =
       match ds with
         PredDecl (l, p, xs, body)::ds ->
         let _ = if List.mem_assoc p pm then static_error l "Duplicate predicate name." in
-	let rec iter2 xm xs =
-	  match xs with
-	    [] -> iter ((p, (l, List.rev xm, Some body))::pm) ds
-	  | (t, x)::xs ->
-	    check_pure_type t;
-	    if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-	    iter2 ((x, t)::xm) xs
-	in
+      	let rec iter2 xm xs =
+      	  match xs with
+      	    [] -> iter ((p, (l, List.rev xm, Some body))::pm) ds
+      	  | (t, x)::xs ->
+      	    check_pure_type t;
+      	    if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+      	    iter2 ((x, t)::xm) xs
+      	in
         iter2 [] xs
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in
     iter (List.map (fun (sn, _) -> ("malloc_block_" ^ sn, (dummy_loc, [("arg", PtrType (dummy_loc, sn))], None))) structmap) ds
+  in
+
+  let expect_type l t t0 =
+    match (t, t0) with
+      (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
+    | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
+    | _ -> static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
 
   let (check_expr, check_expr_t) =
@@ -1230,27 +1237,31 @@ let verify_program verbose path =
     | VarPat x -> (x, t)::tenv
     | DummyPat -> tenv
   in
+  
+  let check_deref l tenv e f =
+    let t = check_expr tenv e in
+    begin
+    match t with
+    | PtrType (_, sn) ->
+      begin
+      match List.assoc sn structmap with
+        (_, fds) ->
+        begin
+          match try_assoc f fds with
+            None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
+          | Some (_, t) -> t
+        end
+      end
+    | _ -> static_error l "Target expression of field dereference should be of pointer type."
+    end
+  in
 
   let rec check_pred tenv p cont =
     match p with
       Access (l, e, f, v) ->
-      let t = check_expr tenv e in
-      begin
-      match t with
-      | PtrType (l, sn) ->
-        begin
-        match List.assoc sn structmap with
-          (_, fds) ->
-          begin
-            match try_assoc f fds with
-              None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
-            | Some (_, t) ->
-              let tenv' = check_pat tenv t v in
-              cont tenv'
-          end
-        end
-      | _ -> static_error l "Target expression of field dereference should be of pointer type."
-      end
+      let t = check_deref l tenv e f in
+      let tenv' = check_pat tenv t v in
+      cont tenv'
     | CallPred (l, p, ps) ->
       begin
       match try_assoc p predmap with
@@ -1723,9 +1734,9 @@ let verify_program verbose path =
     let check_assign l x =
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
+    let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
     let call_stmt l xo g pats =
-      let ts = List.map (function (LitPat e) -> ev e) pats in
-      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(k, ps, pre, post)] | _ -> []) ds in
+      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(k, tr, ps, pre, post)] | _ -> []) ds in
       (
       match fds with
         [] -> (
@@ -1735,13 +1746,23 @@ let verify_program verbose path =
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
+            let tpx = vartp l x in
+            let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
             let _ = check_assign l x in
+            let ts = List.map (function (LitPat e) -> ev e) pats in
             cont h (update env x (FunApp (ag, ts)))
           )
         )
-      | [(k, ps, pre, post)] ->
+      | [(k, tr, ps, pre, post)] ->
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (t, p) -> p) ps in
+        let _ =
+          match zip pats ps with
+            None -> static_error l "Incorrect number of arguments."
+          | Some bs ->
+            List.iter (function (LitPat e, (tp, _)) -> check_expr_t tenv e tp) bs
+        in
+        let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
         assert_pred h ghostenv env' pre (fun h ghostenv' env' ->
           let _ =
@@ -1771,15 +1792,20 @@ let verify_program verbose path =
               else
                 static_error l "A lemma can call only preceding lemmas or itself."
           in
-          let r = get_unique_symb "result" in
-          let env'' = update env' "result" r in
+          let r = match tr with None -> None | Some t -> Some (get_unique_symb "result", t) in
+          let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
           assume_pred h ghostenv' env'' post (fun h _ _ ->
             let env =
               match xo with
                 None -> env
               | Some x ->
+                let tpx = vartp l x in
                 let _ = check_assign l x in
-                update env x r
+                begin
+                  match r with
+                    None -> static_error l "Call does not return a result."
+                  | Some (r, t) -> expect_type l tpx t; update env x r
+                end
             in
             cont h env)
         )
@@ -1789,15 +1815,24 @@ let verify_program verbose path =
       PureStmt (l, s) ->
       verify_stmt true leminfo sizemap tenv ghostenv h env s tcont
     | Assign (l, x, Read (lr, e, f)) ->
-      let _ = check_assign l x in
+      let tpx = vartp l x in
+      let _ = expect_type l (check_deref lr tenv e f) tpx in
       let t = ev e in
+      let _ = check_assign l x in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
     | CallStmt (l, "assert", [e]) ->
+      let _ = check_expr_t tenv e boolt in
       assert_formula (etrue e) h env l "Assertion failure." (fun _ -> cont h env)
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
+      let tpx = vartp l x in
       let _ = check_assign l x in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let _ =
+        match tpx with
+          PtrType (_, sn) when sn = tn -> ()
+        | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
+      in
       let result = get_unique_symb "block" in
       let rec iter h fds =
         match fds with
@@ -1807,7 +1842,7 @@ let verify_program verbose path =
       iter h fds
     | CallStmt (l, "free", [Var (lv, x)]) ->
       let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
-      let (PtrType (_, tn)) = tenv x in
+      let (PtrType (_, tn)) = List.assoc x tenv in
       let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let rec iter h fds =
         match fds with
@@ -1818,29 +1853,68 @@ let verify_program verbose path =
     | Assign (l, x, CallExpr (lc, g, pats)) ->
       call_stmt l (Some x) g pats
     | Assign (l, x, e) ->
+      let tpx = vartp l x in
       let _ = if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." in
+      let _ = check_expr_t tenv e tpx in
       cont h (update env x (ev e))
     | DeclStmt (l, t, x, e) ->
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt pure leminfo sizemap (fun y -> if y = x then t else tenv y) ghostenv h env (Assign (l, x, e)) tcont
+      verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont  (* BUGBUG: e should be typechecked outside of the scope of x *)
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
+      let tp = check_deref l tenv e f in
+      let _ = check_expr_t tenv rhs tp in
       let t = ev e in
       get_field h t f l (fun h _ ->
         cont (("field_" ^ f, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
       call_stmt l None g (List.map (fun e -> LitPat e) es)
     | IfStmt (l, e, ss1, ss2) ->
+      let _ = check_expr_t tenv e boolt in
       let t = ev e in
       branch
         (fun _ -> assume (Eq (t, Symb (Atom "true"))) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
         (fun _ -> assume (Eq (t, Symb (Atom "false"))) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
+      let tp = check_expr tenv e in
+      let (tn, ctormap) =
+        match tp with
+          TypeName (_, tn) ->
+          begin
+          match try_assoc tn inductivemap with
+            None -> static_error l "Switch statement operand is not an inductive value."
+          | Some (l, ctormap) -> (tn, ctormap)
+          end
+        | _ -> static_error l "Switch statement operand is not an inductive value."
+      in
       let t = ev e in
-      let rec iter cs =
+      let rec iter ctors cs =
         match cs with
-          [] -> success()
+          [] ->
+          begin
+          match ctors with
+            [] -> success()
+          | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
+          end
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+          let pts =
+            match try_assoc cn ctormap with
+              None -> static_error lc ("Not a constructor of type " ^ tn)
+            | Some (l, pts) -> pts
+          in
+          let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
+          let ptenv =
+            let rec iter ptenv pats pts =
+              match (pats, pts) with
+                ([], []) -> List.rev ptenv
+              | (pat::pats, tp::pts) ->
+                if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
+                iter ((pat, tp)::ptenv) pats pts
+              | ([], _) -> static_error lc "Too few arguments."
+              | _ -> static_error lc "Too many arguments."
+            in
+            iter [] pats pts
+          in
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           let (_, _, _, ac) = List.assoc cn purefuncmap in
           let sizemap =
@@ -1849,30 +1923,52 @@ let verify_program verbose path =
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap tenv (pats @ ghostenv) h (xts @ env) ss tcont))
-            (fun _ -> iter cs)
+            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
-      iter cs
+      iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Open (l, g, pats) ->
+      let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let tenv' =
+        let rec iter tenv pats ps =
+          match (pats, ps) with
+            ([], []) -> tenv
+          | (pat::pats, (tp, _)::ps) ->
+            iter (check_pat tenv tp pat) pats ps
+          | ([], _) -> static_error l "Too few arguments."
+          | _ -> static_error l "Too many arguments."
+        in
+        iter tenv pats ps
+      in
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
-        let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
         assume_pred h ghostenv env' p (fun h _ _ ->
-          cont h env))
+          tcont sizemap tenv' ghostenv h env)
+      )
     | Close (l, g, pats) ->
-      let ts = List.map (function LitPat e -> ev e) pats in
       let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let _ =
+        match zip pats ps with
+          None -> static_error l "Wrong number of arguments."
+        | Some bs ->
+          List.iter (function (LitPat e, (tp, _)) -> check_expr_t tenv e tp) bs
+      in
+      let ts = List.map (function LitPat e -> ev e) pats in
       let ys = List.map (function (t, p) -> p) ps in
-      let _ = if(List.length ys <> List.length ts) then static_error l "Wrong number of arguments." in
       let Some env' = zip ys ts in
       assert_pred h ghostenv env' p (fun h _ _ ->
         cont ((g, ts)::h) env)
     | ReturnStmt (l, Some e) ->
+      let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
+      let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
+      let _ = check_expr_t tenv e tp in
       cont h (update env "#result" (ev e))
     | ReturnStmt (l, None) -> cont h env
     | WhileStmt (l, e, p, ss) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
+      let _ = check_expr_t tenv e boolt in
+      check_pred tenv p (fun tenv ->
       let xs = block_assigned_variables ss in
       assert_pred h ghostenv env p (fun h ghostenv env ->
         let ts = List.map get_unique_var_symb xs in
@@ -1895,7 +1991,8 @@ let verify_program verbose path =
           (fun _ ->
              assume_pred h ghostenv env p (fun h ghostenv env ->
                assume (Not (exptrue env e)) (fun _ ->
-                 cont h env)))
+                 tcont sizemap tenv ghostenv h env)))
+      )
       )
   and
     verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =
@@ -1925,16 +2022,22 @@ let verify_program verbose path =
         | _ -> ([], None)
       in
       let pts = List.map (function (t, p) -> (p, t)) ps in
-      let tenv x = List.assoc x pts in
-      let (in_pure_context, leminfo, lems') =
-        if k = Lemma then
-          (true, Some (lems, g, indinfo), g::lems)
-        else
-          (false, None, lems)
+      let tenv = pts in
+      let (tenv, rxs) =
+        match rt with
+          None -> (tenv, [])
+        | Some rt -> (("#result", rt)::tenv, ["#result"])
       in
+      let (in_pure_context, leminfo, lems', ghostenv) =
+        if k = Lemma then
+          (true, Some (lems, g, indinfo), g::lems, List.map (function (t, p) -> p) ps @ rxs)
+        else
+          (false, None, lems, [])
+      in
+      check_pred tenv pre (fun tenv ->
       let _ =
-        assume_pred [] [] env pre (fun h ghostenv env ->
-          verify_cont in_pure_context leminfo sizemap tenv [] h env ss (fun _ _ _ h env' ->
+        assume_pred [] ghostenv env pre (fun h ghostenv env ->
+          verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h env' ->
             let get_env_post cont =
               match rt with
                 None -> cont env
@@ -1958,6 +2061,7 @@ let verify_program verbose path =
       in
       let _ = pop_index_table() in
       verify_decls lems' ds
+      )
     | _::ds -> verify_decls lems ds
   in
   
