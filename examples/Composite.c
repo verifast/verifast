@@ -184,16 +184,39 @@ lemma void tree2context(struct Node* root, struct Node* n, tree value)
       }
   }
 }
+
+
+fixpoint tree addLeft(tree value, struct Node* node, tree ptr) {
+  switch(value){
+	  case Nil: return Nil;
+		case tree(r, lhs, rhs): return r == node ? tree(r, ptr, rhs) : tree(r, addLeft(lhs, node, ptr), addLeft(rhs, node, ptr));
+	}
+}
 @*/
 
-
+struct Node* addLeftWrapper(struct Node* node)
+  //@ requires isTree(node, ?v) &*& valueOf(v, node) == tree(node, Nil, Nil);
+	/*@ ensures isTree(node, addLeft(v, node, tree(result, Nil, Nil))); @*/
+{
+	//@ open isTree(node, v);
+	//@ open tree(?root, v);
+	//@ close tree(root, v);
+	//@ close context(root, Root, size(v));
+	//@ tree2context(root, node, v);
+  //@ open tree(node, _);
+	struct Node* newChild = addLeftChild(node);
+	//@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
+	// //@ context2tree(root, node, addLeft(v, node, tree(newChild, Nil, Nil)));
+	//@ close isTree(node, v);
+	return newChild;
+}
 
 struct Node* addLeftChild(struct Node* node)
   /*@ requires context(node, ?value, 1) &*& node!=0 &*& node->left |-> 0 &*& node->right |-> 0 &*&
                malloc_block_Node(node) &*& node->count |-> 1; @*/
   /*@ ensures context(node, value, 2) &*& node!=0 &*& node->left |-> result &*& node->right |-> 0 &*&
                malloc_block_Node(node) &*& node->count |-> 2 &*& 
-               tree(result, tree(result, Nil, Nil)); @*/
+               tree(result, tree(result, Nil, Nil)) &*& result->parent |-> node; @*/
 {
     struct Node* child = create(node);
     node->left = child;
