@@ -22,10 +22,12 @@ inductive context = | lcontext(struct Node*, context, tree) | rcontext(struct No
 predicate context(struct Node* node, context value, int holeCount)
   requires switch(value) {
     case Root: return node->parent |-> 0;
-    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& n->right |-> ?r &*& n->parent |-> ?p &*& n->count |-> ?c &*&
-                                      tree(r, t) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n;
-    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& n->left |-> ?l &*& n->parent |-> ?p &*& n->count |-> ?c &*&
-                                      tree(l, t) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n;
+    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& n->right |-> ?r &*& n->count |-> ?c &*&
+                                      (r==0 ? emp : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+                                      malloc_block_Node(n);
+    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& n->left |-> ?l &*& n->count |-> ?c &*&
+                                      (l==0 ? emp : tree(l, t) &*& l->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+                                      malloc_block_Node(n);
   };
 
 predicate treeseg(struct Node* node, treeseg value, struct Node* parent, int holeCount)
@@ -156,31 +158,30 @@ fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
   }
 }
 
-lemma void tree2context(struct Node* root, struct Node* n) 
-  requires tree(root, ?value) &*& context(root, ?cvalue, size(value)) &*& contains(value, n) == true; 
+lemma void tree2context(struct Node* root, struct Node* n, tree value) 
+  requires tree(root, value) &*& context(root, ?cvalue, size(value)) &*& contains(value, n) == true; 
   ensures context(n, upsideDownMinus(value, n, cvalue), size(valueOf(value, n))) &*& tree(n, valueOf(value, n));
 {
-  if(root == n) {
-    open tree(root, value);
-    close tree(root, value);
-  } else {
-    open tree(root, value);
-    switch(value) {
-      case Nil: return;
-      case tree(root, lhs, rhs): 
+  switch(value) {
+    case Nil: return;
+    case tree(root2, lhs, rhs): 
+      if(root == n) {
+        open tree(root, value);
+        close tree(root, value);
+      } else {
+        open tree(root, value);
         if(contains(lhs, n)) {
           struct Node* l = root->left;
           struct Node* r = root->right;
-          close context(l, lcontext(root, cvalue, rhs), size(valueOf(value, n)));
-          tree2context(l, n);
+          close context(l, lcontext(root, cvalue, rhs), size(lhs));
+          tree2context(l, n, lhs);
         } else {
-          
           struct Node* l = root->left;
           struct Node* r = root->right;
-          close context(r, rcontext(root, lhs, cvalue), size(valueOf(value, n)));
-          tree2context(r, n);
+          close context(r, rcontext(root, lhs, cvalue), size(rhs));
+          tree2context(r, n, rhs);
         }
-    }
+      }
   }
 }
 @*/
@@ -192,7 +193,7 @@ struct Node* addLeftChild(struct Node* node)
                malloc_block_Node(node) &*& node->count |-> 1; @*/
   /*@ ensures context(node, value, 2) &*& node!=0 &*& node->left |-> result &*& node->right |-> 0 &*&
                malloc_block_Node(node) &*& node->count |-> 2 &*& 
-               tree(result, tree(result, Nil, Nil), node); @*/
+               tree(result, tree(result, Nil, Nil)); @*/
 {
     struct Node* child = create(node);
     node->left = child;

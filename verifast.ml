@@ -1678,12 +1678,39 @@ let verify_program verbose path =
   let predmap =
     let rec iter predmap ds =
       match ds with
-        [] -> predmap
+        [] -> List.rev predmap
       | PredDecl (l, pn, ps, p)::ds ->
         let _ = if List.mem_assoc pn predmap then static_error l "Duplicate predicate name." in
         let _ = if startswith pn "field_" || startswith pn "malloc_block_" then static_error l "A predicate name cannot start with 'field_' or 'malloc_block_'." in
         iter ((pn, (ps, p))::predmap) ds
       | _::ds -> iter predmap ds
+    in
+    iter [] ds
+  in
+
+  let funcmap =
+    let rec iter funcmap ds =
+      match ds with
+        [] -> List.rev funcmap
+      | Func (l, k, rt, fn, xs, Some (pre, post), body)::ds ->
+        let _ = if List.mem_assoc fn funcmap then static_error l "Duplicate function name." in
+        let xmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (t, x)::xs ->
+              if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+              check_pure_type t;
+              iter ((x, t)::xm) xs
+          in
+          iter [] xs
+        in
+        check_pred xmap pre (fun tenv ->
+          let postmap = match rt with None -> tenv | Some rt -> check_pure_type rt; ("result", rt)::tenv in
+          check_pred postmap post (fun _ -> ())
+        );
+        iter ((fn, (l, k, rt, xs, pre, post, body))::funcmap) ds
+      | _::ds -> iter funcmap ds
     in
     iter [] ds
   in
@@ -1939,6 +1966,15 @@ let verify_program verbose path =
 
 open Tk
 
+let remove_dups bs =
+  let rec iter bs0 bs =
+    match bs with
+      [] -> List.rev bs0
+    | (x, v)::bs ->
+      if List.mem_assoc x bs0 then iter bs0 bs else iter ((x, v)::bs0) bs
+  in
+  iter [] bs
+
 let browse_trace path ctxts_lifo msg =
   let root = openTk() in
   let srcFrame = Frame.create root in
@@ -2022,7 +2058,7 @@ let browse_trace path ctxts_lifo msg =
     let _ = Listbox.delete chunksList ~first:(`Num 0) ~last:`End in
     let _ = Listbox.insert chunksList `End (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
     let _ = Listbox.delete envList ~first:(`Num 0) ~last:`End in
-    let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) env) in
+    let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
     ()
   in
   let _ = bind stepList ~events:[`Virtual "ListboxSelect"] ~action:stepSelected in
