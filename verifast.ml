@@ -1740,7 +1740,7 @@ let verify_program verbose path =
           )
         )
       | [(k, ps, pre, post)] ->
-        let _ = if pure && k = Regular then static_error l "Cannot call regular methods in a pure context." in
+        let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
         assert_pred h ghostenv env' pre (fun h ghostenv' env' ->
