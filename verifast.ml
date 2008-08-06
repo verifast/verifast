@@ -1049,6 +1049,10 @@ let verify_program verbose path =
                             let t = check e1 in
                             let _ = checkt e2 t in
                             boolt
+			  | Operation (l, ("||"), [e1; e2]) ->
+                            let _ = checkt e1 boolt in
+                            let _ = checkt e2 boolt in
+                            boolt
                           | Operation (l, ("le" | "lt"), [e1; e2]) ->
                             let _ = checkt e1 intt in
                             let _ = checkt e2 intt in
@@ -1123,6 +1127,215 @@ let verify_program verbose path =
     iter [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]))] [("true", (dummy_loc, boolt, [], Atom "true")); ("false", (dummy_loc, boolt, [], Atom "false"))] ds
   in
   
+  let predmap = 
+    let rec iter pm ds =
+      match ds with
+        PredDecl (l, p, xs, body)::ds ->
+        let _ = if List.mem_assoc p pm then static_error l "Duplicate predicate name." in
+	let rec iter2 xm xs =
+	  match xs with
+	    [] -> iter ((p, (l, List.rev xm, Some body))::pm) ds
+	  | (t, x)::xs ->
+	    check_pure_type t;
+	    if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+	    iter2 ((x, t)::xm) xs
+	in
+        iter2 [] xs
+      | _::ds -> iter pm ds
+      | [] -> List.rev pm
+    in
+    iter (List.map (fun (sn, _) -> ("malloc_block_" ^ sn, (dummy_loc, [("arg", PtrType (dummy_loc, sn))], None))) structmap) ds
+  in
+
+  let (check_expr, check_expr_t) =
+    let funcs tenv =
+      let rec check e =
+        match e with
+          Var (l, x) ->
+          begin
+          match try_assoc x tenv with
+            None ->
+            begin
+              match try_assoc x purefuncmap with
+                Some (_, t, [], _) -> t
+              | _ -> static_error l "No such variable or constructor."
+            end
+          | Some t -> t
+          end
+        | Operation (l, ("==" | "!="), [e1; e2]) ->
+          let t = check e1 in
+          let _ = checkt e2 t in
+          boolt
+        | Operation (l, ("||"), [e1; e2]) ->
+          let _ = checkt e1 boolt in
+          let _ = checkt e2 boolt in
+          boolt
+        | Operation (l, ("le" | "lt"), [e1; e2]) ->
+          let _ = checkt e1 intt in
+          let _ = checkt e2 intt in
+          boolt
+        | Operation (l, ("+" | "-"), [e1; e2]) ->
+          let _ = checkt e1 intt in
+          let _ = checkt e2 intt in
+          intt
+        | IntLit (l, n) -> intt
+        | CallExpr (l, g', pats) -> (
+          match try_assoc g' purefuncmap with
+            Some (l, t, ts, _) -> (
+            match zip pats ts with
+              None -> static_error l "Incorrect argument count."
+            | Some pts -> (
+              List.iter (fun (pat, t) ->
+                match pat with
+                  LitPat e -> checkt e t
+                | _ -> static_error l "Patterns are not allowed here."
+              ) pts;
+              t
+              )
+            )
+          | None -> static_error l "No such pure function."
+          )
+        | IfExpr (l, e1, e2, e3) ->
+          let _ = checkt e1 boolt in
+          let t = check e2 in
+          let _ = checkt e3 t in
+          t
+        | e -> static_error (expr_loc e) "Expression form not allowed here."
+      and checkt e t0 =
+        match (e, t0) with
+          (IntLit (l, 0), PtrType (_, sn)) -> ()
+        | _ ->
+          begin
+          let t = check e in
+          match (t, t0) with
+            (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
+          | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
+          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+          end
+      in
+      (check, checkt)
+    in
+    let check_expr tenv e =
+      let (f, _) = funcs tenv in f e
+    in
+    let check_expr_t tenv e t0 =
+      let (_, f) = funcs tenv in f e t0
+    in
+    (check_expr, check_expr_t)
+  in
+
+  let check_pat tenv t p =
+    match p with
+      LitPat e -> check_expr_t tenv e t; tenv
+    | VarPat x -> (x, t)::tenv
+    | DummyPat -> tenv
+  in
+
+  let rec check_pred tenv p cont =
+    match p with
+      Access (l, e, f, v) ->
+      let t = check_expr tenv e in
+      begin
+      match t with
+      | PtrType (l, sn) ->
+        begin
+        match List.assoc sn structmap with
+          (_, fds) ->
+          begin
+            match try_assoc f fds with
+              None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
+            | Some (_, t) ->
+              let tenv' = check_pat tenv t v in
+              cont tenv'
+          end
+        end
+      | _ -> static_error l "Target expression of field dereference should be of pointer type."
+      end
+    | CallPred (l, p, ps) ->
+      begin
+      match try_assoc p predmap with
+        None -> static_error l "No such predicate."
+      | Some (_, xs, _) ->
+        begin
+        match zip xs ps with
+          None -> static_error l "Incorrect number of arguments."
+        | Some bs ->
+          let rec iter tenv bs =
+            match bs with
+              [] -> cont tenv
+            | ((x, t), p)::bs ->
+              let tenv = check_pat tenv t p in iter tenv bs
+          in
+          iter tenv bs
+        end
+      end
+    | ExprPred (l, e) ->
+      check_expr_t tenv e boolt; cont tenv
+    | Sep (l, p1, p2) ->
+      check_pred tenv p1 (fun tenv -> check_pred tenv p2 cont)
+    | IfPred (l, e, p1, p2) ->
+      check_expr_t tenv e boolt;
+      check_pred tenv p1 (fun _ -> ());
+      check_pred tenv p2 (fun _ -> ());
+      cont tenv
+    | SwitchPred (l, e, cs) ->
+      let t = check_expr tenv e in
+      begin
+      match t with
+      | TypeName (lt, "int") -> static_error l "Cannot switch on int."
+      | TypeName (lt, i) ->
+        begin
+        match try_assoc i inductivemap with
+          None -> static_error l "Switch operand is not an inductive value."
+        | Some (l, ctormap) ->
+          let rec iter ctormap cs =
+            match cs with
+              [] ->
+              let _ = 
+                match ctormap with
+                  [] -> ()
+                | (cn, _)::_ ->
+                  static_error l ("Missing case: '" ^ cn ^ "'.")
+              in cont tenv
+            | SwitchPredClause (lc, cn, xs, body)::cs ->
+              begin
+              match try_assoc cn ctormap with
+                None -> static_error lc "No such constructor."
+              | Some (_, ts) ->
+                let xmap =
+                  let rec iter xmap ts xs =
+                    match (ts, xs) with
+                      ([], []) -> xmap
+                    | (t::ts, x::xs) ->
+                      let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
+                      iter ((x, t)::xmap) ts xs
+                    | ([], _) -> static_error lc "Too many pattern variables."
+                    | _ -> static_error lc "Too few pattern variables."
+                  in
+                  iter [] ts xs
+                in
+                let tenv = xmap @ tenv in
+                (check_pred tenv body (fun _ -> ());
+                iter (List.remove_assoc cn ctormap) cs)
+              end
+          in
+          iter ctormap cs
+        end
+      | _ -> static_error l "Switch operand is not an inductive value."
+      end
+    | EmpPred l -> cont tenv
+  in
+
+  let _ =
+    List.iter
+      (
+        function
+          (pn, (l, xs, Some body)) -> check_pred xs body (fun _ -> ())
+        | _ -> ()
+      )
+      predmap
+  in
+
   let rec eval env e =
     let ev = eval env in
     match e with
@@ -1624,6 +1837,7 @@ let verify_program verbose path =
       let ts = List.map (function LitPat e -> ev e) pats in
       let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
       let ys = List.map (function (t, p) -> p) ps in
+      let _ = if(List.length ys <> List.length ts) then static_error l "Wrong number of arguments." in
       let Some env' = zip ys ts in
       assert_pred h ghostenv env' p (fun h _ _ ->
         cont ((g, ts)::h) env)
