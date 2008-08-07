@@ -22,11 +22,11 @@ inductive context = | lcontext(struct Node*, context, tree) | rcontext(struct No
 predicate context(struct Node* node, context value, int holeCount)
   requires switch(value) {
     case Root: return node->parent |-> 0;
-    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& n->right |-> ?r &*& n->count |-> ?c &*&
-                                      (r==0 ? emp : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& node != 0 &*& n->right |-> ?r &*& n->count |-> ?c &*&
+                                      (r==0 ? t==Nil : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
                                       malloc_block_Node(n);
-    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& n->left |-> ?l &*& n->count |-> ?c &*&
-                                      (l==0 ? emp : tree(l, t) &*& l->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& node!=0 &*& n->left |-> ?l &*& n->count |-> ?c &*&
+                                      (l==0 ? t==Nil : tree(l, t) &*& l->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
                                       malloc_block_Node(n);
   };
 
@@ -112,6 +112,13 @@ fixpoint tree plugHole(treeseg ts, tree plug) {
     case Hole(n): return plug;
   }
 }
+
+fixpoint tree replace(tree ts, struct Node* n, tree plug) {
+  switch(ts) {
+    case Nil: return plug;
+    case tree(r, lhs, rhs): return r==n ? plug : tree(r, replace(lhs, n, plug), replace(rhs, n, plug));
+  }
+}
 @*/
 
 struct Node* create(struct Node* parent)
@@ -132,7 +139,7 @@ struct Node* create(struct Node* parent)
 
 /*@
 predicate isTree(struct Node* n, tree value) 
-  requires tree(?root, value) &*& root->parent |-> 0 &*& contains(value, n) == true;
+  requires tree(?root, value) &*& root!=0 &*& root->parent |-> 0 &*& contains(value, n) == true;
 
 fixpoint bool contains(tree value, struct Node* n) {
   switch(value) {
@@ -152,15 +159,24 @@ fixpoint tree valueOf(tree value, struct Node * n) {
 
 fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
   switch(value) {
-    case Nil: return Root;
+    case Nil: return con;
     case tree(r, lhs, rhs): return r==n ? con : (contains(lhs, n) ? 
         upsideDownMinus(lhs, n, lcontext(r, con, rhs)) : upsideDownMinus(rhs, n, rcontext(r, lhs, con)) );
   }
 }
 
-lemma void tree2context(struct Node* root, struct Node* n, tree value) 
-  requires tree(root, value) &*& context(root, ?cvalue, size(value)) &*& contains(value, n) == true; 
-  ensures context(n, upsideDownMinus(value, n, cvalue), size(valueOf(value, n))) &*& tree(n, valueOf(value, n));
+fixpoint struct Node* getroot(context val, struct Node* prev) {
+  switch(val){
+    case Root: return prev;
+    case lcontext(r, lcon, rhs): return getroot(lcon, r);
+    case rcontext(r, lhs, rcon): return getroot(rcon, r);
+  }
+}
+
+lemma void tree2context(struct Node* root, struct Node* n, tree value, struct Node* oroot) 
+  requires tree(root, value) &*& context(root, ?cvalue, size(value)) &*& contains(value, n) == true &*& getroot(cvalue, root)==oroot; 
+  ensures context(n, upsideDownMinus(value, n, cvalue), size(valueOf(value, n))) &*& tree(n, valueOf(value, n)) &*&
+          getroot(upsideDownMinus(value, n, cvalue), n) == oroot;
 {
   switch(value) {
     case Nil: return;
@@ -174,42 +190,113 @@ lemma void tree2context(struct Node* root, struct Node* n, tree value)
           struct Node* l = root->left;
           struct Node* r = root->right;
           close context(l, lcontext(root, cvalue, rhs), size(lhs));
-          tree2context(l, n, lhs);
+          tree2context(l, n, lhs, oroot);
         } else {
           struct Node* l = root->left;
           struct Node* r = root->right;
           close context(r, rcontext(root, lhs, cvalue), size(rhs));
-          tree2context(r, n, rhs);
+          tree2context(r, n, rhs, oroot);
         }
       }
   }
 }
 
+fixpoint tree reverse(context con, tree val) {
+  switch(con){
+    case Root: return val; 
+    case lcontext(r, lcon, rhs): return reverse(lcon, tree(r, val, rhs)); 
+    case rcontext(r, lhs, rcon): return reverse(rcon, tree(r, lhs, val));
+  }
+}
+
+lemma void context2tree(struct Node* theroot, struct Node* node, context contextval)
+  requires tree(node, ?v) &*& context(node, contextval, size(v)) &*& getroot(contextval, node) == theroot; 
+  ensures tree(theroot, reverse(contextval, v)) &*& theroot->parent |-> 0;
+{
+  switch(contextval) {
+    case Root: open context(node, contextval, size(v));
+    case lcontext(r, lcon, rhs): 
+      open context(node, contextval, size(v));
+      struct Node* nodeParent = node->parent; 
+      close tree(nodeParent, tree(nodeParent, v, rhs));
+      context2tree(theroot, nodeParent, lcon);
+    case rcontext(r, lhs, rcon):
+      open context(node, contextval, size(v));
+      struct Node* nodeParent = node->parent;
+      close tree(nodeParent, tree(nodeParent, lhs, v));
+      context2tree(theroot, nodeParent, rcon);
+  }
+}
 
 fixpoint tree addLeft(tree value, struct Node* node, tree ptr) {
   switch(value){
-	  case Nil: return Nil;
-		case tree(r, lhs, rhs): return r == node ? tree(r, ptr, rhs) : tree(r, addLeft(lhs, node, ptr), addLeft(rhs, node, ptr));
-	}
+    case Nil: return Nil;
+    case tree(r, lhs, rhs): return r == node ? tree(r, ptr, rhs) : 
+                                               (contains(lhs, node) ? tree(r, addLeft(lhs, node, ptr), rhs) : 
+                                                                      tree(r, lhs, addLeft(rhs, node, ptr)));
+  }
+}
+
+fixpoint tree left(tree value) {
+  switch(value){
+    case Nil: return Nil;
+    case tree(r, lhs, rhs): return lhs;
+  }
 }
 @*/
 
 struct Node* addLeftWrapper(struct Node* node)
   //@ requires isTree(node, ?v) &*& valueOf(v, node) == tree(node, Nil, Nil);
-	/*@ ensures isTree(node, addLeft(v, node, tree(result, Nil, Nil))); @*/
+  /*@ ensures isTree(node, replace(v, node, tree(node, tree(result, Nil, Nil), Nil))); @*/
 {
-	//@ open isTree(node, v);
-	//@ open tree(?root, v);
-	//@ close tree(root, v);
-	//@ close context(root, Root, size(v));
-	//@ tree2context(root, node, v);
-  //@ open tree(node, _);
-	struct Node* newChild = addLeftChild(node);
-	//@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
-	// //@ context2tree(root, node, addLeft(v, node, tree(newChild, Nil, Nil)));
-	//@ close isTree(node, v);
-	return newChild;
+  //@ open isTree(node, v);
+  //@ open tree(?root, v);
+  //@ close tree(root, v);
+  //@ close context(root, Root, size(v));
+  //@ tree2context(root, node, v, root);
+  
+  //@ open tree(node, ?nodeval);
+  //@ struct Node* myr = node->right;
+  /*@ if(myr != 0){
+        open tree(myr, ?rval);
+        close tree(myr, rval);
+      } else {} @*/
+  //@ struct Node* myl = node->left;
+  /*@ if(myl != 0){
+        open tree(myl, ?rval);
+        close tree(myl, rval);
+      } else {} @*/
+  struct Node* newChild = addLeftChild(node);
+  //@ open tree(newChild, ?childVal);
+  //@ close tree(newChild, childVal);
+  //@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ context2tree(root, node, upsideDownMinus(v, node, Root));
+  //@ reverseLemma(v, node, Root, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ containsReplace(v, node, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ close isTree(node, replace(v, node, tree(node, tree(newChild, Nil, Nil), Nil)));
+  return newChild;
 }
+
+/*@
+lemma void containsReplace(tree t, struct Node* node, tree plug)
+  requires contains(t, node)==true &*& contains(plug, node) == true;
+  ensures contains(replace(t, node, plug), node)==true;
+{
+  switch(t) {
+    case Nil: return;
+    case tree(r, lhs, rhs):
+      if(r==node){     
+      } else {
+        if(contains(lhs, node)){
+          containsReplace(lhs, node, plug);
+        } else {
+          containsReplace(rhs, node, plug);
+        }
+      }
+  }
+}
+
+@*/
 
 struct Node* addLeftChild(struct Node* node)
   /*@ requires context(node, ?value, 1) &*& node!=0 &*& node->left |-> 0 &*& node->right |-> 0 &*&
@@ -249,8 +336,44 @@ void abort()
   }
 }
 
-void main() {
-  struct Node* mytree = create(0);
-  struct Node* child1 = addLeftChild(mytree);
-}
+struct Node* doCreate() 
+  requires emp;
+  ensures isTree(result, tree(result, Nil, Nil));
+{
+  struct Node* n = malloc(sizeof(Node));
+  if(n==0){
+    abort();
+  } else {
+  }
+  n->parent = 0;
+  n->left = 0;
+  n->right = 0;
+  n->count = 1;
   
+  //@ close tree(n, tree(n, Nil, Nil));
+  //@ close isTree(n, tree(n, Nil, Nil));
+  return n;
+}
+
+void main() {
+  struct Node* mytree = doCreate();
+  struct Node* child = addLeftWrapper(mytree);
+  //@ rotate(child);
+  struct Node* child2 = addLeftWrapper(child);
+}
+
+/*@
+lemma void rotate(struct Node* n)
+  requires isTree(?r, ?value) &*& contains(value, n) == true;
+  ensures isTree(n, value);
+{
+}
+@*/
+  
+/*@
+lemma void reverseLemma(tree t, struct Node* node, context con, tree newValue)
+  requires true;
+  ensures reverse(upsideDownMinus(t, node, con), newValue) == replace(t, node, newValue);
+{
+}
+@*/
