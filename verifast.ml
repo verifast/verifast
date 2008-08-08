@@ -391,7 +391,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
 ]
 
 let read_program s =
@@ -581,6 +581,7 @@ and
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
 | [< '(l, Kwd "int") >] -> TypeExpr (l, TypeName (l, "int"))
+| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, "==", [e; Var(l, "false")]) 
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -646,14 +647,21 @@ let theoryAtoms = ["true"; "false"; "le"; "lt"]
 let theory = [
   "(DISTINCT true false)";
   "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
+
 (*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
   "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
   "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) false) (NEQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) false) (EQ e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) false) (> e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) false) (>= e1 e2)))";
   "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) true) (AND (EQ e1 true) (EQ e2 true))))";
-  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) true) (OR (EQ e1 true) (EQ e2 true))))"
+  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) false) (OR (EQ e1 false) (EQ e2 false))))";
+  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) true) (OR (EQ e1 true) (EQ e2 true))))";
+  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) false) (AND (EQ e1 false) (EQ e2 false))))"
 ]
 
 type
@@ -1049,7 +1057,7 @@ let verify_program verbose path =
                             let t = check e1 in
                             let _ = checkt e2 t in
                             boolt
-			  | Operation (l, ("||"), [e1; e2]) ->
+			  | Operation (l, ("||" | "&&"), [e1; e2]) ->
                             let _ = checkt e1 boolt in
                             let _ = checkt e2 boolt in
                             boolt
@@ -1173,7 +1181,7 @@ let verify_program verbose path =
           let t = check e1 in
           let _ = checkt e2 t in
           boolt
-        | Operation (l, ("||"), [e1; e2]) ->
+        | Operation (l, ("||" | "&&"), [e1; e2]) ->
           let _ = checkt e1 boolt in
           let _ = checkt e2 boolt in
           boolt
@@ -2158,7 +2166,7 @@ let browse_trace path ctxts_lifo msg =
     let _ = Text.tag_configure srcText ~tag:"currentLine" ~background:`Yellow in
     let _ = Text.see srcText (`Linechar (line, col - 1), []) in
     let _ = Listbox.delete assumptionsList ~first:(`Num 0) ~last:`End in
-    let _ = Listbox.insert assumptionsList `End (List.map (fun phi -> pretty_print phi) ass) in
+    let _ = Listbox.insert assumptionsList `End (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
     let _ = Listbox.delete chunksList ~first:(`Num 0) ~last:`End in
     let _ = Listbox.insert chunksList `End (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
     let _ = Listbox.delete envList ~first:(`Num 0) ~last:`End in
