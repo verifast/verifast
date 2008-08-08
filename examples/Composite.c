@@ -594,6 +594,7 @@ lemma void upsideDownMinusLContext(tree t0, struct Node * tr, tree t, struct Nod
           case tree(rtlhs, tlhslhs, tlhsrhs):
             if (rtlhs == n) {
               assert(upsideDownMinus(t, n, con) == lcontext(tr, con, trhs));
+              valueOfValueOf(t0, tr, t, rtlhs);
             } else {
               containsValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
               valueOfValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
@@ -642,54 +643,30 @@ lemma void valueOfNotNil(tree t, struct Node *n)
   }
 }
 
-
-lemma void context2tree(struct Node* theroot, struct Node* node, context contextval, tree oldval)
-  requires tree(node, ?v) &*& context(node, contextval, size(v)) &*& getroot(contextval, node) == theroot
-           &*& contextval == upsideDownMinus(oldval, node, Root)
-           &*& contains(oldval, node) == true &*& uniqueNodes(oldval) == true; 
-  ensures tree(theroot, replace(oldval, node, v)) &*& theroot->parent |-> 0;
+lemma void replaceParent(tree oldval, struct Node* nodeParent, struct Node* node, tree nlhs, tree nrhs, tree rhs, tree v)
+  requires contains(oldval, nodeParent) == true &*& valueOf(oldval, nodeParent) == tree(nodeParent, tree(node, nlhs, nrhs), rhs) &*& uniqueNodes(oldval) == true;
+  ensures replace(oldval, nodeParent, tree(nodeParent, v, rhs)) == replace(oldval, node, v);
 {
-  switch(contextval) {
-    case Root: 
-      switch(oldval){
-        case Nil: return;
-        case tree(r, lhs, rhs): 
-          upsideDownMinusIsRoot(r, lhs, rhs, node, Root);
-          assert(r==node);
-          return;
+  switch (oldval) {
+    case Nil:
+    case tree(r, rlhs, rrhs):
+      if (r == nodeParent) {
+      } else {
+        if(contains(rlhs, nodeParent)) {
+          containsValueOf(rlhs, nodeParent, tree(nodeParent, tree(node, nlhs, nrhs), rhs), node);       
+          replaceParent(rlhs, nodeParent, node, nlhs, nrhs, rhs, v);  
+          assert(replace(rlhs, nodeParent, tree(nodeParent, v, rhs)) == replace(rlhs, node, v));
+          
+        } else {
+          containsValueOf(rrhs, nodeParent, tree(nodeParent, tree(node, nlhs, nrhs), rhs), node); 
+          disjointContains(rlhs, rrhs, node);
+          replaceParent(rrhs, nodeParent, node, nlhs, nrhs, rhs, v);  
+        }
       }
-      assert(node==theroot);
-      open context(node, contextval, size(v));
-    case lcontext(r, lcon, rhs):
-      open context(node, contextval, size(v));
-      struct Node* nodeParent = node->parent; 
-      valueOfNotNil(oldval, node);
-      switch(valueOf(oldval, node)){
-        case Nil: return; 
-        case tree(node0, nodeLhs, nodeRhs):
-          valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
-          assert(node == node0);
-          close tree(nodeParent, tree(nodeParent, v, rhs));
-         // assert(valueOf(oldval, nodeParent)==tree(nodeParent, tree(node, nodeLhs, nodeRhs), rhs));
-          switch(oldval){
-            case Nil: return;
-            case tree(oldvalroot, oldvallhs, oldvalrhs):
-              assert(valueOf(oldval, oldvalroot)==oldval);
-              assert(nodeParent == r);
-              upsideDownMinusLContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, lcon, rhs);
-              assert(valueOf(oldval, node) == tree(node, nodeLhs, nodeRhs));
-              assert(valueOf(oldval, nodeParent) == tree(nodeParent, tree(node, nodeLhs, nodeRhs), rhs));
-              upsideDownMinusParentLeft(nodeParent, oldval, node, nodeLhs, nodeRhs, rhs, Root);
-              context2tree(theroot, nodeParent, lcon, oldval);
-          }
-      }
-    case rcontext(r, lhs, rcon):
-      open context(node, contextval, size(v));
-      struct Node* nodeParent = node->parent;
-      close tree(nodeParent, tree(nodeParent, lhs, v));
-      context2tree(theroot, nodeParent, rcon, oldval);
   }
 }
+
+
 
 
 
@@ -717,7 +694,7 @@ struct Node* addLeftWrapper(struct Node* node)
   //@ open isTree(node, v);
   //@ open tree(?root, v);
   //@ close tree(root, v);
-  //@ uniqueNodes(root);
+  //@ treeUniqueNodes(root);
   //@ close context(root, Root, size(v));
   //@ tree2context(root, node, v, root);
   //@ open tree(node, ?nodeval);
@@ -735,14 +712,62 @@ struct Node* addLeftWrapper(struct Node* node)
   //@ open tree(newChild, ?childVal);
   //@ close tree(newChild, childVal);
   //@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
-  //@ context2tree(root, node, upsideDownMinus(v, node, Root));
-  //@ reverseLemma(v, node, Root, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ context2tree(root, node, upsideDownMinus(v, node, Root), v);
   //@ containsReplace(v, node, tree(node, tree(newChild, Nil, Nil), Nil));
   //@ close isTree(node, replace(v, node, tree(node, tree(newChild, Nil, Nil), Nil)));
   return newChild;
 }
 
 /*@
+lemma void context2tree(struct Node* theroot, struct Node* node, context contextval, tree oldval)
+  requires tree(node, ?v) &*& context(node, contextval, size(v)) &*& getroot(contextval, node) == theroot
+           &*& contextval == upsideDownMinus(oldval, node, Root)
+           &*& contains(oldval, node) == true &*& uniqueNodes(oldval) == true; 
+  ensures tree(theroot, replace(oldval, node, v)) &*& theroot->parent |-> 0;
+{
+  switch(contextval) {
+    case Root: 
+      switch(oldval){
+        case Nil: return;
+        case tree(r, lhs, rhs): 
+          upsideDownMinusIsRoot(r, lhs, rhs, node, Root);
+          assert(r==node);
+          return;
+      }
+      assert(node==theroot);
+      open context(node, contextval, size(v));
+    case lcontext(r, lcon, rhs):
+      open context(node, contextval, size(v));
+      struct Node* nodeParent = node->parent; 
+      valueOfNotNil(oldval, node);
+      switch(valueOf(oldval, node)){
+        case Nil: return; 
+        case tree(node0, nodeLhs, nodeRhs):
+          valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
+          assert(node == node0);
+          close tree(nodeParent, tree(nodeParent, v, rhs));
+          switch(oldval){
+            case Nil: return;
+            case tree(oldvalroot, oldvallhs, oldvalrhs):
+              assert(valueOf(oldval, oldvalroot)==oldval);
+              assert(nodeParent == r);
+              upsideDownMinusLContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, lcon, rhs);
+              assert(valueOf(oldval, node) == tree(node, nodeLhs, nodeRhs));
+              assert(valueOf(oldval, nodeParent) == tree(nodeParent, tree(node, nodeLhs, nodeRhs), rhs));
+              uniqueNodesValueOf(oldval, nodeParent);
+              upsideDownMinusParentLeft(nodeParent, oldval, node, nodeLhs, nodeRhs, rhs, Root);
+              context2tree(theroot, nodeParent, lcon, oldval);
+              replaceParent(oldval, nodeParent, node, nodeLhs, nodeRhs, rhs, v);
+          }
+      }
+    case rcontext(r, lhs, rcon):
+      open context(node, contextval, size(v));
+      struct Node* nodeParent = node->parent;
+      close tree(nodeParent, tree(nodeParent, lhs, v));
+      context2tree(theroot, nodeParent, rcon, oldval);
+  }
+}
+
 lemma void containsReplace(tree t, struct Node* node, tree plug)
   requires contains(t, node)==true &*& contains(plug, node) == true;
   ensures contains(replace(t, node, plug), node)==true;
