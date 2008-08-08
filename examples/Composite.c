@@ -113,12 +113,7 @@ fixpoint tree plugHole(treeseg ts, tree plug) {
   }
 }
 
-fixpoint tree replace(tree ts, struct Node* n, tree plug) {
-  switch(ts) {
-    case Nil: return plug;
-    case tree(r, lhs, rhs): return r==n ? plug : tree(r, replace(lhs, n, plug), replace(rhs, n, plug));
-  }
-}
+
 @*/
 
 struct Node* create(struct Node* parent)
@@ -157,13 +152,7 @@ fixpoint tree valueOf(tree value, struct Node * n) {
   }
 }
 
-fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
-  switch(value) {
-    case Nil: return con;
-    case tree(r, lhs, rhs): return r==n ? con : (contains(lhs, n) ? 
-        upsideDownMinus(lhs, n, lcontext(r, con, rhs)) : upsideDownMinus(rhs, n, rcontext(r, lhs, con)) );
-  }
-}
+
 
 fixpoint struct Node* getroot(context val, struct Node* prev) {
   switch(val){
@@ -201,13 +190,6 @@ lemma void tree2context(struct Node* root, struct Node* n, tree value, struct No
   }
 }
 
-fixpoint tree reverse(context con, tree val) {
-  switch(con){
-    case Root: return val; 
-    case lcontext(r, lcon, rhs): return reverse(lcon, tree(r, val, rhs)); 
-    case rcontext(r, lhs, rcon): return reverse(rcon, tree(r, lhs, val));
-  }
-}
 
 lemma void context2tree(struct Node* theroot, struct Node* node, context contextval)
   requires tree(node, ?v) &*& context(node, contextval, size(v)) &*& getroot(contextval, node) == theroot; 
@@ -367,13 +349,124 @@ lemma void rotate(struct Node* n)
   requires isTree(?r, ?value) &*& contains(value, n) == true;
   ensures isTree(n, value);
 {
+  open isTree(r, value);
+  close isTree(n, value);
 }
-@*/
-  
-/*@
-lemma void reverseLemma(tree t, struct Node* node, context con, tree newValue)
+
+fixpoint tree replace(tree ts, struct Node* n, tree plug) {
+  switch(ts) {
+    case Nil: return Nil;
+    case tree(r, lhs, rhs): return r==n ? plug : (contains(lhs, n) ? tree(r, replace(lhs, n, plug), rhs) : tree(r, lhs, replace(rhs, n, plug)) );
+  }
+}
+
+fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
+  switch(value) {
+    case Nil: return con;
+    case tree(r, lhs, rhs): return r==n ? con : (contains(lhs, n) ? 
+        upsideDownMinus(lhs, n, lcontext(r, con, rhs)) : upsideDownMinus(rhs, n, rcontext(r, lhs, con)) );
+  }
+}
+
+fixpoint tree reverse(context con, tree val) {
+  switch(con){
+    case Root: return val; 
+    case lcontext(r, lcon, rhs): return reverse(lcon, tree(r, val, rhs)); 
+    case rcontext(r, lhs, rcon): return reverse(rcon, tree(r, lhs, val));
+  }
+}
+
+fixpoint bool inContext(context con, struct Node* n){
+  switch(con){
+    case Root: return false;
+    case lcontext(r, lcon, rhs): return r==n || inContext(lcon, n) || contains(rhs, n);
+    case rcontext(r, lhs, rcon): return r==n || contains(lhs, n) || inContext(rcon, n);
+  }
+}
+
+lemma void containsReverse(context con, tree t, struct Node* n)
   requires true;
-  ensures reverse(upsideDownMinus(t, node, con), newValue) == replace(t, node, newValue);
+  ensures contains(reverse(con, t), n) == (contains(t, n) || inContext(con, n));
 {
+  switch(con){
+    case Root: 
+      if(contains(t, n)){
+      } else {}
+    case lcontext(r, lcon, rhs):
+      containsReverse(lcon, tree(r, t, rhs), n);
+      if(contains(reverse(con, t), n)){
+      } else {
+      }
+    case rcontext(r, lhs, rcon):
+      containsReverse(rcon, tree(r, lhs, t), n);
+      if(contains(reverse(con, t), n)){
+      } else {
+      }
+  }
 }
+
+
+lemma void replaceReverseComm(context con, tree t, struct Node* node, tree newValue)
+  requires inContext(con, node) == false &*& contains(t, node)==true;
+  ensures reverse(con, replace(t, node, newValue)) == replace(reverse(con, t), node, newValue);
+{
+  switch(con) {
+    case Root:
+    case lcontext(r, lcon, rhs):
+      replaceReverseComm(lcon, tree(r, t, rhs), node, newValue);
+      if(contains(reverse(con, t), node)){
+        
+      } else {
+      }
+      if(contains(t, node)){
+      } else {
+      }
+      containsReverse(con, t, node);
+    case rcontext(r, lhs, rcon):
+      replaceReverseComm(rcon, tree(r, lhs, t), node, newValue);
+      if(contains(reverse(con, t), node)){
+        
+      } else {
+      }
+      if(contains(t, node)){
+      } else {
+      }
+      containsReverse(con, t, node);
+  }
+}
+
+lemma void revisreplace(tree lhs, tree rhs, struct Node* node, context con, tree newValue)
+  requires contains(tree(node, lhs, rhs), node) == true &*& inContext(con, node) == false;
+  ensures reverse(con, newValue) == replace(reverse(con, tree(node, lhs, rhs)), node, newValue);
+{
+  switch(con){
+    case Root:
+    case lcontext(r, lcon, rhs2): 
+      revisreplace(lhs, rhs, node, lcon, tree(r, newValue, rhs2));
+      
+  }
+}
+
+
+lemma void reverseLemma(tree t, struct Node* node, context con, tree newValue)
+  requires contains(t, node) == true &*& inContext(con, node) == false;
+  ensures reverse(upsideDownMinus(t, node, con), newValue) == replace(reverse(con, t), node, newValue);
+{
+  switch(t){
+    case Nil: 
+      
+    case tree(r, lhs, rhs): 
+      if(r == node){
+        
+      } else {
+        if(contains(lhs, node)){
+          reverseLemma(lhs, node, con, newValue);
+        } else {
+          reverseLemma(rhs, node, con, newValue);
+        }
+      }
+  }
+}
+
+
 @*/
