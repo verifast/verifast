@@ -2178,7 +2178,7 @@ let browse_trace path ctxts_lifo msg =
   in
   let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
-  let _ = root#set_title ("VeriFast Failed Path Browser - " ^ msg) in
+  let _ = root#set_title (path ^ " - VeriFast Failed Path Browser - " ^ msg) in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
   let _ = assert (stepStore#iter_n_children None > 0) in
   let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
