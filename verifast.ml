@@ -2089,11 +2089,12 @@ let remove_dups bs =
 
 let browse_trace path ctxts_lifo msg =
   let root = GWindow.window ~width:800 ~height:600 () in
-  let rootTable = GPack.table ~rows:2 ~columns:1 ~packing:root#add () in
-  let textScroll = GBin.scrolled_window () in
+  let rootTable = GPack.paned `VERTICAL ~packing:root#add () in
+  let _ = rootTable#set_position 450 in
+  let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC () in
   let srcText = GText.view ~border_width:2 ~packing:textScroll#add () in (* Text.create srcFrame ~font:"Courier 10" ~wrap:`None in *)
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
-  let _ = rootTable#attach ~left:0 ~top:0 (textScroll#coerce) ~expand:`BOTH in
+  let _ = rootTable#pack1 ~resize:true ~shrink:true (textScroll#coerce) in
   let _ =
     let chan = open_in path in
     let buf = String.create 60000 in
@@ -2108,25 +2109,32 @@ let browse_trace path ctxts_lifo msg =
     ()
   in
   let _ = srcText#set_editable false in
-  let bottomTable = GPack.table ~rows:1 ~columns:4 () in
-  let _ = rootTable#attach ~left:0 ~top:1 ~expand:`BOTH (bottomTable#coerce) in
-  let create_listbox (parent: GPack.table) column =
+  let bottomTable = GPack.paned `HORIZONTAL () in
+  let bottomTable2 = GPack.paned `HORIZONTAL () in
+  let bottomTable3 = GPack.paned `HORIZONTAL () in
+  let _ = bottomTable2#pack2 ~resize:true ~shrink:true (bottomTable3#coerce) in
+  let _ = bottomTable#pack2 ~resize:true ~shrink:true (bottomTable2#coerce) in
+  let _ = rootTable#pack2 ~resize:true ~shrink:true (bottomTable#coerce) in
+  let create_listbox column =
     let collist = new GTree.column_list in
     let col_k = collist#add Gobject.Data.int in
     let col_text = collist#add Gobject.Data.string in
     let store = GTree.list_store collist in
-    let scrollWin = GBin.scrolled_window () in
+    let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
     let col = GTree.view_column ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
-    let _ = parent#attach ~left:column ~top:0 (scrollWin#coerce) ~expand:`BOTH in
     (scrollWin, lb, col_k, col_text, col, store)
   in
-  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_listbox bottomTable 0 in
-  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox bottomTable 1 in
+  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_listbox 0 in
+  let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
+  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox 1 in
+  let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
   (* let _ = Listbox.configure assumptionsList ~takefocus:true in *)
-  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox bottomTable 2 in
-  let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox bottomTable 3 in
+  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox 2 in
+  let _ = bottomTable3#pack1 ~resize:true ~shrink:true (chunksFrame#coerce) in
+  let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox 3 in
+  let _ = bottomTable3#pack2 ~resize:true ~shrink:true (envFrame#coerce) in
   let ctxts_fifo = List.rev ctxts_lifo in
   let stepItems =
     let rec iter ass ctxts =
