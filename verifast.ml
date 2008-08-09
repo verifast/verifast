@@ -9,6 +9,11 @@ type token =
   | String of string
   | Char of char
 
+type srcpos = (string * int * int)
+type loc = (srcpos * srcpos)
+
+exception ParseException of loc * string
+
 (* The lexer *)
 
 let make_lexer keywords path =
@@ -42,6 +47,10 @@ let make_lexer keywords path =
   let line = ref 1 in
   let linepos = ref 0 in  (* Stream count at start of line *)
   let tokenpos = ref 0 in
+  let token_srcpos = ref (path, -1, -1) in
+
+  let current_srcpos() = (path, !line, Stream.count stream - !linepos + 1) in
+  let current_loc() = (!token_srcpos, current_srcpos()) in
 
   let in_single_line_annotation = ref false in
   
@@ -53,9 +62,12 @@ let make_lexer keywords path =
   and keyword_or_error c =
     let s = String.make 1 c in
     try Hashtbl.find kwd_table s with
-      Not_found -> raise (Stream.Error ("Illegal character " ^ s))
+      Not_found -> raise (Stream.Error ("Illegal character"))
   in
-  let start_token() = tokenpos := Stream.count stream in
+  let start_token() =
+    tokenpos := Stream.count stream;
+    token_srcpos := current_srcpos()
+  in
   let new_loc_line strm__ =
       line := !line + 1;
       linepos := Stream.count strm__
@@ -98,11 +110,11 @@ let make_lexer keywords path =
         Stream.junk strm__;
         let c =
           try char strm__ with
-            Stream.Failure -> raise (Stream.Error "")
+            Stream.Failure -> raise (Stream.Error "Bad character literal.")
         in
         begin match Stream.peek strm__ with
           Some '\'' -> Stream.junk strm__; Some (Char c)
-        | _ -> raise (Stream.Error "")
+        | _ -> raise (Stream.Error "Single quote expected.")
         end
     | Some '"' ->
         start_token();
@@ -164,7 +176,7 @@ let make_lexer keywords path =
         Stream.junk strm__;
         let c =
           try escape strm__ with
-            Stream.Failure -> raise (Stream.Error "")
+            Stream.Failure -> raise (Stream.Error "Bad string literal.")
         in
         let s = strm__ in store c; string s
     | Some c -> Stream.junk strm__; let s = strm__ in store c; string s
@@ -174,7 +186,7 @@ let make_lexer keywords path =
       Some '\\' ->
         Stream.junk strm__;
         begin try escape strm__ with
-          Stream.Failure -> raise (Stream.Error "")
+          Stream.Failure -> raise (Stream.Error "Bad character literal.")
         end
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
@@ -194,9 +206,9 @@ let make_lexer keywords path =
                 Char.chr
                   ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
                      (Char.code c3 - 48))
-            | _ -> raise (Stream.Error "")
+            | _ -> raise (Stream.Error "Bad escape sequence.")
             end
-        | _ -> raise (Stream.Error "")
+        | _ -> raise (Stream.Error "Bad escape sequence.")
         end
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
@@ -249,12 +261,15 @@ let make_lexer keywords path =
       )
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
-  (channel, (fun () -> (path, !line, Stream.count stream - !linepos + 1)), Stream.from (fun count -> (match next_token stream with Some t -> Some ((path, !line, !tokenpos - !linepos + 1), t) | None -> None)))
+  (channel,
+   current_loc,
+   Stream.from (fun count ->
+     (match next_token stream with
+        Some t -> Some (current_loc(), t)
+      | None -> None)))
 
 type
   operator = string
-and
- loc = (string * int * int)
 and
   expr =
     Var of loc * string
@@ -344,7 +359,20 @@ and
 http://www.gnu.org/prep/standards/standards.html#Errors
 *)
 
-let string_of_loc (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
+let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
+
+let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
+  p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
+  if p1 = p2 then
+    if l1 = l2 then
+      if c1 = c2 then
+        ""
+      else
+        "-" ^ string_of_int c2 ^ ")"
+    else
+      "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+  else
+    ")-" ^ p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
 
 let expr_loc e =
   match e with
@@ -487,23 +515,23 @@ and
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (Stream.Error "Body of open statement must be call expression."))
+  (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (Stream.Error "Body of close statement must be call expression."))
+  (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/"); b = parse_block >] -> WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (Stream.Error "An expression used as a statement must be a call expression."))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (_, x) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
-     | _ -> raise (Stream.Error "The left-hand side of an assignment must be an identifier or a field dereference expression.")
+     | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
   | [< '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | TypeExpr (_, t) -> DeclStmt (l, t, x, rhs)
-     | _ -> raise (Stream.Error "A local variable declaration statement must start with a type expression.")
+     | _ -> raise (ParseException (expr_loc e, "A local variable declaration statement must start with a type expression."))
     )
   >] -> s
 and
@@ -533,7 +561,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] ->
     (match e with
      | Read (_, e, f) -> Access (l, e, f, rhs)
-     | _ -> raise (Stream.Error "Left-hand side of access predicate must be a field dereference expression.")
+     | _ -> raise (ParseException (expr_loc e, "Left-hand side of access predicate must be a field dereference expression."))
     )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
@@ -628,7 +656,7 @@ in
   try
     try
       let p = parse_program token_stream in close_in c; p
-    with Stream.Error msg -> raise (Stream.Error (string_of_loc (loc()) ^ ": " ^ msg))
+    with Stream.Error msg -> raise (ParseException (loc(), msg))
   with ex -> close_in c; raise ex
 
 let flatmap f xs = List.concat (List.map f xs)
@@ -921,7 +949,8 @@ let verify_program verbose path =
       structdeclmap
   in
   
-  let dummy_loc = ("prelude", 0, 0) in
+  let dummy_srcpos = ("prelude", 0, 0) in
+  let dummy_loc = (dummy_srcpos, dummy_srcpos) in
   
   let inductivedeclmap =
     let rec iter idm ds =
@@ -2233,16 +2262,17 @@ let browse_trace path ctxts_lifo msg =
       let [selpath] = stepList#selection#get_selected_rows in
       let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
       let (ass, h, env, l, msg) = List.nth stepItems k in
-      let (path, line, col) = l in
+      let ((path1, line1, col1), (path2, line2, col2)) = l in
       let gBuf = srcText#buffer in
-      let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col))) in
-      let _ = gBuf#move_mark (`MARK currentStepMark) ~where:(gBuf#get_iter(`LINECHAR(line - 1, col - 1))) in
+      let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1))) in
+      let _ = gBuf#move_mark (`MARK currentStepMark) ~where:(gBuf#get_iter(`LINECHAR(line1 - 1, col1 - 1))) in
       let _ = srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark) in
       let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
       let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
       let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
       ()
   in
+  let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
   let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
@@ -2250,7 +2280,11 @@ let browse_trace path ctxts_lifo msg =
   let updateStepListView() =
     let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
     let _ = stepList#selection#select_path lastStepRowPath in
-    stepList#scroll_to_cell lastStepRowPath stepViewCol
+    stepList#scroll_to_cell lastStepRowPath stepViewCol;
+    let (_, _, _, l, _) = match !stepItems with Some stepItems -> List.nth stepItems (List.length stepItems - 1) in
+    let ((path1, line1, col1), (path2, line2, col2)) = l in
+    let gBuf = srcText#buffer in
+    srcText#buffer#apply_tag_by_name "error" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1)))
   in
   updateStepListView();
   let _ = root#event#connect#delete ~callback:(fun _ ->
@@ -2268,7 +2302,9 @@ let browse_trace path ctxts_lifo msg =
   ) in
   let clearTrace() =
     clearStepInfo();
-    stepStore#clear()
+    stepStore#clear();
+    let gBuf = srcText#buffer in
+    srcText#buffer#remove_tag_by_name "error" ~start:gBuf#start_iter ~stop:gBuf#end_iter
   in
   let _ = srcText#buffer#connect#changed (fun () ->
     msg := None;
@@ -2276,6 +2312,12 @@ let browse_trace path ctxts_lifo msg =
     updateWindowTitle();
     clearTrace()
   ) in
+  let handleStaticError ((_, line1, col1), (_, line2, col2)) emsg =
+    let gBuf = srcText#buffer in
+    gBuf#apply_tag_by_name "error" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1)));
+    msg := Some emsg;
+    updateWindowTitle()
+  in
   let verifyProgram() =
     save();
     clearTrace();
@@ -2284,11 +2326,10 @@ let browse_trace path ctxts_lifo msg =
       msg := Some "0 errors found";
       updateWindowTitle()
     with
-      StaticError ((_, line, col), emsg) ->
-      let gBuf = srcText#buffer in
-      gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col)));
-      msg := Some emsg;
-      updateWindowTitle()
+      ParseException (l, emsg) ->
+      handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
+    | StaticError (l, emsg) ->
+      handleStaticError l emsg
     | SymbolicExecutionError (ctxts, phi, l, emsg) ->
       ctxts_lifo := ctxts;
       msg := Some emsg;
@@ -2312,7 +2353,8 @@ let _ =
     try
       verify_program verbose path
     with
-      StaticError (l, msg) -> print_msg l msg
+      ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg))
+    | StaticError (l, msg) -> print_msg l msg
     | SymbolicExecutionError (ctxts, phi, l, msg) ->
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
