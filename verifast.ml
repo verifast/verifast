@@ -2123,10 +2123,10 @@ let browse_trace path ctxts_lifo msg =
   let rootVbox = GPack.vbox ~packing:root#add () in
   rootVbox#pack (ui#get_widget "/MenuBar");
   rootVbox#pack (ui#get_widget "/ToolBar");
-  let rootTable = GPack.paned `VERTICAL ~packing:(rootVbox#pack ~expand:true) () in
+  let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
   let _ = rootTable#set_position 350 in
-  let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC () in
-  let srcText = GText.view ~border_width:2 ~packing:textScroll#add () in (* Text.create srcFrame ~font:"Courier 10" ~wrap:`None in *)
+  let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+  let srcText = GText.view ~packing:textScroll#add () in
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
   let _ = rootTable#pack1 ~resize:true ~shrink:true (textScroll#coerce) in
   let _ =
@@ -2167,7 +2167,7 @@ let browse_trace path ctxts_lifo msg =
     let col_k = collist#add Gobject.Data.int in
     let col_text = collist#add Gobject.Data.string in
     let store = GTree.list_store collist in
-    let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC () in
+    let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
     let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
