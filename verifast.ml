@@ -2088,9 +2088,37 @@ let remove_dups bs =
   iter [] bs
 
 let browse_trace path ctxts_lifo msg =
+  let ctxts_lifo = ref ctxts_lifo in
+  let msg = ref (Some msg) in
   let root = GWindow.window ~width:800 ~height:600 () in
-  let rootTable = GPack.paned `VERTICAL ~packing:root#add () in
-  let _ = rootTable#set_position 450 in
+  let actionGroup = GAction.action_group ~name:"Actions" () in
+  let _ =
+    let a = GAction.add_action in
+    GAction.add_actions actionGroup [
+      a "File" ~label:"_File";
+      a "Save" ~stock:`SAVE ~accel:"<control>S"
+    ]
+  in
+  let ui = GAction.ui_manager() in
+  ui#insert_action_group actionGroup 0;
+  root#add_accel_group ui#get_accel_group;
+  ui#add_ui_from_string "
+    <ui>
+      <menubar name='MenuBar'>
+        <menu action='File'>
+          <menuitem action='Save' />
+        </menu>
+      </menubar>
+      <toolbar name='ToolBar'>
+        <toolitem action='Save' />
+      </toolbar>
+    </ui>
+  ";
+  let rootVbox = GPack.vbox ~packing:root#add () in
+  rootVbox#pack (ui#get_widget "/MenuBar");
+  rootVbox#pack (ui#get_widget "/ToolBar");
+  let rootTable = GPack.paned `VERTICAL ~packing:(rootVbox#pack ~expand:true) () in
+  let _ = rootTable#set_position 350 in
   let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC () in
   let srcText = GText.view ~border_width:2 ~packing:textScroll#add () in (* Text.create srcFrame ~font:"Courier 10" ~wrap:`None in *)
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
@@ -2106,9 +2134,22 @@ let browse_trace path ctxts_lifo msg =
     in
     let _ = iter() in
     let _ = close_in chan in
-    ()
+    gBuf#set_modified false
   in
-  let _ = srcText#set_editable false in
+  let save() =
+    let chan = open_out path in
+    let gBuf = srcText#buffer in
+    let text = gBuf#get_text () in
+    output_string chan text;
+    close_out chan;
+    srcText#buffer#set_modified false
+  in
+  (actionGroup#get_action "Save")#connect#activate save;
+  let updateWindowTitle() =
+    let part1 = path ^ (if srcText#buffer#modified then " (Modified)" else "") in
+    let part3 = match !msg with None -> "" | Some msg -> " - " ^ msg in
+    root#set_title (part1 ^ " - VeriFast IDE" ^ part3)
+  in
   let bottomTable = GPack.paned `HORIZONTAL () in
   let bottomTable2 = GPack.paned `HORIZONTAL () in
   let bottomTable3 = GPack.paned `HORIZONTAL () in
@@ -2135,8 +2176,8 @@ let browse_trace path ctxts_lifo msg =
   let _ = bottomTable3#pack1 ~resize:true ~shrink:true (chunksFrame#coerce) in
   let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox "Locals" 3 in
   let _ = bottomTable3#pack2 ~resize:true ~shrink:true (envFrame#coerce) in
-  let ctxts_fifo = List.rev ctxts_lifo in
-  let stepItems =
+  let ctxts_fifo = List.rev !ctxts_lifo in
+  let computeStepItems() =
     let rec iter ass ctxts =
       match ctxts with
         [] -> []
@@ -2145,6 +2186,7 @@ let browse_trace path ctxts_lifo msg =
     in
     iter [] ctxts_fifo
   in
+  let stepItems = ref (Some (computeStepItems())) in
   let append_items (store:GTree.list_store) kcol col items =
     let rec iter k items =
       match items with
@@ -2158,35 +2200,73 @@ let browse_trace path ctxts_lifo msg =
     in
     iter 0 items
   in
-  let _ = append_items stepStore stepKCol stepCol (List.map (fun (ass, h, env, l, msg) -> msg) stepItems) in
-  let stepSelected _ =
-    let [selpath] = stepList#selection#get_selected_rows in
-    let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
-    let (ass, h, env, l, msg) = List.nth stepItems k in
-    let (path, line, col) = l in
+  let updateStepList() =
+    match !stepItems with
+      None -> ()
+    | Some stepItems ->
+        append_items stepStore stepKCol stepCol (List.map (fun (ass, h, env, l, msg) -> msg) stepItems)
+  in
+  updateStepList();
+  let clearStepInfo() =
     let gBuf = srcText#buffer in
-    let _ = gBuf#remove_tag_by_name "currentLine" ~start:(gBuf#get_iter `START) ~stop:(gBuf#get_iter `END) in
-    let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col))) in
-    let _ = srcText#scroll_to_iter ~within_margin:0.2 (gBuf#get_iter(`LINECHAR(line - 1, col - 1))) in
-    let _ = assumptionsStore#clear() in
-    let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
-    let _ = chunksStore#clear() in
-    let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
-    let _ = envStore#clear() in
-    let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
-    ()
+    gBuf#remove_tag_by_name "currentLine" ~start:(gBuf#get_iter `START) ~stop:(gBuf#get_iter `END);
+    assumptionsStore#clear();
+    chunksStore#clear();
+    envStore#clear()
+  in
+  let currentStepMark = srcText#buffer#create_mark (srcText#buffer#start_iter) in
+  let stepSelected _ =
+    match !stepItems with
+      None -> ()
+    | Some stepItems ->
+      clearStepInfo();
+      let [selpath] = stepList#selection#get_selected_rows in
+      let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
+      let (ass, h, env, l, msg) = List.nth stepItems k in
+      let (path, line, col) = l in
+      let gBuf = srcText#buffer in
+      let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col))) in
+      let _ = gBuf#move_mark (`MARK currentStepMark) ~where:(gBuf#get_iter(`LINECHAR(line - 1, col - 1))) in
+      let _ = srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark) in
+      let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
+      let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
+      let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
+      ()
   in
   let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
-  let _ = root#set_title (path ^ " - VeriFast Failed Path Browser - " ^ msg) in
+  let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
   let _ = assert (stepStore#iter_n_children None > 0) in
   let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
   let _ = stepList#selection#select_path lastStepRowPath in
   let _ = stepList#scroll_to_cell lastStepRowPath stepViewCol in
+  let _ = root#event#connect#delete ~callback:(fun _ ->
+    if srcText#buffer#modified then
+      match GToolbox.question_box ~title:"VeriFast" ~buttons:["Save"; "Discard"; "Cancel"] "There are unsaved changes." with
+        1 -> save(); false
+      | 2 -> false
+      | _ -> true
+    else
+      false
+  ) in
   let _ = root#connect#destroy ~callback:GMain.Main.quit in
+  let _ = srcText#buffer#connect#modified_changed (fun () ->
+    updateWindowTitle()
+  ) in
+  let clearTrace() =
+    clearStepInfo();
+    stepStore#clear()
+  in
+  let _ = srcText#buffer#connect#changed (fun () ->
+    msg := None;
+    stepItems := None;
+    updateWindowTitle();
+    clearTrace()
+  ) in
   let _ = root#show() in
-  let _ = stepSelected() in
+  (* This hack works around the problem that GText.text_view#scroll_to_mark does not seem to work if called before the GUI is running properly. *)
+  Glib.Idle.add (fun () -> stepSelected(); false);
   GMain.main()
 
 let _ =
