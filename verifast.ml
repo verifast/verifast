@@ -2096,7 +2096,9 @@ let browse_trace path ctxts_lifo msg =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
       a "File" ~label:"_File";
-      a "Save" ~stock:`SAVE ~accel:"<control>S"
+      a "Save" ~stock:`SAVE ~accel:"<control>S";
+      a "Verify" ~label:"_Verify";
+      a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5"
     ]
   in
   let ui = GAction.ui_manager() in
@@ -2108,9 +2110,13 @@ let browse_trace path ctxts_lifo msg =
         <menu action='File'>
           <menuitem action='Save' />
         </menu>
+        <menu action='Verify'>
+          <menuitem action='VerifyProgram' />
+        </menu>
       </menubar>
       <toolbar name='ToolBar'>
         <toolitem action='Save' />
+        <toolitem action='VerifyProgram' />
       </toolbar>
     </ui>
   ";
@@ -2237,10 +2243,12 @@ let browse_trace path ctxts_lifo msg =
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
-  let _ = assert (stepStore#iter_n_children None > 0) in
-  let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
-  let _ = stepList#selection#select_path lastStepRowPath in
-  let _ = stepList#scroll_to_cell lastStepRowPath stepViewCol in
+  let updateStepListView() =
+    let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
+    let _ = stepList#selection#select_path lastStepRowPath in
+    stepList#scroll_to_cell lastStepRowPath stepViewCol
+  in
+  updateStepListView();
   let _ = root#event#connect#delete ~callback:(fun _ ->
     if srcText#buffer#modified then
       match GToolbox.question_box ~title:"VeriFast" ~buttons:["Save"; "Discard"; "Cancel"] "There are unsaved changes." with
@@ -2264,6 +2272,29 @@ let browse_trace path ctxts_lifo msg =
     updateWindowTitle();
     clearTrace()
   ) in
+  let verifyProgram() =
+    save();
+    clearTrace();
+    try
+      verify_program false path;
+      msg := Some "0 errors found";
+      updateWindowTitle()
+    with
+      StaticError ((_, line, col), emsg) ->
+      let gBuf = srcText#buffer in
+      gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col)));
+      msg := Some emsg;
+      updateWindowTitle()
+    | SymbolicExecutionError (ctxts, phi, l, emsg) ->
+      ctxts_lifo := ctxts;
+      msg := Some emsg;
+      updateWindowTitle();
+      stepItems := Some (computeStepItems());
+      updateStepList();
+      updateStepListView();
+      stepSelected()
+  in
+  (actionGroup#get_action "VerifyProgram")#connect#activate verifyProgram;
   let _ = root#show() in
   (* This hack works around the problem that GText.text_view#scroll_to_mark does not seem to work if called before the GUI is running properly. *)
   Glib.Idle.add (fun () -> stepSelected(); false);
