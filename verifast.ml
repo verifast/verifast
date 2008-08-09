@@ -2182,8 +2182,8 @@ let browse_trace path ctxts_lifo msg =
   let _ = bottomTable3#pack1 ~resize:true ~shrink:true (chunksFrame#coerce) in
   let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox "Locals" 3 in
   let _ = bottomTable3#pack2 ~resize:true ~shrink:true (envFrame#coerce) in
-  let ctxts_fifo = List.rev !ctxts_lifo in
   let computeStepItems() =
+    let ctxts_fifo = List.rev !ctxts_lifo in
     let rec iter ass ctxts =
       match ctxts with
         [] -> []
