@@ -2122,7 +2122,10 @@ let browse_trace path ctxts_lifo msg =
   ";
   let rootVbox = GPack.vbox ~packing:root#add () in
   rootVbox#pack (ui#get_widget "/MenuBar");
-  rootVbox#pack (ui#get_widget "/ToolBar");
+  let toolbar = new GButton.toolbar (GtkButton.Toolbar.cast (ui#get_widget "/ToolBar")#as_widget) in
+  toolbar#set_icon_size `SMALL_TOOLBAR;
+  toolbar#set_style `ICONS;
+  rootVbox#pack (toolbar#coerce);
   let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
   let _ = rootTable#set_position 350 in
   let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
@@ -2169,6 +2172,7 @@ let browse_trace path ctxts_lifo msg =
     let store = GTree.list_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
+    lb#coerce#misc#modify_font_by_name "Sans 8";
     let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
