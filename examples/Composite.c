@@ -1,146 +1,134 @@
-struct Node {
-  struct Node* left;
-  struct Node* right;
-  struct Node* parent;
-  int count;
-};
+/*
+ * The composite pattern in C with separation logic.
+ */
+
+// client code
+
+void main() 
+  //@ requires true;
+  //@ ensures true;
+{
+  struct Node* mytree = create();
+  struct Node* child = addLeft(mytree);
+  //@ rotate(child);
+  struct Node* child2 = addLeft(child);
+  //@ rotate(child2);
+  int c = getNbOfNodes(child2);
+  assert(c==1);
+  abort();
+}
+
+// client visible definitions - lemma's
+
+struct Node* create() 
+  //@ requires emp;
+  //@ ensures isTree(result, tree(result, Nil, Nil));
+{
+  struct Node* n = malloc(sizeof(Node));
+  if(n==0){
+    abort();
+  } else {
+  }
+  n->parent = 0;
+  n->left = 0;
+  n->right = 0;
+  n->count = 1;
+  
+  //@ close tree(n, tree(n, Nil, Nil));
+  //@ close isTree(n, tree(n, Nil, Nil));
+  return n;
+}
+
+struct Node* addLeft(struct Node* node)
+  //@ requires isTree(node, ?v) &*& valueOf(v, node) == tree(node, Nil, Nil);
+  /*@ ensures isTree(node, replace(v, node, tree(node, tree(result, Nil, Nil), Nil))) &*& uniqueNodes(replace(v, node, tree(node, tree(result, Nil, Nil), Nil)))==true; @*/
+{
+  //@ open isTree(node, v);
+  //@ open tree(?root, v);
+  //@ close tree(root, v);
+  //@ treeUniqueNodes(root);
+  //@ close context(root, Root, size(v));
+  //@ tree2context(root, node, v, root);
+  //@ open tree(node, ?nodeval);
+  //@ struct Node* myr = node->right;
+  /*@ if(myr != 0){
+        open tree(myr, ?rval);
+        close tree(myr, rval);
+      } else {} @*/
+  //@ struct Node* myl = node->left;
+  /*@ if(myl != 0){
+        open tree(myl, ?rval);
+        close tree(myl, rval);
+      } else {} @*/
+  struct Node* newChild = internalAddLeft(node);
+  //@ open tree(newChild, ?childVal);
+  //@ close tree(newChild, childVal);
+  //@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ context2tree(root, node, upsideDownMinus(v, node, Root), v);
+  //@ containsReplace(v, node, tree(node, tree(newChild, Nil, Nil), Nil));
+  //@ treeUniqueNodes(root);
+  //@ close isTree(node, replace(v, node, tree(node, tree(newChild, Nil, Nil), Nil)));
+  return newChild;
+}
+
+int getNbOfNodes(struct Node* n)
+  //@ requires isTree(n, ?value);
+  //@ ensures isTree(n, value) &*& size(valueOf(value, n))==result; 
+{
+    //@ open isTree(n, value);
+    //@ open tree(?root, value);
+    //@ close tree(root, value);
+    //@ treeUniqueNodes(root);
+    //@ close context(root, Root, size(value));
+    //@ tree2context(root, n, value, root);
+    int c = internalGetNbOfNodes(n);
+    //@ context2tree(root, n, upsideDownMinus(value, n, Root), value);
+    //@ replaceItself(value, n);
+    //@ close isTree(n, value);
+    return c;
+}
 
 /*@
 inductive tree = | Nil | tree(struct Node*, tree, tree);
 
-fixpoint int size(tree t) {
-  switch(t) {
-    case Nil: return 0;
-    case tree(node, lhs, rhs): return 1 + size(lhs) + size(rhs);
-  }
-}
-
-inductive treeseg = | ltreeseg(struct Node*, treeseg, tree) | rtreeseg(struct Node*, tree, treeseg) | Hole(struct Node*);
-
-inductive context = | lcontext(struct Node*, context, tree) | rcontext(struct Node*, tree, context) | Root; 
-
-predicate context(struct Node* node, context value, int holeCount)
-  requires switch(value) {
-    case Root: return node->parent |-> 0;
-    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& node != 0 &*& n->right |-> ?r &*& n->count |-> ?c &*&
-                                      (r==0 ? t==Nil : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
-                                      malloc_block_Node(n);
-    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& node!=0 &*& n->left |-> ?l &*& n->count |-> ?c &*&
-                                      (l==0 ? t==Nil : tree(l, t) &*& l->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
-                                      malloc_block_Node(n);
-  };
-
-predicate treeseg(struct Node* node, treeseg value, struct Node* parent, int holeCount)
-  requires switch(value) {
-    case ltreeseg(n, lhs, rhs): return n!=0 &*& n==node &*&  node->parent |-> parent &*& node->count |-> ?c &*& c == tssize(value, holeCount) &*&
-                                       node->left |-> ?l &*& node->right |-> ?r &*& (l!=0 &*& treeseg(l, lhs, node, holeCount)) &*&
-                                       (r==0 ? rhs==Nil : tree(r, rhs)) &*& malloc_block_Node(node);  
-    case rtreeseg(n, lhs, rhs): return n!=0 &*& n==node &*&  node->parent |-> parent &*& node->count |-> ?c &*& c == tssize(value, holeCount) &*&
-                                       node->left |-> ?l &*& node->right |-> ?r &*& (r!=0 &*& treeseg(r, rhs, node, holeCount)) &*&
-                                       (l==0 ? lhs==Nil : tree(l, lhs)) &*& malloc_block_Node(node);  
-    case Hole(n): return node == n;
-  };
-
-fixpoint int tssize(treeseg t, int holeCount) {
-  switch(t) {
-    case ltreeseg(n, lhs, rhs): return 1 + tssize(lhs, holeCount) + size(rhs);
-    case rtreeseg(n, lhs, rhs): return 1 + size(lhs) + tssize(rhs, holeCount); 
-    case Hole(n): return holeCount;
-  }
-}
-  
-predicate tree(struct Node* node, tree value)
-  requires switch(value) { 
-    case Nil: return false;
-    case tree(node2, lhs, rhs): return node!=0 &*& node==node2 &*& node->count |-> ?c &*& c == size(value) &*&
-                                       node->left |-> ?l &*& node->right |-> ?r &*& (l==0 ? lhs==Nil : tree(l, lhs) &*& l->parent |-> node) &*&
-                                       (r==0 ? rhs==Nil : tree(r, rhs) &*& r->parent |-> node) &*& malloc_block_Node(node); 
-  };
-
-inductive path = | NilPath | LeftCons(path) | RightCons(path);
-
-inductive pathOption = | None | Some(path);
-
-fixpoint pathOption findHelper2(pathOption po2) {
-  switch(po2) {
-    case None: return None;
-    case Some(pa): return Some(RightCons(pa));
-  }
-}
-
-fixpoint pathOption findHelper(pathOption po1, pathOption po2) {
-  switch(po1) {
-    case None: return findHelper2(po2);
-    case Some(pa): return Some(LeftCons(pa));
-  }
-}
-
-fixpoint pathOption find(tree t, struct Node* n) {
-  switch(t) {
-    case Nil: return None;
-    case tree(r, lhs, rhs): return r==n ? Some(NilPath) : findHelper(find(lhs, n), find(rhs, n));
-  }
-}
-
-fixpoint path the(pathOption pa) {
-  switch(pa) {
-    case None: return NilPath;
-    case Some(p): return p;
-  }
-}
-
-fixpoint struct Node* thehole(treeseg ts) {
-  switch(ts) {
-    case ltreeseg(n, lhs, rhs): return thehole(lhs);
-    case rtreeseg(n, lhs, rhs): return thehole(rhs);
-    case Hole(n): return n;
-  }
-}
-
-fixpoint struct Node* holeParent(treeseg ts, struct Node* myparent) {
-  switch(ts) {
-    case ltreeseg(n, lhs, rhs): return holeParent(lhs, n);
-    case rtreeseg(n, lhs, rhs): return holeParent(rhs, n);
-    case Hole(n): return myparent;
-  }
-}
-
-fixpoint tree plugHole(treeseg ts, tree plug) {
-  switch(ts) {
-    case ltreeseg(n, lhs, rhs): return tree(n, plugHole(lhs, plug), rhs);
-    case rtreeseg(n, lhs, rhs): return tree(n, lhs, plugHole(rhs, plug));
-    case Hole(n): return plug;
-  }
-}
-
-
-@*/
-
-struct Node* create(struct Node* parent)
-  requires emp;
-  ensures result!=0 &*& tree(result, tree(result, Nil, Nil)) &*& result->parent |-> parent;
+lemma void rotate(struct Node* n)
+  requires isTree(?r, ?value) &*& contains(value, n) == true;
+  ensures isTree(n, value);
 {
-  struct Node* n = malloc(sizeof(struct Node));
-  if(n==0) {
-    abort();
-  } else {}
-  n->left = 0;
-  n->right = 0;
-  n->parent = parent;
-  n->count = 1;
-  //@ close tree(n, tree(n, Nil, Nil)); 
-  return n;
+  open isTree(r, value);
+  close isTree(n, value);
 }
 
-/*@
-predicate isTree(struct Node* n, tree value) 
-  requires tree(?root, value) &*& root!=0 &*& root->parent |-> 0 &*& contains(value, n) == true;
+lemma void disjointNil(tree t)
+  requires true;
+  ensures disjoint(t, Nil) == true;
+{
+  switch (t) {
+    case Nil: return;
+    case tree(r, lhs, rhs):
+      disjointNil(lhs);
+      disjointNil(rhs);
+  }
+}
 
 fixpoint bool contains(tree value, struct Node* n) {
   switch(value) {
     case Nil: return false;
     case tree(r, lhs, rhs): return n==r || contains(lhs, n) || contains(rhs, n);
-    //case tree(r, lhs, rhs): return (n==r && ! contains(lhs, n) && ! contains(rhs, n)) || (n!=r && contains(lhs, n) && !contains(rhs, n)) || (n!=r && !contains(lhs, n) && contains(rhs, n));
+  }
+}
+
+fixpoint tree replace(tree ts, struct Node* n, tree plug) {
+  switch(ts) {
+    case Nil: return Nil;
+    case tree(r, lhs, rhs): return r==n ? plug : (contains(lhs, n) ? tree(r, replace(lhs, n, plug), rhs) : tree(r, lhs, replace(rhs, n, plug)) );
+  }
+}
+
+fixpoint int size(tree t) {
+  switch(t) {
+    case Nil: return 0;
+    case tree(node, lhs, rhs): return 1 + size(lhs) + size(rhs);
   }
 }
 
@@ -157,6 +145,112 @@ fixpoint bool uniqueNodes(tree t) {
     case tree(r, left, right): return !contains(left, r) && !contains(right, r) && disjoint(left, right) && uniqueNodes(left) && uniqueNodes(right);
   }
 }
+
+fixpoint tree valueOf(tree value, struct Node * n) {
+  switch(value) {
+    case Nil: return Nil;
+    case tree(r, lhs, rhs): return n==r ? tree(r, lhs, rhs) : (contains(lhs, n) ? valueOf(lhs, n) : valueOf(rhs, n));
+  }
+}
+@*/
+
+// private definitions - lemma's
+
+struct Node {
+  struct Node* left;
+  struct Node* right;
+  struct Node* parent;
+  int count;
+};
+
+struct Node* internalCreate(struct Node* parent)
+  requires emp;
+  ensures result!=0 &*& tree(result, tree(result, Nil, Nil)) &*& result->parent |-> parent;
+{
+  struct Node* n = malloc(sizeof(struct Node));
+  if(n==0) {
+    abort();
+  } else {}
+  n->left = 0;
+  n->right = 0;
+  n->parent = parent;
+  n->count = 1;
+  //@ close tree(n, tree(n, Nil, Nil)); 
+  return n;
+}
+
+struct Node* internalAddLeft(struct Node* node)
+  /*@ requires context(node, ?value, 1) &*& node!=0 &*& node->left |-> 0 &*& node->right |-> 0 &*&
+               malloc_block_Node(node) &*& node->count |-> 1; @*/
+  /*@ ensures context(node, value, 2) &*& node!=0 &*& node->left |-> result &*& node->right |-> 0 &*&
+               malloc_block_Node(node) &*& node->count |-> 2 &*& 
+               tree(result, tree(result, Nil, Nil)) &*& result->parent |-> node; @*/
+{
+    struct Node* child = internalCreate(node);
+    node->left = child;
+    fix(node);
+    return child;
+}
+
+void fix(struct Node* node)
+  /*@ requires node->count |-> ?c &*& context(node, ?value, c) &*& node!=0; @*/   
+  /*@ ensures context(node, value, c + 1) &*& node->count |-> c + 1; @*/
+{
+  int tmp = node->count;
+  node->count = tmp + 1;
+  //@ open context(node, value, c);
+  struct Node* parent = node->parent;
+  if(parent==0){
+  } else {
+    fix(parent);
+  }
+  //@ close context(node, value, c+1);
+}
+
+void abort()
+  requires emp;
+  ensures false; 
+{
+  while(true)
+   //@ invariant emp; 
+  {
+  }
+}
+
+int internalGetNbOfNodes(struct Node* n)
+  requires tree(n, ?value);
+  ensures tree(n, value) &*& result == size(value);
+{
+  //@ open tree(n, value);
+  int c = n->count;
+  //@ close tree(n, value);
+  return c;
+}
+
+/*@
+predicate tree(struct Node* node, tree value)
+  requires switch(value) { 
+    case Nil: return false;
+    case tree(node2, lhs, rhs): return node!=0 &*& node==node2 &*& node->count |-> ?c &*& c == size(value) &*&
+                                       node->left |-> ?l &*& node->right |-> ?r &*& (l==0 ? lhs==Nil : tree(l, lhs) &*& l->parent |-> node) &*&
+                                       (r==0 ? rhs==Nil : tree(r, rhs) &*& r->parent |-> node) &*& malloc_block_Node(node); 
+  };
+
+predicate isTree(struct Node* n, tree value) 
+  requires tree(?root, value) &*& root!=0 &*& root->parent |-> 0 &*& contains(value, n) == true;
+
+inductive context = | lcontext(struct Node*, context, tree) | rcontext(struct Node*, tree, context) | Root; 
+
+predicate context(struct Node* node, context value, int holeCount)
+  requires switch(value) {
+    case Root: return node->parent |-> 0;
+    case lcontext(n, cont, t): return n!=0 &*& n->left |-> node &*& node != 0 &*& n->right |-> ?r &*& n->count |-> ?c &*&
+                                      (r==0 ? t==Nil : tree(r, t) &*& r->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+                                      malloc_block_Node(n);
+    case rcontext(n, t, cont): return n!=0 &*& n->right |-> node &*& node!=0 &*& n->left |-> ?l &*& n->count |-> ?c &*&
+                                      (l==0 ? t==Nil : tree(l, t) &*& l->parent |-> n) &*& context(n, cont, c) &*& c== holeCount + 1 + size(t) &*& node->parent |-> n &*&
+                                      malloc_block_Node(n);
+  };
 
 fixpoint bool inContext(context con, struct Node* n){
   switch(con){
@@ -181,6 +275,34 @@ fixpoint bool contextUniqueNodes(context con) {
   }
 }
 
+fixpoint int contextSize(context con) {
+  switch(con){
+    case Root: return 0; 
+    case lcontext(r, lcon, rhs): return 1 + contextSize(lcon);
+    case rcontext(r, lhs, rcon): return 1 + contextSize(rcon);
+  }
+}
+
+fixpoint struct Node* getroot(context val, struct Node* prev) {
+  switch(val){
+    case Root: return prev;
+    case lcontext(r, lcon, rhs): return getroot(lcon, r);
+    case rcontext(r, lhs, rcon): return getroot(rcon, r);
+  }
+}
+
+fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
+  switch(value) {
+    case Nil: return con;
+    case tree(r, lhs, rhs): return r==n ? con : (contains(lhs, n) ? 
+        upsideDownMinus(lhs, n, lcontext(r, con, rhs)) : upsideDownMinus(rhs, n, rcontext(r, lhs, con)) );
+  }
+}
+@*/
+
+// lemma's needed to prove the implementation
+
+/*@
 lemma void treeDistinct(struct Node *root, struct Node *node)
   requires tree(root, ?t) &*& node->left |-> ?l;
   ensures tree(root, t) &*& node->left |-> l &*& !contains(t, node);
@@ -226,18 +348,6 @@ lemma void treesDisjoint(struct Node *root1, struct Node *root2)
   close tree(root1, t1);
 }
 
-lemma void disjointNil(tree t)
-  requires true;
-  ensures disjoint(t, Nil) == true;
-{
-  switch (t) {
-    case Nil: return;
-    case tree(r, lhs, rhs):
-      disjointNil(lhs);
-      disjointNil(rhs);
-  }
-}
-
 lemma void treeUniqueNodes(struct Node *root)
   requires tree(root, ?t);
   ensures tree(root, t) &*& uniqueNodes(t) == true;
@@ -264,9 +374,6 @@ lemma void treeUniqueNodes(struct Node *root)
         treesDisjoint(left, right);
       } else {
       }
-      assert(!contains(lhs, r));
-      assert(!contains(rhs, r));
-      assert(disjoint(lhs, rhs));
   }
   close tree(root, t);
 }
@@ -356,21 +463,6 @@ lemma void contextUniqueNodes(struct Node* n)
   }
   close context(n, con, count);
 }
-    
-fixpoint tree valueOf(tree value, struct Node * n) {
-  switch(value) {
-    case Nil: return Nil;
-    case tree(r, lhs, rhs): return n==r ? tree(r, lhs, rhs) : (contains(lhs, n) ? valueOf(lhs, n) : valueOf(rhs, n));
-  }
-}
-
-fixpoint struct Node* getroot(context val, struct Node* prev) {
-  switch(val){
-    case Root: return prev;
-    case lcontext(r, lcon, rhs): return getroot(lcon, r);
-    case rcontext(r, lhs, rcon): return getroot(rcon, r);
-  }
-}
 
 lemma void tree2context(struct Node* root, struct Node* n, tree value, struct Node* oroot) 
   requires tree(root, value) &*& context(root, ?cvalue, size(value)) &*& contains(value, n) == true &*& getroot(cvalue, root)==oroot; 
@@ -397,24 +489,6 @@ lemma void tree2context(struct Node* root, struct Node* n, tree value, struct No
           tree2context(r, n, rhs, oroot);
         }
       }
-  }
-}
-
-
-
-fixpoint tree reverse(context con, tree val) {
-  switch(con){
-    case Root: return val; 
-    case lcontext(r, lcon, rhs): return reverse(lcon, tree(r, val, rhs)); 
-    case rcontext(r, lhs, rcon): return reverse(rcon, tree(r, lhs, val));
-  }
-}
-
-fixpoint int contextSize(context con) {
-  switch(con){
-    case Root: return 0; 
-    case lcontext(r, lcon, rhs): return 1 + contextSize(lcon);
-    case rcontext(r, lhs, rcon): return 1 + contextSize(rcon);
   }
 }
 
@@ -450,8 +524,6 @@ lemma void upsideDownMinusIsRoot(struct Node* r, tree lhs, tree rhs, struct Node
   }
 }
 
-
-
 lemma void containsValueOf(tree t, struct Node* n, tree v, struct Node* n2)
   requires uniqueNodes(t)==true &*& valueOf(t, n)==v &*& contains(v, n2)==true;
   ensures contains(t, n2)==true;
@@ -468,14 +540,6 @@ lemma void containsValueOf(tree t, struct Node* n, tree v, struct Node* n2)
         }
       }
   }  
-}
-
-fixpoint context upsideDownMinus(tree value, struct Node* n, context con) {
-  switch(value) {
-    case Nil: return con;
-    case tree(r, lhs, rhs): return r==n ? con : (contains(lhs, n) ? 
-        upsideDownMinus(lhs, n, lcontext(r, con, rhs)) : upsideDownMinus(rhs, n, rcontext(r, lhs, con)) );
-  }
 }
 
 lemma void disjointContains(tree t1, tree t2, struct Node* n)
@@ -611,19 +675,16 @@ lemma void upsideDownMinusLContext(tree t0, struct Node * tr, tree t, struct Nod
     case Nil:
     case tree(tr0, tlhs, trhs):
       valueOfRoot(t0, tr, tr0, tlhs, trhs);
-      assert(tr0 == tr);
       if (contains(tlhs, n)) {
         switch (tlhs) {
           case Nil:
           case tree(rtlhs, tlhslhs, tlhsrhs):
             if (rtlhs == n) {
-              assert(upsideDownMinus(t, n, con) == lcontext(tr, con, trhs));
               valueOfValueOf(t0, tr, t, rtlhs);
             } else {
               containsValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
               valueOfValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
               uniqueNodesValueOf(t0, tr);
-              assert(tr != rtlhs);
               upsideDownMinusLContext(t0, rtlhs, tlhs, n, nlhs, nrhs, lcontext(tr, con, trhs), r, lcon, rhs);
             }
         }
@@ -637,9 +698,7 @@ lemma void upsideDownMinusLContext(tree t0, struct Node * tr, tree t, struct Nod
               containsValueOf(t0, tr, t, rtrhs);
               valueOfValueOf(t0, tr, t, rtrhs);
               uniqueNodesValueOf(t0, tr);
-              assert(tr != rtrhs);
               disjointContains(tlhs, trhs, rtrhs);
-              assert(!contains(tlhs, rtrhs));
               upsideDownMinusLContext(t0, rtrhs, trhs, n, nlhs, nrhs, rcontext(tr, tlhs, con), r, lcon, rhs);
             }
         }
@@ -665,19 +724,16 @@ lemma void upsideDownMinusRContext(tree t0, struct Node * tr, tree t, struct Nod
     case Nil:
     case tree(tr0, tlhs, trhs):
       valueOfRoot(t0, tr, tr0, tlhs, trhs);
-      assert(tr0 == tr);
       if (contains(tlhs, n)) {
         switch (tlhs) {
           case Nil:
           case tree(rtlhs, tlhslhs, tlhsrhs):
             if (rtlhs == n) {
-              assert(upsideDownMinus(t, n, con) == lcontext(tr, con, trhs));
               valueOfValueOf(t0, tr, t, rtlhs);
             } else {
               containsValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
               valueOfValueOf(t0, tr, tree(tr, tlhs, trhs), rtlhs);
               uniqueNodesValueOf(t0, tr);
-              assert(tr != rtlhs);
               upsideDownMinusRContext(t0, rtlhs, tlhs, n, nlhs, nrhs, lcontext(tr, con, trhs), r, rcon, lhs);
             }
         }
@@ -686,32 +742,15 @@ lemma void upsideDownMinusRContext(tree t0, struct Node * tr, tree t, struct Nod
           case Nil:
           case tree(rtrhs, trhslhs, trhsrhs):
             if (rtrhs == n) {
-              valueOfValueOf(t0, r, tree(r,  tlhs, trhs), n);
-              
+              valueOfValueOf(t0, r, tree(r,  tlhs, trhs), n);            
               uniqueNodesValueOf(t0, tr);
               uniqueNodesValueOf(t0, r);
               disjointContains(tlhs, trhs, n);
-              
-              assert(upsideDownMinus(t, n, con) == rcontext(tr, tlhs, con));
-              assert(rcontext(r, lhs, rcon)==rcontext(tr, tlhs, con));
-              assert(r==tr);
-              assert(lhs == tlhs);
-              assert(rcon == con);
-              //assert(disjointContext(upsideDownMinus(t0, n, Root),  tree(n, nlhs, nrhs))); 
-              assert(tr!=n);
-              assert(!contains(tlhs, n));
-              assert(valueOf(t0, n) == tree(n, nlhs, nrhs));
-              assert(upsideDownMinus(t0, n, Root) == upsideDownMinus(t, n, con));
-              assert(upsideDownMinus(t, n, con) == rcontext(r, lhs, rcon));
-              assert(contains(t0, r));
-              assert(valueOf(t0, r) == tree(r, lhs, tree(n, nlhs, nrhs)));
             } else {
               containsValueOf(t0, tr, t, rtrhs);
               valueOfValueOf(t0, tr, t, rtrhs);
               uniqueNodesValueOf(t0, tr);
-              assert(tr != rtrhs);
               disjointContains(tlhs, trhs, rtrhs);
-              assert(!contains(tlhs, rtrhs));
               upsideDownMinusRContext(t0, rtrhs, trhs, n, nlhs, nrhs, rcontext(tr, tlhs, con), r, rcon, lhs);
             }
         }
@@ -737,7 +776,7 @@ lemma void valueOfNotNil(tree t, struct Node *n)
   }
 }
 
-lemma void replaceParent(tree oldval, struct Node* nodeParent, struct Node* node, tree nlhs, tree nrhs, tree rhs, tree v)
+lemma void replaceParentLeft(tree oldval, struct Node* nodeParent, struct Node* node, tree nlhs, tree nrhs, tree rhs, tree v)
   requires contains(oldval, nodeParent) == true &*& valueOf(oldval, nodeParent) == tree(nodeParent, tree(node, nlhs, nrhs), rhs) &*& uniqueNodes(oldval) == true;
   ensures replace(oldval, nodeParent, tree(nodeParent, v, rhs)) == replace(oldval, node, v);
 {
@@ -748,13 +787,11 @@ lemma void replaceParent(tree oldval, struct Node* nodeParent, struct Node* node
       } else {
         if(contains(rlhs, nodeParent)) {
           containsValueOf(rlhs, nodeParent, tree(nodeParent, tree(node, nlhs, nrhs), rhs), node);       
-          replaceParent(rlhs, nodeParent, node, nlhs, nrhs, rhs, v);  
-          assert(replace(rlhs, nodeParent, tree(nodeParent, v, rhs)) == replace(rlhs, node, v));
-          
+          replaceParentLeft(rlhs, nodeParent, node, nlhs, nrhs, rhs, v);        
         } else {
           containsValueOf(rrhs, nodeParent, tree(nodeParent, tree(node, nlhs, nrhs), rhs), node); 
           disjointContains(rlhs, rrhs, node);
-          replaceParent(rrhs, nodeParent, node, nlhs, nrhs, rhs, v);  
+          replaceParentLeft(rrhs, nodeParent, node, nlhs, nrhs, rhs, v);  
         }
       }
   }
@@ -774,8 +811,6 @@ lemma void replaceParentRight(tree oldval, struct Node* nodeParent, struct Node*
         if(contains(rlhs, nodeParent)) {
           containsValueOf(rlhs, nodeParent, tree(nodeParent, lhs, tree(node, nlhs, nrhs)), node);       
           replaceParentRight(rlhs, nodeParent, node, nlhs, nrhs, lhs, v);  
-          assert(replace(rlhs, nodeParent, tree(nodeParent, lhs, v)) == replace(rlhs, node, v));
-          
         } else {
           containsValueOf(rrhs, nodeParent, tree(nodeParent, lhs, tree(node, nlhs, nrhs)), node); 
           disjointContains(rlhs, rrhs, node);
@@ -785,61 +820,6 @@ lemma void replaceParentRight(tree oldval, struct Node* nodeParent, struct Node*
   }
 }
 
-
-
-
-
-
-fixpoint tree addLeft(tree value, struct Node* node, tree ptr) {
-  switch(value){
-    case Nil: return Nil;
-    case tree(r, lhs, rhs): return r == node ? tree(r, ptr, rhs) : 
-                                               (contains(lhs, node) ? tree(r, addLeft(lhs, node, ptr), rhs) : 
-                                                                      tree(r, lhs, addLeft(rhs, node, ptr)));
-  }
-}
-
-fixpoint tree left(tree value) {
-  switch(value){
-    case Nil: return Nil;
-    case tree(r, lhs, rhs): return lhs;
-  }
-}
-@*/
-
-struct Node* addLeftWrapper(struct Node* node)
-  //@ requires isTree(node, ?v) &*& valueOf(v, node) == tree(node, Nil, Nil);
-  /*@ ensures isTree(node, replace(v, node, tree(node, tree(result, Nil, Nil), Nil))) &*& uniqueNodes(replace(v, node, tree(node, tree(result, Nil, Nil), Nil)))==true; @*/
-{
-  //@ open isTree(node, v);
-  //@ open tree(?root, v);
-  //@ close tree(root, v);
-  //@ treeUniqueNodes(root);
-  //@ close context(root, Root, size(v));
-  //@ tree2context(root, node, v, root);
-  //@ open tree(node, ?nodeval);
-  //@ struct Node* myr = node->right;
-  /*@ if(myr != 0){
-        open tree(myr, ?rval);
-        close tree(myr, rval);
-      } else {} @*/
-  //@ struct Node* myl = node->left;
-  /*@ if(myl != 0){
-        open tree(myl, ?rval);
-        close tree(myl, rval);
-      } else {} @*/
-  struct Node* newChild = addLeftChild(node);
-  //@ open tree(newChild, ?childVal);
-  //@ close tree(newChild, childVal);
-  //@ close tree(node, tree(node, tree(newChild, Nil, Nil), Nil));
-  //@ context2tree(root, node, upsideDownMinus(v, node, Root), v);
-  //@ containsReplace(v, node, tree(node, tree(newChild, Nil, Nil), Nil));
-  //@ treeUniqueNodes(root);
-  //@ close isTree(node, replace(v, node, tree(node, tree(newChild, Nil, Nil), Nil)));
-  return newChild;
-}
-
-/*@
 lemma void context2tree(struct Node* theroot, struct Node* node, context contextval, tree oldval)
   requires tree(node, ?v) &*& context(node, contextval, size(v)) &*& getroot(contextval, node) == theroot
            &*& contextval == upsideDownMinus(oldval, node, Root)
@@ -852,10 +832,8 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
         case Nil: return;
         case tree(r, lhs, rhs): 
           upsideDownMinusIsRoot(r, lhs, rhs, node, Root);
-          assert(r==node);
           return;
       }
-      assert(node==theroot);
       open context(node, contextval, size(v));
     case lcontext(r, lcon, rhs):
       open context(node, contextval, size(v));
@@ -865,20 +843,15 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
         case Nil: return; 
         case tree(node0, nodeLhs, nodeRhs):
           valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
-          assert(node == node0);
           close tree(nodeParent, tree(nodeParent, v, rhs));
           switch(oldval){
             case Nil: return;
             case tree(oldvalroot, oldvallhs, oldvalrhs):
-              assert(valueOf(oldval, oldvalroot)==oldval);
-              assert(nodeParent == r);
               upsideDownMinusLContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, lcon, rhs);
-              assert(valueOf(oldval, node) == tree(node, nodeLhs, nodeRhs));
-              assert(valueOf(oldval, nodeParent) == tree(nodeParent, tree(node, nodeLhs, nodeRhs), rhs));
               uniqueNodesValueOf(oldval, nodeParent);
               upsideDownMinusParentLeft(nodeParent, oldval, node, nodeLhs, nodeRhs, rhs, Root);
               context2tree(theroot, nodeParent, lcon, oldval);
-              replaceParent(oldval, nodeParent, node, nodeLhs, nodeRhs, rhs, v);
+              replaceParentLeft(oldval, nodeParent, node, nodeLhs, nodeRhs, rhs, v);
           }
       }
     case rcontext(r, lhs, rcon):
@@ -893,8 +866,6 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
           switch(oldval){
             case Nil: return;
             case tree(oldvalroot, oldvallhs, oldvalrhs):
-              assert(valueOf(oldval, oldvalroot)==oldval);
-              assert(nodeParent == r);
               upsideDownMinusRContext(oldval, oldvalroot, oldval, node, nodeLhs, nodeRhs, Root, nodeParent, rcon, lhs);
               uniqueNodesValueOf(oldval, nodeParent);
               upsideDownMinusParentRight(nodeParent, oldval, node, nodeLhs, nodeRhs, lhs, Root);
@@ -923,66 +894,6 @@ lemma void containsReplace(tree t, struct Node* node, tree plug)
   }
 }
 
-@*/
-
-struct Node* addLeftChild(struct Node* node)
-  /*@ requires context(node, ?value, 1) &*& node!=0 &*& node->left |-> 0 &*& node->right |-> 0 &*&
-               malloc_block_Node(node) &*& node->count |-> 1; @*/
-  /*@ ensures context(node, value, 2) &*& node!=0 &*& node->left |-> result &*& node->right |-> 0 &*&
-               malloc_block_Node(node) &*& node->count |-> 2 &*& 
-               tree(result, tree(result, Nil, Nil)) &*& result->parent |-> node; @*/
-{
-    struct Node* child = create(node);
-    node->left = child;
-    fix(node);
-    return child;
-}
-
-void fix(struct Node* node)
-  /*@ requires node->count |-> ?c &*& context(node, ?value, c) &*& node!=0; @*/   
-  /*@ ensures context(node, value, c + 1) &*& node->count |-> c + 1; @*/
-{
-  int tmp = node->count;
-  node->count = tmp + 1;
-  //@ open context(node, value, c);
-  struct Node* parent = node->parent;
-  if(parent==0){
-  } else {
-    fix(parent);
-  }
-  //@ close context(node, value, c+1);
-}
-
-void abort()
-  requires emp;
-  ensures false; 
-{
-  while(true)
-   //@ invariant emp; 
-  {
-  }
-}
-
-struct Node* doCreate() 
-  requires emp;
-  ensures isTree(result, tree(result, Nil, Nil));
-{
-  struct Node* n = malloc(sizeof(Node));
-  if(n==0){
-    abort();
-  } else {
-  }
-  n->parent = 0;
-  n->left = 0;
-  n->right = 0;
-  n->count = 1;
-  
-  //@ close tree(n, tree(n, Nil, Nil));
-  //@ close isTree(n, tree(n, Nil, Nil));
-  return n;
-}
-
-/*@
 lemma void replaceItself(tree value, struct Node* node)
   requires uniqueNodes(value)==true;
   ensures replace(value, node, valueOf(value, node)) == value;
@@ -991,7 +902,6 @@ lemma void replaceItself(tree value, struct Node* node)
     case Nil:
     case tree(r, lhs, rhs):
       if(r==node){
-        
       } else {
         if(contains(lhs, node)){
           replaceItself(lhs, node);
@@ -999,64 +909,6 @@ lemma void replaceItself(tree value, struct Node* node)
           replaceItself(rhs, node);
         }
       }
-  }
-}
-@*/
-
-int getNbOfNodesWrapper(struct Node* n)
-  requires isTree(n, ?value);
-  ensures isTree(n, value) &*& size(valueOf(value, n))==result; 
-{
-    //@ open isTree(n, value);
-    //@ open tree(?root, value);
-    //@ close tree(root, value);
-    //@ treeUniqueNodes(root);
-    //@ close context(root, Root, size(value));
-    //@ tree2context(root, n, value, root);
-    int c = getNbOfNodes(n);
-    //@ context2tree(root, n, upsideDownMinus(value, n, Root), value);
-    //@ replaceItself(value, n);
-    //@ close isTree(n, value);
-    return c;
-}
-
-int getNbOfNodes(struct Node* n)
-  requires tree(n, ?value);
-  ensures tree(n, value) &*& result == size(value);
-{
-  //@ open tree(n, value);
-  int c = n->count;
-  //@ close tree(n, value);
-  return c;
-}
-
-void main() 
-  requires true;
-  ensures true;
-{
-  struct Node* mytree = doCreate();
-  struct Node* child = addLeftWrapper(mytree);
-  //@ rotate(child);
-  struct Node* child2 = addLeftWrapper(child);
-  //@ rotate(child2);
-  int c = getNbOfNodesWrapper(child2);
-  assert(c==1);
-  abort();
-}
-
-/*@
-lemma void rotate(struct Node* n)
-  requires isTree(?r, ?value) &*& contains(value, n) == true;
-  ensures isTree(n, value);
-{
-  open isTree(r, value);
-  close isTree(n, value);
-}
-
-fixpoint tree replace(tree ts, struct Node* n, tree plug) {
-  switch(ts) {
-    case Nil: return Nil;
-    case tree(r, lhs, rhs): return r==n ? plug : (contains(lhs, n) ? tree(r, replace(lhs, n, plug), rhs) : tree(r, lhs, replace(rhs, n, plug)) );
   }
 }
 @*/
