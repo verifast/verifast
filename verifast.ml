@@ -2076,7 +2076,7 @@ let verify_program verbose path =
   let _ = verify_decls [] ds in
   print_endline "0 errors found"
 
-open Tk
+open GMain
 
 let remove_dups bs =
   let rec iter bs0 bs =
@@ -2088,50 +2088,45 @@ let remove_dups bs =
   iter [] bs
 
 let browse_trace path ctxts_lifo msg =
-  let root = openTk() in
-  let srcFrame = Frame.create root in
-  let srcText = Text.create srcFrame ~font:"Courier 10" ~wrap:`None in
-  let srcXScroll = Scrollbar.create srcFrame ~orient:`Horizontal ~command:(Text.xview srcText) in
-  let srcYScroll = Scrollbar.create srcFrame ~orient:`Vertical ~command:(Text.yview srcText) in
-  let _ = Text.configure srcText ~xscrollcommand:(Scrollbar.set srcXScroll) in
-  let _ = Text.configure srcText ~yscrollcommand:(Scrollbar.set srcYScroll) in
+  let root = GWindow.window ~width:800 ~height:600 () in
+  let rootTable = GPack.table ~rows:2 ~columns:1 ~packing:root#add () in
+  let textScroll = GBin.scrolled_window () in
+  let srcText = GText.view ~border_width:2 ~packing:textScroll#add () in (* Text.create srcFrame ~font:"Courier 10" ~wrap:`None in *)
+  let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
+  let _ = rootTable#attach ~left:0 ~top:0 (textScroll#coerce) ~expand:`BOTH in
   let _ =
     let chan = open_in path in
     let buf = String.create 60000 in
+    let gBuf = srcText#buffer in
+    let gIter = gBuf#get_iter `START in
     let rec iter () =
       let result = input chan buf 0 60000 in
-      if result = 0 then () else (Text.insert (`End, []) (String.sub buf 0 result) srcText; iter())
+      if result = 0 then () else (gBuf#insert ~iter:gIter (String.sub buf 0 result); iter())
     in
     let _ = iter() in
     let _ = close_in chan in
     ()
   in
-  let _ = grid [srcText] ~row:0 ~column:0 ~sticky:"nsew" in
-  let _ = grid [srcXScroll] ~row:1 ~column:0 ~sticky:"ew" in
-  let _ = grid [srcYScroll] ~row:0 ~column:1 ~sticky:"ns" in
-  let _ = Grid.column_configure srcFrame 0 ~weight:1 in
-  let _ = Grid.row_configure srcFrame 0 ~weight:1 in
-  let _ = Text.configure srcText ~state:`Disabled in
-  let bottomFrame = Frame.create root in
-  let create_listbox parent =
-    let frame = Frame.create parent in
-    let lb = Listbox.create frame in
-    let sx = Scrollbar.create frame ~orient:`Horizontal ~command:(Listbox.xview lb) in
-    let sy = Scrollbar.create frame ~orient:`Vertical ~command:(Listbox.yview lb) in
-    let _ = Listbox.configure lb ~xscrollcommand:(Scrollbar.set sx) in
-    let _ = Listbox.configure lb ~yscrollcommand:(Scrollbar.set sy) in
-    let _ = grid [lb] ~row:0 ~column:0 ~sticky:"nsew" in
-    let _ = grid [sx] ~row:1 ~column:0 ~sticky:"ew" in
-    let _ = grid [sy] ~row:0 ~column:1 ~sticky:"ns" in
-    let _ = Grid.row_configure frame 0 ~weight:1 in
-    let _ = Grid.column_configure frame 0 ~weight:1 in
-    (frame, lb)
+  let _ = srcText#set_editable false in
+  let bottomTable = GPack.table ~rows:1 ~columns:4 () in
+  let _ = rootTable#attach ~left:0 ~top:1 ~expand:`BOTH (bottomTable#coerce) in
+  let create_listbox (parent: GPack.table) column =
+    let collist = new GTree.column_list in
+    let col_k = collist#add Gobject.Data.int in
+    let col_text = collist#add Gobject.Data.string in
+    let store = GTree.list_store collist in
+    let scrollWin = GBin.scrolled_window () in
+    let lb = GTree.view ~model:store ~packing:scrollWin#add () in
+    let col = GTree.view_column ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
+    let _ = lb#append_column col in
+    let _ = parent#attach ~left:column ~top:0 (scrollWin#coerce) ~expand:`BOTH in
+    (scrollWin, lb, col_k, col_text, col, store)
   in
-  let (steplistFrame, stepList) = create_listbox bottomFrame in
-  let (assumptionsFrame, assumptionsList) = create_listbox bottomFrame in
-  let _ = Listbox.configure assumptionsList ~takefocus:true in
-  let (chunksFrame, chunksList) = create_listbox bottomFrame in
-  let (envFrame, envList) = create_listbox bottomFrame in
+  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_listbox bottomTable 0 in
+  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox bottomTable 1 in
+  (* let _ = Listbox.configure assumptionsList ~takefocus:true in *)
+  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox bottomTable 2 in
+  let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox bottomTable 3 in
   let ctxts_fifo = List.rev ctxts_lifo in
   let stepItems =
     let rec iter ass ctxts =
@@ -2142,44 +2137,49 @@ let browse_trace path ctxts_lifo msg =
     in
     iter [] ctxts_fifo
   in
-  let _ = Listbox.insert stepList `End (List.map (fun (ass, h, env, l, msg) -> msg) stepItems) in
-  let _ = grid [steplistFrame] ~row:0 ~column:0 ~sticky:"nsew" in
-  let _ = grid [assumptionsFrame] ~row:0 ~column:1 ~sticky:"nsew" in
-  let _ = grid [chunksFrame] ~row:0 ~column:2 ~sticky:"nsew" in
-  let _ = grid [envFrame] ~row:0 ~column:3 ~sticky:"nsew" in
-  let _ = Grid.column_configure bottomFrame 0 ~weight:1 in
-  let _ = Grid.column_configure bottomFrame 1 ~weight:1 in
-  let _ = Grid.column_configure bottomFrame 2 ~weight:1 in
-  let _ = Grid.column_configure bottomFrame 3 ~weight:1 in
-  let _ = Grid.row_configure bottomFrame 0 ~weight:1 in
-  let _ = grid [srcFrame] ~row:0 ~column:0 ~sticky:"nsew" in
-  let _ = grid [bottomFrame] ~row:1 ~column:0 ~sticky:"nsew" in
-  let _ = Grid.column_configure root 0 ~weight:1 in
-  let _ = Grid.row_configure root 0 ~weight:1 in
-  let _ = Grid.row_configure root 0 ~weight:1 in
+  let append_items (store:GTree.list_store) kcol col items =
+    let rec iter k items =
+      match items with
+        [] -> ()
+      | item::items ->
+        let gIter = store#append() in
+        store#set ~row:gIter ~column:kcol k;
+        store#set ~row:gIter ~column:col item;
+        iter (k + 1) items
+        in
+    in
+    iter 0 items
+  in
+  let _ = append_items stepStore stepKCol stepCol (List.map (fun (ass, h, env, l, msg) -> msg) stepItems) in
   let stepSelected _ =
-    let [`Num k] = Listbox.curselection stepList in
+    let [selpath] = stepList#selection#get_selected_rows in
+    let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
     let (ass, h, env, l, msg) = List.nth stepItems k in
     let (path, line, col) = l in
-    let _ = Text.tag_delete srcText ["currentLine"] in
-    let _ = Text.tag_add srcText ~tag:"currentLine" ~start:(`Linechar (line, col - 1), []) ~stop:(`Linechar (line, col), []) in
-    let _ = Text.tag_configure srcText ~tag:"currentLine" ~background:`Yellow in
-    let _ = Text.see srcText (`Linechar (line, col - 1), []) in
-    let _ = Listbox.delete assumptionsList ~first:(`Num 0) ~last:`End in
-    let _ = Listbox.insert assumptionsList `End (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
-    let _ = Listbox.delete chunksList ~first:(`Num 0) ~last:`End in
-    let _ = Listbox.insert chunksList `End (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
-    let _ = Listbox.delete envList ~first:(`Num 0) ~last:`End in
-    let _ = Listbox.insert envList `End (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
+    let gBuf = srcText#buffer in
+    let _ = gBuf#remove_tag_by_name "currentLine" ~start:(gBuf#get_iter `START) ~stop:(gBuf#get_iter `END) in
+    let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line - 1, col - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line - 1, col))) in
+    let _ = srcText#scroll_to_iter ~within_margin:0.2 (gBuf#get_iter(`LINECHAR(line - 1, col - 1))) in
+    let _ = assumptionsStore#clear() in
+    let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
+    let _ = chunksStore#clear() in
+    let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
+    let _ = envStore#clear() in
+    let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
     ()
   in
-  let _ = bind stepList ~events:[`Virtual "ListboxSelect"] ~action:stepSelected in
-  let _ = Wm.title_set root ("VeriFast Failed Path Browser - " ^ msg) in
-  let _ = Focus.set stepList in
-  let _ = Listbox.selection_set stepList ~first:`End ~last:`End in
-  let _ = Listbox.see stepList ~index:`End in
+  let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
+  let _ = stepList#connect#cursor_changed ~callback:stepSelected in
+  let _ = root#set_title ("VeriFast Failed Path Browser - " ^ msg) in
+  let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
+  let _ = assert (stepStore#iter_n_children None > 0) in
+  let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
+  let _ = stepList#selection#select_path lastStepRowPath in
+  let _ = stepList#scroll_to_cell lastStepRowPath stepViewCol in
+  let _ = root#connect#destroy ~callback:GMain.Main.quit in
+  let _ = root#show() in
   let _ = stepSelected() in
-  mainLoop()
+  GMain.main()
 
 let _ =
   let print_msg l msg =
