@@ -13,7 +13,7 @@ exception ParseException of loc * string
 
 (* The lexer *)
 
-let make_lexer keywords path =
+let make_lexer keywords path reportKeyword =
   let channel = open_in path in
   let stream = Stream.of_channel channel in
   let initial_buffer = String.create 32
@@ -53,8 +53,8 @@ let make_lexer keywords path =
   
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
-  let ident_or_keyword id =
-    try Hashtbl.find kwd_table id with
+  let ident_or_keyword id isAlpha =
+    try let t = Hashtbl.find kwd_table id in if isAlpha then reportKeyword (current_loc()); t with
       Not_found -> Ident id
   and keyword_or_error c =
     let s = String.make 1 c in
@@ -91,7 +91,7 @@ let make_lexer keywords path =
         start_token();
         Stream.junk strm__;
         let s = strm__ in reset_buffer (); store c; ident s
-    | Some '(' -> Stream.junk strm__; Some(ident_or_keyword("("))
+    | Some '(' -> Stream.junk strm__; Some(ident_or_keyword "(" false)
     | Some
         ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
          '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
@@ -126,14 +126,14 @@ let make_lexer keywords path =
       Some
         ('A'..'Z' | 'a'..'z' | '\192'..'\255' | '0'..'9' | '_' | '\'' as c) ->
         Stream.junk strm__; let s = strm__ in store c; ident s
-    | _ -> Some (ident_or_keyword (get_string ()))
+    | _ -> Some (ident_or_keyword (get_string ()) true)
   and ident2 (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some
         ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
          '>' | '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
         Stream.junk strm__; let s = strm__ in store c; ident2 s
-    | _ -> Some (ident_or_keyword (get_string ()))
+    | _ -> Some (ident_or_keyword (get_string ()) false)
   and neg_number (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some ('0'..'9' as c) ->
@@ -419,8 +419,8 @@ let lexer = make_lexer [
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
 ]
 
-let read_program s =
-  let (c, loc, token_stream) = lexer s in
+let read_program s reportKeyword =
+  let (c, loc, token_stream) = lexer s reportKeyword in
 let rec parse_program = parser
   [< ds = parse_decls; _ = Stream.empty >] -> Program ds
 and
@@ -839,7 +839,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program verbose path =
+let verify_program verbose path reportKeyword =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -903,7 +903,7 @@ let verify_program verbose path =
     imapi 0 xs
   in
   
-  let Program ds = read_program path in
+  let Program ds = read_program path reportKeyword in
   
   let structdeclmap =
     let rec iter sdm ds =

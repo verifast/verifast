@@ -156,6 +156,7 @@ let show_ide path =
   in
   let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
   let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
+  let _ = srcText#buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
@@ -199,11 +200,15 @@ let show_ide path =
     msg := Some emsg;
     updateWindowTitle()
   in
+  let reportKeyword ((_, line1, col1), (_, line2, col2)) =
+    srcText#buffer#apply_tag_by_name "keyword" ~start:(srcText#buffer#get_iter(`LINECHAR(line1 - 1, col1 - 1))) ~stop:(srcText#buffer#get_iter(`LINECHAR (line2-1, col2-1)))
+  in
   let verifyProgram() =
     save();
     clearTrace();
+    srcText#buffer#remove_tag_by_name "keyword" ~start:srcText#buffer#start_iter ~stop:srcText#buffer#end_iter;
     try
-      verify_program false path;
+      verify_program false path reportKeyword;
       msg := Some "0 errors found";
       updateWindowTitle()
     with

@@ -6,7 +6,7 @@ let _ =
   in
   let verify verbose path =
     try
-      verify_program verbose path
+      verify_program verbose path (fun _ -> ())
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg))
     | StaticError (l, msg) -> print_msg l msg
