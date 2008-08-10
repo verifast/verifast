@@ -824,6 +824,8 @@ type env = (string * term) list
 type context =
   Assuming of formula
 | Executing of heap * env * loc * string
+| PushSubcontext
+| PopSubcontext
 
 let string_of_heap h = slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)
   
@@ -831,6 +833,8 @@ let string_of_context c =
   match c with
     Assuming f -> "Assuming " ^ pretty_print f
   | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
+  | PushSubcontext -> "Entering subcontext"
+  | PopSubcontext -> "Leaving subcontext"
 
 exception SymbolicExecutionError of context list * formula * loc * string
 
@@ -2038,8 +2042,13 @@ let verify_program verbose path reportKeyword reportGhostRange =
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont)
+        with_context PushSubcontext (fun _ ->
+          verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+            with_context PopSubcontext (fun _ ->
+              verify_cont pure leminfo sizemap tenv ghostenv h env ss cont
+            )
+          )
+        )
       )
   in
 

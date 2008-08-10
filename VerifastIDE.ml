@@ -79,6 +79,18 @@ let show_ide path =
   let _ = bottomTable2#pack2 ~resize:true ~shrink:true (bottomTable3#coerce) in
   let _ = bottomTable#pack2 ~resize:true ~shrink:true (bottomTable2#coerce) in
   let _ = rootTable#pack2 ~resize:true ~shrink:true (bottomTable#coerce) in
+  let create_steplistbox =
+    let collist = new GTree.column_list in
+    let col_k = collist#add Gobject.Data.int in
+    let col_text = collist#add Gobject.Data.string in
+    let store = GTree.tree_store collist in
+    let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+    let lb = GTree.view ~model:store ~packing:scrollWin#add () in
+    lb#coerce#misc#modify_font_by_name "Sans 8";
+    let col = GTree.view_column ~title:"Steps" ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
+    let _ = lb#append_column col in
+    (scrollWin, lb, col_k, col_text, col, store)
+  in
   let create_listbox title column =
     let collist = new GTree.column_list in
     let col_k = collist#add Gobject.Data.int in
@@ -91,7 +103,7 @@ let show_ide path =
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
   in
-  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_listbox "Steps" 0 in
+  let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
   let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
   let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" 1 in
   let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
@@ -99,17 +111,25 @@ let show_ide path =
   let _ = bottomTable3#pack1 ~resize:true ~shrink:true (chunksFrame#coerce) in
   let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox "Locals" 3 in
   let _ = bottomTable3#pack2 ~resize:true ~shrink:true (envFrame#coerce) in
-  let computeStepItems() =
+  let stepItems = ref None in
+  let updateStepItems() =
     let ctxts_fifo = List.rev (match !ctxts_lifo with Some l -> l) in
-    let rec iter ass ctxts =
+    let rec iter k itstack last_it ass locstack last_loc ctxts =
       match ctxts with
         [] -> []
-      | Assuming phi::cs -> iter (phi::ass) cs
-      | Executing (h, env, l, msg)::cs -> (ass, h, env, l, msg)::iter ass cs
+      | Assuming phi::cs -> iter k itstack last_it (phi::ass) locstack last_loc cs
+      | Executing (h, env, l, msg)::cs ->
+        let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
+        stepStore#set ~row:it ~column:stepKCol k;
+        stepStore#set ~row:it ~column:stepCol msg;
+        (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) cs
+      | PushSubcontext::cs ->
+        (match (last_it, last_loc) with (Some it, Some l) -> iter k (it::itstack) None ass (l::locstack) None cs)
+      | PopSubcontext::cs ->
+        (match (itstack, locstack) with (_::itstack, _::locstack) -> iter k itstack None ass locstack None cs)
     in
-    iter [] ctxts_fifo
+    stepItems := Some (iter 0 [] None [] [] None ctxts_fifo)
   in
-  let stepItems = ref None in
   let append_items (store:GTree.list_store) kcol col items =
     let rec iter k items =
       match items with
@@ -122,12 +142,6 @@ let show_ide path =
     in
     iter 0 items
   in
-  let updateStepList() =
-    match !stepItems with
-      None -> ()
-    | Some stepItems ->
-        append_items stepStore stepKCol stepCol (List.map (fun (ass, h, env, l, msg) -> msg) stepItems)
-  in
   let clearStepInfo() =
     let gBuf = srcText#buffer in
     gBuf#remove_tag_by_name "currentLine" ~start:(gBuf#get_iter `START) ~stop:(gBuf#get_iter `END);
@@ -136,6 +150,10 @@ let show_ide path =
     envStore#clear()
   in
   let currentStepMark = srcText#buffer#create_mark (srcText#buffer#start_iter) in
+  let srcpos_iter (_, line, col) = srcText#buffer#get_iter (`LINECHAR (line - 1, col - 1)) in
+  let apply_tag_by_loc name (p1, p2) =
+    srcText#buffer#apply_tag_by_name name ~start:(srcpos_iter p1) ~stop:(srcpos_iter p2)
+  in
   let stepSelected _ =
     match !stepItems with
       None -> ()
@@ -143,11 +161,11 @@ let show_ide path =
       clearStepInfo();
       let [selpath] = stepList#selection#get_selected_rows in
       let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
-      let (ass, h, env, l, msg) = List.nth stepItems k in
-      let ((path1, line1, col1), (path2, line2, col2)) = l in
+      let (ass, h, env, l, msg, locstack) = List.nth stepItems k in
+      let (sp1, sp2) = l in
+      apply_tag_by_loc "currentLine" l;
       let gBuf = srcText#buffer in
-      let _ = gBuf#apply_tag_by_name "currentLine" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1))) in
-      let _ = gBuf#move_mark (`MARK currentStepMark) ~where:(gBuf#get_iter(`LINECHAR(line1 - 1, col1 - 1))) in
+      gBuf#move_mark (`MARK currentStepMark) ~where:(srcpos_iter sp1);
       let _ = srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark) in
       let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
       let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
@@ -165,10 +183,8 @@ let show_ide path =
     let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
     let _ = stepList#selection#select_path lastStepRowPath in
     stepList#scroll_to_cell lastStepRowPath stepViewCol;
-    let (_, _, _, l, _) = match !stepItems with Some stepItems -> List.nth stepItems (List.length stepItems - 1) in
-    let ((path1, line1, col1), (path2, line2, col2)) = l in
-    let gBuf = srcText#buffer in
-    srcText#buffer#apply_tag_by_name "error" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1)))
+    let (_, _, _, l, _, _) = match !stepItems with Some stepItems -> List.nth stepItems (List.length stepItems - 1) in
+    apply_tag_by_loc "error" l
   in
   let _ = root#event#connect#delete ~callback:(fun _ ->
     if srcText#buffer#modified then
@@ -195,10 +211,6 @@ let show_ide path =
     updateWindowTitle();
     clearTrace()
   ) in
-  let srcpos_iter (_, line, col) = srcText#buffer#get_iter (`LINECHAR (line - 1, col - 1)) in
-  let apply_tag_by_loc name (p1, p2) =
-    srcText#buffer#apply_tag_by_name name ~start:(srcpos_iter p1) ~stop:(srcpos_iter p2)
-  in
   let handleStaticError l emsg =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
@@ -227,8 +239,7 @@ let show_ide path =
       ctxts_lifo := Some ctxts;
       msg := Some emsg;
       updateWindowTitle();
-      stepItems := Some (computeStepItems());
-      updateStepList();
+      updateStepItems();
       updateStepListView();
       stepSelected()
   in
