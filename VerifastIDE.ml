@@ -154,10 +154,10 @@ let show_ide path =
       let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
       ()
   in
-  let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
-  let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = srcText#buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
   let _ = srcText#buffer#create_tag ~name:"ghostRange" [`BACKGROUND "#eeeeee"] in
+  let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
+  let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
