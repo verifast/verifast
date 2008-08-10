@@ -419,14 +419,14 @@ let lexer = make_lexer [
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
 ]
 
-let read_program s reportKeyword =
+let read_program s reportKeyword reportGhostRange reportVariable =
   let (c, loc, token_stream) = lexer s reportKeyword in
 let rec parse_program = parser
   [< ds = parse_decls; _ = Stream.empty >] -> Program ds
 and
   parse_decls = parser
   [< d = parse_decl; ds = parse_decls >] -> d::ds
-| [< '(_, Kwd "/*@"); ds = parse_pure_decls; '(_, Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
+| [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
 | [< >] -> []
 and
   parse_decl = parser
@@ -489,14 +489,16 @@ and
 | [< p = parse_param; ps = parse_more_params >] -> p::ps
 and
   parse_param = parser
-  [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
+  [< t = parse_type; '(l, Ident pn) >] -> reportVariable l; (t, pn)
 and
   parse_more_params = parser
   [< '(_, Kwd ","); p = parse_param; ps = parse_more_params >] -> p::ps
 | [< '(_, Kwd ")") >] -> []
 and
   parse_contract_opt = parser
-  [< '(_, Kwd "/*@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/"); '(_, Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> Some (p, q)
+  [< '((sp1, _), Kwd "/*@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
+     '((sp3, _), Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '((_, sp4), Kwd "@*/")
+     >] -> let _ = reportGhostRange (sp1, sp2); reportGhostRange (sp3, sp4) in Some (p, q)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Some (p, q)
 | [< >] -> None
 and
@@ -508,7 +510,7 @@ and
 | [< >] -> []
 and
   parse_stmt = parser
-  [< '(l, Kwd "/*@"); s = parse_stmt; '(_, Kwd "@*/") >] -> PureStmt (l, s)
+  [< '((sp1, _), Kwd "/*@"); s = parse_stmt; '((_, sp2), Kwd "@*/") >] -> let _ = reportGhostRange (sp1, sp2) in PureStmt ((sp1, sp2), s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
@@ -516,18 +518,20 @@ and
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
-| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/"); b = parse_block >] -> WhileStmt (l, e, p, b)
+| [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
+     '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
+     b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
-     | Var (_, x) -> Assign (l, x, rhs)
+     | Var (lx, x) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
-  | [< '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+  | [< '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
-     | TypeExpr (_, t) -> DeclStmt (l, t, x, rhs)
+     | TypeExpr (_, t) -> reportVariable lx; DeclStmt (l, t, x, rhs)
      | _ -> raise (ParseException (expr_loc e, "A local variable declaration statement must start with a type expression."))
     )
   >] -> s
@@ -537,11 +541,11 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> reportVariable lx; x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
 and
   parse_more_pats = parser
   [< '(_, Kwd ")") >] -> []
-| [< '(_, Kwd ","); '(_, Ident x); xs = parse_more_pats >] -> x::xs
+| [< '(_, Kwd ","); '(lx, Ident x); xs = parse_more_pats >] -> reportVariable lx; x::xs
 and
   parse_pred = parser
   [< p0 = parse_pred0; p = parse_sep_rest p0 >] -> p
@@ -570,7 +574,7 @@ and
 and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
-| [< '(_, Kwd "?"); '(_, Ident x) >] -> VarPat x
+| [< '(_, Kwd "?"); '(lx, Ident x) >] -> reportVariable lx; VarPat x
 | [< e = parse_expr >] -> LitPat e
 and
   parse_switch_pred_clauses = parser
@@ -578,7 +582,7 @@ and
 | [< >] -> []
 and
   parse_switch_pred_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, p)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> reportVariable lx; x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, p)
 and
   parse_expr = parser
   [< e0 = parse_conj_expr; e = parser
@@ -599,7 +603,7 @@ and
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
   parse_expr_primary = parser
-  [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
+  [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> reportVariable l; Var (l, x) >] -> e
 | [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
@@ -613,7 +617,7 @@ and
 | [< >] -> []
 and
   parse_switch_expr_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(_, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> reportVariable lx; x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
@@ -839,7 +843,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program verbose path reportKeyword =
+let verify_program verbose path reportKeyword reportGhostRange reportVariable =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -903,7 +907,7 @@ let verify_program verbose path reportKeyword =
     imapi 0 xs
   in
   
-  let Program ds = read_program path reportKeyword in
+  let Program ds = read_program path reportKeyword reportGhostRange reportVariable in
   
   let structdeclmap =
     let rec iter sdm ds =

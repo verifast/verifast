@@ -157,6 +157,8 @@ let show_ide path =
   let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
   let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
   let _ = srcText#buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
+  let _ = srcText#buffer#create_tag ~name:"ghostRange" [`BACKGROUND "#eeeeee"] in
+  let _ = srcText#buffer#create_tag ~name:"variable" [`STYLE `ITALIC] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
@@ -194,21 +196,30 @@ let show_ide path =
     updateWindowTitle();
     clearTrace()
   ) in
-  let handleStaticError ((_, line1, col1), (_, line2, col2)) emsg =
-    let gBuf = srcText#buffer in
-    gBuf#apply_tag_by_name "error" ~start:(gBuf#get_iter(`LINECHAR (line1 - 1, col1 - 1))) ~stop:(gBuf#get_iter(`LINECHAR (line2 - 1, col2 - 1)));
+  let srcpos_iter (_, line, col) = srcText#buffer#get_iter (`LINECHAR (line - 1, col - 1)) in
+  let apply_tag_by_loc name (p1, p2) =
+    srcText#buffer#apply_tag_by_name name ~start:(srcpos_iter p1) ~stop:(srcpos_iter p2)
+  in
+  let handleStaticError l emsg =
+    apply_tag_by_loc "error" l;
     msg := Some emsg;
     updateWindowTitle()
   in
-  let reportKeyword ((_, line1, col1), (_, line2, col2)) =
-    srcText#buffer#apply_tag_by_name "keyword" ~start:(srcText#buffer#get_iter(`LINECHAR(line1 - 1, col1 - 1))) ~stop:(srcText#buffer#get_iter(`LINECHAR (line2-1, col2-1)))
+  let reportKeyword l =
+    apply_tag_by_loc "keyword" l
+  in
+  let reportGhostRange l =
+    apply_tag_by_loc "ghostRange" l
+  in
+  let reportVariable l =
+    apply_tag_by_loc "variable" l
   in
   let verifyProgram() =
     save();
     clearTrace();
     srcText#buffer#remove_tag_by_name "keyword" ~start:srcText#buffer#start_iter ~stop:srcText#buffer#end_iter;
     try
-      verify_program false path reportKeyword;
+      verify_program false path reportKeyword reportGhostRange reportVariable;
       msg := Some "0 errors found";
       updateWindowTitle()
     with
