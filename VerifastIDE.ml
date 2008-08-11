@@ -1,7 +1,8 @@
 open Verifast
 open GMain
 
-let show_ide path =
+let show_ide initialPath =
+  let path = ref None in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let root = GWindow.window ~width:800 ~height:600 () in
@@ -10,7 +11,10 @@ let show_ide path =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
       a "File" ~label:"_File";
+      a "New" ~stock:`NEW;
+      a "Open" ~stock:`OPEN;
       a "Save" ~stock:`SAVE ~accel:"<control>S";
+      a "SaveAs" ~label:"Save _as";
       a "Verify" ~label:"_Verify";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5"
     ]
@@ -22,7 +26,10 @@ let show_ide path =
     <ui>
       <menubar name='MenuBar'>
         <menu action='File'>
+          <menuitem action='New' />
+          <menuitem action='Open' />
           <menuitem action='Save' />
+          <menuitem action='SaveAs' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -44,34 +51,67 @@ let show_ide path =
   let _ = rootTable#set_position 350 in
   let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
   let srcText = GText.view ~packing:textScroll#add () in
+  let buffer = srcText#buffer in
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
   let _ = rootTable#pack1 ~resize:true ~shrink:true (textScroll#coerce) in
-  let _ =
-    let chan = open_in path in
-    let buf = String.create 60000 in
-    let gBuf = srcText#buffer in
-    let gIter = gBuf#get_iter `START in
-    let rec iter () =
-      let result = input chan buf 0 60000 in
-      if result = 0 then () else (gBuf#insert ~iter:gIter (String.sub buf 0 result); iter())
-    in
-    let _ = iter() in
-    let _ = close_in chan in
-    gBuf#set_modified false
+  let updateWindowTitle() =
+    let part1 = (match !path with None -> "(New buffer)" | Some path -> path) ^ (if srcText#buffer#modified then " (Modified)" else "") in
+    let part3 = match !msg with None -> "" | Some msg -> " - " ^ msg in
+    root#set_title (part1 ^ " - VeriFast IDE" ^ part3)
   in
-  let save() =
-    let chan = open_out path in
+  let load newPath =
+    try
+      let chan = open_in newPath in
+      let rec iter () =
+        let buf = String.create 60000 in
+        let result = input chan buf 0 60000 in
+        if result = 0 then [] else (String.sub buf 0 result)::iter()
+      in
+      let chunks = iter() in
+      let _ = close_in chan in
+      buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
+      let gIter = buffer#start_iter in
+      List.iter (fun chunk -> buffer#insert ~iter:gIter chunk) chunks;
+      buffer#set_modified false;
+      path := Some newPath;
+      updateWindowTitle()
+    with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg)
+  in
+  (match initialPath with None -> () | Some path -> load path);
+  let store thePath =
+    path := Some thePath;
+    let chan = open_out thePath in
     let gBuf = srcText#buffer in
     let text = gBuf#get_text () in
     output_string chan text;
     close_out chan;
-    srcText#buffer#set_modified false
+    srcText#buffer#set_modified false;
+    updateWindowTitle();
+    Some thePath
   in
-  (actionGroup#get_action "Save")#connect#activate save;
-  let updateWindowTitle() =
-    let part1 = path ^ (if srcText#buffer#modified then " (Modified)" else "") in
-    let part3 = match !msg with None -> "" | Some msg -> " - " ^ msg in
-    root#set_title (part1 ^ " - VeriFast IDE" ^ part3)
+  let file_exists path =
+    try
+      Unix.stat path; true
+    with
+      Unix.Unix_error (Unix.ENOENT, _, _) -> false
+  in
+  let rec saveAs() =
+    match GToolbox.select_file ~title:"Save" () with
+      None -> None
+    | Some thePath ->
+      if file_exists thePath then
+        match GToolbox.question_box ~title:"VeriFast" ~buttons:["Yes"; "No"; "Cancel"] "The file already exists. Overwrite?" with
+          1 -> store thePath
+        | 2 -> saveAs()
+        | _ -> None
+      else
+        store thePath
+  in
+  let save() =
+    match !path with
+      None -> saveAs()
+    | Some thePath ->
+      store thePath
   in
   let bottomTable = GPack.paned `HORIZONTAL () in
   let bottomTable2 = GPack.paned `HORIZONTAL () in
@@ -186,15 +226,15 @@ let show_ide path =
     let (_, _, _, l, _, _) = match !stepItems with Some stepItems -> List.nth stepItems (List.length stepItems - 1) in
     apply_tag_by_loc "error" l
   in
-  let _ = root#event#connect#delete ~callback:(fun _ ->
+  let ensureSaved() =
     if srcText#buffer#modified then
       match GToolbox.question_box ~title:"VeriFast" ~buttons:["Save"; "Discard"; "Cancel"] "There are unsaved changes." with
-        1 -> save(); false
+        1 -> (match save() with None -> true | Some _ -> false)
       | 2 -> false
       | _ -> true
     else
       false
-  ) in
+  in
   let _ = root#connect#destroy ~callback:GMain.Main.quit in
   let _ = srcText#buffer#connect#modified_changed (fun () ->
     updateWindowTitle()
@@ -211,6 +251,30 @@ let show_ide path =
     updateWindowTitle();
     clearTrace()
   ) in
+  let _ = root#event#connect#delete ~callback:(fun _ ->
+    ensureSaved()
+  ) in
+  (actionGroup#get_action "New")#connect#activate (fun _ ->
+    if not (ensureSaved()) then
+    begin
+      path := None;
+      clearTrace();
+      buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
+      buffer#set_modified false;
+      updateWindowTitle()
+    end
+  );
+  (actionGroup#get_action "Open")#connect#activate (fun _ ->
+    if not (ensureSaved()) then
+    begin
+      match GToolbox.select_file ~title:"Open" () with
+        None -> ()
+      | Some thePath ->
+        load thePath
+    end
+  );
+  (actionGroup#get_action "Save")#connect#activate (fun () -> save(); ());
+  (actionGroup#get_action "SaveAs")#connect#activate (fun () -> saveAs(); ());
   let handleStaticError l emsg =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
@@ -223,25 +287,27 @@ let show_ide path =
     apply_tag_by_loc "ghostRange" l
   in
   let verifyProgram() =
-    save();
-    clearTrace();
-    srcText#buffer#remove_tag_by_name "keyword" ~start:srcText#buffer#start_iter ~stop:srcText#buffer#end_iter;
-    try
-      verify_program false path reportKeyword reportGhostRange;
-      msg := Some "0 errors found";
-      updateWindowTitle()
-    with
-      ParseException (l, emsg) ->
-      handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
-    | StaticError (l, emsg) ->
-      handleStaticError l emsg
-    | SymbolicExecutionError (ctxts, phi, l, emsg) ->
-      ctxts_lifo := Some ctxts;
-      msg := Some emsg;
-      updateWindowTitle();
-      updateStepItems();
-      updateStepListView();
-      stepSelected()
+    match save() with
+      None -> ()
+    | Some thePath ->
+      clearTrace();
+      srcText#buffer#remove_tag_by_name "keyword" ~start:srcText#buffer#start_iter ~stop:srcText#buffer#end_iter;
+      try
+        verify_program false thePath reportKeyword reportGhostRange;
+        msg := Some "0 errors found";
+        updateWindowTitle()
+      with
+        ParseException (l, emsg) ->
+        handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
+      | StaticError (l, emsg) ->
+        handleStaticError l emsg
+      | SymbolicExecutionError (ctxts, phi, l, emsg) ->
+        ctxts_lifo := Some ctxts;
+        msg := Some emsg;
+        updateWindowTitle();
+        updateStepItems();
+        updateStepListView();
+        stepSelected()
   in
   (actionGroup#get_action "VerifyProgram")#connect#activate verifyProgram;
   let _ = root#show() in
@@ -252,6 +318,8 @@ let show_ide path =
 let _ =
   try
     match Sys.argv with
-      [| _; path |] -> show_ide path
+      [| _ |] -> show_ide None
+    | [| _; path |] -> show_ide (Some path)
+    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line."
   with
     e -> GToolbox.message_box "VeriFast IDE" ("Exception during startup: " ^ Printexc.to_string e)
