@@ -844,7 +844,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program verbose path stream reportKeyword reportGhostRange =
+let verify_program_with_prover simp_in simp_out verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -897,8 +897,6 @@ let verify_program verbose path stream reportKeyword reportGhostRange =
   
   let get_unique_var_symb s = (* get_unique_symb (s ^ "_") *) get_unique_symb s in
 
-  let (simp_in, simp_out) = Unix.open_process "z3 /si" in
-  
   let imap f xs =
     let rec imapi i xs =
       match xs with
@@ -2110,6 +2108,18 @@ let verify_program verbose path stream reportKeyword reportGhostRange =
   in
   
   verify_decls [] ds
+
+let verify_program verbose path stream reportKeyword reportGhostRange =
+  let (simp_in, simp_out) = Unix.open_process "z3 /si" in
+  try
+    verify_program_with_prover simp_in simp_out verbose path stream reportKeyword reportGhostRange;
+    close_in simp_in;
+    close_out simp_out
+  with e ->
+    close_in_noerr simp_in;
+    close_out_noerr simp_out;
+    raise e
+
 
 let remove_dups bs =
   let rec iter bs0 bs =
