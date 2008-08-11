@@ -1,4 +1,2 @@
-Soundness todos:
-S006 Check for duplicate names
-S007 Perform type checking of variable expressions, call expressions, etc.
-S008 Check that type and ghost info does not leak out after a block statement such as an if or a switch
+Todos:
+T0001: In the IDE, put component statements of compound statements in the step tree as toplevel nodes instead of child nodes.

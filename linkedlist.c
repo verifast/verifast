@@ -79,9 +79,7 @@ lemma void lseg_add(struct node *n1, struct node *n2, struct node *n3)
     close lseg(n3, n3, nil);
   } else {
     distinct_nodes(n1, n3);
-    open node(n1, _, _);
-    struct node *next = n1->next;
-    int value = n1->value;
+    open node(n1, ?next, ?value);
     lseg_add(next, n2, n3);
     close node(n1, next, value);
   }
@@ -199,7 +197,7 @@ void dispose(struct llist *list)
     free(n);
     n = next;
   }
-  //@ open lseg(n, _, _);  // Clean up empty lseg.
+  //@ open lseg(n, n, _);  // Clean up empty lseg.
   //@ open node(l, _, _);
   free(l);
   free(list);
@@ -348,9 +346,43 @@ int lookup(struct llist *list, int index)
   return value;
 }
 
+int removeFirst(struct llist *l)
+  //@ requires llist(l, ?v) &*& v != nil;
+  //@ ensures llist(l, ?t) &*& v == cons(result, t);
+{
+  //@ open llist(l, v);
+  struct node *nf = l->first;
+  //@ open lseg(nf, ?nl, v);
+  //@ open node(nf, _, _);
+  struct node *nfn = nf->next;
+  int nfv = nf->value;
+  free(nf);
+  l->first = nfn;
+  //@ open lseg(nfn, nl, ?t); // Just to get t
+  //@ close lseg(nfn, nl, t);
+  //@ close llist(l, t);
+  return nfv;
+}
+
+void main0()
+  //@ requires emp;
+  //@ ensures emp;
+{
+  struct llist *l = create_llist();
+  add(l, 10);
+  add(l, 20);
+  add(l, 30);
+  add(l, 40);
+  int x1 = removeFirst(l);
+  assert(x1 == 10);
+  int x2 = removeFirst(l);
+  assert(x2 == 20);
+  // dispose(l);
+}
+
 void main()
   //@ requires emp;
-  //@ ensures false;
+  //@ ensures emp;
 {
   struct llist *l1 = create_llist();
   struct llist *l2 = create_llist();
@@ -360,13 +392,13 @@ void main()
   add(l2, 40);
   add(l2, 50);
   add(l2, 60);
+  int x = removeFirst(l2); assert(x == 40);
   append(l1, l2);
-  int n = length(l1); assert(n == 6);
+  int n = length(l1); assert(n == 5);
   int e0 = lookup(l1, 0); assert(e0 == 10);
   int e1 = lookup(l1, 1); assert(e1 == 20);
   int e2 = lookup(l1, 2); assert(e2 == 30);
-  int e3 = lookup(l1, 3); assert(e3 == 40);
-  int e4 = lookup(l1, 4); assert(e4 == 50);
-  int e5 = lookup(l1, 5); assert(e5 == 60);
+  int e3 = lookup(l1, 3); assert(e3 == 50);
+  int e4 = lookup(l1, 4); assert(e4 == 60);
   dispose(l1);
 }
