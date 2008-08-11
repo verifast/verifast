@@ -287,27 +287,25 @@ let show_ide initialPath =
     apply_tag_by_loc "ghostRange" l
   in
   let verifyProgram() =
-    match save() with
-      None -> ()
-    | Some thePath ->
-      clearTrace();
-      srcText#buffer#remove_tag_by_name "keyword" ~start:srcText#buffer#start_iter ~stop:srcText#buffer#end_iter;
-      try
-        verify_program false thePath reportKeyword reportGhostRange;
-        msg := Some "0 errors found";
-        updateWindowTitle()
-      with
-        ParseException (l, emsg) ->
-        handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
-      | StaticError (l, emsg) ->
-        handleStaticError l emsg
-      | SymbolicExecutionError (ctxts, phi, l, emsg) ->
-        ctxts_lifo := Some ctxts;
-        msg := Some emsg;
-        updateWindowTitle();
-        updateStepItems();
-        updateStepListView();
-        stepSelected()
+    clearTrace();
+    buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
+    buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter;
+    try
+      verify_program false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
+      msg := Some "0 errors found";
+      updateWindowTitle()
+    with
+      ParseException (l, emsg) ->
+      handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
+    | StaticError (l, emsg) ->
+      handleStaticError l emsg
+    | SymbolicExecutionError (ctxts, phi, l, emsg) ->
+      ctxts_lifo := Some ctxts;
+      msg := Some emsg;
+      updateWindowTitle();
+      updateStepItems();
+      updateStepListView();
+      stepSelected()
   in
   (actionGroup#get_action "VerifyProgram")#connect#activate verifyProgram;
   let _ = root#show() in

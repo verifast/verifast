@@ -13,9 +13,7 @@ exception ParseException of loc * string
 
 (* The lexer *)
 
-let make_lexer keywords path reportKeyword =
-  let channel = open_in path in
-  let stream = Stream.of_channel channel in
+let make_lexer keywords path stream reportKeyword =
   let initial_buffer = String.create 32
   in
 
@@ -258,8 +256,7 @@ let make_lexer keywords path reportKeyword =
       )
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
-  (channel,
-   current_loc,
+  (current_loc,
    Stream.from (fun count ->
      (match next_token stream with
         Some t -> Some (current_loc(), t)
@@ -419,8 +416,8 @@ let lexer = make_lexer [
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
 ]
 
-let read_program s reportKeyword reportGhostRange =
-  let (c, loc, token_stream) = lexer s reportKeyword in
+let read_program path stream reportKeyword reportGhostRange =
+  let (loc, token_stream) = lexer path stream reportKeyword in
 let rec parse_program = parser
   [< ds = parse_decls; _ = Stream.empty >] -> Program ds
 and
@@ -657,10 +654,8 @@ and
 | [< '(_, Kwd ")") >] -> []
 in
   try
-    try
-      let p = parse_program token_stream in close_in c; p
-    with Stream.Error msg -> raise (ParseException (loc(), msg))
-  with ex -> close_in c; raise ex
+    parse_program token_stream
+  with Stream.Error msg -> raise (ParseException (loc(), msg))
 
 let flatmap f xs = List.concat (List.map f xs)
 
@@ -849,7 +844,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program verbose path reportKeyword reportGhostRange =
+let verify_program verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -913,7 +908,7 @@ let verify_program verbose path reportKeyword reportGhostRange =
     imapi 0 xs
   in
   
-  let Program ds = read_program path reportKeyword reportGhostRange in
+  let Program ds = read_program path stream reportKeyword reportGhostRange in
   
   let structdeclmap =
     let rec iter sdm ds =
