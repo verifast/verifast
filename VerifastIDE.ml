@@ -51,15 +51,17 @@ let show_ide initialPath =
   let _ = rootTable#set_position 350 in
   let textPaned = GPack.paned `VERTICAL ~packing:(rootTable#pack1 ~resize:true ~shrink:true) () in
   textPaned#set_position 0;
-  let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+  let srcPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack2 ~resize:true ~shrink:true) () in
+  srcPaned#set_position 500;
+  let subPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack1 ~resize:true ~shrink:true) () in
+  subPaned#set_position 500;
+  let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let srcText = GText.view ~packing:textScroll#add () in
   let buffer = srcText#buffer in
-  let subScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+  let subScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
   let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name "Courier 10" in
-  let _ = textPaned#pack1 ~resize:true ~shrink:true (subScroll#coerce) in
-  let _ = textPaned#pack2 ~resize:true ~shrink:true (textScroll#coerce) in
   let updateWindowTitle() =
     let part1 = (match !path with None -> "(New buffer)" | Some path -> path) ^ (if buffer#modified then " (Modified)" else "") in
     let part3 = match !msg with None -> "" | Some msg -> " - " ^ msg in
@@ -115,8 +117,6 @@ let show_ide initialPath =
   in
   let bottomTable = GPack.paned `HORIZONTAL () in
   let bottomTable2 = GPack.paned `HORIZONTAL () in
-  let bottomTable3 = GPack.paned `HORIZONTAL () in
-  let _ = bottomTable2#pack2 ~resize:true ~shrink:true (bottomTable3#coerce) in
   let _ = bottomTable#pack2 ~resize:true ~shrink:true (bottomTable2#coerce) in
   let _ = rootTable#pack2 ~resize:true ~shrink:true (bottomTable#coerce) in
   let create_steplistbox =
@@ -131,7 +131,7 @@ let show_ide initialPath =
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
   in
-  let create_listbox title column =
+  let create_listbox title =
     let collist = new GTree.column_list in
     let col_k = collist#add Gobject.Data.int in
     let col_text = collist#add Gobject.Data.string in
@@ -145,30 +145,32 @@ let show_ide initialPath =
   in
   let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
   let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
-  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" 1 in
+  let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" in
   let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
-  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox "Heap chunks" 2 in
-  let _ = bottomTable3#pack1 ~resize:true ~shrink:true (chunksFrame#coerce) in
-  let (envFrame, envList, envKCol, envCol, _, envStore) = create_listbox "Locals" 3 in
-  let _ = bottomTable3#pack2 ~resize:true ~shrink:true (envFrame#coerce) in
+  let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox "Heap chunks" in
+  let _ = bottomTable2#pack2 ~resize:true ~shrink:true (chunksFrame#coerce) in
+  let (srcEnvFrame, srcEnvList, srcEnvKCol, srcEnvCol, _, srcEnvStore) = create_listbox "Locals" in
+  let _ = srcPaned#pack2 ~resize:true ~shrink:true (srcEnvFrame#coerce) in
+  let (subEnvFrame, subEnvList, subEnvKCol, subEnvCol, _, subEnvStore) = create_listbox "Locals" in
+  let _ = subPaned#pack2 ~resize:true ~shrink:true (subEnvFrame#coerce) in
   let stepItems = ref None in
   let updateStepItems() =
     let ctxts_fifo = List.rev (match !ctxts_lifo with Some l -> l) in
-    let rec iter k itstack last_it ass locstack last_loc ctxts =
+    let rec iter k itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
         [] -> []
-      | Assuming phi::cs -> iter k itstack last_it (phi::ass) locstack last_loc cs
+      | Assuming phi::cs -> iter k itstack last_it (phi::ass) locstack last_loc last_env cs
       | Executing (h, env, l, msg)::cs ->
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
         stepStore#set ~row:it ~column:stepKCol k;
         stepStore#set ~row:it ~column:stepCol msg;
-        (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) cs
+        (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) (Some env) cs
       | PushSubcontext::cs ->
-        (match (last_it, last_loc) with (Some it, Some l) -> iter k (it::itstack) None ass (l::locstack) None cs)
+        (match (last_it, last_loc, last_env) with (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs)
       | PopSubcontext::cs ->
-        (match (itstack, locstack) with (_::itstack, _::locstack) -> iter k itstack None ass locstack None cs)
+        (match (itstack, locstack) with (_::itstack, _::locstack) -> iter k itstack None ass locstack None None cs)
     in
-    stepItems := Some (iter 0 [] None [] [] None ctxts_fifo)
+    stepItems := Some (iter 0 [] None [] [] None None ctxts_fifo)
   in
   let append_items (store:GTree.list_store) kcol col items =
     let rec iter k items =
@@ -187,7 +189,8 @@ let show_ide initialPath =
     buffer#remove_tag_by_name "currentCaller" ~start:buffer#start_iter ~stop:buffer#end_iter;
     assumptionsStore#clear();
     chunksStore#clear();
-    envStore#clear()
+    srcEnvStore#clear();
+    subEnvStore#clear()
   in
   let currentStepMark = buffer#create_mark (buffer#start_iter) in
   let currentCallerMark = buffer#create_mark (buffer#start_iter) in
@@ -209,18 +212,20 @@ let show_ide initialPath =
       begin
         match locstack with
           [] ->
-          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark)
-        | caller_loc::_ ->
+          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
+          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env))
+        | (caller_loc, caller_env)::_ ->
           apply_tag_by_loc "currentCaller" caller_loc;
           let (current_caller_pos, _) = caller_loc in
           buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter current_caller_pos);
           (if textPaned#position < 10 then textPaned#set_position 100);
           subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
-          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark)
+          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark);
+          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups caller_env));
+          append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env))
       end;
       let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
       let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
-      let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
       ()
   in
   let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
