@@ -49,13 +49,19 @@ let show_ide initialPath =
   rootVbox#pack (toolbar#coerce);
   let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
   let _ = rootTable#set_position 350 in
+  let textPaned = GPack.paned `VERTICAL ~packing:(rootTable#pack1 ~resize:true ~shrink:true) () in
+  textPaned#set_position 0;
   let textScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
   let srcText = GText.view ~packing:textScroll#add () in
   let buffer = srcText#buffer in
+  let subScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+  let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
   let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
-  let _ = rootTable#pack1 ~resize:true ~shrink:true (textScroll#coerce) in
+  let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name "Courier 10" in
+  let _ = textPaned#pack1 ~resize:true ~shrink:true (subScroll#coerce) in
+  let _ = textPaned#pack2 ~resize:true ~shrink:true (textScroll#coerce) in
   let updateWindowTitle() =
-    let part1 = (match !path with None -> "(New buffer)" | Some path -> path) ^ (if srcText#buffer#modified then " (Modified)" else "") in
+    let part1 = (match !path with None -> "(New buffer)" | Some path -> path) ^ (if buffer#modified then " (Modified)" else "") in
     let part3 = match !msg with None -> "" | Some msg -> " - " ^ msg in
     root#set_title (part1 ^ " - VeriFast IDE" ^ part3)
   in
@@ -81,11 +87,11 @@ let show_ide initialPath =
   let store thePath =
     path := Some thePath;
     let chan = open_out thePath in
-    let gBuf = srcText#buffer in
+    let gBuf = buffer in
     let text = gBuf#get_text () in
     output_string chan text;
     close_out chan;
-    srcText#buffer#set_modified false;
+    buffer#set_modified false;
     updateWindowTitle();
     Some thePath
   in
@@ -177,16 +183,17 @@ let show_ide initialPath =
     iter 0 items
   in
   let clearStepInfo() =
-    let gBuf = srcText#buffer in
-    gBuf#remove_tag_by_name "currentLine" ~start:(gBuf#get_iter `START) ~stop:(gBuf#get_iter `END);
+    buffer#remove_tag_by_name "currentLine" ~start:buffer#start_iter ~stop:buffer#end_iter;
+    buffer#remove_tag_by_name "currentCaller" ~start:buffer#start_iter ~stop:buffer#end_iter;
     assumptionsStore#clear();
     chunksStore#clear();
     envStore#clear()
   in
-  let currentStepMark = srcText#buffer#create_mark (srcText#buffer#start_iter) in
-  let srcpos_iter (_, line, col) = srcText#buffer#get_iter (`LINECHAR (line - 1, col - 1)) in
+  let currentStepMark = buffer#create_mark (buffer#start_iter) in
+  let currentCallerMark = buffer#create_mark (buffer#start_iter) in
+  let srcpos_iter (_, line, col) = buffer#get_iter (`LINECHAR (line - 1, col - 1)) in
   let apply_tag_by_loc name (p1, p2) =
-    srcText#buffer#apply_tag_by_name name ~start:(srcpos_iter p1) ~stop:(srcpos_iter p2)
+    buffer#apply_tag_by_name name ~start:(srcpos_iter p1) ~stop:(srcpos_iter p2)
   in
   let stepSelected _ =
     match !stepItems with
@@ -196,24 +203,36 @@ let show_ide initialPath =
       let [selpath] = stepList#selection#get_selected_rows in
       let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
       let (ass, h, env, l, msg, locstack) = List.nth stepItems k in
-      let (sp1, sp2) = l in
       apply_tag_by_loc "currentLine" l;
-      let gBuf = srcText#buffer in
-      gBuf#move_mark (`MARK currentStepMark) ~where:(srcpos_iter sp1);
-      let _ = srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark) in
+      let (current_line_pos, _) = l in
+      buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter current_line_pos);
+      begin
+        match locstack with
+          [] ->
+          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark)
+        | caller_loc::_ ->
+          apply_tag_by_loc "currentCaller" caller_loc;
+          let (current_caller_pos, _) = caller_loc in
+          buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter current_caller_pos);
+          (if textPaned#position < 10 then textPaned#set_position 100);
+          subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
+          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark)
+      end;
       let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
       let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
       let _ = append_items envStore envKCol envCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env)) in
       ()
   in
-  let _ = srcText#buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
-  let _ = srcText#buffer#create_tag ~name:"ghostRange" [`BACKGROUND "#eeeeee"] in
-  let _ = srcText#buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
-  let _ = srcText#buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
+  let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
+  let _ = buffer#create_tag ~name:"ghostRange" [`BACKGROUND "#eeeeee"] in
+  let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
+  let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
+  let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
   let updateStepListView() =
+    stepList#expand_all();
     let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
     let _ = stepList#selection#select_path lastStepRowPath in
     stepList#scroll_to_cell lastStepRowPath stepViewCol;
@@ -221,7 +240,7 @@ let show_ide initialPath =
     apply_tag_by_loc "error" l
   in
   let ensureSaved() =
-    if srcText#buffer#modified then
+    if buffer#modified then
       match GToolbox.question_box ~title:"VeriFast" ~buttons:["Save"; "Discard"; "Cancel"] "There are unsaved changes." with
         1 -> (match save() with None -> true | Some _ -> false)
       | 2 -> false
@@ -230,16 +249,16 @@ let show_ide initialPath =
       false
   in
   let _ = root#connect#destroy ~callback:GMain.Main.quit in
-  let _ = srcText#buffer#connect#modified_changed (fun () ->
+  let _ = buffer#connect#modified_changed (fun () ->
     updateWindowTitle()
   ) in
   let clearTrace() =
     clearStepInfo();
     stepStore#clear();
-    let gBuf = srcText#buffer in
-    srcText#buffer#remove_tag_by_name "error" ~start:gBuf#start_iter ~stop:gBuf#end_iter
+    let gBuf = buffer in
+    buffer#remove_tag_by_name "error" ~start:gBuf#start_iter ~stop:gBuf#end_iter
   in
-  let _ = srcText#buffer#connect#changed (fun () ->
+  let _ = buffer#connect#changed (fun () ->
     msg := None;
     stepItems := None;
     updateWindowTitle();

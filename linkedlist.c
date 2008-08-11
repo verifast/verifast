@@ -27,6 +27,11 @@ fixpoint int ith(intlist v, int i) {
     case cons(x, v): return (i == 0 ? x : ith(v, i - 1));
   }
 }
+@*/
+
+struct haha { };
+
+/*@
 
 predicate lseg(struct node *n1, struct node *n2, intlist v)
   requires n1 == n2 ? emp &*& v == nil : node(n1, ?_n, ?h) &*& lseg(_n, n2, ?t) &*& v == cons(h, t);
@@ -396,7 +401,7 @@ void main()
   append(l1, l2);
   int n = length(l1); assert(n == 5);
   int e0 = lookup(l1, 0); assert(e0 == 10);
-  int e1 = lookup(l1, 1); assert(e1 == 20);
+  int e1 = lookup(l1, 1); assert(e1 == 21);
   int e2 = lookup(l1, 2); assert(e2 == 30);
   int e3 = lookup(l1, 3); assert(e3 == 50);
   int e4 = lookup(l1, 4); assert(e4 == 60);
