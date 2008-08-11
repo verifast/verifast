@@ -377,7 +377,7 @@ void main0()
   assert(x1 == 10);
   int x2 = removeFirst(l);
   assert(x2 == 20);
-  // dispose(l);
+  dispose(l);
 }
 
 void main()
