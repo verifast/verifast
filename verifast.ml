@@ -441,7 +441,7 @@ and
 | [< >] -> []
 and
   parse_pure_decl = parser
-  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = parse_ctors; '(_, Kwd ";") >] -> Inductive (l, i, cs)
+  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> Inductive (l, i, cs)
 | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
 | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
 | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
@@ -449,9 +449,11 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
 and
-  parse_ctors = parser
-  [< '(_, Kwd "|"); '(l, Ident cn); ts = (parser [< '(_, Kwd "("); ts = parse_types >] -> ts | [< >] -> []); cs = parse_ctors >] -> Ctor (l, cn, ts)::cs
+  parse_ctors_suffix = parser
+  [< '(_, Kwd "|"); cs = parse_ctors >] -> cs
 | [< >] -> []
+and parse_ctors = parser
+  [< '(l, Ident cn); ts = (parser [< '(_, Kwd "("); ts = parse_types >] -> ts | [< >] -> []); cs = parse_ctors_suffix >] -> Ctor (l, cn, ts)::cs
 and
   parse_types = parser
   [< '(_, Kwd ")") >] -> []
