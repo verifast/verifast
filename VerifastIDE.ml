@@ -332,6 +332,11 @@ let show_ide initialPath =
   GMain.main()
 
 let _ =
+  if not (Sys.file_exists "z3.exe" || Sys.file_exists "z3.bat") then
+  begin
+    GToolbox.message_box "VeriFast IDE" "Error: Could not find z3.exe or z3.bat in the current directory. Please download Z3 from http://research.microsoft.com/projects/z3.";
+    exit 1
+  end;
   try
     match Sys.argv with
       [| _ |] -> show_ide None

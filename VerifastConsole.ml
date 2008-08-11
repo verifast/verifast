@@ -5,6 +5,11 @@ let _ =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
   let verify verbose path =
+    if not (Sys.file_exists "z3.exe" || Sys.file_exists "z3.bat") then
+    begin
+      print_endline "error: Could not find z3.exe or z3.bat in the current directory. Please download Z3 from http://research.microsoft.com/projects/z3.";
+      exit 1
+    end;
     try
       let channel = open_in path in
       let stream = Stream.of_channel channel in
