@@ -2109,8 +2109,7 @@ let verify_program verbose path stream reportKeyword reportGhostRange =
     | _::ds -> verify_decls lems ds
   in
   
-  let _ = verify_decls [] ds in
-  print_endline "0 errors found"
+  verify_decls [] ds
 
 let remove_dups bs =
   let rec iter bs0 bs =

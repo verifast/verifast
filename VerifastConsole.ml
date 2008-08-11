@@ -8,10 +8,12 @@ let _ =
     try
       let channel = open_in path in
       let stream = Stream.of_channel channel in
-      verify_program verbose path stream (fun _ -> ()) (fun _ -> ())
+      verify_program verbose path stream (fun _ -> ()) (fun _ -> ());
+      print_endline "0 errors found";
+      exit 0
     with
-      ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg))
-    | StaticError (l, msg) -> print_msg l msg
+      ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
+    | StaticError (l, msg) -> print_msg l msg; exit 1
     | SymbolicExecutionError (ctxts, phi, l, msg) ->
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
@@ -21,7 +23,7 @@ let _ =
         *)
         let _ = print_endline ("Failed query: " ^ simp phi) in
         let _ = print_msg l msg in
-        ()
+        exit 1
   in
   match Sys.argv with
     [| _; path |] -> verify false path

@@ -89,17 +89,11 @@ let show_ide initialPath =
     updateWindowTitle();
     Some thePath
   in
-  let file_exists path =
-    try
-      Unix.stat path; true
-    with
-      Unix.Unix_error (Unix.ENOENT, _, _) -> false
-  in
   let rec saveAs() =
     match GToolbox.select_file ~title:"Save" () with
       None -> None
     | Some thePath ->
-      if file_exists thePath then
+      if Sys.file_exists thePath then
         match GToolbox.question_box ~title:"VeriFast" ~buttons:["Yes"; "No"; "Cancel"] "The file already exists. Overwrite?" with
           1 -> store thePath
         | 2 -> saveAs()
