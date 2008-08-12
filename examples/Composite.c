@@ -1,5 +1,7 @@
 /*
  * The composite pattern in C with separation logic.
+ *
+ * By Jan Smans and Bart Jacobs
  */
 
 // client code
