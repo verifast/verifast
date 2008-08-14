@@ -4,16 +4,11 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify verbose path =
-    if not (Sys.file_exists "z3.exe" || Sys.file_exists "z3.bat") then
-    begin
-      print_endline "error: Could not find z3.exe or z3.bat in the current directory. Please download Z3 from http://research.microsoft.com/projects/z3.";
-      exit 1
-    end;
+  let verify verbose prover path =
     try
       let channel = open_in path in
       let stream = Stream.of_channel channel in
-      verify_program verbose path stream (fun _ -> ()) (fun _ -> ());
+      verify_program prover verbose path stream (fun _ -> ()) (fun _ -> ());
       print_endline "0 errors found";
       exit 0
     with
@@ -30,10 +25,31 @@ let _ =
         let _ = print_msg l msg in
         exit 1
   in
-  match Sys.argv with
-    [| _; path |] -> verify false path
-  | [| _; "-verbose"; path |] -> verify true path
-  | _ ->
-    print_endline "Verifast 0.2 for C";
-    print_endline "Usage: verifast [-verbose] filepath";
-    print_endline "Note: Requires z3.exe."
+  let n = Array.length Sys.argv in
+  if n = 1 then
+  begin
+    print_endline "Verifast 1.0 for C";
+    print_endline "Usage: verifast [-verbose] [-prover (z3|simplify)] filepath"
+  end
+  else
+  let rec iter verbose prover i =
+    if i < n then
+      let arg = Sys.argv.(i) in
+      if String.length arg > 0 && String.get arg 0 = '-' then
+        match arg with
+          "-verbose" -> iter true prover (i + 1)
+        | "-prover" ->
+          if i + 1 < n then
+            iter verbose (Sys.argv.(i + 1)) (i + 2)
+          else
+            failwith "-prover option requires argument"
+        | _ -> failwith "unknown command-line option '" ^ arg ^ "'"
+      else
+        if i + 1 = n then
+          verify verbose prover arg
+        else
+          failwith "bad command line"
+    else
+      failwith "no path specified"
+  in
+  iter false "z3" 1; ()

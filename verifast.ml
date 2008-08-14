@@ -784,7 +784,7 @@ let pretty_print f =
 let rec simpt t =
   match t with
     Int i -> string_of_int i
-  | Symb (Atom s) -> s
+  | Symb (Atom s) -> "|" ^ s ^ "|"
   | FunApp (Atom f, ts) -> slist ([f] @ List.map simpt ts)
   | IfTerm (t1, t2, t3) -> slist ["IF"; simpt t1; simpt t2; simpt t3]
 
@@ -844,10 +844,12 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program_with_prover simp_in simp_out verbose path stream reportKeyword reportGhostRange =
+let verify_program_with_prover prover verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
+
+  let (send_command, query_formula) = prover in
 
   let unique_number_counter = ref 0 in
 
@@ -1506,40 +1508,12 @@ let verify_program_with_prover simp_in simp_out verbose path stream reportKeywor
     ds
   in
 
-  let send_command c =
-    verbose_print_endline c;
-    output_string simp_out c;
-    output_string simp_out "\r\n";
-    flush simp_out
-  in
-
   let bg_push s = send_command (slist ["BG_PUSH"; s]) in
 
   let _ = bg_push (slist ("AND" :: theory)) in
   
   let _ = bg_push (slist ("AND" :: List.map (fun s -> s ^ "\r\n") indaxs)) in
 
-  let getch() = input_char simp_in in
-  
-  let getline() = input_line simp_in in
-  
-  let rec input_reply() =
-    let line = getline() in
-    let line = String.sub line 0 (String.length line - 1) in
-    [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then [] else input_reply())
-  in
-  
-  let query_count = ref 0 in
-  
-  let query_formula phi =
-    send_command (simp phi);
-    let reply = input_reply() in
-    List.iter verbose_print_endline reply;
-    let success = (reply = [string_of_int !query_count ^ ": Valid."]) in
-    query_count := !query_count + 1;
-    success
-  in
-  
   let contextStack = ref ([]: context list) in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
@@ -1622,7 +1596,7 @@ let verify_program_with_prover simp_in simp_out verbose path stream reportKeywor
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
                let (_, _, _, ac) = List.assoc cn purefuncmap in
-               assume (Eq (t, FunApp(ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               assume (Eq (t, if xts = [] then Symb ac else FunApp(ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1696,7 +1670,7 @@ let verify_program_with_prover simp_in simp_out verbose path stream reportKeywor
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           let (_, _, _, ac) = List.assoc cn purefuncmap in
           branch
-            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume (Eq (t, if xts = [] then Symb ac else FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1960,7 +1934,7 @@ let verify_program_with_prover simp_in simp_out verbose path stream reportKeywor
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume (Eq (t, FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume (Eq (t, if xts = [] then Symb ac else FunApp (ac, List.map (fun (x, t) -> t) xts))) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -2109,17 +2083,94 @@ let verify_program_with_prover simp_in simp_out verbose path stream reportKeywor
   
   verify_decls [] ds
 
-let verify_program verbose path stream reportKeyword reportGhostRange =
-  let (simp_in, simp_out) = Unix.open_process "z3 /si" in
-  try
-    verify_program_with_prover simp_in simp_out verbose path stream reportKeyword reportGhostRange;
-    close_in simp_in;
-    close_out simp_out
-  with e ->
-    close_in_noerr simp_in;
-    close_out_noerr simp_out;
-    raise e
+let do_with_prover prover verbose action =
+  let verbose_print_endline s = if verbose then print_endline s else () in
+  let verbose_print_string s = if verbose then print_string s else () in
+  match prover with
+    "z3" ->
+    let (simp_in, simp_out) = Unix.open_process "z3 /si" in
+    let send_command c =
+      verbose_print_endline c;
+      output_string simp_out c;
+      output_string simp_out "\r\n";
+      flush simp_out
+    in
+    let getch() = input_char simp_in in
+    let getline() = input_line simp_in in
+    let rec input_reply() =
+      let line = getline() in
+      let line = String.sub line 0 (String.length line - 1) in
+      [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then [] else input_reply())
+    in
+    let query_count = ref 0 in
+    let query_formula phi =
+      send_command (simp phi);
+      let reply = input_reply() in
+      List.iter verbose_print_endline reply;
+      let success = (reply = [string_of_int !query_count ^ ": Valid."]) in
+      query_count := !query_count + 1;
+      success
+    in
+    let prover = (send_command, query_formula) in
+    begin
+      try
+        action prover;
+        close_in simp_in;
+        close_out simp_out
+      with e ->
+        close_in_noerr simp_in;
+        close_out_noerr simp_out;
+        raise e
+    end
+  | "simplify" ->
+    let (simp_in, simp_out) = Unix.open_process "simplify" in
+    let getch() = input_char simp_in in
+    let getline() = input_line simp_in in
+    let readprompt() =
+      let c1 = getch() in let c2 = getch() in if (c1, c2) = ('>', '\009') then () else failwith "verifast: error in output of Simplify prover: input prompt expected."
+    in
+    let send_command c =
+      verbose_print_endline c;
+      readprompt();
+      output_string simp_out c;
+      output_string simp_out "\r\n";
+      flush simp_out
+    in
+    let rec input_reply() =
+      let line = getline() in
+      [line] @ (if String.length line > 0 && String.get line (String.length line - 1) = '.' then begin getline(); [] end else input_reply())
+    in
+    let query_count = ref 1 in
+    let query_formula phi =
+      send_command (simp phi);
+      let reply = input_reply() in
+      List.iter verbose_print_endline reply;
+      let success = (reply = [string_of_int !query_count ^ ": Valid."]) in
+      query_count := !query_count + 1;
+      success
+    in
+    (*
+    let prover_escape x =
+      if 0 < String.length x && String.get x 0 = '_' then "|" ^ x ^ "|" else x
+    end
+    *)
+    let prover = (send_command, query_formula) in
+    begin
+      try
+        action prover;
+        readprompt();
+        close_in simp_in;
+        close_out simp_out
+      with e ->
+        readprompt();
+        close_in_noerr simp_in;
+        close_out_noerr simp_out;
+        raise e
+    end
+  | _ -> failwith ("No such prover: '" ^ prover ^ "'; supported provers: 'z3', 'simplify'.")
 
+let verify_program prover verbose path stream reportKeyword reportGhostRange =
+  do_with_prover prover verbose (fun prover -> verify_program_with_prover prover verbose path stream reportKeyword reportGhostRange)
 
 let remove_dups bs =
   let rec iter bs0 bs =

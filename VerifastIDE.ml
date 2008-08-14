@@ -1,7 +1,7 @@
 open Verifast
 open GMain
 
-let show_ide initialPath =
+let show_ide initialPath prover =
   let path = ref None in
   let ctxts_lifo = ref None in
   let msg = ref None in
@@ -309,7 +309,7 @@ let show_ide initialPath =
     buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
     buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter;
     try
-      verify_program false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
+      verify_program prover false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
       msg := Some "0 errors found";
       updateWindowTitle()
     with
@@ -332,15 +332,11 @@ let show_ide initialPath =
   GMain.main()
 
 let _ =
-  if not (Sys.file_exists "z3.exe" || Sys.file_exists "z3.bat") then
-  begin
-    GToolbox.message_box "VeriFast IDE" "Error: Could not find z3.exe or z3.bat in the current directory. Please download Z3 from http://research.microsoft.com/projects/z3.";
-    exit 1
-  end;
   try
     match Sys.argv with
-      [| _ |] -> show_ide None
-    | [| _; path |] -> show_ide (Some path)
+      [| _ |] -> show_ide None "z3"
+    | [| _; path |] -> show_ide (Some path) "z3"
+    | [| _; "-prover"; prover; path |] -> show_ide (Some path) prover
     | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line."
   with
     e -> GToolbox.message_box "VeriFast IDE" ("Exception during startup: " ^ Printexc.to_string e)
