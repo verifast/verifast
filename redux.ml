@@ -147,14 +147,96 @@ and context =
         Unsat
       else
         v1#merge_into v2
+    
+    method assert_terms_eq t1 t2 =
+      self#assert_eq (self#eval_term t1) (self#eval_term t2)
+      
+    method assert_terms_neq t1 t2 =
+      self#assert_neq (self#eval_term t1) (self#eval_term t2)
   end
 
 let create_context() = new context
 
+type token = Eof | Lparen | Rparen | Atom of string
+
+class scanner txt =
+  object (self)
+    val text = txt
+    val n = String.length txt
+    val mutable k = 0
+    val mutable token = Eof
+    initializer self#next
+    method next =
+      token <- self#scan_next_token
+    method token = token
+    method scan_next_token =
+      if k = n then
+        Eof
+      else
+      begin
+        let c = String.get text k in
+        k <- k + 1;
+        match c with
+          ' ' -> self#scan_next_token
+        | '(' -> Lparen
+        | ')' -> Rparen
+        | c -> self#symbol (k - 1)
+      end
+    method symbol k0 =
+      if k = n then
+        Atom (String.sub text k0 (k - k0))
+      else
+        let c = String.get text k in
+        match c with
+          ' '|')'|'(' -> Atom (String.sub text k0 (k - k0))
+        | _ -> k <- k + 1; self#symbol k0
+  end
+
+class parser scanner =
+  object (self)
+    val scanner = scanner
+    method fail = failwith "Bad input"
+    method parse_term =
+      match scanner#token with
+        Atom a -> scanner#next; Term (a, [])
+      | Lparen ->
+        scanner#next;
+        begin
+        match scanner#token with
+          Atom a ->
+          scanner#next;
+          let ts = self#parse_terms in
+          begin
+          match scanner#token with
+            Rparen ->
+            scanner#next;
+            Term (a, ts)
+          | _ -> self#fail
+          end
+        | _ -> self#fail
+        end
+      | _ -> self#fail
+    method parse_terms =
+      match scanner#token with
+        Rparen -> []
+      | _ ->
+        let t = self#parse_term in
+        t::self#parse_terms
+  end
+
+let parse_term s = (new parser (new scanner s))#parse_term
+
 let _ =
   let ctxt = create_context() in
-  let v1 = ctxt#eval_term (Term ("tree", [Term ("nil", []); Term ("nil", []); Term ("succ", [Term ("zero", [])])])) in
-  let v2 = ctxt#eval_term (Term ("tree", [Term ("nil", []); Term ("nil", []); Term ("succ", [Term ("zero", [])])])) in
+  let eval s = ctxt#eval_term (parse_term s) in
+  let assert_eq s1 s2 = ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
+  let assert_neq s1 s2 = ctxt#assert_terms_neq (parse_term s1) (parse_term s2) in
+  let v1 = eval "(tree nil nil (succ zero))" in
+  let v2 = eval "(tree nil nil (succ zero))" in
   assert (v1 = v2);
-  let v3 = ctxt#eval_term (Term ("tree", [Term ("nil", []); Term ("nil", []); Term ("zero", [])])) in
-  assert (v3 <> v1)
+  let v3 = eval "(tree nil nil zero)" in
+  assert (v3 <> v1);
+  assert (assert_eq "fx" "(f x)" = Unknown);
+  assert (assert_eq "fy" "(f y)" = Unknown);
+  assert (assert_eq "x" "y" = Unknown);
+  assert (assert_neq "fx" "fy" = Unsat)
