@@ -13,8 +13,25 @@ class termnode ctxt s vs v =
   object (self)
     val context = ctxt
     val symbol = s
+    val mutable popstack = []
+    val mutable pushdepth = 0
     val mutable children: valuenode list = vs
     val mutable value = v
+    method push =
+      if context#pushdepth <> pushdepth then
+      begin
+        popstack <- (pushdepth, children, value)::popstack;
+        context#register_popaction (fun () -> self#pop);
+        pushdepth <- context#pushdepth
+      end
+    method pop =
+      match popstack with
+        (pushdepth0, children0, value0)::popstack0 ->
+        pushdepth <- pushdepth0;
+        children <- children0;
+        value <- value0;
+        popstack <- popstack0
+      | [] -> assert false
     method value = value
     initializer begin
       let rec iter k (vs: valuenode list) =
@@ -28,6 +45,7 @@ class termnode ctxt s vs v =
       value#add_child (self :> termnode)
     end
     method set_value v =
+      self#push;
       value <- v
     method set_child k v =
       let rec replace i vs =
@@ -35,6 +53,7 @@ class termnode ctxt s vs v =
           [] -> []
         | v0::vs -> if i = k then v::vs else v0::replace (i + 1) vs
       in
+      self#push;
       children <- replace 0 children
     method matches s vs =
       symbol = s && children = vs
@@ -44,18 +63,40 @@ class termnode ctxt s vs v =
 and valuenode ctxt =
   object (self)
     val context = ctxt
+    val mutable popstack = []
+    val mutable pushdepth = 0
     val mutable children: termnode list = []
     val mutable parents: (termnode * int) list = []
     val mutable neqs: valuenode list = []
+    method push =
+      if ctxt#pushdepth <> pushdepth then
+      begin
+        popstack <- (pushdepth, children, parents, neqs)::popstack;
+        ctxt#register_popaction (fun () -> self#pop);
+        pushdepth <- ctxt#pushdepth
+      end
+    method pop =
+      match popstack with
+        (pushdepth0, children0, parents0, neqs0)::popstack0 ->
+        pushdepth <- pushdepth0;
+        children <- children0;
+        parents <- parents0;
+        neqs <- neqs0;
+        popstack <- popstack0
+      | [] -> assert(false)
     method add_parent p =
+      self#push;
       parents <- p::parents
     method add_child c =
+      self#push;
       children <- c::children
     method neq v =
       List.mem v neqs
     method add_neq v =
+      self#push;
       neqs <- v::neqs
     method neq_merging_into vold vnew =
+      self#push;
       neqs <- List.map (fun v0 -> if v0 = vold then vnew else vold) neqs;
       vnew#add_neq (self :> valuenode)
     method lookup_parent s vs =
@@ -92,9 +133,9 @@ and valuenode ctxt =
           [] -> Unknown
         | (n, n')::rps ->
           begin
-            print_endline "Doing a recursive assert_eq!";
+            (* print_endline "Doing a recursive assert_eq!"; *)
             let result = context#assert_eq n#value n'#value in
-            print_endline "Returned from recursive assert_eq";
+            (* print_endline "Returned from recursive assert_eq"; *)
             match result with
               Unsat -> Unsat
             | Unknown -> iter rps
@@ -105,8 +146,29 @@ and valuenode ctxt =
   end
 and context =
   object (self)
+    val mutable popstack = []
+    val mutable pushdepth = 0
+    val mutable popactionlist: (unit -> unit) list = []
     val mutable leafnodemap: (string * termnode) list = []
     
+    method pushdepth = pushdepth
+    method push =
+      popstack <- (pushdepth, popactionlist, leafnodemap)::popstack;
+      pushdepth <- pushdepth + 1;
+      popactionlist <- []
+    
+    method register_popaction action =
+      popactionlist <- action::popactionlist
+
+    method pop =
+      match popstack with
+        (pushdepth0, popactionlist0, leafnodemap0)::popstack0 ->
+        List.iter (fun action -> action()) popactionlist;
+        pushdepth <- pushdepth0;
+        popactionlist <- popactionlist0;
+        leafnodemap <- leafnodemap0
+      | [] -> failwith "Popstack is empty"
+
     method eval_term t =
       match t with
         Term (s, ts) ->
@@ -149,17 +211,17 @@ and context =
     method assert_eq v1 v2 =
       if v1 = v2 then
       begin
-        print_endline "assert_eq: values already the same";
+        (* print_endline "assert_eq: values already the same"; *)
         Unknown
       end
       else if v1#neq v2 then
       begin
-        print_endline "assert_eq: values are neq";
+        (* print_endline "assert_eq: values are neq"; *)
         Unsat
       end
       else
       begin
-        print_endline "assert_eq: merging v1 into v2";
+        (* print_endline "assert_eq: merging v1 into v2"; *)
         v1#merge_into v2
       end
     
@@ -245,6 +307,8 @@ let _ =
   let ctxt = ref (create_context()) in
   let eval s = !ctxt#eval_term (parse_term s) in
   let reset() = ctxt := create_context() in
+  let push() = !ctxt#push in
+  let pop() = !ctxt#pop in
   let assert_eq s1 s2 = !ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
   let assert_neq s1 s2 = !ctxt#assert_terms_neq (parse_term s1) (parse_term s2) in
   let v1 = eval "(tree nil nil (succ zero))" in
@@ -270,3 +334,49 @@ let _ =
   assert (assert_eq "7" "y" = Unknown);
   assert (assert_eq "z" "5" = Unknown);
   assert (assert_neq "x" "3" = Unsat);
+
+  reset();
+  assert (assert_eq "fx" "(f x)" = Unknown);
+  assert (assert_eq "fy" "(f y)" = Unknown);
+  push();
+  assert (assert_eq "x" "y" = Unknown);
+  assert (assert_neq "fx" "fy" = Unsat);
+  pop();
+  assert (assert_neq "fx" "fy" = Unknown);
+  assert (assert_neq "x" "y" = Unknown);
+  
+  reset();
+  assert (assert_eq "x0" "x" = Unknown);
+  assert (assert_eq "y0" "y" = Unknown);
+  push();
+  assert (assert_eq "x0" "y0" = Unknown);
+  assert (assert_neq "x" "y" = Unsat);
+  pop();
+  push();
+  assert (assert_neq "x0" "y0" = Unknown);
+  assert (assert_eq "x" "y" = Unsat);
+  pop();
+  assert (assert_eq "x0" "y0" = Unknown);
+  assert (assert_eq "x" "y" = Unknown);
+  
+  reset();
+  assert (assert_eq "x0" "x" = Unknown);
+  assert (assert_eq "y0" "y" = Unknown);
+  push();
+  assert (assert_eq "x0" "y0" = Unknown);
+  assert (assert_neq "x" "y" = Unsat);
+  pop();
+  push();
+  assert (assert_neq "x0" "y0" = Unknown);
+  push();
+  assert (assert_eq "x" "(f x1)" = Unknown);
+  assert (assert_eq "y" "(f y1)" = Unknown);
+  assert (assert_eq "x1" "y1" = Unsat);
+  pop();
+  push();
+  assert (assert_eq "x1" "y1" = Unknown);
+  pop();
+  assert (assert_neq "x1" "y1" = Unknown);
+  pop();
+  assert (assert_eq "x0" "y0" = Unknown);
+  assert (assert_eq "x" "y" = Unknown);
