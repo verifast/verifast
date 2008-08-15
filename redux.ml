@@ -9,14 +9,19 @@ type term = Term of string * term list
 
 type assert_result = Unknown | Unsat
 
-class termnode ctxt s vs v =
+type symbol_kind = Ctor | Fixpoint of int | Uninterp
+
+class termnode ctxt knd s vs =
   object (self)
     val context = ctxt
+    val kind = knd
     val symbol = s
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable children: valuenode list = vs
-    val mutable value = v
+    val mutable value = new valuenode ctxt
+    method symbol = symbol
+    method children = children
     method push =
       if context#pushdepth <> pushdepth then
       begin
@@ -33,6 +38,7 @@ class termnode ctxt s vs v =
         popstack <- popstack0
       | [] -> assert false
     method value = value
+    method is_ctor = kind = Ctor
     initializer begin
       let rec iter k (vs: valuenode list) =
         match vs with
@@ -42,7 +48,8 @@ class termnode ctxt s vs v =
           iter (k + 1) vs
       in
       iter 0 vs;
-      value#add_child (self :> termnode)
+      value#add_child (self :> termnode);
+      if kind = Ctor then value#set_ctorchild (self :> termnode)
     end
     method set_value v =
       self#push;
@@ -67,31 +74,39 @@ and valuenode ctxt =
     val mutable pushdepth = 0
     val mutable children: termnode list = []
     val mutable parents: (termnode * int) list = []
+    val mutable ctorchild: termnode option = None
     val mutable neqs: valuenode list = []
     method push =
       if ctxt#pushdepth <> pushdepth then
       begin
-        popstack <- (pushdepth, children, parents, neqs)::popstack;
+        popstack <- (pushdepth, children, parents, ctorchild, neqs)::popstack;
         ctxt#register_popaction (fun () -> self#pop);
         pushdepth <- ctxt#pushdepth
       end
     method pop =
       match popstack with
-        (pushdepth0, children0, parents0, neqs0)::popstack0 ->
+        (pushdepth0, children0, parents0, ctorchild0, neqs0)::popstack0 ->
         pushdepth <- pushdepth0;
         children <- children0;
         parents <- parents0;
+        ctorchild <- ctorchild0;
         neqs <- neqs0;
         popstack <- popstack0
       | [] -> assert(false)
+    method ctorchild = ctorchild
     method add_parent p =
       self#push;
       parents <- p::parents
+    method set_ctorchild c =
+      self#push;
+      ctorchild <- Some c
     method add_child c =
       self#push;
       children <- c::children
     method neq v =
-      List.mem v neqs
+      match (ctorchild, v#ctorchild) with
+        (Some n1, Some n2) when n1#symbol <> n2#symbol -> true
+      | _ -> List.mem v neqs
     method add_neq v =
       self#push;
       neqs <- v::neqs
@@ -128,20 +143,38 @@ and valuenode ctxt =
           )
           parents
       in
-      let rec iter rps =
-        match rps with
-          [] -> Unknown
-        | (n, n')::rps ->
-          begin
-            (* print_endline "Doing a recursive assert_eq!"; *)
-            let result = context#assert_eq n#value n'#value in
-            (* print_endline "Returned from recursive assert_eq"; *)
-            match result with
-              Unsat -> Unsat
-            | Unknown -> iter rps
-          end
+      let process_redundant_parents() =
+        let rec iter rps =
+          match rps with
+            [] -> Unknown
+          | (n, n')::rps ->
+            begin
+              (* print_endline "Doing a recursive assert_eq!"; *)
+              let result = context#assert_eq n#value n'#value in
+              (* print_endline "Returned from recursive assert_eq"; *)
+              match result with
+                Unsat -> Unsat
+              | Unknown -> iter rps
+            end
+        in
+        iter redundant_parents
       in
-      iter redundant_parents
+      match (ctorchild, v#ctorchild) with
+        (None, _) -> process_redundant_parents()
+      | (Some n, None) -> v#set_ctorchild n; process_redundant_parents()
+      | (Some n, Some n') ->
+        (* print_endline "Adding injectiveness edges..."; *)
+        let rec iter vs =
+          match vs with
+            [] -> process_redundant_parents()
+          | (v, v')::vs ->
+            begin
+            match context#assert_eq v v' with
+              Unsat -> Unsat
+            | Unknown -> iter vs
+            end
+        in
+        iter (List.combine n#children n'#children)
 
   end
 and context =
@@ -172,6 +205,15 @@ and context =
     method eval_term t =
       match t with
         Term (s, ts) ->
+        let kind =
+          try
+            let index = String.rindex s '/' in
+            let suffix = String.sub s index (String.length s - index) in
+            let k = int_of_string suffix in
+            Fixpoint k
+          with Not_found -> 
+            match String.get s 0 with 'A'..'Z' | '0'..'9' -> Ctor | _ -> Uninterp
+        in
         begin
         let vs = List.map self#eval_term ts in
         match vs with
@@ -179,19 +221,17 @@ and context =
           begin
           match try_assoc s leafnodemap with
             None ->
-            let v = new valuenode (self :> context) in
-            let node = new termnode (self :> context) s vs v in
+            let node = new termnode (self :> context) kind s vs in
             leafnodemap <- (s, node)::leafnodemap;
-            v
+            node#value
           | Some n -> n#value
           end
         | v::_ ->
           begin
           match v#lookup_parent s vs with
             None ->
-            let v = new valuenode (self :> context) in
-            let _ = new termnode (self :> context) s vs v in
-            v
+            let node = new termnode (self :> context) kind s vs in
+            node#value
           | Some n -> n#value
           end
         end
@@ -299,9 +339,14 @@ class parser scanner =
       | _ ->
         let t = self#parse_term in
         t::self#parse_terms
+    method parse_term_eof =
+      let t = self#parse_term in
+      match scanner#token with
+        Eof -> t
+      | _ -> self#fail
   end
 
-let parse_term s = (new parser (new scanner s))#parse_term
+let parse_term s = (new parser (new scanner s))#parse_term_eof
 
 let _ =
   let ctxt = ref (create_context()) in
@@ -311,6 +356,7 @@ let _ =
   let pop() = !ctxt#pop in
   let assert_eq s1 s2 = !ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
   let assert_neq s1 s2 = !ctxt#assert_terms_neq (parse_term s1) (parse_term s2) in
+
   let v1 = eval "(tree nil nil (succ zero))" in
   let v2 = eval "(tree nil nil (succ zero))" in
   assert (v1 = v2);
@@ -380,3 +426,17 @@ let _ =
   pop();
   assert (assert_eq "x0" "y0" = Unknown);
   assert (assert_eq "x" "y" = Unknown);
+  
+  reset();
+  assert (assert_eq "1" "2" = Unsat);
+  
+  reset();
+  assert (assert_neq "1" "2" = Unknown);
+  
+  reset();
+
+  assert (assert_eq "(Succ (Succ (Succ (Zero))))" "(Succ (Succ (Zero)))" = Unsat);
+  
+  reset();
+  assert (assert_eq "(Succ (Succ (x)))" "(Succ (Succ (y)))" = Unknown);
+  assert (assert_neq "x" "y" = Unsat)
