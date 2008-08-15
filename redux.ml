@@ -20,21 +20,24 @@ class termnode ctxt knd s vs =
     val mutable pushdepth = 0
     val mutable children: valuenode list = vs
     val mutable value = new valuenode ctxt
+    val mutable reduced = false
+    method kind = kind
     method symbol = symbol
     method children = children
     method push =
       if context#pushdepth <> pushdepth then
       begin
-        popstack <- (pushdepth, children, value)::popstack;
+        popstack <- (pushdepth, children, value, reduced)::popstack;
         context#register_popaction (fun () -> self#pop);
         pushdepth <- context#pushdepth
       end
     method pop =
       match popstack with
-        (pushdepth0, children0, value0)::popstack0 ->
+        (pushdepth0, children0, value0, reduced0)::popstack0 ->
         pushdepth <- pushdepth0;
         children <- children0;
         value <- value0;
+        reduced <- reduced0;
         popstack <- popstack0
       | [] -> assert false
     method value = value
@@ -49,7 +52,16 @@ class termnode ctxt knd s vs =
       in
       iter 0 vs;
       value#add_child (self :> termnode);
-      if kind = Ctor then value#set_ctorchild (self :> termnode)
+      match kind with
+        Ctor -> value#set_ctorchild (self :> termnode)
+      | Fixpoint k ->
+        let v = List.nth children k in
+        begin
+        match v#ctorchild with
+          None -> ()
+        | Some n -> ctxt#add_redex (self :> termnode)
+        end
+      | Uninterp -> ()
     end
     method set_value v =
       self#push;
@@ -66,6 +78,26 @@ class termnode ctxt knd s vs =
       symbol = s && children = vs
     method lookup_equivalent_parent_of v =
       v#lookup_parent symbol children
+    method reduce =
+      if not reduced then
+      begin
+        self#push;
+        reduced <- true;
+        match kind with
+          Fixpoint k ->
+          let v = List.nth children k in
+          begin
+          match v#ctorchild with
+            Some n ->
+            let s = n#symbol in
+            let vs = n#children in
+            ctxt#trigger_fpclause (self :> termnode) symbol s children vs
+          | _ -> assert false
+          end
+        | _ -> assert false
+      end
+      else
+        Unknown
   end
 and valuenode ctxt =
   object (self)
@@ -121,6 +153,8 @@ and valuenode ctxt =
         | (n, _)::ns -> if n#matches s vs then Some n else iter ns
       in
       iter parents
+    method ctorchild_added =
+      List.iter (fun (n, k) -> if n#kind = Fixpoint k then ctxt#add_redex n) parents
     method merge_into v =
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
@@ -128,6 +162,14 @@ and valuenode ctxt =
       List.iter (fun (n, k) -> n#set_child k v) parents;
       (* At this point self is referenced nowhere. *)
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
+      begin
+        match (ctorchild, v#ctorchild) with
+          (None, Some _) ->
+          self#ctorchild_added
+        | (Some _, None) ->
+          v#ctorchild_added
+        | _ -> ()
+      end;
       let redundant_parents =
         flatmap
           (fun (n, k) ->
@@ -177,12 +219,13 @@ and valuenode ctxt =
         iter (List.combine n#children n'#children)
 
   end
-and context =
+and context fpclauses =
   object (self)
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
     val mutable leafnodemap: (string * termnode) list = []
+    val mutable redexes = []  (* TODO: Do we need to push this? *)
     
     method pushdepth = pushdepth
     method push =
@@ -202,39 +245,48 @@ and context =
         leafnodemap <- leafnodemap0
       | [] -> failwith "Popstack is empty"
 
+    method add_redex n =
+      redexes <- n::redexes
+      
+    method trigger_fpclause fpn fps cs fpvs cvs =
+      let clause = List.assoc (fps ^ ":" ^ cs) fpclauses in
+      let v = clause (self :> context) fpvs cvs in
+      self#assert_eq v fpn#value
+    
+    method get_node s vs =
+      let kind =
+        try
+          let index = String.rindex s '/' in
+          let suffix = String.sub s (index + 1)(String.length s - index - 1) in
+          let k = int_of_string suffix in
+          Fixpoint k
+        with Not_found -> 
+          match String.get s 0 with 'A'..'Z' | '0'..'9' -> Ctor | _ -> Uninterp
+      in
+      match vs with
+        [] ->
+        begin
+        match try_assoc s leafnodemap with
+          None ->
+          let node = new termnode (self :> context) kind s vs in
+          leafnodemap <- (s, node)::leafnodemap;
+          node#value
+        | Some n -> n#value
+        end
+      | v::_ ->
+        begin
+        match v#lookup_parent s vs with
+          None ->
+          let node = new termnode (self :> context) kind s vs in
+          node#value
+        | Some n -> n#value
+        end
+    
     method eval_term t =
       match t with
         Term (s, ts) ->
-        let kind =
-          try
-            let index = String.rindex s '/' in
-            let suffix = String.sub s index (String.length s - index) in
-            let k = int_of_string suffix in
-            Fixpoint k
-          with Not_found -> 
-            match String.get s 0 with 'A'..'Z' | '0'..'9' -> Ctor | _ -> Uninterp
-        in
-        begin
         let vs = List.map self#eval_term ts in
-        match vs with
-          [] ->
-          begin
-          match try_assoc s leafnodemap with
-            None ->
-            let node = new termnode (self :> context) kind s vs in
-            leafnodemap <- (s, node)::leafnodemap;
-            node#value
-          | Some n -> n#value
-          end
-        | v::_ ->
-          begin
-          match v#lookup_parent s vs with
-            None ->
-            let node = new termnode (self :> context) kind s vs in
-            node#value
-          | Some n -> n#value
-          end
-        end
+        self#get_node s vs
     
     method assert_neq (v1: valuenode) (v2: valuenode) =
       if v1 = v2 then
@@ -265,11 +317,26 @@ and context =
         v1#merge_into v2
       end
     
+    method do_and_reduce action =
+      match action() with
+        Unsat -> Unsat
+      | Unknown ->
+        let rec iter () =
+          match redexes with
+            [] -> Unknown
+          | n::redexes0 ->
+            redexes <- redexes0;
+            match n#reduce with
+              Unsat -> Unsat
+            | Unknown -> iter ()
+        in
+        iter()
+
     method assert_terms_eq t1 t2 =
-      self#assert_eq (self#eval_term t1) (self#eval_term t2)
+      self#do_and_reduce (fun () -> self#assert_eq (self#eval_term t1) (self#eval_term t2))
       
     method assert_terms_neq t1 t2 =
-      self#assert_neq (self#eval_term t1) (self#eval_term t2)
+      self#do_and_reduce (fun () -> self#assert_neq (self#eval_term t1) (self#eval_term t2))
   end
 
 let create_context() = new context
@@ -348,10 +415,23 @@ class parser scanner =
 
 let parse_term s = (new parser (new scanner s))#parse_term_eof
 
+let fpclauses =
+  [
+    ("add/0:Nil", (fun ctxt [l; x] [] -> ctxt#get_node "Cons" [x; ctxt#get_node "Nil" []]));
+    ("add/0:Cons", (fun ctxt [l; x] [h; t] -> ctxt#get_node "Cons" [h; ctxt#get_node "add/0" [t; x]]));
+    ("len/0:Nil", (fun ctxt [l] [] -> ctxt#get_node "Zero" []));
+    ("len/0:Cons", (fun ctxt [l] [h; t] -> ctxt#get_node "Succ" [ctxt#get_node "len/0" [t]]));
+    ("head/0:Cons", (fun ctxt [l] [h; t] -> h));
+    ("tail/0:Cons", (fun ctxt [l] [h; t] -> t));
+    ("nth/1:Zero", (fun ctxt [l; n] [] -> ctxt#get_node "head/0" [l]));
+    ("nth/1:Succ", (fun ctxt [l; n] [m] -> ctxt#get_node "nth/1" [ctxt#get_node "tail/0" [l]; m]));
+    ("evillen/0:Cons", (fun ctxt [l; n] [h; t] -> ctxt#get_node "evillen/0" [t; ctxt#get_node "Succ" [n]])) (* To construct matching loops... *)
+  ]
+
 let _ =
-  let ctxt = ref (create_context()) in
+  let ctxt = ref (new context fpclauses) in
   let eval s = !ctxt#eval_term (parse_term s) in
-  let reset() = ctxt := create_context() in
+  let reset() = ctxt := new context fpclauses in
   let push() = !ctxt#push in
   let pop() = !ctxt#pop in
   let assert_eq s1 s2 = !ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
@@ -434,9 +514,36 @@ let _ =
   assert (assert_neq "1" "2" = Unknown);
   
   reset();
-
   assert (assert_eq "(Succ (Succ (Succ (Zero))))" "(Succ (Succ (Zero)))" = Unsat);
   
   reset();
   assert (assert_eq "(Succ (Succ (x)))" "(Succ (Succ (y)))" = Unknown);
-  assert (assert_neq "x" "y" = Unsat)
+  assert (assert_neq "x" "y" = Unsat);
+  
+  reset();
+  assert (assert_neq "(len/0 (add/0 (add/0 Nil 5) 10))" "(Succ (Succ Zero))" = Unsat);
+  
+  reset();
+  assert (assert_neq "(nth/1 (add/0 (add/0 Nil 5) 10) Zero)" "5" = Unsat);
+  
+  reset();
+  assert (assert_neq "(nth/1 (add/0 (add/0 Nil 5) 10) (Succ Zero))" "10" = Unsat);
+  
+  reset();
+  assert (assert_neq "(add/0 (add/0 Nil 5) 10)" "(Cons 5 (Cons 10 Nil))" = Unsat);
+  
+  reset();
+  assert (assert_eq "(add/0 (add/0 Nil 5) 10)" "(Cons 5 (Cons 10 (Cons 15 Nil)))" = Unsat);
+  
+  reset();
+  assert (assert_eq "(len/0 (Cons h t))" "n1" = Unknown);
+  assert (assert_eq "(len/0 t)" "n2" = Unknown);
+  assert (assert_neq "(Succ n2)" "n1" = Unsat);
+  
+  (*
+  Uncomment to get a nice matching loop...
+  
+  reset();
+  assert (assert_eq "inf" "(Cons 5 inf)" = Unknown);
+  assert (assert_eq "(evillen/0 inf Zero)" "x" = Unsat);
+  *)
