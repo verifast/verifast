@@ -668,28 +668,6 @@ let rec try_assoc x xys =
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
-let theoryAtoms = ["true"; "false"; "le"; "lt"]
-
-let theory = [
-  "(DISTINCT true false)";
-  "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
-
-(*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
-  "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
-  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) false) (NEQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) false) (EQ e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) false) (> e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) false) (>= e1 e2)))";
-  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) true) (AND (EQ e1 true) (EQ e2 true))))";
-  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) false) (OR (EQ e1 false) (EQ e2 false))))";
-  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) true) (OR (EQ e1 true) (EQ e2 true))))";
-  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) false) (AND (EQ e1 false) (EQ e2 false))))"
-]
-
 type
   atom = Atom of string
 and
@@ -711,7 +689,11 @@ and
   | Imp of formula * formula
   | Iff of formula * formula
   | IfFormula of formula * formula * formula
-  | Forall of atom list * formula
+  | Forall of atom list * term list * formula
+  | Distinct of atom list
+  | MultiAnd of formula list
+
+type prover_result = Unsat | Unknown
 
 let rec pprint_t t =
   let rec iter level t =
@@ -744,15 +726,6 @@ let negate_t t =
   | FunApp (Atom "lt", [t1; t2]) -> FunApp (Atom "le", [t2; t1])
   | t -> FunApp (Atom "==", [t; Symb (Atom "false")])
 
-let slist ss =
-  let rec args ss =
-    match ss with
-      [] -> ""
-    | [s] -> s
-    | (s::ss) -> s ^ " " ^ args ss
-  in
-    "(" ^ args ss ^ ")"
-
 let pretty_print f =
   let rec iter level f =
     let (l, s) =
@@ -775,33 +748,11 @@ let pretty_print f =
       | Or (f1, f2) -> (120, iter 120 f1 ^ " OR " ^ iter 120 f2)
       | Imp (f1, f2) -> (130, iter 120 f1 ^ " IMPLIES " ^ iter 130 f2)
       | Iff (f1, f2) -> (140, iter 100 f1 ^ " IFF " ^ iter 100 f2)
-      | Forall (xs, f) -> (150, "FORALL " ^ slist (List.map (function (Atom s) -> s) xs) ^ ". " ^ iter 150 f)
+      | Forall (xs, pats, f) -> failwith "Not supported"
     in
     if l <= level then s else "(" ^ s ^ ")"
   in
   iter 200 f
-
-let rec simpt t =
-  match t with
-    Int i -> string_of_int i
-  | Symb (Atom s) -> "|" ^ s ^ "|"
-  | FunApp (Atom f, ts) -> slist ([f] @ List.map simpt ts)
-  | IfTerm (t1, t2, t3) -> slist ["IF"; simpt t1; simpt t2; simpt t3]
-
-let rec simp f =
-  match f with
-    True -> "TRUE"
-  | False -> "FALSE"
-  | PredApp (p, ts) -> slist (p :: List.map simpt ts)
-  | Eq (t1, t2) -> "(EQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
-  | Neq (t1, t2) -> "(NEQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
-  | Not f -> "(NOT " ^ simp f ^ ")"
-  | And (f1, f2) -> "(AND " ^ simp f1 ^ " " ^ simp f2 ^ ")"
-  | Or (f1, f2) -> "(OR " ^ simp f1 ^ " " ^ simp f2 ^ ")"
-  | Imp (f1, f2) -> slist ["IMPLIES"; simp f1; simp f2]
-  | Iff (f1, f2) -> slist ["IFF"; simp f1; simp f2]
-  | IfFormula (f1, f2, f3) -> let s1 = simp f1 in slist ["AND"; slist ["IMPLIES"; s1; simp f2]; slist ["IMPLIES"; slist ["NOT"; s1]; simp f3]]
-  | Forall (xs, f) -> slist ["FORALL"; slist (List.map (function (Atom x) -> x) xs); simp f]
 
 let rec conj ts : formula =
   match ts with
@@ -810,7 +761,7 @@ let rec conj ts : formula =
 
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
-let string_of_env env = slist (List.map (function (x, t) -> slist [x; simpt t]) env)
+let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ pprint_t t) env)
 
 exception StaticError of loc * string
 
@@ -824,7 +775,7 @@ type context =
 | PushSubcontext
 | PopSubcontext
 
-let string_of_heap h = slist (List.map (function (g, ts) -> slist (g::List.map simpt ts)) h)
+let string_of_heap h = String.concat " * " (List.map (function (g, ts) -> g ^ "(" ^ (String.concat ", " (List.map (fun t -> pprint_t t) ts)) ^ ")") h)
   
 let string_of_context c =
   match c with
@@ -849,7 +800,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
-  let (send_command, query_formula) = prover in
+  let (proverReservedIds, bg_push_formula, bg_pop, query_formula) = prover in
 
   let unique_number_counter = ref 0 in
 
@@ -859,10 +810,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
     n
   in
   
-  let simplifyKeywords = [
-    "AND"; "BG_POP"; "BG_PUSH"; "DEFPRED"; "DISTINCT"; "EQ"; "EXISTS";
-    "FALSE"; "FORALL"; "IFF"; "IMPLIES"; "MPATS"; "NEQ"; "NOT"; "OR"; "PATS"; "TRUE"] in
-  let used_ids = ref (simplifyKeywords @ theoryAtoms) in
+  let used_ids = ref proverReservedIds in
   let used_ids_stack = ref ([]: string list list) in
   
   let push_index_table() =
@@ -1446,35 +1394,37 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
     flatmap
     (function
        Inductive (l, i, cs) ->
-       let tagfunc = alloc_unique_id (i ^ "_tagfunc") in
-       let tags = List.map (function (Ctor (l, c, ps)) -> (c, ps, alloc_unique_id (c ^ "_tag"))) cs in
-       let da = slist ("DISTINCT" :: (List.map (function (c, ps, t) -> t) tags)) in
+       let tagfunc = alloc_atom (i ^ "_tagfunc") in
+       let tags = List.map (function (Ctor (l, c, ps)) -> (c, ps, alloc_atom (c ^ "_tag"))) cs in
+       let da = Distinct (List.map (function (c, ps, t) -> t) tags) in
        let tagaxs =
          List.map
            (function ((c, ps, at)) ->
-              let (_, _, _, Atom ac) = List.assoc c purefuncmap in
+              let (_, _, _, ac) = List.assoc c purefuncmap in
               match ps with
-                [] -> slist ["EQ"; slist [tagfunc; ac]; at]
+                [] -> Eq (FunApp (tagfunc, [Symb ac]), Symb at)
               | _ ->
                 let _ = push_index_table() in
-                let xs = imap (fun i t -> alloc_unique_id ("x" ^ string_of_int i)) ps in
+                let xs = imap (fun i t -> alloc_atom ("x" ^ string_of_int i)) ps in
+                let xts = List.map (fun x -> Symb x) xs in
                 let _ = pop_index_table() in
-                slist ["FORALL"; slist xs; slist ["PATS"; slist (ac :: xs)]; slist ["EQ"; slist [tagfunc; slist (ac :: xs)]; at]]
+                Forall (xs, [FunApp (ac, xts)], Eq (FunApp (tagfunc, [FunApp (ac, xts)]), Symb at))
            )
            tags
        in
        let projaxs =
          flatmap
            (function (Ctor (l, c, ps)) ->
-              let (_, _, _, Atom ac) = List.assoc c purefuncmap in
-              let projfuncs = imap (fun i t -> alloc_unique_id (c ^ "_proj" ^ string_of_int i)) ps in
+              let (_, _, _, ac) = List.assoc c purefuncmap in
+              let projfuncs = imap (fun i t -> alloc_atom (c ^ "_proj" ^ string_of_int i)) ps in
               let _ = push_index_table() in
-              let xs = imap (fun i t -> alloc_unique_id ("x" ^ string_of_int i)) ps in
+              let xs = imap (fun i t -> alloc_atom ("x" ^ string_of_int i)) ps in
+              let xts = List.map (fun x -> Symb x) xs in
               let _ = pop_index_table() in
-              let Some fxs = zip projfuncs xs in
+              let Some fxs = zip projfuncs xts in
               List.map
                 (fun (f, x) ->
-                   slist ["FORALL"; slist xs; slist ["PATS"; slist (ac :: xs)]; slist ["EQ"; slist [f; slist (ac :: xs)]; x]]
+                   Forall (xs, [FunApp (ac, xts)], Eq (FunApp (f, [FunApp (ac, xts)]), x))
                 )
                 fxs
            )
@@ -1483,21 +1433,21 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
        da :: tagaxs @ projaxs
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
        let _ = push_index_table() in
-       let penv = List.map (fun (t, x) -> (x, get_unique_symb x)) ps in
+       let penv = List.map (fun (t, x) -> (x, alloc_atom x)) ps in
        let axs =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-              let patenv = List.map (fun x -> (x, get_unique_symb x)) pats in
-              let patvals = List.map (function (x, Symb (Atom a)) -> a) patenv in
-              let xs' = flatmap (fun (p, Symb (Atom a)) -> if p = x then patvals else [a]) penv in
-              let (_, _, _, Atom csymb) = List.assoc cn purefuncmap in
-              let args = List.map (fun (p, Symb (Atom a)) -> if p = x then match pats with [] -> csymb | _ -> slist (csymb :: patvals) else a) penv in
-              let (_, _, _, Atom gsymb) = List.assoc g purefuncmap in
-              let env = patenv @ penv in
-              let body = slist ["EQ"; slist (gsymb :: args); simpt (eval env e)] in
+              let patenv = List.map (fun x -> (x, alloc_atom x)) pats in
+              let patvals = List.map (function (x, a) -> a) patenv in
+              let xs' = flatmap (fun (p, a) -> if p = x then patvals else [a]) penv in
+              let (_, _, _, ca) = List.assoc cn purefuncmap in
+              let args = List.map (fun (p, a) -> if p = x then match pats with [] -> Symb ca | _ -> FunApp (ca, List.map (fun x -> Symb x) patvals) else Symb a) penv in
+              let (_, _, _, ga) = List.assoc g purefuncmap in
+              let env = List.map (fun (x, a) -> (x, Symb a)) (patenv @ penv) in
+              let body = Eq (FunApp (ga, args), eval env e) in
               match xs' with
                 [] -> body
-              | _ -> slist ["FORALL"; slist xs'; slist ["PATS"; slist (gsymb :: args)]; body]
+              | _ -> Forall (xs', [FunApp (ga, args)], body)
            )
            cs
        in
@@ -1508,11 +1458,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
     ds
   in
 
-  let bg_push s = send_command (slist ["BG_PUSH"; s]) in
-
-  let _ = bg_push (slist ("AND" :: theory)) in
-  
-  let _ = bg_push (slist ("AND" :: List.map (fun s -> s ^ "\r\n") indaxs)) in
+  let _ = bg_push_formula (MultiAnd indaxs) in
 
   let contextStack = ref ([]: context list) in
   
@@ -1528,12 +1474,10 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   
   let assume phi cont =
     if query_formula phi then cont() else (
-      let s = simp phi in
       push_context (Assuming phi);
-      bg_push s;
-      (if not (query_formula (Not True)) then cont());
+      if bg_push_formula phi <> Unsat then cont();
       pop_context ();
-      send_command "(BG_POP)";
+      bg_pop();
       ()
     )
   in
@@ -1544,7 +1488,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   in
   
   let assert_false h env l msg =
-    assert_formula (Not True) h env l msg (fun _ -> ())
+    assert_formula False h env l msg (fun _ -> ())
   in
   
   let success() = () in
@@ -2083,9 +2027,69 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   
   verify_decls [] ds
 
+let slist ss =
+  let rec args ss =
+    match ss with
+      [] -> ""
+    | [s] -> s
+    | (s::ss) -> s ^ " " ^ args ss
+  in
+    "(" ^ args ss ^ ")"
+
+let rec simpt t =
+  match t with
+    Int i -> string_of_int i
+  | Symb (Atom s) -> "|" ^ s ^ "|"
+  | FunApp (Atom f, ts) -> slist ([f] @ List.map simpt ts)
+  | IfTerm (t1, t2, t3) -> slist ["IF"; simpt t1; simpt t2; simpt t3]
+
+let rec simp f =
+  match f with
+    True -> "TRUE"
+  | False -> "FALSE"
+  | PredApp (p, ts) -> slist (p :: List.map simpt ts)
+  | Eq (t1, t2) -> "(EQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
+  | Neq (t1, t2) -> "(NEQ " ^ simpt t1 ^ " " ^ simpt t2 ^ ")"
+  | Not f -> "(NOT " ^ simp f ^ ")"
+  | And (f1, f2) -> "(AND " ^ simp f1 ^ " " ^ simp f2 ^ ")"
+  | Or (f1, f2) -> "(OR " ^ simp f1 ^ " " ^ simp f2 ^ ")"
+  | Imp (f1, f2) -> slist ["IMPLIES"; simp f1; simp f2]
+  | Iff (f1, f2) -> slist ["IFF"; simp f1; simp f2]
+  | IfFormula (f1, f2, f3) -> let s1 = simp f1 in slist ["AND"; slist ["IMPLIES"; s1; simp f2]; slist ["IMPLIES"; slist ["NOT"; s1]; simp f3]]
+  | Forall (xs, pats, f) -> slist ["FORALL"; slist (List.map (function (Atom x) -> x) xs); slist ("PATS" :: List.map simpt pats); simp f]
+  | MultiAnd fs -> slist ("AND" :: List.map simp fs)
+  | Distinct atoms -> slist ("DISTINCT" :: List.map (function Atom a -> a) atoms)
+
+let simplifyKeywords = [
+  "AND"; "BG_POP"; "BG_PUSH"; "DEFPRED"; "DISTINCT"; "EQ"; "EXISTS";
+  "FALSE"; "FORALL"; "IFF"; "IMPLIES"; "MPATS"; "NEQ"; "NOT"; "OR"; "PATS"; "TRUE"]
+
+let simplifyTheoryAtoms = ["true"; "false"; "le"; "lt"]
+
+let simplifyTheory = [
+  "(DISTINCT true false)";
+  "(FORALL (e1 e2) (EQ (IF true e1 e2) e1))";
+
+(*  "(FORALL (e1 e2) (EQ (IF false e1 e2) e2))";   *)
+  "(FORALL (b e1 e2) (IMPLIES (NEQ b true) (EQ (IF b e1 e2) e2)))";   (* The evil case split axiom. *)
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) true) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (== e1 e2) false) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) true) (NEQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (!= e1 e2) false) (EQ e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) true) (<= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (le e1 e2) false) (> e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) true) (< e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (lt e1 e2) false) (>= e1 e2)))";
+  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) true) (AND (EQ e1 true) (EQ e2 true))))";
+  "(FORALL (e1 e2) (IFF (EQ (&& e1 e2) false) (OR (EQ e1 false) (EQ e2 false))))";
+  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) true) (OR (EQ e1 true) (EQ e2 true))))";
+  "(FORALL (e1 e2) (IFF (EQ (|| e1 e2) false) (AND (EQ e1 false) (EQ e2 false))))"
+]
+
 let do_with_prover prover verbose action =
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
+  
   match prover with
     "z3" ->
     let (simp_in, simp_out) = Unix.open_process "z3 /si" in
@@ -2111,7 +2115,14 @@ let do_with_prover prover verbose action =
       query_count := !query_count + 1;
       success
     in
-    let prover = (send_command, query_formula) in
+    let bg_push s = send_command (slist ["BG_PUSH"; s]) in
+    let _ = bg_push (slist ("AND" :: simplifyTheory)) in
+    let bg_push_formula phi =
+      bg_push (simp phi);
+      if query_formula False then Unsat else Unknown
+    in
+    let bg_pop () = send_command "(BG_POP)" in
+    let prover = (simplifyKeywords @ simplifyTheoryAtoms, bg_push_formula, bg_pop, query_formula) in
     begin
       try
         action prover;
@@ -2149,12 +2160,14 @@ let do_with_prover prover verbose action =
       query_count := !query_count + 1;
       success
     in
-    (*
-    let prover_escape x =
-      if 0 < String.length x && String.get x 0 = '_' then "|" ^ x ^ "|" else x
-    end
-    *)
-    let prover = (send_command, query_formula) in
+    let bg_push s = send_command (slist ["BG_PUSH"; s]) in
+    let _ = bg_push (slist ("AND" :: simplifyTheory)) in
+    let bg_push_formula phi =
+      bg_push (simp phi);
+      if query_formula False then Unsat else Unknown
+    in
+    let bg_pop () = send_command "(BG_POP)" in
+    let prover = (simplifyKeywords @ simplifyTheoryAtoms, bg_push_formula, bg_pop, query_formula) in
     begin
       try
         action prover;
