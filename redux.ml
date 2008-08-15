@@ -35,7 +35,7 @@ class node ctxt s vs v =
           [] -> []
         | v0::vs -> if i = k then v::vs else v0::replace (i + 1) vs
       in
-      children <- replace k children
+      children <- replace 0 children
     method matches s vs =
       symbol = s && children = vs
     method lookup_equivalent_parent_of v =
@@ -75,12 +75,15 @@ and value ctxt =
       let redundant_parents =
         flatmap
           (fun (n, k) ->
-             match n#lookup_equivalent_parent_of v with
-               None ->
-               v#add_parent (n, k);
-               []
-             | Some n' ->
-               [(n, n')]
+             let result =
+               match n#lookup_equivalent_parent_of v with
+                 None ->
+                 []
+               | Some n' ->
+                 [(n, n')]
+             in
+             v#add_parent (n, k);
+             result
           )
           parents
       in
@@ -89,7 +92,10 @@ and value ctxt =
           [] -> Unknown
         | (n, n')::rps ->
           begin
-            match context#assert_eq n#value n'#value with
+            print_endline "Doing a recursive assert_eq!";
+            let result = context#assert_eq n#value n'#value in
+            print_endline "Returned from recursive assert_eq";
+            match result with
               Unsat -> Unsat
             | Unknown -> iter rps
           end
@@ -142,11 +148,20 @@ and context =
 
     method assert_eq v1 v2 =
       if v1 = v2 then
+      begin
+        print_endline "assert_eq: values already the same";
         Unknown
+      end
       else if v1#neq v2 then
+      begin
+        print_endline "assert_eq: values are neq";
         Unsat
+      end
       else
+      begin
+        print_endline "assert_eq: merging v1 into v2";
         v1#merge_into v2
+      end
     
     method assert_terms_eq t1 t2 =
       self#assert_eq (self#eval_term t1) (self#eval_term t2)
@@ -227,10 +242,11 @@ class parser scanner =
 let parse_term s = (new parser (new scanner s))#parse_term
 
 let _ =
-  let ctxt = create_context() in
-  let eval s = ctxt#eval_term (parse_term s) in
-  let assert_eq s1 s2 = ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
-  let assert_neq s1 s2 = ctxt#assert_terms_neq (parse_term s1) (parse_term s2) in
+  let ctxt = ref (create_context()) in
+  let eval s = !ctxt#eval_term (parse_term s) in
+  let reset() = ctxt := create_context() in
+  let assert_eq s1 s2 = !ctxt#assert_terms_eq (parse_term s1) (parse_term s2) in
+  let assert_neq s1 s2 = !ctxt#assert_terms_neq (parse_term s1) (parse_term s2) in
   let v1 = eval "(tree nil nil (succ zero))" in
   let v2 = eval "(tree nil nil (succ zero))" in
   assert (v1 = v2);
@@ -239,4 +255,10 @@ let _ =
   assert (assert_eq "fx" "(f x)" = Unknown);
   assert (assert_eq "fy" "(f y)" = Unknown);
   assert (assert_eq "x" "y" = Unknown);
-  assert (assert_neq "fx" "fy" = Unsat)
+  assert (assert_neq "fx" "fy" = Unsat);
+
+  reset();
+  assert (assert_eq "fxy" "(f x y)" = Unknown);
+  assert (assert_eq "fyx" "(f y x)" = Unknown);
+  assert (assert_eq "x" "y" = Unknown);
+  assert (assert_neq "fxy" "fyx" = Unsat)
