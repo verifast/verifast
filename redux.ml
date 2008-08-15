@@ -41,8 +41,9 @@ class node ctxt s vs v =
     method lookup_equivalent_parent_of v =
       v#lookup_parent symbol children
   end
-and value =
-  object
+and value ctxt =
+  object (self)
+    val context = ctxt
     val mutable children: node list = []
     val mutable parents: (node * int) list = []
     val mutable neqs: value list = []
@@ -51,7 +52,7 @@ and value =
     method add_child c =
       children <- c::children
     method neq v =
-      List.mem_assoc v neqs
+      List.mem v neqs
     method add_neq v =
       neqs <- v::neqs
     method neq_merging_into vold vnew =
@@ -61,11 +62,11 @@ and value =
       let rec iter ns =
         match ns with
           [] -> None
-        | n::ns -> if n#matches s vs then Some n else iter ns
+        | (n, _)::ns -> if n#matches s vs then Some n else iter ns
       in
       iter parents
     method merge_into v =
-      List.iter (fun n -> n#set_parent v) children;
+      List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> value) v) neqs;
       List.iter (fun (n, k) -> n#set_child k v) parents;
@@ -88,7 +89,7 @@ and value =
           [] -> Unknown
         | (n, n')::rps ->
           begin
-            match ctxt#assert_eq n#value n'#value with
+            match context#assert_eq n#value n'#value with
               Unsat -> Unsat
             | Unknown -> iter rps
           end
@@ -108,32 +109,36 @@ and context =
         match vs with
           [] ->
           begin
-          match try_assoc s nodemap with
+          match try_assoc s leafnodemap with
             None ->
-            let v = new value in
+            let v = new value (self :> context) in
             let node = new node (self :> context) s vs v in
-            nodemap <- (s, node)::nodemap;
+            leafnodemap <- (s, node)::leafnodemap;
             v
           | Some n -> n#value
           end
         | v::_ ->
+          begin
           match v#lookup_parent s vs with
             None ->
-            let v = new value in
-            let node = new node (self :> context) s vs v in
+            let v = new value (self :> context) in
+            let _ = new node (self :> context) s vs v in
             v
           | Some n -> n#value
           end
         end
     
-    method assert_neq v1 v2 =
+    method assert_neq (v1: value) (v2: value) =
       if v1 = v2 then
         Unsat
       else if v1#neq v2 then
         Unknown
       else
+      begin
         v1#add_neq v2;
-        v2#add_neq v1
+        v2#add_neq v1;
+        Unknown
+      end
 
     method assert_eq v1 v2 =
       if v1 = v2 then
