@@ -261,4 +261,12 @@ let _ =
   assert (assert_eq "fxy" "(f x y)" = Unknown);
   assert (assert_eq "fyx" "(f y x)" = Unknown);
   assert (assert_eq "x" "y" = Unknown);
-  assert (assert_neq "fxy" "fyx" = Unsat)
+  assert (assert_neq "fxy" "fyx" = Unsat);
+  
+  reset();
+  assert (assert_eq "x" "(f (g y))" = Unknown);
+  assert (assert_eq "(f 5)" "3" = Unknown);
+  assert (assert_eq "(g 7)" "z" = Unknown);
+  assert (assert_eq "7" "y" = Unknown);
+  assert (assert_eq "z" "5" = Unknown);
+  assert (assert_neq "x" "3" = Unsat);
