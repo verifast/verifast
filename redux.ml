@@ -9,23 +9,23 @@ type term = Term of string * term list
 
 type assert_result = Unknown | Unsat
 
-class node ctxt s vs v =
+class termnode ctxt s vs v =
   object (self)
     val context = ctxt
     val symbol = s
-    val mutable children: value list = vs
+    val mutable children: valuenode list = vs
     val mutable value = v
     method value = value
     initializer begin
-      let rec iter k (vs: value list) =
+      let rec iter k (vs: valuenode list) =
         match vs with
           [] -> ()
         | v::vs ->
-          v#add_parent ((self :> node), k);
+          v#add_parent ((self :> termnode), k);
           iter (k + 1) vs
       in
       iter 0 vs;
-      value#add_child (self :> node)
+      value#add_child (self :> termnode)
     end
     method set_value v =
       value <- v
@@ -41,12 +41,12 @@ class node ctxt s vs v =
     method lookup_equivalent_parent_of v =
       v#lookup_parent symbol children
   end
-and value ctxt =
+and valuenode ctxt =
   object (self)
     val context = ctxt
-    val mutable children: node list = []
-    val mutable parents: (node * int) list = []
-    val mutable neqs: value list = []
+    val mutable children: termnode list = []
+    val mutable parents: (termnode * int) list = []
+    val mutable neqs: valuenode list = []
     method add_parent p =
       parents <- p::parents
     method add_child c =
@@ -57,7 +57,7 @@ and value ctxt =
       neqs <- v::neqs
     method neq_merging_into vold vnew =
       neqs <- List.map (fun v0 -> if v0 = vold then vnew else vold) neqs;
-      vnew#add_neq (self :> value)
+      vnew#add_neq (self :> valuenode)
     method lookup_parent s vs =
       let rec iter ns =
         match ns with
@@ -68,7 +68,7 @@ and value ctxt =
     method merge_into v =
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
-      List.iter (fun vneq -> vneq#neq_merging_into (self :> value) v) neqs;
+      List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
       List.iter (fun (n, k) -> n#set_child k v) parents;
       (* At this point self is referenced nowhere. *)
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
@@ -105,7 +105,7 @@ and value ctxt =
   end
 and context =
   object (self)
-    val mutable leafnodemap: (string * node) list = []
+    val mutable leafnodemap: (string * termnode) list = []
     
     method eval_term t =
       match t with
@@ -117,8 +117,8 @@ and context =
           begin
           match try_assoc s leafnodemap with
             None ->
-            let v = new value (self :> context) in
-            let node = new node (self :> context) s vs v in
+            let v = new valuenode (self :> context) in
+            let node = new termnode (self :> context) s vs v in
             leafnodemap <- (s, node)::leafnodemap;
             v
           | Some n -> n#value
@@ -127,14 +127,14 @@ and context =
           begin
           match v#lookup_parent s vs with
             None ->
-            let v = new value (self :> context) in
-            let _ = new node (self :> context) s vs v in
+            let v = new valuenode (self :> context) in
+            let _ = new termnode (self :> context) s vs v in
             v
           | Some n -> n#value
           end
         end
     
-    method assert_neq (v1: value) (v2: value) =
+    method assert_neq (v1: valuenode) (v2: valuenode) =
       if v1 = v2 then
         Unsat
       else if v1#neq v2 then
