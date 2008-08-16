@@ -11,10 +11,12 @@ type symbol_kind = Ctor | Fixpoint of int | Uninterp
 
 class symbol (name: string) =
   object (self)
+    val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
     method name = name
+    method node = node
+    method set_node n = node <- Some n
   end
-
-class termnode ctxt knd s initial_children =
+and termnode ctxt knd s initial_children =
   object (self)
     val context = ctxt
     val kind = knd
@@ -239,7 +241,6 @@ and context fpclauses =
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
-    val mutable leafnodemap: (symbol * termnode) list = []
     val mutable redexes = []  (* TODO: Do we need to push this? *)
     
     method set_fpclauses cs = fpclauses <- cs
@@ -247,7 +248,7 @@ and context fpclauses =
     method pushdepth = pushdepth
     method push =
       assert (redexes = []);
-      popstack <- (pushdepth, popactionlist, leafnodemap)::popstack;
+      popstack <- (pushdepth, popactionlist)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- []
     
@@ -257,11 +258,10 @@ and context fpclauses =
     method pop =
       redexes <- [];
       match popstack with
-        (pushdepth0, popactionlist0, leafnodemap0)::popstack0 ->
+        (pushdepth0, popactionlist0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
-        leafnodemap <- leafnodemap0;
         popstack <- popstack0
       | [] -> failwith "Popstack is empty"
 
@@ -278,10 +278,10 @@ and context fpclauses =
       match vs with
         [] ->
         begin
-        match try_assoc s leafnodemap with
+        match s#node with
           None ->
           let node = new termnode (self :> context) kind s vs in
-          leafnodemap <- (s, node)::leafnodemap;
+          s#set_node node;
           node
         | Some n -> n
         end

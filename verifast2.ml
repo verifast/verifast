@@ -753,13 +753,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
-  let unique_number_counter = ref 0 in
-
-  let get_unique_number () =
-    let n = !unique_number_counter in
-    unique_number_counter := n + 1;
-    n
-  in
+  let ctxt = new context [] in
   
   let used_ids = ref [] in
   let used_ids_stack = ref ([]: string list list) in
@@ -794,6 +788,8 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   let get_unique_id s =
     alloc_symbol s
   in
+  
+  let alloc_nullary_ctor s = let s = alloc_symbol s in ignore (ctxt#get_node Redux.Ctor s []); s in
   
   let alloc_atom s = alloc_symbol s in
 
@@ -901,8 +897,8 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let entry = (cn, (lc, ts)) in
-              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, alloc_atom cn, Redux.Ctor))::pfm) ctors
+              let csym = if ts = [] then alloc_nullary_ctor cn else alloc_symbol cn in
+              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym, Redux.Ctor))::pfm) ctors
             )
         in
         citer [] pfm ctors
@@ -1067,9 +1063,9 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     iter
       [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]));
        ("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
-      [("true", (dummy_loc, boolt, [], alloc_symbol "true", Redux.Ctor));
-       ("false", (dummy_loc, boolt, [], alloc_symbol "false", Redux.Ctor));
-       ("zero", (dummy_loc, uintt, [], alloc_symbol "zero", Redux.Ctor));
+      [("true", (dummy_loc, boolt, [], alloc_nullary_ctor "true", Redux.Ctor));
+       ("false", (dummy_loc, boolt, [], alloc_nullary_ctor "false", Redux.Ctor));
+       ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor "zero", Redux.Ctor));
        ("succ", (dummy_loc, uintt, [uintt], alloc_symbol "succ", Redux.Ctor))] ds
   in
   
@@ -1315,8 +1311,6 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       s
     | Some s -> s
   in
-  
-  let ctxt = new context [] in
   
   let rec eval env e =
     let ev = eval env in
