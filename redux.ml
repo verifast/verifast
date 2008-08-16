@@ -68,7 +68,7 @@ class termnode ctxt knd s initial_children =
     method set_child k v =
       let rec replace i vs =
         match vs with
-          [] -> []
+          [] -> assert false
         | v0::vs -> if i = k then v::vs else v0::replace (i + 1) vs
       in
       self#push;
@@ -241,6 +241,7 @@ and context fpclauses =
 
     method pushdepth = pushdepth
     method push =
+      assert (redexes = []);
       popstack <- (pushdepth, popactionlist, leafnodemap)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- []
@@ -249,6 +250,7 @@ and context fpclauses =
       popactionlist <- action::popactionlist
 
     method pop =
+      redexes <- [];
       match popstack with
         (pushdepth0, popactionlist0, leafnodemap0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;

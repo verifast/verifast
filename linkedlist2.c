@@ -236,6 +236,29 @@ fixpoint uint plus(uint n1, uint n2) {
   }
 }
 
+lemma void plus_succ(uint n1, uint n2)
+  requires emp;
+  ensures plus(succ(n1), n2) == succ(plus(n1, n2));
+{
+  switch (n1) {
+    case zero:
+    case succ(n):
+      plus_succ(n, succ(n2));
+  }
+}
+
+lemma void plus_zero(uint n)
+  requires emp;
+  ensures plus(n, zero) == n;
+{
+  switch (n) {
+    case zero:
+    case succ(m):
+      plus_succ(m, zero);
+      plus_zero(m);
+  }
+}
+
 @*/
 
 uint length(struct llist *list)
@@ -266,6 +289,7 @@ uint length(struct llist *list)
   //@ open lseg(n, l, _ls2);
   //@ list_append_nil(_ls1);
   //@ close llist(list, _v);
+  //@ plus_zero(c);
   return c;
 }
 
@@ -315,7 +339,7 @@ lemma void drop_ith(intlist v, uint i, int h)
 }
 
 lemma void drop_0_lemma(intlist v)
-  requires true;
+  requires emp;
   ensures drop(zero,v) == v;
 {
   switch (v) {
