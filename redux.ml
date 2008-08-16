@@ -11,14 +11,14 @@ type assert_result = Unknown | Unsat
 
 type symbol_kind = Ctor | Fixpoint of int | Uninterp
 
-class termnode ctxt knd s vs =
+class termnode ctxt knd s initial_children =
   object (self)
     val context = ctxt
     val kind = knd
     val symbol = s
     val mutable popstack = []
     val mutable pushdepth = 0
-    val mutable children: valuenode list = vs
+    val mutable children: valuenode list = initial_children
     val mutable value = new valuenode ctxt
     val mutable reduced = false
     method kind = kind
@@ -50,8 +50,9 @@ class termnode ctxt knd s vs =
           v#add_parent ((self :> termnode), k);
           iter (k + 1) vs
       in
-      iter 0 vs;
+      iter 0 initial_children;
       value#add_child (self :> termnode);
+      value#set_initial_child (self :> termnode);
       match kind with
         Ctor -> value#set_ctorchild (self :> termnode)
       | Fixpoint k ->
@@ -98,16 +99,23 @@ class termnode ctxt knd s vs =
       end
       else
         Unknown
+    method pprint =
+      if initial_children = [] then symbol else
+        symbol ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
+
   end
 and valuenode ctxt =
   object (self)
     val context = ctxt
+    val mutable initial_child: termnode option = None
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable children: termnode list = []
     val mutable parents: (termnode * int) list = []
     val mutable ctorchild: termnode option = None
     val mutable neqs: valuenode list = []
+    method set_initial_child t = initial_child <- Some t
+    method initial_child = match initial_child with Some n -> n | None -> assert false
     method push =
       if ctxt#pushdepth <> pushdepth then
       begin
@@ -217,16 +225,22 @@ and valuenode ctxt =
             end
         in
         iter (List.combine n#children n'#children)
-
+    method pprint =
+      match initial_child with
+        Some n -> n#pprint
+      | None -> assert false
   end
 and context fpclauses =
   object (self)
+    val mutable fpclauses = fpclauses
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
     val mutable leafnodemap: (string * termnode) list = []
     val mutable redexes = []  (* TODO: Do we need to push this? *)
     
+    method set_fpclauses cs = fpclauses <- cs
+
     method pushdepth = pushdepth
     method push =
       popstack <- (pushdepth, popactionlist, leafnodemap)::popstack;
@@ -253,16 +267,7 @@ and context fpclauses =
       let v = clause (self :> context) fpvs cvs in
       self#assert_eq v fpn#value
     
-    method get_node s vs =
-      let kind =
-        try
-          let index = String.rindex s '/' in
-          let suffix = String.sub s (index + 1)(String.length s - index - 1) in
-          let k = int_of_string suffix in
-          Fixpoint k
-        with Not_found -> 
-          match String.get s 0 with 'A'..'Z' | '0'..'9' -> Ctor | _ -> Uninterp
-      in
+    method get_node kind s vs =
       match vs with
         [] ->
         begin
@@ -270,23 +275,38 @@ and context fpclauses =
           None ->
           let node = new termnode (self :> context) kind s vs in
           leafnodemap <- (s, node)::leafnodemap;
-          node#value
-        | Some n -> n#value
+          node
+        | Some n -> n
         end
       | v::_ ->
         begin
         match v#lookup_parent s vs with
           None ->
           let node = new termnode (self :> context) kind s vs in
-          node#value
-        | Some n -> n#value
+          node
+        | Some n -> n
         end
     
+    method infer_symbol_kind s =
+      try
+        let index = String.rindex s '/' in
+        let suffix = String.sub s (index + 1)(String.length s - index - 1) in
+        let k = int_of_string suffix in
+        Fixpoint k
+      with Not_found -> 
+        match String.get s 0 with 'A'..'Z' | '0'..'9' -> Ctor | _ -> Uninterp
+
+    method get_node2 s vs =
+      self#get_node (self#infer_symbol_kind s) s vs
+    
+    method get_node2_value s vs =
+      (self#get_node2 s vs)#value
+      
     method eval_term t =
       match t with
         Term (s, ts) ->
-        let vs = List.map self#eval_term ts in
-        self#get_node s vs
+        let vs = List.map (fun t -> (self#eval_term t)#value) ts in
+        self#get_node2 s vs
     
     method assert_neq (v1: valuenode) (v2: valuenode) =
       if v1 = v2 then
@@ -317,26 +337,31 @@ and context fpclauses =
         v1#merge_into v2
       end
     
+    method reduce0 =
+      let rec iter () =
+        match redexes with
+          [] -> Unknown
+        | n::redexes0 ->
+          redexes <- redexes0;
+          match n#reduce with
+            Unsat -> Unsat
+          | Unknown -> iter ()
+      in
+      iter()
+    
+    method reduce =
+      assert (self#reduce0 = Unknown)
+
     method do_and_reduce action =
       match action() with
         Unsat -> Unsat
-      | Unknown ->
-        let rec iter () =
-          match redexes with
-            [] -> Unknown
-          | n::redexes0 ->
-            redexes <- redexes0;
-            match n#reduce with
-              Unsat -> Unsat
-            | Unknown -> iter ()
-        in
-        iter()
+      | Unknown -> self#reduce0
 
     method assert_terms_eq t1 t2 =
-      self#do_and_reduce (fun () -> self#assert_eq (self#eval_term t1) (self#eval_term t2))
+      self#do_and_reduce (fun () -> self#assert_eq (self#eval_term t1)#value (self#eval_term t2)#value)
       
     method assert_terms_neq t1 t2 =
-      self#do_and_reduce (fun () -> self#assert_neq (self#eval_term t1) (self#eval_term t2))
+      self#do_and_reduce (fun () -> self#assert_neq (self#eval_term t1)#value (self#eval_term t2)#value)
   end
 
 let create_context() = new context
@@ -417,15 +442,15 @@ let parse_term s = (new parser (new scanner s))#parse_term_eof
 
 let fpclauses =
   [
-    ("add/0:Nil", (fun ctxt [l; x] [] -> ctxt#get_node "Cons" [x; ctxt#get_node "Nil" []]));
-    ("add/0:Cons", (fun ctxt [l; x] [h; t] -> ctxt#get_node "Cons" [h; ctxt#get_node "add/0" [t; x]]));
-    ("len/0:Nil", (fun ctxt [l] [] -> ctxt#get_node "Zero" []));
-    ("len/0:Cons", (fun ctxt [l] [h; t] -> ctxt#get_node "Succ" [ctxt#get_node "len/0" [t]]));
+    ("add/0:Nil", (fun ctxt [l; x] [] -> ctxt#get_node2_value "Cons" [x; ctxt#get_node2_value "Nil" []]));
+    ("add/0:Cons", (fun ctxt [l; x] [h; t] -> ctxt#get_node2_value "Cons" [h; ctxt#get_node2_value "add/0" [t; x]]));
+    ("len/0:Nil", (fun ctxt [l] [] -> ctxt#get_node2_value "Zero" []));
+    ("len/0:Cons", (fun ctxt [l] [h; t] -> ctxt#get_node2_value "Succ" [ctxt#get_node2_value "len/0" [t]]));
     ("head/0:Cons", (fun ctxt [l] [h; t] -> h));
     ("tail/0:Cons", (fun ctxt [l] [h; t] -> t));
-    ("nth/1:Zero", (fun ctxt [l; n] [] -> ctxt#get_node "head/0" [l]));
-    ("nth/1:Succ", (fun ctxt [l; n] [m] -> ctxt#get_node "nth/1" [ctxt#get_node "tail/0" [l]; m]));
-    ("evillen/0:Cons", (fun ctxt [l; n] [h; t] -> ctxt#get_node "evillen/0" [t; ctxt#get_node "Succ" [n]])) (* To construct matching loops... *)
+    ("nth/1:Zero", (fun ctxt [l; n] [] -> ctxt#get_node2_value "head/0" [l]));
+    ("nth/1:Succ", (fun ctxt [l; n] [m] -> ctxt#get_node2_value "nth/1" [ctxt#get_node2_value "tail/0" [l]; m]));
+    ("evillen/0:Cons", (fun ctxt [l; n] [h; t] -> ctxt#get_node2_value "evillen/0" [t; ctxt#get_node2_value "Succ" [n]])) (* To construct matching loops... *)
   ]
 
 let _ =
