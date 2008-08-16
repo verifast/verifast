@@ -348,18 +348,101 @@ lemma void drop_0_lemma(intlist v)
   }
 }
 
-lemma void drop_len_lemma(uint i, intlist v)
+lemma void less_than_succ(uint x, uint y)
+  requires lessthan(x, y) == true;
+  ensures lessthan(x, succ(y)) == true;
+{
+  switch (y) {
+    case zero:
+    case succ(y0):
+      switch (x) {
+        case zero:
+        case succ(x0):
+          less_than_succ(x0, y0);
+      }
+  }
+}
+
+lemma void less_than_trans(uint x, uint y, uint z)
+  requires lessthan(x, y) == true &*& lessthan(y, z) == true;
+  ensures lessthan(x, z) == true;
+{
+  switch (y) {
+    case zero:
+    case succ(y0):
+      switch (z) {
+        case zero:
+        case succ(z0):
+          switch (x) {
+            case zero:
+            case succ(x0):
+              less_than_trans(x0, y0, z0);
+          }
+      }
+  }
+}
+
+lemma void less_than_succ_trans(uint x, uint y, uint z)
+  requires lessthan(x, y) == true &*& lessthan(y, z) == true;
+  ensures lessthan(succ(x), z) == true;
+{
+  switch (y) {
+    case zero:
+    case succ(y0):
+      switch (z) {
+        case zero:
+        case succ(z0):
+          switch (x) {
+            case zero:
+              switch (z0) {
+                case zero:
+                case succ(z00):
+              }
+            case succ(x0):
+              less_than_succ_trans(x0, y0, z0);
+          }
+      }
+  }
+}
+
+
+lemma void drop_succ_lemma(uint i, intlist v)
   requires lessthan(i, len(v)) == true;
-  ensures plus(i, len(drop(i, v))) == len(v);
+  ensures len(drop(i, v)) == succ(len(drop(succ(i), v)));
 {
   switch (v) {
     case nil:
     case cons(h, t):
       switch (i) {
         case zero:
-        case succ(i):
-          drop_len_lemma(i, t);
+        case succ(j):
+          drop_succ_lemma(j, t);
       }
+      switch (t) {
+        case nil:
+        case cons(ht, tt):
+      }
+  }
+}
+
+lemma void drop_len_lemma(uint i, intlist v)
+  requires lessthan(i, len(v)) == true;
+  ensures plus(i, len(drop(i, v))) == len(v);
+{
+  switch (i) {
+    case zero:
+      switch (v) {
+        case nil:
+        case cons(h, t):
+      }
+    case succ(j):
+      switch (v) {
+        case nil:
+        case cons(h, t):
+          less_than_succ(j, len(t));
+      }
+      drop_len_lemma(j, v);
+      drop_succ_lemma(j, v);
   }
 }
 
@@ -379,6 +462,62 @@ lemma void drop_cons_lemma(uint i, intlist v, int h, intlist t)
       }
   }
 }
+
+fixpoint bool le(uint x, uint y) {
+  switch (x) {
+    case zero: return true;
+    case succ(x0): return ifzero_bool(y, false, le(x0, minus_one(y)));
+  }
+}
+
+lemma void lessthan_neq(uint x, uint y)
+  requires lessthan(x, y) == true;
+  ensures x != y;
+{
+  switch (y) {
+    case zero:
+    case succ(y0):
+      switch (x) {
+        case zero:
+        case succ(x0):
+          lessthan_neq(x0, y0);
+      }
+  }
+}
+
+lemma void lessthan_le(uint x, uint y)
+  requires lessthan(x, y) == true;
+  ensures le(succ(x), y) == true;
+{
+  switch (y) {
+    case zero:
+    case succ(y0):
+      switch (x) {
+        case zero:
+        case succ(x0):
+          lessthan_le(x0, y0);
+      }
+  }
+}
+
+lemma void le_not_lessthan(uint x, uint y)
+  requires le(x, y) == true &*& lessthan(x, y) != true;
+  ensures x == y;
+{
+  switch (x) {
+    case zero:
+      switch (y) {
+        case zero:
+        case succ(y0):
+      }
+    case succ(x0):
+      switch (y) {
+        case zero:
+        case succ(y0):
+          le_not_lessthan(x0, y0);
+      }
+  }
+}
 @*/
 
 int lookup(struct llist *list, uint index)
@@ -389,23 +528,30 @@ int lookup(struct llist *list, uint index)
   struct node *f = list->first;
   struct node *l = list->last;
   struct node *n = f;
-  int i = zero;
+  uint i = zero;
   //@ close lseg(f, n, nil);
   //@ drop_0_lemma(_v);
-  while (i < index)
-    //@ invariant lessthan(i, index) == true &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& plus(i, len(_ls2)) == len(_v);
+  while (lessthan(i, index) == true)
+    //@ invariant le(i, index) == true &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& plus(i, len(_ls2)) == len(_v);
   {
+    //@ less_than_trans(i, index, len(_v));
     //@ drop_len_lemma(i, _v);
+    //@ plus_zero(i);
+    //@ lessthan_neq(i, len(_v));
     //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     struct node *next = n->next;
     //@ int value = n->value;
     //@ close node(n, next, value);
     //@ open lseg(next, l, ?ls3); // To produce a witness node for next.
+    //@ less_than_succ_trans(i, index, len(_v));
+    //@ lessthan_neq(succ(i), len(_v));
+    //@ plus_zero(succ(i));
     //@ lseg_add(f, n, next);
     //@ close lseg(next, l, ls3);
     //@ drop_cons_lemma(i, _v, value, ls3);
     n = next;
+    //@ lessthan_le(i, index);
     i = succ(i);
     //@ add_append_lemma(_ls1, value, ls3);
   }
@@ -416,6 +562,9 @@ int lookup(struct llist *list, uint index)
   //@ close lseg(n, l, _ls2);
   //@ lseg_append(f, n, l);
   //@ close llist(list, _v);
+  //@ le_not_lessthan(i, index);
+  //@ plus_zero(index);
+  //@ lessthan_neq(index, len(_v));
   //@ drop_ith(_v, index, value);
   return value;
 }
@@ -468,7 +617,7 @@ void main()
   add(l2, 60);
   int x = removeFirst(l2); assert(x == 40);
   append(l1, l2);
-  int n = length(l1); assert(n == succ(succ(succ(succ(succ(zero))))));
+  uint n = length(l1); assert(n == succ(succ(succ(succ(succ(zero))))));
   int e0 = lookup(l1, zero); assert(e0 == 10);
   int e1 = lookup(l1, succ(zero)); assert(e1 == 20);
   int e2 = lookup(l1, succ(succ(zero))); assert(e2 == 30);

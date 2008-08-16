@@ -1318,7 +1318,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
          )
        | Some t -> t)
     (* | Operation (l, op, es) -> (match es with [] -> Symb (Atom op) | _ -> FunApp (Atom op, List.map ev es)) *)
-    (* | IntLit (l, n) -> Int n *)
+       | IntLit (l, n) -> ctxt#get_node Redux.Ctor (string_of_int n) []
   (*  | Read (l, e, f) ->  *)
     | CallExpr (l, g, pats) -> (
         match try_assoc g purefuncmap with

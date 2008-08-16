@@ -266,6 +266,7 @@ and context fpclauses =
     method trigger_fpclause fpn fps cs fpvs cvs =
       let clause = List.assoc (fps ^ ":" ^ cs) fpclauses in
       let v = clause (self :> context) fpvs cvs in
+      (* print_endline ("Assumed by reduction: " ^ fpn#pprint ^ " == " ^ v#initial_child#pprint); *)
       self#assert_eq v fpn#value
     
     method get_node kind s vs =
