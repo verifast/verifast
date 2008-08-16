@@ -29,8 +29,6 @@ fixpoint int ith(intlist v, int i) {
 }
 @*/
 
-struct haha { };
-
 /*@
 
 predicate lseg(struct node *n1, struct node *n2, intlist v)
