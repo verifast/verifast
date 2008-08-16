@@ -29,7 +29,7 @@ let _ =
   if n = 1 then
   begin
     print_endline "Verifast 1.0 for C";
-    print_endline "Usage: verifast [-verbose] [-prover (z3|simplify)] filepath"
+    print_endline "Usage: verifast [-stats] [-verbose] [-prover (z3|simplify)] filepath"
   end
   else
   let rec iter stats verbose prover i =
