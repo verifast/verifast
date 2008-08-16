@@ -1,3 +1,30 @@
+class stats =
+  object (self)
+    val mutable stmtsParsedCount = 0
+    val mutable stmtExecCount = 0
+    val mutable execStepCount = 0
+    val mutable branchCount = 0
+    val mutable proverCmdCount = 0
+    val mutable proverQueryCount = 0
+    
+    method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
+    method stmtExec = stmtExecCount <- stmtExecCount + 1
+    method execStep = execStepCount <- execStepCount + 1
+    method branch = branchCount <- branchCount + 1
+    method proverCmd = proverCmdCount <- proverCmdCount + 1
+    method proverQuery = proverQueryCount <- proverQueryCount + 1
+    
+    method printStats =
+      print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
+      print_endline ("Statement executions: " ^ string_of_int stmtExecCount);
+      print_endline ("Execution steps (including assertion production/consumption steps): " ^ string_of_int execStepCount);
+      print_endline ("Branches: " ^ string_of_int branchCount);
+      print_endline ("Prover commands: " ^ string_of_int proverCmdCount);
+      print_endline ("Prover queries: " ^ string_of_int proverQueryCount)
+  end
+
+let stats = new stats
+
 type token =
     Kwd of string
   | Ident of string
@@ -508,8 +535,10 @@ and
   [< s = parse_stmt; ss = parse_stmts >] -> s::ss
 | [< >] -> []
 and
-  parse_stmt = parser
-  [< '((sp1, _), Kwd "/*@"); s = parse_stmt; '((_, sp2), Kwd "@*/") >] -> let _ = reportGhostRange (sp1, sp2) in PureStmt ((sp1, sp2), s)
+  parse_stmt = parser [< s = parse_stmt0 >] -> stats#stmtParsed; s
+and
+  parse_stmt0 = parser
+  [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> let _ = reportGhostRange (sp1, sp2) in PureStmt ((sp1, sp2), s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
@@ -1466,6 +1495,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
     
   let with_context msg cont =
+    stats#execStep;
     push_context msg;
     cont();
     pop_context();
@@ -1494,6 +1524,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   let success() = () in
   
   let branch cont1 cont2 =
+    stats#branch;
     with_index_table (fun _ -> cont1());
     with_index_table (fun _ -> cont2())
   in
@@ -1682,6 +1713,7 @@ let verify_program_with_prover prover verbose path stream reportKeyword reportGh
   in
 
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
+    stats#stmtExec;
     let l = stmt_loc s in
     let ev e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
     let etrue e = let _ = if not pure then check_ghost ghostenv l e in exptrue env e in
@@ -2091,9 +2123,29 @@ let do_with_prover prover verbose action =
   let verbose_print_string s = if verbose then print_string s else () in
   
   match prover with
-    "z3" ->
+(*
+    "redux" ->
+    let declare_inductive_type i ctors = () in
+    let declare_fixpoint_function ga k clauses = () in
+    let bg_push_formula phi = Unknown in
+    let bg_pop () = () in
+    let query_formula phi = false in
+    let prover =
+      (
+        [],
+        declare_inductive_type,
+        declare_fixpoint_function,
+        bg_push_formula,
+        bg_pop,
+        query_formula
+      )
+    in
+    action prover
+*)
+  | "z3" ->
     let (simp_in, simp_out) = Unix.open_process "z3 /si" in
     let send_command c =
+      stats#proverCmd;
       verbose_print_endline c;
       output_string simp_out c;
       output_string simp_out "\r\n";
@@ -2108,6 +2160,7 @@ let do_with_prover prover verbose action =
     in
     let query_count = ref 0 in
     let query_formula phi =
+      stats#proverQuery;
       send_command (simp phi);
       let reply = input_reply() in
       List.iter verbose_print_endline reply;
@@ -2141,6 +2194,7 @@ let do_with_prover prover verbose action =
       let c1 = getch() in let c2 = getch() in if (c1, c2) = ('>', '\009') then () else failwith "verifast: error in output of Simplify prover: input prompt expected."
     in
     let send_command c =
+      stats#proverCmd;
       verbose_print_endline c;
       readprompt();
       output_string simp_out c;
@@ -2153,6 +2207,7 @@ let do_with_prover prover verbose action =
     in
     let query_count = ref 1 in
     let query_formula phi =
+      stats#proverQuery;
       send_command (simp phi);
       let reply = input_reply() in
       List.iter verbose_print_endline reply;
@@ -2182,8 +2237,19 @@ let do_with_prover prover verbose action =
     end
   | _ -> failwith ("No such prover: '" ^ prover ^ "'; supported provers: 'z3', 'simplify'.")
 
-let verify_program prover verbose path stream reportKeyword reportGhostRange =
-  do_with_prover prover verbose (fun prover -> verify_program_with_prover prover verbose path stream reportKeyword reportGhostRange)
+let do_finally tryBlock finallyBlock =
+  let result =
+    try
+      tryBlock()
+    with e -> finallyBlock(); raise e
+  in
+  finallyBlock();
+  result
+
+let verify_program print_stats prover verbose path stream reportKeyword reportGhostRange =
+  do_finally
+    (fun () -> do_with_prover prover verbose (fun prover -> verify_program_with_prover prover verbose path stream reportKeyword reportGhostRange))
+    (fun () -> if print_stats then stats#printStats)
 
 let remove_dups bs =
   let rec iter bs0 bs =

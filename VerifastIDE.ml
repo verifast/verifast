@@ -309,7 +309,7 @@ let show_ide initialPath prover =
     buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
     buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter;
     try
-      verify_program prover false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
+      verify_program false prover false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
       msg := Some "0 errors found";
       updateWindowTitle()
     with

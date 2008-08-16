@@ -4,11 +4,11 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify verbose prover path =
+  let verify stats verbose prover path =
     try
       let channel = open_in path in
       let stream = Stream.of_channel channel in
-      verify_program prover verbose path stream (fun _ -> ()) (fun _ -> ());
+      verify_program stats prover verbose path stream (fun _ -> ()) (fun _ -> ());
       print_endline "0 errors found";
       exit 0
     with
@@ -32,24 +32,25 @@ let _ =
     print_endline "Usage: verifast [-verbose] [-prover (z3|simplify)] filepath"
   end
   else
-  let rec iter verbose prover i =
+  let rec iter stats verbose prover i =
     if i < n then
       let arg = Sys.argv.(i) in
       if String.length arg > 0 && String.get arg 0 = '-' then
         match arg with
-          "-verbose" -> iter true prover (i + 1)
+          "-stats" -> iter true verbose prover (i + 1)
+        | "-verbose" -> iter stats true prover (i + 1)
         | "-prover" ->
           if i + 1 < n then
-            iter verbose (Sys.argv.(i + 1)) (i + 2)
+            iter stats verbose (Sys.argv.(i + 1)) (i + 2)
           else
             failwith "-prover option requires argument"
         | _ -> failwith "unknown command-line option '" ^ arg ^ "'"
       else
         if i + 1 = n then
-          verify verbose prover arg
+          verify stats verbose prover arg
         else
           failwith "bad command line"
     else
       failwith "no path specified"
   in
-  iter false "z3" 1; ()
+  iter false false "z3" 1; ()
