@@ -439,7 +439,7 @@ let type_loc t =
   | PtrType (l, n) -> l
 
 let lexer = make_lexer [
-  "struct"; "{"; "}"; "*"; ";"; "int"; "predicate"; "("; ")"; ","; "requires";
+  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
@@ -506,6 +506,7 @@ and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> (l, s)
 | [< '(l, Kwd "int") >] -> (l, "int")
+| [< '(l, Kwd "uint") >] -> (l, "uint")
 | [< '(l, Ident n) >] -> (l, n)
 and
   parse_type_suffix tnl tn = parser
@@ -640,6 +641,7 @@ and
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
 | [< '(l, Kwd "int") >] -> TypeExpr (l, TypeName (l, "int"))
+| [< '(l, Kwd "uint") >] -> TypeExpr (l, TypeName (l, "uint"))
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, "==", [e; Var(l, "false")]) 
 and
   parse_switch_expr_clauses = parser
@@ -762,7 +764,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     n
   in
   
-  let used_ids = ref ["true"; "false"] in
+  let used_ids = ref ["true"; "false"; "zero"; "succ"] in
   let used_ids_stack = ref ([]: string list list) in
   
   let push_index_table() =
@@ -861,7 +863,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           iter ((i, (l, ctors))::idm) ds
       | _::ds -> iter idm ds
     in
-    iter [("bool", (dummy_loc, []))] ds
+    iter [("bool", (dummy_loc, [])); ("uint", (dummy_loc, []))] ds
   in
   
   let check_pure_type t =
@@ -876,6 +878,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   
   let boolt = TypeName (dummy_loc, "bool") in
   let intt = TypeName (dummy_loc, "int") in
+  let uintt = TypeName (dummy_loc, "uint") in
   
   let string_of_type t =
     match t with
@@ -1059,7 +1062,13 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_atom g, Redux.Fixpoint index))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
-    iter [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]))] [("true", (dummy_loc, boolt, [], Atom "true", Redux.Ctor)); ("false", (dummy_loc, boolt, [], Atom "false", Redux.Ctor))] ds
+    iter
+      [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]));
+       ("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
+      [("true", (dummy_loc, boolt, [], Atom "true", Redux.Ctor));
+       ("false", (dummy_loc, boolt, [], Atom "false", Redux.Ctor));
+       ("zero", (dummy_loc, uintt, [], Atom "zero", Redux.Ctor));
+       ("succ", (dummy_loc, uintt, [uintt], Atom "succ", Redux.Ctor))] ds
   in
   
   let predmap = 
