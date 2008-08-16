@@ -41,7 +41,7 @@ predicate llist(struct llist *list, intlist v)
 @*/
 
 struct llist *create_llist()
-  //@ requires true;
+  //@ requires emp;
   //@ ensures llist(result, nil);
 {
   struct llist *l = malloc(sizeof(struct llist));
@@ -401,7 +401,7 @@ void main()
   append(l1, l2);
   int n = length(l1); assert(n == 5);
   int e0 = lookup(l1, 0); assert(e0 == 10);
-  int e1 = lookup(l1, 1); assert(e1 == 21);
+  int e1 = lookup(l1, 1); assert(e1 == 20);
   int e2 = lookup(l1, 2); assert(e2 == 30);
   int e3 = lookup(l1, 3); assert(e3 == 50);
   int e4 = lookup(l1, 4); assert(e4 == 60);

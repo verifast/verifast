@@ -254,7 +254,8 @@ and context fpclauses =
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
-        leafnodemap <- leafnodemap0
+        leafnodemap <- leafnodemap0;
+        popstack <- popstack0
       | [] -> failwith "Popstack is empty"
 
     method add_redex n =
@@ -296,6 +297,12 @@ and context fpclauses =
         v2#add_neq v1;
         Unknown
       end
+
+    method assert_eq_and_reduce v1 v2 =
+      self#do_and_reduce (fun () -> self#assert_eq v1 v2)
+    
+    method assert_neq_and_reduce v1 v2 =
+      self#do_and_reduce (fun () -> self#assert_neq v1 v2)
 
     method assert_eq v1 v2 =
       if v1 = v2 then

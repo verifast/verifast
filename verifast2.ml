@@ -1373,7 +1373,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       push_context (AssumingEq (t1, t2));
       ctxt#push;
       begin
-        match ctxt#assert_eq t1#value t2#value with
+        match ctxt#assert_eq_and_reduce t1#value t2#value with
           Unknown -> cont()
         | Unsat -> ()
       end;
@@ -1389,7 +1389,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       push_context (AssumingNeq (t1, t2));
       ctxt#push;
       begin
-        match ctxt#assert_neq t1#value t2#value with
+        match ctxt#assert_neq_and_reduce t1#value t2#value with
           Unknown -> cont()
         | Unsat -> ()
       end;
@@ -1422,6 +1422,23 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       raise (SymbolicExecutionError (!contextStack, t1#pprint ^ " == " ^ t2#pprint, l, msg))
   in
   
+  let assert_neq t1 t2 h env l msg cont =
+    ctxt#reduce;
+    if t1#value#neq t2#value then
+      cont()
+    else
+    begin
+      ctxt#push;
+      begin
+        match ctxt#assert_eq_and_reduce t1#value t2#value with
+          Unsat -> cont()
+        | Unknown ->
+          raise (SymbolicExecutionError (!contextStack, t1#pprint ^ " != " ^ t2#pprint, l, msg))
+      end;
+      ctxt#pop
+    end
+  in
+  
   let assert_false h env l msg =
     raise (SymbolicExecutionError (!contextStack, "false", l, msg))
   in
@@ -1430,7 +1447,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     let ev = eval env in
     match e with
       Operation (l, "==", [e1; e2]) -> assert_eq (ev e1) (ev e2) h env l msg cont
-    (* | Operation (l, "!=", [e1; e2]) -> assert_neq (ev e1) (e2 e2) cont *)
+    | Operation (l, "!=", [e1; e2]) -> assert_neq (ev e1) (ev e2) h env l msg cont
     | _ -> static_error (expr_loc e) "Asserting this expression form is not supported."
   in
   
