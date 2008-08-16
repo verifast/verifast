@@ -9,11 +9,16 @@ type assert_result = Unknown | Unsat
 
 type symbol_kind = Ctor | Fixpoint of int | Uninterp
 
+class symbol (name: string) =
+  object (self)
+    method name = name
+  end
+
 class termnode ctxt knd s initial_children =
   object (self)
     val context = ctxt
     val kind = knd
-    val symbol = s
+    val symbol: symbol = s
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable children: valuenode list = initial_children
@@ -98,8 +103,8 @@ class termnode ctxt knd s initial_children =
       else
         Unknown
     method pprint =
-      if initial_children = [] then symbol else
-        symbol ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
+      if initial_children = [] then symbol#name else
+        symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
 
   end
 and valuenode ctxt =
@@ -234,7 +239,7 @@ and context fpclauses =
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
-    val mutable leafnodemap: (string * termnode) list = []
+    val mutable leafnodemap: (symbol * termnode) list = []
     val mutable redexes = []  (* TODO: Do we need to push this? *)
     
     method set_fpclauses cs = fpclauses <- cs
@@ -264,7 +269,7 @@ and context fpclauses =
       redexes <- n::redexes
       
     method trigger_fpclause fpn fps cs fpvs cvs =
-      let clause = List.assoc (fps ^ ":" ^ cs) fpclauses in
+      let clause = List.assoc (fps#name ^ ":" ^ cs#name) fpclauses in
       let v = clause (self :> context) fpvs cvs in
       (* print_endline ("Assumed by reduction: " ^ fpn#pprint ^ " == " ^ v#initial_child#pprint); *)
       self#assert_eq v fpn#value

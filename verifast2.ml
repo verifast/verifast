@@ -710,9 +710,6 @@ let try_assoc_i x xys =
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
-type
-  atom = Atom of string
-
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t#pprint) env)
@@ -764,7 +761,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     n
   in
   
-  let used_ids = ref ["true"; "false"; "zero"; "succ"] in
+  let used_ids = ref [] in
   let used_ids_stack = ref ([]: string list list) in
   
   let push_index_table() =
@@ -783,19 +780,22 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     pop_index_table()
   in
   
-  let alloc_unique_id s =
+  let alloc_symbol s =
     let rec iter k =
       let sk = s ^ string_of_int k in
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
-    if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s)
-  in
-
-  let get_unique_id s =
-    alloc_unique_id s
+    let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
+    new symbol name
   in
   
-  let alloc_atom s = Atom (alloc_unique_id s) in
+  let alloc_unique_id s = alloc_symbol s in
+
+  let get_unique_id s =
+    alloc_symbol s
+  in
+  
+  let alloc_atom s = alloc_symbol s in
 
   let imap f xs =
     let rec imapi i xs =
@@ -1067,10 +1067,10 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     iter
       [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]));
        ("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
-      [("true", (dummy_loc, boolt, [], Atom "true", Redux.Ctor));
-       ("false", (dummy_loc, boolt, [], Atom "false", Redux.Ctor));
-       ("zero", (dummy_loc, uintt, [], Atom "zero", Redux.Ctor));
-       ("succ", (dummy_loc, uintt, [uintt], Atom "succ", Redux.Ctor))] ds
+      [("true", (dummy_loc, boolt, [], alloc_symbol "true", Redux.Ctor));
+       ("false", (dummy_loc, boolt, [], alloc_symbol "false", Redux.Ctor));
+       ("zero", (dummy_loc, uintt, [], alloc_symbol "zero", Redux.Ctor));
+       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol "succ", Redux.Ctor))] ds
   in
   
   let predmap = 
@@ -1305,36 +1305,41 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     iter e
   in
 
+  let intlit_symbolmap = ref [] in
+  
+  let get_intlit_symbol n =
+    match try_assoc n !intlit_symbolmap with
+      None ->
+      let s = new symbol (string_of_int n) in
+      intlit_symbolmap := (n, s)::!intlit_symbolmap;
+      s
+    | Some s -> s
+  in
+  
   let ctxt = new context [] in
   
   let rec eval env e =
     let ev = eval env in
     match e with
       Var (l, x) ->
-      (match try_assoc x env with
-         None ->
-         (match try_assoc x purefuncmap with
-            None -> static_error l "No such variable or constructor."
-          | Some (lg, t, [], a, kind) -> ctxt#get_node kind x []
-          | _ -> static_error l "Missing argument list."
-         )
-       | Some t -> t)
-    (* | Operation (l, op, es) -> (match es with [] -> Symb (Atom op) | _ -> FunApp (Atom op, List.map ev es)) *)
-       | IntLit (l, n) -> ctxt#get_node Redux.Ctor (string_of_int n) []
-  (*  | Read (l, e, f) ->  *)
-    | CallExpr (l, g, pats) -> (
+      begin
+        match try_assoc x env with
+          None ->
+          begin
+            match try_assoc x purefuncmap with
+              None -> static_error l "No such variable or constructor."
+            | Some (lg, t, [], s, kind) -> ctxt#get_node kind s []
+            | _ -> static_error l "Missing argument list."
+          end
+        | Some t -> t
+      end
+    | IntLit (l, n) -> ctxt#get_node Redux.Ctor (get_intlit_symbol n) []
+    | CallExpr (l, g, pats) ->
+      begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, a, kind) -> ctxt#get_node kind g (List.map (function (LitPat e) -> (ev e)#value) pats)
-      )
-    (* | IfExpr (l, e1, e2, e3) -> IfTerm (ev e1, ev e2, ev e3) *)
-  (*  | SwitchExpr (l, e, cs) *)
-  (*
-    | SizeofExpr (l, t) ->
-      match t with
-        TypeName (_, tn) -> Symb (tn ^ "_size")
-      | PtrType (_, tn) -> Symb "ptrsize"
-   *)
+        | Some (lg, t, pts, s, kind) -> ctxt#get_node kind s (List.map (function (LitPat e) -> (ev e)#value) pats)
+      end
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
@@ -1512,8 +1517,8 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           branch
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-               let (_, _, _, Atom ac, _) = List.assoc cn purefuncmap in
-               assume_eq t (ctxt#get_node Redux.Ctor ac (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               let (_, _, _, cs, _) = List.assoc cn purefuncmap in
+               assume_eq t (ctxt#get_node Redux.Ctor cs (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1585,9 +1590,9 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-          let (_, _, _, Atom ac, _) = List.assoc cn purefuncmap in
+          let (_, _, _, ctorsym, _) = List.assoc cn purefuncmap in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ac (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1670,7 +1675,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         [] -> (
         match try_assoc g purefuncmap with
           None -> static_error l ("No such function: " ^ g)
-        | Some (lg, rt, pts, Atom ag, kind) -> (
+        | Some (lg, rt, pts, gs, kind) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
@@ -1678,7 +1683,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
             let _ = check_assign l x in
             let vs = List.map (function (LitPat e) -> (ev e)#value) pats in
-            cont h (update env x (ctxt#get_node kind ag vs))
+            cont h (update env x (ctxt#get_node kind gs vs))
           )
         )
       | [(k, tr, ps, pre, post)] ->
@@ -1843,14 +1848,14 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             iter [] pats pts
           in
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-          let (_, _, _, Atom ac, _) = List.assoc cn purefuncmap in
+          let (_, _, _, ctorsym, _) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assoc t sizemap with
               None -> sizemap
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ac (List.map (fun (x, t) -> t#value) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
