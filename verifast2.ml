@@ -808,6 +808,8 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   
   let Program ds = read_program path stream reportKeyword reportGhostRange in
   
+  (* failwith "Done parsing."; *)
+  
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
