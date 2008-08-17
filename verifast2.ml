@@ -783,7 +783,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     new symbol kind name
   in
   
-  let alloc_nullary_ctor s = let s = alloc_symbol Redux.Ctor s in ignore (ctxt#get_node s []); s in
+  let alloc_nullary_ctor j s = let s = alloc_symbol (Redux.Ctor j) s in ignore (ctxt#get_node s []); s in
   
   let imap f xs =
     let rec imapi i xs =
@@ -881,7 +881,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       match ds with
         [] -> (List.rev imap, List.rev pfm)
       | Inductive (l, i, ctors)::ds ->
-        let rec citer ctormap pfm ctors =
+        let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> iter ((i, (l, List.rev ctormap))::imap) pfm ds
           | Ctor (lc, cn, ts)::ctors ->
@@ -889,11 +889,11 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let csym = if ts = [] then alloc_nullary_ctor cn else alloc_symbol Redux.Ctor cn in
-              citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym, Redux.Ctor))::pfm) ctors
+              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (Redux.Ctor j) cn in
+              citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym))::pfm) ctors
             )
         in
-        citer [] pfm ctors
+        citer 0 [] pfm ctors
       | Func (l, Fixpoint, rto, g, ps, contract, body)::ds ->
         let _ =
           if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
@@ -968,7 +968,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
-                                  Some (_, t, [], _, _) -> t
+                                  Some (_, t, [], _) -> t
                                 | _ -> static_error l "No such variable or constructor."
                               )
                             | Some t -> t
@@ -992,7 +992,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
                           | IntLit (l, n) -> intt
                           | CallExpr (l, g', pats) -> (
                             match try_assoc g' pfm with
-                              Some (l, t, ts, _, _) -> (
+                              Some (l, t, ts, _) -> (
                               match zip pats ts with
                                 None -> static_error l "Incorrect argument count."
                               | Some pts -> (
@@ -1049,16 +1049,16 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Redux.Fixpoint index) g, Redux.Fixpoint index))::pfm) ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Redux.Fixpoint index) g))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
     iter
       [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]));
        ("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
-      [("true", (dummy_loc, boolt, [], alloc_nullary_ctor "true", Redux.Ctor));
-       ("false", (dummy_loc, boolt, [], alloc_nullary_ctor "false", Redux.Ctor));
-       ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor "zero", Redux.Ctor));
-       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol Redux.Ctor "succ", Redux.Ctor))] ds
+      [("true", (dummy_loc, boolt, [], alloc_nullary_ctor 0 "true"));
+       ("false", (dummy_loc, boolt, [], alloc_nullary_ctor 1 "false"));
+       ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
+       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol (Redux.Ctor 1) "succ"))] ds
   in
   
   let predmap = 
@@ -1098,7 +1098,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             None ->
             begin
               match try_assoc x purefuncmap with
-                Some (_, t, [], _, _) -> t
+                Some (_, t, [], _) -> t
               | _ -> static_error l "No such variable or constructor."
             end
           | Some t -> t
@@ -1122,7 +1122,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         | IntLit (l, n) -> intt
         | CallExpr (l, g', pats) -> (
           match try_assoc g' purefuncmap with
-            Some (l, t, ts, _, _) -> (
+            Some (l, t, ts, _) -> (
             match zip pats ts with
               None -> static_error l "Incorrect argument count."
             | Some pts -> (
@@ -1298,7 +1298,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   let get_intlit_symbol n =
     match try_assoc n !intlit_symbolmap with
       None ->
-      let s = alloc_nullary_ctor (string_of_int n) in
+      let s = alloc_nullary_ctor 0 (string_of_int n) in
       intlit_symbolmap := (n, s)::!intlit_symbolmap;
       s
     | Some s -> s
@@ -1314,7 +1314,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           begin
             match try_assoc x purefuncmap with
               None -> static_error l "No such variable or constructor."
-            | Some (lg, t, [], s, kind) -> ctxt#get_node s []
+            | Some (lg, t, [], s) -> ctxt#get_node s []
             | _ -> static_error l "Missing argument list."
           end
         | Some t -> t
@@ -1324,7 +1324,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, s, kind) -> ctxt#get_node s (List.map (function (LitPat e) -> (ev e)#value) pats)
+        | Some (lg, t, pts, s) -> ctxt#get_node s (List.map (function (LitPat e) -> (ev e)#value) pats)
       end
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
@@ -1503,7 +1503,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           branch
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-               let (_, _, _, cs, _) = List.assoc cn purefuncmap in
+               let (_, _, _, cs) = List.assoc cn purefuncmap in
                assume_eq t (ctxt#get_node cs (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
@@ -1576,7 +1576,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-          let (_, _, _, ctorsym, _) = List.assoc cn purefuncmap in
+          let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
           branch
             (fun _ -> assume_eq t (ctxt#get_node ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
@@ -1661,7 +1661,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
         [] -> (
         match try_assoc g purefuncmap with
           None -> static_error l ("No such function: " ^ g)
-        | Some (lg, rt, pts, gs, kind) -> (
+        | Some (lg, rt, pts, gs) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
@@ -1834,7 +1834,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             iter [] pats pts
           in
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-          let (_, _, _, ctorsym, _) = List.assoc cn purefuncmap in
+          let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assoc t sizemap with
               None -> sizemap

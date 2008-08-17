@@ -7,7 +7,7 @@ let flatmap f xs = List.concat (List.map f xs)
 
 type assert_result = Unknown | Unsat
 
-type symbol_kind = Ctor | Fixpoint of int | Uninterp
+type symbol_kind = Ctor of int | Fixpoint of int | Uninterp
 
 class symbol (kind: symbol_kind) (name: string) =
   object (self)
@@ -46,7 +46,7 @@ and termnode ctxt s initial_children =
         popstack <- popstack0
       | [] -> assert false
     method value = value
-    method is_ctor = symbol#kind = Ctor
+    method is_ctor = match symbol#kind with Ctor _ -> true | _ -> false
     initializer begin
       let rec iter k (vs: valuenode list) =
         match vs with
@@ -59,7 +59,7 @@ and termnode ctxt s initial_children =
       value#add_child (self :> termnode);
       value#set_initial_child (self :> termnode);
       match symbol#kind with
-        Ctor -> value#set_ctorchild (self :> termnode)
+        Ctor j -> value#set_ctorchild (self :> termnode)
       | Fixpoint k ->
         let v = List.nth children k in
         begin
