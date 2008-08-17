@@ -774,25 +774,17 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     pop_index_table()
   in
   
-  let alloc_symbol s =
+  let alloc_symbol kind s =
     let rec iter k =
       let sk = s ^ string_of_int k in
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    new symbol name
+    new symbol kind name
   in
   
-  let alloc_unique_id s = alloc_symbol s in
-
-  let get_unique_id s =
-    alloc_symbol s
-  in
+  let alloc_nullary_ctor s = let s = alloc_symbol Redux.Ctor s in ignore (ctxt#get_node s []); s in
   
-  let alloc_nullary_ctor s = let s = alloc_symbol s in ignore (ctxt#get_node Redux.Ctor s []); s in
-  
-  let alloc_atom s = alloc_symbol s in
-
   let imap f xs =
     let rec imapi i xs =
       match xs with
@@ -897,7 +889,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let csym = if ts = [] then alloc_nullary_ctor cn else alloc_symbol cn in
+              let csym = if ts = [] then alloc_nullary_ctor cn else alloc_symbol Redux.Ctor cn in
               citer ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym, Redux.Ctor))::pfm) ctors
             )
         in
@@ -1057,7 +1049,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_atom g, Redux.Fixpoint index))::pfm) ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Redux.Fixpoint index) g, Redux.Fixpoint index))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
     iter
@@ -1066,7 +1058,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       [("true", (dummy_loc, boolt, [], alloc_nullary_ctor "true", Redux.Ctor));
        ("false", (dummy_loc, boolt, [], alloc_nullary_ctor "false", Redux.Ctor));
        ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor "zero", Redux.Ctor));
-       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol "succ", Redux.Ctor))] ds
+       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol Redux.Ctor "succ", Redux.Ctor))] ds
   in
   
   let predmap = 
@@ -1306,7 +1298,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   let get_intlit_symbol n =
     match try_assoc n !intlit_symbolmap with
       None ->
-      let s = new symbol (string_of_int n) in
+      let s = alloc_nullary_ctor (string_of_int n) in
       intlit_symbolmap := (n, s)::!intlit_symbolmap;
       s
     | Some s -> s
@@ -1322,17 +1314,17 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           begin
             match try_assoc x purefuncmap with
               None -> static_error l "No such variable or constructor."
-            | Some (lg, t, [], s, kind) -> ctxt#get_node kind s []
+            | Some (lg, t, [], s, kind) -> ctxt#get_node s []
             | _ -> static_error l "Missing argument list."
           end
         | Some t -> t
       end
-    | IntLit (l, n) -> ctxt#get_node Redux.Ctor (get_intlit_symbol n) []
+    | IntLit (l, n) -> ctxt#get_node (get_intlit_symbol n) []
     | CallExpr (l, g, pats) ->
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, s, kind) -> ctxt#get_node kind s (List.map (function (LitPat e) -> (ev e)#value) pats)
+        | Some (lg, t, pts, s, kind) -> ctxt#get_node s (List.map (function (LitPat e) -> (ev e)#value) pats)
       end
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
@@ -1469,7 +1461,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     with_index_table (fun _ -> cont2())
   in
   
-  let get_unique_var_symb x = let a = alloc_unique_id x in ctxt#get_node Uninterp a [] in
+  let get_unique_var_symb x = let a = alloc_symbol Uninterp x in ctxt#get_node a [] in
 
   let evalpat ghostenv env pat cont =
     match pat with
@@ -1512,7 +1504,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
                let (_, _, _, cs, _) = List.assoc cn purefuncmap in
-               assume_eq t (ctxt#get_node Redux.Ctor cs (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               assume_eq t (ctxt#get_node cs (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1586,7 +1578,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           let (_, _, _, ctorsym, _) = List.assoc cn purefuncmap in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume_eq t (ctxt#get_node ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1677,7 +1669,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
             let _ = check_assign l x in
             let vs = List.map (function (LitPat e) -> (ev e)#value) pats in
-            cont h (update env x (ctxt#get_node kind gs vs))
+            cont h (update env x (ctxt#get_node gs vs))
           )
         )
       | [(k, tr, ps, pre, post)] ->
@@ -1849,7 +1841,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node Redux.Ctor ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume_eq t (ctxt#get_node ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs

@@ -9,24 +9,24 @@ type assert_result = Unknown | Unsat
 
 type symbol_kind = Ctor | Fixpoint of int | Uninterp
 
-class symbol (name: string) =
+class symbol (kind: symbol_kind) (name: string) =
   object (self)
-    val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
+    method kind = kind
     method name = name
+    val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
     method node = node
     method set_node n = node <- Some n
   end
-and termnode ctxt knd s initial_children =
+and termnode ctxt s initial_children =
   object (self)
     val context = ctxt
-    val kind = knd
     val symbol: symbol = s
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable children: valuenode list = initial_children
     val mutable value = new valuenode ctxt
     val mutable reduced = false
-    method kind = kind
+    method kind = symbol#kind
     method symbol = symbol
     method children = children
     method push =
@@ -46,7 +46,7 @@ and termnode ctxt knd s initial_children =
         popstack <- popstack0
       | [] -> assert false
     method value = value
-    method is_ctor = kind = Ctor
+    method is_ctor = symbol#kind = Ctor
     initializer begin
       let rec iter k (vs: valuenode list) =
         match vs with
@@ -58,7 +58,7 @@ and termnode ctxt knd s initial_children =
       iter 0 initial_children;
       value#add_child (self :> termnode);
       value#set_initial_child (self :> termnode);
-      match kind with
+      match symbol#kind with
         Ctor -> value#set_ctorchild (self :> termnode)
       | Fixpoint k ->
         let v = List.nth children k in
@@ -89,7 +89,7 @@ and termnode ctxt knd s initial_children =
       begin
         self#push;
         reduced <- true;
-        match kind with
+        match symbol#kind with
           Fixpoint k ->
           let v = List.nth children k in
           begin
@@ -274,13 +274,13 @@ and context fpclauses =
       (* print_endline ("Assumed by reduction: " ^ fpn#pprint ^ " == " ^ v#initial_child#pprint); *)
       self#assert_eq v fpn#value
     
-    method get_node kind s vs =
+    method get_node s vs =
       match vs with
         [] ->
         begin
         match s#node with
           None ->
-          let node = new termnode (self :> context) kind s vs in
+          let node = new termnode (self :> context) s vs in
           s#set_node node;
           node
         | Some n -> n
@@ -289,7 +289,7 @@ and context fpclauses =
         begin
         match v#lookup_parent s vs with
           None ->
-          let node = new termnode (self :> context) kind s vs in
+          let node = new termnode (self :> context) s vs in
           node
         | Some n -> n
         end
