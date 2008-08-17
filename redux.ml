@@ -16,6 +16,9 @@ class symbol (kind: symbol_kind) (name: string) =
     val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
     method node = node
     method set_node n = node <- Some n
+    val mutable fpclauses: (valuenode list -> valuenode list -> valuenode) array option = None
+    method fpclauses = fpclauses
+    method set_fpclauses cs = fpclauses <- cs
   end
 and termnode ctxt s initial_children =
   object (self)
@@ -91,13 +94,18 @@ and termnode ctxt s initial_children =
         reduced <- true;
         match symbol#kind with
           Fixpoint k ->
+          let clauses = match symbol#fpclauses with Some clauses -> clauses | None -> assert false in
           let v = List.nth children k in
           begin
           match v#ctorchild with
             Some n ->
             let s = n#symbol in
+            let j = match s#kind with Ctor j -> j | _ -> assert false in
+            let clause = clauses.(j) in
             let vs = n#children in
-            ctxt#trigger_fpclause (self :> termnode) symbol s children vs
+            let v = clause children vs in
+            (* print_endline ("Assumed by reduction: " ^ self#pprint ^ " == " ^ v#initial_child#pprint); *)
+            ctxt#assert_eq v value
           | _ -> assert false
           end
         | _ -> assert false
@@ -235,16 +243,13 @@ and valuenode ctxt =
         Some n -> n#pprint
       | None -> assert false
   end
-and context fpclauses =
+and context =
   object (self)
-    val mutable fpclauses = fpclauses
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
     val mutable redexes = []  (* TODO: Do we need to push this? *)
     
-    method set_fpclauses cs = fpclauses <- cs
-
     method pushdepth = pushdepth
     method push =
       assert (redexes = []);
@@ -268,12 +273,6 @@ and context fpclauses =
     method add_redex n =
       redexes <- n::redexes
       
-    method trigger_fpclause fpn fps cs fpvs cvs =
-      let clause = List.assoc (fps#name ^ ":" ^ cs#name) fpclauses in
-      let v = clause (self :> context) fpvs cvs in
-      (* print_endline ("Assumed by reduction: " ^ fpn#pprint ^ " == " ^ v#initial_child#pprint); *)
-      self#assert_eq v fpn#value
-    
     method get_node s vs =
       match vs with
         [] ->

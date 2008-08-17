@@ -753,7 +753,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
-  let ctxt = new context [] in
+  let ctxt = new context in
   
   let used_ids = ref [] in
   let used_ids_stack = ref ([]: string list list) in
@@ -919,9 +919,10 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           in
           iter [] ps
         in
-        let index = 
+        let (index, ctorcount) = 
           match body with
             [SwitchStmt (ls, e, cs)] -> (
+            let ctorcount = List.length cs in
             match e with
               Var (l, x) -> (
               match try_assoc_i x pmap with
@@ -939,7 +940,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
                           [] -> ()
                         | (cn, _)::_ ->
                           static_error ls ("Missing case: '" ^ cn ^ "'.")
-                      in index
+                      in (index, ctorcount)
                     | SwitchStmtClause (lc, cn, xs, body)::cs -> (
                       match try_assoc cn ctormap with
                         None -> static_error lc "No such constructor."
@@ -1330,28 +1331,39 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
 
-  let fpclauses =
-    flatmap
+  let _ =
+    List.iter
     (function
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
-       List.map
+       let clauses = Array.make (List.length cs) (fun _ _ -> assert false) in
+       begin
+         match List.assoc g purefuncmap with (l, rt, ts, s) -> s#set_fpclauses (Some clauses)
+       end;
+       List.iter
          (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-            (g ^ ":" ^ cn,
-             (fun _ gvs cvs ->
-              let Some pvs = zip ps gvs in
-              let penv = List.map (fun ((t, p), v) -> (p, v#initial_child)) pvs in
-              let Some patenv = zip pats (List.map (fun v -> v#initial_child) cvs) in
-              (eval (patenv @ penv) e)#value
-             )
-            )
+            let j =
+              match List.assoc cn purefuncmap with
+                (l, rt, ts, s) ->
+                begin
+                match s#kind with
+                  Redux.Ctor j -> j
+                | _ -> assert false
+                end
+            in
+            clauses.(j) <-
+              (
+                fun gvs cvs ->
+                let Some pvs = zip ps gvs in
+                let penv = List.map (fun ((t, p), v) -> (p, v#initial_child)) pvs in
+                let Some patenv = zip pats (List.map (fun v -> v#initial_child) cvs) in
+                (eval (patenv @ penv) e)#value
+              )
          )
          cs
-     | _ -> []
+     | _ -> ()
     )
     ds
   in
-
-  ctxt#set_fpclauses fpclauses;
 
   let contextStack = ref ([]: context list) in
   
