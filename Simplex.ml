@@ -34,7 +34,7 @@ and coeff v =
     method add a = value <- value +/ a
     method divide_by a = value <- value // a
   end
-and row own c =
+and row context own c =
   object (self)
     val mutable owner: unknown = own
     val mutable constant: num = c
@@ -65,17 +65,62 @@ and row own c =
              coef#divide_by c0
         )
         terms
+    
+    method close =
+      print_endline ("Closing row " ^ owner#print ^ "...");
+      List.iter (fun (col, coef) -> if sign_num coef#value < 0 then col#die) terms
+    
+    method live_terms =
+      List.filter (fun (col, coef) -> not col#dead && sign_num coef#value <> 0) terms
+
+    method propagate_eq =
+      let live_terms = self#live_terms in
+      begin
+        match live_terms with
+          [(col, coef)] -> if sign_num constant = 0 then if coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
+        | [] -> context#propagate_eq_constant owner constant
+        | _ -> ()
+      end;
+      begin
+        match live_terms with
+          [] -> ()
+        | (col0, coef0)::_ ->
+          let row_equals (c1, ts1) (c2, ts2) =
+            print_endline "Performing a row comparison...";
+            c1 =/ c2 &&
+            List.length ts1 = List.length ts2 &&
+            let rec iter ts =
+              match ts with
+                [] -> true
+              | (col0, coef0)::ts ->
+                begin
+                match try_assoc col0 ts2 with
+                  None -> false
+                | Some coef1 -> coef0#value =/ coef1#value && iter ts
+                end
+            in
+            iter ts1
+          in
+          List.iter (fun (row, coef1) -> if row <> (self :> row) && coef0#value =/ coef1#value && row_equals (constant, live_terms) (row#constant, row#live_terms) then context#propagate_equality owner row#owner) col0#terms
+      end
   end
-and column own =
+and column context own =
   object (self)
     val mutable owner: unknown = own
     val mutable terms: (row * coeff) list = []
+    val mutable dead: bool = false
     
     method owner = owner
     method set_owner u = owner <- u
     method terms = terms
     method term_added row coef =
       terms <- (row, coef)::terms
+    method dead = dead
+    
+    method die =
+      dead <- true;
+      context#propagate_eq_constant owner (num_of_int 0);
+      List.iter (fun (row, coef) -> if sign_num coef#value <> 0 then row#propagate_eq) terms
   end
 and simplex =
   object (self)
@@ -112,7 +157,7 @@ and simplex =
 
     method alloc_unknown name =
       let u = new unknown name false in
-      let col = new column u in
+      let col = new column (self :> simplex) u in
       u#set_pos (Column col);
       columns <- col::columns;
       u
@@ -162,11 +207,14 @@ and simplex =
             match ts with
               [] -> None
             | (col, coef)::ts ->
-              let sign = sign_num coef#value in
-              if sign <> 0 && (not col#owner#restricted || sign > 0) then
-                Some (col, sign)
-              else
+              if col#dead then
                 find_pivot_col ts
+              else
+                let sign = sign_num coef#value in
+                if sign <> 0 && (not col#owner#restricted || sign > 0) then
+                  Some (col, sign)
+                else
+                  find_pivot_col ts
           in
           match find_pivot_col row#terms with
             None -> (* row is manifestly maximized  *) sign_num row#constant  
@@ -182,10 +230,16 @@ and simplex =
         end
       in
       maximize_row()
-       
+    
+    method propagate_equality u1 u2 =
+      print_endline ("Propagating equality between " ^ u1#print ^ " and " ^ u2#print)
+
+    method propagate_eq_constant u n =
+      print_endline ("Propagating equality between unknown " ^ u#print ^ " and constant " ^ string_of_num n)
+      
     method assert_ge (c: num) (ts: (num * unknown) list) =
       let y = new unknown ("r" ^ string_of_int (self#get_unique_index())) true in
-      let row = new row y c in
+      let row = new row (self :> simplex) y c in
       rows <- row::rows;
       y#set_pos (Row row);
       List.iter
@@ -197,14 +251,17 @@ and simplex =
              row#add a col
         )
         ts;
-      if self#sign_of_max_of_row row < 0 then Unsat else Sat
+      match self#sign_of_max_of_row row with
+        -1 -> Unsat
+      | 0 -> row#close; Sat
+      | 1 -> Sat
+      | _ -> assert false
   end
 
 let _ =
   let s = new simplex in
   let x = s#alloc_unknown "x" in
   let y = s#alloc_unknown "y" in
-  let z = s#alloc_unknown "z" in
   
   let assert_ge c1 ts1 c2 ts2 =
     s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
@@ -235,5 +292,59 @@ let _ =
   assert (assert_ge 1 [1, y] 0 [1, z] = Sat); (* y < z *)
   print_string s#print;
   assert (assert_ge 0 [1, z] 0 [1, y] = Unsat); (* z <= y *)
+  
+  ()
+
+let _ =
+  let s = new simplex in
+  let x = s#alloc_unknown "x" in
+  
+  let assert_ge c1 ts1 c2 ts2 =
+    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+  in
+  
+  assert (assert_ge 0 [] 0 [1, x] = Sat); (* 0 <= x *)
+  print_string s#print;
+  print_endline "Should propagate x == 0:";
+  assert (assert_ge 0 [1, x] 0 [] = Sat); (* x <= 0 *)
+  print_string s#print;
+  
+  ()
+
+let _ =
+  let s = new simplex in
+  let x = s#alloc_unknown "x" in
+  let y = s#alloc_unknown "y" in
+  
+  let assert_ge c1 ts1 c2 ts2 =
+    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+  in
+  
+  assert (assert_ge 0 [1, x] 0 [1, y] = Sat); (* x <= y *)
+  print_string s#print;
+  print_endline "Should propagate x == y";
+  assert (assert_ge 0 [1, y] 0 [1, x] = Sat); (* y <= x *)
+  print_string s#print;
+  
+  ()
+
+let _ =
+  let s = new simplex in
+  let x = s#alloc_unknown "x" in
+  let y = s#alloc_unknown "y" in
+  let z = s#alloc_unknown "z" in
+  
+  let assert_ge c1 ts1 c2 ts2 =
+    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+  in
+  
+  assert (assert_ge 0 [1, x] 0 [1, y; 1, z] = Sat); (* x <= y + z *)
+  print_string s#print;
+  assert (assert_ge 0 [1, y; 1, z] 0 [1, x] = Sat); (* y + z <= x *)
+  print_string s#print;
+  assert (assert_ge 0 [] 0 [1, y] = Sat); (* 0 <= y *)
+  print_string s#print;
+  print_endline "Should propagate x == z";
+  assert (assert_ge 0 [1, y] 0 [] = Sat); (* y <= 0 *)
   
   ()
