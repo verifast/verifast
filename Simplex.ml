@@ -117,25 +117,44 @@ and simplex =
       columns <- col::columns;
       u
       
-    method assert_ge (c: num) (ts: (num * unknown) list) =
-      let y = new unknown ("r" ^ string_of_int (self#get_unique_index())) true in
-      let row = new row y c in
-      rows <- row::rows;
-      y#set_pos (Row row);
-      List.iter
-        (fun (a, u) ->
-           match u#pos with
-             Row r ->
-             row#add_row a r
-           | Column col ->
-             row#add a col
-        )
-        ts;
+    method find_pivot_row sign col =
+      let rec iter cand ts =
+        match ts with
+          [] -> cand
+        | (r, coef)::ts ->
+          if r#owner#restricted && sign_num coef#value * sign < 0 then
+            let delta = r#constant // abs_num coef#value in
+            let new_cand =
+              match cand with
+                None -> Some (r, delta)
+              | Some (r', delta') ->
+                if delta' <=/ delta then Some (r', delta') else Some (r, delta)
+            in
+            iter new_cand ts
+          else
+            iter cand ts
+      in
+      iter None col#terms
+
+    method sign_of_max_of_unknown (u: unknown): int =
+      match u#pos with
+        Row r -> self#sign_of_max_of_row r
+      | Column col ->
+        begin
+          match self#find_pivot_row 1 col with
+            None -> (* column is manifestly unbounded. *)
+            1
+          | Some (row, _) ->
+            self#pivot row col;
+            self#sign_of_max_of_row row
+        end
+
+    method sign_of_max_of_row row =
       let rec maximize_row () =
-        print_endline "Maximizing the new row...";
+        print_endline ("Maximizing row " ^ row#owner#print ^ "...");
         print_string self#print;
-        if sign_num row#constant >= 0 then
-          Sat
+        if sign_num row#constant > 0 then
+          1
         else
         begin
           (* Note: in the Simplify TR, columns with unrestricted owners are preferred over columns with restricted owners. *)
@@ -150,39 +169,35 @@ and simplex =
                 find_pivot_col ts
           in
           match find_pivot_col row#terms with
-            None -> Unsat  (* row is manifestly maximized at a negative value *)
+            None -> (* row is manifestly maximized  *) sign_num row#constant  
           | Some (col, sign) ->
-            let rec find_pivot_row cand ts =
-              match ts with
-                [] -> cand
-              | (r, coef)::ts ->
-                if r#owner#restricted then
-                  if sign_num coef#value * sign < 0 then
-                    let delta = r#constant // abs_num coef#value in
-                    let new_cand =
-                      match cand with
-                        None -> Some (r, delta)
-                      | Some (r', delta') ->
-                        if delta' <=/ delta then Some (r', delta') else Some (r, delta)
-                    in
-                    find_pivot_row new_cand ts
-                  else
-                    find_pivot_row cand ts
-                else
-                  find_pivot_row cand ts
-            in
-            match find_pivot_row None col#terms with
+            match self#find_pivot_row sign col with
               None ->
               (* col is manifestly unbounded *)
               self#pivot row col;
-              Sat
+              1
             | Some (r, _) ->
               self#pivot r col;
               maximize_row()
         end
       in
       maximize_row()
-
+       
+    method assert_ge (c: num) (ts: (num * unknown) list) =
+      let y = new unknown ("r" ^ string_of_int (self#get_unique_index())) true in
+      let row = new row y c in
+      rows <- row::rows;
+      y#set_pos (Row row);
+      List.iter
+        (fun (a, u) ->
+           match u#pos with
+             Row r ->
+             row#add_row a r
+           | Column col ->
+             row#add a col
+        )
+        ts;
+      if self#sign_of_max_of_row row < 0 then Unsat else Sat
   end
 
 let _ =
