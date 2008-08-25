@@ -138,31 +138,27 @@ and simplex =
           Sat
         else
         begin
+          (* Note: in the Simplify TR, columns with unrestricted owners are preferred over columns with restricted owners. *)
           let rec find_pivot_col ts =
             match ts with
               [] -> None
             | (col, coef)::ts ->
-              if col#owner#restricted then
-                if sign_num coef#value > 0 then
-                  Some col
-                else
-                  find_pivot_col ts
+              let sign = sign_num coef#value in
+              if sign <> 0 && (not col#owner#restricted || sign > 0) then
+                Some (col, sign)
               else
-                if sign_num coef#value <> 0 then
-                  Some col
-                else
-                  find_pivot_col ts
+                find_pivot_col ts
           in
           match find_pivot_col row#terms with
             None -> Unsat  (* row is manifestly maximized at a negative value *)
-          | Some col ->
+          | Some (col, sign) ->
             let rec find_pivot_row cand ts =
               match ts with
                 [] -> cand
               | (r, coef)::ts ->
                 if r#owner#restricted then
-                  if sign_num coef#value < 0 then
-                    let delta = r#constant // minus_num coef#value in
+                  if sign_num coef#value * sign < 0 then
+                    let delta = r#constant // abs_num coef#value in
                     let new_cand =
                       match cand with
                         None -> Some (r, delta)
