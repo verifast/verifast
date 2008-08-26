@@ -1458,13 +1458,12 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     else
     begin
       ctxt#push;
-      begin
-        match ctxt#assert_eq_and_reduce_terms t1 t2 with
-          Unsat -> cont()
-        | Unknown ->
-          raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
-      end;
-      ctxt#pop
+      let result = ctxt#assert_eq_and_reduce_terms t1 t2 in
+      ctxt#pop;
+      match result with
+        Unsat -> cont()
+      | Unknown ->
+        raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
     end
   in
   
