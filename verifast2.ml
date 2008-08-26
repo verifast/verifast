@@ -2031,7 +2031,12 @@ let verify_program_with_stats ctxt print_stats verbose path stream reportKeyword
     (fun () -> verify_program_core ctxt verbose path stream reportKeyword reportGhostRange)
     (fun () -> if print_stats then stats#printStats)
 
-let prover_table: (string * (bool -> bool -> string -> char Stream.t -> (loc -> unit) -> (loc -> unit) -> unit)) list ref = ref []
+class virtual prover_client =
+  object
+    method virtual run: 'symbol 'termnode. ('symbol, 'termnode) Proverapi.context -> unit
+  end
+
+let prover_table: (string * (prover_client -> unit)) list ref = ref []
 
 let register_prover name f =
   prover_table := (name, f)::!prover_table
@@ -2052,7 +2057,11 @@ let lookup_prover prover =
     end
       
 let verify_program prover print_stats verbose path stream reportKeyword reportGhostRange =
-  lookup_prover prover print_stats verbose path stream reportKeyword reportGhostRange
+  lookup_prover prover
+    (object
+       method run: 'symbol 'termnode. ('symbol, 'termnode) Proverapi.context -> unit =
+         fun ctxt -> verify_program_with_stats ctxt print_stats verbose path stream reportKeyword reportGhostRange
+     end)
 
 let remove_dups bs =
   let rec iter bs0 bs =
