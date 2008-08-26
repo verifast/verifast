@@ -698,6 +698,12 @@ let rec try_assoc x xys =
   | (x', y)::xys when x' = x -> Some y
   | _::xys -> try_assoc x xys
 
+let rec try_assq x xys =
+  match xys with
+    [] -> None
+  | (x', y)::xys when x' == x -> Some y
+  | _::xys -> try_assq x xys
+
 let try_assoc_i x xys =
   let rec iter k xys =
     match xys with
@@ -748,7 +754,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
+let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -772,16 +778,16 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     pop_index_table()
   in
   
-  let alloc_symbol kind s =
+  let alloc_symbol arity kind s =
     let rec iter k =
       let sk = s ^ string_of_int k in
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    ctxt#alloc_symbol kind name
+    ctxt#alloc_symbol arity kind name
   in
   
-  let alloc_nullary_ctor j s = let s = alloc_symbol (Proverapi.Ctor j) s in ignore (ctxt#get_termnode s []); s in
+  let alloc_nullary_ctor j s = let s = alloc_symbol 0 (Proverapi.Ctor j) s in ignore (ctxt#get_termnode s []); s in
   
   let imap f xs =
     let rec imapi i xs =
@@ -887,7 +893,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (Proverapi.Ctor j) cn in
+              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (List.length ts) (Proverapi.Ctor j) cn in
               citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym))::pfm) ctors
             )
         in
@@ -1048,7 +1054,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Proverapi.Fixpoint index) g))::pfm) ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (List.length pmap) (Proverapi.Fixpoint index) g))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
     iter
@@ -1057,7 +1063,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
       [("true", (dummy_loc, boolt, [], alloc_nullary_ctor 0 "true"));
        ("false", (dummy_loc, boolt, [], alloc_nullary_ctor 1 "false"));
        ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol (Proverapi.Ctor 1) "succ"))] ds
+       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol 1 (Proverapi.Ctor 1) "succ"))] ds
   in
   
   let predmap = 
@@ -1303,7 +1309,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     | Some s -> s
   in
   
-  let rec eval (env: (string * Redux.termnode) list) e : Redux.termnode =
+  let rec eval (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval env in
     match e with
       Var (l, x) ->
@@ -1333,37 +1339,34 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     List.iter
     (function
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
-       let clauses = Array.make (List.length cs) (fun _ _ -> assert false) in
-       begin
-         match List.assoc g purefuncmap with (l, rt, ts, s) -> ctxt#set_fpclauses s (Some clauses)
-       end;
-       List.iter
-         (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-            let j =
-              match List.assoc cn purefuncmap with
-                (l, rt, ts, s) ->
-                begin
-                match s#kind with
-                  Proverapi.Ctor j -> j
-                | _ -> assert false
-                end
-            in
-            clauses.(j) <-
-              (
-                fun gts cts ->
+       let rec index_of_param i x0 ps =
+         match ps with
+           [] -> assert false
+         | (tp, x)::ps -> if x = x0 then i else index_of_param (i + 1) x0 ps
+       in
+       let i = index_of_param 0 x ps in
+       let fsym = match List.assoc g purefuncmap with (l, rt, ts, s) -> s in
+       let clauses =
+         List.map
+           (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
+              let ctorsym = match List.assoc cn purefuncmap with (l, rt, ts, s) -> s in
+              let eval_body gts cts =
                 let Some pts = zip ps gts in
                 let penv = List.map (fun ((tp, p), t) -> (p, t)) pts in
                 let Some patenv = zip pats cts in
                 eval (patenv @ penv) e
-              )
-         )
-         cs
+              in
+              (ctorsym, eval_body)
+           )
+           cs
+       in
+       ctxt#set_fpclauses fsym i clauses
      | _ -> ()
     )
     ds
   in
 
-  let contextStack = ref ([]: Redux.termnode context list) in
+  let contextStack = ref ([]: 'termnode context list) in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
@@ -1445,7 +1448,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     if ctxt#value_eq t1 t2 then
       cont()
     else
-      raise (SymbolicExecutionError (pprint_context_stack !contextStack, t1#pprint ^ " == " ^ t2#pprint, l, msg))
+      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " == " ^ ctxt#pprint t2, l, msg))
   in
   
   let assert_neq t1 t2 h env l msg cont =
@@ -1459,7 +1462,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
         match ctxt#assert_eq_and_reduce_terms t1 t2 with
           Unsat -> cont()
         | Unknown ->
-          raise (SymbolicExecutionError (pprint_context_stack !contextStack, t1#pprint ^ " != " ^ t2#pprint, l, msg))
+          raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
       end;
       ctxt#pop
     end
@@ -1485,7 +1488,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     with_index_table (fun _ -> cont2())
   in
   
-  let get_unique_var_symb x = let a = alloc_symbol Uninterp x in ctxt#get_termnode a [] in
+  let get_unique_var_symb x = let a = alloc_symbol 0 Uninterp x in ctxt#get_termnode a [] in
 
   let evalpat ghostenv env pat cont =
     match pat with
@@ -1510,7 +1513,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     iter h0
   in
   
-  let rec assume_pred h ghostenv (env: (string * Redux.termnode) list) p cont =
+  let rec assume_pred h ghostenv (env: (string * 'termnode) list) p cont =
     with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
     let ev = eval env in
     match p with
@@ -1574,7 +1577,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
     | _ -> assert_false h env l "Multiple matching heap chunks."
   in
   
-  let rec assert_pred h ghostenv env p (cont: Redux.termnode heap -> string list -> Redux.termnode env -> unit) =
+  let rec assert_pred h ghostenv env p (cont: 'termnode heap -> string list -> 'termnode env -> unit) =
     with_context (Executing (h, env, pred_loc p, "Asserting predicate")) (fun _ ->
     let ev = eval env in
     match p with
@@ -1727,7 +1730,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
                   match indinfo with
                     None -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) and there is no inductive parameter."
                   | Some x -> (
-                    match try_assoc (List.assoc x env') sizemap with
+                    match try_assq (List.assoc x env') sizemap with
                       Some k when k < 0 -> ()
                     | _ -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) or the inductive parameter."
                     )
@@ -1860,7 +1863,7 @@ let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context)
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
-            match try_assoc t sizemap with
+            match try_assq t sizemap with
               None -> sizemap
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
@@ -2023,11 +2026,33 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-let verify_program print_stats verbose path stream reportKeyword reportGhostRange =
-  let ctxt = ((new Redux.context): Redux.context :> (Redux.symbol, Redux.termnode) Proverapi.context) in
+let verify_program_with_stats ctxt print_stats verbose path stream reportKeyword reportGhostRange =
   do_finally
     (fun () -> verify_program_core ctxt verbose path stream reportKeyword reportGhostRange)
     (fun () -> if print_stats then stats#printStats)
+
+let prover_table: (string * (bool -> bool -> string -> char Stream.t -> (loc -> unit) -> (loc -> unit) -> unit)) list ref = ref []
+
+let register_prover name f =
+  prover_table := (name, f)::!prover_table
+
+let lookup_prover prover =
+  match prover with
+    None ->
+    begin
+      match !prover_table with
+        [] -> assert false
+      | (_, f)::_ -> f
+    end
+  | Some name ->
+    begin
+      match try_assoc name !prover_table with
+        None -> failwith ("No such prover: " ^ name)
+      | Some f -> f
+    end
+      
+let verify_program prover print_stats verbose path stream reportKeyword reportGhostRange =
+  lookup_prover prover print_stats verbose path stream reportKeyword reportGhostRange
 
 let remove_dups bs =
   let rec iter bs0 bs =

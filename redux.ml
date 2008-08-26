@@ -16,7 +16,15 @@ class symbol (kind: symbol_kind) (name: string) =
     method set_node n = node <- Some n
     val mutable fpclauses: (termnode list -> termnode list -> termnode) array option = None
     method fpclauses = fpclauses
-    method set_fpclauses cs = fpclauses <- cs
+    method set_fpclauses cs =
+      let a = Array.make (List.length cs) (fun _ _ -> assert false) in
+      List.iter
+        (fun (c, f) ->
+           let k = match c#kind with Ctor k -> k | _ -> assert false in
+           a.(k) <- f
+        )
+        cs;
+      fpclauses <- Some a
   end
 and termnode ctxt s initial_children =
   object (self)
@@ -271,9 +279,9 @@ and context =
     method add_redex n =
       redexes <- n::redexes
       
-    method alloc_symbol kind name = new symbol kind name
+    method alloc_symbol (arity: int) kind name = new symbol kind name
     
-    method set_fpclauses (s: symbol) cs = s#set_fpclauses cs
+    method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode list -> termnode list -> termnode)) list) = s#set_fpclauses cs
 
     method value_eq (t1: termnode) (t2: termnode) = t1#value = t2#value
     

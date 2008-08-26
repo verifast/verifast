@@ -4,8 +4,8 @@ type symbol_kind = Ctor of int | Fixpoint of int | Uninterp
 
 class virtual ['symbol, 'termnode] context =
   object
-    method virtual alloc_symbol: symbol_kind -> string -> 'symbol
-    method virtual set_fpclauses: 'symbol -> ('termnode list -> 'termnode list -> 'termnode) array option -> unit
+    method virtual alloc_symbol: int -> symbol_kind -> string -> 'symbol
+    method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
     method virtual get_termnode: 'symbol -> 'termnode list -> 'termnode
     method virtual pprint: 'termnode -> string
     method virtual reduce: unit
