@@ -32,14 +32,14 @@ let _ =
     print_endline "Usage: verifast [-stats] [-verbose] filepath"
   end
   else
-  let rec iter stats verbose i =
+  let rec iter stats verbose i : unit =
     if i < n then
       let arg = Sys.argv.(i) in
       if String.length arg > 0 && String.get arg 0 = '-' then
         match arg with
           "-stats" -> iter true verbose (i + 1)
         | "-verbose" -> iter stats true (i + 1)
-        | _ -> failwith "unknown command-line option '" ^ arg ^ "'"
+        | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
       else
         if i + 1 = n then
           verify stats verbose arg

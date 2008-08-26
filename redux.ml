@@ -1,13 +1,11 @@
+open Proverapi
+
 let rec try_assoc key al =
   match al with
     [] -> None
   | (k, v)::al -> if k = key then Some v else try_assoc key al
 
 let flatmap f xs = List.concat (List.map f xs)
-
-type assert_result = Unknown | Unsat
-
-type symbol_kind = Ctor of int | Fixpoint of int | Uninterp
 
 class symbol (kind: symbol_kind) (name: string) =
   object (self)
@@ -16,7 +14,7 @@ class symbol (kind: symbol_kind) (name: string) =
     val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
     method node = node
     method set_node n = node <- Some n
-    val mutable fpclauses: (valuenode list -> valuenode list -> valuenode) array option = None
+    val mutable fpclauses: (termnode list -> termnode list -> termnode) array option = None
     method fpclauses = fpclauses
     method set_fpclauses cs = fpclauses <- cs
   end
@@ -103,9 +101,9 @@ and termnode ctxt s initial_children =
             let j = match s#kind with Ctor j -> j | _ -> assert false in
             let clause = clauses.(j) in
             let vs = n#children in
-            let v = clause children vs in
+            let t = clause (List.map (fun v -> v#initial_child) children) (List.map (fun v -> v#initial_child) vs) in
             (* print_endline ("Assumed by reduction: " ^ self#pprint ^ " == " ^ v#initial_child#pprint); *)
-            ctxt#assert_eq v value
+            ctxt#assert_eq t#value value
           | _ -> assert false
           end
         | _ -> assert false
@@ -273,6 +271,20 @@ and context =
     method add_redex n =
       redexes <- n::redexes
       
+    method alloc_symbol kind name = new symbol kind name
+    
+    method set_fpclauses (s: symbol) cs = s#set_fpclauses cs
+
+    method value_eq (t1: termnode) (t2: termnode) = t1#value = t2#value
+    
+    method value_neq (t1: termnode) (t2: termnode) = t1#value#neq t2#value
+
+    method get_termnode s (ts: termnode list) = self#get_node s (List.map (fun t -> t#value) ts)
+    
+    method pprint (t: termnode): string = t#pprint
+    
+    method coerce_termnode (t: termnode): Proverapi.termnode = (t :> Proverapi.termnode)
+    
     method get_node s vs =
       match vs with
         [] ->
@@ -308,8 +320,12 @@ and context =
     method assert_eq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_eq v1 v2)
     
+    method assert_eq_and_reduce_terms (t1: termnode) (t2: termnode) = self#assert_eq_and_reduce t1#value t2#value
+    
     method assert_neq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_neq v1 v2)
+      
+    method assert_neq_and_reduce_terms (t1: termnode) (t2: termnode) = self#assert_neq_and_reduce t1#value t2#value
 
     method assert_eq v1 v2 =
       if v1 = v2 then

@@ -1,4 +1,4 @@
-open Redux
+open Proverapi
 
 class stats =
   object (self)
@@ -712,32 +712,32 @@ let startswith s s0 =
 
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
-let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t#pprint) env)
+let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t) env)
 
 exception StaticError of loc * string
 
 let static_error l msg = raise (StaticError (l, msg))
 
-type heap = (string * termnode list) list
-type env = (string * termnode) list
-type context =
-  AssumingEq of termnode * termnode
-| AssumingNeq of termnode * termnode
-| Executing of heap * env * loc * string
+type 'termnode heap = (string * 'termnode list) list
+type 'termnode env = (string * 'termnode) list
+type 'termnode context =
+  AssumingEq of 'termnode * 'termnode
+| AssumingNeq of 'termnode * 'termnode
+| Executing of 'termnode heap * 'termnode env * loc * string
 | PushSubcontext
 | PopSubcontext
 
-let string_of_heap h = String.concat " * " (List.map (function (g, ts) -> g ^ "(" ^ (String.concat ", " (List.map (fun t -> t#pprint) ts)) ^ ")") h)
+let string_of_heap h = String.concat " * " (List.map (function (g, ts) -> g ^ "(" ^ (String.concat ", " (List.map (fun t -> t) ts)) ^ ")") h)
   
 let string_of_context c =
   match c with
-    AssumingEq (t1, t2) -> "Assuming " ^ t1#pprint ^ " == " ^ t2#pprint
-  | AssumingNeq (t1, t2) -> "Assuming " ^ t1#pprint ^ " != " ^ t2#pprint
+    AssumingEq (t1, t2) -> "Assuming " ^ t1 ^ " == " ^ t2
+  | AssumingNeq (t1, t2) -> "Assuming " ^ t1 ^ " != " ^ t2
   | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
   | PushSubcontext -> "Entering subcontext"
   | PopSubcontext -> "Leaving subcontext"
 
-exception SymbolicExecutionError of context list * string * loc * string
+exception SymbolicExecutionError of string context list * string * loc * string
 
 let zip xs ys =
   let rec iter xs ys zs =
@@ -748,13 +748,11 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program_core verbose path stream reportKeyword reportGhostRange =
+let verify_program_core (ctxt: (Redux.symbol, Redux.termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
-  let ctxt = new context in
-  
   let used_ids = ref [] in
   let used_ids_stack = ref ([]: string list list) in
   
@@ -780,10 +778,10 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    new symbol kind name
+    ctxt#alloc_symbol kind name
   in
   
-  let alloc_nullary_ctor j s = let s = alloc_symbol (Redux.Ctor j) s in ignore (ctxt#get_node s []); s in
+  let alloc_nullary_ctor j s = let s = alloc_symbol (Proverapi.Ctor j) s in ignore (ctxt#get_termnode s []); s in
   
   let imap f xs =
     let rec imapi i xs =
@@ -889,7 +887,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (Redux.Ctor j) cn in
+              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (Proverapi.Ctor j) cn in
               citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym))::pfm) ctors
             )
         in
@@ -1050,7 +1048,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Redux.Fixpoint index) g))::pfm) ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (Proverapi.Fixpoint index) g))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
     iter
@@ -1059,7 +1057,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
       [("true", (dummy_loc, boolt, [], alloc_nullary_ctor 0 "true"));
        ("false", (dummy_loc, boolt, [], alloc_nullary_ctor 1 "false"));
        ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol (Redux.Ctor 1) "succ"))] ds
+       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol (Proverapi.Ctor 1) "succ"))] ds
   in
   
   let predmap = 
@@ -1305,7 +1303,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     | Some s -> s
   in
   
-  let rec eval env e =
+  let rec eval (env: (string * Redux.termnode) list) e : Redux.termnode =
     let ev = eval env in
     match e with
       Var (l, x) ->
@@ -1315,17 +1313,17 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           begin
             match try_assoc x purefuncmap with
               None -> static_error l "No such variable or constructor."
-            | Some (lg, t, [], s) -> ctxt#get_node s []
+            | Some (lg, t, [], s) -> ctxt#get_termnode s []
             | _ -> static_error l "Missing argument list."
           end
         | Some t -> t
       end
-    | IntLit (l, n) -> ctxt#get_node (get_intlit_symbol n) []
+    | IntLit (l, n) -> ctxt#get_termnode (get_intlit_symbol n) []
     | CallExpr (l, g, pats) ->
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, s) -> ctxt#get_node s (List.map (function (LitPat e) -> (ev e)#value) pats)
+        | Some (lg, t, pts, s) -> ctxt#get_termnode s (List.map (function (LitPat e) -> ev e) pats)
       end
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
@@ -1337,7 +1335,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
      | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
        let clauses = Array.make (List.length cs) (fun _ _ -> assert false) in
        begin
-         match List.assoc g purefuncmap with (l, rt, ts, s) -> s#set_fpclauses (Some clauses)
+         match List.assoc g purefuncmap with (l, rt, ts, s) -> ctxt#set_fpclauses s (Some clauses)
        end;
        List.iter
          (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
@@ -1346,17 +1344,17 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
                 (l, rt, ts, s) ->
                 begin
                 match s#kind with
-                  Redux.Ctor j -> j
+                  Proverapi.Ctor j -> j
                 | _ -> assert false
                 end
             in
             clauses.(j) <-
               (
-                fun gvs cvs ->
-                let Some pvs = zip ps gvs in
-                let penv = List.map (fun ((t, p), v) -> (p, v#initial_child)) pvs in
-                let Some patenv = zip pats (List.map (fun v -> v#initial_child) cvs) in
-                (eval (patenv @ penv) e)#value
+                fun gts cts ->
+                let Some pts = zip ps gts in
+                let penv = List.map (fun ((tp, p), t) -> (p, t)) pts in
+                let Some patenv = zip pats cts in
+                eval (patenv @ penv) e
               )
          )
          cs
@@ -1365,7 +1363,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     ds
   in
 
-  let contextStack = ref ([]: context list) in
+  let contextStack = ref ([]: Redux.termnode context list) in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
@@ -1382,12 +1380,12 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   
   let assume_eq t1 t2 cont =
     ctxt#reduce;
-    if t1#value = t2#value then cont() else
+    if ctxt#value_eq t1 t2 then cont() else
     begin
       push_context (AssumingEq (t1, t2));
       ctxt#push;
       begin
-        match ctxt#assert_eq_and_reduce t1#value t2#value with
+        match ctxt#assert_eq_and_reduce_terms t1 t2 with
           Unknown -> cont()
         | Unsat -> ()
       end;
@@ -1398,12 +1396,12 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   
   let assume_neq t1 t2 cont =
     ctxt#reduce;
-    if t1#value#neq t2#value then cont() else
+    if ctxt#value_neq t1 t2 then cont() else
     begin
       push_context (AssumingNeq (t1, t2));
       ctxt#push;
       begin
-        match ctxt#assert_neq_and_reduce t1#value t2#value with
+        match ctxt#assert_neq_and_reduce_terms t1 t2 with
           Unknown -> cont()
         | Unsat -> ()
       end;
@@ -1428,33 +1426,47 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     | _ -> static_error (expr_loc e) "Expression form not supported here."
   in
   
+  let pprint_context_stack cs =
+    List.map
+      (function
+         AssumingEq (t1, t2) -> AssumingEq (ctxt#pprint t1, ctxt#pprint t2)
+       | AssumingNeq (t1, t2) -> AssumingNeq (ctxt#pprint t1, ctxt#pprint t2)
+       | Executing (h, env, l, msg) ->
+         let h' = List.map (fun (g, ts) -> (g, List.map (fun t -> ctxt#pprint t) ts)) h in
+         let env' = List.map (fun (x, t) -> (x, ctxt#pprint t)) env in
+         Executing (h', env', l, msg)
+       | PushSubcontext -> PushSubcontext
+       | PopSubcontext -> PopSubcontext)
+      cs
+  in
+
   let assert_eq t1 t2 h env l msg cont =
     ctxt#reduce;
-    if t1#value = t2#value then
+    if ctxt#value_eq t1 t2 then
       cont()
     else
-      raise (SymbolicExecutionError (!contextStack, t1#pprint ^ " == " ^ t2#pprint, l, msg))
+      raise (SymbolicExecutionError (pprint_context_stack !contextStack, t1#pprint ^ " == " ^ t2#pprint, l, msg))
   in
   
   let assert_neq t1 t2 h env l msg cont =
     ctxt#reduce;
-    if t1#value#neq t2#value then
+    if ctxt#value_neq t1 t2 then
       cont()
     else
     begin
       ctxt#push;
       begin
-        match ctxt#assert_eq_and_reduce t1#value t2#value with
+        match ctxt#assert_eq_and_reduce_terms t1 t2 with
           Unsat -> cont()
         | Unknown ->
-          raise (SymbolicExecutionError (!contextStack, t1#pprint ^ " != " ^ t2#pprint, l, msg))
+          raise (SymbolicExecutionError (pprint_context_stack !contextStack, t1#pprint ^ " != " ^ t2#pprint, l, msg))
       end;
       ctxt#pop
     end
   in
   
   let assert_false h env l msg =
-    raise (SymbolicExecutionError (!contextStack, "false", l, msg))
+    raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg))
   in
   
   let assert_expr env e h env l msg cont =
@@ -1473,7 +1485,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     with_index_table (fun _ -> cont2())
   in
   
-  let get_unique_var_symb x = let a = alloc_symbol Uninterp x in ctxt#get_node a [] in
+  let get_unique_var_symb x = let a = alloc_symbol Uninterp x in ctxt#get_termnode a [] in
 
   let evalpat ghostenv env pat cont =
     match pat with
@@ -1498,7 +1510,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     iter h0
   in
   
-  let rec assume_pred h ghostenv env p cont =
+  let rec assume_pred h ghostenv (env: (string * Redux.termnode) list) p cont =
     with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
     let ev = eval env in
     match p with
@@ -1516,7 +1528,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             (fun _ ->
                let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
                let (_, _, _, cs) = List.assoc cn purefuncmap in
-               assume_eq t (ctxt#get_node cs (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               assume_eq t (ctxt#get_termnode cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1527,7 +1539,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
   
   let definitely_equal t1 t2 =
     ctxt#reduce;
-    t1#value = t2#value
+    ctxt#value_eq t1 t2
   in
   
   let match_chunk ghostenv env g pats (g', ts0) =
@@ -1562,7 +1574,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
     | _ -> assert_false h env l "Multiple matching heap chunks."
   in
   
-  let rec assert_pred h ghostenv env p (cont: heap -> string list -> env -> unit) =
+  let rec assert_pred h ghostenv env p (cont: Redux.termnode heap -> string list -> Redux.termnode env -> unit) =
     with_context (Executing (h, env, pred_loc p, "Asserting predicate")) (fun _ ->
     let ev = eval env in
     match p with
@@ -1590,7 +1602,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
           let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
           let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume_eq t (ctxt#get_termnode ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1680,8 +1692,8 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             let tpx = vartp l x in
             let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
             let _ = check_assign l x in
-            let vs = List.map (function (LitPat e) -> (ev e)#value) pats in
-            cont h (update env x (ctxt#get_node gs vs))
+            let ts = List.map (function (LitPat e) -> ev e) pats in
+            cont h (update env x (ctxt#get_termnode gs ts))
           )
         )
       | [(k, tr, ps, pre, post)] ->
@@ -1853,7 +1865,7 @@ let verify_program_core verbose path stream reportKeyword reportGhostRange =
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#get_node ctorsym (List.map (fun (x, t) -> t#value) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume_eq t (ctxt#get_termnode ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -2012,8 +2024,9 @@ let do_finally tryBlock finallyBlock =
   result
 
 let verify_program print_stats verbose path stream reportKeyword reportGhostRange =
+  let ctxt = ((new Redux.context): Redux.context :> (Redux.symbol, Redux.termnode) Proverapi.context) in
   do_finally
-    (fun () -> verify_program_core verbose path stream reportKeyword reportGhostRange)
+    (fun () -> verify_program_core ctxt verbose path stream reportKeyword reportGhostRange)
     (fun () -> if print_stats then stats#printStats)
 
 let remove_dups bs =
