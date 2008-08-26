@@ -283,8 +283,6 @@ and context =
     
     method pprint (t: termnode): string = t#pprint
     
-    method coerce_termnode (t: termnode): Proverapi.termnode = (t :> Proverapi.termnode)
-    
     method get_node s vs =
       match vs with
         [] ->
