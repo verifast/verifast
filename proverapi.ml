@@ -1,4 +1,4 @@
-type assert_result = Unknown | Unsat
+type assume_result = Unknown | Unsat
 
 type symbol_kind = Ctor of int | Fixpoint of int | Uninterp
 
@@ -8,11 +8,10 @@ class virtual ['symbol, 'termnode] context =
     method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
     method virtual get_termnode: 'symbol -> 'termnode list -> 'termnode
     method virtual pprint: 'termnode -> string
-    method virtual reduce: unit
-    method virtual value_eq: 'termnode -> 'termnode -> bool
-    method virtual value_neq: 'termnode -> 'termnode -> bool
-    method virtual assert_eq_and_reduce_terms: 'termnode -> 'termnode -> assert_result
-    method virtual assert_neq_and_reduce_terms: 'termnode -> 'termnode -> assert_result
     method virtual push: unit
     method virtual pop: unit
+    method virtual assume_eq: 'termnode -> 'termnode -> assume_result
+    method virtual assume_neq: 'termnode -> 'termnode -> assume_result
+    method virtual query_eq: 'termnode -> 'termnode -> bool
+    method virtual query_neq: 'termnode -> 'termnode -> bool
   end

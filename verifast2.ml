@@ -1382,35 +1382,27 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
   let assume_eq t1 t2 cont =
-    ctxt#reduce;
-    if ctxt#value_eq t1 t2 then cont() else
+    push_context (AssumingEq (t1, t2));
+    ctxt#push;
     begin
-      push_context (AssumingEq (t1, t2));
-      ctxt#push;
-      begin
-        match ctxt#assert_eq_and_reduce_terms t1 t2 with
-          Unknown -> cont()
-        | Unsat -> ()
-      end;
-      pop_context();
-      ctxt#pop
-    end
+      match ctxt#assume_eq t1 t2 with
+        Unknown -> cont()
+      | Unsat -> ()
+    end;
+    pop_context();
+    ctxt#pop
   in
   
   let assume_neq t1 t2 cont =
-    ctxt#reduce;
-    if ctxt#value_neq t1 t2 then cont() else
+    push_context (AssumingNeq (t1, t2));
+    ctxt#push;
     begin
-      push_context (AssumingNeq (t1, t2));
-      ctxt#push;
-      begin
-        match ctxt#assert_neq_and_reduce_terms t1 t2 with
-          Unknown -> cont()
-        | Unsat -> ()
-      end;
-      pop_context();
-      ctxt#pop
-    end
+      match ctxt#assume_neq t1 t2 with
+        Unknown -> cont()
+      | Unsat -> ()
+    end;
+    pop_context();
+    ctxt#pop
   in
   
   let assume env e cont =
@@ -1444,27 +1436,17 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   in
 
   let assert_eq t1 t2 h env l msg cont =
-    ctxt#reduce;
-    if ctxt#value_eq t1 t2 then
+    if ctxt#query_eq t1 t2 then
       cont()
     else
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " == " ^ ctxt#pprint t2, l, msg))
   in
   
   let assert_neq t1 t2 h env l msg cont =
-    ctxt#reduce;
-    if ctxt#value_neq t1 t2 then
+    if ctxt#query_neq t1 t2 then
       cont()
     else
-    begin
-      ctxt#push;
-      let result = ctxt#assert_eq_and_reduce_terms t1 t2 in
-      ctxt#pop;
-      match result with
-        Unsat -> cont()
-      | Unknown ->
-        raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
-    end
+      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
   in
   
   let assert_false h env l msg =
@@ -1540,8 +1522,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   in
   
   let definitely_equal t1 t2 =
-    ctxt#reduce;
-    ctxt#value_eq t1 t2
+    ctxt#query_eq t1 t2
   in
   
   let match_chunk ghostenv env g pats (g', ts0) =

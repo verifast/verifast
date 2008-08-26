@@ -258,6 +258,7 @@ and context =
     
     method pushdepth = pushdepth
     method push =
+      self#reduce;
       assert (redexes = []);
       popstack <- (pushdepth, popactionlist)::popstack;
       pushdepth <- pushdepth + 1;
@@ -283,9 +284,15 @@ and context =
     
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode list -> termnode list -> termnode)) list) = s#set_fpclauses cs
 
-    method value_eq (t1: termnode) (t2: termnode) = t1#value = t2#value
+    method query_eq (t1: termnode) (t2: termnode) = self#reduce; t1#value = t2#value
     
-    method value_neq (t1: termnode) (t2: termnode) = t1#value#neq t2#value
+    method query_neq (t1: termnode) (t2: termnode) =
+      self#push;
+      let result = self#assume_eq t1 t2 in
+      self#pop;
+      match result with
+        Unsat -> true
+      | Unknown -> false
 
     method get_termnode s (ts: termnode list) = self#get_node s (List.map (fun t -> t#value) ts)
     
@@ -326,12 +333,12 @@ and context =
     method assert_eq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_eq v1 v2)
     
-    method assert_eq_and_reduce_terms (t1: termnode) (t2: termnode) = self#assert_eq_and_reduce t1#value t2#value
+    method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
     method assert_neq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_neq v1 v2)
       
-    method assert_neq_and_reduce_terms (t1: termnode) (t2: termnode) = self#assert_neq_and_reduce t1#value t2#value
+    method assume_neq (t1: termnode) (t2: termnode) = self#reduce; self#assert_neq_and_reduce t1#value t2#value
 
     method assert_eq v1 v2 =
       if v1 = v2 then
