@@ -293,13 +293,14 @@ and ['tag] simplex eq_listener const_listener =
       else
         unsat <- true
       
-    method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
+    method assert_ge (c: int) (ts: (int * 'tag unknown) list) =
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None in
-      let row = new row (self :> 'tag simplex) y c in
+      let row = new row (self :> 'tag simplex) y (num_of_int c) in
       rows <- row::rows;
       y#set_pos (Row row);
       List.iter
         (fun (a, u) ->
+           let a = num_of_int a in
            match u#pos with
              Row r ->
              row#add_row a r
@@ -313,8 +314,8 @@ and ['tag] simplex eq_listener const_listener =
       | 1 -> Sat
       | _ -> assert false
     
-    method assert_eq (c: num) (ts: (num * 'tag unknown) list) =
+    method assert_eq (c: int) (ts: (int * 'tag unknown) list) =
       match self#assert_ge c ts with
         Unsat -> Unsat
-      | Sat -> self#assert_ge (minus_num c) (List.map (fun (a, u) -> (minus_num a, u)) ts)
+      | Sat -> self#assert_ge (-c) (List.map (fun (a, u) -> (-a, u)) ts)
   end

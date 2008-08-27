@@ -21,7 +21,7 @@ let _ =
   let y = alloc_unknown s "y" in
   
   let assert_ge c1 ts1 c2 ts2 =
-    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+    s#assert_ge (c2 - c1) (List.map (fun (n, u) -> (-n, u)) ts1 @ List.map (fun (n, u) -> (n, u)) ts2)
   in
   
   assert (assert_ge 0 [] 0 [1, x] = Sat); (* 0 <= x *)
@@ -39,7 +39,7 @@ let _ =
   let z = alloc_unknown s "z" in
   
   let assert_ge c1 ts1 c2 ts2 =
-    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+    s#assert_ge (c2 - c1) (List.map (fun (n, u) -> (-n, u)) ts1 @ List.map (fun (n, u) -> (n, u)) ts2)
   in
   
   assert (assert_ge 0 [] 0 [1, x] = Sat); (* 0 <= x *)
@@ -57,7 +57,7 @@ let _ =
   let x = alloc_unknown s "x" in
   
   let assert_ge c1 ts1 c2 ts2 =
-    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+    s#assert_ge (c2 - c1) (List.map (fun (n, u) -> (-n, u)) ts1 @ List.map (fun (n, u) -> (n, u)) ts2)
   in
   
   assert (assert_ge 0 [] 0 [1, x] = Sat); (* 0 <= x *)
@@ -76,7 +76,7 @@ let _ =
   let y = alloc_unknown s "y" in
   
   let assert_ge c1 ts1 c2 ts2 =
-    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+    s#assert_ge (c2 - c1) (List.map (fun (n, u) -> (-n, u)) ts1 @ List.map (fun (n, u) -> (n, u)) ts2)
   in
   
   assert (assert_ge 0 [1, x] 0 [1, y] = Sat); (* x <= y *)
@@ -96,7 +96,7 @@ let _ =
   let z = alloc_unknown s "z" in
   
   let assert_ge c1 ts1 c2 ts2 =
-    s#assert_ge (num_of_int (c2 - c1)) (List.map (fun (n, u) -> (num_of_int (-n), u)) ts1 @ List.map (fun (n, u) -> (num_of_int n, u)) ts2)
+    s#assert_ge (c2 - c1) (List.map (fun (n, u) -> (-n, u)) ts1 @ List.map (fun (n, u) -> (n, u)) ts2)
   in
   
   assert (assert_ge 0 [1, x] 0 [1, y; 1, z] = Sat); (* x <= y + z *)
@@ -110,4 +110,37 @@ let _ =
   assert (eqs_eq [(z, x)]);
   assert (consts_eq [(y, 0)]);
   
+  ()
+
+let _ =
+  let (s, eqs_eq, consts_eq) = mk_simplex() in
+  let x = alloc_unknown s "x" in
+  
+  assert (s#assert_eq (-5) [1, x] = Sat);
+  assert (s#assert_eq 5 [1, x] = Unsat)
+
+let _ =
+  let (s, eqs_eq, consts_eq) = mk_simplex() in
+  let x = alloc_unknown s "x" in
+  
+  s#push;
+  assert (s#assert_eq (-5) [1, x] = Sat);
+  assert (s#assert_eq 5 [1, x] = Unsat);
+  s#pop;
+  assert (s#assert_eq 5 [1, x] = Sat);
+  assert (s#assert_eq (-5) [1, x] = Unsat)
+
+let _ =
+  let (s, eqs_eq, consts_eq) = mk_simplex() in
+  let x = alloc_unknown s "x" in
+  let y = alloc_unknown s "y" in
+  let z = alloc_unknown s "z" in
+  
+  assert (s#assert_ge (2) [-1, x] = Sat);  (* x <= 2 *)
+  s#push;
+  assert (s#assert_ge (-10) [1, x; 1, y] = Sat);  (* 10 <= x + y *)
+  assert (s#assert_ge 7 [-1, y] = Unsat); (* y <= 7 *)
+  s#pop;
+  assert (s#assert_ge (-5) [1, x; 1, y] = Sat);  (* 5 <= x + y *)
+  assert (s#assert_ge 2 [-1, y] = Unsat); (* y <= 2 *)
   ()
