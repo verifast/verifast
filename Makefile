@@ -1,5 +1,5 @@
 verifastRedux.exe: proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlc -warn-error F -g -pp camlp4o -o verifastRedux.exe unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
+	ocamlc -warn-error F -w p -g -pp camlp4o -o verifastRedux.exe unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 
 verifast.exe: proverapi.cmo simplex.cmo redux.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o verifast.exe -I $(Z3)\ocaml unix.cma $(Z3)\ocaml\z3.cma proverapi.cmo nums.cma simplex.cmo redux.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
@@ -17,7 +17,7 @@ proverapi.cmo: proverapi.ml
 	ocamlc -warn-error F -g -c proverapi.ml
 
 redux.cmo: proverapi.cmo simplex.cmo redux.ml
-	ocamlc -warn-error F -g -c redux.ml
+	ocamlc -warn-error F -w p -g -c redux.ml
 
 z3prover.cmo: proverapi.cmo z3prover.ml
 	ocamlc -warn-error F -g -c -I $(Z3)\ocaml z3prover.ml
@@ -31,11 +31,14 @@ verifastz3.opt.exe: proverapi.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml v
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
 
-redux.cmx: proverapi.cmx redux.ml
-	ocamlopt.opt -warn-error F -c proverapi.cmx redux.ml
+simplex.cmx: simplex.ml
+	ocamlopt.opt -warn-error F -c simplex.cmx simplex.ml
+
+redux.cmx: proverapi.cmx simplex.cmx redux.ml
+	ocamlopt.opt -warn-error F -c redux.ml
 
 z3prover.cmx: proverapi.cmx z3prover.ml
 	ocamlopt.opt -warn-error F -c -I $(Z3)\ocaml z3.cmxa proverapi.cmx z3prover.ml
 
-verifastRedux.opt.exe: proverapi.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux.opt.exe unix.cmxa proverapi.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
+verifastRedux.opt.exe: proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux.opt.exe unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml

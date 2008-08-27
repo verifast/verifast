@@ -7,6 +7,11 @@ let rec try_assoc key al =
 
 let flatmap f xs = List.concat (List.map f xs)
 
+type 'termnode term =
+  TermNode of 'termnode
+| Eq of 'termnode * 'termnode
+| Not of 'termnode term
+
 class symbol (kind: symbol_kind) (name: string) =
   object (self)
     method kind = kind
@@ -14,7 +19,7 @@ class symbol (kind: symbol_kind) (name: string) =
     val mutable node: termnode option = None (* Used only for nullary symbols. Assumes this symbol is used with one context only. *)
     method node = node
     method set_node n = node <- Some n
-    val mutable fpclauses: (termnode list -> termnode list -> termnode) array option = None
+    val mutable fpclauses: (termnode term list -> termnode term list -> termnode term) array option = None
     method fpclauses = fpclauses
     method set_fpclauses cs =
       let a = Array.make (List.length cs) (fun _ _ -> assert false) in
@@ -65,7 +70,6 @@ and termnode ctxt s initial_children =
           iter (k + 1) vs
       in
       iter 0 initial_children;
-      value#add_child (self :> termnode);
       value#set_initial_child (self :> termnode);
       match symbol#kind with
         Ctor j -> value#set_ctorchild (self :> termnode)
@@ -76,10 +80,20 @@ and termnode ctxt s initial_children =
           None -> ()
         | Some n -> ctxt#add_redex (self :> termnode)
         end
-      | Uninterp -> ()
+      | Uninterp ->
+        begin
+          match symbol#name with
+            "==" ->
+            begin
+              match children with
+                [v1; v2] -> if v1 = v2 then ignore (ctxt#assert_eq value ctxt#true_node#value)
+            end
+          | _ -> ()
+        end
     end
     method set_value v =
       self#push;
+      (* print_endline (string_of_int (Oo.id self) ^ ".value <- " ^ string_of_int (Oo.id v)); *)
       value <- v
     method set_child k v =
       let rec replace i vs =
@@ -109,9 +123,10 @@ and termnode ctxt s initial_children =
             let j = match s#kind with Ctor j -> j | _ -> assert false in
             let clause = clauses.(j) in
             let vs = n#children in
-            let t = clause (List.map (fun v -> v#initial_child) children) (List.map (fun v -> v#initial_child) vs) in
-            (* print_endline ("Assumed by reduction: " ^ self#pprint ^ " == " ^ v#initial_child#pprint); *)
-            ctxt#assert_eq t#value value
+            let t = clause (List.map (fun v -> TermNode v#initial_child) children) (List.map (fun v -> TermNode v#initial_child) vs) in
+            let tn = ctxt#termnode_of_term t in
+            (* print_endline ("Assumed by reduction: " ^ self#pprint ^ " == " ^ tn#pprint); *)
+            ctxt#assert_eq tn#value value
           | _ -> assert false
           end
         | _ -> assert false
@@ -119,8 +134,11 @@ and termnode ctxt s initial_children =
       else
         Unknown
     method pprint =
+      "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^
+      begin
       if initial_children = [] then symbol#name else
         symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
+      end
 
   end
 and valuenode ctxt =
@@ -133,7 +151,9 @@ and valuenode ctxt =
     val mutable parents: (termnode * int) list = []
     val mutable ctorchild: termnode option = None
     val mutable neqs: valuenode list = []
-    method set_initial_child t = initial_child <- Some t
+    method set_initial_child t =
+      initial_child <- Some t;
+      children <- [t]
     method initial_child = match initial_child with Some n -> n | None -> assert false
     method push =
       if ctxt#pushdepth <> pushdepth then
@@ -183,6 +203,7 @@ and valuenode ctxt =
     method ctorchild_added =
       List.iter (fun (n, k) -> if n#kind = Fixpoint k then ctxt#add_redex n) parents
     method merge_into v =
+      (* print_endline ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v)); *)
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
@@ -251,6 +272,11 @@ and valuenode ctxt =
   end
 and context =
   object (self)
+    val eq_symbol = new symbol Uninterp "=="
+    val not_symbol = new symbol Uninterp "!"
+    val mutable intlitnodes: (int * termnode) list = []
+    val mutable ttrue = None
+    val mutable tfalse = None
     val mutable simplex = new Simplex.simplex
     val mutable popstack = []
     val mutable pushdepth = 0
@@ -260,28 +286,74 @@ and context =
     val mutable redexes = []
     
     initializer
-      simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts)
+      simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
+      ttrue <- Some (self#mk_app (self#mk_symbol "true" [] () (Ctor 0)) []);
+      tfalse <- Some (self#mk_app (self#mk_symbol "false" [] () (Ctor 1)) [])
+    
+    method get_intlitnode n =
+      match try_assoc n intlitnodes with
+        None ->
+        (* print_endline ("Creating intlit node for " ^ string_of_int n); *)
+        let node = self#get_node (new symbol (Ctor n) (string_of_int n)) [] in
+        intlitnodes <- (n, node)::intlitnodes;
+        node
+      | Some n -> n
+      
+    method true_node = let Some (TermNode ttrue) = ttrue in ttrue
+    method false_node = let Some (TermNode tfalse) = tfalse in tfalse
     
     method type_bool = ()
     method type_int = ()
     method type_inductive = ()
-    method mk_true: termnode = assert false
-    method mk_false: termnode = assert false
-    method mk_and (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_or (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_not (t: termnode): termnode = assert false
-    method mk_ifthenelse (t1: termnode) (t2: termnode) (t3: termnode): termnode = assert false
-    method mk_eq (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_intlit (n: int): termnode = assert false
-    method mk_add (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_sub (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_lt (t1: termnode) (t2: termnode): termnode = assert false
-    method mk_le (t1: termnode) (t2: termnode): termnode = assert false
-    method assume (t: termnode): assume_result = assert false
-    method query (t: termnode): bool = assert false
+    method mk_true: termnode term = let Some ttrue = ttrue in ttrue
+    method mk_false: termnode term = let Some tfalse = tfalse in tfalse
+    method mk_and (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method mk_or (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method mk_not (t: termnode term): termnode term = Not t
+    method mk_ifthenelse (t1: termnode term) (t2: termnode term) (t3: termnode term): termnode term = assert false
+    method mk_eq (t1: termnode term) (t2: termnode term): termnode term = Eq (self#termnode_of_term t1, self#termnode_of_term t2)
+    method mk_intlit (n: int): termnode term = TermNode (self#get_intlitnode n)
+    method mk_add (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method mk_sub (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method mk_lt (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method mk_le (t1: termnode term) (t2: termnode term): termnode term = assert false
+    method assume (t: termnode term): assume_result =
+      (* print_endline ("Assume: " ^ self#pprint t); *)
+      let rec assume_true t =
+        match t with
+          TermNode t -> assert false
+        | Eq (t1, t2) -> self#assume_eq t1 t2
+        | Not t -> assume_false t
+      and assume_false t =
+        match t with
+          TermNode t -> assert false
+        | Eq (t1, t2) -> self#assume_neq t1 t2
+        | Not t -> assume_true t
+      in
+      assume_true t
+    method query (t: termnode term): bool =
+      (* print_endline ("Query: " ^ self#pprint t); *)
+      let rec query_true t =
+        match t with
+          TermNode t -> assert false
+        | Eq (t1, t2) -> self#query_eq t1 t2
+        | Not t -> query_false t
+      and query_false t =
+        match t with
+          TermNode t -> assert false
+        | Eq (t1, t2) -> self#query_neq t1 t2
+        | Not t -> query_true t
+      in
+      query_true t
     
+    method termnode_of_term t =
+      match t with
+        TermNode t -> t
+      | _ -> assert false
+
     method pushdepth = pushdepth
     method push =
+      (* print_endline "Push"; *)
       self#reduce;
       assert (redexes = []);
       popstack <- (pushdepth, popactionlist)::popstack;
@@ -292,6 +364,7 @@ and context =
       popactionlist <- action::popactionlist
 
     method pop =
+      (* print_endline "Pop"; *)
       redexes <- [];
       match popstack with
         (pushdepth0, popactionlist0)::popstack0 ->
@@ -307,7 +380,8 @@ and context =
     method mk_symbol name (domain: unit list) (range: unit) kind =
       let s = new symbol kind name in if List.length domain = 0 then ignore (self#mk_app s []); s
     
-    method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode list -> termnode list -> termnode)) list) = s#set_fpclauses cs
+    method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode term list -> termnode term list -> termnode term)) list) =
+      s#set_fpclauses cs
 
     method query_eq (t1: termnode) (t2: termnode) = self#reduce; t1#value = t2#value
     
@@ -319,9 +393,14 @@ and context =
         Unsat -> true
       | Unknown -> false
 
-    method mk_app s (ts: termnode list) = self#get_node s (List.map (fun t -> t#value) ts)
+    method mk_app (s: symbol) (ts: termnode term list): termnode term =
+      TermNode (self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts))
     
-    method pprint (t: termnode): string = t#pprint
+    method pprint (t: termnode term): string =
+      match t with
+        TermNode t -> t#pprint
+      | Eq (t1, t2) -> t1#pprint ^ " = " ^ t2#pprint
+      | Not t -> "!(" ^ self#pprint t ^ ")"
     
     method get_node s vs =
       match vs with
