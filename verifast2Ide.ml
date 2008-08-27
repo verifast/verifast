@@ -1,4 +1,4 @@
-open Verifast
+open Verifast2
 open GMain
 
 let show_ide initialPath prover =
@@ -159,7 +159,7 @@ let show_ide initialPath prover =
     let rec iter k itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
         [] -> []
-      | Assuming phi::cs -> iter k itstack last_it (phi::ass) locstack last_loc last_env cs
+      | Assuming t::cs -> iter k itstack last_it (t::ass) locstack last_loc last_env cs
       | Executing (h, env, l, msg)::cs ->
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
         stepStore#set ~row:it ~column:stepKCol k;
@@ -213,7 +213,7 @@ let show_ide initialPath prover =
         match locstack with
           [] ->
           srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
-          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env))
+          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
         | (caller_loc, caller_env)::_ ->
           apply_tag_by_loc "currentCaller" caller_loc;
           let (current_caller_pos, _) = caller_loc in
@@ -221,11 +221,11 @@ let show_ide initialPath prover =
           (if textPaned#position < 10 then textPaned#set_position 100);
           subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
           srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark);
-          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups caller_env));
-          append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ pprint_t t) (remove_dups env))
+          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups caller_env));
+          append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
       end;
-      let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.map (fun phi -> pretty_print phi) (List.rev ass)) in
-      let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ pprint_ts ts ^ ")") h) in
+      let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass) in
+      let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, ts) -> g ^ "(" ^ String.concat ", " ts ^ ")") h) in
       ()
   in
   let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
@@ -296,7 +296,12 @@ let show_ide initialPath prover =
   let handleStaticError l emsg =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
-    updateWindowTitle()
+    updateWindowTitle();
+    let (start, stop) = l in
+    let it = srcpos_iter stop in
+    buffer#place_cursor ~where:it;
+    srcText#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scoll_to_iter returns a boolean *)
+    ()
   in
   let reportKeyword l =
     apply_tag_by_loc "keyword" l
@@ -309,7 +314,7 @@ let show_ide initialPath prover =
     buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
     buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter;
     try
-      verify_program false prover false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
+      verify_program None false false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
       msg := Some "0 errors found";
       updateWindowTitle()
     with
