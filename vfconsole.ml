@@ -1,5 +1,4 @@
-open Verifast2
-
+open Verifast
 
 let _ =
   let print_msg l msg =

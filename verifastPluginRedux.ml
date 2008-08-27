@@ -1,5 +1,5 @@
 let _ =
-  Verifast2.register_prover "redux"
+  Verifast.register_prover "redux"
     (
       fun client ->
         let ctxt = (new Redux.context: Redux.context :> (Redux.symbol, Redux.termnode) Proverapi.context) in

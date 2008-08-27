@@ -1,4 +1,4 @@
-open Verifast2
+open Verifast
 open GMain
 
 let show_ide initialPath prover =
