@@ -251,10 +251,34 @@ and valuenode ctxt =
   end
 and context =
   object (self)
+    val mutable simplex = new Simplex.simplex
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
-    val mutable redexes = []  (* TODO: Do we need to push this? *)
+    val mutable simplex_eqs = []
+    val mutable simplex_consts = []
+    val mutable redexes = []
+    
+    initializer
+      simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts)
+    
+    method type_bool = ()
+    method type_int = ()
+    method type_inductive = ()
+    method mk_true: termnode = assert false
+    method mk_false: termnode = assert false
+    method mk_and (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_or (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_not (t: termnode): termnode = assert false
+    method mk_ifthenelse (t1: termnode) (t2: termnode) (t3: termnode): termnode = assert false
+    method mk_eq (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_intlit (n: int): termnode = assert false
+    method mk_add (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_sub (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_lt (t1: termnode) (t2: termnode): termnode = assert false
+    method mk_le (t1: termnode) (t2: termnode): termnode = assert false
+    method assume (t: termnode): assume_result = assert false
+    method query (t: termnode): bool = assert false
     
     method pushdepth = pushdepth
     method push =
@@ -280,7 +304,8 @@ and context =
     method add_redex n =
       redexes <- n::redexes
       
-    method alloc_symbol (arity: int) kind name = let s = new symbol kind name in if arity = 0 then ignore (self#get_termnode s []); s
+    method mk_symbol name (domain: unit list) (range: unit) kind =
+      let s = new symbol kind name in if List.length domain = 0 then ignore (self#mk_app s []); s
     
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode list -> termnode list -> termnode)) list) = s#set_fpclauses cs
 
@@ -294,7 +319,7 @@ and context =
         Unsat -> true
       | Unknown -> false
 
-    method get_termnode s (ts: termnode list) = self#get_node s (List.map (fun t -> t#value) ts)
+    method mk_app s (ts: termnode list) = self#get_node s (List.map (fun t -> t#value) ts)
     
     method pprint (t: termnode): string = t#pprint
     

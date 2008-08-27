@@ -6,11 +6,10 @@ let mk_simplex () =
   let consts: (string unknown * int) list ref = ref [] in
   let eqs_eq es2 = !eqs = es2 in
   let consts_eq cs2 = !consts = cs2 in
-  let s =
-  new simplex
+  let s = new simplex in
+  s#register_listeners
     (fun u1 u2 -> print_endline ("Propagating equality between " ^ u1#print ^ " and " ^ u2#print); eqs := (u1, u2)::!eqs)
-    (fun u n -> print_endline ("Propagating equality between unknown " ^ u#print ^ " and constant " ^ string_of_int n); consts := (u, n)::!consts)
-  in
+    (fun u n -> print_endline ("Propagating equality between unknown " ^ u#print ^ " and constant " ^ string_of_int n); consts := (u, n)::!consts);
   (s, eqs_eq, consts_eq)
 
 let alloc_unknown simplex name = simplex#alloc_unknown name (Some name)

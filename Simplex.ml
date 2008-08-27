@@ -157,8 +157,10 @@ and ['tag] column context own =
         context#propagate_eq_constant owner (num_of_int 0);
       List.iter (fun (row, coef) -> if row#owner#tag <> None && sign_num coef#value <> 0 then row#propagate_eq) terms
   end
-and ['tag] simplex eq_listener const_listener =
+and ['tag] simplex =
   object (self)
+    val mutable eq_listener = (fun _ _ -> ())
+    val mutable const_listener = (fun _ _ -> ())
     val mutable uniqueCounter: int = 0
     val mutable unsat: bool = false
     val mutable rows: 'tag row list = []
@@ -166,6 +168,10 @@ and ['tag] simplex eq_listener const_listener =
     val mutable popactions: (unit -> unit) list = []
     val mutable popstack = []
     
+    method register_listeners feqs fconsts =
+      eq_listener <- feqs;
+      const_listener <- fconsts
+
     method register_popaction f = popactions <- f::popactions
     method push =
       popstack <- (unsat, rows, columns, popactions)::popstack;
