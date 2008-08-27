@@ -3,8 +3,11 @@ open Proverapi
 class z3_context () =
   let ctxt = Z3.mk_context (Z3.mk_config ()) in
   (* let _ = Z3.trace_to_stdout ctxt in *)
-  (* HACK: for now, all inductive values have the same Z3 type. *)
+  let bool_type = Z3.mk_bool_type ctxt in
   let int_type = Z3.mk_int_type ctxt in
+  let ttrue = Z3.mk_true ctxt in
+  let tfalse = Z3.mk_false ctxt in
+  (* HACK: for now, all inductive values have the same Z3 type. *)
   let inductive_type = Z3.mk_uninterpreted_type ctxt (Z3.mk_string_symbol ctxt "inductive") in
   let tag_func = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "ctortag") [| inductive_type |] int_type in
   let ctor_counter = ref 0 in
@@ -24,33 +27,35 @@ class z3_context () =
     result
   in
   object
-    method alloc_symbol arity kind name =
-      let s = Z3.mk_string_symbol ctxt name in
-      let tps = Array.make arity inductive_type in
-      let c = Z3.mk_func_decl ctxt s tps inductive_type in
+    method type_bool = bool_type
+    method type_int = int_type
+    method type_inductive = inductive_type
+    method mk_symbol name domain range kind =
+      let tps = Array.of_list domain in
+      let c = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt name) tps range in
       begin
         match kind with
           Ctor k ->
           begin
             let tag = Z3.mk_int ctxt (get_ctor_tag()) int_type in
-            let xs = Array.init arity (fun j -> Z3.mk_bound ctxt j inductive_type) in
+            let xs = Array.init (Array.length tps) (fun j -> Z3.mk_bound ctxt j tps.(j)) in
             let app = Z3.mk_app ctxt c xs in
-            if arity = 0 then
+            if domain = [] then
               Z3.assert_cnstr ctxt (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag)
             else
             begin
-              let names = Array.init arity (Z3.mk_int_symbol ctxt) in
+              let names = Array.init (Array.length tps) (Z3.mk_int_symbol ctxt) in
               let pat = Z3.mk_pattern ctxt [| app |] in
               (* disjointness axiom *)
               (* (forall (x1 ... xn) (PAT (C x1 ... xn)) (EQ (tag (C x1 ... xn)) Ctag)) *)
               Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag));
             end
           end;
-          for i = 0 to arity - 1 do
-            let names = Array.init arity (Z3.mk_int_symbol ctxt) in
-            let xs = Array.init arity (fun j -> Z3.mk_bound ctxt j inductive_type) in
+          for i = 0 to Array.length tps - 1 do
+            let names = Array.init (Array.length tps) (Z3.mk_int_symbol ctxt) in
+            let xs = Array.init (Array.length tps) (fun j -> Z3.mk_bound ctxt j tps.(j)) in
             let app = Z3.mk_app ctxt c xs in
-            let finv = Z3.mk_fresh_func_decl ctxt "ctorinv" [| inductive_type |] inductive_type in
+            let finv = Z3.mk_fresh_func_decl ctxt "ctorinv" [| inductive_type |] tps.(i) in
             let pat = Z3.mk_pattern ctxt [| app |] in
             (* injectiveness axiom *)
             (* (forall (x1 ... x2) (PAT (C x1 ... xn)) (EQ (finv (C x1 ... xn)) xi)) *)
@@ -65,11 +70,13 @@ class z3_context () =
       List.iter
         (fun (csym, fbody) ->
            let n = Z3.get_domain_size ctxt fc in
+           let ftps = Array.init n (Z3.get_domain ctxt fc) in
            let m = Z3.get_domain_size ctxt csym in
+           let ctps = Array.init m (Z3.get_domain ctxt csym) in
            let l = m + n - 1 in
-           let xs = Array.init l (fun i -> Z3.mk_bound ctxt i inductive_type) in
+           let tps = Array.init l (fun i -> if i < m then ctps.(i) else if i < m + k then ftps.(i - m) else ftps.(i + 1 - m)) in
+           let xs = Array.init l (fun i -> Z3.mk_bound ctxt i tps.(i)) in
            let names = Array.init l (Z3.mk_int_symbol ctxt) in
-           let tps = Array.make l inductive_type in
            let cargs = Array.init m (fun i -> xs.(i)) in
            let capp = Z3.mk_app ctxt csym cargs in
            let fargs = Array.init n (fun j -> if j < k then xs.(m + j) else if j = k then capp else xs.(m + j - 1)) in
@@ -83,18 +90,23 @@ class z3_context () =
              Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3.mk_eq ctxt fapp body))
         )
         cs
-    method get_termnode s ts =
-      Z3.mk_app ctxt s (Array.of_list ts)
-    method pprint t =
-      Z3.ast_to_string ctxt t
-    method query_eq t1 t2 = query (Z3.mk_eq ctxt t1 t2)
-    method query_neq t1 t2 = query (Z3.mk_not ctxt (Z3.mk_eq ctxt t1 t2))
-    method assume_eq t1 t2 =
-      assert_term (Z3.mk_eq ctxt t1 t2)
-    method assume_neq t1 t2 =
-      assert_term (Z3.mk_not ctxt (Z3.mk_eq ctxt t1 t2))
-    method push =
-      Z3.push ctxt
-    method pop =
-      Z3.pop ctxt 1
+
+    method mk_app s ts = Z3.mk_app ctxt s (Array.of_list ts)
+    method mk_true = ttrue
+    method mk_false = tfalse
+    method mk_and t1 t2 = Z3.mk_and ctxt [| t1; t2 |]
+    method mk_or t1 t2 = Z3.mk_or ctxt [| t1; t2 |]
+    method mk_not t = Z3.mk_not ctxt t
+    method mk_ifthenelse t1 t2 t3 = Z3.mk_ite ctxt t1 t2 t3
+    method mk_eq t1 t2 = Z3.mk_eq ctxt t1 t2
+    method mk_intlit n = Z3.mk_int ctxt n int_type
+    method mk_add t1 t2 = Z3.mk_add ctxt [| t1; t2 |]
+    method mk_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
+    method mk_lt t1 t2 = Z3.mk_lt ctxt t1 t2
+    method mk_le t1 t2 = Z3.mk_le ctxt t1 t2
+    method pprint t = Z3.ast_to_string ctxt t
+    method query t = query t
+    method assume t = assert_term t
+    method push = Z3.push ctxt
+    method pop = Z3.pop ctxt 1
   end

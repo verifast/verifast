@@ -291,14 +291,36 @@ let make_lexer keywords path stream reportKeyword =
         Some t -> Some (current_loc(), t)
       | None -> None)))
 
+type type_expr =
+  | TypeName of loc * string
+  | PtrType of loc * string   (* Always pointer-to-struct for now. *)
+
+class fieldref (name: string) =
+  object
+    val mutable range: type_expr option = None
+    method name = name
+    method range = match range with None -> assert false | Some r -> r
+    method set_range r = range <- Some r
+  end
+
+class predref (name: string) =
+  object
+    val mutable domain: type_expr list option = None
+    method name = name
+    method domain = match domain with None -> assert false | Some d -> d
+    method set_domain d = domain <- Some d
+  end
+
 type
-  operator = string
+  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not
 and
   expr =
-    Var of loc * string
+    True of loc
+  | False of loc
+  | Var of loc * string
   | Operation of loc * operator * expr list
   | IntLit of loc * int
-  | Read of loc * expr * string
+  | Read of loc * expr * fieldref
   | CallExpr of loc * string * pat list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
@@ -317,7 +339,7 @@ and
     PureStmt of loc * stmt
   | Assign of loc * string * expr
   | DeclStmt of loc * type_expr * string * expr
-  | Write of loc * expr * string * expr
+  | Write of loc * expr * fieldref * expr
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
   | SwitchStmt of loc * expr * switch_stmt_clause list
@@ -330,8 +352,8 @@ and
   | SwitchStmtClause of loc * string * string list * stmt list
 and
   pred =
-    Access of loc * expr * string * pat
-  | CallPred of loc * string * pat list
+    Access of loc * expr * fieldref * pat
+  | CallPred of loc * predref * pat list
   | ExprPred of loc * expr
   | Sep of loc * pred * pred
   | IfPred of loc * expr * pred * pred
@@ -357,10 +379,6 @@ and
 and
   ctor =
   | Ctor of loc * string * type_expr list
-and
-  type_expr =
-  | TypeName of loc * string
-  | PtrType of loc * string   (* Always pointer-to-struct for now. *)
 and
   program =
     Program of decl list
@@ -399,7 +417,9 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
 
 let expr_loc e =
   match e with
-    Var (l, x) -> l
+    True l -> l
+  | False l -> l
+  | Var (l, x) -> l
   | IntLit (l, n) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
@@ -439,7 +459,7 @@ let type_loc t =
   | PtrType (l, n) -> l
 
 let lexer = make_lexer [
-  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "predicate"; "("; ")"; ","; "requires";
+  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "bool"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
@@ -507,6 +527,7 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> (l, s)
 | [< '(l, Kwd "int") >] -> (l, "int")
 | [< '(l, Kwd "uint") >] -> (l, "uint")
+| [< '(l, Kwd "bool") >] -> (l, "bool")
 | [< '(l, Ident n) >] -> (l, n)
 and
   parse_type_suffix tnl tn = parser
@@ -598,7 +619,7 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, pats) -> CallPred (l, g, pats)
+     | CallExpr (l, g, pats) -> CallPred (l, new predref g, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -634,7 +655,9 @@ and
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
   parse_expr_primary = parser
-  [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
+  [< '(l, Kwd "true") >] -> True l
+| [< '(l, Kwd "false") >] -> False l
+| [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
 | [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
@@ -642,7 +665,8 @@ and
 | [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
 | [< '(l, Kwd "int") >] -> TypeExpr (l, TypeName (l, "int"))
 | [< '(l, Kwd "uint") >] -> TypeExpr (l, TypeName (l, "uint"))
-| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, "==", [e; Var(l, "false")]) 
+| [< '(l, Kwd "bool") >] -> TypeExpr (l, TypeName (l, "bool"))
+| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e]) 
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -652,24 +676,24 @@ and
   [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
   parse_expr_suffix_rest e0 = parser
-  [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+  [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
-  [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, "+", [e0; e1])) >] -> e
-| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, "-", [e0; e1])) >] -> e
+  [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "==", [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "!=", [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "le", [e0; e1])) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, "lt", [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_expr_conj_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, "&&", [e0; e1])) >] -> e
-| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, "||", [e0; e1])) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, And, [e0; e1])) >] -> e
+| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, Or, [e0; e1])) >] -> e
 | [< >] -> e0
 and
   parse_arglist = parser
@@ -727,8 +751,7 @@ let static_error l msg = raise (StaticError (l, msg))
 type 'termnode heap = (string * 'termnode list) list
 type 'termnode env = (string * 'termnode) list
 type 'termnode context =
-  AssumingEq of 'termnode * 'termnode
-| AssumingNeq of 'termnode * 'termnode
+  Assuming of 'termnode
 | Executing of 'termnode heap * 'termnode env * loc * string
 | PushSubcontext
 | PopSubcontext
@@ -737,8 +760,7 @@ let string_of_heap h = String.concat " * " (List.map (function (g, ts) -> g ^ "(
   
 let string_of_context c =
   match c with
-    AssumingEq (t1, t2) -> "Assuming " ^ t1 ^ " == " ^ t2
-  | AssumingNeq (t1, t2) -> "Assuming " ^ t1 ^ " != " ^ t2
+    Assuming t -> "Assuming " ^ t
   | Executing (h, env, l, s) -> "Heap: " ^ string_of_heap h ^ "\nEnv: " ^ string_of_env env ^ "\n" ^ string_of_loc l ^ ": " ^ s
   | PushSubcontext -> "Entering subcontext"
   | PopSubcontext -> "Leaving subcontext"
@@ -754,7 +776,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -762,32 +784,34 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   let used_ids = ref [] in
   let used_ids_stack = ref ([]: string list list) in
   
-  let push_index_table() =
-    used_ids_stack := !used_ids::!used_ids_stack
+  let push() =
+    used_ids_stack := !used_ids::!used_ids_stack;
+    ctxt#push
   in
   
-  let pop_index_table() =
+  let pop() =
     let (ids::t) = !used_ids_stack in
     let _ = used_ids := ids in
-    used_ids_stack := t
+    used_ids_stack := t;
+    ctxt#pop
   in
   
-  let with_index_table cont =
-    push_index_table();
+  let in_temporary_context cont =
+    push();
     cont();
-    pop_index_table()
+    pop()
   in
   
-  let alloc_symbol arity kind s =
+  let mk_symbol s domain range kind =
     let rec iter k =
       let sk = s ^ string_of_int k in
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    ctxt#alloc_symbol arity kind name
+    ctxt#mk_symbol name domain range kind
   in
   
-  let alloc_nullary_ctor j s = let s = alloc_symbol 0 (Proverapi.Ctor j) s in ignore (ctxt#get_termnode s []); s in
+  let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor j) in
   
   let imap f xs =
     let rec imapi i xs =
@@ -851,19 +875,19 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       match ds with
         [] -> idm
       | (Inductive (l, i, ctors))::ds ->
-        if i = "int" || List.mem_assoc i idm then
+        if i = "bool" || i = "int" || List.mem_assoc i idm then
           static_error l "Duplicate datatype name."
         else
           iter ((i, (l, ctors))::idm) ds
       | _::ds -> iter idm ds
     in
-    iter [("bool", (dummy_loc, [])); ("uint", (dummy_loc, []))] ds
+    iter [("uint", (dummy_loc, []))] ds
   in
   
   let check_pure_type t =
     match t with
       TypeName (l, tn) ->
-      if not (tn = "int" || List.mem_assoc tn inductivedeclmap) then
+      if not (tn = "bool" || tn = "int" || List.mem_assoc tn inductivedeclmap) then
         static_error l "No such datatype."
     | PtrType (l, sn) ->
       if not (List.mem_assoc sn structmap) then
@@ -880,6 +904,14 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     | PtrType (_, tn) -> "struct " ^ tn ^ " *"
   in
   
+  let typenode_of_type t =
+    match t with
+      TypeName (_, "bool") -> ctxt#type_bool
+    | TypeName (_, "int") -> ctxt#type_int
+    | TypeName (_, _) -> ctxt#type_inductive
+    | PtrType (_, _) -> ctxt#type_int
+  in
+  
   let (inductivemap, purefuncmap) =
     let rec iter imap pfm ds =
       match ds with
@@ -893,7 +925,12 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
               static_error lc "Duplicate pure function name."
             else (
               List.iter check_pure_type ts;
-              let csym = if ts = [] then alloc_nullary_ctor j cn else alloc_symbol (List.length ts) (Proverapi.Ctor j) cn in
+              let csym =
+                if ts = [] then
+                  alloc_nullary_ctor j cn
+                else
+                  mk_symbol cn (List.map typenode_of_type ts) ctxt#type_inductive (Proverapi.Ctor j)
+              in
               citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym))::pfm) ctors
             )
         in
@@ -969,7 +1006,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
                         in
                         let rec check e =
                           match e with
-                            Var (l, x) -> (
+                            True l -> boolt
+                          | False l -> boolt
+                          | Var (l, x) -> (
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
@@ -978,19 +1017,22 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
                               )
                             | Some t -> t
                             )
-                          | Operation (l, ("==" | "!="), [e1; e2]) ->
+                          | Operation (l, (Eq | Neq), [e1; e2]) ->
                             let t = check e1 in
                             let _ = checkt e2 t in
                             boolt
-			  | Operation (l, ("||" | "&&"), [e1; e2]) ->
+                          | Operation (l, (Or | And), [e1; e2]) ->
                             let _ = checkt e1 boolt in
                             let _ = checkt e2 boolt in
                             boolt
-                          | Operation (l, ("le" | "lt"), [e1; e2]) ->
+                          | Operation (l, Not, [e]) ->
+                            let _ = checkt e boolt in
+                            boolt
+                          | Operation (l, (Le | Lt), [e1; e2]) ->
                             let _ = checkt e1 intt in
                             let _ = checkt e2 intt in
                             boolt
-                          | Operation (l, ("+" | "-"), [e1; e2]) ->
+                          | Operation (l, (Add | Sub), [e1; e2]) ->
                             let _ = checkt e1 intt in
                             let _ = checkt e2 intt in
                             intt
@@ -1054,16 +1096,14 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, alloc_symbol (List.length pmap) (Proverapi.Fixpoint index) g))::pfm) ds
+        let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
     iter
-      [("bool", (dummy_loc, [("true", (dummy_loc, [])); ("false", (dummy_loc, []))]));
-       ("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
-      [("true", (dummy_loc, boolt, [], alloc_nullary_ctor 0 "true"));
-       ("false", (dummy_loc, boolt, [], alloc_nullary_ctor 1 "false"));
-       ("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, uintt, [uintt], alloc_symbol 1 (Proverapi.Ctor 1) "succ"))] ds
+      [("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
+      [("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
+       ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor 1)))] ds
   in
   
   let predmap = 
@@ -1097,7 +1137,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     let funcs tenv =
       let rec check e =
         match e with
-          Var (l, x) ->
+          True l -> boolt
+        | False l -> boolt
+        | Var (l, x) ->
           begin
           match try_assoc x tenv with
             None ->
@@ -1108,19 +1150,22 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
             end
           | Some t -> t
           end
-        | Operation (l, ("==" | "!="), [e1; e2]) ->
+        | Operation (l, (Eq | Neq), [e1; e2]) ->
           let t = check e1 in
           let _ = checkt e2 t in
           boolt
-        | Operation (l, ("||" | "&&"), [e1; e2]) ->
+        | Operation (l, (Or | And), [e1; e2]) ->
           let _ = checkt e1 boolt in
           let _ = checkt e2 boolt in
           boolt
-        | Operation (l, ("le" | "lt"), [e1; e2]) ->
+        | Operation (l, Not, [e]) ->
+          let _ = checkt e boolt in
+          boolt
+        | Operation (l, (Le | Lt), [e1; e2]) ->
           let _ = checkt e1 intt in
           let _ = checkt e2 intt in
           boolt
-        | Operation (l, ("+" | "-"), [e1; e2]) ->
+        | Operation (l, (Add | Sub), [e1; e2]) ->
           let _ = checkt e1 intt in
           let _ = checkt e2 intt in
           intt
@@ -1186,9 +1231,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       match List.assoc sn structmap with
         (_, fds) ->
         begin
-          match try_assoc f fds with
+          match try_assoc f#name fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
-          | Some (_, t) -> t
+          | Some (_, t) -> f#set_range t; t
         end
       end
     | _ -> static_error l "Target expression of field dereference should be of pointer type."
@@ -1203,7 +1248,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       cont tenv'
     | CallPred (l, p, ps) ->
       begin
-      match try_assoc p predmap with
+      match try_assoc p#name predmap with
         None -> static_error l "No such predicate."
       | Some (_, xs, _) ->
         begin
@@ -1212,7 +1257,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
         | Some bs ->
           let rec iter tenv bs =
             match bs with
-              [] -> cont tenv
+              [] -> p#set_domain (List.map (fun (x, t) -> t) xs); cont tenv
             | ((x, t), p)::bs ->
               let tenv = check_pat tenv t p in iter tenv bs
           in
@@ -1232,6 +1277,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       let t = check_expr tenv e in
       begin
       match t with
+      | TypeName (lt, "bool") -> static_error l "Cannot switch on bool."
       | TypeName (lt, "int") -> static_error l "Cannot switch on int."
       | TypeName (lt, i) ->
         begin
@@ -1298,39 +1344,40 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     iter e
   in
 
-  let intlit_symbolmap = ref [] in
-  
-  let get_intlit_symbol n =
-    match try_assoc n !intlit_symbolmap with
-      None ->
-      let s = alloc_nullary_ctor 0 (string_of_int n) in
-      intlit_symbolmap := (n, s)::!intlit_symbolmap;
-      s
-    | Some s -> s
-  in
-  
   let rec eval (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval env in
     match e with
-      Var (l, x) ->
+      True l -> ctxt#mk_true
+    | False l -> ctxt#mk_false
+    | Var (l, x) ->
       begin
         match try_assoc x env with
           None ->
           begin
             match try_assoc x purefuncmap with
               None -> static_error l "No such variable or constructor."
-            | Some (lg, t, [], s) -> ctxt#get_termnode s []
+            | Some (lg, t, [], s) -> ctxt#mk_app s []
             | _ -> static_error l "Missing argument list."
           end
         | Some t -> t
       end
-    | IntLit (l, n) -> ctxt#get_termnode (get_intlit_symbol n) []
+    | IntLit (l, n) -> ctxt#mk_intlit n
     | CallExpr (l, g, pats) ->
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, s) -> ctxt#get_termnode s (List.map (function (LitPat e) -> ev e) pats)
+        | Some (lg, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
       end
+    | Operation (l, And, [e1; e2]) -> ctxt#mk_and (ev e1) (ev e2)
+    | Operation (l, Or, [e1; e2]) -> ctxt#mk_or (ev e1) (ev e2)
+    | Operation (l, Not, [e]) -> ctxt#mk_not (ev e)
+    | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
+    | Operation (l, Eq, [e1; e2]) -> ctxt#mk_eq (ev e1) (ev e2)
+    | Operation (l, Neq, [e1; e2]) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
+    | Operation (l, Add, [e1; e2]) -> ctxt#mk_add (ev e1) (ev e2)
+    | Operation (l, Sub, [e1; e2]) -> ctxt#mk_sub (ev e1) (ev e2)
+    | Operation (l, Le, [e1; e2]) -> ctxt#mk_le (ev e1) (ev e2)
+    | Operation (l, Lt, [e1; e2]) -> ctxt#mk_lt (ev e1) (ev e2)
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
@@ -1381,11 +1428,11 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
-  let assume_eq t1 t2 cont =
-    push_context (AssumingEq (t1, t2));
+  let assume t cont =
+    push_context (Assuming t);
     ctxt#push;
     begin
-      match ctxt#assume_eq t1 t2 with
+      match ctxt#assume t with
         Unknown -> cont()
       | Unsat -> ()
     end;
@@ -1393,39 +1440,13 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     ctxt#pop
   in
   
-  let assume_neq t1 t2 cont =
-    push_context (AssumingNeq (t1, t2));
-    ctxt#push;
-    begin
-      match ctxt#assume_neq t1 t2 with
-        Unknown -> cont()
-      | Unsat -> ()
-    end;
-    pop_context();
-    ctxt#pop
-  in
-  
-  let assume env e cont =
-    let ev = eval env in
-    match e with
-      Operation (l, "==", [e1; e2]) -> assume_eq (ev e1) (ev e2) cont
-    | Operation (l, "!=", [e1; e2]) -> assume_neq (ev e1) (ev e2) cont
-    | _ -> static_error (expr_loc e) "Expression form not supported here."
-  in
-  
-  let assume_not env e cont =
-    let ev = eval env in
-    match e with
-      Operation (l, "==", [e1; e2]) -> assume_neq (ev e1) (ev e2) cont
-    | Operation (l, "!=", [e1; e2]) -> assume_eq (ev e1) (ev e2) cont
-    | _ -> static_error (expr_loc e) "Expression form not supported here."
-  in
-  
+  let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont in
+  let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont in
+
   let pprint_context_stack cs =
     List.map
       (function
-         AssumingEq (t1, t2) -> AssumingEq (ctxt#pprint t1, ctxt#pprint t2)
-       | AssumingNeq (t1, t2) -> AssumingNeq (ctxt#pprint t1, ctxt#pprint t2)
+         Assuming t -> Assuming (ctxt#pprint t)
        | Executing (h, env, l, msg) ->
          let h' = List.map (fun (g, ts) -> (g, List.map (fun t -> ctxt#pprint t) ts)) h in
          let env' = List.map (fun (x, t) -> (x, ctxt#pprint t)) env in
@@ -1435,60 +1456,50 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       cs
   in
 
-  let assert_eq t1 t2 h env l msg cont =
-    if ctxt#query_eq t1 t2 then
+  let assert_term t h env l msg cont =
+    if ctxt#query t then
       cont()
     else
-      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " == " ^ ctxt#pprint t2, l, msg))
+      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg))
   in
-  
-  let assert_neq t1 t2 h env l msg cont =
-    if ctxt#query_neq t1 t2 then
-      cont()
-    else
-      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t1 ^ " != " ^ ctxt#pprint t2, l, msg))
-  in
+
+  let assert_eq t1 t2 h env l msg cont = assert_term (ctxt#mk_eq t1 t2) h env l msg in
+  let assert_neq t1 t2 h env l msg cont = assert_term (ctxt#mk_not (ctxt#mk_eq t1 t2)) h env l msg in
   
   let assert_false h env l msg =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg))
   in
   
-  let assert_expr env e h env l msg cont =
-    let ev = eval env in
-    match e with
-      Operation (l, "==", [e1; e2]) -> assert_eq (ev e1) (ev e2) h env l msg cont
-    | Operation (l, "!=", [e1; e2]) -> assert_neq (ev e1) (ev e2) h env l msg cont
-    | _ -> static_error (expr_loc e) "Asserting this expression form is not supported."
-  in
+  let assert_expr env e h env l msg cont = assert_term (eval env e) h env l msg cont in
   
   let success() = () in
   
   let branch cont1 cont2 =
     stats#branch;
-    with_index_table (fun _ -> cont1());
-    with_index_table (fun _ -> cont2())
+    in_temporary_context (fun _ -> cont1());
+    in_temporary_context (fun _ -> cont2())
   in
   
-  let get_unique_var_symb x = let a = alloc_symbol 0 Uninterp x in ctxt#get_termnode a [] in
+  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
 
-  let evalpat ghostenv env pat cont =
+  let evalpat ghostenv env pat tp cont =
     match pat with
       LitPat e -> cont ghostenv env (eval env e)
-    | VarPat x -> let t = get_unique_var_symb x in cont (x::ghostenv) (update env x t) t
-    | DummyPat -> let t = get_unique_var_symb "dummy" in cont ghostenv env t
+    | VarPat x -> let t = get_unique_var_symb x tp in cont (x::ghostenv) (update env x t) t
+    | DummyPat -> let t = get_unique_var_symb "dummy" tp in cont ghostenv env t
   in
   
-  let rec evalpats ghostenv env pats cont =
-    match pats with
-      [] -> cont ghostenv env []
-    | pat::pats -> evalpat ghostenv env pat (fun ghostenv env t -> evalpats ghostenv env pats (fun ghostenv env ts -> cont ghostenv env (t::ts)))
+  let rec evalpats ghostenv env pats tps cont =
+    match (pats, tps) with
+      ([], []) -> cont ghostenv env []
+    | (pat::pats, tp::tps) -> evalpat ghostenv env pat tp (fun ghostenv env t -> evalpats ghostenv env pats tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
   in
-  
+
   let assume_field h0 f tp tv cont =
     let rec iter h =
       match h with
-        [] -> cont (("field_" ^ f, [tp; tv])::h0)
-      | (g, [tp'; _])::h when g = "field_" ^ f -> assume_neq tp tp' (fun _ -> iter h)
+        [] -> cont (("field_" ^ f#name, [tp; tv])::h0)
+      | (g, [tp'; _])::h when g = "field_" ^ f#name -> assume_neq tp tp' (fun _ -> iter h)
       | _::h -> iter h
     in
     iter h0
@@ -1498,11 +1509,12 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
     let ev = eval env in
     match p with
-    | Access (l, e, f, rhs) -> let te = ev e in evalpat ghostenv env rhs (fun ghostenv env t -> assume_field h f te t (fun h -> cont h ghostenv env))
-    | CallPred (l, g, pats) -> evalpats ghostenv env pats (fun ghostenv env ts -> cont ((g, ts)::h) ghostenv env)
-    | ExprPred (l, e) -> assume env e (fun _ -> cont h ghostenv env)
+    | Access (l, e, f, rhs) ->
+      let te = ev e in evalpat ghostenv env rhs f#range (fun ghostenv env t -> assume_field h f te t (fun h -> cont h ghostenv env))
+    | CallPred (l, g, pats) -> evalpats ghostenv env pats g#domain (fun ghostenv env ts -> cont ((g#name, ts)::h) ghostenv env)
+    | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 (fun h ghostenv env -> assume_pred h ghostenv env p2 cont)
-    | IfPred (l, e, p1, p2) -> branch (fun _ -> assume env e (fun _ -> assume_pred h ghostenv env p1 cont)) (fun _ -> assume_not env e (fun _ -> assume_pred h ghostenv env p2 cont))
+    | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 cont))
     | SwitchPred (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
@@ -1510,9 +1522,10 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
           SwitchPredClause (lc, cn, pats, p)::cs ->
           branch
             (fun _ ->
-               let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-               let (_, _, _, cs) = List.assoc cn purefuncmap in
-               assume_eq t (ctxt#get_termnode cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
+               let (_, _, tps, cs) = List.assoc cn purefuncmap in
+               let Some pts = zip pats tps in
+               let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
+               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1522,7 +1535,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   in
   
   let definitely_equal t1 t2 =
-    ctxt#query_eq t1 t2
+    ctxt#query (ctxt#mk_eq t1 t2)
   in
   
   let match_chunk ghostenv env g pats (g', ts0) =
@@ -1562,9 +1575,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     let ev = eval env in
     match p with
     | Access (l, e, f, rhs) ->
-      assert_chunk h ghostenv env l ("field_" ^ f) [LitPat e; rhs] (fun h ts ghostenv env -> cont h ghostenv env)
+      assert_chunk h ghostenv env l ("field_" ^ f#name) [LitPat e; rhs] (fun h ts ghostenv env -> cont h ghostenv env)
     | CallPred (l, g, pats) ->
-      assert_chunk h ghostenv env l g pats (fun h ts ghostenv env -> cont h ghostenv env)
+      assert_chunk h ghostenv env l g#name pats (fun h ts ghostenv env -> cont h ghostenv env)
     | ExprPred (l, e) ->
       assert_expr env e h env l "Expression is false." (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) ->
@@ -1572,20 +1585,21 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     | IfPred (l, e, p1, p2) ->
       branch
         (fun _ ->
-           assume env e (fun _ ->
+           assume (ev e) (fun _ ->
              assert_pred h ghostenv env p1 cont))
         (fun _ ->
-           assume_not env e (fun _ ->
+           assume (ctxt#mk_not (ev e)) (fun _ ->
              assert_pred h ghostenv env p2 cont))
     | SwitchPred (l, e, cs) ->
       let t = ev e in
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
-          let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
-          let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
+          let (_, _, tps, ctorsym) = List.assoc cn purefuncmap in
+          let Some pts = zip pats tps in
+          let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
           branch
-            (fun _ -> assume_eq t (ctxt#get_termnode ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -1608,7 +1622,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   in
   
   let get_field h t f l cont =
-    assert_chunk h [] [("x", t)] l ("field_" ^ f) [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h ts ghostenv env ->
+    assert_chunk h [] [("x", t)] l ("field_" ^ f#name) [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h ts ghostenv env ->
       cont h (lookup env "y"))
   in
   
@@ -1655,7 +1669,8 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
     let l = stmt_loc s in
-    let ev e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
+    let eval env e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
+    let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
     let check_assign l x =
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
@@ -1676,7 +1691,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
             let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
             let _ = check_assign l x in
             let ts = List.map (function (LitPat e) -> ev e) pats in
-            cont h (update env x (ctxt#get_termnode gs ts))
+            cont h (update env x (ctxt#mk_app gs ts))
           )
         )
       | [(k, tr, ps, pre, post)] ->
@@ -1690,6 +1705,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
+        with_context PushSubcontext (fun () ->
         assert_pred h ghostenv env' pre (fun h ghostenv' env' ->
           let _ =
             match leminfo with
@@ -1718,7 +1734,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
               else
                 static_error l "A lemma can call only preceding lemmas or itself."
           in
-          let r = match tr with None -> None | Some t -> Some (get_unique_var_symb "result", t) in
+          let r = match tr with None -> None | Some t -> Some (get_unique_var_symb "result" t, t) in
           let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
           assume_pred h ghostenv' env'' post (fun h _ _ ->
             let env =
@@ -1733,7 +1749,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
                   | Some (r, t) -> expect_type l tpx t; update env x r
                 end
             in
-            cont h env)
+            with_context PopSubcontext (fun () -> cont h env)
+          )
+        )
         )
       )
     in
@@ -1759,11 +1777,13 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
           PtrType (_, sn) when sn = tn -> ()
         | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
       in
-      let result = get_unique_var_symb "block" in
+      let result = get_unique_var_symb "block" tpx in
       let rec iter h fds =
         match fds with
           [] -> cont (h @ [("malloc_block_" ^ tn, [result])]) (update env x result)
-        | Field (lf, t, f)::fds -> assume_field h f result (get_unique_var_symb "value") (fun h -> iter h fds)
+        | Field (lf, t, f)::fds ->
+          let fref = new fieldref f in
+          fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) (fun h -> iter h fds)
       in
       iter h fds
     | CallStmt (l, "free", [Var (lv, x)]) ->
@@ -1773,7 +1793,9 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       let rec iter h fds =
         match fds with
           [] -> cont h env
-        | (Field (lf, t, f))::fds -> get_field h (lookup env x) f l (fun h _ -> iter h fds)
+        | (Field (lf, t, f))::fds ->
+          let fref = new fieldref f in
+          get_field h (lookup env x) fref l (fun h _ -> iter h fds)
       in
       assert_chunk h ghostenv env l ("malloc_block_" ^ tn) [LitPat (Var (lv, x))] (fun h _ _ _ -> iter h fds)
     | Assign (l, x, CallExpr (lc, g, pats)) ->
@@ -1792,14 +1814,14 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       let _ = check_expr_t tenv rhs tp in
       let t = ev e in
       get_field h t f l (fun h _ ->
-        cont (("field_" ^ f, [t; ev rhs])::h) env)
+        cont (("field_" ^ f#name, [t; ev rhs])::h) env)
     | CallStmt (l, g, es) ->
       call_stmt l None g (List.map (fun e -> LitPat e) es)
     | IfStmt (l, e, ss1, ss2) ->
       let _ = check_expr_t tenv e boolt in
       branch
-        (fun _ -> assume env e (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
-        (fun _ -> assume_not env e (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
+        (fun _ -> assume (ev e) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let tp = check_expr tenv e in
       let (tn, ctormap) =
@@ -1840,7 +1862,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
             in
             iter [] pats pts
           in
-          let xts = List.map (fun x -> (x, get_unique_var_symb x)) pats in
+          let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) ptenv in
           let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assq t sizemap with
@@ -1848,7 +1870,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#get_termnode ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -1868,8 +1890,11 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
         let ys = List.map (function (t, p) -> p) ps in
         let Some env' = zip ys ts in
-        assume_pred h ghostenv env' p (fun h _ _ ->
-          tcont sizemap tenv' ghostenv h env)
+        with_context PushSubcontext (fun () ->
+          assume_pred h ghostenv env' p (fun h _ _ ->
+            with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
+          )
+        )
       )
     | Close (l, g, pats) ->
       let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
@@ -1882,8 +1907,11 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       let ts = List.map (function LitPat e -> ev e) pats in
       let ys = List.map (function (t, p) -> p) ps in
       let Some env' = zip ys ts in
-      assert_pred h ghostenv env' p (fun h _ _ ->
-        cont ((g, ts)::h) env)
+      with_context PushSubcontext (fun () ->
+        assert_pred h ghostenv env' p (fun h _ _ ->
+          with_context PopSubcontext (fun () -> cont ((g, ts)::h) env)
+        )
+      )
     | ReturnStmt (l, Some e) ->
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
@@ -1896,13 +1924,13 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       check_pred tenv p (fun tenv ->
       let xs = block_assigned_variables ss in
       assert_pred h ghostenv env p (fun h ghostenv env ->
-        let ts = List.map get_unique_var_symb xs in
+        let ts = List.map (fun x -> get_unique_var_symb x (List.assoc x tenv)) xs in  (* BUG: I assume there is no variable hiding going on here. *)
         let Some bs = zip xs ts in
         let env = bs @ env in
         branch
           (fun _ ->
              assume_pred [] ghostenv env p (fun h ghostenv env ->
-               assume env e (fun _ ->
+               assume (eval env e) (fun _ ->
                  verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                    assert_pred h ghostenv env p (fun h _ _ ->
                      match h with
@@ -1915,7 +1943,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
           )
           (fun _ ->
              assume_pred h ghostenv env p (fun h ghostenv env ->
-               assume_not env e (fun _ ->
+               assume (ctxt#mk_not (eval env e)) (fun _ ->
                  tcont sizemap tenv ghostenv h env)))
       )
       )
@@ -1925,12 +1953,8 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        with_context PushSubcontext (fun _ ->
-          verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-            with_context PopSubcontext (fun _ ->
-              verify_cont pure leminfo sizemap tenv ghostenv h env ss cont
-            )
-          )
+        verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont
         )
       )
   in
@@ -1940,8 +1964,8 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
     | [] -> ()
     | Func (l, Fixpoint, _, _, _, _, _)::ds -> verify_decls lems ds
     | Func (l, k, rt, g, ps, Some (pre, post), ss)::ds ->
-      let _ = push_index_table() in
-      let env = List.map (function (t, p) -> (p, get_unique_var_symb p)) ps in
+      let _ = push() in
+      let env = List.map (function (t, p) -> (p, get_unique_var_symb p t)) ps in
       let (sizemap, indinfo) =
         match ss with
           [SwitchStmt (_, Var (_, x), _)] -> (
@@ -1989,7 +2013,7 @@ let verify_program_core (ctxt: ('symbol, 'termnode) Proverapi.context) verbose p
           )
         )
       in
-      let _ = pop_index_table() in
+      let _ = pop() in
       verify_decls lems' ds
       )
     | _::ds -> verify_decls lems ds
@@ -2013,7 +2037,7 @@ let verify_program_with_stats ctxt print_stats verbose path stream reportKeyword
 
 class virtual prover_client =
   object
-    method virtual run: 'symbol 'termnode. ('symbol, 'termnode) Proverapi.context -> unit
+    method virtual run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit
   end
 
 let prover_table: (string * (prover_client -> unit)) list ref = ref []
@@ -2039,7 +2063,7 @@ let lookup_prover prover =
 let verify_program prover print_stats verbose path stream reportKeyword reportGhostRange =
   lookup_prover prover
     (object
-       method run: 'symbol 'termnode. ('symbol, 'termnode) Proverapi.context -> unit =
+       method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
          fun ctxt -> verify_program_with_stats ctxt print_stats verbose path stream reportKeyword reportGhostRange
      end)
 

@@ -280,7 +280,7 @@ and context =
     method add_redex n =
       redexes <- n::redexes
       
-    method alloc_symbol (arity: int) kind name = new symbol kind name
+    method alloc_symbol (arity: int) kind name = let s = new symbol kind name in if arity = 0 then ignore (self#get_termnode s []); s
     
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * (termnode list -> termnode list -> termnode)) list) = s#set_fpclauses cs
 
