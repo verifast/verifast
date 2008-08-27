@@ -85,7 +85,7 @@ and ['tag] row context own c =
     
     method close =
       print_endline ("Closing row " ^ owner#print ^ "...");
-      List.iter (fun (col, coef) -> if sign_num coef#value < 0 then col#die) terms
+      List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die) terms
     
     method live_terms =
       List.filter (fun (col, coef) -> not col#dead && sign_num coef#value <> 0) terms
@@ -94,7 +94,8 @@ and ['tag] row context own c =
       let live_terms = self#live_terms in
       begin
         match live_terms with
-          [(col, coef)] -> if sign_num constant = 0 then if coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
+          [(col, coef)] ->
+          if col#owner#tag <> None && sign_num constant = 0 && coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
         | [] -> context#propagate_eq_constant owner constant
         | _ -> ()
       end;
