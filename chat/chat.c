@@ -9,22 +9,21 @@
 #include <netdb.h>
 #include <unistd.h>  /* fork(), write(), close() */
 
-int main(int argc, char *argv[])
+int socket_create_and_listen(int port)
+  //@ requires emp;
+  //@ ensures emp;
 {
-    int port = 0;
     int serverSocket = 0;
     struct sockaddr_in serverName = { 0 };
     int status = 0;
 
-    port = 12345;
-
     serverSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (-1 == serverSocket)
     {
-        perror("socket()"); // Print the error message for errno
+        perror("socket()");
         exit(1);
     }
-
+    
     serverName.sin_addr.s_addr=htonl(INADDR_ANY);
     serverName.sin_family = AF_INET;
     /* network-order */
@@ -36,7 +35,7 @@ int main(int argc, char *argv[])
         perror("bind()");
         exit(1);
     }
-
+    
     status = listen(serverSocket, 5);  // Allow 5 pending incoming connection requests
     if (-1 == status)
     {
@@ -44,21 +43,39 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    for (;;)
+    return serverSocket;
+}
+
+int socket_accept(int serverSocket)
+  //@ requires emp;
+  //@ ensures emp;
+{
+    struct sockaddr_in clientName = { 0 };
+    int slaveSocket, clientLength = sizeof(clientName);
+
+    (void) memset(&clientName, 0, sizeof(clientName));
+
+    slaveSocket = accept(serverSocket, (struct sockaddr *) &clientName, &clientLength);
+    if (-1 == slaveSocket)
     {
-        struct sockaddr_in clientName = { 0 };
-        int slaveSocket, clientLength = sizeof(clientName);
-        char * msg = "Hello world!";
+        perror("accept()");
+        exit(1);
+    }
+    
+    return slaveSocket;
+}
 
-        (void) memset(&clientName, 0, sizeof(clientName));
+int main()
+  //@ requires emp;
+  //@ ensures emp;
+{
+    int serverSocket = socket_create_and_listen(12345);
+    char * msg = "Hello world!";
 
-        slaveSocket = accept(serverSocket, (struct sockaddr *) &clientName, &clientLength);
-        if (-1 == slaveSocket)
-        {
-            perror("accept()");
-            exit(1);
-        }
-
+    while (0 == 0)
+      //@ invariant emp;
+    {
+        int slaveSocket = socket_accept(serverSocket);
         write(slaveSocket, msg, strlen(msg));
         close(slaveSocket);
     }
