@@ -1,5 +1,9 @@
-#include <bool.h>
-#include <sockets.h>
+#include "bool.h"
+#include "lists.h"
+#include "malloc.h"
+#include "stringBuffers.h"
+#include "sockets.h"
+#include "threading.h"
 
 struct member {
     struct string_buffer *nick;
@@ -9,6 +13,14 @@ struct member {
 struct room {
     struct list *members;
 };
+
+struct room *create_room()
+{
+    struct room *room = malloc(sizeof(room));
+    struct list *members = create_list();
+    room->members = members;
+    return room;
+}
 
 bool room_has_member(struct room *room, struct string_buffer *nick)
 {
@@ -77,8 +89,41 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
     return session;
 }
 
-void session_run(struct session *session)
+void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
 {
+    struct member *member = malloc(sizeof(member));
+    struct string_buffer *nickCopy = string_buffer_copy(nick);
+    member->nick = nickCopy;
+    member->writer = writer;
+    struct list *members = room->members;
+    list_add(members, member);
+    lock_release(roomLock);
+    
+    bool eof = false;
+    struct string_buffer *message = create_string_buffer();
+    while (!eof)
+    {
+        eof = reader_read_line(reader, message);
+        if (eof) {
+        } else {
+            lock_acquire(roomLock);
+            room_broadcast_message(room, nick, message);
+            lock_release(roomLock);
+        }
+    }
+    string_buffer_dispose(message);
+    
+    lock_acquire(roomLock);
+    list_remove(members, member);
+    room_broadcast_goodbye_message(room, nick);
+    lock_release(roomLock);
+    
+    string_buffer_dispose(nickCopy);
+}
+
+void session_run(void *data)
+{
+    struct session *session = (struct session *)data;
     struct room *room = session->room;
     struct lock *roomLock = session->room_lock;
     struct socket *socket = session->socket;
@@ -113,50 +158,20 @@ void session_run(struct session *session)
         writer_write_string(writer, "Please enter your nick: ");
         bool eof = reader_read_line(reader, nick);
         if (eof) {
-            exit(1);
-        } else {
-        }
-        
-        lock_acquire(roomLock);
-        bool hasMember = room_has_member(room, nick);
-        if (hasMember) {
-            lock_release(roomLock);
-            writer_write_string(writer, "Error: This nick is already in use.\n");
-        } else {
             done = true;
-        }
-    }
-    
-    struct member *member = malloc(sizeof(member));
-    struct string_buffer *nickCopy = string_buffer_copy(nick);
-    member->nick = nickCopy;
-    member->writer = writer;
-    struct list *members = room->members;
-    list_add(members, member);
-    lock_release(roomLock);
-    
-    bool eof = false;
-    struct string_buffer *message = create_string_buffer();
-    while (!eof)
-    {
-        eof = reader_read_line(reader, message);
-        if (eof) {
         } else {
             lock_acquire(roomLock);
-            room_broadcast_message(room, nick, message);
-            lock_release(roomLock);
+            bool hasMember = room_has_member(room, nick);
+            if (hasMember) {
+                lock_release(roomLock);
+                writer_write_string(writer, "Error: This nick is already in use.\n");
+            } else {
+                session_run_with_nick(room, roomLock, reader, writer, nick);
+                done = true;
+            }
         }
     }
-    string_buffer_dispose(message);
     
-    lock_acquire(roomLock);
-    struct list *members = room->members;
-    list_remove(members, member);
-    room_broadcast_goodbye_message(room, nick);
-    lock_release(roomLock);
-    
-    struct string_buffer *nickCopy = members->nick;
-    string_buffer_dispose(nickCopy);
     string_buffer_dispose(nick);
     socket_close(socket);
 }
@@ -170,7 +185,7 @@ int main()
     while (true)
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        struct session *session = create_session(roomLock, socket);
-        struct thread *t = create_thread(session_run, session);
+        struct session *session = create_session(room, roomLock, socket);
+        thread_start(session_run, session);
     }
 }
