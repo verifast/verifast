@@ -1,5 +1,6 @@
 #include "bool.h"
 #include "stringBuffers.h"
+#include "stringBuffersExt.h"
 #include <malloc.h>
 #include <string.h>
 

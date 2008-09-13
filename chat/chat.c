@@ -1,6 +1,6 @@
 #include "bool.h"
-#include "lists.h"
 #include "malloc.h"
+#include "lists.h"
 #include "stringBuffers.h"
 #include "sockets.h"
 #include "threading.h"

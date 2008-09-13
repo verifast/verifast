@@ -13,6 +13,7 @@ typedef int ssize_t;
 
 #include "bool.h"
 #include "stringBuffers.h"
+#include "stringBuffersExt.h"
 #include "sockets.h"
 
 struct server_socket {
