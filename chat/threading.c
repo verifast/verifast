@@ -10,32 +10,32 @@
 #ifdef WIN32
 // The callback function needs to respect a non-standard calling convention.
 struct run_closure {
-	void (*run)(void *data);
-	void *data;
+    void (*run)(void *data);
+    void *data;
 };
 
 DWORD WINAPI run_closure_run(LPVOID argument)
 {
-	struct run_closure *closure = (struct run_closure *)argument;
-	void (*run)(void *data) = closure->run;
-	void *data = closure->data;
-	free(closure);
-	run(data);
-	return 0;
+    struct run_closure *closure = (struct run_closure *)argument;
+    void (*run)(void *data) = closure->run;
+    void *data = closure->data;
+    free(closure);
+    run(data);
+    return 0;
 }
 #endif
 
 void thread_start(void run(void *data), void *data)
 {
 #ifdef WIN32
-	struct run_closure *closure = malloc(sizeof(struct run_closure));
-	closure->run = run;
-	closure->data = data;
-	{
-		HANDLE result = CreateThread(0, 0, run_closure_run, closure, 0, 0);
-		if (result == NULL)
-			abort();
-	}
+    struct run_closure *closure = malloc(sizeof(struct run_closure));
+    closure->run = run;
+    closure->data = data;
+    {
+        HANDLE result = CreateThread(0, 0, run_closure_run, closure, 0, 0);
+        if (result == NULL)
+            abort();
+    }
 #else
     pthread_t id;
     
@@ -47,7 +47,7 @@ void thread_start(void run(void *data), void *data)
 
 struct lock {
 #ifdef WIN32
-	CRITICAL_SECTION criticalSection;
+    CRITICAL_SECTION criticalSection;
 #else
     pthread_mutex_t mutex;
 #endif
@@ -57,7 +57,7 @@ struct lock *create_lock()
 {
     struct lock *lock = malloc(sizeof(struct lock));
 #ifdef WIN32
-	InitializeCriticalSection(&(lock->criticalSection));
+    InitializeCriticalSection(&(lock->criticalSection));
 #else
     int result = pthread_mutex_init(&(lock->mutex), 0);
     if (result != 0)
@@ -69,7 +69,7 @@ struct lock *create_lock()
 void lock_acquire(struct lock *lock)
 {
 #ifdef WIN32
-	EnterCriticalSection(&(lock->criticalSection));
+    EnterCriticalSection(&(lock->criticalSection));
 #else
     pthread_mutex_lock(&(lock->mutex));
 #endif
@@ -78,7 +78,7 @@ void lock_acquire(struct lock *lock)
 void lock_release(struct lock *lock)
 {
 #ifdef WIN32
-	LeaveCriticalSection(&(lock->criticalSection));
+    LeaveCriticalSection(&(lock->criticalSection));
 #else
     pthread_mutex_unlock(&(lock->mutex));
 #endif

@@ -90,29 +90,29 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
 
 void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
 {
-	struct list *members = room->members;
+    struct list *members = room->members;
     struct member *member = malloc(sizeof(member));
     struct string_buffer *nickCopy = string_buffer_copy(nick);
     member->nick = nickCopy;
     member->writer = writer;
-	list_add(members, member);
+    list_add(members, member);
     lock_release(roomLock);
     
-	{
-		bool eof = false;
-		struct string_buffer *message = create_string_buffer();
-		while (!eof)
-		{
-			eof = reader_read_line(reader, message);
-			if (eof) {
-			} else {
-				lock_acquire(roomLock);
-				room_broadcast_message(room, nick, message);
-				lock_release(roomLock);
-			}
-		}
-		string_buffer_dispose(message);
-	}
+    {
+        bool eof = false;
+        struct string_buffer *message = create_string_buffer();
+        while (!eof)
+        {
+            eof = reader_read_line(reader, message);
+            if (eof) {
+            } else {
+                lock_acquire(roomLock);
+                room_broadcast_message(room, nick, message);
+                lock_release(roomLock);
+            }
+        }
+        string_buffer_dispose(message);
+    }
     
     lock_acquire(roomLock);
     list_remove(members, member);
@@ -136,49 +136,49 @@ void session_run(void *data)
     writer_write_string(writer, "The following members are present:\r\n");
     
     lock_acquire(roomLock);
-	{
-		struct list *members = room->members;
-		struct iter *iter = list_create_iter(members);
-		bool hasNext = iter_has_next(iter);
-		while (hasNext)
-		{
-			struct member *member = (struct member *)iter_next(iter);
-			struct string_buffer *nick = member->nick;
-			writer_write_string_buffer(writer, nick);
-			writer_write_string(writer, "\r\n");
-			hasNext = iter_has_next(iter);
-		}
-		iter_dispose(iter);
-	}
+    {
+        struct list *members = room->members;
+        struct iter *iter = list_create_iter(members);
+        bool hasNext = iter_has_next(iter);
+        while (hasNext)
+        {
+            struct member *member = (struct member *)iter_next(iter);
+            struct string_buffer *nick = member->nick;
+            writer_write_string_buffer(writer, nick);
+            writer_write_string(writer, "\r\n");
+            hasNext = iter_has_next(iter);
+        }
+        iter_dispose(iter);
+    }
     lock_release(roomLock);
 
-	{
-		struct string_buffer *nick = create_string_buffer();
-		bool done = false;
-		while (!done)
-		{
-			writer_write_string(writer, "Please enter your nick: ");
-			{
-				bool eof = reader_read_line(reader, nick);
-				if (eof) {
-					done = true;
-				} else {
-					lock_acquire(roomLock);
-					{
-						bool hasMember = room_has_member(room, nick);
-						if (hasMember) {
-							lock_release(roomLock);
-							writer_write_string(writer, "Error: This nick is already in use.\r\n");
-						} else {
-							session_run_with_nick(room, roomLock, reader, writer, nick);
-							done = true;
-						}
-					}
-				}
-			}
-		}
-		string_buffer_dispose(nick);
-	}
+    {
+        struct string_buffer *nick = create_string_buffer();
+        bool done = false;
+        while (!done)
+        {
+            writer_write_string(writer, "Please enter your nick: ");
+            {
+                bool eof = reader_read_line(reader, nick);
+                if (eof) {
+                    done = true;
+                } else {
+                    lock_acquire(roomLock);
+                    {
+                        bool hasMember = room_has_member(room, nick);
+                        if (hasMember) {
+                            lock_release(roomLock);
+                            writer_write_string(writer, "Error: This nick is already in use.\r\n");
+                        } else {
+                            session_run_with_nick(room, roomLock, reader, writer, nick);
+                            done = true;
+                        }
+                    }
+                }
+            }
+        }
+        string_buffer_dispose(nick);
+    }
 
     socket_close(socket);
 }
