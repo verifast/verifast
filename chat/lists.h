@@ -8,3 +8,4 @@ void *iter_next(struct iter *iter);
 void iter_dispose(struct iter *iter);
 void list_add(struct list *list, void *element);
 void list_remove(struct list *list, void *element);
+void list_dispose(struct list *list);
