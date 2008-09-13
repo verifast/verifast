@@ -1,32 +1,26 @@
-int socket_create_and_listen(int port);
-  //@ requires emp;
-  //@ ensures emp;
+struct server_socket;
 
-int socket_accept(int serverSocket);
-  //@ requires emp;
-  //@ ensures emp;
+struct server_socket *create_server_socket(int port);
+struct socket *server_socket_accept(struct server_socket *serverSocket);
 
-int write(int fd, void *buf, int size);
-  //@ requires range(buf, ?bytes) &*& length(bytes) == size;
-  //@ ensures range(buf, bytes);
+struct writer;
 
-int close(int fd);
-  //@ requires emp;
-  //@ ensures emp;
+struct writer *socket_get_writer(struct socket *socket);
+void writer_write_string(struct writer *writer, char *string);
+void socket_close(struct socket *socket);
 
 int main()
-  //@ requires emp;
-  //@ ensures emp;
+    //@ requires emp;
+    //@ ensures emp;
 {
-    int serverSocket = socket_create_and_listen(12345);
+    struct server_socket *serverSocket = create_server_socket(12345);
 
-    while (0 == 0)
-      //@ invariant emp;
+    while (1 == 1)
     {
-        int slaveSocket = socket_accept(serverSocket);
-        char *msg = "Hello, world!";
-        write(slaveSocket, msg, 13);
-        close(slaveSocket);
+        struct socket *socket = server_socket_accept(serverSocket);
+        struct writer *writer = socket_get_writer(socket);
+        writer_write_string(writer, "Hello, world!\r\n");
+        socket_close(socket);
     }
 
     return 0;
