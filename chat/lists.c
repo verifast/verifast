@@ -58,6 +58,6 @@ void list_remove(struct list *list, void *element)
 {
     struct node **next = &(list->head);
     while ((*next)->value != element)
-        *next = (*next)->next;
+        next = &((*next)->next);
     *next = (*next)->next;
 }

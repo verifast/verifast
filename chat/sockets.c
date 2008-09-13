@@ -1,6 +1,12 @@
 #include <malloc.h>
 #include <string.h>
+#ifdef WIN32
+#include <winsock.h> /* send, recv */
+#include <process.h> /* _exit */
+typedef int ssize_t;
+#else
 #include <unistd.h>
+#endif
 #include <stdio.h> /* For perror */
 #include "socketlib.h"
 
@@ -31,6 +37,7 @@ struct reader {
 
 bool reader_read_line(struct reader *reader, struct string_buffer *buffer)
 {
+	string_buffer_clear(buffer);
     for (;;)
     {
         void *newline = memchr(reader->bufferStart, '\n', reader->bufferEnd - reader->bufferStart);
@@ -44,14 +51,16 @@ bool reader_read_line(struct reader *reader, struct string_buffer *buffer)
         } else {
             string_buffer_append_chars(buffer, reader->bufferStart, reader->bufferEnd - reader->bufferStart);
             reader->bufferStart = reader->buffer;
-            ssize_t count = read(reader->handle, reader->buffer, READER_BUFFER_SIZE);
-            if (count < 0) {
-                perror("read()");
-                _exit(1);
-            }
-            if (count == 0)
-                return true;
-            reader->bufferEnd = reader->buffer + count;
+			{
+				ssize_t count = recv(reader->handle, reader->buffer, READER_BUFFER_SIZE, 0);
+				if (count < 0) {
+					print_socket_error_message("recv()");
+					abort();
+				}
+				if (count == 0)
+					return true;
+				reader->bufferEnd = reader->buffer + count;
+			}
         }
     }
 }
@@ -62,13 +71,13 @@ struct writer {
 
 void writer_write_string(struct writer *writer, char *text)
 {
-    int length = strlen(text);
-    write(writer->handle, text, length);
+    size_t length = strlen(text);
+    send(writer->handle, text, length, 0);
 }
 
 void writer_write_string_buffer(struct writer *writer, struct string_buffer *buffer)
 {
-    write(writer->handle, string_buffer_get_chars(buffer), string_buffer_get_length(buffer));
+    send(writer->handle, string_buffer_get_chars(buffer), string_buffer_get_length(buffer), 0);
 }
 
 struct socket {
@@ -81,10 +90,10 @@ struct socket *server_socket_accept(struct server_socket *serverSocket)
 {
     int handle = socket_accept(serverSocket->handle);
     struct reader *reader = malloc(sizeof(struct reader));
-    reader->handle = handle;
     struct writer *writer = malloc(sizeof(struct writer));
-    writer->handle = handle;
     struct socket *socket = malloc(sizeof(struct socket));
+    reader->handle = handle;
+    writer->handle = handle;
     socket->handle = handle;
     socket->reader = reader;
     socket->writer = writer;
@@ -103,7 +112,11 @@ struct writer *socket_get_writer(struct socket *socket)
 
 void socket_close(struct socket *socket)
 {
+#ifdef WIN32
+	closesocket(socket->handle);
+#else
     close(socket->handle);
+#endif
     free(socket->reader);
     free(socket->writer);
     free(socket);

@@ -28,6 +28,11 @@ int string_buffer_get_length(struct string_buffer *buffer)
     return buffer->length;
 }
 
+void string_buffer_clear(struct string_buffer *buffer)
+{
+	buffer->length = 0;
+}
+
 void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int count)
 {
     int newLength = buffer->length + count;
@@ -45,9 +50,9 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
 struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
 {
     struct string_buffer *copy = malloc(sizeof(struct string_buffer));
+    char *chars = malloc(buffer->length);
     copy->length = buffer->length;
     copy->capacity = buffer->length;
-    char *chars = malloc(buffer->length);
     memcpy(chars, buffer->chars, buffer->length);
     copy->chars = chars;
     return copy;

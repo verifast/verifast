@@ -1,27 +1,48 @@
 #include <stdio.h>   /* */
 #include <stdlib.h>  /* exit() */
 #include <string.h>  /* memset(), memcpy() */
-#include <sys/utsname.h>   /* uname() */
 #include <sys/types.h>
+#ifdef WIN32
+#include <winsock2.h>
+#else
 #include <sys/socket.h>   /* socket(), bind(), listen(), accept() */
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>  /* fork(), write(), close() */
+#define SOCKET int
+#define INVALID_SOCKET (-1)
+#endif
 
-int socket_create_and_listen(int port)
-  //@ requires emp;
-  //@ ensures emp;
+#include "socketlib.h"
+
+void print_socket_error_message(char *api)
 {
-    int serverSocket = 0;
+#ifdef WIN32
+	printf("Socket API call '%s' failed: error code %d\n", api, WSAGetLastError());
+#else
+	perror(api);
+#endif
+}
+
+SOCKET socket_create_and_listen(int port)
+{
+    SOCKET serverSocket = 0;
     struct sockaddr_in serverName = { 0 };
     int status = 0;
 
-    serverSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (-1 == serverSocket)
+#ifdef WIN32
+	{
+		WSADATA windowsSocketsApiData;
+		WSAStartup(MAKEWORD(2, 0), &windowsSocketsApiData);
+	}
+#endif
+
+	serverSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (INVALID_SOCKET == serverSocket)
     {
-        perror("socket()");
-        exit(1);
+        print_socket_error_message("socket()");
+        abort();
     }
     
     serverName.sin_addr.s_addr=htonl(INADDR_ANY);
@@ -30,36 +51,35 @@ int socket_create_and_listen(int port)
     serverName.sin_port = htons(port);
 
     status = bind(serverSocket, (struct sockaddr *) &serverName, sizeof(serverName));
-    if (-1 == status)
+    if (INVALID_SOCKET == status)
     {
-        perror("bind()");
-        exit(1);
+        print_socket_error_message("bind()");
+        abort();
     }
     
     status = listen(serverSocket, 5);  // Allow 5 pending incoming connection requests
-    if (-1 == status)
+    if (INVALID_SOCKET == status)
     {
-        perror("listen()");
-        exit(1);
+        print_socket_error_message("listen()");
+        abort();
     }
 
     return serverSocket;
 }
 
-int socket_accept(int serverSocket)
-  //@ requires emp;
-  //@ ensures emp;
+SOCKET socket_accept(SOCKET serverSocket)
 {
     struct sockaddr_in clientName = { 0 };
-    int slaveSocket, clientLength = sizeof(clientName);
+    SOCKET slaveSocket;
+	int clientLength = sizeof(clientName);
 
     (void) memset(&clientName, 0, sizeof(clientName));
 
     slaveSocket = accept(serverSocket, (struct sockaddr *) &clientName, &clientLength);
-    if (-1 == slaveSocket)
+    if (INVALID_SOCKET == slaveSocket)
     {
-        perror("accept()");
-        exit(1);
+        print_socket_error_message("accept()");
+        abort();
     }
     
     return slaveSocket;
