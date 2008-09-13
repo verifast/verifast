@@ -8,6 +8,7 @@ typedef int ssize_t;
 #include <unistd.h>
 #endif
 #include <stdio.h> /* For perror */
+#include <stdlib.h> /* abort */
 #include "socketlib.h"
 
 #include "bool.h"
