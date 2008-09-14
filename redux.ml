@@ -1,5 +1,7 @@
 open Proverapi
 
+let print_endline_disabled msg = ()
+
 let rec try_assoc key al =
   match al with
     [] -> None
@@ -88,7 +90,7 @@ and termnode (ctxt: context) s initial_children =
         | Some n -> ctxt#add_redex (fun () -> self#reduce)
         end
       | Uninterp ->
-        print_endline ("Created uninterpreted termnode " ^ symbol#name);
+        print_endline_disabled ("Created uninterpreted termnode " ^ symbol#name);
         begin
           match symbol#name with
             "==" ->
@@ -97,12 +99,12 @@ and termnode (ctxt: context) s initial_children =
                 [v1; v2] ->
                 if v1 = v2 then
                 begin
-                  print_endline ("Equality termnode: operands are equal");
+                  print_endline_disabled ("Equality termnode: operands are equal");
                   ignore (ctxt#assert_eq value ctxt#true_node#value)
                 end
                 else if v1#neq v2 then
                 begin
-                  print_endline ("Equality termnode: operands are distinct");
+                  print_endline_disabled ("Equality termnode: operands are distinct");
                   ignore (ctxt#assert_eq value ctxt#false_node#value)
                 end
                 else
@@ -115,14 +117,14 @@ and termnode (ctxt: context) s initial_children =
                     end
                     ^ ")"
                   in
-                  print_endline ("Equality termnode: undecided: " ^ pprint v1 ^ ", " ^ pprint v2);
+                  print_endline_disabled ("Equality termnode: undecided: " ^ pprint v1 ^ ", " ^ pprint v2);
             end
           | _ -> ()
         end
     end
     method set_value v =
       self#push;
-      (* print_endline (string_of_int (Oo.id self) ^ ".value <- " ^ string_of_int (Oo.id v)); *)
+      (* print_endline_disabled (string_of_int (Oo.id self) ^ ".value <- " ^ string_of_int (Oo.id v)); *)
       value <- v
     method set_child k v =
       let rec replace i vs =
@@ -166,7 +168,7 @@ and termnode (ctxt: context) s initial_children =
             let clause = clauses.(j) in
             let vs = n#children in
             let t = clause (List.map (fun v -> TermNode v#initial_child) children) (List.map (fun v -> TermNode v#initial_child) vs) in
-            print_endline ("Assumed by reduction: " ^ self#pprint ^ " = " ^ ctxt#pprint t);
+            print_endline_disabled ("Assumed by reduction: " ^ self#pprint ^ " = " ^ ctxt#pprint t);
             let tn = ctxt#termnode_of_term t in
             ctxt#assert_eq tn#value value
           | _ -> assert false
@@ -267,7 +269,7 @@ and valuenode (ctxt: context) =
     method ctorchild_added =
       List.iter (fun (n, k) -> n#child_ctorchild_added k) parents
     method merge_into v =
-      (* print_endline ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v)); *)
+      (* print_endline_disabled ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v)); *)
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
@@ -303,9 +305,9 @@ and valuenode (ctxt: context) =
             [] -> Unknown
           | (n, n')::rps ->
             begin
-              (* print_endline "Doing a recursive assert_eq!"; *)
+              (* print_endline_disabled "Doing a recursive assert_eq!"; *)
               let result = context#assert_eq n#value n'#value in
-              (* print_endline "Returned from recursive assert_eq"; *)
+              (* print_endline_disabled "Returned from recursive assert_eq"; *)
               match result with
                 Unsat -> Unsat
               | Unknown -> iter rps
@@ -318,7 +320,7 @@ and valuenode (ctxt: context) =
           (None, _) -> process_redundant_parents()
         | (Some n, None) -> v#set_ctorchild n; process_redundant_parents()
         | (Some n, Some n') ->
-          (* print_endline "Adding injectiveness edges..."; *)
+          (* print_endline_disabled "Adding injectiveness edges..."; *)
           let rec iter vs =
             match vs with
               [] -> process_redundant_parents()
@@ -336,7 +338,7 @@ and valuenode (ctxt: context) =
           (Some u, None) -> v#set_unknown u; process_ctorchildren()
         | (Some u1, Some u2) ->
           begin
-            print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name);
+            print_endline_disabled ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name);
             match ctxt#simplex#assert_eq 0 [1, u1; -1, u2] with
               Simplex.Unsat -> Unsat
             | Simplex.Sat -> process_ctorchildren()
@@ -376,14 +378,14 @@ and context =
     method get_intlitnode n =
       match try_assoc n intlitnodes with
         None ->
-        (* print_endline ("Creating intlit node for " ^ string_of_int n); *)
+        (* print_endline_disabled ("Creating intlit node for " ^ string_of_int n); *)
         let node = self#get_node (new symbol (Ctor n) (string_of_int n)) [] in
         intlitnodes <- (n, node)::intlitnodes;
         node
       | Some n -> n
     
     method get_ifthenelsenode t1 t2 t3 =
-      print_endline ("Producing ifthenelse termnode");
+      print_endline_disabled ("Producing ifthenelse termnode");
       let symname = "ifthenelse(" ^ self#pprint t2 ^ ", " ^ self#pprint t3 ^ ")" in
       let s = new symbol (Fixpoint 0) symname in
       s#set_fpclauses [
@@ -412,7 +414,7 @@ and context =
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method assume (t: (symbol, termnode) term): assume_result =
-      print_endline ("Assume: " ^ self#pprint t);
+      print_endline_disabled ("Assume: " ^ self#pprint t);
       let rec assume_true t =
         match t with
           TermNode t -> self#assume_eq t self#true_node
@@ -430,7 +432,7 @@ and context =
       in
       assume_true t
     method query (t: (symbol, termnode) term): bool =
-      print_endline ("Query: " ^ self#pprint t);
+      print_endline_disabled ("Query: " ^ self#pprint t);
       let rec query_true t =
         match t with
           TermNode t -> self#query_eq t self#true_node
@@ -456,7 +458,7 @@ and context =
         let uv1 = v1#mk_unknown in
         let uv2 = v2#mk_unknown in
         let utn = tn#value#mk_unknown in
-        print_endline ("Exporting addition to Simplex: " ^ utn#name ^ " = " ^ uv1#name ^ " + " ^ uv2#name);
+        print_endline_disabled ("Exporting addition to Simplex: " ^ utn#name ^ " = " ^ uv1#name ^ " + " ^ uv2#name);
         ignore (simplex#assert_eq 0 [-1, utn; 1, uv1; sign, uv2]);
         tn
       in
@@ -470,20 +472,20 @@ and context =
         let tn = self#get_intlitnode n in
         let v = tn#value in
         let u = v#mk_unknown in
-        print_endline ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_int n);
+        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_int n);
         ignore (simplex#assert_eq n [-1, u]);
         tn
       | App (s, ts) ->
         self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts)
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Eq (t1, t2) ->
-        print_endline ("Producing equality termnode");
+        print_endline_disabled ("Producing equality termnode");
         self#get_node eq_symbol [(self#termnode_of_term t1)#value; (self#termnode_of_term t2)#value]
       | _ -> assert false
 
     method pushdepth = pushdepth
     method push =
-      (* print_endline "Push"; *)
+      (* print_endline_disabled "Push"; *)
       self#reduce;
       assert (redexes = []);
       assert (simplex_eqs = []);
@@ -497,7 +499,7 @@ and context =
       popactionlist <- action::popactionlist
 
     method pop =
-      (* print_endline "Pop"; *)
+      (* print_endline_disabled "Pop"; *)
       redexes <- [];
       simplex_eqs <- [];
       simplex_consts <- [];
@@ -606,17 +608,17 @@ and context =
     method assert_eq v1 v2 =
       if v1 = v2 then
       begin
-        (* print_endline "assert_eq: values already the same"; *)
+        (* print_endline_disabled "assert_eq: values already the same"; *)
         Unknown
       end
       else if v1#neq v2 then
       begin
-        (* print_endline "assert_eq: values are neq"; *)
+        (* print_endline_disabled "assert_eq: values are neq"; *)
         Unsat
       end
       else
       begin
-        (* print_endline "assert_eq: merging v1 into v2"; *)
+        (* print_endline_disabled "assert_eq: merging v1 into v2"; *)
         v1#merge_into v2
       end
     
@@ -639,7 +641,7 @@ and context =
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = u#tag in
-              print_endline ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_int c);
+              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_int c);
               match self#assert_eq tn#value (self#get_intlitnode c)#value with
                 Unsat -> Unsat
               | Unknown -> iter()
@@ -648,7 +650,7 @@ and context =
           simplex_eqs <- eqs;
           let Some tn1 = u1#tag in
           let Some tn2 = u2#tag in
-          print_endline ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")");
+          print_endline_disabled ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")");
           match self#assert_eq tn1#value tn2#value with
             Unsat -> Unsat
           | Unknown -> iter()

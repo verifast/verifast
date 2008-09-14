@@ -2,6 +2,9 @@
 
 open Num
 
+let print_endline_disabled msg = ()
+let print_string_disabled msg = ()
+
 let rec try_assoc k0 kvs =
   match kvs with
     [] -> None
@@ -84,7 +87,7 @@ and ['tag] row context own c =
         terms
     
     method close =
-      print_endline ("Closing row " ^ owner#print ^ "...");
+      print_endline_disabled ("Closing row " ^ owner#print ^ "...");
       List.iter (fun (col, coef) -> if not col#dead && sign_num coef#value < 0 then col#die) terms
     
     method live_terms =
@@ -104,7 +107,7 @@ and ['tag] row context own c =
           [] -> ()
         | (col0, coef0)::_ ->
           let row_equals (c1, ts1) (c2, ts2) =
-            print_endline "Performing a row comparison...";
+            print_endline_disabled "Performing a row comparison...";
             c1 =/ c2 &&
             List.length ts1 = List.length ts2 &&
             let rec iter ts =
@@ -256,8 +259,8 @@ and ['tag] simplex =
 
     method sign_of_max_of_row row =
       let rec maximize_row () =
-        print_endline ("Maximizing row " ^ row#owner#print ^ "...");
-        print_string self#print;
+        print_endline_disabled ("Maximizing row " ^ row#owner#print ^ "...");
+        print_string_disabled self#print;
         if sign_num row#constant > 0 then
           1
         else
