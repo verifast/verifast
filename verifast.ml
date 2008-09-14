@@ -1740,7 +1740,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match zip pats ps with
             None -> static_error l "Incorrect number of arguments."
           | Some bs ->
-            List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp) bs
+            List.iter
+              (function (LitPat e, (_, tp)) ->
+                 check_expr_t tenv e tp;
+                 if tp = PtrType Char then   (* TODO: Replace this hack with a proper approach for char arrays (writable ones and readonly ones) *)
+                   match e with
+                     StringLit _ -> ()
+                   | _ -> static_error (expr_loc e) "Argument for parameter of type 'char *' must be string literal."
+              ) bs
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
