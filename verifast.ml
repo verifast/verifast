@@ -370,9 +370,9 @@ and
 and
   decl =
   | Inductive of loc * string * ctor list
-  | Struct of loc * string * field list
-  | PredDecl of loc * string * (type_expr * string) list * pred
-  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list
+  | Struct of loc * string * field list option
+  | PredDecl of loc * string * (type_expr * string) list * pred option
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list option
 and
   field =
   | Field of loc * type_expr * string
@@ -477,7 +477,8 @@ and
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
-    [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, fs)
+    [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
+  | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix l s; d = parse_func_rest Regular (Some t) >] -> d
   >] -> d
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
@@ -489,11 +490,15 @@ and
   parse_pure_decl = parser
   [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> Inductive (l, i, cs)
 | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
-| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> PredDecl (l, g, ps, p)
+| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; body = (parser [< '(_, Kwd "requires"); p = parse_pred >] -> Some p | [< >] -> None); '(_, Kwd ";"); >] -> PredDecl (l, g, ps, body)
 | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
 and
   parse_func_rest k t = parser
-  [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, ss)
+  [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
+    (parser
+       [< '(_, Kwd ";"); co = parse_contract_opt >] -> Func (l, k, t, g, ps, co, None)
+     | [< co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss)
+    ) >] -> f
 and
   parse_ctors_suffix = parser
   [< '(_, Kwd "|"); cs = parse_ctors >] -> cs
@@ -830,11 +835,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter sdm ds =
       match ds with
         [] -> sdm
-      | Struct (l, sn, fds)::ds ->
+      | Struct (l, sn, fds_opt)::ds ->
         if List.mem_assoc sn sdm then
           static_error l "Duplicate struct name."
         else
-          iter ((sn, (l, fds))::sdm) ds
+          iter ((sn, (l, fds_opt))::sdm) ds
       | _::ds -> iter sdm ds
     in
     iter [] ds
@@ -842,10 +847,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let structmap =
     List.map
-      (fun (sn, (l, fds)) ->
+      (fun (sn, (l, fds_opt)) ->
          let rec iter fmap fds =
            match fds with
-             [] -> (sn, (l, List.rev fmap))
+             [] -> (sn, (l, Some (List.rev fmap)))
            | Field (lf, t, f)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
@@ -862,7 +867,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                iter ((f, (lf, t))::fmap) fds
              )
          in
-         iter [] fds
+         begin
+           match fds_opt with
+             Some fds -> iter [] fds
+           | None -> (sn, (l, None))
+         end
       )
       structdeclmap
   in
@@ -935,7 +944,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         in
         citer 0 [] pfm ctors
-      | Func (l, Fixpoint, rto, g, ps, contract, body)::ds ->
+      | Func (l, Fixpoint, rto, g, ps, contract, body_opt)::ds ->
         let _ =
           if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
         in
@@ -961,8 +970,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter [] ps
         in
         let (index, ctorcount) = 
-          match body with
-            [SwitchStmt (ls, e, cs)] -> (
+          match body_opt with
+            Some [SwitchStmt (ls, e, cs)] -> (
             let ctorcount = List.length cs in
             match e with
               Var (l, x) -> (
@@ -1109,16 +1118,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let predmap = 
     let rec iter pm ds =
       match ds with
-        PredDecl (l, p, xs, body)::ds ->
+        PredDecl (l, p, xs, body_opt)::ds ->
         let _ = if List.mem_assoc p pm then static_error l "Duplicate predicate name." in
-      	let rec iter2 xm xs =
-      	  match xs with
-      	    [] -> iter ((p, (l, List.rev xm, Some body))::pm) ds
-      	  | (t, x)::xs ->
-      	    check_pure_type t;
-      	    if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-      	    iter2 ((x, t)::xm) xs
-      	in
+        let rec iter2 xm xs =
+          match xs with
+            [] -> iter ((p, (l, List.rev xm, body_opt))::pm) ds
+          | (t, x)::xs ->
+            check_pure_type t;
+            if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+            iter2 ((x, t)::xm) xs
+        in
         iter2 [] xs
       | _::ds -> iter pm ds
       | [] -> List.rev pm
@@ -1229,12 +1238,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType (_, sn) ->
       begin
       match List.assoc sn structmap with
-        (_, fds) ->
+        (_, Some fds) ->
         begin
           match try_assoc f#name fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
           | Some (_, t) -> f#set_range t; t
         end
+      | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
     | _ -> static_error l "Target expression of field dereference should be of pointer type."
     end
@@ -1385,7 +1395,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, [SwitchStmt (_, Var (_, x), cs)]) ->
+     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x), cs)]) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -1771,7 +1781,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
       let tpx = vartp l x in
       let _ = check_assign l x in
-      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let [fds_opt] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let fds =
+        match fds_opt with
+          Some fds -> fds
+        | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+      in
       let _ =
         match tpx with
           PtrType (_, sn) when sn = tn -> ()
@@ -1789,7 +1804,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallStmt (l, "free", [Var (lv, x)]) ->
       let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
       let (PtrType (_, tn)) = List.assoc x tenv in
-      let [fds] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let [fds_opt] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let fds =
+        match fds_opt with
+          Some fds -> fds
+        | None -> static_error l "Freeing an object of a struct type declared without a body is not supported."
+      in
       let rec iter h fds =
         match fds with
           [] -> cont h env
@@ -1875,7 +1895,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Open (l, g, pats) ->
-      let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let [(lpd, ps, p_opt)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let p =
+        match p_opt with
+          Some p -> p
+        | None -> static_error l "Cannot open predicate declared without a body."
+      in
       let tenv' =
         let rec iter tenv pats ps =
           match (pats, ps) with
@@ -1897,7 +1922,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       )
     | Close (l, g, pats) ->
-      let [(lpd, ps, p)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let [(lpd, ps, p_opt)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let p =
+        match p_opt with
+          Some p -> p
+        | None -> static_error l "Cannot close predicate declared without a body."
+      in
       let _ =
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
@@ -1963,7 +1993,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match ds with
     | [] -> ()
     | Func (l, Fixpoint, _, _, _, _, _)::ds -> verify_decls lems ds
-    | Func (l, k, rt, g, ps, Some (pre, post), ss)::ds ->
+    | Func (l, k, rt, g, ps, contract_opt, Some ss)::ds ->
+      let (pre, post) =
+        match contract_opt with
+          None -> static_error l "Non-fixpoint function must have contract."
+        | Some (pre, post) -> (pre, post)
+      in
       let _ = push() in
       let env = List.map (function (t, p) -> (p, get_unique_var_symb p t)) ps in
       let (sizemap, indinfo) =
