@@ -18,9 +18,9 @@ struct socket *server_socket_accept(struct server_socket *serverSocket);
 struct writer *socket_get_writer(struct socket *socket);
     //@ requires socket(socket, ?writer);
     //@ ensures socket(socket, writer) &*& result == writer;
-//void writer_write_string(struct writer *writer, /*@ string_literal @*/ char *string);
-//    //@ requires socket_writer(writer, ?socket);
-//    //@ ensures socket_writer(writer, socket);
+void writer_write_string(struct writer *writer, /* string_literal */ char *string);
+    //@ requires socket_writer(writer, ?socket);
+    //@ ensures socket_writer(writer, socket);
 void socket_close(struct socket *socket);
     //@ requires socket(socket, ?writer) &*& socket_writer(writer, socket);
     //@ ensures emp;
@@ -36,7 +36,7 @@ int main()
     {
         struct socket *socket = server_socket_accept(serverSocket);
         struct writer *writer = socket_get_writer(socket);
-//        writer_write_string(writer, "Hello, world!\r\n");
+        //writer_write_string(writer, "Hello, world!\r\n");
         socket_close(socket);
     }
 

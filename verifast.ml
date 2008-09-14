@@ -291,13 +291,23 @@ let make_lexer keywords path stream reportKeyword =
         Some t -> Some (current_loc(), t)
       | None -> None)))
 
+type type_ =
+    Bool
+  | IntType
+  | Char
+  | StructType of string
+  | PtrType of type_
+  | InductiveType of string
+
 type type_expr =
-  | TypeName of loc * string
-  | PtrType of loc * string   (* Always pointer-to-struct for now. *)
+    ManifestTypeExpr of loc * type_
+  | StructTypeExpr of loc * string
+  | IdentTypeExpr of loc * string
+  | PtrTypeExpr of loc * type_expr
 
 class fieldref (name: string) =
   object
-    val mutable range: type_expr option = None
+    val mutable range: type_ option = None
     method name = name
     method range = match range with None -> assert false | Some r -> r
     method set_range r = range <- Some r
@@ -305,7 +315,7 @@ class fieldref (name: string) =
 
 class predref (name: string) =
   object
-    val mutable domain: type_expr list option = None
+    val mutable domain: type_ list option = None
     method name = name
     method domain = match domain with None -> assert false | Some d -> d
     method set_domain d = domain <- Some d
@@ -453,16 +463,18 @@ let stmt_loc s =
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _) -> l
 
-let type_loc t =
+let type_expr_loc t =
   match t with
-    TypeName (l, n) -> l
-  | PtrType (l, n) -> l
+    ManifestTypeExpr (l, t) -> l
+  | StructTypeExpr (l, sn) -> l
+  | IdentTypeExpr (l, x) -> l
+  | PtrTypeExpr (l, te) -> l
 
 let lexer = make_lexer [
-  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "bool"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
+  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal"
 ]
 
 let read_program path stream reportKeyword reportGhostRange =
@@ -479,7 +491,7 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix l s; d = parse_func_rest Regular (Some t) >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> d
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
 and
@@ -526,24 +538,26 @@ and
 | [< t = parse_type >] -> Some t
 and
   parse_type = parser
-  [< (l, tn) = parse_primary_type; tt = parse_type_suffix l tn >] -> tt
+  [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
   parse_primary_type = parser
-  [< '(l, Kwd "struct"); '(_, Ident s) >] -> (l, s)
-| [< '(l, Kwd "int") >] -> (l, "int")
-| [< '(l, Kwd "uint") >] -> (l, "uint")
-| [< '(l, Kwd "bool") >] -> (l, "bool")
-| [< '(l, Ident n) >] -> (l, n)
+  [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
+| [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
+| [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
+| [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
+| [< '(l, Ident n) >] -> IdentTypeExpr (l, n)
 and
-  parse_type_suffix tnl tn = parser
-  [< '(l, Kwd "*") >] -> PtrType (l, tn)
-| [< >] -> TypeName (tnl, tn)
+  parse_type_suffix t0 = parser
+  [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
+| [< >] -> t0
 and
   parse_paramlist = parser
   [< '(_, Kwd ")") >] -> []
 | [< p = parse_param; ps = parse_more_params >] -> p::ps
 and
   parse_param = parser
+(*  [< sl = (parser [< '(_, Kwd "/*@"); '(_, Kwd "string_literal"); '(_, Kwd "@*/") >] -> true | [< >] -> false); t = parse_type; '(l, Ident pn) >] -> (sl, t, pn) *)
   [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
 and
   parse_more_params = parser
@@ -667,10 +681,11 @@ and
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
-| [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix l s >] -> TypeExpr (type_loc t, t)
-| [< '(l, Kwd "int") >] -> TypeExpr (l, TypeName (l, "int"))
-| [< '(l, Kwd "uint") >] -> TypeExpr (l, TypeName (l, "uint"))
-| [< '(l, Kwd "bool") >] -> TypeExpr (l, TypeName (l, "bool"))
+| [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix (StructTypeExpr (l, s)) >] -> TypeExpr (type_expr_loc t, t)
+| [< '(l, Kwd "int") >] -> TypeExpr (l, ManifestTypeExpr (l, IntType))
+| [< '(l, Kwd "uint") >] -> TypeExpr (l, IdentTypeExpr (l, "uint"))
+| [< '(l, Kwd "bool") >] -> TypeExpr (l, ManifestTypeExpr (l, Bool))
+| [< '(l, Kwd "char") >] -> TypeExpr (l, ManifestTypeExpr (l, Char))
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e]) 
 and
   parse_switch_expr_clauses = parser
@@ -855,16 +870,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
-               let _ =
-                 match t with
-                   TypeName (_, "int") -> ()
-                 | PtrType (lt, sn) ->
+               let rec check_type te =
+                 match te with
+                   ManifestTypeExpr (_, IntType) -> IntType
+                 | ManifestTypeExpr (_, Char) -> Char
+                 | StructTypeExpr (lt, sn) ->
                    if List.mem_assoc sn structdeclmap then
-                     ()
+                     StructType sn
                    else
                      static_error lt "No such struct."
+                 | PtrTypeExpr (lt, te) -> PtrType (check_type te)
+                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component."
                in
-               iter ((f, (lf, t))::fmap) fds
+               iter ((f, (lf, check_type t))::fmap) fds
              )
          in
          begin
@@ -893,32 +911,44 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [("uint", (dummy_loc, []))] ds
   in
   
-  let check_pure_type t =
-    match t with
-      TypeName (l, tn) ->
-      if not (tn = "bool" || tn = "int" || List.mem_assoc tn inductivedeclmap) then
+  let rec check_pure_type te =
+    match te with
+      ManifestTypeExpr (l, t) -> t
+    | IdentTypeExpr (l, id) ->
+      if not (List.mem_assoc id inductivedeclmap) then
         static_error l "No such datatype."
-    | PtrType (l, sn) ->
+      else
+        InductiveType id
+    | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap) then
         static_error l "No such struct."
+      else
+        StructType sn
+    | PtrTypeExpr (l, te) -> PtrType (check_pure_type te)
   in 
   
-  let boolt = TypeName (dummy_loc, "bool") in
-  let intt = TypeName (dummy_loc, "int") in
-  let uintt = TypeName (dummy_loc, "uint") in
+  let boolt = Bool in
+  let intt = IntType in
+  let uintt = InductiveType "uint" in
   
-  let string_of_type t =
+  let rec string_of_type t =
     match t with
-      TypeName (_, tn) -> tn
-    | PtrType (_, tn) -> "struct " ^ tn ^ " *"
+      Bool -> "bool"
+    | IntType -> "int"
+    | Char -> "char"
+    | InductiveType i -> i
+    | StructType sn -> "struct " ^ sn
+    | PtrType t -> string_of_type t ^ " *"
   in
   
   let typenode_of_type t =
     match t with
-      TypeName (_, "bool") -> ctxt#type_bool
-    | TypeName (_, "int") -> ctxt#type_int
-    | TypeName (_, _) -> ctxt#type_inductive
-    | PtrType (_, _) -> ctxt#type_int
+      Bool -> ctxt#type_bool
+    | IntType -> ctxt#type_int
+    | Char -> ctxt#type_int
+    | InductiveType i -> ctxt#type_inductive
+    | StructType sn -> assert false
+    | PtrType t -> ctxt#type_int
   in
   
   let (inductivemap, purefuncmap) =
@@ -929,18 +959,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> iter ((i, (l, List.rev ctormap))::imap) pfm ds
-          | Ctor (lc, cn, ts)::ctors ->
+          | Ctor (lc, cn, tes)::ctors ->
             if List.mem_assoc cn pfm then
               static_error lc "Duplicate pure function name."
             else (
-              List.iter check_pure_type ts;
+              let ts = List.map check_pure_type tes in
               let csym =
                 if ts = [] then
                   alloc_nullary_ctor j cn
                 else
                   mk_symbol cn (List.map typenode_of_type ts) ctxt#type_inductive (Proverapi.Ctor j)
               in
-              citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, TypeName (l, i), ts, csym))::pfm) ctors
+              citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, InductiveType i, ts, csym))::pfm) ctors
             )
         in
         citer 0 [] pfm ctors
@@ -951,7 +981,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rt =
           match rto with
             None -> static_error l "Return type of fixpoint functions cannot be void."
-          | Some rt -> (check_pure_type rt; rt)
+          | Some rt -> (check_pure_type rt)
         in
         let _ =
           match contract with
@@ -962,9 +992,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rec iter pmap ps =
             match ps with
               [] -> List.rev pmap
-            | (t, p)::ps ->
+            | (te, p)::ps ->
               let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." in
-              let _ = check_pure_type t in
+              let t = check_pure_type te in
               iter ((p, t)::pmap) ps
           in
           iter [] ps
@@ -977,8 +1007,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               Var (l, x) -> (
               match try_assoc_i x pmap with
                 None -> static_error l "Fixpoint function must switch on a parameter."
-              | Some (index, TypeName (lt, "int")) -> static_error ls "Cannot switch on int."
-              | Some (index, TypeName (lt, i)) -> (
+              | Some (index, InductiveType i) -> (
                 match try_assoc i imap with
                   None -> static_error ls "Switch statement cannot precede inductive declaration."
                 | Some (l, ctormap) ->
@@ -1089,10 +1118,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
                         and checkt e t0 =
                           let t = check e in
-                          match (t, t0) with
-                            (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
-                          | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
-                          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+                          if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
                         in
                         let _ = checkt body rt in
                         iter (List.remove_assoc cn ctormap) cs
@@ -1100,7 +1126,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   in
                   iter ctormap cs
                 )
-              | _ -> static_error l "Cannot switch on a pointer type."
+              | _ -> static_error l "Switch operand is not an inductive value."
               )
             )
           | _ -> static_error l "Body of fixpoint function must be switch statement."
@@ -1123,8 +1149,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec iter2 xm xs =
           match xs with
             [] -> iter ((p, (l, List.rev xm, body_opt))::pm) ds
-          | (t, x)::xs ->
-            check_pure_type t;
+          | (te, x)::xs ->
+            let t = check_pure_type te in
             if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
             iter2 ((x, t)::xm) xs
         in
@@ -1132,14 +1158,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in
-    iter (List.map (fun (sn, _) -> ("malloc_block_" ^ sn, (dummy_loc, [("arg", PtrType (dummy_loc, sn))], None))) structmap) ds
+    let structpreds =
+      flatmap
+        (fun (sn, (_, fds_opt)) ->
+           [("malloc_block_" ^ sn, (dummy_loc, [("arg", PtrType (StructType sn))], None))] @
+           begin
+             match fds_opt with
+               None -> []
+             | Some fds ->
+               List.map (fun (fn, (_, t)) -> ("field_" ^ fn, (dummy_loc, [("obj", PtrType (StructType sn)); ("value", t)], None))) fds
+           end
+        )
+        structmap
+    in
+    iter structpreds ds
   in
 
   let expect_type l t t0 =
-    match (t, t0) with
-      (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
-    | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
-    | _ -> static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
 
   let (check_expr, check_expr_t) =
@@ -1203,14 +1239,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | e -> static_error (expr_loc e) "Expression form not allowed here."
       and checkt e t0 =
         match (e, t0) with
-          (IntLit (l, 0), PtrType (_, sn)) -> ()
+          (IntLit (l, 0), PtrType _) -> ()
         | _ ->
           begin
           let t = check e in
-          match (t, t0) with
-            (TypeName (_, tn), TypeName (_, tn')) when tn = tn' -> ()
-          | (PtrType (_, sn), PtrType (_, sn')) when sn = sn' -> ()
-          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+          if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
           end
       in
       (check, checkt)
@@ -1235,7 +1268,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let t = check_expr tenv e in
     begin
     match t with
-    | PtrType (_, sn) ->
+    | PtrType (StructType sn) ->
       begin
       match List.assoc sn structmap with
         (_, Some fds) ->
@@ -1246,7 +1279,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
-    | _ -> static_error l "Target expression of field dereference should be of pointer type."
+    | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct."
     end
   in
 
@@ -1287,9 +1320,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_expr tenv e in
       begin
       match t with
-      | TypeName (lt, "bool") -> static_error l "Cannot switch on bool."
-      | TypeName (lt, "int") -> static_error l "Cannot switch on int."
-      | TypeName (lt, i) ->
+      | InductiveType i ->
         begin
         match try_assoc i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
@@ -1636,41 +1667,34 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cont h (lookup env "y"))
   in
   
-  let predmap =
-    let rec iter predmap ds =
-      match ds with
-        [] -> List.rev predmap
-      | PredDecl (l, pn, ps, p)::ds ->
-        let _ = if List.mem_assoc pn predmap then static_error l "Duplicate predicate name." in
-        let _ = if startswith pn "field_" || startswith pn "malloc_block_" then static_error l "A predicate name cannot start with 'field_' or 'malloc_block_'." in
-        iter ((pn, (ps, p))::predmap) ds
-      | _::ds -> iter predmap ds
-    in
-    iter [] ds
-  in
-
   let funcmap =
     let rec iter funcmap ds =
       match ds with
         [] -> List.rev funcmap
-      | Func (l, k, rt, fn, xs, Some (pre, post), body)::ds ->
+      | Func (l, k, rt, fn, xs, contract_opt, body)::ds when k <> Fixpoint ->
+        let (pre, post) =
+          match contract_opt with
+            None -> static_error l "Non-fixpoint function must have contract."
+          | Some (pre, post) -> (pre, post)
+        in
         let _ = if List.mem_assoc fn funcmap then static_error l "Duplicate function name." in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
             match xs with
               [] -> List.rev xm
-            | (t, x)::xs ->
+            | (te, x)::xs ->
               if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-              check_pure_type t;
+              let t = check_pure_type te in
               iter ((x, t)::xm) xs
           in
           iter [] xs
         in
         check_pred xmap pre (fun tenv ->
-          let postmap = match rt with None -> tenv | Some rt -> check_pure_type rt; ("result", rt)::tenv in
+          let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
           check_pred postmap post (fun _ -> ())
         );
-        iter ((fn, (l, k, rt, xs, pre, post, body))::funcmap) ds
+        iter ((fn, (l, k, rt, xmap, pre, post, body))::funcmap) ds
       | _::ds -> iter funcmap ds
     in
     iter [] ds
@@ -1687,10 +1711,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
     let call_stmt l xo g pats =
-      let fds = flatmap (function (Func (lg, k, tr, g', ps, Some (pre, post), _)) when g = g' && k != Fixpoint -> [(k, tr, ps, pre, post)] | _ -> []) ds in
       (
-      match fds with
-        [] -> (
+      match try_assoc g funcmap with
+        None -> (
         match try_assoc g purefuncmap with
           None -> static_error l ("No such function: " ^ g)
         | Some (lg, rt, pts, gs) -> (
@@ -1704,14 +1727,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | [(k, tr, ps, pre, post)] ->
+      | Some (_, k, tr, ps, pre, post, _) ->
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-        let ys = List.map (function (t, p) -> p) ps in
+        let ys = List.map (function (p, t) -> p) ps in
         let _ =
           match zip pats ps with
             None -> static_error l "Incorrect number of arguments."
           | Some bs ->
-            List.iter (function (LitPat e, (tp, _)) -> check_expr_t tenv e tp) bs
+            List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp) bs
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
@@ -1778,10 +1801,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallStmt (l, "assert", [e]) ->
       let _ = check_expr_t tenv e boolt in
       assert_expr env e h env l "Assertion failure." (fun _ -> cont h env)
-    | Assign (l, x, CallExpr (lc, "malloc", [LitPat (SizeofExpr (lsoe, TypeName (ltn, tn)))])) ->
+    | Assign (l, x, CallExpr (lc, "malloc", args)) ->
+      let (lsoe, ltn, tn) =
+        match args with
+          [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] -> (lsoe, ltn, tn)
+        | _ -> static_error l "malloc argument must be of the form 'sizeof(struct struct_name)'."
+      in
       let tpx = vartp l x in
       let _ = check_assign l x in
-      let [fds_opt] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
+      let (_, fds_opt) = List.assoc tn structmap in
       let fds =
         match fds_opt with
           Some fds -> fds
@@ -1789,21 +1817,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let _ =
         match tpx with
-          PtrType (_, sn) when sn = tn -> ()
+          PtrType (StructType sn) when sn = tn -> ()
         | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
       in
       let result = get_unique_var_symb "block" tpx in
       let rec iter h fds =
         match fds with
           [] -> cont (h @ [("malloc_block_" ^ tn, [result])]) (update env x result)
-        | Field (lf, t, f)::fds ->
+        | (f, (lf, t))::fds ->
           let fref = new fieldref f in
           fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) (fun h -> iter h fds)
       in
       iter h fds
     | CallStmt (l, "free", [Var (lv, x)]) ->
       let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
-      let (PtrType (_, tn)) = List.assoc x tenv in
+      let (PtrType (StructType tn)) = List.assoc x tenv in
       let [fds_opt] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
       let fds =
         match fds_opt with
@@ -1825,7 +1853,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." in
       let _ = check_expr_t tenv e tpx in
       cont h (update env x (ev e))
-    | DeclStmt (l, t, x, e) ->
+    | DeclStmt (l, te, x, e) ->
+      let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
       verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont  (* BUGBUG: e should be typechecked outside of the scope of x *)
     | Write (l, e, f, rhs) ->
@@ -1844,14 +1873,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let tp = check_expr tenv e in
-      let (tn, ctormap) =
+      let (tn, (_, ctormap)) =
         match tp with
-          TypeName (_, tn) ->
-          begin
-          match try_assoc tn inductivemap with
-            None -> static_error l "Switch statement operand is not an inductive value."
-          | Some (l, ctormap) -> (tn, ctormap)
-          end
+          InductiveType i -> (i, List.assoc i inductivemap)
         | _ -> static_error l "Switch statement operand is not an inductive value."
       in
       let t = ev e in
@@ -1895,7 +1919,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Open (l, g, pats) ->
-      let [(lpd, ps, p_opt)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let (lpd, ps, p_opt) = List.assoc g predmap in
       let p =
         match p_opt with
           Some p -> p
@@ -1905,7 +1929,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec iter tenv pats ps =
           match (pats, ps) with
             ([], []) -> tenv
-          | (pat::pats, (tp, _)::ps) ->
+          | (pat::pats, (_, tp)::ps) ->
             iter (check_pat tenv tp pat) pats ps
           | ([], _) -> static_error l "Too few arguments."
           | _ -> static_error l "Too many arguments."
@@ -1913,7 +1937,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter tenv pats ps
       in
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
-        let ys = List.map (function (t, p) -> p) ps in
+        let ys = List.map (function (p, t) -> p) ps in
         let Some env' = zip ys ts in
         with_context PushSubcontext (fun () ->
           assume_pred h ghostenv env' p (fun h _ _ ->
@@ -1922,7 +1946,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       )
     | Close (l, g, pats) ->
-      let [(lpd, ps, p_opt)] = flatmap (function PredDecl (lpd, g', ps, p) when g = g' -> [(lpd, ps, p)] | _ -> []) ds in
+      let (lpd, ps, p_opt) = List.assoc g predmap in
       let p =
         match p_opt with
           Some p -> p
@@ -1932,10 +1956,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
         | Some bs ->
-          List.iter (function (LitPat e, (tp, _)) -> check_expr_t tenv e tp) bs
+          List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp) bs
       in
       let ts = List.map (function LitPat e -> ev e) pats in
-      let ys = List.map (function (t, p) -> p) ps in
+      let ys = List.map (function (p, t) -> p) ps in
       let Some env' = zip ys ts in
       with_context PushSubcontext (fun () ->
         assert_pred h ghostenv env' p (fun h _ _ ->
@@ -1989,18 +2013,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
   in
 
-  let rec verify_decls lems ds =
-    match ds with
+  let rec verify_funcs lems funcs =
+    match funcs with
     | [] -> ()
-    | Func (l, Fixpoint, _, _, _, _, _)::ds -> verify_decls lems ds
-    | Func (l, k, rt, g, ps, contract_opt, Some ss)::ds ->
-      let (pre, post) =
-        match contract_opt with
-          None -> static_error l "Non-fixpoint function must have contract."
-        | Some (pre, post) -> (pre, post)
-      in
+    | (g, (l, k, rt, ps, pre, post, Some ss))::funcs ->
       let _ = push() in
-      let env = List.map (function (t, p) -> (p, get_unique_var_symb p t)) ps in
+      let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in
       let (sizemap, indinfo) =
         match ss with
           [SwitchStmt (_, Var (_, x), _)] -> (
@@ -2010,7 +2028,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         | _ -> ([], None)
       in
-      let pts = List.map (function (t, p) -> (p, t)) ps in
+      let pts = ps in
       let tenv = pts in
       let (tenv, rxs) =
         match rt with
@@ -2019,7 +2037,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let (in_pure_context, leminfo, lems', ghostenv) =
         if k = Lemma then
-          (true, Some (lems, g, indinfo), g::lems, List.map (function (t, p) -> p) ps @ rxs)
+          (true, Some (lems, g, indinfo), g::lems, List.map (function (p, t) -> p) ps @ rxs)
         else
           (false, None, lems, [])
       in
@@ -2049,12 +2067,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       in
       let _ = pop() in
-      verify_decls lems' ds
+      verify_funcs lems' funcs
       )
-    | _::ds -> verify_decls lems ds
+    | _::funcs -> verify_funcs lems funcs
   in
   
-  verify_decls [] ds
+  verify_funcs [] funcmap
 
 let do_finally tryBlock finallyBlock =
   let result =

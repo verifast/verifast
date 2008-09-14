@@ -26,7 +26,7 @@ struct Node* create()
   //@ requires emp;
   //@ ensures isTree(result, tree(result, Nil, Nil));
 {
-  struct Node* n = malloc(sizeof(Node));
+  struct Node* n = malloc(sizeof(struct Node));
   if(n==0){
     abort();
   } else {
