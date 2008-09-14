@@ -330,6 +330,7 @@ and
   | Var of loc * string
   | Operation of loc * operator * expr list
   | IntLit of loc * int
+  | StringLit of loc * string
   | Read of loc * expr * fieldref
   | CallExpr of loc * string * pat list
   | IfExpr of loc * expr * expr * expr
@@ -431,6 +432,7 @@ let expr_loc e =
   | False l -> l
   | Var (l, x) -> l
   | IntLit (l, n) -> l
+  | StringLit (l, s) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
   | CallExpr (l, g, pats) -> l
@@ -678,6 +680,7 @@ and
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
 | [< '(l, Int i) >] -> IntLit (l, i)
+| [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
@@ -1075,6 +1078,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             let _ = checkt e2 intt in
                             intt
                           | IntLit (l, n) -> intt
+                          | StringLit (l, s) -> PtrType Char
                           | CallExpr (l, g', pats) -> (
                             match try_assoc g' pfm with
                               Some (l, t, ts, _) -> (
@@ -1215,6 +1219,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let _ = checkt e2 intt in
           intt
         | IntLit (l, n) -> intt
+        | StringLit (l, s) -> PtrType Char
         | CallExpr (l, g', pats) -> (
           match try_assoc g' purefuncmap with
             Some (l, t, ts, _) -> (
@@ -1385,6 +1390,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter e
   in
 
+  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
+
   let rec eval (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval env in
     match e with
@@ -1403,6 +1410,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some t -> t
       end
     | IntLit (l, n) -> ctxt#mk_intlit n
+    | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
     | CallExpr (l, g, pats) ->
       begin
         match try_assoc g purefuncmap with
@@ -1521,8 +1529,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in_temporary_context (fun _ -> cont2())
   in
   
-  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
-
   let evalpat ghostenv env pat tp cont =
     match pat with
       LitPat e -> cont ghostenv env (eval env e)

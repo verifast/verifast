@@ -36,7 +36,7 @@ int main()
     {
         struct socket *socket = server_socket_accept(serverSocket);
         struct writer *writer = socket_get_writer(socket);
-        //writer_write_string(writer, "Hello, world!\r\n");
+        writer_write_string(writer, "Hello, world!\r\n");
         socket_close(socket);
     }
 
