@@ -43,7 +43,7 @@ void thread_start(thread_run run, void *data);
 
 /*@
 predicate thread_run_data(session_run)(void *data)
-    requires socket(data, _);
+    requires socket(data, ?writer) &*& socket_writer(writer, data);
 @*/
 
 void session_run(void *data) /*@ : thread_run @*/
