@@ -25,6 +25,36 @@ void socket_close(struct socket *socket);
     //@ requires socket(socket, ?writer) &*& socket_writer(writer, socket);
     //@ ensures emp;
 
+/* threading.h */
+
+typedef void (*thread_run)(void *data);
+    //@ requires thread_run_data(this)(data);
+    //@ ensures emp;
+
+/*@
+predicate_family thread_run_data(thread_run run)(void *data);
+@*/
+
+void thread_start(thread_run run, void *data);
+    //@ requires is_thread_run(run) == true &*& thread_run_data(run)(data);
+    //@ ensures emp;
+
+/* client code */
+
+/*@
+predicate thread_run_data(session_run)(void *data)
+    requires socket(data, _);
+@*/
+
+void session_run(void *data) /*@ : thread_run @*/
+{
+    //@ open thread_run_data(session_run)(data);
+    struct socket *socket = data;
+    struct writer *writer = socket_get_writer(socket);
+    writer_write_string(writer, "Hello, world!\r\n");
+    socket_close(socket);
+}
+
 int main()
     //@ requires emp;
     //@ ensures emp;
@@ -35,9 +65,8 @@ int main()
         //@ invariant server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        struct writer *writer = socket_get_writer(socket);
-        writer_write_string(writer, "Hello, world!\r\n");
-        socket_close(socket);
+        //@ close thread_run_data(session_run)(data);
+        thread_start(session_run, socket);
     }
 
     return 0;
