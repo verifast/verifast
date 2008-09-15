@@ -35,8 +35,6 @@ int main()
         //@ invariant server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        void *blah = socket;
-        struct socket *socket2 = blah;
         struct writer *writer = socket_get_writer(socket);
         writer_write_string(writer, "Hello, world!\r\n");
         socket_close(socket);

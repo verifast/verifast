@@ -333,10 +333,11 @@ and
   | IntLit of loc * int
   | StringLit of loc * string
   | Read of loc * expr * fieldref
-  | CallExpr of loc * string * pat list
+  | CallExpr of loc * string * pat list * pat list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
   | SizeofExpr of loc * type_expr
+  | FuncNameExpr of string
 and
   pat =
     LitPat of expr
@@ -354,8 +355,8 @@ and
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
   | SwitchStmt of loc * expr * switch_stmt_clause list
-  | Open of loc * string * pat list
-  | Close of loc * string * pat list
+  | Open of loc * string * (loc * string) list * pat list
+  | Close of loc * string * (loc * string) list * pat list
   | ReturnStmt of loc * expr option
   | WhileStmt of loc * expr * pred * stmt list
 and
@@ -364,7 +365,7 @@ and
 and
   pred =
     Access of loc * expr * fieldref * pat
-  | CallPred of loc * predref * pat list
+  | CallPred of loc * predref * pat list * pat list
   | ExprPred of loc * expr
   | Sep of loc * pred * pred
   | IfPred of loc * expr * pred * pred
@@ -382,7 +383,8 @@ and
   decl =
   | Inductive of loc * string * ctor list
   | Struct of loc * string * field list option
-  | PredDecl of loc * string * (type_expr * string) list * pred option
+  | PredFamilyDecl of loc * string * int * type_expr list
+  | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list option
 and
   field =
@@ -435,7 +437,7 @@ let expr_loc e =
   | StringLit (l, s) -> l
   | Operation (l, op, es) -> l
   | Read (l, e, f) -> l
-  | CallExpr (l, g, pats) -> l
+  | CallExpr (l, g, pats0, pats) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs) -> l
   | SizeofExpr (l, t) -> l
@@ -443,7 +445,7 @@ let expr_loc e =
 let pred_loc p =
   match p with
     Access (l, e, f, rhs) -> l
-  | CallPred (l, g, es) -> l
+  | CallPred (l, g, ies, es) -> l
   | ExprPred (l, e) -> l
   | Sep (l, p1, p2) -> l
   | IfPred (l, e, p1, p2) -> l
@@ -459,8 +461,8 @@ let stmt_loc s =
   | CallStmt (l,  _, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
-  | Open (l, _, _) -> l
-  | Close (l, _, _) -> l
+  | Open (l, _, _, _) -> l
+  | Close (l, _, _, _) -> l
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _) -> l
 
@@ -475,8 +477,13 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal"
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
+  "predicate_family"; "predicate_family_instance"; "open_instance"; "close_instance"
 ]
+
+let opt p = parser [< v = p >] -> Some v | [< >] -> None
+let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
+let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 
 let read_program path stream reportKeyword reportGhostRange =
   let (loc, token_stream) = lexer path stream reportKeyword in
@@ -497,14 +504,23 @@ and
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
 and
   parse_pure_decls = parser
-  [< d = parse_pure_decl; ds = parse_pure_decls >] -> d::ds
+  [< ds0 = parse_pure_decl; ds = parse_pure_decls >] -> ds0 @ ds
 | [< >] -> []
 and
+  parse_index_list = parser
+  [< '(_, Kwd "("); is = rep_comma (parser [< '(l, Ident i) >] -> (l, i)); '(_, Kwd ")") >] -> is
+and
   parse_pure_decl = parser
-  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> Inductive (l, i, cs)
-| [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> d
-| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist; body = (parser [< '(_, Kwd "requires"); p = parse_pred >] -> Some p | [< >] -> None); '(_, Kwd ";"); >] -> PredDecl (l, g, ps, body)
-| [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> d
+  [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, cs)]
+| [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
+| [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist;
+     body = (parser [< '(_, Kwd "requires"); p = parse_pred >] -> Some p | [< >] -> None); '(_, Kwd ";");
+  >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
+| [< '(l, Kwd "predicate_family"); '(_, Ident g); '(_, Kwd "("); is = parse_paramlist; '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";") >]
+  -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps)]
+| [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; '(_, Kwd "("); ps = parse_paramlist;
+     '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
+| [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
 and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
@@ -586,15 +602,17 @@ and
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Open (l, g, es) | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
+  (match e with CallExpr (_, g, [], es) -> Open (l, g, [], es) | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
+| [< '(l, Kwd "open_instance"); '(_, Ident g); is = parse_index_list; args = parse_patlist; '(_, Kwd ";") >] -> Open (l, g, is, args)
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, es) -> Close (l, g, es) | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
+  (match e with CallExpr (_, g, [], es) -> Close (l, g, [], es) | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
+| [< '(l, Kwd "close_instance"); '(_, Ident g); is = parse_index_list; args = parse_patlist; '(_, Kwd ";") >] -> Close (l, g, is, args)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (lx, x) -> Assign (l, x, rhs)
@@ -635,7 +653,7 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, pats) -> CallPred (l, new predref g, pats)
+     | CallExpr (l, g, pats0, pats) -> CallPred (l, new predref g, pats0, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -673,7 +691,13 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
-| [< '(l, Ident x); e = parser [< args = parse_patlist >] -> CallExpr (l, x, args) | [< >] -> Var (l, x) >] -> e
+| [< '(l, Ident x); e = parser
+    [< args0 = parse_patlist; e = parser
+      [< args = parse_patlist >] -> CallExpr (l, x, args0, args)
+    | [< >] -> CallExpr (l, x, [], args0)
+    >] -> e
+  | [< >] -> Var (l, x)
+  >] -> e
 | [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
@@ -728,6 +752,8 @@ in
   with Stream.Error msg -> raise (ParseException (loc(), msg))
 
 let flatmap f xs = List.concat (List.map f xs)
+let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
+let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
 let rec try_assoc x xys =
   match xys with
@@ -1070,7 +1096,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             intt
                           | IntLit (l, n) -> intt
                           | StringLit (l, s) -> PtrType Char
-                          | CallExpr (l, g', pats) -> (
+                          | CallExpr (l, g', [], pats) -> (
                             match try_assoc g' pfm with
                               Some (l, t, ts, _) -> (
                               match zip pats ts with
@@ -1136,37 +1162,68 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
        ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor 1)))] ds
   in
   
-  let predmap = 
+  let predfammap = 
     let rec iter pm ds =
       match ds with
-        PredDecl (l, p, xs, body_opt)::ds ->
+        PredFamilyDecl (l, p, arity, tes)::ds ->
         let _ = if List.mem_assoc p pm then static_error l "Duplicate predicate name." in
-        let rec iter2 xm xs =
-          match xs with
-            [] -> iter ((p, (l, List.rev xm, body_opt))::pm) ds
-          | (te, x)::xs ->
-            let t = check_pure_type te in
-            if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-            iter2 ((x, t)::xm) xs
-        in
-        iter2 [] xs
+        let ts = List.map check_pure_type tes in
+        iter ((p, (l, arity, ts))::pm) ds
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in
     let structpreds =
       flatmap
         (fun (sn, (_, fds_opt)) ->
-           [("malloc_block_" ^ sn, (dummy_loc, [("arg", PtrType (StructType sn))], None))] @
+           [("malloc_block_" ^ sn, (dummy_loc, 0, [PtrType (StructType sn)]))] @
            begin
              match fds_opt with
                None -> []
              | Some fds ->
-               List.map (fun (fn, (_, t)) -> ("field_" ^ fn, (dummy_loc, [("obj", PtrType (StructType sn)); ("value", t)], None))) fds
+               List.map (fun (fn, (_, t)) -> ("field_" ^ fn, (dummy_loc, 0, [PtrType (StructType sn); t]))) fds
            end
         )
         structmap
     in
     iter structpreds ds
+  in
+
+  let funcnames = flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds in
+  
+  let check_funcnamelist is = List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is in
+  
+  let predinstmap = 
+    let rec iter pm ds =
+      match ds with
+        PredFamilyInstanceDecl (l, p, is, xs, body)::ds ->
+        let (arity, ps) =
+          match try_assoc p predfammap with
+            None -> static_error l "No such predicate family."
+          | Some (_, arity, ps) -> (arity, ps)
+        in
+        if List.length is <> arity then static_error l "Incorrect number of indexes.";
+        let pxs =
+          match zip ps xs with
+            None -> static_error l "Incorrect number of parameters."
+          | Some pxs -> pxs
+        in
+        let fns = check_funcnamelist is in
+        let pfns = (p, fns) in
+        let _ = if List.mem_assoc pfns pm then static_error l "Duplicate predicate family instance." in
+        let rec iter2 xm pxs =
+          match pxs with
+            [] -> iter ((pfns, (l, List.rev xm, body))::pm) ds
+          | (t0, (te, x))::xs ->
+            let t = check_pure_type te in
+            if t <> t0 then static_error (type_expr_loc te) "Predicate family instance parameter type does not match predicate family parameter type.";
+            if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+            iter2 ((x, t)::xm) xs
+        in
+        iter2 [] pxs
+      | _::ds -> iter pm ds
+      | [] -> List.rev pm
+    in  (* TODO: Include field_xxx predicate bodies in terms of 'range' predicates, so that a field can be turned into a range by opening it. *)
+    iter [] ds
   in
 
   let expect_type l t t0 =
@@ -1186,7 +1243,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin
               match try_assoc x purefuncmap with
                 Some (_, t, [], _) -> t
-              | _ -> static_error l "No such variable or constructor."
+              | _ ->
+                begin
+                  if List.mem x funcnames then
+                    PtrType Void
+                  else
+                    static_error l "No such variable or constructor."
+                end
             end
           | Some t -> t
           end
@@ -1211,7 +1274,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           intt
         | IntLit (l, n) -> intt
         | StringLit (l, s) -> PtrType Char
-        | CallExpr (l, g', pats) -> (
+        | CallExpr (l, g', [], pats) -> (
           match try_assoc g' purefuncmap with
             Some (l, t, ts, _) -> (
             match zip pats ts with
@@ -1289,19 +1352,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_deref l tenv e f in
       let tenv' = check_pat tenv t v in
       cont tenv'
-    | CallPred (l, p, ps) ->
+    | CallPred (l, p, ps0, ps) ->
       begin
-      match try_assoc p#name predmap with
+      match try_assoc p#name predfammap with
         None -> static_error l "No such predicate."
-      | Some (_, xs, _) ->
+      | Some (_, arity, xs) ->
+        if List.length ps0 <> arity then static_error l "Incorrect number of indexes.";
+        let ts = list_make arity (PtrType Void) @ xs in
         begin
-        match zip xs ps with
+        match zip ts (ps0 @ ps) with
           None -> static_error l "Incorrect number of arguments."
         | Some bs ->
           let rec iter tenv bs =
             match bs with
-              [] -> p#set_domain (List.map (fun (x, t) -> t) xs); cont tenv
-            | ((x, t), p)::bs ->
+              [] -> p#set_domain ts; cont tenv
+            | (t, p)::bs ->
               let tenv = check_pat tenv t p in iter tenv bs
           in
           iter tenv bs
@@ -1367,10 +1432,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.iter
       (
         function
-          (pn, (l, xs, Some body)) -> check_pred xs body (fun _ -> ())
+          (pfns, (l, xs, body)) -> check_pred xs body (fun _ -> ())
         | _ -> ()
       )
-      predmap
+      predinstmap
   in
 
   let check_ghost ghostenv l e =
@@ -1378,7 +1443,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match e with
         Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
       | Operation (l, _, es) -> List.iter iter es
-      | CallExpr (l, _, pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
+      | CallExpr (l, _, [], pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
       | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
       | _ -> ()
     in
@@ -1386,6 +1451,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
+  
+  let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames in
 
   let rec eval (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval env in
@@ -1398,7 +1465,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None ->
           begin
             match try_assoc x purefuncmap with
-              None -> static_error l "No such variable or constructor."
+              None ->
+              begin
+                match try_assoc x funcnameterms with
+                  None -> static_error l "No such variable, constructor, or regular function name."
+                | Some t -> t
+              end
             | Some (lg, t, [], s) -> ctxt#mk_app s []
             | _ -> static_error l "Missing argument list."
           end
@@ -1406,7 +1478,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | IntLit (l, n) -> ctxt#mk_intlit n
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
-    | CallExpr (l, g, pats) ->
+    | CallExpr (l, g, [], pats) ->
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
@@ -1423,6 +1495,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Le, [e1; e2]) -> ctxt#mk_le (ev e1) (ev e2)
     | Operation (l, Lt, [e1; e2]) -> ctxt#mk_lt (ev e1) (ev e2)
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
+    | FuncNameExpr fn -> List.assoc fn funcnameterms
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
 
@@ -1553,7 +1626,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
     | Access (l, e, f, rhs) ->
       let te = ev e in evalpat ghostenv env rhs f#range (fun ghostenv env t -> assume_field h f te t (fun h -> cont h ghostenv env))
-    | CallPred (l, g, pats) -> evalpats ghostenv env pats g#domain (fun ghostenv env ts -> cont ((g#name, ts)::h) ghostenv env)
+    | CallPred (l, g, pats0, pats) -> evalpats ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g#name, ts)::h) ghostenv env)
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 (fun h ghostenv env -> assume_pred h ghostenv env p2 cont)
     | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 cont))
@@ -1618,8 +1691,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
     | Access (l, e, f, rhs) ->
       assert_chunk h ghostenv env l ("field_" ^ f#name) [LitPat e; rhs] (fun h ts ghostenv env -> cont h ghostenv env)
-    | CallPred (l, g, pats) ->
-      assert_chunk h ghostenv env l g#name pats (fun h ts ghostenv env -> cont h ghostenv env)
+    | CallPred (l, g, pats0, pats) ->
+      assert_chunk h ghostenv env l g#name (pats0 @ pats) (fun h ts ghostenv env -> cont h ghostenv env)
     | ExprPred (l, e) ->
       assert_expr env e h env l "Expression is false." (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) ->
@@ -1722,7 +1795,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            let _ = check_expr_t tenv (CallExpr (l, g, pats)) in
+            let _ = check_expr_t tenv (CallExpr (l, g, [], pats)) in
             let _ = check_assign l x in
             let ts = List.map (function (LitPat e) -> ev e) pats in
             cont h (update env x (ctxt#mk_app gs ts))
@@ -1809,7 +1882,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallStmt (l, "assert", [e]) ->
       let _ = check_expr_t tenv e boolt in
       assert_expr env e h env l "Assertion failure." (fun _ -> cont h env)
-    | Assign (l, x, CallExpr (lc, "malloc", args)) ->
+    | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
       let (lsoe, ltn, tn) =
         match args with
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] -> (lsoe, ltn, tn)
@@ -1854,7 +1927,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           get_field h (lookup env x) fref l (fun h _ -> iter h fds)
       in
       assert_chunk h ghostenv env l ("malloc_block_" ^ tn) [LitPat (Var (lv, x))] (fun h _ _ _ -> iter h fds)
-    | Assign (l, x, CallExpr (lc, g, pats)) ->
+    | Assign (l, x, CallExpr (lc, g, [], pats)) ->
       call_stmt l (Some x) g pats
     | Assign (l, x, e) ->
       let tpx = vartp l x in
@@ -1926,12 +1999,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
-    | Open (l, g, pats) ->
-      let (lpd, ps, p_opt) = List.assoc g predmap in
-      let p =
-        match p_opt with
-          Some p -> p
-        | None -> static_error l "Cannot open predicate declared without a body."
+    | Open (l, g, is, pats) ->
+      let fns = check_funcnamelist is in
+      let (ps, p) =
+        match try_assoc (g, fns) predinstmap with
+          None -> static_error l "No such predicate family instance."
+        | Some (l, ps, body) -> (ps, body)
       in
       let tenv' =
         let rec iter tenv pats ps =
@@ -1944,7 +2017,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         iter tenv pats ps
       in
+      let pats = List.map (fun fn -> LitPat (FuncNameExpr fn)) fns @ pats in
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
+        let ts = drop (List.length fns) ts in
         let ys = List.map (function (p, t) -> p) ps in
         let Some env' = zip ys ts in
         with_context PushSubcontext (fun () ->
@@ -1953,12 +2028,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         )
       )
-    | Close (l, g, pats) ->
-      let (lpd, ps, p_opt) = List.assoc g predmap in
-      let p =
-        match p_opt with
-          Some p -> p
-        | None -> static_error l "Cannot close predicate declared without a body."
+    | Close (l, g, is, pats) ->
+      let fns = check_funcnamelist is in
+      let (ps, p) =
+        match try_assoc (g, fns) predinstmap with
+          None -> static_error l "No such predicate family instance."
+        | Some (l, ps, body) -> (ps, body)
       in
       let _ =
         match zip pats ps with
@@ -1971,7 +2046,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let Some env' = zip ys ts in
       with_context PushSubcontext (fun () ->
         assert_pred h ghostenv env' p (fun h _ _ ->
-          with_context PopSubcontext (fun () -> cont ((g, ts)::h) env)
+          with_context PopSubcontext (fun () -> cont ((g, List.map (fun fn -> List.assoc fn funcnameterms) fns @ ts)::h) env)
         )
       )
     | ReturnStmt (l, Some e) ->
