@@ -380,12 +380,17 @@ and
   | Fixpoint
   | Lemma
 and
+  spec =
+    Contract of pred * pred
+  | FuncTypeSpec of string
+and
   decl =
   | Inductive of loc * string * ctor list
   | Struct of loc * string * field list option
   | PredFamilyDecl of loc * string * int * type_expr list
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list option
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option
+  | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
 and
   field =
   | Field of loc * type_expr * string
@@ -478,7 +483,7 @@ let lexer = make_lexer [
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
-  "predicate_family"; "predicate_family_instance"
+  "predicate_family"; "predicate_family_instance"; "typedef"
 ]
 
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
@@ -501,6 +506,8 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> d
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";"); c = parse_contract l >] ->
+  FuncTypeDecl (l, rt, g, ps, c)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
 and
   parse_pure_decls = parser
@@ -525,8 +532,8 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); co = parse_contract_opt >] -> Func (l, k, t, g, ps, co, None)
-     | [< co = parse_contract_opt; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss)
+       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, co, None)
+     | [< co = opt parse_spec; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -574,19 +581,23 @@ and
 | [< p = parse_param; ps = parse_more_params >] -> p::ps
 and
   parse_param = parser
-(*  [< sl = (parser [< '(_, Kwd "/*@"); '(_, Kwd "string_literal"); '(_, Kwd "@*/") >] -> true | [< >] -> false); t = parse_type; '(l, Ident pn) >] -> (sl, t, pn) *)
   [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
 and
   parse_more_params = parser
   [< '(_, Kwd ","); p = parse_param; ps = parse_more_params >] -> p::ps
 | [< '(_, Kwd ")") >] -> []
 and
-  parse_contract_opt = parser
-  [< '((sp1, _), Kwd "/*@"); '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
-     '((sp3, _), Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '((_, sp4), Kwd "@*/")
-     >] -> let _ = reportGhostRange (sp1, sp2); reportGhostRange (sp3, sp4) in Some (p, q)
-| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Some (p, q)
-| [< >] -> None
+  parse_spec = parser
+  [< '((sp1, _), Kwd "/*@"); spec = parser
+      [< '(_, Kwd ":"); '(_, Ident fn); '(_, Kwd "@*/") >] -> FuncTypeSpec fn
+    | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
+         '((sp3, _), Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '((_, sp4), Kwd "@*/")
+         >] -> let _ = reportGhostRange (sp1, sp2); reportGhostRange (sp3, sp4) in Contract (p, q)
+    >] -> spec
+| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Contract (p, q)
+and
+  parse_contract l = parser
+  [< spec = parse_spec >] -> match spec with Contract (p, q) -> (p, q) | FuncTypeSpec ftn -> raise (ParseException (l, "Function type specification not allowed here."))
 and
   parse_block = parser
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss
@@ -1298,6 +1309,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let t = check e2 in
           let _ = checkt e3 t in
           t
+        | FuncNameExpr _ -> PtrType Void
         | e -> static_error (expr_loc e) "Expression form not allowed here."
       and checkt e t0 =
         match (e, t0) with
@@ -1744,16 +1756,39 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cont h (lookup env "y"))
   in
   
+  let functypemap =
+    let rec iter functypemap ds =
+      match ds with
+        [] -> List.rev functypemap
+      | FuncTypeDecl (l, rt, ftn, xs, (pre, post))::ds ->
+        let _ = if List.mem_assoc ftn functypemap then static_error l "Duplicate function type name." in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+        let xmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (te, x)::xs ->
+              if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+              let t = check_pure_type te in
+              iter ((x, t)::xm) xs
+          in
+          iter [] xs
+        in
+        check_pred (xmap @ [("this", PtrType Void)]) pre (fun tenv ->
+          let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+          check_pred postmap post (fun _ -> ())
+        );
+        iter ((ftn, (l, rt, xmap, pre, post))::functypemap) ds
+      | _::ds -> iter functypemap ds
+    in
+    iter [] ds
+  in
+
   let funcmap =
     let rec iter funcmap ds =
       match ds with
         [] -> List.rev funcmap
       | Func (l, k, rt, fn, xs, contract_opt, body)::ds when k <> Fixpoint ->
-        let (pre, post) =
-          match contract_opt with
-            None -> static_error l "Non-fixpoint function must have contract."
-          | Some (pre, post) -> (pre, post)
-        in
         let _ = if List.mem_assoc fn funcmap then static_error l "Duplicate function name." in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
@@ -1767,11 +1802,39 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           iter [] xs
         in
-        check_pred xmap pre (fun tenv ->
-          let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          check_pred postmap post (fun _ -> ())
-        );
-        iter ((fn, (l, k, rt, xmap, pre, post, body))::funcmap) ds
+        let (cenv, pre, post) =
+          match contract_opt with
+            None -> static_error l "Non-fixpoint function must have contract."
+          | Some (Contract (pre, post)) ->
+            check_pred xmap pre (fun tenv ->
+              let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+              check_pred postmap post (fun _ -> ())
+            );
+            (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+          | Some (FuncTypeSpec ftn) ->
+            begin
+              match try_assoc ftn functypemap with
+                None -> static_error l "No such function type."
+              | Some (_, rt0, xmap0, pre, post) ->
+                if rt <> rt0 then static_error l "Function return type differs from function type return type.";
+                begin
+                  match zip xmap xmap0 with
+                    None -> static_error l "Function parameter count differs from function type parameter count."
+                  | Some bs ->
+                    let cenv =
+                      List.map
+                        (fun ((x, t), (x0, t0)) ->
+                         if t <> t0 then static_error l ("Type of parameter '" ^ x ^ "' does not match type of function type parameter '" ^ x0 ^ "'.");
+                         (x0, Var (dummy_loc, x))
+                        )
+                        bs
+                      @ [("this", FuncNameExpr fn)]
+                    in
+                      (cenv, pre, post)
+                end
+            end
+        in
+        iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
       | _::ds -> iter funcmap ds
     in
     iter [] ds
@@ -1804,7 +1867,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | Some (_, k, tr, ps, pre, post, _) ->
+      | Some (_, k, tr, ps, cenv0, pre, post, _) ->
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (p, t) -> p) ps in
         let _ =
@@ -1822,8 +1885,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
+        let cenv = List.map (fun (x, e) -> (x, eval env' e)) cenv0 in
         with_context PushSubcontext (fun () ->
-        assert_pred h ghostenv env' pre (fun h ghostenv' env' ->
+        assert_pred h ghostenv cenv pre (fun h ghostenv' env' ->
           let _ =
             match leminfo with
               None -> ()
@@ -2102,7 +2166,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_funcs lems funcs =
     match funcs with
     | [] -> ()
-    | (g, (l, k, rt, ps, pre, post, Some ss))::funcs ->
+    | (g, (l, k, rt, ps, cenv0, pre, post, Some ss))::funcs ->
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in
       let (sizemap, indinfo) =
@@ -2127,7 +2191,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         else
           (false, None, lems, [])
       in
+      let tenv = List.map (fun (x, e) -> (x, check_expr tenv e)) cenv0 in
       check_pred tenv pre (fun tenv ->
+      let env = List.map (fun (x, e) -> (x, eval env e)) cenv0 in
       let _ =
         assume_pred [] ghostenv env pre (fun h ghostenv env ->
           verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h env' ->

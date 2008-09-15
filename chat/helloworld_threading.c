@@ -27,9 +27,9 @@ void socket_close(struct socket *socket);
 
 /* threading.h */
 
-//typedef void (*thread_run)(void *data);
-//    //@ requires thread_run_data(this)(data);
-//    //@ ensures emp;
+typedef void (*thread_run)(void *data);
+    //@ requires thread_run_data(this)(data);
+    //@ ensures emp;
 
 /*@
 predicate_family thread_run_data(void *run)(void *data);
@@ -46,9 +46,7 @@ predicate_family_instance thread_run_data(session_run)(void *data)
     requires socket(data, ?writer) &*& socket_writer(writer, data);
 @*/
 
-void session_run(void *data) // /*@ : thread_run @*/
-    //@ requires thread_run_data(session_run)(data);
-    //@ ensures emp;
+void session_run(void *data) /*@ : thread_run @*/
 {
     //@ open thread_run_data(session_run)(data);
     struct socket *socket = data;
