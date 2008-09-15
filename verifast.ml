@@ -359,6 +359,7 @@ and
   | Close of loc * string * (loc * string) list * pat list
   | ReturnStmt of loc * expr option
   | WhileStmt of loc * expr * pred * stmt list
+  | BlockStmt of loc * stmt list
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list
@@ -470,6 +471,7 @@ let stmt_loc s =
   | Close (l, _, _, _) -> l
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _) -> l
+  | BlockStmt (l, ss) -> l
 
 let type_expr_loc t =
   match t with
@@ -625,6 +627,7 @@ and
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
+| [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
@@ -2166,6 +2169,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  tcont sizemap tenv ghostenv h env)))
       )
       )
+    | BlockStmt (l, ss) ->
+      verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env)
   and
     verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =
     match ss with

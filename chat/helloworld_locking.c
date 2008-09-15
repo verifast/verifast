@@ -37,7 +37,7 @@ typedef void (*thread_run)(void *data);
 predicate_family thread_run_data(thread_run run)(void *data);
 @*/
 
-void thread_start(thread_run run, void *data);
+void thread_start(void *run, void *data);
     //@ requires is_thread_run(run) == true &*& thread_run_data(run)(data);
     //@ ensures emp;
 
@@ -50,19 +50,22 @@ predicate lock_permission(struct lock *lock, void *label, void *data);
 lemma void split_lock_permission(struct lock *lock);
     requires lock_permission(lock, ?label, ?data);
     ensures lock_permission(lock, label, data) &*& lock_permission(lock, label, data); // TODO: Disable the ambiguous match check.
+lemma void remove_lock_permission(struct lock *lock);
+    requires lock_permission(lock, _, _);
+    ensures emp;
 @*/
 
 struct lock *create_lock();
     //@ requires lock_invariant(?label)(?data);
     //@ ensures lock_permission(result, label, data);
 
-void lock_acquire(struct lock *lock);   //@ TODO: Make the lock implementation non-reentrant; otherwise, this contract is unsound.
+void lock_acquire(struct lock *lock);   // TODO: Make the lock implementation non-reentrant; otherwise, this contract is unsound.
     //@ requires lock_permission(lock, ?label, ?data);
     //@ ensures lock_permission(lock, label, data) &*& lock_invariant(label)(data);
 
 void lock_release(struct lock *lock);
-    //@ requires lock_permission(result, ?label, ?data) &*& lock_invariant(label)(data);
-    //@ ensures lock_permission(result, label, data);
+    //@ requires lock_permission(lock, ?label, ?data) &*& lock_invariant(label)(data);
+    //@ ensures lock_permission(lock, label, data);
 
 /* client code */
 
@@ -76,25 +79,25 @@ struct session {
     struct lock *counterLock;
 };
 
-/*@
 void counterLabel() // Used only as a label.
-    requires emp;
-    ensures emp;
+    //@ requires emp;
+    //@ ensures emp;
 {
 }
 
+/*@
 predicate counter(struct counter *counter)
     requires counter->count |-> _;
 
-predicate lock_invariant(counterLabel)(void *data)
+predicate_family_instance lock_invariant(counterLabel)(void *data)
     requires counter(data);
 
 predicate session(struct session *session)
     requires session->socket |-> ?socket &*& socket(socket, ?writer) &*& socket_writer(writer, socket)
-      &*& session->counter |-> ?counter &*& session->lock |-> ?lock &*& lock_permission(lock, counterLabel, counter)
+      &*& session->counter |-> ?counter &*& session->counterLock |-> ?lock &*& lock_permission(lock, counterLabel, counter)
       &*& malloc_block_session(session);
 
-predicate thread_run_data(session_run)(void *data)
+predicate_family_instance thread_run_data(session_run)(void *data)
     requires session(data);
 @*/
 
@@ -118,6 +121,7 @@ void session_run(void *data) /*@ : thread_run @*/
     //@ close counter(counter);
     //@ close lock_invariant(counterLabel)(counter);
     lock_release(lock);
+    //@ remove_lock_permission(lock);
     
     {
         struct writer *writer = socket_get_writer(socket);
@@ -132,7 +136,7 @@ int main()
 {
     struct counter *counter = malloc(sizeof(struct counter));
     counter->count = 0;
-    //@ close counter(count);
+    //@ close counter(counter);
     //@ close lock_invariant(counterLabel)(counter);
     {
         struct lock *lock = create_lock();
