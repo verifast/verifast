@@ -50,7 +50,7 @@ void session_run(void *data) // /*@ : thread_run @*/
     //@ requires thread_run_data(session_run)(data);
     //@ ensures emp;
 {
-    //@ open_instance thread_run_data(session_run)(data);
+    //@ open thread_run_data(session_run)(data);
     struct socket *socket = data;
     struct writer *writer = socket_get_writer(socket);
     writer_write_string(writer, "Hello, world!\r\n");
@@ -67,9 +67,8 @@ int main()
         //@ invariant server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        //@ close_instance thread_run_data(session_run)(socket);
+        //@ close thread_run_data(session_run)(socket);
         thread_start(session_run, socket);
-        assert(false);
     }
 
     return 0;

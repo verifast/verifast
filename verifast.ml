@@ -478,7 +478,7 @@ let lexer = make_lexer [
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
-  "predicate_family"; "predicate_family_instance"; "open_instance"; "close_instance"
+  "predicate_family"; "predicate_family_instance"
 ]
 
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
@@ -602,10 +602,13 @@ and
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, [], es) -> Open (l, g, [], es) | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
-| [< '(l, Kwd "open_instance"); '(_, Ident g); is = parse_index_list; args = parse_patlist; '(_, Kwd ";") >] -> Open (l, g, is, args)
+  (match e with
+     CallExpr (_, g, es1, es2) -> Open (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2)
+   | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); e = parse_expr; '(_, Kwd ";") >] ->
-  (match e with CallExpr (_, g, [], es) -> Close (l, g, [], es) | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
+  (match e with
+     CallExpr (_, g, es1, es2) -> Close (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2)
+   | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "close_instance"); '(_, Ident g); is = parse_index_list; args = parse_patlist; '(_, Kwd ";") >] -> Close (l, g, is, args)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
