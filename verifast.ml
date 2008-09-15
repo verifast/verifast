@@ -1712,8 +1712,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     match iter [] h with
       [] -> assert_false h env l ("No matching heap chunks: " ^ g)
+(*      
     | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
     | _ -> assert_false h env l "Multiple matching heap chunks."
+*)
+    | (h, ts, ghostenv, env)::_ -> cont h ts ghostenv env
   in
   
   let rec assert_pred h ghostenv env p (cont: 'termnode heap -> string list -> 'termnode env -> unit) =
