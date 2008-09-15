@@ -985,6 +985,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType t -> ctxt#type_int
   in
   
+  let functypenames = flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds in
+  let isfuncs =
+    List.map (fun ftn ->
+      let isfuncname = "is_" ^ ftn in
+      let domain = [ctxt#type_int] in
+      let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
+      (isfuncname, (dummy_loc, Bool, [PtrType Void], symb))
+    ) functypenames
+  in
+  
   let (inductivemap, purefuncmap) =
     let rec iter imap pfm ds =
       match ds with
@@ -1170,10 +1180,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ds
       | _::ds -> iter imap pfm ds
     in
-    iter
-      [("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))]
+    let indtypemap0 = [("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))] in
+    let purefuncmap0 = 
       [("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor 1)))] ds
+       ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor 1)))]
+    in
+    let purefuncmap0 = purefuncmap0 @ isfuncs in
+    iter indtypemap0 purefuncmap0 ds
   in
   
   let predfammap = 
@@ -1830,7 +1843,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         bs
                       @ [("this", FuncNameExpr fn)]
                     in
-                      (cenv, pre, post)
+                    let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true));
+                    (cenv, pre, post)
                 end
             end
         in
