@@ -293,6 +293,7 @@ let make_lexer keywords path stream reportKeyword =
 
 type type_ =
     Bool
+  | Void
   | IntType
   | Char
   | StructType of string
@@ -336,7 +337,6 @@ and
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list
   | SizeofExpr of loc * type_expr
-  | TypeExpr of loc * type_expr
 and
   pat =
     LitPat of expr
@@ -439,7 +439,6 @@ let expr_loc e =
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs) -> l
   | SizeofExpr (l, t) -> l
-  | TypeExpr (l, t) -> l
 
 let pred_loc p =
   match p with
@@ -536,8 +535,7 @@ and
   [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f)
 and
   parse_return_type = parser
-  [< '(_, Kwd "void") >] -> None
-| [< t = parse_type >] -> Some t
+  [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
 and
   parse_type = parser
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
@@ -547,6 +545,7 @@ and
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
+| [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
 | [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Ident n) >] -> IdentTypeExpr (l, n)
 and
@@ -602,12 +601,8 @@ and
      | Read (_, e, f) -> Write (l, e, f, rhs)
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
-  | [< '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
-    (match e with
-     | TypeExpr (_, t) -> DeclStmt (l, t, x, rhs)
-     | _ -> raise (ParseException (expr_loc e, "A local variable declaration statement must start with a type expression."))
-    )
   >] -> s
+| [< te = parse_type; '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -684,12 +679,7 @@ and
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
-| [< '(l, Kwd "struct"); '(_, Ident s); t = parse_type_suffix (StructTypeExpr (l, s)) >] -> TypeExpr (type_expr_loc t, t)
-| [< '(l, Kwd "int") >] -> TypeExpr (l, ManifestTypeExpr (l, IntType))
-| [< '(l, Kwd "uint") >] -> TypeExpr (l, IdentTypeExpr (l, "uint"))
-| [< '(l, Kwd "bool") >] -> TypeExpr (l, ManifestTypeExpr (l, Bool))
-| [< '(l, Kwd "char") >] -> TypeExpr (l, ManifestTypeExpr (l, Char))
-| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e]) 
+| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e])
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -937,6 +927,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec string_of_type t =
     match t with
       Bool -> "bool"
+    | Void -> "void"
     | IntType -> "int"
     | Char -> "char"
     | InductiveType i -> i
@@ -1246,9 +1237,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match (e, t0) with
           (IntLit (l, 0), PtrType _) -> ()
         | _ ->
-          begin
           let t = check e in
-          if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+          begin
+          match (t, t0) with
+            (PtrType _, PtrType Void) -> ()
+          | (PtrType Void, PtrType _) -> ()
+          | _ when t = t0 -> ()
+          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
           end
       in
       (check, checkt)
