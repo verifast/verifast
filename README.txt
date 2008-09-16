@@ -15,6 +15,12 @@ So that's 12 possible outputs. The Makefile does not support all of them yet, th
 nmake verifastz3.opt.exe
 nmake vfidez3.opt.exe
 
+In order to build and run VeriFast, a number of environment variables need to be set. You can do this conveniently by creating a settings.bat file. Do
+
+copy settings.bat.example settings.bat
+
+and edit settings.bat to update the paths as appropriate for your setup.
+
 Z3
 --
 
