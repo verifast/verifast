@@ -27,6 +27,28 @@ class stats =
 
 let stats = new stats
 
+let readFile path =
+  let chan = open_in path in
+  let count = ref 0 in
+  let rec iter () =
+    let buf = String.create 60000 in
+    let result = input chan buf 0 60000 in
+    count := !count + result;
+    if result = 0 then [] else (buf, result)::iter()
+  in
+  let chunks = iter() in
+  let _ = close_in chan in
+  let s = String.create !count in
+  let rec iter2 chunks offset =
+    match chunks with
+      [] -> ()
+    | (buf, size)::chunks ->
+      String.blit buf 0 s offset size;
+      iter2 chunks (offset + size)
+  in
+  iter2 chunks 0;
+  s
+
 type token =
     Kwd of string
   | Ident of string
@@ -34,6 +56,7 @@ type token =
   | Float of float
   | String of string
   | Char of char
+  | Eol
 
 type srcpos = (string * int * int)
 type loc = (srcpos * srcpos)
@@ -103,7 +126,7 @@ let make_lexer keywords path stream reportKeyword =
         in_single_line_annotation := false;
         Some (Kwd "@*/")
       ) else
-        next_token strm__
+        Some Eol
     in
     match Stream.peek strm__ with
       Some (' ' | '\009' | '\026' | '\012') ->
@@ -291,6 +314,144 @@ let make_lexer keywords path stream reportKeyword =
         Some t -> Some (current_loc(), t)
       | None -> None)))
 
+let preprocess path loc stream streamSource =
+  let path = ref path in
+  let loc = ref loc in
+  let stream = ref stream in
+  let startOfLine = ref true in
+  let stack: (string * (unit -> loc) * (loc * token) Stream.t * bool) list ref = ref [] in
+  let defines: (string * (loc * token) list) list ref = ref [] in
+  let push newPath =
+    stack := (!path, !loc, !stream, !startOfLine)::!stack;
+    path := newPath;
+    let (newloc, newstream) = streamSource newPath in
+    loc := newloc;
+    stream := newstream;
+    startOfLine := true
+  in
+  let define x toks =
+    defines := (x, toks)::!defines
+  in
+  let peek() = Stream.peek (!stream) in
+  let skip() =
+    startOfLine := begin match peek() with Some (_, Eol) -> true | _ -> false end;
+    if peek() <> None then Stream.junk (!stream)
+  in
+  let error msg = raise (ParseException (!loc(), msg)) in
+  let next() =
+    match peek() with
+      Some t -> skip(); t
+    | None -> error "Token expected"
+  in
+  let expect_eol() =
+    match peek() with
+      None -> ()
+    | Some (_, Eol) -> ()
+    | _ -> error "End of line expected."
+  in
+  let expect token =
+    match next() with
+      (_, t) when t = token -> ()
+    | _ ->
+      let txt = match token with Eol -> "end of line" | Kwd s -> "'" ^ s ^ "'" in
+      error (txt ^ " expected")
+  in
+  let next_ident() =
+    match next() with
+      (_, Ident x) -> x
+    | _ ->
+      error "Identifier expected"
+  in
+  let rec skip_block() =
+    if !startOfLine then
+      match next() with
+        (l, Kwd "#") ->
+        begin
+          match next() with
+            (_, Kwd "endif") ->
+            expect_eol();
+            ()
+          | (_, Kwd "ifndef") ->
+            skip_block();
+            skip_block()
+          | _ -> skip_block()
+        end
+      | _ -> skip_block()
+    else
+    begin
+      ignore (next());
+      skip_block()
+    end
+  in
+  let rec next_token() =
+    let pop() =
+      match !stack with
+        [] -> None
+      | (path0, loc0, stream0, startOfLine0)::stack0 ->
+        path := path0;
+        loc := loc0;
+        stream := stream0;
+        stack := stack0;
+        startOfLine := startOfLine0;
+        next_token()
+    in
+    if !startOfLine then
+      match peek() with
+        Some (l, Kwd "#") ->
+        begin
+          skip();
+          match next() with
+            (_, Kwd "include") ->
+            begin
+              match next() with
+                (_, String includePath) ->
+                expect_eol();
+                begin
+                  match includePath with
+                    "malloc.h" -> ()
+                  | "bool.h" -> ()
+                  | _ ->
+                    let resolvedPath = Filename.concat (Filename.dirname !path) includePath in
+                    push resolvedPath
+                end;
+                next_token()
+              | _ ->
+                error "String literal expected."
+            end
+          | (_, Kwd "define") ->
+            let x = next_ident() in
+            expect_eol();
+            define x [];
+            next_token()
+          | (_, Kwd "ifndef") ->
+            let x = next_ident() in
+            expect_eol();
+            if List.mem_assoc x !defines then
+            begin
+              skip_block();
+              next_token()
+            end
+            else
+              next_token()
+          | (_, Kwd "endif") ->
+            expect_eol();
+            next_token()
+          | (l, _) -> error "Expected one of: include, define, ifndef, endif."
+        end
+      | Some (_, Eol) -> skip(); next_token()
+      | None -> pop()
+      | t -> skip(); t
+    else
+      match peek() with
+        (Some (l, Ident x)) as t ->
+        skip();
+        if List.mem_assoc x !defines then next_token() else t
+      | Some (_, Eol) -> skip(); next_token()
+      | None -> pop()
+      | t -> skip(); t
+  in
+  Stream.from (fun count -> next_token())
+
 type type_ =
     Bool
   | Void
@@ -398,9 +559,6 @@ and
 and
   ctor =
   | Ctor of loc * string * type_expr list
-and
-  program =
-    Program of decl list
 
 (*
 Visual Studio format:
@@ -485,20 +643,23 @@ let lexer = make_lexer [
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
-  "predicate_family"; "predicate_family_instance"; "typedef"
+  "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"
 ]
 
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 
-let read_program path stream reportKeyword reportGhostRange =
-  let (loc, token_stream) = lexer path stream reportKeyword in
-let rec parse_program = parser
-  [< ds = parse_decls; _ = Stream.empty >] -> Program ds
+let read_decls path stream streamSource reportKeyword reportGhostRange =
+begin
+let tokenStreamSource path = lexer path (streamSource path) reportKeyword in
+let (loc, token_stream) = lexer path stream reportKeyword in
+let pp_token_stream = preprocess path loc token_stream tokenStreamSource in
+let rec parse_decls_eof = parser
+  [< ds = parse_decls; _ = Stream.empty >] -> ds
 and
   parse_decls = parser
-  [< d = parse_decl; ds = parse_decls >] -> d::ds
+  [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
 | [< >] -> []
 and
@@ -507,10 +668,10 @@ and
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
-  >] -> d
+  >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";"); c = parse_contract l >] ->
-  FuncTypeDecl (l, rt, g, ps, c)
-| [< t = parse_return_type; d = parse_func_rest Regular t >] -> d
+  [FuncTypeDecl (l, rt, g, ps, c)]
+| [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
   [< ds0 = parse_pure_decl; ds = parse_pure_decls >] -> ds0 @ ds
@@ -765,8 +926,9 @@ and
 | [< '(_, Kwd ")") >] -> []
 in
   try
-    parse_program token_stream
+    parse_decls_eof pp_token_stream
   with Stream.Error msg -> raise (ParseException (loc(), msg))
+end
 
 let flatmap f xs = List.concat (List.map f xs)
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
@@ -832,7 +994,7 @@ let zip xs ys =
   in
   iter xs ys []
 
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) verbose path stream reportKeyword reportGhostRange =
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) verbose path stream streamSource reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
@@ -878,7 +1040,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     imapi 0 xs
   in
   
-  let Program ds = read_program path stream reportKeyword reportGhostRange in
+  let ds = read_decls path stream streamSource reportKeyword reportGhostRange in
   
   (* failwith "Done parsing."; *)
   
@@ -2203,6 +2365,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let pts = ps in
       let tenv = pts in
+      let tenv = List.map (fun (x, e) -> (x, check_expr tenv e)) cenv0 in
       let (tenv, rxs) =
         match rt with
           None -> (tenv, [])
@@ -2214,7 +2377,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         else
           (false, None, lems, [])
       in
-      let tenv = List.map (fun (x, e) -> (x, check_expr tenv e)) cenv0 in
       check_pred tenv pre (fun tenv ->
       let env = List.map (fun (x, e) -> (x, eval env e)) cenv0 in
       let _ =
@@ -2258,9 +2420,9 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-let verify_program_with_stats ctxt print_stats verbose path stream reportKeyword reportGhostRange =
+let verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange =
   do_finally
-    (fun () -> verify_program_core ctxt verbose path stream reportKeyword reportGhostRange)
+    (fun () -> verify_program_core ctxt verbose path stream streamSource reportKeyword reportGhostRange)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -2288,11 +2450,11 @@ let lookup_prover prover =
       | Some f -> f
     end
       
-let verify_program prover print_stats verbose path stream reportKeyword reportGhostRange =
+let verify_program prover print_stats verbose path stream streamSource reportKeyword reportGhostRange =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats verbose path stream reportKeyword reportGhostRange
+         fun ctxt -> verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange
      end)
 
 let remove_dups bs =

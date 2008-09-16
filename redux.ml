@@ -424,7 +424,7 @@ and context =
         | Not t -> assume_false t
       and assume_false t =
         match t with
-          TermNode t -> assert false
+          TermNode t -> self#assume_eq t self#false_node
         | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#assume_le t2 1 t1
         | Lt (t1, t2) -> self#assume_le t2 0 t1

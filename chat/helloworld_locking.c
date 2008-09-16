@@ -25,7 +25,7 @@ predicate_family_instance lock_invariant(counterLabel)(void *data)
     requires counter(data);
 
 predicate session(struct session *session)
-    requires session->socket |-> ?socket &*& socket(socket, ?writer) &*& socket_writer(writer, socket)
+    requires session->socket |-> ?socket &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer)
       &*& session->counter |-> ?counter &*& session->counterLock |-> ?lock &*& lock_permission(lock, counterLabel, counter)
       &*& malloc_block_session(session);
 

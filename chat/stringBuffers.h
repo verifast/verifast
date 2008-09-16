@@ -1,3 +1,6 @@
+#ifndef STRINGBUFFERS_H
+#define STRINGBUFFERS_H
+
 #include "bool.h"
 
 struct string_buffer;
@@ -18,3 +21,5 @@ bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *bu
 void string_buffer_dispose(struct string_buffer *buffer);
     //@ requires string_buffer(buffer);
     //@ ensures emp;
+
+#endif

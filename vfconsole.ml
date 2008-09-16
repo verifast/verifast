@@ -5,10 +5,11 @@ let _ =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
   let verify stats verbose prover path =
+    let streamSource path =
+      Stream.of_string (readFile path)
+    in
     try
-      let channel = open_in path in
-      let stream = Stream.of_channel channel in
-      verify_program prover stats verbose path stream (fun _ -> ()) (fun _ -> ());
+      verify_program prover stats verbose path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ());
       print_endline "0 errors found";
       exit 0
     with

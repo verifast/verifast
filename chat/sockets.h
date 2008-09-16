@@ -1,3 +1,6 @@
+#ifndef SOCKETS_H
+#define SOCKETS_H
+
 #include "bool.h"
 #include "stringBuffers.h"
 
@@ -18,7 +21,7 @@ struct server_socket *create_server_socket(int port);
     //@ ensures server_socket(result);
 struct socket *server_socket_accept(struct server_socket *serverSocket);
     //@ requires server_socket(serverSocket);
-    //@ ensures server_socket(serverSocket) &*& socket(result, ?reader, ?writer) &*& reader(reader, result) &*& writer(writer, result);
+    //@ ensures server_socket(serverSocket) &*& socket(result, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
 
 struct reader *socket_get_reader(struct socket *socket);
     //@ requires socket(socket, ?reader, ?writer);
@@ -39,3 +42,5 @@ void writer_write_string(struct writer *writer, char *string);
 void writer_write_string_buffer(struct writer *writer, struct string_buffer *buffer);
     //@ requires writer(writer) &*& string_buffer(buffer);
     //@ ensures writer(writer) &*& string_buffer(buffer);
+
+#endif

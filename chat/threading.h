@@ -1,3 +1,6 @@
+#ifndef THREADING_H
+#define THREADING_H
+
 struct lock;
 
 /*@
@@ -37,3 +40,5 @@ void lock_acquire(struct lock *lock);   // TODO: Make the lock implementation no
 void lock_release(struct lock *lock);
     //@ requires lock_permission(lock, ?label, ?data) &*& lock_invariant(label)(data);
     //@ ensures lock_permission(lock, label, data);
+
+#endif
