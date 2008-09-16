@@ -1,0 +1,1 @@
+cl /Fehelloworld_locking.exe /DWIN32 ws2_32.lib helloworld_locking.c stringBuffers.c socketlib.c sockets.c threading.c
