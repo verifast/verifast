@@ -303,32 +303,47 @@ let show_ide initialPath prover =
     srcText#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scoll_to_iter returns a boolean *)
     ()
   in
+  let loc_path ((path, _, _), _) = path in
   let reportKeyword l =
-    apply_tag_by_loc "keyword" l
+    if !path = Some (loc_path l) then
+      apply_tag_by_loc "keyword" l
   in
   let reportGhostRange l =
-    apply_tag_by_loc "ghostRange" l
+    if !path = Some (loc_path l) then
+      apply_tag_by_loc "ghostRange" l
+  in
+  let ensureHasPath() =
+    match !path with
+      None -> save()
+    | Some path ->
+      if buffer#modified then store path else Some path
   in
   let verifyProgram() =
     clearTrace();
     buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
     buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter;
-    try
-      verify_program None false false "(buffer)" (Stream.of_string (buffer#get_text())) reportKeyword reportGhostRange;
-      msg := Some "0 errors found";
-      updateWindowTitle()
-    with
-      ParseException (l, emsg) ->
-      handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
-    | StaticError (l, emsg) ->
-      handleStaticError l emsg
-    | SymbolicExecutionError (ctxts, phi, l, emsg) ->
-      ctxts_lifo := Some ctxts;
-      msg := Some emsg;
-      updateWindowTitle();
-      updateStepItems();
-      updateStepListView();
-      stepSelected()
+    match ensureHasPath() with
+      None -> ()
+    | Some path ->
+      begin
+        let streamSource path = Stream.of_string (readFile path) in
+        try
+          verify_program None false false path (Stream.of_string (buffer#get_text())) streamSource reportKeyword reportGhostRange;
+          msg := Some "0 errors found";
+          updateWindowTitle()
+        with
+          ParseException (l, emsg) ->
+          handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
+        | StaticError (l, emsg) ->
+          handleStaticError l emsg
+        | SymbolicExecutionError (ctxts, phi, l, emsg) ->
+          ctxts_lifo := Some ctxts;
+          msg := Some emsg;
+          updateWindowTitle();
+          updateStepItems();
+          updateStepListView();
+          stepSelected()
+      end
   in
   (actionGroup#get_action "VerifyProgram")#connect#activate verifyProgram;
   let _ = root#show() in
