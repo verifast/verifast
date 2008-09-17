@@ -280,13 +280,13 @@ let show_ide initialPath prover =
           append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
         | (caller_loc, caller_env)::_ ->
           begin
-            if textPaned#position < 10 then textPaned#set_position 100;
+            if textPaned#position < 10 then textPaned#set_position 150;
             apply_tag_by_loc "currentLine" l;
             let ((path, line, col), _) = l in
             let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path path in
             subNotebook#goto_page k;
             buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
-            subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
+            Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
             append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
           end;
           begin
@@ -310,9 +310,7 @@ let show_ide initialPath prover =
     stepList#expand_all();
     let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
     let _ = stepList#selection#select_path lastStepRowPath in
-    stepList#scroll_to_cell lastStepRowPath stepViewCol;
-    let (_, _, _, l, _, _) = match !stepItems with Some stepItems -> List.nth stepItems (List.length stepItems - 1) in
-    apply_tag_by_loc "error" l
+    Glib.Idle.add (fun () -> stepList#scroll_to_cell lastStepRowPath stepViewCol; false)
   in
   let ensureSaved tab =
     if (tab_buffer tab)#modified then
@@ -366,7 +364,7 @@ let show_ide initialPath prover =
     begin
       textNotebook#remove textScroll#coerce;
       subNotebook#remove subScroll#coerce;
-      match !current_tab with None -> () | Some tab0 when tab == tab0 -> current_tab := None
+      match !current_tab with None -> () | Some tab0 -> if tab == tab0 then current_tab := None
     end
   in
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
@@ -383,7 +381,7 @@ let show_ide initialPath prover =
     let buffer = tab_buffer tab in
     let it = srcpos_iter buffer (line, col) in
     buffer#place_cursor ~where:it;
-    (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scoll_to_iter returns a boolean *)
+    Glib.Idle.add (fun () -> (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scoll_to_iter returns a boolean *) false);
     ()
   in
   let loc_path ((path, _, _), _) = path in
@@ -426,11 +424,9 @@ let show_ide initialPath prover =
               handleStaticError l emsg
             | SymbolicExecutionError (ctxts, phi, l, emsg) ->
               ctxts_lifo := Some ctxts;
-              msg := Some emsg;
-              updateWindowTitle();
               updateStepItems();
               updateStepListView();
-              stepSelected()
+              handleStaticError l emsg
           end
       end
   in
