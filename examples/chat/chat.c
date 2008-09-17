@@ -21,10 +21,85 @@ struct room {
 
 /*@ 
 predicate memberlist(listval v)
-  requires switch(v) { 
+  requires uniqueElements(v)==true &*& switch(v) { 
              case nil: return emp; 
-             case cons(h, t): return member(h) &*& memberlist(tail(v));
+             case cons(h, t): return member(h) &*& memberlist(t);
            }; 
+@*/
+
+/*@ 
+predicate memberlistWithout(listval v, struct member* member)
+  requires uniqueElements(v)==true &*& switch(v) { 
+             case nil: return emp; 
+             case cons(h, t): return (h==member ? emp: member(h)) &*& memberlistWithout(t, member);
+           }; 
+
+lemma void memberlist2memberlistWithout(listval v, struct member* mem)
+  requires memberlist(v) &*& !contains(v, mem);
+  ensures memberlistWithout(v, mem);
+{
+  switch(v){
+    case nil: open memberlist(v); close memberlistWithout(nil, mem);
+    case cons(h, t):
+      open memberlist(v);
+      memberlist2memberlistWithout(t, mem);
+      close memberlistWithout(cons(h, t), mem);
+  }
+}
+
+lemma void separateMember(listval v, struct member* mem)
+  requires memberlist(v) &*& contains(v, mem)==true;
+  ensures memberlistWithout(v, mem) &*& member(mem);
+{
+  
+  switch(v) {
+    case nil: open memberlist(v);return;
+    case cons(h, t):
+      open memberlist(v);
+      if(h==mem){
+        memberlist2memberlistWithout(t, mem);
+        close memberlistWithout(v, mem);
+      } else {
+        separateMember(t, mem);
+        close memberlistWithout(v, mem);
+      }
+  }
+}
+
+lemma void memberListWithout2memberlist(listval v, struct member* mem)
+  requires memberlistWithout(v, mem) &*& ! contains(v, mem);
+  ensures memberlist(v);
+{
+  switch(v) {
+    case nil: open memberlistWithout(v, mem); close memberlist(v); 
+    case cons(h, t):
+      open memberlistWithout(v, mem);
+      if(h==mem){
+      } else {
+        memberListWithout2memberlist(t, mem);
+        close memberlist(v);
+      }
+  }
+}
+
+lemma void putMemberBack(listval v, struct member* mem)
+  requires memberlistWithout(v, mem) &*& contains(v, mem)==true &*& member(mem);
+  ensures memberlist(v);
+{
+  
+  switch(v) {
+    case nil: open memberlistWithout(v); return;
+    case cons(h, t):
+      open memberlistWithout(v, mem);
+      if(h==mem){
+        memberListWithout2memberlist(t, mem);
+        close memberlist(v);
+      } else {
+        putMemberBack(t, mem);
+        close memberlist(v);
+      }
+  }
+}
 @*/
 
 /*@
@@ -49,16 +124,24 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
   //@ ensures room(room) &*& string_buffer(nick);
 {
     //@ open room(room);
+    //@ open memberlist(?v);
+    //@ close memberlist(v);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasMember = false;
     bool hasNext = iter_has_next(iter);
+    //@ lengthPositive(v);
     while (hasNext && !hasMember)
-      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& hasNext==(i<length(v));
+      //@ invariant string_buffer(nick) &*& iter(iter, members, v, ?i) &*& memberlist(v) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
-        struct member *member = iter_next(iter); // stopped here
+        struct member *member = iter_next(iter);
+        //@ containsIth(v, i);
+        //@ separateMember(v, member);
+        //@ open member(member);
         struct string_buffer *memberNick = member->nick;
         hasMember = string_buffer_equals(memberNick, nick);
+        //@ close member(member);
+        //@ putMemberBack(v, member);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
@@ -70,21 +153,31 @@ void room_broadcast_message(struct room *room, struct string_buffer *senderNick,
   //@ requires room(room) &*& string_buffer(senderNick) &*& string_buffer(message);
   //@ ensures room(room) &*& string_buffer(senderNick) &*& string_buffer(message);
 {
+    //@ open room(room);
+    //@ open memberlist(?v);
+    //@ close memberlist(v);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasNext = iter_has_next(iter);
+    //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant true;
+      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& string_buffer(message) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
+        //@ containsIth(v, i);
+        //@ separateMember(v, member);
+        //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
         writer_write_string(memberWriter, " says: ");
         writer_write_string_buffer(memberWriter, message);
         writer_write_string(memberWriter, "\r\n");
+        //@ close member(member);
+        //@ putMemberBack(v, member);
         hasNext = iter_has_next(iter);
-    }
+    }    
     iter_dispose(iter);
+    //@ close room(room);
 }
 
 void room_broadcast_goodbye_message(struct room *room, struct string_buffer *senderNick)

@@ -44,6 +44,52 @@ fixpoint void* ith(listval v, int i)
   }
 }
 
+
+fixpoint bool contains(listval v, void* x)
+{
+  switch(v) {
+    case nil: return false;
+    case cons(h, t): return h==x ? true : contains(t, x);
+  }
+}
+
+fixpoint bool uniqueElements(listval v)
+{
+  switch(v) {
+    case nil: return true;
+    case cons(h, t): return !contains(t, h) && uniqueElements(t);
+  }
+}
+
+lemma void lengthPositive(listval v)
+  requires true;
+  ensures 0<=length(v);
+{
+  switch(v){
+    case nil: return;
+    case cons(h, t): lengthPositive(t);
+  }
+}
+
+
+
+lemma void containsIth(listval v, int i)
+  requires 0<=i && i<length(v);
+  ensures contains(v, ith(v, i)) == true;
+{
+  switch(v){
+    case nil: return;
+    case cons(h, t):
+      if(i==0){
+      } else {
+        containsIth(t, i - 1);
+      }
+  }
+}
+
+
+
+
 predicate list(struct list* l, listval v);
 
 predicate iter(struct iter* i, struct list* l, listval v, int index);
