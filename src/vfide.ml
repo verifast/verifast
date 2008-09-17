@@ -14,6 +14,7 @@ let show_ide initialPath prover =
       a "Open" ~stock:`OPEN;
       a "Save" ~stock:`SAVE ~accel:"<control>S";
       a "SaveAs" ~label:"Save _as";
+      a "Close" ~stock:`CLOSE;
       a "Verify" ~label:"_Verify";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5"
     ]
@@ -29,6 +30,7 @@ let show_ide initialPath prover =
           <menuitem action='Open' />
           <menuitem action='Save' />
           <menuitem action='SaveAs' />
+          <menuitem action='Close' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -37,6 +39,7 @@ let show_ide initialPath prover =
       <toolbar name='ToolBar'>
         <toolitem action='Save' />
         <toolitem action='VerifyProgram' />
+        <toolitem action='Close' />
       </toolbar>
     </ui>
   ");
@@ -358,8 +361,17 @@ let show_ide initialPath prover =
       Some tab -> Some tab
     | None -> GToolbox.message_box "VeriFast IDE" ("Please select a buffer."); None
   in
+  let close ((_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
+    if not (ensureSaved tab) then
+    begin
+      textNotebook#remove textScroll#coerce;
+      subNotebook#remove subScroll#coerce;
+      match !current_tab with None -> () | Some tab0 when tab == tab0 -> current_tab := None
+    end
+  in
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
   (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> saveAs tab; () | None -> ());
+  (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> close tab; () | None -> ());
   let handleStaticError l emsg =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
