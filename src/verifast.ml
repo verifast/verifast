@@ -1327,8 +1327,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             t
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
                         and checkt e t0 =
-                          let t = check e in
-                          if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+                          match (e, t0) with
+                            (IntLit (l, 0), PtrType _) -> ()
+                          | _ ->
+                            let t = check e in
+                            if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
                         in
                         let _ = checkt body rt in
                         iter (List.remove_assoc cn ctormap) cs
@@ -1419,7 +1422,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let expect_type l t t0 =
-    if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    match (t, t0) with
+      (PtrType _, PtrType Void) -> ()
+    | (PtrType Void, PtrType _) -> ()
+    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
 
   let (check_expr, check_expr_t) =
@@ -1493,14 +1499,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match (e, t0) with
           (IntLit (l, 0), PtrType _) -> ()
         | _ ->
-          let t = check e in
-          begin
-          match (t, t0) with
-            (PtrType _, PtrType Void) -> ()
-          | (PtrType Void, PtrType _) -> ()
-          | _ when t = t0 -> ()
-          | _ -> static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
-          end
+          let t = check e in expect_type (expr_loc e) t t0
       in
       (check, checkt)
     in
@@ -2110,7 +2109,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin
                   match r with
                     None -> static_error l "Call does not return a result."
-                  | Some (r, t) -> expect_type l tpx t; update env x r
+                  | Some (r, t) -> expect_type l t tpx; update env x r
                 end
             in
             with_context PopSubcontext (fun () -> cont h env)
