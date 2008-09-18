@@ -2099,11 +2099,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   ()
                 else (
                   match indinfo with
-                    None -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) and there is no inductive parameter."
+                    None ->
+                    with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                      assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) and there is no inductive parameter."
+                    )
                   | Some x -> (
                     match try_assq (List.assoc x env') sizemap with
                       Some k when k < 0 -> ()
-                    | _ -> assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) or the inductive parameter."
+                    | _ ->
+                      with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                        assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) or the inductive parameter."
+                      )
                     )
                 )
               else

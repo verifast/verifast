@@ -260,14 +260,18 @@ let show_ide initialPath prover =
     let buffer = tab_buffer tab in
     buffer#apply_tag_by_name name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
+  let get_step_of_path selpath =
+    let stepItems = match !stepItems with Some stepItems -> stepItems | None -> assert false in
+    let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
+    List.nth stepItems k
+  in
   let stepSelected _ =
     match !stepItems with
       None -> ()
     | Some stepItems ->
       clearStepInfo();
       let [selpath] = stepList#selection#get_selected_rows in
-      let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
-      let (ass, h, env, l, msg, locstack) = List.nth stepItems k in
+      let (ass, h, env, l, msg, locstack) = get_step_of_path selpath in
       begin
         match locstack with
           [] ->
@@ -306,9 +310,15 @@ let show_ide initialPath prover =
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
+  let get_last_step_path() =
+    let lastBigStep = stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None in
+    let lastBigStepChildCount = stepStore#iter_n_children (Some lastBigStep) in
+    let lastStep = if lastBigStepChildCount > 0 then stepStore#iter_children ~nth:(lastBigStepChildCount - 1) (Some lastBigStep) else lastBigStep in
+    stepStore#get_path lastStep
+  in
   let updateStepListView() =
     stepList#expand_all();
-    let lastStepRowPath = stepStore#get_path (stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None) in
+    let lastStepRowPath = get_last_step_path() in
     let _ = stepList#selection#select_path lastStepRowPath in
     Glib.Idle.add (fun () -> stepList#scroll_to_cell lastStepRowPath stepViewCol; false)
   in
@@ -426,7 +436,16 @@ let show_ide initialPath prover =
               ctxts_lifo := Some ctxts;
               updateStepItems();
               updateStepListView();
-              handleStaticError l emsg
+              stepSelected();
+              let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in
+              if l = steploc then
+              begin
+                apply_tag_by_loc "error" l;
+                msg := Some emsg;
+                updateWindowTitle()
+              end
+              else
+                handleStaticError l emsg
           end
       end
   in
