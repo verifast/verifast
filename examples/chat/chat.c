@@ -181,22 +181,32 @@ void room_broadcast_message(struct room *room, struct string_buffer *senderNick,
 }
 
 void room_broadcast_goodbye_message(struct room *room, struct string_buffer *senderNick)
-  //@ requires true;
-  //@ ensures false;
+  //@ requires room(room) &*& string_buffer(senderNick);
+  //@ ensures room(room) &*& string_buffer(senderNick);
 {
+    //@ open room(room);
+    //@ open memberlist(?v);
+    //@ close memberlist(v);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasNext = iter_has_next(iter);
+    //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant true;
+      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
+        //@ containsIth(v, i);
+        //@ separateMember(v, member);
+        //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
         writer_write_string(memberWriter, " left the room.\r\n");
+        //@ close member(member);
+        //@ putMemberBack(v, member);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
+    //@ close room(room);
 }
 
 struct session {
@@ -206,8 +216,8 @@ struct session {
 };
 
 struct session *create_session(struct room *room, struct lock *roomLock, struct socket *socket)
-  //@ requires true;
-  //@ ensures false;
+  //@ requires emp;
+  //@ ensures result->room |-> room &*& result->room_lock |-> roomLock &*& result->socket |-> socket &*& malloc_block_session(result);
 {
     struct session *session = malloc(sizeof(struct session));
     session->room = room;
@@ -216,29 +226,51 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
     return session;
 }
 
+void room_label() requires emp; ensures emp; { } // Used only as a label.
+
+/*@
+
+predicate_family_instance lock_invariant(room_label)(void *data)
+    requires room(data);
+
+lemma void assume(bool b);
+    requires emp;
+    ensures b;
+
+@*/
+
 void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
-  //@ requires true;
-  //@ ensures false;
+  //@ requires lock_permission(roomLock, room_label, room) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+  //@ ensures lock_permission(roomLock, room_label, room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
 {
+    //@ open room(room);
+    //@ open memberlist(?v);
+    //@ close memberlist(v);
     struct list *members = room->members;
-    struct member *member = malloc(sizeof(member));
+    struct member *member = malloc(sizeof(struct member));
     struct string_buffer *nickCopy = string_buffer_copy(nick);
     member->nick = nickCopy;
     member->writer = writer;
+    //@ close member(member);
     list_add(members, member);
+    //@ close memberlist(cons(member, v));
+    //@ close room(room);
+    //@ close lock_invariant(room_label)(room);
     lock_release(roomLock);
     
     {
         bool eof = false;
         struct string_buffer *message = create_string_buffer();
         while (!eof)
-          //@ invariant true;
+          //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& lock_permission(roomLock, room_label, room);
         {
             eof = reader_read_line(reader, message);
             if (eof) {
             } else {
                 lock_acquire(roomLock);
+                //@ open lock_invariant(room_label)(room);
                 room_broadcast_message(room, nick, message);
+                //@ close lock_invariant(room_label)(room);
                 lock_release(roomLock);
             }
         }
@@ -246,8 +278,14 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     }
     
     lock_acquire(roomLock);
-    list_remove(members, member);
+    //@ open lock_invariant(room_label)(room);
+    //@ open room(room);
+    struct list *roomMembers = room->members;
+    
+    list_remove(roomMembers, member);
+    //@ close room(room);
     room_broadcast_goodbye_message(room, nick);
+    //@ close lock_invariant(room_label)(room);
     lock_release(roomLock);
     
     string_buffer_dispose(nickCopy);
