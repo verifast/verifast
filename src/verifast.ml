@@ -516,6 +516,7 @@ and
   | CallStmt of loc * string * expr list
   | IfStmt of loc * expr * stmt list * stmt list
   | SwitchStmt of loc * expr * switch_stmt_clause list
+  | Assert of loc * pred
   | Open of loc * string * (loc * string) list * pat list
   | Close of loc * string * (loc * string) list * pat list
   | ReturnStmt of loc * expr option
@@ -625,6 +626,7 @@ let stmt_loc s =
   | CallStmt (l,  _, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
+  | Assert (l, _) -> l
   | Open (l, _, _, _) -> l
   | Close (l, _, _, _) -> l
   | ReturnStmt (l, _) -> l
@@ -643,7 +645,7 @@ let lexer = make_lexer [
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
-  "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"
+  "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"; "assert"
 ]
 
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
@@ -775,6 +777,7 @@ and
   [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> let _ = reportGhostRange (sp1, sp2) in PureStmt ((sp1, sp2), s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); b1 = parse_block; '(_, Kwd "else"); b2 = parse_block >] -> IfStmt (l, e, b1, b2)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
+| [< '(l, Kwd "assert"); p = parse_pred; '(_, Kwd ";") >] -> Assert (l, p)
 | [< '(l, Kwd "open"); e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, es1, es2) -> Open (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2)
@@ -1519,6 +1522,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | DummyPat -> tenv
   in
   
+  let rec check_pats l tenv ts ps =
+    match (ts, ps) with
+      ([], []) -> tenv
+    | (t::ts, p::ps) ->
+      check_pats l (check_pat tenv t p) ts ps
+    | ([], _) -> static_error l "Too many patterns"
+    | (_, []) -> static_error l "Too few patterns"
+  in
+
   let check_deref l tenv e f =
     let t = check_expr tenv e in
     begin
@@ -2128,9 +2140,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = check_assign l x in
       get_field h t f l (fun _ v ->
         cont h (update env x v))
-    | CallStmt (l, "assert", [e]) ->
-      let _ = check_expr_t tenv e boolt in
-      assert_expr env e h env l "Assertion failure." (fun _ -> cont h env)
     | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
       let (lsoe, ltn, tn) =
         match args with
@@ -2248,6 +2257,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
+    | Assert (l, p) ->
+      check_pred tenv p (fun tenv ->
+        assert_pred h ghostenv env p (fun _ ghostenv env ->
+          tcont sizemap tenv ghostenv h env
+        )
+      )
     | Open (l, g, is, pats) ->
       let fns = check_funcnamelist is in
       let (ps, p) =
@@ -2255,17 +2270,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such predicate family instance."
         | Some (l, ps, body) -> (ps, body)
       in
-      let tenv' =
-        let rec iter tenv pats ps =
-          match (pats, ps) with
-            ([], []) -> tenv
-          | (pat::pats, (_, tp)::ps) ->
-            iter (check_pat tenv tp pat) pats ps
-          | ([], _) -> static_error l "Too few arguments."
-          | _ -> static_error l "Too many arguments."
-        in
-        iter tenv pats ps
-      in
+      let tenv' = check_pats l tenv (List.map (fun (x, t) -> t) ps) pats in
       let pats = List.map (fun fn -> LitPat (FuncNameExpr fn)) fns @ pats in
       assert_chunk h ghostenv env l g pats (fun h ts ghostenv env ->
         let ts = drop (List.length fns) ts in
