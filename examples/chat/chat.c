@@ -100,6 +100,53 @@ lemma void putMemberBack(listval v, struct member* mem)
       }
   }
 }
+
+lemma void removeContains(listval v, void *x1, void *x2)
+    requires !contains(v, x1);
+    ensures  !contains(remove(v, x2), x1);
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x2) {
+            } else {
+                removeContains(t, x1, x2);
+            }
+    }
+}
+
+lemma void removeUniqueElements(listval v, void *x)
+    requires uniqueElements(v) == true;
+    ensures uniqueElements(remove(v, x)) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x) {
+            } else {
+                removeContains(t, h, x);
+                removeUniqueElements(t, x);
+            }
+    }
+}
+
+lemma void memberlistRemove(listval v, struct member *mem)
+    requires memberlist(v) &*& contains(v, mem) == true;
+    ensures memberlist(remove(v, mem)) &*& member(mem);
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            open memberlist(v);
+            if (h == mem) {
+            } else {
+                memberlistRemove(t, mem);
+                removeUniqueElements(v, mem);
+                close memberlist(remove(v, mem));
+            }
+    }
+}
+
 @*/
 
 /*@
@@ -215,14 +262,23 @@ struct session {
     struct socket *socket;
 };
 
+/*@
+
+predicate session(struct session *session)
+    requires session->room |-> ?room &*& session->room_lock |-> ?roomLock &*& session->socket |-> ?socket &*& malloc_block_session(session)
+        &*& lock_permission(roomLock, room_label, room) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+
+@*/
+
 struct session *create_session(struct room *room, struct lock *roomLock, struct socket *socket)
-  //@ requires emp;
-  //@ ensures result->room |-> room &*& result->room_lock |-> roomLock &*& result->socket |-> socket &*& malloc_block_session(result);
+  //@ requires lock_permission(roomLock, room_label, room) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+  //@ ensures session(result);
 {
     struct session *session = malloc(sizeof(struct session));
     session->room = room;
     session->room_lock = roomLock;
     session->socket = socket;
+    //@ close session(session);
     return session;
 }
 
@@ -253,6 +309,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     member->writer = writer;
     //@ close member(member);
     list_add(members, member);
+    //@ assume(!contains(v, member));
     //@ close memberlist(cons(member, v));
     //@ close room(room);
     //@ close lock_invariant(room_label)(room);
@@ -281,21 +338,35 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     //@ open lock_invariant(room_label)(room);
     //@ open room(room);
     struct list *roomMembers = room->members;
-    
+    //@ assert list(roomMembers, ?roomMembersValue);
+    //@ assume(contains(roomMembersValue, member));
     list_remove(roomMembers, member);
+    //@ memberlistRemove(roomMembersValue, member);
     //@ close room(room);
     room_broadcast_goodbye_message(room, nick);
     //@ close lock_invariant(room_label)(room);
     lock_release(roomLock);
     
-    string_buffer_dispose(nickCopy);
+    //@ open member(member);
+    struct string_buffer *memberNick = member->nick;
+    string_buffer_dispose(memberNick);
+    assert writer(?memberWriter);
+    //@ assume(memberWriter == writer);
+    free(member);
 }
 
-void session_run(void *data)
-  //@ requires true;
-  //@ ensures false;
+/*@
+
+predicate_family_instance thread_run_data(session_run)(void *data)
+    requires session(data);
+
+@*/
+
+void session_run(void *data) //@ : thread_run
 {
+    //@ open thread_run_data(session_run)(data);
     struct session *session = data;
+    //@ open session(session);
     struct room *room = session->room;
     struct lock *roomLock = session->room_lock;
     struct socket *socket = session->socket;
@@ -307,28 +378,39 @@ void session_run(void *data)
     writer_write_string(writer, "The following members are present:\r\n");
     
     lock_acquire(roomLock);
+    //@ open lock_invariant(room_label)(room);
+    //@ open room(room);
     {
         struct list *members = room->members;
+        //@ assert list(members, ?membersValue);
         struct iter *iter = list_create_iter(members);
         bool hasNext = iter_has_next(iter);
+        //@ lengthPositive(membersValue);
         while (hasNext)
-          //@ invariant true;
+            //@ invariant writer(writer) &*& iter(iter, members, membersValue, ?i) &*& memberlist(membersValue) &*& hasNext == (i < length(membersValue)) &*& 0 <= i &*& i <= length(membersValue);
         {
             struct member *member = iter_next(iter);
+            //@ containsIth(membersValue, i);
+            //@ separateMember(membersValue, member);
+            //@ open member(member);
             struct string_buffer *nick = member->nick;
             writer_write_string_buffer(writer, nick);
             writer_write_string(writer, "\r\n");
+            //@ close member(member);
+            //@ putMemberBack(membersValue, member);
             hasNext = iter_has_next(iter);
         }
         iter_dispose(iter);
     }
+    //@ close room(room);
+    //@ close lock_invariant(room_label)(room);
     lock_release(roomLock);
 
     {
         struct string_buffer *nick = create_string_buffer();
         bool done = false;
         while (!done)
-          //@ invariant true;
+          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& lock_permission(roomLock, room_label, room);
         {
             writer_write_string(writer, "Please enter your nick: ");
             {
@@ -337,9 +419,11 @@ void session_run(void *data)
                     done = true;
                 } else {
                     lock_acquire(roomLock);
+                    //@ open lock_invariant(room_label)(room);
                     {
                         bool hasMember = room_has_member(room, nick);
                         if (hasMember) {
+                            //@ close lock_invariant(room_label)(room);
                             lock_release(roomLock);
                             writer_write_string(writer, "Error: This nick is already in use.\r\n");
                         } else {
@@ -361,14 +445,17 @@ int main()
   //@ ensures false;
 {
     struct room *room = create_room();
+    //@ close lock_invariant(room_label)(room);
     struct lock *roomLock = create_lock();
     struct server_socket *serverSocket = create_server_socket(12345);
 
     while (true)
-      //@ invariant true;
+      //@ invariant lock_permission(roomLock, room_label, room) &*& server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
+        //@ split_lock_permission(roomLock);
         struct session *session = create_session(room, roomLock, socket);
+        //@ close thread_run_data(session_run)(session);
         thread_start(session_run, session);
     }
 }
