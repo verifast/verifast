@@ -1,4 +1,5 @@
 #include "malloc.h"
+#include "bool.h"
 
 struct node {
     struct node *left;
@@ -9,13 +10,13 @@ struct node {
 
 /*@
 
-predicate tree(struct node *root, struct node *parent, int count)
+predicate subtree(struct node *root, struct node *parent, int count)
     requires
         root == 0 ?
             count == 0
         :
             root->left |-> ?left &*& root->right |-> ?right &*& root->parent |-> parent &*& root->count |-> count &*& malloc_block_node(root) &*&
-            tree(left, root, ?leftCount) &*& tree(right, root, ?rightCount) &*& count == 1 + leftCount + rightCount;
+            subtree(left, root, ?leftCount) &*& subtree(right, root, ?rightCount) &*& count == 1 + leftCount + rightCount;
 
 predicate context(struct node *node, struct node *parent, int count)
     requires
@@ -25,10 +26,13 @@ predicate context(struct node *node, struct node *parent, int count)
             parent->left |-> ?left &*& parent->right |-> ?right &*& parent->parent |-> ?grandparent &*& parent->count |-> ?parentCount &*& malloc_block_node(parent) &*&
             context(parent, grandparent, parentCount) &*&
             (node == left ? 
-                 tree(right, parent, ?rightCount) &*& parentCount == 1 + count + rightCount
+                 subtree(right, parent, ?rightCount) &*& parentCount == 1 + count + rightCount
              :
-                 node == right &*& tree(left, parent, ?leftCount) &*& parentCount == 1 + count + leftCount
+                 node == right &*& subtree(left, parent, ?leftCount) &*& parentCount == 1 + count + leftCount
             );
+
+predicate tree(struct node *node)
+    requires context(node, ?parent, ?count) &*& subtree(node, parent, count);
 
 @*/
 
@@ -38,34 +42,45 @@ void abort();
 
 struct node *create_tree()
     //@ requires emp;
-    //@ ensures context(result, 0, 1) &*& tree(result, 0, 1);
+    //@ ensures tree(result);
 {
     struct node *n = malloc(sizeof(struct node));
     if (n == 0) {
         abort();
     }
     n->left = 0;
-    //@ close tree(0, n, 0);
+    //@ close subtree(0, n, 0);
     n->right = 0;
-    //@ close tree(0, n, 0);
+    //@ close subtree(0, n, 0);
     n->parent = 0;
     n->count = 1;
-    //@ close tree(n, 0, 1);
+    //@ close subtree(n, 0, 1);
     //@ close context(n, 0, 1);
+    //@ close tree(n);
     return n;
 }
 
-int tree_get_count(struct node *node)
-    //@ requires tree(node, ?parent, ?count);
-    //@ ensures tree(node, parent, count) &*& result == count;
+int subtree_get_count(struct node *node)
+    //@ requires subtree(node, ?parent, ?count);
+    //@ ensures subtree(node, parent, count) &*& result == count;
 {
     int result = 0;
-    //@ open tree(node, parent, count);
+    //@ open subtree(node, parent, count);
     if (node == 0) {
     } else {
         result = node->count;
     }
-    //@ close tree(node, parent, count);
+    //@ close subtree(node, parent, count);
+    return result;
+}
+
+int tree_get_count(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(node);
+{
+    //@ open tree(node);
+    int result = subtree_get_count(node);
+    //@ close tree(node);
     return result;
 }
 
@@ -83,9 +98,9 @@ void fixup_ancestors(struct node *node, struct node *parent, int count)
         int rightCount = 0;
         if (node == left) {
             leftCount = count;
-            rightCount = tree_get_count(right);
+            rightCount = subtree_get_count(right);
         } else {
-            leftCount = tree_get_count(left);
+            leftCount = subtree_get_count(left);
             rightCount = count;
         }
         {
@@ -98,9 +113,10 @@ void fixup_ancestors(struct node *node, struct node *parent, int count)
 }
 
 struct node *tree_add_left(struct node *node)
-    //@ requires context(node, ?parent, ?count) &*& tree(node, parent, count);
-    //@ ensures context(result, node, 1) &*& tree(result, node, 1);
+    //@ requires tree(node);
+    //@ ensures tree(result);
 {
+    //@ open tree(node);
     if (node == 0) {
         abort();
     }
@@ -110,32 +126,70 @@ struct node *tree_add_left(struct node *node)
             abort();
         }
         n->left = 0;
-        //@ close tree(0, n, 0);
+        //@ close subtree(0, n, 0);
         n->right = 0;
-        //@ close tree(0, n, 0);
+        //@ close subtree(0, n, 0);
         n->parent = node;
         n->count = 1;
-        //@ close tree(n, node, 1);
-        //@ open tree(node, parent, count);
+        //@ close subtree(n, node, 1);
+        //@ open subtree(node, ?parent, ?count);
         {
             struct node *nodeLeft = node->left;
             if (nodeLeft != 0) {
                 abort();
             }
-            //@ open tree(nodeLeft, node, _);
+            //@ open subtree(nodeLeft, node, _);
             node->left = n;
             //@ close context(n, node, 0);
             fixup_ancestors(n, node, 1);
         }
+        //@ close tree(n);
+        return n;
+    }
+}
+
+struct node *tree_add_right(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(result);
+{
+    //@ open tree(node);
+    if (node == 0) {
+        abort();
+    }
+    {
+        struct node *n = malloc(sizeof(struct node));
+        if (n == 0) {
+            abort();
+        }
+        n->left = 0;
+        //@ close subtree(0, n, 0);
+        n->right = 0;
+        //@ close subtree(0, n, 0);
+        n->parent = node;
+        n->count = 1;
+        //@ close subtree(n, node, 1);
+        //@ open subtree(node, ?parent, ?count);
+        {
+            struct node *nodeRight = node->right;
+            if (nodeRight != 0) {
+                abort();
+            }
+            //@ open subtree(nodeRight, node, _);
+            node->right = n;
+            //@ close context(n, node, 0);
+            fixup_ancestors(n, node, 1);
+        }
+        //@ close tree(n);
         return n;
     }
 }
 
 struct node *tree_get_parent(struct node *node)
-    //@ requires context(node, ?parent, ?count) &*& tree(node, parent, count);
-    //@ ensures context(parent, ?grandparent, ?parentCount) &*& tree(parent, grandparent, parentCount) &*& result == parent;
+    //@ requires tree(node);
+    //@ ensures tree(result);
 {
-    //@ open tree(node, parent, count);
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
     if (node == 0) {
         abort();
     }
@@ -144,19 +198,111 @@ struct node *tree_get_parent(struct node *node)
         if (parent == 0) {
             abort();
         }
-        //@ close tree(node, parent, count);
+        //@ close subtree(node, parent, count);
         //@ open context(node, parent, count);
         //@ assert context(parent, ?grandparent, ?parentCount);
-        //@ close tree(parent, grandparent, parentCount);
+        //@ close subtree(parent, grandparent, parentCount);
+        //@ close tree(parent);
         return parent;
     }
 }
 
+struct node *tree_get_left(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(result);
+{
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
+    if (node == 0) {
+        abort();
+    }
+    {
+        struct node *left = node->left;
+        //@ assert subtree(left, node, ?leftCount);
+        //@ close context(left, node, leftCount);
+        //@ close tree(left);
+        return left;
+    }
+}
+
+struct node *tree_get_right(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(result);
+{
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
+    if (node == 0) {
+        abort();
+    }
+    {
+        struct node *right = node->right;
+        //@ struct node *left = node->left;
+        //@ open subtree(left, node, ?leftCount);
+        //@ open subtree(right, node, ?rightCount);
+        //@ close subtree(left, node, leftCount);
+        //@ close subtree(right, node, rightCount);
+        //@ close context(right, node, rightCount);
+        //@ close tree(right);
+        return right;
+    }
+}
+
+bool tree_has_parent(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(node);
+{
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
+    bool result = false;
+    if (node == 0) {
+    } else {
+        struct node *parent = node->parent;
+        result = parent != 0;
+    }
+    //@ close subtree(node, parent, count);
+    //@ close tree(node);
+    return result;
+}
+
+bool tree_has_left(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(node);
+{
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
+    bool result = false;
+    if (node == 0) {
+    } else {
+        struct node *left = node->left;
+        result = left != 0;
+    }
+    //@ close subtree(node, parent, count);
+    //@ close tree(node);
+    return result;
+}
+
+bool tree_has_right(struct node *node)
+    //@ requires tree(node);
+    //@ ensures tree(node);
+{
+    //@ open tree(node);
+    //@ open subtree(node, ?parent, ?count);
+    bool result = false;
+    if (node == 0) {
+    } else {
+        struct node *right = node->right;
+        result = right != 0;
+    }
+    //@ close subtree(node, parent, count);
+    //@ close tree(node);
+    return result;
+}
+
 void dispose_node(struct node *node)
-    //@ requires tree(node, _, _);
+    //@ requires subtree(node, _, _);
     //@ ensures emp;
 {
-    //@ open tree(node, _, _);
+    //@ open subtree(node, _, _);
     if (node == 0) {
     } else {
         {
@@ -172,20 +318,21 @@ void dispose_node(struct node *node)
 }
 
 void tree_dispose(struct node *node)
-    //@ requires context(node, ?parent, _) &*& tree(node, parent, _);
+    //@ requires tree(node);
     //@ ensures emp;
 {
     if (node == 0) {
         abort();
     }
-    //@ open context(node, parent, _);
-    //@ open tree(node, parent, ?count);
+    //@ open tree(node);
+    //@ open context(node, ?parent, ?count);
+    //@ open subtree(node, parent, count);
     {
         struct node *parent = node->parent;
         if (parent != 0) {
             abort();
         }
-        //@ close tree(node, parent, count);
+        //@ close subtree(node, parent, count);
     }
     dispose_node(node);
 }
@@ -194,13 +341,13 @@ int main()
     //@ requires emp;
     //@ ensures emp;
 {
-    struct node *root = create_tree();
-    struct node *left = tree_add_left(root);
-    struct node *leftLeft = tree_add_left(left);
-    struct node *leftLeftLeft = tree_add_left(leftLeft);
-    struct node *leftLeftLeftParent = tree_get_parent(leftLeftLeft);
-    struct node *leftLeftLeftParentParent = tree_get_parent(leftLeftLeftParent);
-    struct node *leftLeftLeftParentParentParent = tree_get_parent(leftLeftLeftParentParent);
-    tree_dispose(leftLeftLeftParentParentParent);
+    struct node *node = create_tree();
+    node = tree_add_left(node);
+    node = tree_add_right(node);
+    node = tree_get_parent(node);
+    node = tree_add_left(node);
+    node = tree_get_parent(node);
+    node = tree_get_parent(node);
+    tree_dispose(node);
     return 0;
 }
