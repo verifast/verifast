@@ -2041,6 +2041,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
     let l = stmt_loc s in
+    if verbose then print_endline (string_of_loc l ^ ": Executing statement");
+    let eval0 = eval in
     let eval env e = let _ = if not pure then check_ghost ghostenv l e in eval env e in
     let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
@@ -2083,7 +2085,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
         let Some env' = zip ys ts in
-        let cenv = List.map (fun (x, e) -> (x, eval env' e)) cenv0 in
+        let cenv = List.map (fun (x, e) -> (x, eval0 env' e)) cenv0 in
         with_context PushSubcontext (fun () ->
         assert_pred h ghostenv cenv pre (fun h ghostenv' env' ->
           let _ =
