@@ -1981,7 +1981,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let definitely_equal t1 t2 =
-    ctxt#query (ctxt#mk_eq t1 t2)
+    let result = ctxt#query (ctxt#mk_eq t1 t2) in
+    (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
+    result
   in
   
   let match_chunk ghostenv env g pats (g', ts0) =

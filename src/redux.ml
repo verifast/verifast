@@ -147,6 +147,15 @@ and termnode (ctxt: context) s initial_children =
             (Some t1, Some t2) when t1#symbol <> t2#symbol -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#false_node#value)
           | _ -> ()
           end
+    method parent_ctorchild_added =
+      if symbol#name = "==" then
+        match children with
+          [v1; v2] ->
+          begin
+            match value#ctorchild with
+              Some t when t = ctxt#true_node -> ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value v2#initial_child#value)
+            | Some t when t = ctxt#false_node -> ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
+          end
     method matches s vs =
       symbol = s && children = vs
     method lookup_equivalent_parent_of v =
@@ -178,7 +187,7 @@ and termnode (ctxt: context) s initial_children =
       else
         Unknown
     method pprint =
-      (* "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^ *)
+      "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^
       begin
       if initial_children = [] then symbol#name else
         symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
@@ -267,9 +276,10 @@ and valuenode (ctxt: context) =
       in
       iter parents
     method ctorchild_added =
-      List.iter (fun (n, k) -> n#child_ctorchild_added k) parents
+      List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
+      List.iter (fun n -> n#parent_ctorchild_added) children
     method merge_into v =
-      (* print_endline_disabled ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v)); *)
+      print_endline_disabled ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v));
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
@@ -326,7 +336,8 @@ and valuenode (ctxt: context) =
               [] -> process_redundant_parents()
             | (v, v')::vs ->
               begin
-              match context#assert_eq v v' with
+              print_endline_disabled ("Adding injectiveness edge: " ^ v#pprint ^ " = " ^ v'#pprint);
+              match context#assert_eq v#initial_child#value v'#initial_child#value with
                 Unsat -> Unsat
               | Unknown -> iter vs
               end
@@ -483,11 +494,13 @@ and context =
       | Eq (t1, t2) ->
         print_endline_disabled ("Producing equality termnode");
         self#get_node eq_symbol [(self#termnode_of_term t1)#value; (self#termnode_of_term t2)#value]
-      | _ -> assert false
+      | Not t -> self#termnode_of_term (Eq (t, self#mk_false))
+      | _ -> print_endline_disabled ("Not supported: " ^ self#pprint t); assert false
 
     method pushdepth = pushdepth
     method push =
       (* print_endline_disabled "Push"; *)
+      print_endline_disabled "Push";
       self#reduce;
       assert (redexes = []);
       assert (simplex_eqs = []);
@@ -502,6 +515,7 @@ and context =
 
     method pop =
       (* print_endline_disabled "Pop"; *)
+      print_endline_disabled "Pop";
       redexes <- [];
       simplex_eqs <- [];
       simplex_consts <- [];
@@ -523,7 +537,11 @@ and context =
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * ((symbol, termnode) term list -> (symbol, termnode) term list -> (symbol, termnode) term)) list) =
       s#set_fpclauses cs
 
-    method query_eq (t1: termnode) (t2: termnode) = self#reduce; t1#value = t2#value
+    method query_eq (t1: termnode) (t2: termnode) =
+      self#reduce;
+      let result = t1#value = t2#value in
+      print_endline_disabled ("Equality query: " ^ t1#pprint ^ " = " ^ t2#pprint ^ ": " ^ (if result then "true" else "false"));
+      result
     
     method as_query f =
       self#reduce;
@@ -561,6 +579,7 @@ and context =
         begin
         match s#node with
           None ->
+          print_endline_disabled ("Creating node for nullary symbol " ^ s#name);
           let node = new termnode (self :> context) s vs in
           s#set_node node;
           node
