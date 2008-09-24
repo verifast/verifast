@@ -496,7 +496,7 @@ and
   | Read of loc * expr * fieldref
   | CallExpr of loc * string * pat list * pat list
   | IfExpr of loc * expr * expr * expr
-  | SwitchExpr of loc * expr * switch_expr_clause list
+  | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
   | SizeofExpr of loc * type_expr
   | FuncNameExpr of string
 and
@@ -604,7 +604,7 @@ let expr_loc e =
   | Read (l, e, f) -> l
   | CallExpr (l, g, pats0, pats) -> l
   | IfExpr (l, e1, e2, e3) -> l
-  | SwitchExpr (l, e, secs) -> l
+  | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
 
 let pred_loc p =
@@ -886,7 +886,7 @@ and
 | [< '(l, Int i) >] -> IntLit (l, i)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
-| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs)
+| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref Void)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e])
 and
@@ -1027,13 +1027,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     pop()
   in
   
-  let mk_symbol s domain range kind =
+  let mk_ident s =
     let rec iter k =
       let sk = s ^ string_of_int k in
       if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
     in
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    ctxt#mk_symbol name domain range kind
+    name
+  in
+  
+  let mk_symbol s domain range kind =
+    ctxt#mk_symbol (mk_ident s) domain range kind
   in
   
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor j) in
@@ -1167,6 +1171,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ) functypenames
   in
   
+  let expect_type l t t0 =
+    match (t, t0) with
+      (PtrType _, PtrType Void) -> ()
+    | (PtrType Void, PtrType _) -> ()
+    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+  in
+
   let (inductivemap, purefuncmap) =
     let rec iter imap pfm ds =
       match ds with
@@ -1258,7 +1269,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             [ReturnStmt (_, Some e)] -> e
                           | _ -> static_error lc "Body of switch clause must be a return statement with a result expression."
                         in
-                        let rec check e =
+                        let rec check_ tenv e =
+                          let check e = check_ tenv e in
+                          let checkt e = checkt_ tenv e in
                           match e with
                             True l -> boolt
                           | False l -> boolt
@@ -1332,15 +1345,61 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             let t = check e2 in
                             let _ = checkt e3 t in
                             t
+                          | SwitchExpr (l, e, cs, tref) ->
+                            let t = check e in
+                            begin
+                              match t with
+                                InductiveType i ->
+                                begin
+                                  let (_, ctormap) = List.assoc i imap in
+                                  let rec iter t0 ctors cs =
+                                    match cs with
+                                      [] ->
+                                      if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
+                                      begin
+                                        match t0 with
+                                          None -> static_error l "Switch expressions with zero cases are not yet supported."
+                                        | Some t0 -> tref := t0; t0
+                                      end
+                                    | SwitchExprClause (lc, cn, xs, e)::cs ->
+                                      begin
+                                        match try_assoc cn ctormap with
+                                          None -> static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.")
+                                        | Some (_, ts) ->
+                                          if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause.";
+                                          let xenv =
+                                            let rec iter2 ts xs xenv =
+                                              match (ts, xs) with
+                                                ([], []) -> List.rev xenv
+                                              | (t::ts, []) -> static_error lc "Too few pattern variables."
+                                              | ([], _) -> static_error lc "Too many pattern variables."
+                                              | (t::ts, x::xs) ->
+                                                if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
+                                                iter2 ts xs ((x, t)::xenv)
+                                            in
+                                            iter2 ts xs []
+                                          in
+                                          let t = check_ (xenv@tenv) e in
+                                          let t0 =
+                                            match t0 with
+                                              None -> Some t
+                                            | Some t0 -> expect_type (expr_loc e) t t0; Some t0
+                                          in
+                                          iter t0 (List.filter (fun (ctorname, _) -> ctorname <> cn) ctors) cs
+                                      end
+                                  in
+                                  iter None ctormap cs
+                                end
+                            end
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
-                        and checkt e t0 =
+                        and checkt_ tenv e t0 =
                           match (e, t0) with
                             (IntLit (l, 0), PtrType _) -> ()
                           | _ ->
-                            let t = check e in
+                            let t = check_ tenv e in
                             if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
                         in
-                        let _ = checkt body rt in
+                        let _ = checkt_ tenv body rt in
                         iter (List.remove_assoc cn ctormap) cs
                       )
                   in
@@ -1428,93 +1487,127 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] ds
   in
 
-  let expect_type l t t0 =
-    match (t, t0) with
-      (PtrType _, PtrType Void) -> ()
-    | (PtrType Void, PtrType _) -> ()
-    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
-  in
-
   let (check_expr, check_expr_t) =
-    let funcs tenv =
-      let rec check e =
-        match e with
-          True l -> boolt
-        | False l -> boolt
-        | Var (l, x) ->
+    let rec check_expr tenv e =
+      let check e = check_expr tenv e in
+      let checkt e t0 = check_expr_t tenv e t0 in
+      match e with
+        True l -> boolt
+      | False l -> boolt
+      | Var (l, x) ->
+        begin
+        match try_assoc x tenv with
+          None ->
           begin
-          match try_assoc x tenv with
-            None ->
-            begin
-              match try_assoc x purefuncmap with
-                Some (_, t, [], _) -> t
-              | _ ->
-                begin
-                  if List.mem x funcnames then
-                    PtrType Void
-                  else
-                    static_error l "No such variable or constructor."
-                end
-            end
-          | Some t -> t
+            match try_assoc x purefuncmap with
+              Some (_, t, [], _) -> t
+            | _ ->
+              begin
+                if List.mem x funcnames then
+                  PtrType Void
+                else
+                  static_error l "No such variable or constructor."
+              end
           end
-        | Operation (l, (Eq | Neq), [e1; e2]) ->
-          let t = check e1 in
-          let _ = checkt e2 t in
-          boolt
-        | Operation (l, (Or | And), [e1; e2]) ->
-          let _ = checkt e1 boolt in
-          let _ = checkt e2 boolt in
-          boolt
-        | Operation (l, Not, [e]) ->
-          let _ = checkt e boolt in
-          boolt
-        | Operation (l, (Le | Lt), [e1; e2]) ->
-          let _ = checkt e1 intt in
-          let _ = checkt e2 intt in
-          boolt
-        | Operation (l, (Add | Sub), [e1; e2]) ->
-          let _ = checkt e1 intt in
-          let _ = checkt e2 intt in
-          intt
-        | IntLit (l, n) -> intt
-        | StringLit (l, s) -> PtrType Char
-        | CallExpr (l, g', [], pats) -> (
-          match try_assoc g' purefuncmap with
-            Some (l, t, ts, _) -> (
-            match zip pats ts with
-              None -> static_error l "Incorrect argument count."
-            | Some pts -> (
-              List.iter (fun (pat, t) ->
-                match pat with
-                  LitPat e -> checkt e t
-                | _ -> static_error l "Patterns are not allowed here."
-              ) pts;
-              t
-              )
+        | Some t -> t
+        end
+      | Operation (l, (Eq | Neq), [e1; e2]) ->
+        let t = check e1 in
+        let _ = checkt e2 t in
+        boolt
+      | Operation (l, (Or | And), [e1; e2]) ->
+        let _ = checkt e1 boolt in
+        let _ = checkt e2 boolt in
+        boolt
+      | Operation (l, Not, [e]) ->
+        let _ = checkt e boolt in
+        boolt
+      | Operation (l, (Le | Lt), [e1; e2]) ->
+        let _ = checkt e1 intt in
+        let _ = checkt e2 intt in
+        boolt
+      | Operation (l, (Add | Sub), [e1; e2]) ->
+        let _ = checkt e1 intt in
+        let _ = checkt e2 intt in
+        intt
+      | IntLit (l, n) -> intt
+      | StringLit (l, s) -> PtrType Char
+      | CallExpr (l, g', [], pats) -> (
+        match try_assoc g' purefuncmap with
+          Some (l, t, ts, _) -> (
+          match zip pats ts with
+            None -> static_error l "Incorrect argument count."
+          | Some pts -> (
+            List.iter (fun (pat, t) ->
+              match pat with
+                LitPat e -> checkt e t
+              | _ -> static_error l "Patterns are not allowed here."
+            ) pts;
+            t
             )
-          | None -> static_error l "No such pure function."
           )
-        | IfExpr (l, e1, e2, e3) ->
-          let _ = checkt e1 boolt in
-          let t = check e2 in
-          let _ = checkt e3 t in
-          t
-        | FuncNameExpr _ -> PtrType Void
-        | e -> static_error (expr_loc e) "Expression form not allowed here."
-      and checkt e t0 =
-        match (e, t0) with
-          (IntLit (l, 0), PtrType _) -> ()
-        | _ ->
-          let t = check e in expect_type (expr_loc e) t t0
-      in
-      (check, checkt)
-    in
-    let check_expr tenv e =
-      let (f, _) = funcs tenv in f e
-    in
-    let check_expr_t tenv e t0 =
-      let (_, f) = funcs tenv in f e t0
+        | None -> static_error l "No such pure function."
+        )
+      | IfExpr (l, e1, e2, e3) ->
+        let _ = checkt e1 boolt in
+        let t = check e2 in
+        let _ = checkt e3 t in
+        t
+      | FuncNameExpr _ -> PtrType Void
+      | SwitchExpr (l, e, cs, tref) ->
+        let t = check e in
+        begin
+          match t with
+            InductiveType i ->
+            begin
+              let (_, ctormap) = List.assoc i inductivemap in
+              let rec iter t0 ctors cs =
+                match cs with
+                  [] ->
+                  if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
+                  begin
+                    match t0 with
+                      None -> static_error l "Switch expressions with zero clauses are not yet supported."
+                    | Some t0 -> tref := t0; t0
+                  end
+                | SwitchExprClause (lc, cn, xs, e)::cs ->
+                  begin
+                    match try_assoc cn ctormap with
+                      None ->
+                      static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.")
+                    | Some (_, ts) ->
+                      if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause.";
+                      let xenv =
+                        let rec iter2 ts xs xenv =
+                          match (ts, xs) with
+                            ([], []) -> List.rev xenv
+                          | (t::ts, []) -> static_error lc "Too few pattern variables."
+                          | ([], _) -> static_error lc "Too many pattern variables."
+                          | (t::ts, x::xs) ->
+                            if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
+                            iter2 ts xs ((x, t)::xenv)
+                        in
+                        iter2 ts xs []
+                      in
+                      let t = check_expr (xenv@tenv) e in
+                      let t0 =
+                        match t0 with
+                          None -> Some t
+                        | Some t0 -> expect_type (expr_loc e) t t0; Some t0
+                      in
+                      iter t0 (List.filter (fun (ctorname, _) -> ctorname <> cn) ctors) cs
+                  end
+              in
+              iter None ctormap cs
+            end
+          | _ -> static_error l "Switch expression operand must be inductive value."
+        end
+      | e -> static_error (expr_loc e) "Expression form not allowed here."
+    and check_expr_t tenv e t0 =
+      match (e, t0) with
+        (IntLit (l, 0), PtrType _) -> ()
+      | _ ->
+        let t = check_expr tenv e in expect_type (expr_loc e) t t0
     in
     (check_expr, check_expr_t)
   in
@@ -1704,6 +1797,36 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Lt, [e1; e2]) -> ctxt#mk_lt (ev e1) (ev e2)
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | FuncNameExpr fn -> List.assoc fn funcnameterms
+    | SwitchExpr (l, e, cs, tref) ->
+      let g = mk_ident "switch_expression" in
+      let t = ev e in
+      let env =
+        let rec iter env0 env =
+          match env with
+            [] -> env0
+          | (x, t)::env ->
+            if List.mem_assoc x env0 then iter env0 env else iter ((x, t)::env0) env
+        in
+        iter [] env
+      in
+      let tp = !tref in
+      let symbol = ctxt#mk_symbol g (ctxt#get_type t :: List.map (fun (x, t) -> ctxt#get_type t) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
+      let fpclauses =
+        List.map
+          (function (SwitchExprClause (_, cn, ps, e)) ->
+             let (_, pts, _, csym) = List.assoc cn purefuncmap in
+             let apply gvs cvs =
+               let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
+               let Some penv = zip ps cvs in
+               let env = penv@genv in
+               eval env e
+             in
+             (csym, apply)
+          )
+          cs
+      in
+      ctxt#set_fpclauses symbol 0 fpclauses;
+      ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env)
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
 

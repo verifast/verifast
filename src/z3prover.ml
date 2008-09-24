@@ -104,6 +104,7 @@ class z3_context () =
     method mk_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
     method mk_lt t1 t2 = Z3.mk_lt ctxt t1 t2
     method mk_le t1 t2 = Z3.mk_le ctxt t1 t2
+    method get_type t = Z3.get_type ctxt t
     method pprint t = Z3.ast_to_string ctxt t
     method query t = query t
     method assume t = assert_term t

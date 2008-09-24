@@ -22,6 +22,7 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_sub: 'termnode -> 'termnode -> 'termnode
     method virtual mk_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_le: 'termnode -> 'termnode -> 'termnode
+    method virtual get_type: 'termnode -> 'typenode
     method virtual pprint: 'termnode -> string
     method virtual push: unit
     method virtual pop: unit

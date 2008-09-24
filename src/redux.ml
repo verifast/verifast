@@ -450,6 +450,8 @@ and context =
       in
       query_true t
     
+    method get_type (term: (symbol, termnode) term) = ()
+    
     method termnode_of_term t =
       let addition sym sign t1 t2 =
         let v1 = (self#termnode_of_term t1)#value in
