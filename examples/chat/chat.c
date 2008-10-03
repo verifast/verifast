@@ -13,6 +13,16 @@ struct member {
 /*@
 predicate member(struct member* mem)
   requires mem->nick |-> ?nick &*& mem->writer |-> ?writer &*& string_buffer(nick) &*& writer(writer) &*& malloc_block_member(mem);
+
+lemma void member_distinct(struct member *m1, struct member *m2)
+  requires member(m1) &*& member(m2);
+  ensures member(m1) &*& member(m2) &*& m1 != m2;
+{
+  open member(m1);
+  open member(m2);
+  close member(m2);
+  close member(m1);
+}
 @*/
 
 struct room {
@@ -28,6 +38,20 @@ predicate memberlist(listval v)
 @*/
 
 /*@ 
+lemma void memberlist_member_not_contains(listval v, struct member *member)
+  requires memberlist(v) &*& member(member);
+  ensures memberlist(v) &*& member(member) &*& !contains(v, member);
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      open memberlist(v);
+      member_distinct(h, member);
+      memberlist_member_not_contains(t, member);
+      close memberlist(v);
+  }
+}
+
 predicate memberlistWithout(listval v, struct member* member)
   requires uniqueElements(v)==true &*& switch(v) { 
              case nil: return emp; 
@@ -309,7 +333,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     member->writer = writer;
     //@ close member(member);
     list_add(members, member);
-    //@ assume(!contains(v, member));
+    //@ memberlist_member_not_contains(v, member);
     //@ close memberlist(cons(member, v));
     //@ close room(room);
     //@ close lock_invariant(room_label)(room);
