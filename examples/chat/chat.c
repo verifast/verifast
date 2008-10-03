@@ -243,10 +243,9 @@ void room_broadcast_goodbye_message(struct room *room, struct string_buffer *sen
 
 
 void room_broadcast_join_message(struct room *room, struct string_buffer *senderNick)
-  //@ requires room(room) &*& string_buffer(senderNick);
-  //@ ensures room(room) &*& string_buffer(senderNick);
+  //@ requires room->members |-> ?list &*& list(list, ?v) &*& memberlist(v) &*& string_buffer(senderNick);
+  //@ ensures room->members |-> list &*& list(list, v) &*& memberlist(v) &*& string_buffer(senderNick);
 {
-    //@ open room(room);
     //@ open memberlist(?v);
     //@ close memberlist(v);
     struct list *members = room->members;
@@ -254,7 +253,7 @@ void room_broadcast_join_message(struct room *room, struct string_buffer *sender
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+      //@ invariant iter(iter, members, v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
@@ -268,7 +267,6 @@ void room_broadcast_join_message(struct room *room, struct string_buffer *sender
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
-    //@ close room(room);
 }
 
 struct session {
@@ -327,9 +325,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
 	
     struct member *member = malloc(sizeof(struct member));
     struct string_buffer *nickCopy = string_buffer_copy(nick);
-// close room(room);
-//	room_broadcast_join_message(room,nick);
-// open room(room);
+    room_broadcast_join_message(room,nick);
     member->nick = nickCopy;
     member->writer = writer;
     //@ close member(member);
