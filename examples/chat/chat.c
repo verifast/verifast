@@ -258,7 +258,7 @@ void room_broadcast_join_message(struct room *room, struct string_buffer *sender
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ separateMember(v, member);
+        //@ memberlistRemove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
@@ -327,9 +327,9 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
 	
     struct member *member = malloc(sizeof(struct member));
     struct string_buffer *nickCopy = string_buffer_copy(nick);
-//@ close room(room);
-	room_broadcast_join_message(room,nick);
-//@ open room(room);
+// close room(room);
+//	room_broadcast_join_message(room,nick);
+// open room(room);
     member->nick = nickCopy;
     member->writer = writer;
     //@ close member(member);
