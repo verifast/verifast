@@ -52,79 +52,6 @@ lemma void memberlist_member_not_contains(listval v, struct member *member)
   }
 }
 
-predicate memberlistWithout(listval v, struct member* member)
-  requires uniqueElements(v)==true &*& switch(v) { 
-             case nil: return emp; 
-             case cons(h, t): return (h==member ? emp: member(h)) &*& memberlistWithout(t, member);
-           }; 
-
-lemma void memberlist2memberlistWithout(listval v, struct member* mem)
-  requires memberlist(v) &*& !contains(v, mem);
-  ensures memberlistWithout(v, mem);
-{
-  switch(v){
-    case nil: open memberlist(v); close memberlistWithout(nil, mem);
-    case cons(h, t):
-      open memberlist(v);
-      memberlist2memberlistWithout(t, mem);
-      close memberlistWithout(cons(h, t), mem);
-  }
-}
-
-lemma void separateMember(listval v, struct member* mem)
-  requires memberlist(v) &*& contains(v, mem)==true;
-  ensures memberlistWithout(v, mem) &*& member(mem);
-{
-  
-  switch(v) {
-    case nil: open memberlist(v);return;
-    case cons(h, t):
-      open memberlist(v);
-      if(h==mem){
-        memberlist2memberlistWithout(t, mem);
-        close memberlistWithout(v, mem);
-      } else {
-        separateMember(t, mem);
-        close memberlistWithout(v, mem);
-      }
-  }
-}
-
-lemma void memberListWithout2memberlist(listval v, struct member* mem)
-  requires memberlistWithout(v, mem) &*& ! contains(v, mem);
-  ensures memberlist(v);
-{
-  switch(v) {
-    case nil: open memberlistWithout(v, mem); close memberlist(v); 
-    case cons(h, t):
-      open memberlistWithout(v, mem);
-      if(h==mem){
-      } else {
-        memberListWithout2memberlist(t, mem);
-        close memberlist(v);
-      }
-  }
-}
-
-lemma void putMemberBack(listval v, struct member* mem)
-  requires memberlistWithout(v, mem) &*& contains(v, mem)==true &*& member(mem);
-  ensures memberlist(v);
-{
-  
-  switch(v) {
-    case nil: open memberlistWithout(v); return;
-    case cons(h, t):
-      open memberlistWithout(v, mem);
-      if(h==mem){
-        memberListWithout2memberlist(t, mem);
-        close memberlist(v);
-      } else {
-        putMemberBack(t, mem);
-        close memberlist(v);
-      }
-  }
-}
-
 lemma void removeContains(listval v, void *x1, void *x2)
     requires !contains(v, x1);
     ensures  !contains(remove(v, x2), x1);
@@ -154,9 +81,42 @@ lemma void removeUniqueElements(listval v, void *x)
     }
 }
 
+lemma void remove_not_contains(listval v, struct member *mem)
+  requires !contains(v, mem);
+  ensures remove(v, mem) == v;
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      if (h == mem) {
+      } else {
+      }
+      remove_not_contains(t, mem);
+  }
+}
+
+lemma void putMemberBack(listval v, struct member* mem)
+  requires memberlist(remove(v, mem)) &*& contains(v, mem)==true &*& member(mem) &*& uniqueElements(v) == true;
+  ensures memberlist(v);
+{
+  
+  switch(v) {
+    case nil: open memberlist(remove(v, mem)); return;
+    case cons(h, t):
+      if(h==mem){
+        remove_not_contains(t, mem);
+        close memberlist(v);
+      } else {
+        open memberlist(remove(v, mem));
+        putMemberBack(t, mem);
+        close memberlist(v);
+      }
+  }
+}
+
 lemma void memberlistRemove(listval v, struct member *mem)
     requires memberlist(v) &*& contains(v, mem) == true;
-    ensures memberlist(remove(v, mem)) &*& member(mem);
+    ensures memberlist(remove(v, mem)) &*& member(mem) &*& uniqueElements(v) == true;
 {
     switch (v) {
         case nil:
@@ -207,7 +167,7 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ separateMember(v, member);
+        //@ memberlistRemove(v, member);
         //@ open member(member);
         struct string_buffer *memberNick = member->nick;
         hasMember = string_buffer_equals(memberNick, nick);
@@ -236,7 +196,7 @@ void room_broadcast_message(struct room *room, struct string_buffer *senderNick,
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ separateMember(v, member);
+        //@ memberlistRemove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
@@ -267,7 +227,7 @@ void room_broadcast_goodbye_message(struct room *room, struct string_buffer *sen
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ separateMember(v, member);
+        //@ memberlistRemove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
@@ -415,7 +375,7 @@ void session_run(void *data) //@ : thread_run
         {
             struct member *member = iter_next(iter);
             //@ containsIth(membersValue, i);
-            //@ separateMember(membersValue, member);
+            //@ memberlistRemove(membersValue, member);
             //@ open member(member);
             struct string_buffer *nick = member->nick;
             writer_write_string_buffer(writer, nick);
