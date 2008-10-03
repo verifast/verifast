@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "chat", "chat\chat.vcproj", "{71C42B56-2C2C-4A9A-B505-7438B69B3D2D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "chatbot", "chatbot\chatbot.vcproj", "{F45CC9FD-2137-4AAB-A0FF-30DAD8EB32CF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{71C42B56-2C2C-4A9A-B505-7438B69B3D2D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{71C42B56-2C2C-4A9A-B505-7438B69B3D2D}.Debug|Win32.Build.0 = Debug|Win32
+		{71C42B56-2C2C-4A9A-B505-7438B69B3D2D}.Release|Win32.ActiveCfg = Release|Win32
+		{71C42B56-2C2C-4A9A-B505-7438B69B3D2D}.Release|Win32.Build.0 = Release|Win32
+		{F45CC9FD-2137-4AAB-A0FF-30DAD8EB32CF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F45CC9FD-2137-4AAB-A0FF-30DAD8EB32CF}.Debug|Win32.Build.0 = Debug|Win32
+		{F45CC9FD-2137-4AAB-A0FF-30DAD8EB32CF}.Release|Win32.ActiveCfg = Release|Win32
+		{F45CC9FD-2137-4AAB-A0FF-30DAD8EB32CF}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -240,6 +240,37 @@ void room_broadcast_goodbye_message(struct room *room, struct string_buffer *sen
     //@ close room(room);
 }
 
+
+
+void room_broadcast_join_message(struct room *room, struct string_buffer *senderNick)
+  //@ requires room(room) &*& string_buffer(senderNick);
+  //@ ensures room(room) &*& string_buffer(senderNick);
+{
+    //@ open room(room);
+    //@ open memberlist(?v);
+    //@ close memberlist(v);
+    struct list *members = room->members;
+    struct iter *iter = list_create_iter(members);
+    bool hasNext = iter_has_next(iter);
+    //@ lengthPositive(v);
+    while (hasNext)
+      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+    {
+        struct member *member = iter_next(iter);
+        //@ containsIth(v, i);
+        //@ separateMember(v, member);
+        //@ open member(member);
+        struct writer *memberWriter = member->writer;
+        writer_write_string_buffer(memberWriter, senderNick);
+        writer_write_string(memberWriter, " joined the room.\r\n");
+        //@ close member(member);
+        //@ putMemberBack(v, member);
+        hasNext = iter_has_next(iter);
+    }
+    iter_dispose(iter);
+    //@ close room(room);
+}
+
 struct session {
     struct room *room;
     struct lock *room_lock;
@@ -266,7 +297,10 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
     return session;
 }
 
-void room_label() requires emp; ensures emp; { } // Used only as a label.
+void room_label() 
+	//@ requires emp; 
+	//@ ensures emp; 
+{ } // Used only as a label.
 
 /*@
 
@@ -283,12 +317,19 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
   //@ requires lock_permission(roomLock, room_label, room) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
   //@ ensures lock_permission(roomLock, room_label, room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
 {
+	
     //@ open room(room);
     //@ open memberlist(?v);
     //@ close memberlist(v);
+	struct list *roomMembers = 0;
+	struct string_buffer *memberNick = 0;
     struct list *members = room->members;
+	
     struct member *member = malloc(sizeof(struct member));
     struct string_buffer *nickCopy = string_buffer_copy(nick);
+//@ close room(room);
+	room_broadcast_join_message(room,nick);
+//@ open room(room);
     member->nick = nickCopy;
     member->writer = writer;
     //@ close member(member);
@@ -321,7 +362,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     lock_acquire(roomLock);
     //@ open lock_invariant(room_label)(room);
     //@ open room(room);
-    struct list *roomMembers = room->members;
+    roomMembers = room->members;
     //@ assert list(roomMembers, ?roomMembersValue);
     //@ assume(contains(roomMembersValue, member));
     list_remove(roomMembers, member);
@@ -332,9 +373,9 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     lock_release(roomLock);
     
     //@ open member(member);
-    struct string_buffer *memberNick = member->nick;
+    memberNick = member->nick;
     string_buffer_dispose(memberNick);
-    assert writer(?memberWriter);
+    //@ assert writer(?memberWriter);
     //@ assume(memberWriter == writer);
     free(member);
 }
