@@ -456,6 +456,7 @@ type type_ =
     Bool
   | Void
   | IntType
+  | RealType
   | Char
   | StructType of string
   | PtrType of type_
@@ -495,8 +496,8 @@ and
     True of loc
   | False of loc
   | Var of loc * string
-  | Operation of loc * operator * expr list
-  | IntLit of loc * int
+  | Operation of loc * operator * expr list * type_ list option ref
+  | IntLit of loc * int * type_ option ref
   | StringLit of loc * string
   | Read of loc * expr * fieldref
   | CallExpr of loc * string * pat list * pat list
@@ -604,9 +605,9 @@ let expr_loc e =
     True l -> l
   | False l -> l
   | Var (l, x) -> l
-  | IntLit (l, n) -> l
+  | IntLit (l, n, t) -> l
   | StringLit (l, s) -> l
-  | Operation (l, op, es) -> l
+  | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
   | CallExpr (l, g, pats0, pats) -> l
   | IfExpr (l, e1, e2, e3) -> l
@@ -648,7 +649,7 @@ let type_expr_loc t =
   | PtrTypeExpr (l, te) -> l
 
 let lexer = make_lexer [
-  "struct"; "{"; "}"; "*"; ";"; "int"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
+  "struct"; "{"; "}"; "*"; ";"; "int"; "real"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
@@ -738,6 +739,7 @@ and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
@@ -891,12 +893,12 @@ and
     >] -> e
   | [< >] -> Var (l, x)
   >] -> e
-| [< '(l, Int i) >] -> IntLit (l, i)
+| [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref Void)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
-| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e])
+| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 and
   parse_switch_expr_clauses = parser
@@ -911,20 +913,20 @@ and
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
-  [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1])) >] -> e
-| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1])) >] -> e
+  [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
-  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1])) >] -> e
-| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1])) >] -> e
-| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1])) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1])) >] -> e
+  [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_conj_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, And, [e0; e1])) >] -> e
-| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, Or, [e0; e1])) >] -> e
+  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, And, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, Or, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_arglist = parser
@@ -1155,6 +1157,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       Bool -> "bool"
     | Void -> "void"
     | IntType -> "int"
+    | RealType -> "real"
     | Char -> "char"
     | InductiveType i -> i
     | StructType sn -> "struct " ^ sn
@@ -1166,6 +1169,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match t with
       Bool -> ctxt#type_bool
     | IntType -> ctxt#type_int
+    | RealType -> ctxt#type_real
     | Char -> ctxt#type_int
     | InductiveType i -> ctxt#type_inductive
     | StructType sn -> assert false
@@ -1291,6 +1295,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         let rec check_ tenv e =
                           let check e = check_ tenv e in
                           let checkt e = checkt_ tenv e in
+                          let promote_numeric e1 e2 ts =
+                            let t1 = check e1 in
+                            let t2 = check e2 in
+                            match (t1, t2) with
+                              (IntType, RealType) -> checkt e1 RealType; ts := Some [RealType; RealType]; RealType
+                            | (t1, t2) -> checkt e2 t1; ts := Some [t1; t1]; t1
+                          in
+                          let promote l e1 e2 ts =
+                            match promote_numeric e1 e2 ts with
+                              (IntType | RealType) as t -> t
+                            | _ -> static_error l "Expression of type int or real expected."
+                          in
                           match e with
                             True l -> boolt
                           | False l -> boolt
@@ -1303,26 +1319,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               )
                             | Some t -> t
                             )
-                          | Operation (l, (Eq | Neq), [e1; e2]) ->
-                            let t = check e1 in
-                            let _ = checkt e2 t in
+                          | Operation (l, (Eq | Neq), [e1; e2], ts) ->
+                            ignore (promote_numeric e1 e2 ts);
                             boolt
-                          | Operation (l, (Or | And), [e1; e2]) ->
+                          | Operation (l, (Or | And), [e1; e2], ts) ->
                             let _ = checkt e1 boolt in
                             let _ = checkt e2 boolt in
                             boolt
-                          | Operation (l, Not, [e]) ->
+                          | Operation (l, Not, [e], ts) ->
                             let _ = checkt e boolt in
                             boolt
-                          | Operation (l, (Le | Lt), [e1; e2]) ->
-                            let _ = checkt e1 intt in
-                            let _ = checkt e2 intt in
+                          | Operation (l, (Le | Lt), [e1; e2], ts) ->
+                            ignore (promote l e1 e2 ts);
                             boolt
-                          | Operation (l, (Add | Sub), [e1; e2]) ->
-                            let _ = checkt e1 intt in
-                            let _ = checkt e2 intt in
-                            intt
-                          | IntLit (l, n) -> intt
+                          | Operation (l, (Add | Sub), [e1; e2], ts) ->
+                            promote l e1 e2 ts
+                          | IntLit (l, n, t) -> t := Some intt; intt
                           | StringLit (l, s) -> PtrType Char
                           | CallExpr (l, g', [], pats) -> (
                             match try_assoc g' pfm with
@@ -1413,7 +1425,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
                         and checkt_ tenv e t0 =
                           match (e, t0) with
-                            (IntLit (l, 0), PtrType _) -> ()
+                            (IntLit (l, 0, t), PtrType _) -> t:=Some IntType
+                          | (IntLit (l, n, t), RealType) -> t:=Some RealType
                           | _ ->
                             let t = check_ tenv e in
                             if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
@@ -1519,6 +1532,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec check_expr tenv e =
       let check e = check_expr tenv e in
       let checkt e t0 = check_expr_t tenv e t0 in
+      let promote_numeric e1 e2 ts =
+        let t1 = check e1 in
+        let t2 = check e2 in
+        match (t1, t2) with
+          (IntType, RealType) -> checkt e1 RealType; ts := Some [RealType; RealType]; RealType
+        | (t1, t2) -> checkt e2 t1; ts := Some [t1; t1]; t1
+      in
+      let promote l e1 e2 ts =
+        match promote_numeric e1 e2 ts with
+          (IntType | RealType) as t -> t
+        | _ -> static_error l "Expression of type int or real expected."
+      in
       match e with
         True l -> boolt
       | False l -> boolt
@@ -1554,26 +1579,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             PredType ts
           | None -> static_error l "No such predicate."
         end
-      | Operation (l, (Eq | Neq), [e1; e2]) ->
-        let t = check e1 in
-        let _ = checkt e2 t in
+      | Operation (l, (Eq | Neq), [e1; e2], ts) ->
+        ignore (promote_numeric e1 e2 ts);
         boolt
-      | Operation (l, (Or | And), [e1; e2]) ->
+      | Operation (l, (Or | And), [e1; e2], ts) ->
         let _ = checkt e1 boolt in
         let _ = checkt e2 boolt in
         boolt
-      | Operation (l, Not, [e]) ->
+      | Operation (l, Not, [e], ts) ->
         let _ = checkt e boolt in
         boolt
-      | Operation (l, (Le | Lt), [e1; e2]) ->
-        let _ = checkt e1 intt in
-        let _ = checkt e2 intt in
+      | Operation (l, (Le | Lt), [e1; e2], ts) ->
+        ignore (promote l e1 e2 ts);
         boolt
-      | Operation (l, (Add | Sub), [e1; e2]) ->
-        let _ = checkt e1 intt in
-        let _ = checkt e2 intt in
-        intt
-      | IntLit (l, n) -> intt
+      | Operation (l, (Add | Sub), [e1; e2], ts) ->
+        promote l e1 e2 ts
+      | IntLit (l, n, t) -> t := Some intt; intt
       | StringLit (l, s) -> PtrType Char
       | CallExpr (l, g', [], pats) -> (
         match try_assoc g' purefuncmap with
@@ -1648,7 +1669,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | e -> static_error (expr_loc e) "Expression form not allowed here."
     and check_expr_t tenv e t0 =
       match (e, t0) with
-        (IntLit (l, 0), PtrType _) -> ()
+        (IntLit (l, 0, t), PtrType _) -> t:=Some IntType
+      | (IntLit (l, n, t), RealType) -> t:=Some RealType
       | _ ->
         let t = check_expr tenv e in expect_type (expr_loc e) t t0
     in
@@ -1794,7 +1816,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter e =
       match e with
         Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
-      | Operation (l, _, es) -> List.iter iter es
+      | Operation (l, _, es, _) -> List.iter iter es
       | CallExpr (l, _, [], pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
       | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
       | _ -> ()
@@ -1831,7 +1853,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some t -> t
       end
     | PredNameExpr (l, g) -> let (_, _, _, symb) = List.assoc g predfammap in symb
-    | IntLit (l, n) -> ctxt#mk_intlit n
+    | IntLit (l, n, t) when !t = Some IntType -> ctxt#mk_intlit n
+    | IntLit (l, n, t) when !t = Some RealType -> ctxt#mk_reallit n
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
     | CallExpr (l, g, [], pats) ->
       begin
@@ -1839,16 +1862,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such pure function."
         | Some (lg, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
       end
-    | Operation (l, And, [e1; e2]) -> ctxt#mk_and (ev e1) (ev e2)
-    | Operation (l, Or, [e1; e2]) -> ctxt#mk_or (ev e1) (ev e2)
-    | Operation (l, Not, [e]) -> ctxt#mk_not (ev e)
+    | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
+    | Operation (l, Or, [e1; e2], ts) -> ctxt#mk_or (ev e1) (ev e2)
+    | Operation (l, Not, [e], ts) -> ctxt#mk_not (ev e)
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
-    | Operation (l, Eq, [e1; e2]) -> ctxt#mk_eq (ev e1) (ev e2)
-    | Operation (l, Neq, [e1; e2]) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
-    | Operation (l, Add, [e1; e2]) -> ctxt#mk_add (ev e1) (ev e2)
-    | Operation (l, Sub, [e1; e2]) -> ctxt#mk_sub (ev e1) (ev e2)
-    | Operation (l, Le, [e1; e2]) -> ctxt#mk_le (ev e1) (ev e2)
-    | Operation (l, Lt, [e1; e2]) -> ctxt#mk_lt (ev e1) (ev e2)
+    | Operation (l, Eq, [e1; e2], ts) -> ctxt#mk_eq (ev e1) (ev e2)
+    | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
+    | Operation (l, Add, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_add (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_add (ev e1) (ev e2))
+    | Operation (l, Sub, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_sub (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_sub (ev e1) (ev e2))
+    | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
+    | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) -> static_error l "Cannot use field dereference in this context."
     | FuncNameExpr fn -> List.assoc fn funcnameterms
     | SwitchExpr (l, e, cs, tref) ->

@@ -5,6 +5,7 @@ class z3_context () =
   (* let _ = Z3.trace_to_stdout ctxt in *)
   let bool_type = Z3.mk_bool_type ctxt in
   let int_type = Z3.mk_int_type ctxt in
+  let real_type = Z3.mk_real_type ctxt in
   let ttrue = Z3.mk_true ctxt in
   let tfalse = Z3.mk_false ctxt in
   (* HACK: for now, all inductive values have the same Z3 type. *)
@@ -29,6 +30,7 @@ class z3_context () =
   object
     method type_bool = bool_type
     method type_int = int_type
+    method type_real = real_type
     method type_inductive = inductive_type
     method mk_symbol name domain range kind =
       let tps = Array.of_list domain in
@@ -104,6 +106,11 @@ class z3_context () =
     method mk_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
     method mk_lt t1 t2 = Z3.mk_lt ctxt t1 t2
     method mk_le t1 t2 = Z3.mk_le ctxt t1 t2
+    method mk_reallit n = Z3.mk_int ctxt n real_type
+    method mk_real_add t1 t2 = Z3.mk_add ctxt [| t1; t2 |]
+    method mk_real_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
+    method mk_real_lt t1 t2 = Z3.mk_lt ctxt t1 t2
+    method mk_real_le t1 t2 = Z3.mk_le ctxt t1 t2
     method get_type t = Z3.get_type ctxt t
     method pprint t = Z3.ast_to_string ctxt t
     method query t = query t

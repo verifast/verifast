@@ -300,8 +300,8 @@ and ['tag] simplex =
     method propagate_eq_constant u n =
       if is_integer_num n then
         const_listener u (int_of_num n)
-      else
-        unsat <- true
+      (* else
+        unsat <- true *)
       
     method assert_ge (c: int) (ts: (int * 'tag unknown) list) =
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None in

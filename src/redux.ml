@@ -15,11 +15,14 @@ type ('symbol, 'termnode) term =
 | Le of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Lt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Not of ('symbol, 'termnode) term
+| And of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | IntLit of int
 | App of 'symbol * ('symbol, 'termnode) term list
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 
 class symbol (kind: symbol_kind) (name: string) =
   object (self)
@@ -410,6 +413,7 @@ and context =
     
     method type_bool = ()
     method type_int = ()
+    method type_real = ()
     method type_inductive = ()
     method mk_true: (symbol, termnode) term = let Some ttrue = ttrue in TermNode ttrue
     method mk_false: (symbol, termnode) term = let Some tfalse = tfalse in TermNode tfalse
@@ -424,6 +428,11 @@ and context =
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
+    method mk_reallit (n: int): (symbol, termnode) term = IntLit n
+    method mk_real_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
+    method mk_real_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
+    method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
+    method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     method assume (t: (symbol, termnode) term): assume_result =
       print_endline_disabled ("Assume: " ^ self#pprint t);
       let rec assume_true t =
@@ -432,6 +441,14 @@ and context =
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#assume_le t1 0 t2
         | Lt (t1, t2) -> self#assume_le t1 1 t2
+        | RealLe (t1, t2) -> self#assume_le t1 0 t2
+        | RealLt (t1, t2) -> self#assume (And (Not (Eq (t1, t2)), (RealLe (t1, t2))))
+        | And (t1, t2) ->
+          begin
+            match self#assume t1 with
+              Unsat -> Unsat
+            | Unknown -> self#assume t2
+          end
         | Not t -> assume_false t
       and assume_false t =
         match t with
@@ -439,6 +456,8 @@ and context =
         | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#assume_le t2 1 t1
         | Lt (t1, t2) -> self#assume_le t2 0 t1
+        | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
+        | RealLt (t1, t2) -> assume_true (RealLe (t2, t1))
         | Not t -> assume_true t
       in
       assume_true t
@@ -450,6 +469,8 @@ and context =
         | Eq (t1, t2) -> self#query_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#query_le t1 0 t2
         | Lt (t1, t2) -> self#query_le t1 1 t2
+        | RealLe (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
+        | RealLt (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
         | Not t -> query_false t
       and query_false t =
         match t with
@@ -457,6 +478,8 @@ and context =
         | Eq (t1, t2) -> self#query_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#query_le t2 1 t1
         | Lt (t1, t2) -> self#query_le t2 0 t1
+        | RealLe (t1, t2) -> self#as_query (fun () -> self#assume t)
+        | RealLt (t1, t2) -> self#as_query (fun () -> self#assume t)
         | Not t -> query_true t
       in
       query_true t
@@ -566,6 +589,9 @@ and context =
       | Eq (t1, t2) -> self#pprint t1 ^ " = " ^ self#pprint t2
       | Le (t1, t2) -> self#pprint t1 ^ " <= " ^ self#pprint t2
       | Lt (t1, t2) -> self#pprint t1 ^ " < " ^ self#pprint t2
+      | RealLe (t1, t2) -> self#pprint t1 ^ " </ " ^ self#pprint t2
+      | RealLt (t1, t2) -> self#pprint t1 ^ " <=/ " ^ self#pprint t2
+      | And (t1, t2) -> self#pprint t1 ^ " && " ^ self#pprint t2
       | Not t -> "!(" ^ self#pprint t ^ ")"
       | Add (t1, t2) -> "(" ^ self#pprint t1 ^ " + " ^ self#pprint t2 ^ ")"
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"

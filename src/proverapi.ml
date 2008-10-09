@@ -6,6 +6,7 @@ class virtual ['typenode, 'symbol, 'termnode] context =
   object
     method virtual type_bool: 'typenode
     method virtual type_int: 'typenode
+    method virtual type_real: 'typenode
     method virtual type_inductive: 'typenode
     method virtual mk_symbol: string -> 'typenode list -> 'typenode -> symbol_kind -> 'symbol
     method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
@@ -22,6 +23,11 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_sub: 'termnode -> 'termnode -> 'termnode
     method virtual mk_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_le: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_reallit: int -> 'termnode
+    method virtual mk_real_add: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_real_sub: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_real_lt: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_real_le: 'termnode -> 'termnode -> 'termnode
     method virtual get_type: 'termnode -> 'typenode
     method virtual pprint: 'termnode -> string
     method virtual push: unit
