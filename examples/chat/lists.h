@@ -71,8 +71,6 @@ lemma void lengthPositive(listval v)
   }
 }
 
-
-
 lemma void containsIth(listval v, int i)
   requires 0<=i && i<length(v);
   ensures contains(v, ith(v, i)) == true;
@@ -87,6 +85,90 @@ lemma void containsIth(listval v, int i)
   }
 }
 
+predicate foreach(listval v, predicate(void *) p)
+  requires uniqueElements(v)==true &*& switch(v) { 
+             case nil: return emp; 
+             case cons(h, t): return p(h) &*& foreach(t, p);
+           }; 
+
+lemma void removeContains(listval v, void *x1, void *x2)
+    requires !contains(v, x1);
+    ensures  !contains(remove(v, x2), x1);
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x2) {
+            } else {
+                removeContains(t, x1, x2);
+            }
+    }
+}
+
+lemma void removeUniqueElements(listval v, void *x)
+    requires uniqueElements(v) == true;
+    ensures uniqueElements(remove(v, x)) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x) {
+            } else {
+                removeContains(t, h, x);
+                removeUniqueElements(t, x);
+            }
+    }
+}
+
+lemma void remove_not_contains(listval v, struct member *mem)
+  requires !contains(v, mem);
+  ensures remove(v, mem) == v;
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      if (h == mem) {
+      } else {
+      }
+      remove_not_contains(t, mem);
+  }
+}
+
+lemma void foreach_unremove(listval v, void *x)
+  requires foreach(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
+  ensures foreach(v, p);
+{
+  
+  switch(v) {
+    case nil: open foreach(remove(v, x), p); return;
+    case cons(h, t):
+      if(h==x){
+        remove_not_contains(t, x);
+        close foreach(v, p);
+      } else {
+        open foreach(remove(v, x), p);
+        foreach_unremove(t, x);
+        close foreach(v, p);
+      }
+  }
+}
+
+lemma void foreach_remove(listval v, void *x)
+    requires foreach(v, ?p) &*& contains(v, x) == true;
+    ensures foreach(remove(v, x), p) &*& p(x) &*& uniqueElements(v) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            open foreach(v, p);
+            if (h == x) {
+            } else {
+                foreach_remove(t, x);
+                removeUniqueElements(v, x);
+                close foreach(remove(v, x), p);
+            }
+    }
+}
 
 
 

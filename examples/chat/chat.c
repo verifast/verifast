@@ -23,119 +23,29 @@ lemma void member_distinct(struct member *m1, struct member *m2)
   close member(m2);
   close member(m1);
 }
+
+lemma void foreach_member_not_contains(listval v, struct member *member)
+  requires foreach(v, @member) &*& member(member);
+  ensures foreach(v, @member) &*& member(member) &*& !contains(v, member);
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      open foreach(v, @member);
+      member_distinct(h, member);
+      foreach_member_not_contains(t, member);
+      close foreach(v, @member);
+  }
+}
 @*/
 
 struct room {
     struct list *members;
 };
 
-/*@ 
-predicate memberlist(listval v)
-  requires uniqueElements(v)==true &*& switch(v) { 
-             case nil: return emp; 
-             case cons(h, t): return member(h) &*& memberlist(t);
-           }; 
-@*/
-
-/*@ 
-lemma void memberlist_member_not_contains(listval v, struct member *member)
-  requires memberlist(v) &*& member(member);
-  ensures memberlist(v) &*& member(member) &*& !contains(v, member);
-{
-  switch (v) {
-    case nil:
-    case cons(h, t):
-      open memberlist(v);
-      member_distinct(h, member);
-      memberlist_member_not_contains(t, member);
-      close memberlist(v);
-  }
-}
-
-lemma void removeContains(listval v, void *x1, void *x2)
-    requires !contains(v, x1);
-    ensures  !contains(remove(v, x2), x1);
-{
-    switch (v) {
-        case nil:
-        case cons(h, t):
-            if (h == x2) {
-            } else {
-                removeContains(t, x1, x2);
-            }
-    }
-}
-
-lemma void removeUniqueElements(listval v, void *x)
-    requires uniqueElements(v) == true;
-    ensures uniqueElements(remove(v, x)) == true;
-{
-    switch (v) {
-        case nil:
-        case cons(h, t):
-            if (h == x) {
-            } else {
-                removeContains(t, h, x);
-                removeUniqueElements(t, x);
-            }
-    }
-}
-
-lemma void remove_not_contains(listval v, struct member *mem)
-  requires !contains(v, mem);
-  ensures remove(v, mem) == v;
-{
-  switch (v) {
-    case nil:
-    case cons(h, t):
-      if (h == mem) {
-      } else {
-      }
-      remove_not_contains(t, mem);
-  }
-}
-
-lemma void putMemberBack(listval v, struct member* mem)
-  requires memberlist(remove(v, mem)) &*& contains(v, mem)==true &*& member(mem) &*& uniqueElements(v) == true;
-  ensures memberlist(v);
-{
-  
-  switch(v) {
-    case nil: open memberlist(remove(v, mem)); return;
-    case cons(h, t):
-      if(h==mem){
-        remove_not_contains(t, mem);
-        close memberlist(v);
-      } else {
-        open memberlist(remove(v, mem));
-        putMemberBack(t, mem);
-        close memberlist(v);
-      }
-  }
-}
-
-lemma void memberlistRemove(listval v, struct member *mem)
-    requires memberlist(v) &*& contains(v, mem) == true;
-    ensures memberlist(remove(v, mem)) &*& member(mem) &*& uniqueElements(v) == true;
-{
-    switch (v) {
-        case nil:
-        case cons(h, t):
-            open memberlist(v);
-            if (h == mem) {
-            } else {
-                memberlistRemove(t, mem);
-                removeUniqueElements(v, mem);
-                close memberlist(remove(v, mem));
-            }
-    }
-}
-
-@*/
-
 /*@
 predicate room(struct room* r)
-  requires r->members |-> ?list &*& list(list, ?v) &*& memberlist(v) &*& malloc_block_room(r);
+  requires r->members |-> ?list &*& list(list, ?v) &*& foreach(v, member) &*& malloc_block_room(r);
 @*/
 
 struct room *create_room()
@@ -145,7 +55,7 @@ struct room *create_room()
     struct room *room = malloc(sizeof(struct room));
     struct list *members = create_list();
     room->members = members;
-    //@ close memberlist(nil);
+    //@ close foreach(nil, member);
     //@ close room(room);
     return room;
 }
@@ -155,24 +65,23 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
   //@ ensures room(room) &*& string_buffer(nick);
 {
     //@ open room(room);
-    //@ open memberlist(?v);
-    //@ close memberlist(v);
+    //@ assert foreach(?v, _);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasMember = false;
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(v);
     while (hasNext && !hasMember)
-      //@ invariant string_buffer(nick) &*& iter(iter, members, v, ?i) &*& memberlist(v) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+      //@ invariant string_buffer(nick) &*& iter(iter, members, v, ?i) &*& foreach(v, @member) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ memberlistRemove(v, member);
+        //@ foreach_remove(v, member);
         //@ open member(member);
         struct string_buffer *memberNick = member->nick;
         hasMember = string_buffer_equals(memberNick, nick);
         //@ close member(member);
-        //@ putMemberBack(v, member);
+        //@ foreach_unremove(v, member);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
@@ -185,18 +94,17 @@ void room_broadcast_message(struct room *room, struct string_buffer *senderNick,
   //@ ensures room(room) &*& string_buffer(senderNick) &*& string_buffer(message);
 {
     //@ open room(room);
-    //@ open memberlist(?v);
-    //@ close memberlist(v);
+    //@ assert foreach(?v, _);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& string_buffer(message) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+      //@ invariant iter(iter, members, ?v, ?i) &*& foreach(v, @member) &*& string_buffer(senderNick) &*& string_buffer(message) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ memberlistRemove(v, member);
+        //@ foreach_remove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
@@ -204,7 +112,7 @@ void room_broadcast_message(struct room *room, struct string_buffer *senderNick,
         writer_write_string_buffer(memberWriter, message);
         writer_write_string(memberWriter, "\r\n");
         //@ close member(member);
-        //@ putMemberBack(v, member);
+        //@ foreach_unremove(v, member);
         hasNext = iter_has_next(iter);
     }    
     iter_dispose(iter);
@@ -216,54 +124,50 @@ void room_broadcast_goodbye_message(struct room *room, struct string_buffer *sen
   //@ ensures room(room) &*& string_buffer(senderNick);
 {
     //@ open room(room);
-    //@ open memberlist(?v);
-    //@ close memberlist(v);
+    //@ assert foreach(?v, _);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant iter(iter, members, ?v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+      //@ invariant iter(iter, members, ?v, ?i) &*& foreach(v, @member) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ memberlistRemove(v, member);
+        //@ foreach_remove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
         writer_write_string(memberWriter, " left the room.\r\n");
         //@ close member(member);
-        //@ putMemberBack(v, member);
+        //@ foreach_unremove(v, member);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
     //@ close room(room);
 }
 
-
-
 void room_broadcast_join_message(struct room *room, struct string_buffer *senderNick)
-  //@ requires room->members |-> ?list &*& list(list, ?v) &*& memberlist(v) &*& string_buffer(senderNick);
-  //@ ensures room->members |-> list &*& list(list, v) &*& memberlist(v) &*& string_buffer(senderNick);
+  //@ requires room->members |-> ?list &*& list(list, ?v) &*& foreach(v, member) &*& string_buffer(senderNick);
+  //@ ensures room->members |-> list &*& list(list, v) &*& foreach(v, member) &*& string_buffer(senderNick);
 {
-    //@ open memberlist(?v);
-    //@ close memberlist(v);
+    //@ assert foreach(?v, _);
     struct list *members = room->members;
     struct iter *iter = list_create_iter(members);
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(v);
     while (hasNext)
-      //@ invariant iter(iter, members, v, ?i) &*& memberlist(v) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
+      //@ invariant iter(iter, members, v, ?i) &*& foreach(v, @member) &*& string_buffer(senderNick) &*& hasNext==(i<length(v)) &*& 0<=i &*& i<= length(v);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(v, i);
-        //@ memberlistRemove(v, member);
+        //@ foreach_remove(v, member);
         //@ open member(member);
         struct writer *memberWriter = member->writer;
         writer_write_string_buffer(memberWriter, senderNick);
         writer_write_string(memberWriter, " joined the room.\r\n");
         //@ close member(member);
-        //@ putMemberBack(v, member);
+        //@ foreach_unremove(v, member);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
@@ -317,8 +221,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
 {
 	
     //@ open room(room);
-    //@ open memberlist(?v);
-    //@ close memberlist(v);
+    //@ open foreach(?v, @member);
+    //@ close foreach(v, @member);
 	struct list *roomMembers = 0;
 	struct string_buffer *memberNick = 0;
     struct list *members = room->members;
@@ -330,8 +234,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     member->writer = writer;
     //@ close member(member);
     list_add(members, member);
-    //@ memberlist_member_not_contains(v, member);
-    //@ close memberlist(cons(member, v));
+    //@ foreach_member_not_contains(v, member);
+    //@ close foreach(cons(member, v), @member);
     //@ close room(room);
     //@ close lock_invariant(room_label)(room);
     lock_release(roomLock);
@@ -362,7 +266,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     //@ assert list(roomMembers, ?roomMembersValue);
     //@ assume(contains(roomMembersValue, member));
     list_remove(roomMembers, member);
-    //@ memberlistRemove(roomMembersValue, member);
+    //@ foreach_remove(roomMembersValue, member);
     //@ close room(room);
     room_broadcast_goodbye_message(room, nick);
     //@ close lock_invariant(room_label)(room);
@@ -408,17 +312,17 @@ void session_run(void *data) //@ : thread_run
         bool hasNext = iter_has_next(iter);
         //@ lengthPositive(membersValue);
         while (hasNext)
-            //@ invariant writer(writer) &*& iter(iter, members, membersValue, ?i) &*& memberlist(membersValue) &*& hasNext == (i < length(membersValue)) &*& 0 <= i &*& i <= length(membersValue);
+            //@ invariant writer(writer) &*& iter(iter, members, membersValue, ?i) &*& foreach(membersValue, @member) &*& hasNext == (i < length(membersValue)) &*& 0 <= i &*& i <= length(membersValue);
         {
             struct member *member = iter_next(iter);
             //@ containsIth(membersValue, i);
-            //@ memberlistRemove(membersValue, member);
+            //@ foreach_remove(membersValue, member);
             //@ open member(member);
             struct string_buffer *nick = member->nick;
             writer_write_string_buffer(writer, nick);
             writer_write_string(writer, "\r\n");
             //@ close member(member);
-            //@ putMemberBack(membersValue, member);
+            //@ foreach_unremove(membersValue, member);
             hasNext = iter_has_next(iter);
         }
         iter_dispose(iter);
