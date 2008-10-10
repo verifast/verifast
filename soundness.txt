@@ -7,3 +7,4 @@ Known VeriFast unsoundnesses:
 - variable hiding might cause problems; should be forbidden
 - contracts of lock_acquire and lock_release (non-re-entrant, non-thread-affine) not consistent with implementation (re-entrant, thread-affine)
 - The "return" statement does not jump to the end of the function
+- Symbolic execution of a "malloc" call produces heap chunks even if the return value is 0
