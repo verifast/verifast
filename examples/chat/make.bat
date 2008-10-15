@@ -1,0 +1,1 @@
+cl /MDd /DWIN32 chat.c lists.c stringBuffers.c ws2_32.lib socketlib.c sockets.c threading.c
