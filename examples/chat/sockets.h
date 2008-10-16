@@ -37,10 +37,10 @@ bool reader_read_line(struct reader *reader, struct string_buffer *buffer);
     //@ requires reader(reader) &*& string_buffer(buffer);
     //@ ensures reader(reader) &*& string_buffer(buffer);
 void writer_write_string(struct writer *writer, char *string);
-    //@ requires writer(writer);
-    //@ ensures writer(writer);
+    //@ requires writer(writer) &*& [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
+    //@ ensures writer(writer) &*& [f]chars(string, cs);
 void writer_write_string_buffer(struct writer *writer, struct string_buffer *buffer);
-    //@ requires writer(writer) &*& string_buffer(buffer);
-    //@ ensures writer(writer) &*& string_buffer(buffer);
+    //@ requires writer(writer) &*& [?f]string_buffer(buffer);
+    //@ ensures writer(writer) &*& [f]string_buffer(buffer);
 
 #endif

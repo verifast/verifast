@@ -304,7 +304,7 @@ let show_ide initialPath prover =
           end
       end;
       let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass) in
-      let _ = append_items chunksStore chunksKCol chunksCol (List.map (fun (g, coef, ts) -> "[" ^ coef ^ "]" ^ g ^ "(" ^ String.concat ", " ts ^ ")") h) in
+      let _ = append_items chunksStore chunksKCol chunksCol (List.map Verifast.string_of_chunk h) in
       ()
   in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in

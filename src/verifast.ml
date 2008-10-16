@@ -408,8 +408,7 @@ let preprocess path loc stream streamSource =
                 expect_eol();
                 begin
                   match includePath with
-                    "malloc.h" -> ()
-                  | "bool.h" -> ()
+                    "bool.h" -> ()
                   | _ ->
                     let resolvedPath = Filename.concat (Filename.dirname !path) includePath in
                     push resolvedPath
@@ -654,7 +653,7 @@ let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "real"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
-  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!"; "string_literal";
+  "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!";
   "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"; "assert"; "@"; "["; "]"
 ]
 
@@ -978,6 +977,14 @@ let try_assoc_i x xys =
   in
   iter 0 xys
 
+let list_remove_dups xs =
+  let rec iter ys xs =
+    match xs with
+      [] -> List.rev ys
+    | x::xs -> if List.mem x ys then iter ys xs else iter (x::ys) xs
+  in
+  iter [] xs
+
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
@@ -997,7 +1004,9 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 
-let string_of_heap h = String.concat " * " (List.map (function (g, coef, ts) -> "[" ^ coef ^ "]" ^ g ^ "(" ^ (String.concat ", " (List.map (fun t -> t) ts)) ^ ")") h)
+let string_of_chunk (g, coef, ts) = "[" ^ coef ^ "]" ^ g ^ "(" ^ String.concat ", " ts ^ ")"
+
+let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
 
 let string_of_context c =
   match c with
@@ -1067,7 +1076,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     imapi 0 xs
   in
   
-  let ds = read_decls path stream streamSource reportKeyword reportGhostRange in
+  let myPath = Filename.dirname (Sys.argv.(0)) in
+  let preludePath = Filename.concat myPath "prelude.h" in
+  let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
+  let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
+  let ds = ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange in
   
   (* failwith "Done parsing."; *)
   
@@ -1076,10 +1089,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> sdm
       | Struct (l, sn, fds_opt)::ds ->
-        if List.mem_assoc sn sdm then
-          static_error l "Duplicate struct name."
-        else
-          iter ((sn, (l, fds_opt))::sdm) ds
+        begin
+          match try_assoc sn sdm with
+            Some (_, Some _) -> static_error l "Duplicate struct name."
+          | Some (_, None) | None -> iter ((sn, (l, fds_opt))::sdm) ds
+        end
       | _::ds -> iter sdm ds
     in
     iter [] ds
@@ -1196,6 +1210,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match (t, t0) with
       (PtrType _, PtrType Void) -> ()
     | (PtrType Void, PtrType _) -> ()
+    | (Char, IntType) -> ()
     | (PredType ts, PredType ts0) ->
       begin
         match zip ts ts0 with
@@ -1464,7 +1479,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let mk_predfam p l arity ts = (p, (l, arity, ts, get_unique_var_symb p (PredType ts))) in
   
-  let malloc_block_pred_map = List.map (fun (sn, _) -> (sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [PtrType (StructType sn)])) structmap in
+  let malloc_block_pred_map = flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [PtrType (StructType sn)])] | _ -> []) structmap in
   
   let field_pred_map =
     flatmap
@@ -1485,9 +1500,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter pm ds =
       match ds with
         PredFamilyDecl (l, p, arity, tes)::ds ->
-        let _ = if List.mem_assoc p pm then static_error l "Duplicate predicate name." in
         let ts = List.map check_pure_type tes in
-        iter (mk_predfam p l arity ts::pm) ds
+        begin
+          match try_assoc p pm with
+            Some (l0, arity0, ts0, symb0) ->
+            if arity <> arity0 || ts <> ts0 then static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
+            iter pm ds
+          | None ->
+            iter (mk_predfam p l arity ts::pm) ds
+        end
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in
@@ -1495,7 +1516,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter structpreds ds
   in
 
-  let funcnames = flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds in
+  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds) in
   
   let check_funcnamelist is = List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is in
   
@@ -1597,7 +1618,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ignore (promote l e1 e2 ts);
       boolt
     | Operation (l, (Add | Sub), [e1; e2], ts) ->
-      promote l e1 e2 ts
+      let t1 = check e1 in
+      begin
+        match t1 with
+          PtrType Char -> checkt e2 intt; ts:=Some [PtrType Char; IntType]; t1
+        | IntType | RealType -> promote l e1 e2 ts
+      end
     | IntLit (l, n, t) -> t := Some intt; intt
     | StringLit (l, s) -> PtrType Char
     | Read (l, e, f) -> check_deref l tenv e f
@@ -1676,6 +1702,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match (e, t0) with
       (IntLit (l, 0, t), PtrType _) -> t:=Some IntType
     | (IntLit (l, n, t), RealType) -> t:=Some RealType
+    | (IntLit (l, n, t), Char) -> if not (0 <= n && n <= 127) then static_error l "Integer literal used as char must be between 0 and 127."; t:=Some IntType
     | _ ->
       let t = check_expr tenv e in expect_type (expr_loc e) t t0
   and check_deref l tenv e f =
@@ -1874,8 +1901,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
     | Operation (l, Eq, [e1; e2], ts) -> ctxt#mk_eq (ev e1) (ev e2)
     | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
-    | Operation (l, Add, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_add (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_add (ev e1) (ev e2))
-    | Operation (l, Sub, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_sub (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_sub (ev e1) (ev e2))
+    | Operation (l, Add, [e1; e2], ts) -> (match !ts with Some [IntType|PtrType Char|Char; IntType|Char] -> ctxt#mk_add (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_add (ev e1) (ev e2) | _ -> static_error l "Internal error in eval.")
+    | Operation (l, Sub, [e1; e2], ts) -> (match !ts with Some [IntType|PtrType Char|Char; IntType|Char] -> ctxt#mk_sub (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_sub (ev e1) (ev e2))
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->
@@ -2252,7 +2279,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> List.rev funcmap
       | Func (l, k, rt, fn, xs, contract_opt, body)::ds when k <> Fixpoint ->
-        let _ = if List.mem_assoc fn funcmap then static_error l "Duplicate function name." in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2299,13 +2325,92 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 end
             end
         in
-        iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
+        begin
+          match try_assoc fn funcmap with
+            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            if body = None then
+              static_error l "Function prototype must precede function implementation."
+            else
+              static_error l "Duplicate function implementation."
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None) ->
+            if body = None then static_error l "Duplicate function prototype.";
+            if k <> k0 then static_error l "Function implementation does not match prototype: modifiers do not match.";
+            if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
+            begin
+              match zip xmap xmap0 with
+                None -> static_error l "Function implementation does not match prototype: parameter counts do not match."
+              | Some pairs ->
+                List.iter
+                  (fun ((x, t), (x0, t0)) ->
+                   if t <> t0 then static_error l ("Function implementation does not match prototype: parameter '" ^ x ^ "': wrong type.")
+                  )
+                  pairs
+            end;
+            push();
+            let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
+            let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
+            let _ =
+              assume_pred [] [] env0 pre0 real_unit (fun h _ env0 ->
+                let (Some bs) = zip xmap env0_0 in
+                let env_0 = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
+                let env = List.map (fun (x, e) -> (x, eval None env_0 e)) cenv in
+                assert_pred h [] env pre real_unit (fun h _ env ->
+                  let (result, env) =
+                    match rt with
+                      None -> (None, env)
+                    | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
+                  in
+                  assume_pred h [] env post real_unit (fun h _ _ ->
+                    let env0 =
+                      match result with
+                        None -> env0
+                      | Some v -> ("result", v)::env0
+                    in
+                    assert_pred h [] env0 post0 real_unit (fun h _ env0 ->
+                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                    )
+                  )
+                )
+              )
+            in
+            pop();
+            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
+        end
       | _::ds -> iter funcmap ds
     in
     iter [] ds
   in
 
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb))) -> symb) field_pred_map in
+  
+  let check_leaks h env l msg =
+    let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+    let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+    let (stringlitchunks, otherchunks) =
+      let rec iter stringlitchunks otherchunks h =
+        match h with
+          [] -> (stringlitchunks, otherchunks)
+        | ((g, coef, ts) as chunk)::h when g == string_literal_symb -> iter (chunk::stringlitchunks) otherchunks h
+        | chunk::h -> iter stringlitchunks (chunk::otherchunks) h
+      in
+      iter [] [] h
+    in
+    let rec iter stringlitchunks otherchunks =
+      match stringlitchunks with
+        [] ->
+        if otherchunks = [] then () else assert_false h env l msg
+      | (_, coef, [arr; cs])::stringlitchunks ->
+        let rec consume_chars_chunk otherchunks h =
+          match h with
+            [] -> assert_false h env l "At function exit: string_literal chunk without matching chars chunk."
+          | (g, coef', [arr'; cs'])::h when g == chars_symb && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
+          | chunk::h -> consume_chars_chunk (chunk::otherchunks) h
+        in
+        consume_chars_chunk [] otherchunks
+    in
+    iter stringlitchunks otherchunks
+  in
   
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
@@ -2344,12 +2449,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Incorrect number of arguments."
           | Some bs ->
             List.iter
-              (function (LitPat e, (_, tp)) ->
-                 check_expr_t tenv e tp;
-                 if tp = PtrType Char then   (* TODO: Replace this hack with a proper approach for char arrays (writable ones and readonly ones) *)
-                   match e with
-                     StringLit _ -> ()
-                   | _ -> static_error (expr_loc e) "Argument for parameter of type 'char *' must be string literal."
+              (function (LitPat e, (x, tp)) ->
+                 check_expr_t tenv e tp
               ) bs
         in
         let ts = List.map (function (LitPat e) -> ev e) pats in
@@ -2414,55 +2515,74 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match s with
       PureStmt (l, s) ->
       verify_stmt true leminfo sizemap tenv ghostenv h env s tcont
-    | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
-      let (lsoe, ltn, tn) =
-        match args with
-          [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] -> (lsoe, ltn, tn)
-        | _ -> static_error l "malloc argument must be of the form 'sizeof(struct struct_name)'."
-      in
+    | Assign (l, x, StringLit (llit, s)) ->
+      if pure then static_error l "Cannot use a string literal in a pure context.";
       let tpx = vartp l x in
-      let _ = check_assign l x in
-      let (_, fds_opt) = List.assoc tn structmap in
-      let fds =
-        match fds_opt with
-          Some fds -> fds
-        | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
-      in
-      let _ =
-        match tpx with
-          PtrType (StructType sn) when sn = tn -> ()
-        | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
-      in
-      let result = get_unique_var_symb "block" tpx in
-      let rec iter h fds =
-        match fds with
-          [] ->
+      check_assign l x;
+      expect_type l (PtrType Char) tpx;
+      let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+      let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+      let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+      let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
+      let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
+      let coef = get_unique_var_symb "stringLiteralCoef" RealType in
+      assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
+        cont ((chars_symb, coef, [value; cs])::(string_literal_symb, coef, [value; cs])::h) ((x, value)::env)
+      )
+    | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
+      begin
+        match args with
+          [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
+          let tpx = vartp l x in
+          let _ = check_assign l x in
+          let (_, fds_opt) = List.assoc tn structmap in
+          let fds =
+            match fds_opt with
+              Some fds -> fds
+            | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+          in
+          let _ =
+            match tpx with
+              PtrType (StructType sn) when sn = tn -> ()
+            | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
+          in
+          let result = get_unique_var_symb "block" tpx in
+          let rec iter h fds =
+            match fds with
+              [] ->
+              let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+               cont (h @ [(malloc_block_symb, real_unit, [result])]) (update env x result)
+            | (f, (lf, t))::fds ->
+              let fref = new fieldref f in
+              fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+          in
+          iter h fds
+        | _ -> call_stmt l (Some x) "malloc" args
+      end
+    | CallStmt (l, "free", args) ->
+      begin
+        match List.map (check_expr tenv) args with
+          [PtrType (StructType tn)] ->
+          let [arg] = args in
+          let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
+          let fds =
+            match flatmap (function (Struct (ls, sn, Some fds)) when sn = tn -> [fds] | _ -> []) ds with
+              [fds] -> fds
+            | [] -> static_error l "Freeing an object of a struct type declared without a body is not supported."
+          in
+          let arg = ev arg in
+          let rec iter h fds =
+            match fds with
+              [] -> cont h env
+            | (Field (lf, t, f))::fds ->
+              let fref = new fieldref f in
+              fref#set_parent tn;
+              get_field h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
+          in
           let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-           cont (h @ [(malloc_block_symb, real_unit, [result])]) (update env x result)
-        | (f, (lf, t))::fds ->
-          let fref = new fieldref f in
-          fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
-      in
-      iter h fds
-    | CallStmt (l, "free", [Var (lv, x)]) ->
-      let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
-      let (PtrType (StructType tn)) = List.assoc x tenv in
-      let [fds_opt] = flatmap (function (Struct (ls, sn, fds)) when sn = tn -> [fds] | _ -> []) ds in
-      let fds =
-        match fds_opt with
-          Some fds -> fds
-        | None -> static_error l "Freeing an object of a struct type declared without a body is not supported."
-      in
-      let rec iter h fds =
-        match fds with
-          [] -> cont h env
-        | (Field (lf, t, f))::fds ->
-          let fref = new fieldref f in
-          fref#set_parent tn;
-          get_field h (lookup env x) fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
-      in
-      let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-      assert_chunk h ghostenv env l malloc_block_symb real_unit DummyPat [LitPat (Var (lv, x))] (fun h coef _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
+          assert_chunk h [] [("x", arg)] l malloc_block_symb real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
+        | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args)
+      end
     | Assign (l, x, CallExpr (lc, g, [], pats)) ->
       call_stmt l (Some x) g pats
     | Assign (l, x, e) ->
@@ -2609,9 +2729,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                assume (eval env e) (fun _ ->
                  verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                    assert_pred h ghostenv env p real_unit (fun h _ _ ->
-                     match h with
-                       [] -> success()
-                     | _ -> assert_false h env l "Loop leaks heap chunks."
+                     check_leaks h env l "Loop leaks heap chunks."
                    )
                  )
                )
@@ -2685,9 +2803,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             get_env_post (fun env_post ->
             assert_pred h ghostenv env_post post real_unit (fun h _ _ ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
-              match h with
-                [] -> success()
-              | _ -> assert_false h env l "Function leaks heap chunks."
+                check_leaks h env l "Function leaks heap chunks."
               )
             )
             )
