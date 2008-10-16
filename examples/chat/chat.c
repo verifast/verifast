@@ -78,8 +78,7 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
         //@ containsIth(members, i);
         //@ foreach_remove(members, member);
         //@ open member(member);
-        struct string_buffer *memberNick = member->nick;
-        hasMember = string_buffer_equals(memberNick, nick);
+        hasMember = string_buffer_equals(member->nick, nick);
         //@ close member(member);
         //@ foreach_unremove(members, member);
         hasNext = iter_has_next(iter);
@@ -106,9 +105,8 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
         //@ containsIth(members, i);
         //@ foreach_remove(members, member);
         //@ open member(member);
-        struct writer *memberWriter = member->writer;
-        writer_write_string_buffer(memberWriter, message);
-        writer_write_string(memberWriter, "\r\n");
+        writer_write_string_buffer(member->writer, message);
+        writer_write_string(member->writer, "\r\n");
         //@ close member(member);
         //@ foreach_unremove(members, member);
         hasNext = iter_has_next(iter);
@@ -166,12 +164,11 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     {
         struct string_buffer *nickCopy = string_buffer_copy(nick);
         //@ open room(room);
-        struct list *membersList = room->members;
         member = malloc(sizeof(struct member));
         member->nick = nickCopy;
         member->writer = writer;
         //@ close member(member);
-        list_add(membersList, member);
+        list_add(room->members, member);
         //@ open foreach(?members, @member);
         //@ close foreach(members, @member);
         //@ foreach_member_not_contains(members, member);
@@ -230,10 +227,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     lock_release(roomLock);
     
     //@ open member(member);
-    {
-        struct string_buffer *memberNick = member->nick;
-        string_buffer_dispose(memberNick);
-    }
+    string_buffer_dispose(member->nick);
     //@ assert writer(?memberWriter);
     //@ assume(memberWriter == writer);
     free(member);
@@ -277,8 +271,7 @@ void session_run(void *data) //@ : thread_run
             //@ containsIth(members, i);
             //@ foreach_remove(members, member);
             //@ open member(member);
-            struct string_buffer *nick = member->nick;
-            writer_write_string_buffer(writer, nick);
+            writer_write_string_buffer(writer, member->nick);
             writer_write_string(writer, "\r\n");
             //@ close member(member);
             //@ foreach_unremove(members, member);
