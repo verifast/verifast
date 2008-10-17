@@ -1,0 +1,7 @@
+.provides .\lists.h#create_list
+.provides .\lists.h#iter_dispose
+.provides .\lists.h#iter_has_next
+.provides .\lists.h#iter_next
+.provides .\lists.h#list_add
+.provides .\lists.h#list_create_iter
+.provides .\lists.h#list_remove

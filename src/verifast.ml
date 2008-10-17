@@ -58,7 +58,7 @@ type token =
   | Char of char
   | Eol
 
-type srcpos = (string * int * int)
+type srcpos = ((string * string) * int * int)
 type loc = (srcpos * srcpos)
 
 exception ParseException of loc * string
@@ -319,7 +319,7 @@ let preprocess path loc stream streamSource =
   let loc = ref loc in
   let stream = ref stream in
   let startOfLine = ref true in
-  let stack: (string * (unit -> loc) * (loc * token) Stream.t * bool) list ref = ref [] in
+  let stack: ((string * string) * (unit -> loc) * (loc * token) Stream.t * bool) list ref = ref [] in
   let defines: (string * (loc * token) list) list ref = ref [] in
   let push newPath =
     stack := (!path, !loc, !stream, !startOfLine)::!stack;
@@ -410,8 +410,9 @@ let preprocess path loc stream streamSource =
                   match includePath with
                     "bool.h" -> ()
                   | _ ->
-                    let resolvedPath = Filename.concat (Filename.dirname !path) includePath in
-                    push resolvedPath
+                    let (basedir, relpath) = !path in
+                    let resolvedRelPath = Filename.concat (Filename.dirname relpath) includePath in
+                    push (basedir, resolvedRelPath)
                 end;
                 next_token()
               | _ ->
@@ -587,8 +588,10 @@ http://www.gnu.org/prep/standards/standards.html#Errors
 
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
+let string_of_path (basedir, relpath) = Filename.concat basedir relpath
+
 let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
-  p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
+  string_of_path p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
   if p1 = p2 then
     if l1 = l2 then
       if c1 = c2 then
@@ -598,7 +601,7 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
     else
       "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
   else
-    ")-" ^ p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+    ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
 
 let expr_loc e =
   match e with
@@ -663,9 +666,9 @@ let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 
 let read_decls path stream streamSource reportKeyword reportGhostRange =
 begin
-let tokenStreamSource path = lexer path (streamSource path) reportKeyword in
-let (loc, token_stream) = lexer path stream reportKeyword in
-let pp_token_stream = preprocess path loc token_stream tokenStreamSource in
+let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
+let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) stream reportKeyword in
+let pp_token_stream = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
 let rec parse_decls_eof = parser
   [< ds = parse_decls; _ = Stream.empty >] -> ds
 and
@@ -1026,6 +1029,15 @@ let zip xs ys =
   in
   iter xs ys []
 
+let do_finally tryBlock finallyBlock =
+  let result =
+    try
+      tryBlock()
+    with e -> finallyBlock(); raise e
+  in
+  finallyBlock();
+  result
+
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) verbose path stream streamSource reportKeyword reportGhostRange =
 
   let verbose_print_endline s = if verbose then print_endline s else () in
@@ -1133,7 +1145,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structdeclmap
   in
   
-  let dummy_srcpos = ("prelude", 0, 0) in
+  let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0) in
   let dummy_loc = (dummy_srcpos, dummy_srcpos) in
   
   let inductivedeclmap =
@@ -2273,11 +2285,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter [] ds
   in
-
-  let funcmap =
-    let rec iter funcmap ds =
+  
+  let (funcmap, prototypes_implemented) =
+    let rec iter funcmap prototypes_implemented ds =
       match ds with
-        [] -> List.rev funcmap
+        [] -> (List.rev funcmap, List.rev prototypes_implemented)
       | Func (l, k, rt, fn, xs, contract_opt, body)::ds when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
@@ -2327,7 +2339,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
+            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) prototypes_implemented ds
           | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
@@ -2375,11 +2387,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               )
             in
             pop();
-            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ds
+            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
-      | _::ds -> iter funcmap ds
+      | _::ds -> iter funcmap prototypes_implemented ds
     in
-    iter [] ds
+    iter [] [] ds
   in
 
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb))) -> symb) field_pred_map in
@@ -2427,6 +2439,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     | e -> cont h (eval (Some (fun l t f -> read_field h env l t f)) env e)
   in
+  
+  let prototypes_used : (string * loc) list ref = ref [] in
+  
+  let register_prototype_used l g =
+    if not (List.mem (g, l) !prototypes_used) then
+      prototypes_used := (g, l)::!prototypes_used
+  in
 
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
@@ -2464,7 +2483,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | Some (_, k, tr, ps, cenv0, pre, post, _) ->
+      | Some (lg, k, tr, ps, cenv0, pre, post, body) ->
+        if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (p, t) -> p) ps in
         let _ =
@@ -2829,16 +2849,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _::funcs -> verify_funcs lems funcs
   in
   
-  verify_funcs [] funcmap
-
-let do_finally tryBlock finallyBlock =
-  let result =
-    try
-      tryBlock()
-    with e -> finallyBlock(); raise e
+  verify_funcs [] funcmap;
+  
+  let create_manifest_file() =
+    let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
+    let file = open_out manifest_filename in
+    let sorted_lines protos =
+      let lines = List.map (fun (g, (((_, path), _, _), _)) -> path ^ "#" ^ g) protos in
+      List.sort compare lines
+    in
+    do_finally (fun () ->
+      List.iter (fun line -> output_string file (".requires " ^ line ^ "\n")) (sorted_lines !prototypes_used);
+      List.iter (fun line -> output_string file (".provides " ^ line ^ "\n")) (sorted_lines prototypes_implemented)
+    ) (fun () -> close_out file)
   in
-  finallyBlock();
-  result
+  create_manifest_file()
 
 let verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange =
   do_finally
@@ -2885,3 +2910,43 @@ let remove_dups bs =
       if List.mem_assoc x bs0 then iter bs0 bs else iter ((x, v)::bs0) bs
   in
   iter [] bs
+
+exception LinkError of string
+
+let link_program isLibrary modulepaths =
+  let rec iter impls modulepaths =
+    match modulepaths with
+      [] -> impls
+    | modulepath::modulepaths ->
+      let manifest_path = Filename.chop_extension modulepath ^ ".vfmanifest" in
+      let lines =
+        let file = open_in manifest_path in
+        do_finally (fun () ->
+          let rec iter () =
+            try
+              let line = input_line file in
+              line::iter()
+            with
+              End_of_file -> []
+          in
+          iter()
+        ) (fun () -> close_in file)
+      in
+      let rec iter0 impls' lines =
+        match lines with
+          [] -> iter impls' modulepaths
+        | line::lines ->
+          let space = String.index line ' ' in
+          let command = String.sub line 0 space in
+          let symbol = String.sub line (space + 1) (String.length line - space - 1) in
+          begin
+            match command with
+              ".requires" -> if List.mem symbol impls then iter0 impls' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
+            | ".provides" -> iter0 (symbol::impls') lines
+          end
+      in
+      iter0 impls lines
+  in
+  let impls = iter [] modulepaths in
+  if not isLibrary then
+    if not (List.mem "prelude.h#main" impls) then raise (LinkError ("Program does not implement 'main'. Use the '-shared' option to suppress this error."))

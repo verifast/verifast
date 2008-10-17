@@ -6,7 +6,7 @@
 
 // client code
 
-void main() 
+int main() 
   //@ requires true;
   //@ ensures true;
 {
@@ -18,6 +18,7 @@ void main()
   int c = getNbOfNodes(child2);
   assert(c==1);
   abort();
+  return 0;
 }
 
 // client visible definitions - lemma's

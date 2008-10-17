@@ -141,14 +141,6 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
     return session;
 }
 
-/*@
-
-lemma void assume(bool b);
-    requires emp;
-    ensures b;
-
-@*/
-
 void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
     //@ requires lock_permission(roomLock, @room, room) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
     //@ ensures lock_permission(roomLock, @room, room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);

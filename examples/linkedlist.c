@@ -373,7 +373,7 @@ void main0()
   dispose(l);
 }
 
-void main()
+int main()
   //@ requires emp;
   //@ ensures emp;
 {
@@ -394,4 +394,5 @@ void main()
   int e3 = lookup(l1, 3); assert(e3 == 50);
   int e4 = lookup(l1, 4); assert(e4 == 60);
   dispose(l1);
+  return 0;
 }

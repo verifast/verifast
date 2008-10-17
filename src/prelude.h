@@ -75,4 +75,12 @@ lemma void chars_join(char *array);
         [f]chars(array, chars_append(cs, cs0))
         &*& chars_length(chars_append(cs, cs0)) == chars_length(cs) + chars_length(cs0); // To avoid lemma call at call site in common scenario.
 
+lemma void assume(bool b);
+    requires true;
+    ensures b;
+
 @*/
+
+int main();
+    //@ requires emp;
+    //@ ensures emp;
