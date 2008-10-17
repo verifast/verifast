@@ -106,8 +106,7 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
         //@ foreach_remove(members, member);
         //@ open member(member);
         writer_write_string_buffer(member->writer, message);
-        char *eol = "\r\n";
-        writer_write_string(member->writer, eol);
+        writer_write_string(member->writer, "\r\n");
         //@ close member(member);
         //@ foreach_unremove(members, member);
         hasNext = iter_has_next(iter);
@@ -158,10 +157,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
 
     struct string_buffer *joinMessage = create_string_buffer();
     string_buffer_append_string_buffer(joinMessage, nick);
-    {
-        char *messageText = " has joined the room.";
-        string_buffer_append_string(joinMessage, messageText);
-    }
+    string_buffer_append_string(joinMessage, " has joined the room.");
     room_broadcast_message(room, joinMessage);
     string_buffer_dispose(joinMessage);
 
@@ -197,10 +193,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
                 {
                     struct string_buffer *fullMessage = create_string_buffer();
                     string_buffer_append_string_buffer(fullMessage, nick);
-                    {
-                        char *messageText = " says: ";
-                        string_buffer_append_string(fullMessage, messageText);
-                    }
+                    string_buffer_append_string(fullMessage, " says: ");
                     string_buffer_append_string_buffer(fullMessage, message);
                     room_broadcast_message(room, fullMessage);
                     string_buffer_dispose(fullMessage);
@@ -226,10 +219,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     {
         struct string_buffer *goodbyeMessage = create_string_buffer();
         string_buffer_append_string_buffer(goodbyeMessage, nick);
-        {
-            char *messageText = " left the room.";
-            string_buffer_append_string(goodbyeMessage, messageText);
-        }
+        string_buffer_append_string(goodbyeMessage, " left the room.");
         room_broadcast_message(room, goodbyeMessage);
         string_buffer_dispose(goodbyeMessage);
     }
@@ -262,14 +252,8 @@ void session_run(void *data) //@ : thread_run
     struct reader *reader = socket_get_reader(socket);
     free(session);
     
-    {
-        char *text = "Welcome to the chat room.\r\n";
-        writer_write_string(writer, text);
-    }
-    {
-        char *text = "The following members are present:\r\n";
-        writer_write_string(writer, text);
-    }
+    writer_write_string(writer, "Welcome to the chat room.\r\n");
+    writer_write_string(writer, "The following members are present:\r\n");
     
     lock_acquire(roomLock);
     //@ open_lock_invariant(@room, room);
@@ -288,10 +272,7 @@ void session_run(void *data) //@ : thread_run
             //@ foreach_remove(members, member);
             //@ open member(member);
             writer_write_string_buffer(writer, member->nick);
-            {
-                char *eol = "\r\n";
-                writer_write_string(writer, eol);
-            }
+            writer_write_string(writer, "\r\n");
             //@ close member(member);
             //@ foreach_unremove(members, member);
             hasNext = iter_has_next(iter);
@@ -308,10 +289,7 @@ void session_run(void *data) //@ : thread_run
         while (!done)
           //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& lock_permission(roomLock, @room, room);
         {
-            {
-                char *text = "Please enter your nick: ";
-                writer_write_string(writer, text);
-            }
+            writer_write_string(writer, "Please enter your nick: ");
             {
                 bool eof = reader_read_line(reader, nick);
                 if (eof) {
@@ -324,10 +302,7 @@ void session_run(void *data) //@ : thread_run
                         if (hasMember) {
                             //@ close_lock_invariant(@room, room);
                             lock_release(roomLock);
-                            {
-                                char *text = "Error: This nick is already in use.\r\n";
-                                writer_write_string(writer, text);
-                            }
+                            writer_write_string(writer, "Error: This nick is already in use.\r\n");
                         } else {
                             session_run_with_nick(room, roomLock, reader, writer, nick);
                             done = true;

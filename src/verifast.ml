@@ -2412,12 +2412,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter stringlitchunks otherchunks
   in
   
+  let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+  let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+  let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+
+  let eval_h h env e cont =
+    match e with
+      StringLit (l, s) ->
+      let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
+      let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
+      let coef = get_unique_var_symb "stringLiteralCoef" RealType in
+      assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
+        cont ((chars_symb, coef, [value; cs])::(string_literal_symb, coef, [value; cs])::h) value
+      )
+    | e -> cont h (eval (Some (fun l t f -> read_field h env l t f)) env e)
+  in
+
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
     let eval0 = eval in
     let eval env e = let _ = if not pure then check_ghost ghostenv l e in eval (Some (fun l t f -> read_field h env l t f)) env e in
+    let eval_h0 = eval_h in
+    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h h env e cont in
+    let rec evhs h env es cont =
+      match es with
+        [] -> cont h []
+      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+    in
     let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
     let check_assign l x =
@@ -2453,7 +2476,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  check_expr_t tenv e tp
               ) bs
         in
-        let ts = List.map (function (LitPat e) -> ev e) pats in
+        evhs h env (List.map (function (LitPat e) -> e) pats) (fun h ts ->
         let Some env' = zip ys ts in
         let cenv = List.map (fun (x, e) -> (x, eval0 None env' e)) cenv0 in
         with_context PushSubcontext (fun () ->
@@ -2510,25 +2533,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         )
         )
+        )
       )
     in
     match s with
       PureStmt (l, s) ->
       verify_stmt true leminfo sizemap tenv ghostenv h env s tcont
-    | Assign (l, x, StringLit (llit, s)) ->
-      if pure then static_error l "Cannot use a string literal in a pure context.";
-      let tpx = vartp l x in
-      check_assign l x;
-      expect_type l (PtrType Char) tpx;
-      let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
-      let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
-      let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
-      let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-      let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
-      let coef = get_unique_var_symb "stringLiteralCoef" RealType in
-      assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
-        cont ((chars_symb, coef, [value; cs])::(string_literal_symb, coef, [value; cs])::h) ((x, value)::env)
-      )
     | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
       begin
         match args with
@@ -2589,7 +2599,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let tpx = vartp l x in
       let _ = check_expr_t tenv e tpx in
       let _ = check_assign l x in
-      cont h (update env x (ev e))
+      eval_h h env e (fun h v -> cont h ((x, v)::env))
     | DeclStmt (l, te, x, e) ->
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
@@ -2598,11 +2608,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = if pure then static_error l "Cannot write in a pure context." in
       let tp = check_deref l tenv e f in
       let _ = check_expr_t tenv rhs tp in
-      let t = ev e in
-      let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
-      get_field h t f l (fun h coef _ ->
-        if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-        cont ((f_symb, real_unit, [t; ev rhs])::h) env)
+      eval_h h env e (fun h t ->
+        let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
+        get_field h t f l (fun h coef _ ->
+          if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
+          cont ((f_symb, real_unit, [t; ev rhs])::h) env)
+      )
     | CallStmt (l, g, es) ->
       call_stmt l None g (List.map (fun e -> LitPat e) es)
     | IfStmt (l, e, ss1, ss2) ->
@@ -2726,7 +2737,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         branch
           (fun _ ->
              assume_pred [] ghostenv env p real_unit (fun h ghostenv env ->
-               assume (eval env e) (fun _ ->
+               if not pure then check_ghost ghostenv l e;
+               assume (eval0 (Some (fun l t f -> read_field h env l t f)) env e) (fun _ ->
                  verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                    assert_pred h ghostenv env p real_unit (fun h _ _ ->
                      check_leaks h env l "Loop leaks heap chunks."
@@ -2737,7 +2749,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
           (fun _ ->
              assume_pred h ghostenv env p real_unit (fun h ghostenv env ->
-               assume (ctxt#mk_not (eval env e)) (fun _ ->
+               if not pure then check_ghost ghostenv l e;
+               assume (ctxt#mk_not (eval0 (Some (fun l t f -> read_field h env l t f)) env e)) (fun _ ->
                  tcont sizemap tenv ghostenv h env)))
       )
       )
