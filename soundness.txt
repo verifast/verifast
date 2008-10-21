@@ -2,8 +2,7 @@ Target soundness statement:
 If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./program.exe" does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
-- integer overflow
-- linking correctness (i.e. all modules of a program use the same contracts for the same functions)
+- linking correctness: ensure header files have the same meaning in all modules
 - variable hiding might cause problems; should be forbidden
 - contracts of lock_acquire and lock_release (non-re-entrant, non-thread-affine) not consistent with implementation (re-entrant, thread-affine)
 - The "return" statement does not jump to the end of the function

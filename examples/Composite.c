@@ -200,6 +200,10 @@ void fix(struct Node* node)
   /*@ ensures context(node, value, c + 1) &*& node->count |-> c + 1; @*/
 {
   int tmp = node->count;
+  //@ assume_is_int(tmp);
+  if (tmp == 2147483647) {
+    abort();
+  }
   node->count = tmp + 1;
   //@ open context(node, value, c);
   struct Node* parent = node->parent;

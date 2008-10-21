@@ -19,6 +19,7 @@ type ('symbol, 'termnode) term =
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | IntLit of int
+| IntLitOfString of string
 | App of 'symbol * ('symbol, 'termnode) term list
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
@@ -424,6 +425,7 @@ and context =
       IfThenElse (t1, t2, t3)
     method mk_eq (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Eq (t1, t2)
     method mk_intlit (n: int): (symbol, termnode) term = IntLit n
+    method mk_intlit_of_string (s: string): (symbol, termnode) term = IntLitOfString s
     method mk_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
@@ -597,6 +599,7 @@ and context =
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"
       | App (s, ts) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
       | IntLit n -> string_of_int n
+      | IntLitOfString s -> "#\"" ^ s ^ "\""
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
     
     method get_node s vs =

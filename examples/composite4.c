@@ -22,6 +22,18 @@ fixpoint int count(tree nodes) {
   }
 }
 
+lemma void count_nonnegative(tree nodes)
+  requires true;
+  ensures 0 <= count(nodes);
+{
+  switch (nodes) {
+    case nil:
+    case tree(n, l, r):
+      count_nonnegative(l);
+      count_nonnegative(r);
+  }
+}
+
 predicate subtree(struct node * root, struct node * parent, tree t)
   requires
     switch (t) {
@@ -114,17 +126,18 @@ struct node *create_tree()
 int subtree_get_count(struct node *node)
   //@ requires subtree(node, ?parent, ?nodes);
   /*@ ensures subtree(node, parent, nodes) &*&
-              result == count(nodes); @*/
+              result == count(nodes) &*& 0 <= result; @*/
 {
   int result = 0;
   //@ open subtree(node, parent, nodes);
   if (node != 0) { result = node->count; }
   //@ close subtree(node, parent, nodes);
+  //@ count_nonnegative(nodes);
   return result;
 }
 
 void fixup_ancestors(struct node * n, struct node * p, int count)
-  //@ requires context(n, p, _, ?c);
+  //@ requires context(n, p, _, ?c) &*& 0 <= count;
   //@ ensures context(n, p, count, c);
 {
   //@ open context(n, p, _, c);
@@ -141,6 +154,11 @@ void fixup_ancestors(struct node * n, struct node * p, int count)
     } else {
       leftCount = subtree_get_count(left);
       rightCount = count;
+    }
+    //@ assume_is_int(leftCount);
+    //@ assume_is_int(rightCount);
+    if (2147483647 - 1 - leftCount < rightCount) {
+      abort();
     }
     {
       int pcount = 1 + leftCount + rightCount;

@@ -61,7 +61,15 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     //@ requires string_buffer(buffer) &*& [?f]chars(chars, ?cs) &*& count == chars_length(cs);
     //@ ensures string_buffer(buffer) &*& [f]chars(chars, cs);
 {
+    //@ chars_length_nonnegative(cs);
     //@ open string_buffer(buffer);
+    //@ malloc_block_limits(buffer->chars);
+    //@ assume_is_int(count);
+    int length = buffer->length;
+    //@ assume_is_int(length);
+    if (2147483647 - buffer->length < count) {
+        abort();
+    }
     int newLength = buffer->length + count;
     if (buffer->capacity < newLength) {
         char *newChars = malloc(newLength);
@@ -79,8 +87,8 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
         buffer->chars = newChars;
     }
     //@ chars_split(buffer->chars, buffer->length);
-    //@ chars_length_nonnegative(cs);
     //@ chars_split(buffer->chars + buffer->length, count);
+    //@ malloc_block_limits(buffer->chars);
     memcpy(buffer->chars + buffer->length, chars, count);
     //@ chars_join(buffer->chars);
     //@ chars_join(buffer->chars);

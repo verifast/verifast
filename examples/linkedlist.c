@@ -1,3 +1,5 @@
+#include "stdlib.h"
+
 struct node {
   struct node *next;
   int value;
@@ -231,6 +233,10 @@ int length(struct llist *list)
     //@ lseg_add(f, n, next);
     //@ close lseg(next, l, ls3);
     n = next;
+    //@ assume_is_int(c);
+    if (c == 2147483647) {
+      abort();
+    }
     c = c + 1;
     //@ add_append_lemma(_ls1, value, ls3);
   }
@@ -311,6 +317,7 @@ int lookup(struct llist *list, int index)
   int i = 0;
   //@ close lseg(f, n, nil);
   //@ drop_0_lemma(_v);
+  //@ assume_is_int(index);
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + len(_ls2) == len(_v);
   {

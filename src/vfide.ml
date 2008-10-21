@@ -253,10 +253,10 @@ let show_ide initialPath prover =
     buffer#get_iter (`LINECHAR (line - 1, col - 1))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
-    let (path1, line1, col1) = p1 in
+    let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
-    let (_, tab) = get_tab_for_path path1 in
+    let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
     let buffer = tab_buffer tab in
     buffer#apply_tag_by_name name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
@@ -277,7 +277,7 @@ let show_ide initialPath prover =
           [] ->
           apply_tag_by_loc "currentLine" l;
           let ((path, line, col), _) = l in
-          let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path path in
+          let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
           textNotebook#goto_page k;
           buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
           srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
@@ -287,7 +287,7 @@ let show_ide initialPath prover =
             if textPaned#position < 10 then textPaned#set_position 150;
             apply_tag_by_loc "currentLine" l;
             let ((path, line, col), _) = l in
-            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path path in
+            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
             subNotebook#goto_page k;
             buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
             Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
@@ -296,7 +296,7 @@ let show_ide initialPath prover =
           begin
             apply_tag_by_loc "currentCaller" caller_loc;
             let ((path, line, col), _) = caller_loc in
-            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path path in
+            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
             textNotebook#goto_page k;
             buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter buffer (line, col));
             srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark);
@@ -386,7 +386,7 @@ let show_ide initialPath prover =
     updateWindowTitle();
     let (start, stop) = l in
     let (path, line, col) = stop in
-    let (k, tab) = get_tab_for_path path in
+    let (k, tab) = get_tab_for_path (string_of_path path) in
     textNotebook#goto_page k;
     let buffer = tab_buffer tab in
     let it = srcpos_iter buffer (line, col) in

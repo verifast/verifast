@@ -1,4 +1,5 @@
 open Proverapi
+open Big_int
 
 class stats =
   object (self)
@@ -52,7 +53,7 @@ let readFile path =
 type token =
     Kwd of string
   | Ident of string
-  | Int of int
+  | Int of big_int
   | Float of float
   | String of string
   | Char of char
@@ -198,7 +199,7 @@ let make_lexer keywords path stream reportKeyword =
         Stream.junk strm__; let s = strm__ in store '.'; decimal_part s
     | Some ('e' | 'E') ->
         Stream.junk strm__; let s = strm__ in store 'E'; exponent_part s
-    | _ -> Some (Int (int_of_string (get_string ())))
+    | _ -> Some (Int (big_int_of_string (get_string ())))
   and decimal_part (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some ('0'..'9' as c) ->
@@ -497,7 +498,7 @@ and
   | False of loc
   | Var of loc * string
   | Operation of loc * operator * expr list * type_ list option ref
-  | IntLit of loc * int * type_ option ref
+  | IntLit of loc * big_int * type_ option ref
   | StringLit of loc * string
   | Read of loc * expr * fieldref
   | CallExpr of loc * string * pat list * pat list
@@ -506,6 +507,7 @@ and
   | SizeofExpr of loc * type_expr
   | PredNameExpr of loc * string
   | FuncNameExpr of string
+  | CastExpr of loc * type_expr * expr
 and
   pat =
     LitPat of expr
@@ -617,6 +619,7 @@ let expr_loc e =
   | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
   | PredNameExpr (l, g) -> l
+  | CastExpr (l, te, e) -> l
 
 let pred_loc p =
   match p with
@@ -902,7 +905,11 @@ and
   >] -> e
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
-| [< '(l, Kwd "("); e = parse_expr; '(_, Kwd ")") >] -> e
+| [< '(l, Kwd "(");
+     e = parser
+     [< e = parse_expr; '(_, Kwd ")") >] -> e
+   | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
+   >] -> e
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref Void)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
@@ -1457,7 +1464,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
                         and checkt_ tenv e t0 =
                           match (e, t0) with
-                            (IntLit (l, 0, t), PtrType _) -> t:=Some IntType
+                            (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType
                           | (IntLit (l, n, t), RealType) -> t:=Some RealType
                           | _ ->
                             let t = check_ tenv e in
@@ -1578,8 +1585,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
-        (IntType | RealType) as t -> t
-      | _ -> static_error l "Expression of type int or real expected."
+        (IntType | RealType | PtrType _) as t -> t
+      | _ -> static_error l "Expression of type int, real, or pointer type expected."
     in
     match e with
       True l -> boolt
@@ -1633,11 +1640,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t1 = check e1 in
       begin
         match t1 with
-          PtrType Char -> checkt e2 intt; ts:=Some [PtrType Char; IntType]; t1
+          PtrType Char | PtrType Void -> checkt e2 intt; ts:=Some [t1; IntType]; t1
         | IntType | RealType -> promote l e1 e2 ts
       end
     | IntLit (l, n, t) -> t := Some intt; intt
     | StringLit (l, s) -> PtrType Char
+    | CastExpr (l, te, e) ->
+      let t = check_pure_type te in
+      begin
+        match (e, t) with
+          (IntLit (_, n, tp), PtrType _) -> tp := Some t
+        | _ -> checkt e t
+      end;
+      t
     | Read (l, e, f) -> check_deref l tenv e f
     | CallExpr (l, g', [], pats) -> (
       match try_assoc g' purefuncmap with
@@ -1712,9 +1727,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | e -> static_error (expr_loc e) "Expression form not allowed here."
   and check_expr_t tenv e t0 =
     match (e, t0) with
-      (IntLit (l, 0, t), PtrType _) -> t:=Some IntType
+      (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType
     | (IntLit (l, n, t), RealType) -> t:=Some RealType
-    | (IntLit (l, n, t), Char) -> if not (0 <= n && n <= 127) then static_error l "Integer literal used as char must be between 0 and 127."; t:=Some IntType
+    | (IntLit (l, n, t), Char) ->
+      if not (le_big_int zero_big_int n && le_big_int n (big_int_of_int 127)) then
+        static_error l "Integer literal used as char must be between 0 and 127.";
+      t:=Some IntType
     | _ ->
       let t = check_expr tenv e in expect_type (expr_loc e) t t0
   and check_deref l tenv e f =
@@ -1871,8 +1889,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let real_unit = ctxt#mk_reallit 1 in
   
-  let rec eval read_field (env: (string * 'termnode) list) e : 'termnode =
-    let ev = eval read_field env in
+  let min_int_big_int = big_int_of_string "-2147483648" in
+  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let max_int_big_int = big_int_of_string "2147483647" in
+  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
+  let max_ptr_big_int = big_int_of_string "4294967295" in
+  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
+  
+  let rec eval_core assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
+    let ev = eval_core assert_term read_field env in
+    let check_overflow l min t max =
+      begin
+      match assert_term with
+        None -> ()
+      | Some assert_term ->
+        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow.";
+        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow."
+      end;
+      t
+    in
     match e with
       True l -> ctxt#mk_true
     | False l -> ctxt#mk_false
@@ -1898,8 +1933,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some t -> t
       end
     | PredNameExpr (l, g) -> let (_, _, _, symb) = List.assoc g predfammap in symb
-    | IntLit (l, n, t) when !t = Some IntType -> ctxt#mk_intlit n
-    | IntLit (l, n, t) when !t = Some RealType -> if n = 1 then real_unit else ctxt#mk_reallit n
+    | CastExpr (l, te, e) ->
+      let t = check_pure_type te in
+      begin
+        match (e, t) with
+          (IntLit (_, n, _), PtrType _) ->
+          if assert_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
+          ctxt#mk_intlit_of_string (string_of_big_int n)
+        | _ -> ev e
+      end
+    | IntLit (l, n, t) when !t = Some IntType ->
+      if assert_term <> None && not (le_big_int min_int_big_int n && le_big_int n max_int_big_int) then static_error l "Int literal is out of range.";
+      begin
+        try
+          let n = int_of_big_int n in ctxt#mk_intlit n
+        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+      end
+    | IntLit (l, n, t) when !t = Some RealType ->
+      if eq_big_int n unit_big_int then real_unit
+      else if eq_big_int n zero_big_int then ctxt#mk_reallit 0
+      else static_error l "Real number literals other than 0 and 1 are not yet supported."
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
     | CallExpr (l, g, [], pats) ->
       begin
@@ -1913,10 +1966,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
     | Operation (l, Eq, [e1; e2], ts) -> ctxt#mk_eq (ev e1) (ev e2)
     | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
-    | Operation (l, Add, [e1; e2], ts) -> (match !ts with Some [IntType|PtrType Char|Char; IntType|Char] -> ctxt#mk_add (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_add (ev e1) (ev e2) | _ -> static_error l "Internal error in eval.")
-    | Operation (l, Sub, [e1; e2], ts) -> (match !ts with Some [IntType|PtrType Char|Char; IntType|Char] -> ctxt#mk_sub (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_sub (ev e1) (ev e2))
-    | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
-    | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some [IntType; IntType] -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
+    | Operation (l, Add, [e1; e2], ts) ->
+      begin
+        match !ts with
+          Some [IntType; IntType] ->
+          check_overflow l min_int_term (ctxt#mk_add (ev e1) (ev e2)) max_int_term
+        | Some [PtrType (Char|Void); IntType] ->
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ev e2)) max_ptr_term
+        | Some [RealType; RealType] ->
+          ctxt#mk_real_add (ev e1) (ev e2)
+        | _ -> static_error l "Internal error in eval."
+      end
+    | Operation (l, Sub, [e1; e2], ts) ->
+      begin
+        match !ts with
+          Some [IntType; IntType] ->
+          check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
+        | Some [PtrType Char; IntType] ->
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ev e2)) max_ptr_term
+        | Some [RealType; RealType] ->
+          ctxt#mk_real_sub (ev e1) (ev e2)
+      end
+    | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
+    | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->
       begin
         match read_field with
@@ -1946,7 +2018,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
                let env = penv@genv in
-               eval None env e
+               eval_core None None env e
              in
              (csym, apply)
           )
@@ -1956,6 +2028,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env)
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
+  
+  let eval = eval_core None in
 
   let _ =
     List.iter
@@ -2031,21 +2105,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cs
   in
 
-  let assert_term t h env l msg cont =
-    if ctxt#query t then
-      cont()
-    else
+  let assert_term t h env l msg =
+    if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg))
   in
 
-  let assert_eq t1 t2 h env l msg cont = assert_term (ctxt#mk_eq t1 t2) h env l msg in
-  let assert_neq t1 t2 h env l msg cont = assert_term (ctxt#mk_not (ctxt#mk_eq t1 t2)) h env l msg in
-  
   let assert_false h env l msg =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg))
   in
   
-  let assert_expr env e h env l msg cont = assert_term (eval None env e) h env l msg cont in
+  let assert_expr env e h env l msg = assert_term (eval None env e) h env l msg in
   
   let success() = () in
   
@@ -2055,7 +2124,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in_temporary_context (fun _ -> cont2())
   in
   
-  let real_unit_pat = LitPat (IntLit (dummy_loc, 1, ref (Some RealType))) in
+  let real_unit_pat = LitPat (IntLit (dummy_loc, unit_big_int, ref (Some RealType))) in
   
   let evalpat ghostenv env pat tp cont =
     if pat == real_unit_pat then cont ghostenv env real_unit else
@@ -2208,7 +2277,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Access (l, e, f, rhs) -> access l real_unit_pat e f rhs
     | CallPred (l, g, pats0, pats) -> callpred l real_unit_pat g pats0 pats
     | ExprPred (l, e) ->
-      assert_expr env e h env l "Expression is false." (fun _ -> cont h ghostenv env)
+      assert_expr env e h env l "Expression is false."; cont h ghostenv env
     | Sep (l, p1, p2) ->
       assert_pred h ghostenv env p1 coef (fun h ghostenv env -> assert_pred h ghostenv env p2 coef cont)
     | IfPred (l, e, p1, p2) ->
@@ -2428,7 +2497,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
   let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
 
-  let eval_h h env e cont =
+  let eval_non_pure is_ghost_expr h env e =
+    let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
+    eval_core assert_term (Some (fun l t f -> read_field h env l t f)) env e
+  in
+  
+  let eval_h is_ghost_expr h env e cont =
     match e with
       StringLit (l, s) ->
       let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
@@ -2437,7 +2511,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
         cont ((chars_symb, coef, [value; cs])::(string_literal_symb, coef, [value; cs])::h) value
       )
-    | e -> cont h (eval (Some (fun l t f -> read_field h env l t f)) env e)
+    | e -> cont h (eval_non_pure is_ghost_expr h env e)
   in
   
   let prototypes_used : (string * loc) list ref = ref [] in
@@ -2446,15 +2520,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used
   in
-
+  
+  let assume_is_of_type t tp cont =
+    match tp with
+      IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
+    | _ -> cont()
+  in
+  
   let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
     let eval0 = eval in
-    let eval env e = let _ = if not pure then check_ghost ghostenv l e in eval (Some (fun l t f -> read_field h env l t f)) env e in
+    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h0 = eval_h in
-    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h h env e cont in
+    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h pure h env e cont in
     let rec evhs h env es cont =
       match es with
         [] -> cont h []
@@ -2589,6 +2669,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter h fds
         | _ -> call_stmt l (Some x) "malloc" args
       end
+    | CallStmt (l, "assume_is_int", [Var (lv, x) as e]) ->
+      if not pure then static_error l "This function may be called only from a pure context.";
+      if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
+      let tp = check_expr tenv e in
+      assume_is_of_type (ev e) tp (fun () -> cont h env)
     | CallStmt (l, "free", args) ->
       begin
         match List.map (check_expr tenv) args with

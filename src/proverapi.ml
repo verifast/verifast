@@ -19,6 +19,7 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_ifthenelse: 'termnode -> 'termnode -> 'termnode -> 'termnode
     method virtual mk_eq: 'termnode -> 'termnode -> 'termnode
     method virtual mk_intlit: int -> 'termnode
+    method virtual mk_intlit_of_string: string -> 'termnode
     method virtual mk_add: 'termnode -> 'termnode -> 'termnode
     method virtual mk_sub: 'termnode -> 'termnode -> 'termnode
     method virtual mk_lt: 'termnode -> 'termnode -> 'termnode

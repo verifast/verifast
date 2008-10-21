@@ -5,6 +5,10 @@ predicate malloc_block(void *array, int size);
 lemma void malloc_block_null();
     requires emp;
     ensures malloc_block(0, 0);
+
+lemma void malloc_block_limits(void *array);
+    requires [?f]malloc_block(array, ?size);
+    ensures [f]malloc_block(array, size) &*& true == ((void *)0 <= array) &*& 0 <= size &*& array + size <= (void *)4294967295;
 @*/
 
 void *malloc(int size);
