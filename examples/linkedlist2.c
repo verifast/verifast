@@ -41,7 +41,7 @@ struct llist *create_llist()
 fixpoint intlist list_add(intlist v, int x) {
   switch (v) {
     case nil: return cons(x, nil);
-    case cons(y, v): return cons(y, list_add(v, x));
+    case cons(y, v0): return cons(y, list_add(v0, x));
   }
 }
 
@@ -204,28 +204,28 @@ lemma void add_append_lemma(intlist v1, int x, intlist v2)
 fixpoint uint len(intlist v) {
   switch (v) {
     case nil: return zero;
-    case cons(x, v): return succ(len(v));
+    case cons(x, v0): return succ(len(v0));
   }
 }
 
 fixpoint int ifzero_int(uint n, int n1, int n2) {
   switch (n) {
     case zero: return n1;
-    case succ(n): return n2;
+    case succ(n0): return n2;
   }
 }
 
 fixpoint uint minus_one(uint n) {
   switch (n) {
     case zero: return zero;
-    case succ(n): return n;
+    case succ(n0): return n0;
   }
 }
 
 fixpoint int ith(intlist v, uint i) {
   switch (v) {
     case nil: return 0;
-    case cons(x, v): return ifzero_int(i, x, ith(v, minus_one(i)));
+    case cons(x, v0): return ifzero_int(i, x, ith(v0, minus_one(i)));
   }
 }
 
@@ -298,28 +298,28 @@ uint length(struct llist *list)
 fixpoint intlist ifzero_intlist(uint n, intlist l1, intlist l2) {
   switch (n) {
     case zero: return l1;
-    case succ(n): return l2;
+    case succ(n0): return l2;
   }
 }
 
 fixpoint intlist drop(uint i, intlist v) {
   switch (v) {
     case nil: return nil;
-    case cons(x, v): return ifzero_intlist(i, cons(x, v), drop(minus_one(i), v));
+    case cons(x, v0): return ifzero_intlist(i, cons(x, v0), drop(minus_one(i), v0));
   }
 }
 
 fixpoint bool ifzero_bool(uint n, bool b1, bool b2) {
   switch (n) {
     case zero: return b1;
-    case succ(n): return b2;
+    case succ(n0): return b2;
   }
 }
 
 fixpoint bool lessthan(uint n1, uint n2) {
   switch (n2) {
     case zero: return false;
-    case succ(n2): return ifzero_bool(n1, true, lessthan(minus_one(n1), n2));
+    case succ(n2_0): return ifzero_bool(n1, true, lessthan(minus_one(n1), n2_0));
   }
 }
 
@@ -329,11 +329,11 @@ lemma void drop_ith(intlist v, uint i, int h)
 {
   switch (v) {
     case nil:
-    case cons(x, v):
+    case cons(x, v0):
       switch (i) {
         case zero:
-        case succ(i):
-          drop_ith(v, i, h);
+        case succ(i0):
+          drop_ith(v0, i0, h);
       }
   }
 }
@@ -344,7 +344,7 @@ lemma void drop_0_lemma(intlist v)
 {
   switch (v) {
     case nil:
-    case cons(x, v):
+    case cons(x, v0):
   }
 }
 
@@ -457,8 +457,8 @@ lemma void drop_cons_lemma(uint i, intlist v, int h, intlist t)
         case zero:
           drop_0_lemma(v);
           drop_0_lemma(t);
-        case succ(i):
-          drop_cons_lemma(i, t2, h, t);
+        case succ(i0):
+          drop_cons_lemma(i0, t2, h, t);
       }
   }
 }

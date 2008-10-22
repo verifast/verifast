@@ -5,14 +5,14 @@ inductive chars = chars_nil | chars_cons(char, chars);
 fixpoint int chars_length(chars cs) {
     switch (cs) {
         case chars_nil: return 0;
-        case chars_cons(c, cs): return 1 + chars_length(cs);
+        case chars_cons(c, cs0): return 1 + chars_length(cs0);
     }
 }
 
 fixpoint chars chars_take(chars cs, int offset) {
     switch (cs) {
         case chars_nil: return chars_nil;
-        case chars_cons(c, cs): return offset == 0 ? chars_nil : chars_cons(c, chars_take(cs, offset - 1));
+        case chars_cons(c, cs0): return offset == 0 ? chars_nil : chars_cons(c, chars_take(cs0, offset - 1));
     }
 }
 
@@ -26,21 +26,21 @@ fixpoint chars chars_drop(chars cs, int offset) {
 fixpoint bool chars_contains(chars cs, char c) {
     switch (cs) {
         case chars_nil: return false;
-        case chars_cons(c0, cs): return c0 == c || chars_contains(cs, c);
+        case chars_cons(c0, cs0): return c0 == c || chars_contains(cs0, c);
     }
 }
 
 fixpoint int chars_index_of(chars cs, char c) {
     switch (cs) {
         case chars_nil: return -1;
-        case chars_cons(c0, cs): return c0 == c ? 0 : 1 + chars_index_of(cs, c);
+        case chars_cons(c0, cs0): return c0 == c ? 0 : 1 + chars_index_of(cs0, c);
     }
 }
 
 fixpoint chars chars_append(chars cs, chars cs0) {
     switch (cs) {
         case chars_nil: return cs0;
-        case chars_cons(c, cs): return chars_cons(c, chars_append(cs, cs0));
+        case chars_cons(c, cs1): return chars_cons(c, chars_append(cs1, cs0));
     }
 }
 

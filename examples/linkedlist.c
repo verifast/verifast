@@ -19,14 +19,14 @@ inductive intlist = | nil | cons(int, intlist);
 fixpoint int len(intlist v) {
   switch (v) {
     case nil: return 0;
-    case cons(x, v): return 1 + len(v);
+    case cons(x, v0): return 1 + len(v0);
   }
 }
 
 fixpoint int ith(intlist v, int i) {
   switch (v) {
     case nil: return 0;
-    case cons(x, v): return (i == 0 ? x : ith(v, i - 1));
+    case cons(x, v0): return (i == 0 ? x : ith(v0, i - 1));
   }
 }
 @*/
@@ -58,7 +58,7 @@ struct llist *create_llist()
 fixpoint intlist list_add(intlist v, int x) {
   switch (v) {
     case nil: return cons(x, nil);
-    case cons(y, v): return cons(y, list_add(v, x));
+    case cons(y, v0): return cons(y, list_add(v0, x));
   }
 }
 
@@ -250,7 +250,7 @@ int length(struct llist *list)
 fixpoint intlist drop(int i, intlist v) {
   switch (v) {
     case nil: return nil;
-    case cons(x, v): return i == 0 ? cons(x, v) : drop(i - 1, v);
+    case cons(x, v0): return i == 0 ? cons(x, v0) : drop(i - 1, v0);
   }
 }
 
@@ -260,7 +260,7 @@ lemma void drop_ith(intlist v, int i, int h)
 {
   switch (v) {
     case nil:
-    case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1, h); }
+    case cons(x, v0): if (i == 0) { } else { drop_ith(v0, i - 1, h); }
   }
 }
 
@@ -270,7 +270,7 @@ lemma void drop_0_lemma(intlist v)
 {
   switch (v) {
     case nil:
-    case cons(x, v):
+    case cons(x, v0):
   }
 }
 

@@ -1318,6 +1318,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             match (ts, xs) with
                               ([], []) -> xmap
                             | (t::ts, x::xs) ->
+                              if List.mem_assoc x pmap then static_error lc "Pattern variable hides parameter.";
                               let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
                               iter ((x, t)::xmap) ts xs
                             | ([], _) -> static_error lc "Too many pattern variables."
@@ -1706,6 +1707,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         | (t::ts, []) -> static_error lc "Too few pattern variables."
                         | ([], _) -> static_error lc "Too many pattern variables."
                         | (t::ts, x::xs) ->
+                          if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                           if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
                           iter2 ts xs ((x, t)::xenv)
                       in
@@ -1754,10 +1756,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end
   in
 
-  let check_pat tenv t p =
+  let check_pat l tenv t p =
     match p with
       LitPat e -> check_expr_t tenv e t; tenv
-    | VarPat x -> (x, t)::tenv
+    | VarPat x ->
+      if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
+      (x, t)::tenv
     | DummyPat -> tenv
   in
   
@@ -1765,7 +1769,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match (ts, ps) with
       ([], []) -> tenv
     | (t::ts, p::ps) ->
-      check_pats l (check_pat tenv t p) ts ps
+      check_pats l (check_pat l tenv t p) ts ps
     | ([], _) -> static_error l "Too many patterns"
     | (_, []) -> static_error l "Too few patterns"
   in
@@ -1774,7 +1778,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
       Access (l, e, f, v) ->
       let t = check_deref l tenv e f in
-      let tenv' = check_pat tenv t v in
+      let tenv' = check_pat l tenv t v in
       cont tenv'
     | CallPred (l, p, ps0, ps) ->
       let (arity, xs) =
@@ -1799,7 +1803,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match bs with
               [] -> p#set_domain ts; cont tenv
             | (t, p)::bs ->
-              let tenv = check_pat tenv t p in iter tenv bs
+              let tenv = check_pat l tenv t p in iter tenv bs
           in
           iter tenv bs
         end
@@ -1841,6 +1845,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     match (ts, xs) with
                       ([], []) -> xmap
                     | (t::ts, x::xs) ->
+                      if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
                       iter ((x, t)::xmap) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables."
@@ -1859,7 +1864,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | EmpPred l -> cont tenv
     | CoefPred (l, coef, body) ->
-      let tenv = check_pat tenv RealType coef in
+      let tenv = check_pat l tenv RealType coef in
       check_pred tenv body cont
   in
 
@@ -2174,8 +2179,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       evalpats ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts)::h) ghostenv env)
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 coef (fun h ghostenv env -> assume_pred h ghostenv env p2 coef cont)
-    | IfPred (l, e, p1, p2) -> branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 coef cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 coef cont))
+    | IfPred (l, e, p1, p2) ->
+      let cont h _ _ = cont h ghostenv env in
+      branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 coef cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 coef cont))
     | SwitchPred (l, e, cs) ->
+      let cont h _ _ = cont h ghostenv env in
       let t = ev e in
       let rec iter cs =
         match cs with
@@ -2281,6 +2289,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Sep (l, p1, p2) ->
       assert_pred h ghostenv env p1 coef (fun h ghostenv env -> assert_pred h ghostenv env p2 coef cont)
     | IfPred (l, e, p1, p2) ->
+      let cont h _ _ = cont h ghostenv env in
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
@@ -2289,6 +2298,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            assume (ctxt#mk_not (ev e)) (fun _ ->
              assert_pred h ghostenv env p2 coef cont))
     | SwitchPred (l, e, cs) ->
+      let cont h _ _ = cont h ghostenv env in
       let t = ev e in
       let rec iter cs =
         match cs with
@@ -2706,6 +2716,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = check_assign l x in
       eval_h h env e (fun h v -> cont h ((x, v)::env))
     | DeclStmt (l, te, x, e) ->
+      if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
       verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont  (* BUGBUG: e should be typechecked outside of the scope of x *)
@@ -2723,11 +2734,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       call_stmt l None g (List.map (fun e -> LitPat e) es)
     | IfStmt (l, e, ss1, ss2) ->
       let _ = check_expr_t tenv e boolt in
+      let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
         (fun _ -> assume (ev e) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
         (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
     | SwitchStmt (l, e, cs) ->
       let tp = check_expr tenv e in
+      let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let (tn, (_, ctormap)) =
         match tp with
           InductiveType i -> (i, List.assoc i inductivemap)
@@ -2754,6 +2767,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match (pats, pts) with
                 ([], []) -> List.rev ptenv
               | (pat::pats, tp::pts) ->
+                if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
                 if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
                 iter ((pat, tp)::ptenv) pats pts
               | ([], _) -> static_error lc "Too few arguments."
@@ -2786,7 +2800,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such predicate family instance."
         | Some (l, ps, body) -> (ps, body)
       in
-      let tenv = match coefpat with None -> tenv | Some coefpat -> check_pat tenv RealType coefpat in
+      let tenv = match coefpat with None -> tenv | Some coefpat -> check_pat l tenv RealType coefpat in
       let tenv' = check_pats l tenv (List.map (fun (x, t) -> t) ps) pats in
       let pats = List.map (fun fn -> LitPat (FuncNameExpr fn)) fns @ pats in
       let (_, _, _, g_symb) = List.assoc g predfammap in
@@ -2833,18 +2847,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WhileStmt (l, e, p, ss) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let _ = check_expr_t tenv e boolt in
-      check_pred tenv p (fun tenv ->
+      check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
-      assert_pred h ghostenv env p real_unit (fun h ghostenv env ->
-        let ts = List.map (fun x -> get_unique_var_symb x (List.assoc x tenv)) xs in  (* BUG: I assume there is no variable hiding going on here. *)
-        let Some bs = zip xs ts in
+      let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+      check_pred tenv p (fun tenv' ->
+      assert_pred h ghostenv env p real_unit (fun h _ _ ->
+        let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
         branch
           (fun _ ->
-             assume_pred [] ghostenv env p real_unit (fun h ghostenv env ->
-               if not pure then check_ghost ghostenv l e;
+             assume_pred [] ghostenv env p real_unit (fun h ghostenv' env' ->
                assume (eval0 (Some (fun l t f -> read_field h env l t f)) env e) (fun _ ->
-                 verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+                 verify_cont pure leminfo sizemap tenv' ghostenv' h env' ss (fun _ _ _ h env ->
+                   let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h ghostenv env p real_unit (fun h _ _ ->
                      check_leaks h env l "Loop leaks heap chunks."
                    )
@@ -2853,13 +2868,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
           )
           (fun _ ->
-             assume_pred h ghostenv env p real_unit (fun h ghostenv env ->
-               if not pure then check_ghost ghostenv l e;
+             assume_pred h ghostenv env p real_unit (fun h ghostenv' env' ->
                assume (ctxt#mk_not (eval0 (Some (fun l t f -> read_field h env l t f)) env e)) (fun _ ->
-                 tcont sizemap tenv ghostenv h env)))
+                 tcont sizemap tenv' ghostenv' h env')))
       )
       )
     | BlockStmt (l, ss) ->
+      let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env)
   and
     verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =

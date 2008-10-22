@@ -1,4 +1,5 @@
 #include "malloc.h"
+#include "stdlib.h"
 #include "bool.h"
 
 struct node {
@@ -90,10 +91,6 @@ predicate tree(struct node * node, context c, tree subtree)
     subtree(node, parent, subtree);
 
 @*/
-
-void abort();
-  //@ requires true;
-  //@ ensures false;
 
 struct node * create_node(struct node * p)
   //@ requires emp;
@@ -257,9 +254,9 @@ struct node *tree_get_parent(struct node *node)
   //@ assert context(p, ?gp, ?pcount, ?pns);
   /*@ switch (c) {
         case root:
-        case left_context(pns, p0, r):
+        case left_context(pns0, p0, r):
             close subtree(p, gp, tree(p, t, r));
-        case right_context(pns, p0, l):
+        case right_context(pns0, p0, l):
             close subtree(p, gp, tree(p, l, t));
       }
   @*/
@@ -371,19 +368,19 @@ fixpoint path combine_path(context contextNodes, path path) {
 fixpoint context get_context_nodes_at_path(context contextNodes, tree subtreeNodes, path path) {
     switch (path) {
         case here: return contextNodes;
-        case left(path):
+        case left(path0):
             return
                 switch (subtreeNodes) {
                     case nil: return contextNodes;
                     case tree(rootNode, leftNodes, rightNodes):
-                        return get_context_nodes_at_path(left_context(contextNodes, rootNode, rightNodes), leftNodes, path);
+                        return get_context_nodes_at_path(left_context(contextNodes, rootNode, rightNodes), leftNodes, path0);
                 };
-        case right(path):
+        case right(path0):
             return
                 switch (subtreeNodes) {
                     case nil: return contextNodes;
                     case tree(rootNode, leftNodes, rightNodes):
-                        return get_context_nodes_at_path(right_context(contextNodes, rootNode, leftNodes), rightNodes, path);
+                        return get_context_nodes_at_path(right_context(contextNodes, rootNode, leftNodes), rightNodes, path0);
                 };
     }
 }
@@ -415,7 +412,7 @@ lemma void go_to_descendant(struct node *node0, path path, struct node *node)
                     close subtree(node0, parent, subtreeNodes);
                     close tree(node0, contextNodes, subtreeNodes);
             }
-        case left(path):
+        case left(path0):
             open tree(node0, contextNodes, subtreeNodes);
             open subtree(node0, ?parent, subtreeNodes);
             switch (subtreeNodes) {
@@ -424,9 +421,9 @@ lemma void go_to_descendant(struct node *node0, path path, struct node *node)
                     struct node *left = node0->left;
                     close context(left, node0, count(leftNodes), left_context(contextNodes, node0, rightNodes));
                     close tree(left, left_context(contextNodes, node0, rightNodes), leftNodes);
-                    go_to_descendant(left, path, node);
+                    go_to_descendant(left, path0, node);
             }
-        case right(path):
+        case right(path0):
             open tree(node0, contextNodes, subtreeNodes);
             open subtree(node0, ?parent, subtreeNodes);
             switch (subtreeNodes) {
@@ -435,7 +432,7 @@ lemma void go_to_descendant(struct node *node0, path path, struct node *node)
                     struct node *right = node0->right;
                     close context(right, node0, count(rightNodes), right_context(contextNodes, node0, leftNodes));
                     close tree(right, right_context(contextNodes, node0, leftNodes), rightNodes);
-                    go_to_descendant(right, path, node);
+                    go_to_descendant(right, path0, node);
             }
     }
 }

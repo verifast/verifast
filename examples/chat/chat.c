@@ -93,11 +93,11 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
     //@ ensures room(room) &*& string_buffer(message);
 {
     //@ open room(room);
-    //@ assert foreach(?members, _);
+    //@ assert foreach(?members0, _);
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasNext = iter_has_next(iter);
-    //@ lengthPositive(members);
+    //@ lengthPositive(members0);
     while (hasNext)
         //@ invariant iter(iter, membersList, ?members, ?i) &*& foreach(members, @member) &*& string_buffer(message) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
     {
