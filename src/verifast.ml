@@ -1006,7 +1006,7 @@ exception StaticError of loc * string
 
 let static_error l msg = raise (StaticError (l, msg))
 
-type 'termnode heap = ('termnode * 'termnode * 'termnode list) list
+type 'termnode heap = ('termnode * 'termnode * 'termnode list * int option) list
 type 'termnode env = (string * 'termnode) list
 type 'termnode context =
   Assuming of 'termnode
@@ -1014,7 +1014,7 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 
-let string_of_chunk (g, coef, ts) = "[" ^ coef ^ "]" ^ g ^ "(" ^ String.concat ", " ts ^ ")"
+let string_of_chunk (g, coef, ts, size) = "[" ^ coef ^ "]" ^ g ^ "(" ^ String.concat ", " ts ^ ")"
 
 let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
 
@@ -2102,7 +2102,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (function
          Assuming t -> Assuming (ctxt#pprint t)
        | Executing (h, env, l, msg) ->
-         let h' = List.map (fun (g, coef, ts) -> (ctxt#pprint g, ctxt#pprint coef, List.map (fun t -> ctxt#pprint t) ts)) h in
+         let h' = List.map (fun (g, coef, ts, size) -> (ctxt#pprint g, ctxt#pprint coef, List.map (fun t -> ctxt#pprint t) ts, size)) h in
          let env' = List.map (fun (x, t) -> (x, ctxt#pprint t)) env in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
@@ -2157,14 +2157,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let (_, (_, _, _, symb)) = List.assoc (f#parent, f#name) field_pred_map in
     let rec iter h =
       match h with
-        [] -> cont ((symb, tcoef, [tp; tv])::h0)
-      | (g, tcoef', [tp'; _])::h when g == symb && tcoef' == real_unit -> assume_neq tp tp' (fun _ -> iter h)
+        [] -> cont ((symb, tcoef, [tp; tv], None)::h0)
+      | (g, tcoef', [tp'; _], _)::h when g == symb && tcoef' == real_unit -> assume_neq tp tp' (fun _ -> iter h)
       | _::h -> iter h
     in
     iter h0
   in
   
-  let rec assume_pred h ghostenv (env: (string * 'termnode) list) p coef cont =
+  let rec assume_pred h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
     with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
     let ev = eval None env in
     match p with
@@ -2176,12 +2176,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Some (_, _, _, symb) -> symb
         | None -> List.assoc g#name env
       in
-      evalpats ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts)::h) ghostenv env)
+      evalpats ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts, size_first)::h) ghostenv env)
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
-    | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 coef (fun h ghostenv env -> assume_pred h ghostenv env p2 coef cont)
+    | Sep (l, p1, p2) -> assume_pred h ghostenv env p1 coef size_first size_all (fun h ghostenv env -> assume_pred h ghostenv env p2 coef size_all size_all cont)
     | IfPred (l, e, p1, p2) ->
       let cont h _ _ = cont h ghostenv env in
-      branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 coef cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 coef cont))
+      branch (fun _ -> assume (ev e) (fun _ -> assume_pred h ghostenv env p1 coef size_all size_all cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred h ghostenv env p2 coef size_all size_all cont))
     | SwitchPred (l, e, cs) ->
       let cont h _ _ = cont h ghostenv env in
       let t = ev e in
@@ -2193,14 +2193,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                let (_, _, tps, cs) = List.assoc cn purefuncmap in
                let Some pts = zip pats tps in
                let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
-               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p coef cont))
+               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p coef size_all size_all cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpPred l -> cont h ghostenv env
     | CoefPred (l, coef', body) ->
-      evalpat ghostenv env coef' RealType (fun ghostenv env coef' -> assume_pred h ghostenv env body (real_mul l coef coef') cont)
+      evalpat ghostenv env coef' RealType (fun ghostenv env coef' -> assume_pred h ghostenv env body (real_mul l coef coef') size_first size_all cont)
     )
   in
   
@@ -2210,7 +2210,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     result
   in
   
-  let match_chunk ghostenv env l g coef coefpat pats (g', coef0, ts0) =
+  let match_chunk ghostenv env l g coef coefpat pats (g', coef0, ts0, size0) =
     let match_pat ghostenv env pat t cont =
       match (pat, t) with
         (LitPat e, t) -> if definitely_equal (eval None env e) t then cont ghostenv env else None
@@ -2220,7 +2220,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter ghostenv env pats ts =
       match (pats, ts) with
         (pat::pats, t::ts) -> match_pat ghostenv env pat t (fun ghostenv env -> iter ghostenv env pats ts)
-      | ([], []) -> Some (coef0, ts0, ghostenv, env)
+      | ([], []) -> Some (coef0, ts0, size0, ghostenv, env)
     in
       if g == g' then
         begin
@@ -2239,7 +2239,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter h =
       match h with
         [] -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
-      | (g, coef, [t0; v])::_ when g == f_symb && definitely_equal t0 t -> v
+      | (g, coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> v
       | _::h -> iter h
     in
     iter h
@@ -2253,7 +2253,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let matches =
           match match_chunk ghostenv env l g coef coefpat pats chunk with
             None -> []
-          | Some (coef, ts, ghostenv, env) -> [(hprefix @ h, coef, ts, ghostenv, env)]
+          | Some (coef, ts, size, ghostenv, env) -> [(hprefix @ h, coef, ts, size, ghostenv, env)]
         in
           matches @ iter (chunk::hprefix) h
     in
@@ -2263,15 +2263,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
     | _ -> assert_false h env l "Multiple matching heap chunks."
 *)
-    | (h, coef, ts, ghostenv, env)::_ -> cont h coef ts ghostenv env
+    | (h, coef, ts, size, ghostenv, env)::_ -> cont h coef ts size ghostenv env
   in
   
-  let rec assert_pred h ghostenv env p coef (cont: 'termnode heap -> string list -> 'termnode env -> unit) =
+  let rec assert_pred h ghostenv env p coef (cont: 'termnode heap -> string list -> 'termnode env -> int option -> unit) =
     with_context (Executing (h, env, pred_loc p, "Asserting predicate")) (fun _ ->
     let ev = eval None env in
     let access l coefpat e f rhs =
       let (_, (_, _, _, symb)) = List.assoc (f#parent, f#name) field_pred_map in
-      assert_chunk h ghostenv env l symb coef coefpat [LitPat e; rhs] (fun h coef ts ghostenv env -> cont h ghostenv env)
+      assert_chunk h ghostenv env l symb coef coefpat [LitPat e; rhs] (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
     let callpred l coefpat g pats0 pats =
       let g_symb =
@@ -2279,17 +2279,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Some (_, _, _, symb) -> symb
         | None -> List.assoc g#name env
       in
-      assert_chunk h ghostenv env l g_symb coef coefpat (pats0 @ pats) (fun h coef ts ghostenv env -> cont h ghostenv env)
+      assert_chunk h ghostenv env l g_symb coef coefpat (pats0 @ pats) (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
     match p with
     | Access (l, e, f, rhs) -> access l real_unit_pat e f rhs
     | CallPred (l, g, pats0, pats) -> callpred l real_unit_pat g pats0 pats
     | ExprPred (l, e) ->
-      assert_expr env e h env l "Expression is false."; cont h ghostenv env
+      assert_expr env e h env l "Expression is false."; cont h ghostenv env None
     | Sep (l, p1, p2) ->
-      assert_pred h ghostenv env p1 coef (fun h ghostenv env -> assert_pred h ghostenv env p2 coef cont)
+      assert_pred h ghostenv env p1 coef (fun h ghostenv env size -> assert_pred h ghostenv env p2 coef (fun h ghostenv env _ -> cont h ghostenv env size))
     | IfPred (l, e, p1, p2) ->
-      let cont h _ _ = cont h ghostenv env in
+      let cont h _ _ _ = cont h ghostenv env None in
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
@@ -2298,7 +2298,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            assume (ctxt#mk_not (ev e)) (fun _ ->
              assert_pred h ghostenv env p2 coef cont))
     | SwitchPred (l, e, cs) ->
-      let cont h _ _ = cont h ghostenv env in
+      let cont h _ _ _ = cont h ghostenv env None in
       let t = ev e in
       let rec iter cs =
         match cs with
@@ -2312,7 +2312,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | [] -> success()
       in
       iter cs
-    | EmpPred l -> cont h ghostenv env
+    | EmpPred l -> cont h ghostenv env None
     | CoefPred (l, coefpat, Access (_, e, f, rhs)) -> access l coefpat e f rhs
     | CoefPred (l, coefpat, CallPred (_, g, pat0, pats)) -> callpred l coefpat g pat0 pats
     )
@@ -2333,7 +2333,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let get_field h t f l cont =
     let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
-    assert_chunk h [] [("x", t)] l f_symb real_unit DummyPat [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h coef ts ghostenv env ->
+    assert_chunk h [] [("x", t)] l f_symb real_unit DummyPat [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h coef ts size ghostenv env ->
       cont h coef (lookup env "y"))
   in
   
@@ -2442,23 +2442,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
             let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
             let _ =
-              assume_pred [] [] env0 pre0 real_unit (fun h _ env0 ->
+              assume_pred [] [] env0 pre0 real_unit None None (fun h _ env0 ->
                 let (Some bs) = zip xmap env0_0 in
                 let env_0 = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
                 let env = List.map (fun (x, e) -> (x, eval None env_0 e)) cenv in
-                assert_pred h [] env pre real_unit (fun h _ env ->
+                assert_pred h [] env pre real_unit (fun h _ env _ ->
                   let (result, env) =
                     match rt with
                       None -> (None, env)
                     | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
                   in
-                  assume_pred h [] env post real_unit (fun h _ _ ->
+                  assume_pred h [] env post real_unit None None (fun h _ _ ->
                     let env0 =
                       match result with
                         None -> env0
                       | Some v -> ("result", v)::env0
                     in
-                    assert_pred h [] env0 post0 real_unit (fun h _ env0 ->
+                    assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
                       if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
                     )
                   )
@@ -2482,7 +2482,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec iter stringlitchunks otherchunks h =
         match h with
           [] -> (stringlitchunks, otherchunks)
-        | ((g, coef, ts) as chunk)::h when g == string_literal_symb -> iter (chunk::stringlitchunks) otherchunks h
+        | ((g, coef, ts, _) as chunk)::h when g == string_literal_symb -> iter (chunk::stringlitchunks) otherchunks h
         | chunk::h -> iter stringlitchunks (chunk::otherchunks) h
       in
       iter [] [] h
@@ -2491,11 +2491,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match stringlitchunks with
         [] ->
         if otherchunks = [] then () else assert_false h env l msg
-      | (_, coef, [arr; cs])::stringlitchunks ->
+      | (_, coef, [arr; cs], _)::stringlitchunks ->
         let rec consume_chars_chunk otherchunks h =
           match h with
             [] -> assert_false h env l "At function exit: string_literal chunk without matching chars chunk."
-          | (g, coef', [arr'; cs'])::h when g == chars_symb && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
+          | (g, coef', [arr'; cs'], _)::h when g == chars_symb && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
           | chunk::h -> consume_chars_chunk (chunk::otherchunks) h
         in
         consume_chars_chunk [] otherchunks
@@ -2519,7 +2519,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
       let coef = get_unique_var_symb "stringLiteralCoef" RealType in
       assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
-        cont ((chars_symb, coef, [value; cs])::(string_literal_symb, coef, [value; cs])::h) value
+        cont ((chars_symb, coef, [value; cs], None)::(string_literal_symb, coef, [value; cs], None)::h) value
       )
     | e -> cont h (eval_non_pure is_ghost_expr h env e)
   in
@@ -2590,7 +2590,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let Some env' = zip ys ts in
         let cenv = List.map (fun (x, e) -> (x, eval0 None env' e)) cenv0 in
         with_context PushSubcontext (fun () ->
-        assert_pred h ghostenv cenv pre real_unit (fun h ghostenv' env' ->
+        assert_pred h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
           let _ =
             match leminfo with
               None -> ()
@@ -2601,7 +2601,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let rec nonempty h =
                   match h with
                     [] -> false
-                  | (p, _, ts)::_ when List.memq p nonempty_pred_symbs -> true
+                  | (p, coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
                   | _::h -> nonempty h
                 in
                 if nonempty h then
@@ -2609,15 +2609,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 else (
                   match indinfo with
                     None ->
-                    with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                      assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) and there is no inductive parameter."
-                    )
+                    begin
+                      match chunk_size with
+                        Some k when k < 0 -> ()
+                      | _ ->
+                        with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                          assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter."
+                        )
+                    end
                   | Some x -> (
                     match try_assq (List.assoc x env') sizemap with
                       Some k when k < 0 -> ()
                     | _ ->
                       with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                        assert_false h env l "Recursive lemma call does not decrease the heap (no field chunks left) or the inductive parameter."
+                        assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter."
                       )
                     )
                 )
@@ -2626,7 +2631,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let r = match tr with None -> None | Some t -> Some (get_unique_var_symb "result" t, t) in
           let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
-          assume_pred h ghostenv' env'' post real_unit (fun h _ _ ->
+          assume_pred h ghostenv' env'' post real_unit None None (fun h _ _ ->
             let env =
               match xo with
                 None -> env
@@ -2679,7 +2684,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    match fds with
                      [] ->
                      let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-                     cont (h @ [(malloc_block_symb, real_unit, [result])]) (update env x result)
+                     cont (h @ [(malloc_block_symb, real_unit, [result], None)]) (update env x result)
                    | (f, (lf, t))::fds ->
                      let fref = new fieldref f in
                      fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
@@ -2715,7 +2720,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               get_field h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
           let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-          assert_chunk h [] [("x", arg)] l malloc_block_symb real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
+          assert_chunk h [] [("x", arg)] l malloc_block_symb real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args)
       end
     | Assign (l, x, CallExpr (lc, g, [], pats)) ->
@@ -2738,7 +2743,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-          cont ((f_symb, real_unit, [t; ev rhs])::h) env)
+          cont ((f_symb, real_unit, [t; ev rhs], None)::h) env)
       )
     | CallStmt (l, g, es) ->
       call_stmt l None g (List.map (fun e -> LitPat e) es)
@@ -2799,7 +2804,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Assert (l, p) ->
       check_pred tenv p (fun tenv ->
-        assert_pred h ghostenv env p real_unit (fun _ ghostenv env ->
+        assert_pred h ghostenv env p real_unit (fun _ ghostenv env _ ->
           tcont sizemap tenv ghostenv h env
         )
       )
@@ -2815,12 +2820,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let pats = List.map (fun fn -> LitPat (FuncNameExpr fn)) fns @ pats in
       let (_, _, _, g_symb) = List.assoc g predfammap in
       let coefpat = match coefpat with None -> DummyPat | Some coefpat -> coefpat in
-      assert_chunk h ghostenv env l g_symb real_unit coefpat pats (fun h coef ts ghostenv env ->
+      assert_chunk h ghostenv env l g_symb real_unit coefpat pats (fun h coef ts chunk_size ghostenv env ->
         let ts = drop (List.length fns) ts in
         let ys = List.map (function (p, t) -> p) ps in
         let Some env' = zip ys ts in
+        let body_size = match chunk_size with None -> None | Some k -> Some (k - 1) in
         with_context PushSubcontext (fun () ->
-          assume_pred h ghostenv env' p coef (fun h _ _ ->
+          assume_pred h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
           )
         )
@@ -2844,8 +2850,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let Some env' = zip ys ts in
       let (_, _, _, g_symb) = List.assoc g predfammap in
       with_context PushSubcontext (fun () ->
-        assert_pred h ghostenv env' p coef (fun h _ _ ->
-          with_context PopSubcontext (fun () -> cont ((g_symb, coef, List.map (fun fn -> List.assoc fn funcnameterms) fns @ ts)::h) env)
+        assert_pred h ghostenv env' p coef (fun h _ _ _ ->
+          with_context PopSubcontext (fun () -> cont ((g_symb, coef, List.map (fun fn -> List.assoc fn funcnameterms) fns @ ts, None)::h) env)
         )
       )
     | ReturnStmt (l, Some e) ->
@@ -2861,16 +2867,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       check_pred tenv p (fun tenv' ->
-      assert_pred h ghostenv env p real_unit (fun h _ _ ->
+      assert_pred h ghostenv env p real_unit (fun h _ _ _ ->
         let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
         branch
           (fun _ ->
-             assume_pred [] ghostenv env p real_unit (fun h' ghostenv' env' ->
+             assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
                assume (eval0 (Some (fun l t f -> read_field h' env l t f)) env e) (fun _ ->
                  verify_cont pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                   assert_pred h'' ghostenv env p real_unit (fun h''' _ _ ->
+                   assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
                      check_leaks h''' env l "Loop leaks heap chunks."
                    )
                  ) (fun h'' retval -> return_cont (h'' @ h) retval)
@@ -2878,7 +2884,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
           )
           (fun _ ->
-             assume_pred h ghostenv env p real_unit (fun h ghostenv' env' ->
+             assume_pred h ghostenv env p real_unit None None (fun h ghostenv' env' ->
                assume (ctxt#mk_not (eval0 (Some (fun l t f -> read_field h env l t f)) env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
@@ -2932,9 +2938,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       check_pred tenv pre (fun tenv ->
       let env = List.map (fun (x, e) -> (x, eval None env e)) cenv0 in
       let _ =
-        assume_pred [] ghostenv env pre real_unit (fun h ghostenv env ->
+        assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
-            assert_pred h ghostenv env_post post real_unit (fun h ghostenv env ->
+            assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
                 check_leaks h env l "Function leaks heap chunks."
               )

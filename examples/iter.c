@@ -1,3 +1,5 @@
+#include "stdlib.h"
+
 struct node {
   struct node *next;
   int value;
@@ -17,14 +19,14 @@ inductive intlist = | nil | cons(int, intlist);
 fixpoint int len(intlist v) {
   switch (v) {
     case nil: return 0;
-    case cons(x, v): return 1 + len(v);
+    case cons(x, v0): return 1 + len(v0);
   }
 }
 
 fixpoint int ith(intlist v, int i) {
   switch (v) {
     case nil: return 0;
-    case cons(x, v): return (i == 0 ? x : ith(v, i - 1));
+    case cons(x, v0): return (i == 0 ? x : ith(v0, i - 1));
   }
 }
 @*/
@@ -44,6 +46,9 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
+  if (l == 0 || n == 0) {
+    abort();
+  }
   //@ struct node *next = n->next;
   //@ int value = n->value;
   //@ close node(n, next, value);
@@ -58,7 +63,7 @@ struct llist *create_llist()
 fixpoint intlist list_add(intlist v, int x) {
   switch (v) {
     case nil: return cons(x, nil);
-    case cons(y, v): return cons(y, list_add(v, x));
+    case cons(y, v0): return cons(y, list_add(v0, x));
   }
 }
 
@@ -95,13 +100,17 @@ void add(struct llist *list, int x)
   //@ requires llist(list, ?_v);
   //@ ensures llist(list, list_add(_v, x));
 {
+  struct node *l = 0;
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
+  if (n == 0) {
+    abort();
+  }
   //@ struct node *next = n->next;
   //@ int value = n->value;
   //@ close node(n, next, value);
   //@ struct node *f = list->first;
-  struct node *l = list->last;
+  l = list->last;
   //@ open node(l, _, _);
   l->next = n;
   l->value = x;
@@ -286,8 +295,8 @@ lemma void node_fractions_merge(struct node *n)
   close [f1 + f2] node(n, next1, value1);
 }
 
-lemma void lseg_fractions_merge(struct node *first)
-  requires [?f1]lseg(first, ?last, ?v1) &*& [?f2]lseg(first, last, ?v2);
+lemma void lseg_fractions_merge(real f1, struct node *first)
+  requires [f1]lseg(first, ?last, ?v1) &*& [?f2]lseg(first, last, ?v2);
   ensures [f1 + f2]lseg(first, last, v1) &*& v2 == v1;
 {
   open lseg(first, last, v1);
@@ -296,9 +305,7 @@ lemma void lseg_fractions_merge(struct node *first)
   } else {
     assert [_]node(first, ?next, _);
     node_fractions_merge(first);
-    open [f1 + f2]node(first, next, ?head);
-    lseg_fractions_merge(next);
-    close [f1 + f2]node(first, next, head);
+    lseg_fractions_merge(f1, next);
   }
   close [f1 + f2] lseg(first, last, v1);
 }
@@ -324,6 +331,10 @@ int length(struct llist *list)
     //@ close [frac]node(n, next, value);
     //@ lseg2_add(f);
     n = next;
+    //@ assume_is_int(c);
+    if (c == 2147483647) {
+      abort();
+    }
     c = c + 1;
     //@ assert [frac]lseg(next, l, ?ls3);
     //@ add_append_lemma(_ls1, value, ls3);
@@ -339,7 +350,7 @@ int length(struct llist *list)
 fixpoint intlist drop(int i, intlist v) {
   switch (v) {
     case nil: return nil;
-    case cons(x, v): return i == 0 ? cons(x, v) : drop(i - 1, v);
+    case cons(x, v0): return i == 0 ? cons(x, v0) : drop(i - 1, v0);
   }
 }
 
@@ -349,7 +360,7 @@ lemma void drop_ith(intlist v, int i, int h)
 {
   switch (v) {
     case nil:
-    case cons(x, v): if (i == 0) { } else { drop_ith(v, i - 1, h); }
+    case cons(x, v0): if (i == 0) { } else { drop_ith(v0, i - 1, h); }
   }
 }
 
@@ -359,7 +370,7 @@ lemma void drop_0_lemma(intlist v)
 {
   switch (v) {
     case nil:
-    case cons(x, v):
+    case cons(x, v0):
   }
 }
 
@@ -406,6 +417,7 @@ int lookup(struct llist *list, int index)
   int i = 0;
   //@ close lseg(f, n, nil);
   //@ drop_0_lemma(_v);
+  //@ assume_is_int(index);
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == list_append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + len(_ls2) == len(_v);
   {
@@ -468,7 +480,7 @@ void main0()
   dispose(l);
 }
 
-void main()
+int main()
   //@ requires emp;
   //@ ensures emp;
 {
@@ -489,6 +501,7 @@ void main()
   int e3 = lookup(l1, 3); assert(e3 == 50);
   int e4 = lookup(l1, 4); assert(e4 == 60);
   dispose(l1);
+  return 0;
 }
 
 struct iter {
@@ -513,10 +526,15 @@ struct iter *llist_create_iter(struct llist *l)
     //@ requires [?frac]llist(l, ?v);
     //@ ensures [?frac1]llist(l, v) &*& iter(result, frac - frac1, l, v, v);
 {
+    struct iter *i = 0;
+    struct node *f = 0;
     //@ real frac2 = llist_split_fraction(frac, l, v);
-    struct iter *i = malloc(sizeof(struct iter));
+    i = malloc(sizeof(struct iter));
+    if (i == 0) {
+      abort();
+    }
     //@ open [frac2]llist(l, v);
-    struct node *f = l->first;
+    f = l->first;
     i->current = f;
     //@ struct node *last = l->last;
     //@ close [frac2]lseg2(f, f, last, nil);
@@ -534,17 +552,17 @@ int iter_next(struct iter *i)
     //@ open llist_with_node(l, v0, c, v);
     //@ open lseg(c, ?last, v);
     //@ open node(c, _, _);
-    int v = c->value;
+    int value = c->value;
     struct node *n = c->next;
-    //@ close [f]node(c, n, v);
+    //@ close [f]node(c, n, value);
     //@ assert [f]lseg2(?first, _, _, ?vleft);
     //@ lseg2_add(first);
     i->current = n;
     //@ assert [f]lseg(n, last, ?tail);
-    //@ add_append_lemma(vleft, v, tail);
+    //@ add_append_lemma(vleft, value, tail);
     //@ close [f]llist_with_node(l, v0, n, tail);
     //@ close iter(i, f, l, v0, tail);
-    return v;
+    return value;
 }
 
 /*@
@@ -587,7 +605,7 @@ lemma void llist_fractions_merge(struct llist *l)
   malloc_block_llist_fractions_merge(l);
   struct node *first = l->first;
   struct node *last = l->last;
-  lseg_fractions_merge(first);
+  lseg_fractions_merge(f1, first);
   node_fractions_merge(last);
   close [f1 + f2]llist(l, v1);
 }

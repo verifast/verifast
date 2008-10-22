@@ -3,6 +3,7 @@ test: verifastz3.opt.exe
 	..\src\verifastz3.opt linkedlist.c
 	..\src\verifastz3.opt composite.c
 	..\src\verifastz3.opt composite4.c
+	..\src\verifastz3.opt -c iter.c
 	cd chat
 	..\..\src\verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
 
