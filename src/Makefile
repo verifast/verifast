@@ -19,7 +19,7 @@ vfideZ3.exe: proverapi.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml vfide.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma $(Z3)\ocaml\z3.cma proverapi.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml vfide.ml $(Z3)\ocaml\z3_stubs.obj $(Z3)\bin\z3.lib $(OCAMLLIB)\libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:$(GTKLIB)"
 
 vfideZ3.opt.exe: proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "/link /LIBPATH:$(GTKLIB)"
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "/link /LIBPATH:"$(GTKLIB)
 
 vfideredux.opt.exe: proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt.exe -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml -ccopt "/link /LIBPATH:$(GTKLIB)"
