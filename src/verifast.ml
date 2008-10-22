@@ -2537,7 +2537,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _ -> cont()
   in
   
-  let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont =
+  let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
@@ -2648,7 +2648,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     match s with
       PureStmt (l, s) ->
-      verify_stmt true leminfo sizemap tenv ghostenv h env s tcont
+      verify_stmt true leminfo sizemap tenv ghostenv h env s tcont return_cont
     | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
       begin
         match args with
@@ -2719,7 +2719,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont  (* BUGBUG: e should be typechecked outside of the scope of x *)
+      verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
       let tp = check_deref l tenv e f in
@@ -2736,8 +2736,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = check_expr_t tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
-        (fun _ -> assume (ev e) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont))
+        (fun _ -> assume (ev e) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
     | SwitchStmt (l, e, cs) ->
       let tp = check_expr tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -2783,7 +2783,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont return_cont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -2842,8 +2842,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
       let _ = check_expr_t tenv e tp in
-      cont h (update env "#result" (ev e))
-    | ReturnStmt (l, None) -> cont h env
+      return_cont h (Some (ev e))
+    | ReturnStmt (l, None) -> return_cont h None
     | WhileStmt (l, e, p, ss) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let _ = check_expr_t tenv e boolt in
@@ -2856,14 +2856,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let env = bs @ env in
         branch
           (fun _ ->
-             assume_pred [] ghostenv env p real_unit (fun h ghostenv' env' ->
-               assume (eval0 (Some (fun l t f -> read_field h env l t f)) env e) (fun _ ->
-                 verify_cont pure leminfo sizemap tenv' ghostenv' h env' ss (fun _ _ _ h env ->
+             assume_pred [] ghostenv env p real_unit (fun h' ghostenv' env' ->
+               assume (eval0 (Some (fun l t f -> read_field h' env l t f)) env e) (fun _ ->
+                 verify_cont pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                   assert_pred h ghostenv env p real_unit (fun h _ _ ->
-                     check_leaks h env l "Loop leaks heap chunks."
+                   assert_pred h'' ghostenv env p real_unit (fun h''' _ _ ->
+                     check_leaks h''' env l "Loop leaks heap chunks."
                    )
-                 )
+                 ) (fun h'' retval -> return_cont (h'' @ h) retval)
                )
              )
           )
@@ -2875,16 +2875,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     | BlockStmt (l, ss) ->
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env)
+      verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
   and
-    verify_cont pure leminfo sizemap tenv ghostenv h env ss cont =
+    verify_cont pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
         verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont
-        )
+          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont return_cont
+        ) return_cont
       )
   in
 
@@ -2923,24 +2923,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let env = List.map (fun (x, e) -> (x, eval None env e)) cenv0 in
       let _ =
         assume_pred [] ghostenv env pre real_unit (fun h ghostenv env ->
-          verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h env' ->
-            let get_env_post cont =
-              match rt with
-                None -> cont env
-              | Some t -> (
-                match try_assoc "#result" env' with
-                  None -> assert_false h env l "Function does not specify a return value."
-                | Some t -> cont (update env "result" t)
-                )
-            in
-            get_env_post (fun env_post ->
-            assert_pred h ghostenv env_post post real_unit (fun h _ _ ->
+          let do_return h env_post =
+            assert_pred h ghostenv env_post post real_unit (fun h ghostenv env ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
                 check_leaks h env l "Function leaks heap chunks."
               )
             )
-            )
-          )
+          in
+          let return_cont h retval =
+            match (rt, retval) with
+              (None, None) -> do_return h env
+            | (Some tp, Some t) -> do_return h (("result", t)::env)
+            | (None, Some _) -> assert_false h env l "Void function returns a value."
+            | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
+          in
+          verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
         )
       in
       let _ = pop() in

@@ -392,7 +392,6 @@ lemma void contextDistinct(struct Node* c, struct Node* n)
   open context(c, con, count);
   switch(con) {
     case Root:
-      return ;
     case lcontext(r, lcon, rhs):
       struct Node *left = r->left;
       struct Node *right = r->right;
@@ -442,7 +441,6 @@ lemma void contextUniqueNodes(struct Node* n)
   open context(n, con, count);
   switch(con){
     case Root: 
-      return;
     case lcontext(r, lcon, rhs):
       struct Node* left = r->left;
       struct Node* right = r->right;
@@ -839,7 +837,6 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
         case Nil: return;
         case tree(r, lhs, rhs): 
           upsideDownMinusIsRoot(r, lhs, rhs, node, Root);
-          return;
       }
       open context(node, contextval, size(v));
     case lcontext(r, lcon, rhs):
@@ -847,7 +844,7 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
       struct Node* nodeParent = node->parent; 
       valueOfNotNil(oldval, node);
       switch(valueOf(oldval, node)){
-        case Nil: return; 
+        case Nil:
         case tree(node0, nodeLhs, nodeRhs):
           valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
           close tree(nodeParent, tree(nodeParent, v, rhs));
@@ -866,7 +863,7 @@ lemma void context2tree(struct Node* theroot, struct Node* node, context context
       struct Node* nodeParent = node->parent; 
       valueOfNotNil(oldval, node);
       switch(valueOf(oldval, node)){
-        case Nil: return; 
+        case Nil:
         case tree(node0, nodeLhs, nodeRhs):
           valueOfRoot(oldval, node, node0, nodeLhs, nodeRhs);
           close tree(nodeParent, tree(nodeParent, lhs, v));

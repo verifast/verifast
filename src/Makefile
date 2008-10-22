@@ -1,3 +1,11 @@
+test: verifastz3.opt.exe
+	cd ..\examples
+	..\src\verifastz3.opt linkedlist.c
+	..\src\verifastz3.opt composite.c
+	..\src\verifastz3.opt composite4.c
+	cd chat
+	..\..\src\verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+
 verifastRedux.exe: proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlc -warn-error F -w p -g -pp camlp4o -o verifastRedux.exe unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 
