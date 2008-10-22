@@ -46,6 +46,9 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
+  if (l == 0 || n == 0) {
+    abort();
+  }
   //@ close node(n, n->next, n->value);
   //@ close lseg(n, n, nil);
   l->first = n;
@@ -97,8 +100,11 @@ void add(struct llist *list, int x)
 {
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
-  //@ close node(n, n->next, n->value);
   struct node *l = list->last;
+  if (n == 0) {
+    abort();
+  }
+  //@ close node(n, n->next, n->value);
   //@ open node(l, _, _);
   l->next = n;
   l->value = x;

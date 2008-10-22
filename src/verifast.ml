@@ -2667,16 +2667,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
           in
           let result = get_unique_var_symb "block" tpx in
-          let rec iter h fds =
-            match fds with
-              [] ->
-              let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-               cont (h @ [(malloc_block_symb, real_unit, [result])]) (update env x result)
-            | (f, (lf, t))::fds ->
-              let fref = new fieldref f in
-              fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
-          in
-          iter h fds
+          branch
+            (fun () ->
+               assume_eq result (ctxt#mk_intlit 0) (fun () ->
+                 cont h ((x, result)::env)
+               )
+            )
+            (fun () ->
+               assume_neq result (ctxt#mk_intlit 0) (fun () ->
+                 let rec iter h fds =
+                   match fds with
+                     [] ->
+                     let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+                     cont (h @ [(malloc_block_symb, real_unit, [result])]) (update env x result)
+                   | (f, (lf, t))::fds ->
+                     let fref = new fieldref f in
+                     fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+                 in
+                 iter h fds
+               )
+            )
         | _ -> call_stmt l (Some x) "malloc" args
       end
     | CallStmt (l, "assume_is_int", [Var (lv, x) as e]) ->

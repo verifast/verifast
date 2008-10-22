@@ -4,6 +4,7 @@
 #include "stringBuffers.h"
 #include "sockets.h"
 #include "threading.h"
+#include "stdlib.h"
 
 struct member {
     struct string_buffer *nick;
@@ -52,8 +53,13 @@ struct room *create_room()
     //@ requires emp;
     //@ ensures room(result);
 {
-    struct room *room = malloc(sizeof(struct room));
-    struct list *members = create_list();
+    struct room *room = 0;
+    struct list *members = 0;
+    room = malloc(sizeof(struct room));
+    if (room == 0) {
+        abort();
+    }
+    members = create_list();
     room->members = members;
     //@ close foreach(nil, member);
     //@ close room(room);
@@ -134,6 +140,9 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
     //@ ensures session(result);
 {
     struct session *session = malloc(sizeof(struct session));
+    if (session == 0) {
+        abort();
+    }
     session->room = room;
     session->room_lock = roomLock;
     session->socket = socket;
@@ -157,6 +166,9 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         struct string_buffer *nickCopy = string_buffer_copy(nick);
         //@ open room(room);
         member = malloc(sizeof(struct member));
+        if (member == 0) {
+            abort();
+        }
         member->nick = nickCopy;
         member->writer = writer;
         //@ close member(member);

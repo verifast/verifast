@@ -4,6 +4,4 @@ If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./
 Known VeriFast unsoundnesses:
 - linking correctness: ensure header files have the same meaning in all modules
 - linking correctness: prevent duplicate struct definitions and duplicate predicate definitions
-- contracts of lock_acquire and lock_release (non-re-entrant, non-thread-affine) not consistent with implementation (re-entrant, thread-affine)
-- Symbolic execution of a "malloc" call produces heap chunks even if the return value is 0
 - the lemma termination check that checks for nonemptyness is unsound: you can split off an infinite number of fractions from a field chunk.

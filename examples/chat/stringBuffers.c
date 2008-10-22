@@ -22,6 +22,9 @@ struct string_buffer *create_string_buffer()
     //@ ensures string_buffer(result);
 {
     struct string_buffer *buffer = malloc(sizeof(struct string_buffer));
+    if (buffer == 0) {
+        abort();
+    }
     buffer->length = 0;
     buffer->capacity = 0;
     buffer->chars = 0;
@@ -61,6 +64,7 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     //@ requires string_buffer(buffer) &*& [?f]chars(chars, ?cs) &*& count == chars_length(cs);
     //@ ensures string_buffer(buffer) &*& [f]chars(chars, cs);
 {
+    int newLength = 0;
     //@ chars_length_nonnegative(cs);
     //@ open string_buffer(buffer);
     //@ malloc_block_limits(buffer->chars);
@@ -70,14 +74,15 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     if (2147483647 - buffer->length < count) {
         abort();
     }
-    int newLength = buffer->length + count;
+    newLength = buffer->length + count;
     if (buffer->capacity < newLength) {
+        char *bufferChars = 0;
         char *newChars = malloc(newLength);
         if (newChars == 0) {
             abort();
         }
         buffer->capacity = newLength;
-        char * bufferChars = buffer->chars;
+        bufferChars = buffer->chars;
         //@ chars_split(buffer->chars, buffer->length);
         //@ chars_split(newChars, buffer->length);
         memcpy(newChars, buffer->chars, buffer->length);
@@ -125,7 +130,7 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
     //@ open string_buffer(buffer);
     struct string_buffer *copy = malloc(sizeof(struct string_buffer));
     char *chars = malloc(buffer->length);
-    if (chars == 0) {
+    if (copy == 0 || chars == 0) {
         abort();
     }
     copy->length = buffer->length;
