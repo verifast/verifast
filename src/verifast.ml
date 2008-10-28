@@ -410,6 +410,7 @@ let preprocess path loc stream streamSource =
                 begin
                   match includePath with
                     "bool.h" -> ()
+				  | "assert.h" -> ()
                   | _ ->
                     let (basedir, relpath) = !path in
                     let resolvedRelPath = Filename.concat (Filename.dirname relpath) includePath in
