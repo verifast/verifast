@@ -21,6 +21,23 @@ copy settings.bat.example settings.bat
 
 and edit settings.bat to update the paths as appropriate for your setup.
 
+The optimized executables do not print exception stack traces. To get exception stack traces, build verifastz3.exe and set OCAMLRUNPARAM=b:
+
+nmake verifastz3.exe
+set OCAMLRUNPARAM=b
+verifastz3 nonexistent.c
+
+Output:
+
+nonexistent.c
+Fatal error: exception Sys_error("nonexistent.c: No such file or directory")
+Raised by primitive operation at unknown location
+Called from unknown location
+Called from file "vfconsole.ml", line 9, characters 33-37
+Called from file "vfconsole.ml", line 12, characters 61-65
+Called from file "vfconsole.ml", line 12, characters 94-107
+Called from file "vfconsole.ml", line 60, characters 39-42
+
 Z3
 --
 
