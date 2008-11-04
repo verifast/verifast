@@ -29,7 +29,7 @@ verifast.cmx: proverapi.cmx verifast.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -c proverapi.cmx verifast.ml
 
 verifast.cmo: proverapi.cmo verifast.ml
-	ocamlc.opt -warn-error F -pp camlp4o -c verifast.ml
+	ocamlc.opt -warn-error F -g -pp camlp4o -c verifast.ml
 
 simplex.cmo: simplex.ml
 	ocamlc -warn-error F -g -c simplex.ml

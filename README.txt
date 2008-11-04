@@ -32,7 +32,7 @@ Output:
 nonexistent.c
 Fatal error: exception Sys_error("nonexistent.c: No such file or directory")
 Raised by primitive operation at unknown location
-Called from unknown location
+Called from file "verifast.ml", line 32, characters 21-25
 Called from file "vfconsole.ml", line 9, characters 33-37
 Called from file "vfconsole.ml", line 12, characters 61-65
 Called from file "vfconsole.ml", line 12, characters 94-107
