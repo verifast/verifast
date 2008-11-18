@@ -460,17 +460,20 @@ type type_ =
   | IntType
   | RealType
   | Char
+  | StringType
   | StructType of string
   | PtrType of type_
-  | InductiveType of string
-  | PredType of type_ list
+  | InductiveType of string (* type van inductive type *)
+  | PredType of type_ list (* type van predicate -> lijst van types van args*)
+  | ObjType of string (* voor java *)
 
 type type_expr =
-    ManifestTypeExpr of loc * type_
-  | StructTypeExpr of loc * string
-  | IdentTypeExpr of loc * string
+    StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
-  | PredTypeExpr of loc * type_expr list
+  | ArrayTypeExpr of loc * type_expr
+  | ManifestTypeExpr of loc * type_ (* primitive types? met regel-type*)
+  | IdentTypeExpr of loc * string (*type van inductive type met regel-naam *)
+  | PredTypeExpr of loc * type_expr list (* type def van predicate met regel-lijst van types van args *)
 
 class fieldref (name: string) =
   object
@@ -483,6 +486,17 @@ class fieldref (name: string) =
     method set_range r = range <- Some r
   end
 
+(*class methodref (name: string) =
+  object
+    val mutable parent: string option = None
+    val mutable args: list type_ option = None
+    method name = name
+    method parent = match parent with None -> assert false | Some s -> s
+    method args = match args with None -> assert false | Some r -> r
+    method set_parent s = parent <- Some s
+    method set_args r = args <- Some r
+  end*)
+  
 class predref (name: string) =
   object
     val mutable domain: type_ list option = None
@@ -497,57 +511,63 @@ and
   expr =
     True of loc
   | False of loc
+  | Null of loc
   | Var of loc * string
-  | Operation of loc * operator * expr list * type_ list option ref
-  | IntLit of loc * big_int * type_ option ref
-  | StringLit of loc * string
-  | Read of loc * expr * fieldref
-  | CallExpr of loc * string * pat list * pat list
+  | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
+  | IntLit of loc * big_int * type_ option ref (* int literal*)
+  | StringLit of loc * string (* string literal *)
+  | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field acces *)
+  | CallExpr of loc * string * pat list * pat list (* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
+  | PredNameExpr of loc * string (* naam van predicaat en line of code*)
+  | FuncNameExpr of string (*function name *)
+  | CastExpr of loc * type_expr * expr (* cast *)
   | SizeofExpr of loc * type_expr
-  | PredNameExpr of loc * string
-  | FuncNameExpr of string
-  | CastExpr of loc * type_expr * expr
 and
   pat =
-    LitPat of expr
-  | VarPat of string
-  | DummyPat
+    LitPat of expr (* literal pattern *)
+  | VarPat of string (* var pattern, aangeduid met ? in code *)
+  | DummyPat (*dummy pattern, aangeduid met _ in code *)
 and
   switch_expr_clause =
-    SwitchExprClause of loc * string * string list * expr
+    SwitchExprClause of loc * string * string list * expr (* switch uitdrukking *)
+and
+  file_type_=
+    Java
+  | C
+  | Header
 and
   stmt =
-    PureStmt of loc * stmt
-  | Assign of loc * string * expr
-  | DeclStmt of loc * type_expr * string * expr
-  | Write of loc * expr * fieldref * expr
-  | CallStmt of loc * string * expr list
-  | IfStmt of loc * expr * stmt list * stmt list
-  | SwitchStmt of loc * expr * switch_stmt_clause list
-  | Assert of loc * pred
-  | Open of loc * string * (loc * string) list * pat list * pat option
+    PureStmt of loc * stmt (* oproep van pure function in ghost range*)
+  | Assign of loc * string * expr (* toekenning *)
+  | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
+  | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
+  | CallStmt of loc * string * expr list (* oproep regel-naam-argumenten*)
+  | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
+  | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
+  | Assert of loc * pred (* assert regel-predicate *)
+  | Open of loc * string * (loc * string) list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
   | Close of loc * string * (loc * string) list * pat list * pat option
-  | ReturnStmt of loc * expr option
-  | WhileStmt of loc * expr * pred * stmt list
-  | BlockStmt of loc * stmt list
+  | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
+  | WhileStmt of loc * expr * pred * stmt list (* while regel-conditie-lus invariant- lus body *)
+  | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
 and
   switch_stmt_clause =
-  | SwitchStmtClause of loc * string * string list * stmt list
+  | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
 and
   pred =
-    Access of loc * expr * fieldref * pat
-  | CallPred of loc * predref * pat list * pat list
-  | ExprPred of loc * expr
-  | Sep of loc * pred * pred
-  | IfPred of loc * expr * pred * pred
-  | SwitchPred of loc * expr * switch_pred_clause list
-  | EmpPred of loc
+    Access of loc * expr * fieldref * pat (*  toegang tot veld regel-expr-veld-pattern*)
+  | CallPred of loc * predref * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
+  | ExprPred of loc * expr (*  uitdrukking regel-expr *)
+  | Sep of loc * pred * pred (* seperate execution of &*& in de code regel-predicate 1 - predicate 2 *)
+  | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
+  | SwitchPred of loc * expr * switch_pred_clause list (* switch over cons van inductive type regel-expr-clauses*)
+  | EmpPred of loc (* als "emp" bij requires/ensures staat -regel-*)
   | CoefPred of loc * pat * pred
 and
   switch_pred_clause =
-  | SwitchPredClause of loc * string * string list * pred
+  | SwitchPredClause of loc * string * string list * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
 and
   func_kind =
   | Regular
@@ -555,22 +575,30 @@ and
   | Lemma
 and
   spec =
-    Contract of pred * pred
+    Contract of pred * pred (* contract van een functie requires predicate-ensures predicate *)
   | FuncTypeSpec of string
 and
+  meth =
+  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option
+and
   decl =
-  | Inductive of loc * string * ctor list
-  | Struct of loc * string * field list option
-  | PredFamilyDecl of loc * string * int * type_expr list
+    Struct of loc * string * field list option
+  | Inductive of loc * string * ctor list (* inductief data type regel-naam-lijst van constructors*)
+  | Class of loc * string * meth list * field list (* java *)
+  | PredFamilyDecl of loc * string * int * type_expr list 
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option
+  (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
+  (* typedef met regel-return type-naam-parameter lijst - contract *)
 and
   field =
-  | Field of loc * type_expr * string
+  | Field of loc * type_expr * string (* veld met regel-type-naam*)
 and
   ctor =
-  | Ctor of loc * string * type_expr list
+  | Ctor of loc * string * type_expr list  (* constructor met regel-naam-lijst v types v args*)
+ and
+  member = FieldMember of field | MethMember of meth
 
 (*
 Visual Studio format:
@@ -605,11 +633,16 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
       "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
   else
     ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
-
+let string_of_func_kind f=
+  match f with
+    Lemma -> "lemma"
+  | Regular -> "regular"
+  | Fixpoint -> "fixpoint"
 let expr_loc e =
   match e with
     True l -> l
   | False l -> l
+  | Null l -> l
   | Var (l, x) -> l
   | IntLit (l, n, t) -> l
   | StringLit (l, s) -> l
@@ -655,20 +688,42 @@ let type_expr_loc t =
   | StructTypeExpr (l, sn) -> l
   | IdentTypeExpr (l, x) -> l
   | PtrTypeExpr (l, te) -> l
-
-let lexer = make_lexer [
+let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint"; "switch"; "case"; ":";"return";
+  "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&";
+  "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"assert"; "@"; "["; "]";"{";
+  "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
+]
+let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
+  "define"; "endif";
+]
+let java_keywords= ["public" ;"class" ; "." ; "static" ; "string"; "boolean";"new";"null"
+]
+(*let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "real"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
   "->"; "|->"; "&*&"; "inductive"; "="; "|"; "fixpoint"; "switch"; "case"; ":";
   "return"; "+"; "-"; "=="; "?"; "ensures"; "sizeof"; "close"; "void"; "lemma";
   "open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&"; "||"; "forall"; "_"; "@*/"; "!";
-  "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"; "assert"; "@"; "["; "]"
+  "predicate_family"; "predicate_family_instance"; "typedef"; "#"; "include"; "ifndef"; "define"; "endif"; "assert"; "@"; "["; "]";
+  "public" ;"class" ; "." ; "static" ; "string"; "boolean";"new";"null"
 ]
-
+*)
+let file_type path=
+  begin
+  if Filename.check_suffix (Filename.basename path) ".c" then C
+  else if Filename.check_suffix (Filename.basename path) ".java" then Java
+  else if Filename.check_suffix (Filename.basename path) ".h" then Header
+  else failwith ("unknown extension")
+  end
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 
 let read_decls path stream streamSource reportKeyword reportGhostRange =
+let lexer=
+  match file_type path with
+  Java -> make_lexer (veri_keywords@java_keywords)
+  | _ -> make_lexer (veri_keywords@c_keywords)
+in
 begin
 let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
 let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) stream reportKeyword in
@@ -677,9 +732,39 @@ let rec parse_decls_eof = parser
   [< ds = parse_decls; _ = Stream.empty >] -> ds
 and
   parse_decls = parser
-  [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
-| [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
+  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
+| [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);'(_, Kwd "{"); mem=parse_java_members
+    ;'(_, Kwd "}");ds=parse_decls>]->Class(l,s,methods mem,fields mem)::ds
+| [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
+and
+  methods m=
+  match m with
+    MethMember (Meth (l, t, n, ps, co, ss))::ms -> Meth (l, t, n, ps, co, ss)::(methods ms)
+    |_::ms -> methods ms
+    | []->[]
+and
+  fields m=
+  match m with
+    FieldMember (Field (l, t, f))::ms -> Field (l, t, f)::(fields ms)
+    |_::ms -> fields ms
+    | []->[]
+and
+  parse_java_members= parser
+  [<'(l, Kwd "public");m=parse_java_member l;mr=parse_java_members>] -> m::mr
+| [<>] -> []
+and
+  parse_java_member l= parser
+  [< '(_, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
+    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss))
+| [< t=parse_type;'(_,Ident f);'(_, Kwd ";")>] -> FieldMember(Field (l,t,f))
+
+and
+  parse_meth_rest ?t g l= parser
+  [< ps = parse_paramlist; f =
+    (parser
+       [< co = opt parse_spec; ss = parse_block >] -> Meth (l,t,g,ps,co,Some ss)
+    ) >] -> f
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
@@ -735,6 +820,10 @@ and
   [< '(_, Kwd "}") >] -> []
 | [< f = parse_field; fs = parse_fields >] -> f::fs
 and
+  parse_java_fields = parser
+  [<'(_, Kwd "public static")>] -> []
+| [< '(_, Kwd "public");f = parse_field; fs = parse_java_fields >] -> f::fs
+and
   parse_field = parser
   [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f)
 and
@@ -747,9 +836,11 @@ and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "string") >] -> ManifestTypeExpr (l, StringType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
+| [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
 | [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Kwd "predicate"); '(_, Kwd "("); ts = parse_types >] -> PredTypeExpr (l, ts)
@@ -757,6 +848,7 @@ and
 and
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
+| [<'(l, Kwd "[");'(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
 | [< >] -> t0
 and
   parse_paramlist = parser
@@ -816,6 +908,19 @@ and
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
+| [< '(l, Ident x); s= parser
+	 [<'(_, Kwd "=");e=parser
+			[<rhs = parse_expr; '(_, Kwd ";")>]-> Assign (l, x, rhs)
+			| [<'(_, Kwd "new");'(_, Ident y);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,x,CallExpr(l,"new",[],[]))>] -> e
+   | [<'(_, Kwd ".");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
+       ->Write (l, Var (l, x), new fieldref f, rhs)
+   | [<'(_, Kwd "->");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
+       ->Write (l, Var (l, x), new fieldref f, rhs)
+   | [< args0 = parse_patlist;'(_, Kwd ";")>] -> CallStmt (l, x, List.map (function LitPat x-> x) args0)
+   | [<'(_, Ident t);'(_, Kwd "=");e=parser
+			[<rhs = parse_expr; '(_, Kwd ";")>] -> DeclStmt (l, IdentTypeExpr (l, x), t, rhs)
+			| [<'(_, Kwd "new");'(_, Ident x);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,t,CallExpr(l,"new",[],[]))>] -> e
+  >] -> s
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
@@ -825,7 +930,7 @@ and
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
   >] -> s
-| [< te = parse_type; '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
+| [< te = parse_type; '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -897,6 +1002,7 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
+| [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Ident x); e = parser
     [< args0 = parse_patlist; e = parser
       [< args = parse_patlist >] -> CallExpr (l, x, args0, args)
@@ -925,6 +1031,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
+| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
@@ -1097,13 +1204,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let myPath = Filename.dirname (Sys.argv.(0)) in
-  let preludePath = Filename.concat myPath "prelude.h" in
-  let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
-  let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
-  let ds = ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange in
+  let ds= 
+    match file_type (Filename.basename path) with
+	Java-> read_decls path stream streamSource reportKeyword reportGhostRange
+	| _->
+		let preludePath = Filename.concat myPath "prelude.h" in
+		let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
+		let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
+		ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange 
+  in
   
   (* failwith "Done parsing."; *)
-  
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -1161,7 +1272,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> idm
       | (Inductive (l, i, ctors))::ds ->
-        if i = "bool" || i = "int" || List.mem_assoc i idm then
+        if i = "bool" || i = "boolean" || i = "int" || List.mem_assoc i idm then
           static_error l "Duplicate datatype name."
         else
           iter ((i, (l, ctors))::idm) ds
@@ -1170,14 +1281,104 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [("uint", (dummy_loc, []))] ds
   in
   
+  let classdeclmap =
+    let rec iter idm ds =
+      match ds with
+        [] -> idm
+      | (Class (l, i, meths,fields))::ds ->
+        if List.mem_assoc i idm then
+          static_error l "Duplicate datatype name."
+        else
+          iter ((i, (l, meths,fields))::idm) ds
+      | _::ds -> iter idm ds
+    in
+    iter [("Object", (dummy_loc,[],[]))] ds
+  in
+  
+  let classfmap =
+    List.map
+      (fun (sn, (l,meths, fds_opt)) ->
+         let rec iter fmap fds =
+           match fds with
+             [] -> (sn, (l,meths, Some (List.rev fmap)))
+           | Field (lf, t, f)::fds ->
+             if List.mem_assoc f fmap then
+               static_error lf "Duplicate field name."
+             else (
+               let rec check_type te =
+                 match te with
+                   ManifestTypeExpr (_, IntType) -> IntType
+                 | ManifestTypeExpr (_, Char) -> Char
+				 | IdentTypeExpr(lt, sn) -> 
+				   if List.mem_assoc sn classdeclmap then
+                     ObjType sn
+                   else
+                     static_error lt "No such struct."
+                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class."
+               in
+               iter ((f, (lf, check_type t))::fmap) fds
+             )
+         in
+          begin
+           match fds_opt with
+             fds -> iter [] fds
+           | [] -> (sn, (l,meths,None))
+         end
+      )
+      classdeclmap
+  in
+  let classmap =
+    List.map
+      (fun (sn, (l,meths_opt, fds)) ->
+         let rec iter mmap meths =
+           match meths with
+             [] -> (sn, (l,Some (List.rev mmap),fds))
+           | Meth (lm, t, n, ps, co, ss)::meths ->
+             if List.mem_assoc n mmap then
+               static_error lm "Duplicate meth name."
+             else (
+               let rec check_type te =
+                 match te with
+                   ManifestTypeExpr (_, IntType) -> IntType
+                 | ManifestTypeExpr (_, Char) -> Char
+				 | ManifestTypeExpr (_, Bool) -> Bool
+				 | IdentTypeExpr(lt, sn) -> 
+				   if List.mem_assoc sn classdeclmap then
+                     ObjType sn
+                   else
+                     static_error lt "No such struct."
+                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
+               in
+			   let check_t t=
+			     match t with
+				   Some ManifestTypeExpr (_, Void) -> None
+				 | Some t-> Some (check_type t)
+				 | None -> None
+			   in
+               iter ((n, (lm, check_t t,ps,co,ss))::mmap) meths
+             )
+         in
+          begin
+           match meths_opt with
+             meths -> iter [] meths
+           | [] -> (sn, (l,None,fds))
+         end
+      )
+      classfmap
+  in
+  
   let rec check_pure_type te =
     match te with
       ManifestTypeExpr (l, t) -> t
+	| ArrayTypeExpr (l, t) -> check_pure_type t
     | IdentTypeExpr (l, id) ->
-      if not (List.mem_assoc id inductivedeclmap) then
-        static_error l "No such datatype."
-      else
-        InductiveType id
+      if (List.mem_assoc id inductivedeclmap) then
+	    InductiveType id
+	  else
+	    if (List.mem_assoc id classdeclmap) then 
+		ObjType id
+		else
+        static_error l ("No such datatype."^id)
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap) then
         static_error l "No such struct."
@@ -1199,6 +1400,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | RealType -> "real"
     | Char -> "char"
     | InductiveType i -> i
+	| ObjType l -> l
     | StructType sn -> "struct " ^ sn
     | PtrType t -> string_of_type t ^ " *"
     | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
@@ -1210,8 +1412,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IntType -> ctxt#type_int
     | RealType -> ctxt#type_real
     | Char -> ctxt#type_int
+	| StringType -> ctxt#type_int
     | InductiveType i -> ctxt#type_inductive
     | StructType sn -> assert false
+	| ObjType n -> ctxt#type_int
     | PtrType t -> ctxt#type_int
     | PredType t -> ctxt#type_inductive
   in
@@ -1229,6 +1433,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec expect_type l t t0 =
     match (t, t0) with
       (PtrType _, PtrType Void) -> ()
+	| (ObjType "null", ObjType _) -> ()
     | (PtrType Void, PtrType _) -> ()
     | (Char, IntType) -> ()
     | (PredType ts, PredType ts0) ->
@@ -1240,7 +1445,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
-
+  (* opstellen van inductivemap en purefuncmap *)
   let (inductivemap, purefuncmap) =
     let rec iter imap pfm ds =
       match ds with
@@ -1500,9 +1705,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let mk_predfam p l arity ts = (p, (l, arity, ts, get_unique_var_symb p (PredType ts))) in
   
-  let malloc_block_pred_map = flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [PtrType (StructType sn)])] | _ -> []) structmap in
-  
+  let malloc_block_pred_map = 
+    match file_type path with
+	Java-> flatmap (function (sn, (_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn])] 
+	        | _ -> []) classmap
+	| _ -> flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 
+	        [PtrType (StructType sn)])] | _ -> []) structmap 
+	in
+
   let field_pred_map =
+    match file_type path with
+	Java-> flatmap
+      (fun (sn, (_,_, fds_opt)) ->
+         match fds_opt with
+           None -> []
+         | Some fds ->
+           List.map
+             (fun (fn, (_, t)) ->
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) dummy_loc 0 [ObjType sn; t])
+             )
+             fds
+      )
+      classmap
+	| _ ->
     flatmap
       (fun (sn, (_, fds_opt)) ->
          match fds_opt with
@@ -1516,6 +1741,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
       structmap
   in
+  
   
   let predfammap = 
     let rec iter pm ds =
@@ -1536,10 +1762,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let structpreds = List.map (fun (_, p) -> p) malloc_block_pred_map @ List.map (fun (_, p) -> p) field_pred_map in
     iter structpreds ds
   in
-
-  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds) in
   
-  let check_funcnamelist is = List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is in
+  let funcnames = 
+    match file_type path with
+	Java -> let rec mnames meths=
+	  match meths with
+	  Meth(l,rt,g,ps,c,b)::rest -> g::mnames rest
+	  | []->[]
+	in
+    list_remove_dups (flatmap (function (Class (l,cn,meths,fds)) -> mnames meths | _ -> []) ds )
+	| _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds) 
+  in
+  
+  let check_funcnamelist is =
+    match file_type path with
+    Java->List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is
+	| _ -> List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is 
+  in
   
   let predinstmap = 
     let rec iter pm ds =
@@ -1593,6 +1832,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       True l -> boolt
     | False l -> boolt
+	| Null l -> ObjType "null"
     | Var (l, x) ->
       begin
       match try_assoc x tenv with
@@ -1603,7 +1843,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | _ ->
             begin
               if List.mem x funcnames then
-                PtrType Void
+                match file_type path with
+				Java -> static_error l "In java methods can't be used as pointers"
+				| _ -> PtrType Void
               else
                 begin
                   match try_assoc x predfammap with
@@ -1625,17 +1867,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           PredType ts
         | None -> static_error l "No such predicate."
       end
-    | Operation (l, (Eq | Neq), [e1; e2], ts) ->
+    | Operation (l, (Eq | Neq), [e1; e2], ts) -> 
       ignore (promote_numeric e1 e2 ts);
       boolt
-    | Operation (l, (Or | And), [e1; e2], ts) ->
+    | Operation (l, (Or | And), [e1; e2], ts) -> 
       let _ = checkt e1 boolt in
       let _ = checkt e2 boolt in
       boolt
-    | Operation (l, Not, [e], ts) ->
+    | Operation (l, Not, [e], ts) -> 
       let _ = checkt e boolt in
       boolt
-    | Operation (l, (Le | Lt), [e1; e2], ts) ->
+    | Operation (l, (Le | Lt), [e1; e2], ts) -> 
       ignore (promote l e1 e2 ts);
       boolt
     | Operation (l, (Add | Sub), [e1; e2], ts) ->
@@ -1645,7 +1887,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           PtrType Char | PtrType Void -> checkt e2 intt; ts:=Some [t1; IntType]; t1
         | IntType | RealType -> promote l e1 e2 ts
       end
-    | IntLit (l, n, t) -> t := Some intt; intt
+    | IntLit (l, n, t) -> t := Some intt; intt 
     | StringLit (l, s) -> PtrType Char
     | CastExpr (l, te, e) ->
       let t = check_pure_type te in
@@ -1752,6 +1994,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | Some (_, t) -> f#set_parent sn; f#set_range t; t
         end
       | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
+      end
+	| ObjType sn ->
+	  begin
+      match List.assoc sn classmap with
+        (_,_, Some fds) ->
+        begin
+          match try_assoc f#name fds with
+            None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
+          | Some (_, t) -> f#set_parent sn; f#set_range t; t
+        end
+      | (_,_,None) -> static_error l ("Invalid dereference; class '" ^ sn ^ "' was declared without a body.")
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct."
     end
@@ -1891,8 +2144,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter e
   in
 
-  let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames in
-
+  let funcnameterms = 
+    match file_type path with
+	Java ->[] (* in java methods can't be used as pointers *)
+	| _ -> List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
+  in
+  
   let real_unit = ctxt#mk_reallit 1 in
   
   let min_int_big_int = big_int_of_string "-2147483648" in
@@ -1917,6 +2174,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       True l -> ctxt#mk_true
     | False l -> ctxt#mk_false
+	| Null l -> ctxt#mk_intlit 0
     | Var (l, x) ->
       begin (* Note: this lookup sequence must match exactly the one in check_expr *)
         match try_assoc x env with
@@ -2367,6 +2625,198 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let (funcmap, prototypes_implemented) =
+    match file_type path with
+	Java -> let rec iter funcmap prototypes_implemented ds =
+      match ds with
+        [] -> (List.rev funcmap, List.rev prototypes_implemented)
+      | Meth (l,rt, fn, xs, contract_opt, body)::ds->
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+        let xmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (te, x)::xs ->
+              if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+              let t = check_pure_type te in
+              iter ((x, t)::xm) xs
+          in
+          iter [] xs
+        in
+        let (cenv, pre, post) =
+          match contract_opt with
+            None -> static_error l "Non-fixpoint function must have contract."
+          | Some (Contract (pre, post)) ->
+            check_pred xmap pre (fun tenv ->
+              let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+              check_pred postmap post (fun _ -> ())
+            );
+            (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+          | Some (FuncTypeSpec ftn) ->
+            begin
+              match try_assoc ftn functypemap with
+                None -> static_error l "No such function type."
+              | Some (_, rt0, xmap0, pre, post) ->
+                if rt <> rt0 then static_error l "Function return type differs from function type return type.";
+                begin
+                  match zip xmap xmap0 with
+                    None -> static_error l "Function parameter count differs from function type parameter count."
+                  | Some bs ->
+                    let cenv =
+                      List.map
+                        (fun ((x, t), (x0, t0)) ->
+                         if t <> t0 then static_error l ("Type of parameter '" ^ x ^ "' does not match type of function type parameter '" ^ x0 ^ "'.");
+                         (x0, Var (dummy_loc, x))
+                        )
+                        bs
+                      @ [("this", FuncNameExpr fn)]
+                    in
+                    let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true));
+                    (cenv, pre, post)
+                end
+            end
+        in
+        begin
+          match try_assoc fn funcmap with
+            None -> iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body))::funcmap) prototypes_implemented ds
+          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            if body = None then
+              static_error l "Function prototype must precede function implementation."
+            else
+              static_error l "Duplicate function implementation."
+          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, None) ->
+            if body = None then static_error l "Duplicate function prototype.";
+            if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
+            begin
+              match zip xmap xmap0 with
+                None -> static_error l "Function implementation does not match prototype: parameter counts do not match."
+              | Some pairs ->
+                List.iter
+                  (fun ((x, t), (x0, t0)) ->
+                   if t <> t0 then static_error l ("Function implementation does not match prototype: parameter '" ^ x ^ "': wrong type.")
+                  )
+                  pairs
+            end;
+            push();
+            let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
+            let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
+            let _ =
+              assume_pred [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+                let (Some bs) = zip xmap env0_0 in
+                let env_0 = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
+                let env = List.map (fun (x, e) -> (x, eval None env_0 e)) cenv in
+                assert_pred h [] env pre real_unit (fun h _ env _ ->
+                  let (result, env) =
+                    match rt with
+                      None -> (None, env)
+                    | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
+                  in
+                  assume_pred h [] env post real_unit None None (fun h _ _ ->
+                    let env0 =
+                      match result with
+                        None -> env0
+                      | Some v -> ("result", v)::env0
+                    in
+                    assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
+                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                    )
+                  )
+                )
+              )
+            in
+            pop();
+            iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body))::funcmap) ((fn, l0)::prototypes_implemented) ds
+        end
+      | _::ds -> iter funcmap prototypes_implemented ds
+    in
+	let iter2 f funcmap prototypes_implemented=
+	  match f with
+	  |Func(l,k, rt, fn, xs, contract_opt, body) when k<>Fixpoint->
+	  let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+        let xmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (te, x)::xs ->
+              if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+              let t = check_pure_type te in
+              iter ((x, t)::xm) xs
+          in
+          iter [] xs
+        in
+        let (cenv, pre, post) =
+          match contract_opt with
+            None -> static_error l "Non-fixpoint function must have contract."
+          | Some (Contract (pre, post)) ->
+            check_pred xmap pre (fun tenv ->
+              let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+              check_pred postmap post (fun _ -> ())
+            );
+            (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+        in
+        begin
+          match try_assoc fn funcmap with
+            None -> (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),prototypes_implemented)
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            if body = None then
+              static_error l "Function prototype must precede function implementation."
+            else
+              static_error l "Duplicate function implementation."
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None) ->
+            if body = None then static_error l "Duplicate function prototype.";
+            if k <> k0 then static_error l "Function implementation does not match prototype: modifiers do not match.";
+            if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
+            begin
+              match zip xmap xmap0 with
+                None -> static_error l "Function implementation does not match prototype: parameter counts do not match."
+              | Some pairs ->
+                List.iter
+                  (fun ((x, t), (x0, t0)) ->
+                   if t <> t0 then static_error l ("Function implementation does not match prototype: parameter '" ^ x ^ "': wrong type.")
+                  )
+                  pairs
+            end;
+            push();
+            let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
+            let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
+            let _ =
+              assume_pred [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+                let (Some bs) = zip xmap env0_0 in
+                let env_0 = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
+                let env = List.map (fun (x, e) -> (x, eval None env_0 e)) cenv in
+                assert_pred h [] env pre real_unit (fun h _ env _ ->
+                  let (result, env) =
+                    match rt with
+                      None -> (None, env)
+                    | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
+                  in
+                  assume_pred h [] env post real_unit None None (fun h _ _ ->
+                    let env0 =
+                      match result with
+                        None -> env0
+                      | Some v -> ("result", v)::env0
+                    in
+                    assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
+                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                    )
+                  )
+                )
+              )
+            in
+            pop();
+            (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),((fn, l0)::prototypes_implemented))
+        end
+		| _ -> (funcmap,prototypes_implemented)
+	in
+	let rec iter1 (funcmap,prototypes_implemented) ds=
+	  match ds with
+	  Class(l,cn,meths,fds)::rest-> iter1 (iter funcmap prototypes_implemented meths) rest
+	  | Func(l,k,rt, fn, xs, contract_opt, body)::rest -> iter1 (iter2 (Func(l,k,rt, fn, xs, contract_opt, body)) funcmap prototypes_implemented) rest
+	  | _::rest -> iter1 (funcmap,prototypes_implemented) rest
+	  | []-> (funcmap, List.rev prototypes_implemented)
+	in
+    iter1 ([],[]) ds
+	|_ ->
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (List.rev funcmap, List.rev prototypes_implemented)
@@ -2473,17 +2923,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter [] [] ds
   in
-
+  
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb))) -> symb) field_pred_map in
   
   let check_leaks h env l msg =
-    let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+    match file_type path with
+	Java -> ()
+	| _ -> let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
     let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
     let (stringlitchunks, otherchunks) =
       let rec iter stringlitchunks otherchunks h =
         match h with
           [] -> (stringlitchunks, otherchunks)
-        | ((g, coef, ts, _) as chunk)::h when g == string_literal_symb -> iter (chunk::stringlitchunks) otherchunks h
+        | ((g, coef, ts, _) as chunk)::h when g == string_literal_symb && (file_type path) <> Java -> iter (chunk::stringlitchunks) otherchunks h
         | chunk::h -> iter stringlitchunks (chunk::otherchunks) h
       in
       iter [] [] h
@@ -2496,32 +2948,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec consume_chars_chunk otherchunks h =
           match h with
             [] -> assert_false h env l "At function exit: string_literal chunk without matching chars chunk."
-          | (g, coef', [arr'; cs'], _)::h when g == chars_symb && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
+          | (g, coef', [arr'; cs'], _)::h when g == chars_symb && (file_type path) <> Java && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
           | chunk::h -> consume_chars_chunk (chunk::otherchunks) h
         in
         consume_chars_chunk [] otherchunks
     in
     iter stringlitchunks otherchunks
-  in
-  
-  let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
-  let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
-  let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
-
+  in 
   let eval_non_pure is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
     eval_core assert_term (Some (fun l t f -> read_field h env l t f)) env e
-  in
+  in 
   
   let eval_h is_ghost_expr h env e cont =
     match e with
-      StringLit (l, s) ->
-      let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-      let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
-      let coef = get_unique_var_symb "stringLiteralCoef" RealType in
-      assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
-        cont ((chars_symb, coef, [value; cs], None)::(string_literal_symb, coef, [value; cs], None)::h) value
-      )
+      StringLit (l, s)->
+	    if(file_type path <> Java) then
+		  let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+		  let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+		  let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+          let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
+          let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
+          let coef = get_unique_var_symb "stringLiteralCoef" RealType in
+            assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
+              cont ((chars_symb, coef, [value; cs], None)::(string_literal_symb, coef, [value; cs], None)::h) value
+            )
+	    else
+		  cont h (eval_non_pure is_ghost_expr h env e)
     | e -> cont h (eval_non_pure is_ghost_expr h env e)
   in
   
@@ -2550,7 +3003,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match es with
         [] -> cont h []
       | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
-    in
+    in 
     let ev e = eval env e in
     let cont = tcont sizemap tenv ghostenv in
     let check_assign l x =
@@ -2574,7 +3027,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | Some (lg, k, tr, ps, cenv0, pre, post, body) ->
+      | Some (lg,k, tr, ps, cenv0, pre, post, body) ->
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (p, t) -> p) ps in
@@ -2651,7 +3104,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
         )
       )
-    in
+    in 
     match s with
       PureStmt (l, s) ->
       verify_stmt true leminfo sizemap tenv ghostenv h env s tcont return_cont
@@ -2695,6 +3148,37 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         | _ -> call_stmt l (Some x) "malloc" args
       end
+	| Assign (l, x, CallExpr (lc, "new", [], args)) ->
+	  begin match args with
+	    [] -> 
+          let tpx = vartp l x in
+          let _ = check_assign l x in
+          let tn =
+            match tpx with
+              ObjType sn -> sn
+            | _ -> static_error l ("Type mismatch")
+          in
+		  let (_,_,fds_opt) = List.assoc tn classmap in
+		  let fds =
+            match fds_opt with
+              Some fds -> fds
+            | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+          in
+          let result = get_unique_var_symb "block" tpx in
+               assume_neq result (ctxt#mk_intlit 0) (fun () ->
+                 let rec iter h fds =
+                   match fds with
+                     [] ->
+                     let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+                     cont (h @ [(malloc_block_symb, real_unit, [result], None)]) (update env x result)
+                   | (f, (lf, t))::fds ->
+                     let fref = new fieldref f in
+                     fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+                 in
+                 iter h fds
+               )
+		 | _-> call_stmt l (Some x) "malloc" args
+		end
     | CallStmt (l, "assume_is_int", [Var (lv, x) as e]) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
@@ -2726,16 +3210,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | Assign (l, x, CallExpr (lc, g, [], pats)) ->
       call_stmt l (Some x) g pats
-    | Assign (l, x, e) ->
+    | Assign (l, x, e) -> 
       let tpx = vartp l x in
       let _ = check_expr_t tenv e tpx in
       let _ = check_assign l x in
-      eval_h h env e (fun h v -> cont h ((x, v)::env))
+      eval_h h env e (fun h v -> cont h ((x, v)::env));
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
       verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+	  ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
       let tp = check_deref l tenv e f in
@@ -2941,7 +3426,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ =
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
-            assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
+		    match file_type path with
+			Java -> ()
+			|_ ->
+             assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
                 check_leaks h env l "Function leaks heap chunks."
               )

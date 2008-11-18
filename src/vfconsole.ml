@@ -54,7 +54,8 @@ let _ =
       | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
     else
     begin
-      if Filename.check_suffix arg ".c" then
+      if Filename.check_suffix arg ".c" || Filename.check_suffix arg ".java"
+	  then
       begin
         print_endline arg;
         verify !stats !verbose !prover arg
@@ -71,7 +72,7 @@ let _ =
       let assume_lib = Filename.concat mydir "assume.a" in
       let modules = crt::List.rev !modules in
       let modules = if !allowAssume then assume_lib::modules else modules in
-      link_program (!isLibrary) modules;
+      link_program (!isLibrary) modules; 
       print_endline "Program linked successfully."
     with
       LinkError msg -> print_endline msg; exit 1

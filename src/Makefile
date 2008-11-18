@@ -4,6 +4,9 @@ test: verifastz3.opt.exe
 	..\src\verifastz3.opt composite.c
 	..\src\verifastz3.opt composite4.c
 	..\src\verifastz3.opt -c iter.c
+	cd java
+	..\..\src\verifastz3.opt -c Tree.java
+	cd ..
 	cd chat
 	..\..\src\verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
 
@@ -17,7 +20,7 @@ verifastZ3.exe: proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfco
 	ocamlc -custom -warn-error F -g -pp camlp4o -o verifastZ3.exe -I $(Z3)\ocaml unix.cma nums.cma $(Z3)\ocaml\z3.ml proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml $(Z3)\ocaml\z3_stubs.obj $(Z3)\bin\z3.lib $(OCAMLLIB)\libcamlidl.lib ole32.lib
 
 vfideZ3.exe: proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
-	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)\ocaml\z3.ml proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)\ocaml\z3_stubs.obj $(Z3)\bin\z3.lib $(OCAMLLIB)\libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:$(GTKLIB)"
+	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)\ocaml\z3.ml proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)\ocaml\z3_stubs.obj $(Z3)\bin\z3.lib $(OCAMLLIB)\libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
 vfideZ3.opt.exe: proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt.exe -I $(Z3)\ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "/link /LIBPATH:"$(GTKLIB)
