@@ -87,8 +87,8 @@ lemma void contains_min(bintree r)
   switch(r){
 	case nil:
 	case cons(a,b,c):if(b!=nil){
-			  min_le_max(b);
-			  contains_min(b);
+			 min_le_max(b);
+			 contains_min(b);
 			 }
   }
 }
@@ -420,6 +420,7 @@ public class Tree{
 			}
 			if(l==null&&r==null){
 				//@ close tree(t,b);
+				//@ close tree(null,nil);
 				return null;
 			}
 			if(l==null&&r!=null){

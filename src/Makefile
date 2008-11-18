@@ -3,6 +3,7 @@ test: verifastz3.opt.exe
 	..\src\verifastz3.opt linkedlist.c
 	..\src\verifastz3.opt composite.c
 	..\src\verifastz3.opt composite4.c
+	..\src\verifastz3.opt sorted_bintree.c
 	..\src\verifastz3.opt -c iter.c
 	cd java
 	..\..\src\verifastz3.opt -c Tree.java

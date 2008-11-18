@@ -2628,7 +2628,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match file_type path with
 	Java -> let rec iter funcmap prototypes_implemented ds =
       match ds with
-        [] -> (List.rev funcmap, List.rev prototypes_implemented)
+        [] -> (funcmap,prototypes_implemented)
       | Meth (l,rt, fn, xs, contract_opt, body)::ds->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
@@ -2645,13 +2645,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (cenv, pre, post) =
           match contract_opt with
             None -> static_error l "Non-fixpoint function must have contract."
-          | Some (Contract (pre, post)) ->
+          | Some (Contract (pre, post)) -> 
             check_pred xmap pre (fun tenv ->
               let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-              check_pred postmap post (fun _ -> ())
+              check_pred postmap post (fun _ -> ());
             );
             (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
-          | Some (FuncTypeSpec ftn) ->
+          | Some (FuncTypeSpec ftn) -> 
             begin
               match try_assoc ftn functypemap with
                 None -> static_error l "No such function type."
@@ -2731,8 +2731,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
 	let iter2 f funcmap prototypes_implemented=
 	  match f with
-	  |Func(l,k, rt, fn, xs, contract_opt, body) when k<>Fixpoint->
-	  let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+	  | Func (l, k, rt, fn, xs, contract_opt, body) when k <> Fixpoint ->
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
             match xs with
@@ -2753,6 +2753,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               check_pred postmap post (fun _ -> ())
             );
             (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+          | Some (FuncTypeSpec ftn) ->
+            begin
+              match try_assoc ftn functypemap with
+                None -> static_error l "No such function type."
+              | Some (_, rt0, xmap0, pre, post) ->
+                if rt <> rt0 then static_error l "Function return type differs from function type return type.";
+                begin
+                  match zip xmap xmap0 with
+                    None -> static_error l "Function parameter count differs from function type parameter count."
+                  | Some bs ->
+                    let cenv =
+                      List.map
+                        (fun ((x, t), (x0, t0)) ->
+                         if t <> t0 then static_error l ("Type of parameter '" ^ x ^ "' does not match type of function type parameter '" ^ x0 ^ "'.");
+                         (x0, Var (dummy_loc, x))
+                        )
+                        bs
+                      @ [("this", FuncNameExpr fn)]
+                    in
+                    let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true));
+                    (cenv, pre, post)
+                end
+            end
         in
         begin
           match try_assoc fn funcmap with
@@ -2804,16 +2828,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               )
             in
             pop();
-            (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),((fn, l0)::prototypes_implemented))
+            (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),((fn, l0)::prototypes_implemented));
         end
 		| _ -> (funcmap,prototypes_implemented)
 	in
 	let rec iter1 (funcmap,prototypes_implemented) ds=
 	  match ds with
-	  Class(l,cn,meths,fds)::rest-> iter1 (iter funcmap prototypes_implemented meths) rest
-	  | Func(l,k,rt, fn, xs, contract_opt, body)::rest -> iter1 (iter2 (Func(l,k,rt, fn, xs, contract_opt, body)) funcmap prototypes_implemented) rest
+	  Class(l,cn,meths,fds)::rest->iter1 (iter funcmap prototypes_implemented meths) rest
+	  | Func(l,k,rt, fn, xs, contract_opt, body)::rest -> iter1 (iter2 (Func(l,k,rt,fn,xs,contract_opt,body)) funcmap prototypes_implemented) rest
 	  | _::rest -> iter1 (funcmap,prototypes_implemented) rest
-	  | []-> (funcmap, List.rev prototypes_implemented)
+	  | []-> (List.rev funcmap,List.rev prototypes_implemented)
 	in
     iter1 ([],[]) ds
 	|_ ->
@@ -3427,7 +3451,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
 		    match file_type path with
-			Java -> ()
+			Java -> assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
+              with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
+                check_leaks h env l "Function leaks heap chunks."
+              )
+            )
 			|_ ->
              assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
