@@ -517,7 +517,7 @@ and
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | StringLit of loc * string (* string literal *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field acces *)
-  | CallExpr of loc * string * pat list * pat list (* oproep van functie/methode/lemma/fixpoint *)
+  | CallExpr of loc * string * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
@@ -538,12 +538,21 @@ and
   | C
   | Header
 and
+  func_binding =
+    Static
+  | Instance
+and
+  visibility =
+    Public
+  | Protected
+  | Private
+and
   stmt =
     PureStmt of loc * stmt (* oproep van pure function in ghost range*)
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
-  | CallStmt of loc * string * expr list (* oproep regel-naam-argumenten*)
+  | CallStmt of loc * string * expr list * func_binding(* oproep regel-naam-argumenten*)
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
@@ -579,7 +588,7 @@ and
   | FuncTypeSpec of string
 and
   meth =
-  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option
+  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
 and
   decl =
     Struct of loc * string * field list option
@@ -587,13 +596,13 @@ and
   | Class of loc * string * meth list * field list (* java *)
   | PredFamilyDecl of loc * string * int * type_expr list 
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
 and
   field =
-  | Field of loc * type_expr * string (* veld met regel-type-naam*)
+  | Field of loc * type_expr * string * func_binding(* veld met regel-type-naam*)
 and
   ctor =
   | Ctor of loc * string * type_expr list  (* constructor met regel-naam-lijst v types v args*)
@@ -638,6 +647,10 @@ let string_of_func_kind f=
     Lemma -> "lemma"
   | Regular -> "regular"
   | Fixpoint -> "fixpoint"
+let tostring f=
+  match f with
+  Instance -> "instance"
+  | Static -> "static"
 let expr_loc e =
   match e with
     True l -> l
@@ -648,7 +661,7 @@ let expr_loc e =
   | StringLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
-  | CallExpr (l, g, pats0, pats) -> l
+  | CallExpr (l, g, pats0, pats,_) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
@@ -672,7 +685,7 @@ let stmt_loc s =
   | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
-  | CallStmt (l,  _, _) -> l
+  | CallStmt (l,  _, _,_) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
@@ -696,7 +709,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
 ]
-let java_keywords= ["public" ;"class" ; "." ; "static" ; "string"; "boolean";"new";"null"
+let java_keywords= ["public" ;"class" ; "." ; "static" ; "string"; "boolean";"new";"null"(*;"this"*)
 ]
 (*let lexer = make_lexer [
   "struct"; "{"; "}"; "*"; ";"; "int"; "real"; "uint"; "bool"; "char"; "true"; "false"; "predicate"; "("; ")"; ","; "requires";
@@ -733,38 +746,36 @@ let rec parse_decls_eof = parser
 and
   parse_decls = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
-| [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);'(_, Kwd "{"); mem=parse_java_members
+| [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);'(_, Kwd "{"); mem=parse_java_members s
     ;'(_, Kwd "}");ds=parse_decls>]->Class(l,s,methods mem,fields mem)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
 and
   methods m=
   match m with
-    MethMember (Meth (l, t, n, ps, co, ss))::ms -> Meth (l, t, n, ps, co, ss)::(methods ms)
+    MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods ms)
     |_::ms -> methods ms
     | []->[]
 and
   fields m=
   match m with
-    FieldMember (Field (l, t, f))::ms -> Field (l, t, f)::(fields ms)
+    FieldMember (Field (l, t, f,fb))::ms -> Field (l, t, f,fb)::(fields ms)
     |_::ms -> fields ms
     | []->[]
 and
-  parse_java_members= parser
-  [<'(l, Kwd "public");m=parse_java_member l;mr=parse_java_members>] -> m::mr
+  parse_java_members cn= parser
+  [<'(l, Kwd "public");m=parse_java_member l cn;mr=parse_java_members cn>] -> m::mr
 | [<>] -> []
 and
-  parse_java_member l= parser
+  parse_java_member l cn= parser
   [< '(_, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
-    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss))
-| [< t=parse_type;'(_,Ident f);'(_, Kwd ";")>] -> FieldMember(Field (l,t,f))
-
-and
-  parse_meth_rest ?t g l= parser
-  [< ps = parse_paramlist; f =
-    (parser
-       [< co = opt parse_spec; ss = parse_block >] -> Meth (l,t,g,ps,co,Some ss)
-    ) >] -> f
+    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,Public))
+| [< t=parse_type;'(_,Ident f);r=parser
+       [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance))
+	   |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+	   -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
+	   MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
+	   >] -> r
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
@@ -798,8 +809,8 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, co, None)
-     | [< co = opt parse_spec; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss)
+       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, co, None,Static,Public)
+     | [< co = opt parse_spec; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss,Static,Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -825,7 +836,7 @@ and
 | [< '(_, Kwd "public");f = parse_field; fs = parse_java_fields >] -> f::fs
 and
   parse_field = parser
-  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f)
+  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f,Instance)
 and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
@@ -897,37 +908,48 @@ and
 | [< '(l, Kwd "assert"); p = parse_pred; '(_, Kwd ";") >] -> Assert (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, es1, es2) -> Open (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2, coef)
+     CallExpr (_, g, es1, es2,_) -> Open (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, es1, es2) -> Close (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2, coef)
+     CallExpr (_, g, es1, es2,_) -> Close (l, g, List.map (function (LitPat (Var (l, x))) -> (l, x) | e -> raise (ParseException (l, "Index expressions must be identifiers."))) es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
-| [< '(l, Ident x); s= parser
-	 [<'(_, Kwd "=");e=parser
+(*| [< '(l, Ident x); s= parser
+    [<'(_, Kwd "->");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
+       ->Write (l, Var (l, x), new fieldref f, rhs)
+	| [<'(_, Kwd "=");e=parser
 			[<rhs = parse_expr; '(_, Kwd ";")>]-> Assign (l, x, rhs)
-			| [<'(_, Kwd "new");'(_, Ident y);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,x,CallExpr(l,"new",[],[]))>] -> e
-   | [<'(_, Kwd ".");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
-       ->Write (l, Var (l, x), new fieldref f, rhs)
-   | [<'(_, Kwd "->");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
-       ->Write (l, Var (l, x), new fieldref f, rhs)
-   | [< args0 = parse_patlist;'(_, Kwd ";")>] -> CallStmt (l, x, List.map (function LitPat x-> x) args0)
+			| [<'(_, Kwd "new");'(_, Ident y);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,x,CallExpr(l,"new",[],[]))
+			| [<'(_, Kwd ".");'(_, Ident f);args0 = parse_patlist;'(_, Kwd ";")>] -> Assign (l, x,CallExpr (l, x, [], args0))
+			| [<'(_, Ident y);'(_, Kwd ".");'(_, Ident f);args0 = parse_patlist;'(_, Kwd ";")>] -> Assign (l, x,CallExpr (l, f, [], args0))
+			>] -> e
+   | [<'(_, Kwd ".");'(_, Ident f);e=parser
+       [<'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]->Write (l, Var (l, x), new fieldref f, rhs)
+	   |[<>]->
+	   | [<args0 = parse_patlist;'(_, Kwd ";")>] -> CallStmt (l, x, List.map (function LitPat x-> x) args0,Instance)
+	   >] -> e
+   | [< args0 = parse_patlist;'(_, Kwd ";")>] -> CallStmt (l, x, List.map (function LitPat x-> x) args0,Static)
    | [<'(_, Ident t);'(_, Kwd "=");e=parser
 			[<rhs = parse_expr; '(_, Kwd ";")>] -> DeclStmt (l, IdentTypeExpr (l, x), t, rhs)
 			| [<'(_, Kwd "new");'(_, Ident x);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,t,CallExpr(l,"new",[],[]))>] -> e
-  >] -> s
+  >] -> s *)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es) -> CallStmt (l, g, List.map (function LitPat e -> e) es) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (lx, x) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
+    )
+  | [<'(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >]->
+    (match e with
+     | Var (lx, t) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
+     | _ -> raise (ParseException (expr_loc e, "Parse error blabla."))
     )
   >] -> s
 | [< te = parse_type; '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
@@ -964,7 +986,7 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, pats0, pats) -> CallPred (l, new predref g, pats0, pats)
+     | CallExpr (l, g, pats0, pats,_) -> CallPred (l, new predref g, pats0, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -1003,13 +1025,18 @@ and
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, Kwd "null") >] -> Null l
-| [< '(l, Ident x); e = parser
+| [< '(l, Kwd "new");'(_, Ident x);'(_, Kwd "(");'(_, Kwd ")");>] -> CallExpr(l,"new",[],[],Static)
+| [< '(l, Ident x); ex = parser
     [< args0 = parse_patlist; e = parser
-      [< args = parse_patlist >] -> CallExpr (l, x, args0, args)
-    | [< >] -> CallExpr (l, x, [], args0)
-    >] -> e
-  | [< >] -> Var (l, x)
-  >] -> e
+      [< args = parse_patlist >] -> CallExpr (l, x, args0, args,Static)
+    | [< >] -> CallExpr (l, x, [], args0,Static)
+      >] -> e
+	| [<'(l, Kwd ".");'(l, Ident f);e=parser
+	    [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x))::args0,Instance)
+	   |[<>] -> Read (l, Var(l,x), new fieldref f)
+	 >]->e
+    | [< >] -> Var (l, x)
+  >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "(");
@@ -1031,7 +1058,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
-| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
+| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] ->e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
@@ -1236,7 +1263,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter fmap fds =
            match fds with
              [] -> (sn, (l, Some (List.rev fmap)))
-           | Field (lf, t, f)::fds ->
+           | Field (lf, t, f,Instance)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
@@ -1301,7 +1328,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter fmap fds =
            match fds with
              [] -> (sn, (l,meths, Some (List.rev fmap)))
-           | Field (lf, t, f)::fds ->
+           | Field (lf, t, f,Instance)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
@@ -1333,7 +1360,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter mmap meths =
            match meths with
              [] -> (sn, (l,Some (List.rev mmap),fds))
-           | Meth (lm, t, n, ps, co, ss)::meths ->
+           | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
              if List.mem_assoc n mmap then
                static_error lm "Duplicate meth name."
              else (
@@ -1355,7 +1382,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 				 | Some t-> Some (check_type t)
 				 | None -> None
 			   in
-               iter ((n, (lm, check_t t,ps,co,ss))::mmap) meths
+               iter ((n, (lm, check_t t,ps,co,ss,fb,v))::mmap) meths
              )
          in
           begin
@@ -1469,7 +1496,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         in
         citer 0 [] pfm ctors
-      | Func (l, Fixpoint, rto, g, ps, contract, body_opt)::ds ->
+      | Func (l, Fixpoint, rto, g, ps, contract, body_opt,Static,Public)::ds ->
         let _ =
           if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
         in
@@ -1582,7 +1609,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             promote l e1 e2 ts
                           | IntLit (l, n, t) -> t := Some intt; intt
                           | StringLit (l, s) -> PtrType Char
-                          | CallExpr (l, g', [], pats) -> (
+                          | CallExpr (l, g', [], pats,_) -> (
                             match try_assoc g' pfm with
                               Some (l, t, ts, _) -> (
                               match zip pats ts with
@@ -1767,11 +1794,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match file_type path with
 	Java -> let rec mnames meths=
 	  match meths with
-	  Meth(l,rt,g,ps,c,b)::rest -> g::mnames rest
+	  Meth(l,rt,g,ps,c,b,fb,v)::rest -> g::mnames rest
 	  | []->[]
 	in
     list_remove_dups (flatmap (function (Class (l,cn,meths,fds)) -> mnames meths | _ -> []) ds )
-	| _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b)) -> [g] | _ -> []) ds) 
+	| _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_funcnamelist is =
@@ -1898,7 +1925,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end;
       t
     | Read (l, e, f) -> check_deref l tenv e f
-    | CallExpr (l, g', [], pats) -> (
+    | CallExpr (l, g', [], pats,_) -> (
       match try_assoc g' purefuncmap with
         Some (l, t, ts, _) -> (
         match zip pats ts with
@@ -2137,7 +2164,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match e with
         Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
       | Operation (l, _, es, _) -> List.iter iter es
-      | CallExpr (l, _, [], pats) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
+      | CallExpr (l, _, [], pats,_) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
       | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
       | _ -> ()
     in
@@ -2218,7 +2245,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else if eq_big_int n zero_big_int then ctxt#mk_reallit 0
       else static_error l "Real number literals other than 0 and 1 are not yet supported."
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
-    | CallExpr (l, g, [], pats) ->
+    | CallExpr (l, g, [], pats,_) ->
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
@@ -2298,7 +2325,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x), cs)]) ->
+     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x), cs)],Static,Public) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -2629,7 +2656,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	Java -> let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap,prototypes_implemented)
-      | Meth (l,rt, fn, xs, contract_opt, body)::ds->
+      | Meth (l,rt, fn, xs, contract_opt, body,fb,v)::ds->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2678,13 +2705,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body))::funcmap) prototypes_implemented ds
-          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            None -> iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body,fb,v))::funcmap) prototypes_implemented ds
+          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, Some _,fb,v) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, None) ->
+          | Some (l0,Regular,rt0, xmap0, cenv0, pre0, post0, None,fb,v) ->
             if body = None then static_error l "Duplicate function prototype.";
             if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
             begin
@@ -2725,13 +2752,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               )
             in
             pop();
-            iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            iter ((fn, (l,Regular,rt, xmap, cenv, pre, post, body,fb,v))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
 	let iter2 f funcmap prototypes_implemented=
 	  match f with
-	  | Func (l, k, rt, fn, xs, contract_opt, body) when k <> Fixpoint ->
+	  | Func (l, k, rt, fn, xs, contract_opt, body,fb,v) when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2780,13 +2807,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin
           match try_assoc fn funcmap with
-            None -> (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),prototypes_implemented)
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            None -> (((fn, (l, k, rt, xmap, cenv, pre, post, body,fb,v))::funcmap),prototypes_implemented)
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _,fb,v) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None) ->
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None,fb,v) ->
             if body = None then static_error l "Duplicate function prototype.";
             if k <> k0 then static_error l "Function implementation does not match prototype: modifiers do not match.";
             if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
@@ -2828,14 +2855,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               )
             in
             pop();
-            (((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap),((fn, l0)::prototypes_implemented));
+            (((fn, (l, k, rt, xmap, cenv, pre, post, body,fb,v))::funcmap),((fn, l0)::prototypes_implemented));
         end
 		| _ -> (funcmap,prototypes_implemented)
 	in
 	let rec iter1 (funcmap,prototypes_implemented) ds=
 	  match ds with
 	  Class(l,cn,meths,fds)::rest->iter1 (iter funcmap prototypes_implemented meths) rest
-	  | Func(l,k,rt, fn, xs, contract_opt, body)::rest -> iter1 (iter2 (Func(l,k,rt,fn,xs,contract_opt,body)) funcmap prototypes_implemented) rest
+	  | Func(l,k,rt, fn, xs, contract_opt, body,Static,Public)::rest -> iter1 (iter2 (Func(l,k,rt,fn,xs,contract_opt,body,Static,Public)) funcmap prototypes_implemented) rest
 	  | _::rest -> iter1 (funcmap,prototypes_implemented) rest
 	  | []-> (List.rev funcmap,List.rev prototypes_implemented)
 	in
@@ -2844,7 +2871,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (List.rev funcmap, List.rev prototypes_implemented)
-      | Func (l, k, rt, fn, xs, contract_opt, body)::ds when k <> Fixpoint ->
+      | Func (l, k, rt, fn, xs, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2893,13 +2920,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) prototypes_implemented ds
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _) ->
+            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body,Static,Public))::funcmap) prototypes_implemented ds
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None) ->
+          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
             if k <> k0 then static_error l "Function implementation does not match prototype: modifiers do not match.";
             if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
@@ -2941,7 +2968,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               )
             in
             pop();
-            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body,Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
@@ -3034,7 +3061,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
-    let call_stmt l xo g pats =
+    let call_stmt l xo g pats fb=
       (
       match try_assoc g funcmap with
         None -> (
@@ -3045,13 +3072,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            let _ = check_expr_t tenv (CallExpr (l, g, [], pats)) in
+            let _ = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) in
             let _ = check_assign l x in
             let ts = List.map (function (LitPat e) -> ev e) pats in
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | Some (lg,k, tr, ps, cenv0, pre, post, body) ->
+      | Some (lg,k, tr, ps, cenv0, pre, post, body,fbf,v) ->
+	    if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let ys = List.map (function (p, t) -> p) ps in
@@ -3132,7 +3160,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match s with
       PureStmt (l, s) ->
       verify_stmt true leminfo sizemap tenv ghostenv h env s tcont return_cont
-    | Assign (l, x, CallExpr (lc, "malloc", [], args)) ->
+    | Assign (l, x, CallExpr (lc, "malloc", [], args,Static)) ->
       begin
         match args with
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
@@ -3170,9 +3198,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  iter h fds
                )
             )
-        | _ -> call_stmt l (Some x) "malloc" args
+        | _ -> call_stmt l (Some x) "malloc" args Static
       end
-	| Assign (l, x, CallExpr (lc, "new", [], args)) ->
+	| Assign (l, x, CallExpr (lc, "new", [], args,Static)) ->
 	  begin match args with
 	    [] -> 
           let tpx = vartp l x in
@@ -3201,14 +3229,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter h fds
                )
-		 | _-> call_stmt l (Some x) "malloc" args
+		 | _-> call_stmt l (Some x) "malloc" args Static
 		end
-    | CallStmt (l, "assume_is_int", [Var (lv, x) as e]) ->
+    | CallStmt (l, "assume_is_int", [Var (lv, x) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let tp = check_expr tenv e in
       assume_is_of_type (ev e) tp (fun () -> cont h env)
-    | CallStmt (l, "free", args) ->
+    | CallStmt (l, "free", args,Static) ->
       begin
         match List.map (check_expr tenv) args with
           [PtrType (StructType tn)] ->
@@ -3223,17 +3251,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rec iter h fds =
             match fds with
               [] -> cont h env
-            | (Field (lf, t, f))::fds ->
+            | (Field (lf, t, f,Instance))::fds ->
               let fref = new fieldref f in
               fref#set_parent tn;
               get_field h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
           let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
           assert_chunk h [] [("x", arg)] l malloc_block_symb real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
-        | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args)
+        | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
-    | Assign (l, x, CallExpr (lc, g, [], pats)) ->
-      call_stmt l (Some x) g pats
+    | Assign (l, x, CallExpr (lc, g, [], pats,fb)) ->
+      call_stmt l (Some x) g pats fb
     | Assign (l, x, e) -> 
       let tpx = vartp l x in
       let _ = check_expr_t tenv e tpx in
@@ -3255,8 +3283,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont ((f_symb, real_unit, [t; ev rhs], None)::h) env)
       )
-    | CallStmt (l, g, es) ->
-      call_stmt l None g (List.map (fun e -> LitPat e) es)
+    | CallStmt (l, g, es,fb) ->
+      call_stmt l None g (List.map (fun e -> LitPat e) es) fb
     | IfStmt (l, e, ss1, ss2) ->
       let _ = check_expr_t tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -3417,9 +3445,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_funcs lems funcs =
     match funcs with
     | [] -> ()
-    | (g, (l, Lemma, rt, ps, cenv0, pre, post, None))::funcs ->
+    | (g, (l, Lemma, rt, ps, cenv0, pre, post, None,fb,v))::funcs ->
       verify_funcs (g::lems) funcs
-    | (g, (l, k, rt, ps, cenv0, pre, post, Some ss))::funcs ->
+    | (g, (l, k, rt, ps, cenv0, pre, post, Some ss,fb,v))::funcs ->
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in
       let (sizemap, indinfo) =
