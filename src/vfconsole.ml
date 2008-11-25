@@ -4,12 +4,12 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify stats verbose prover path =
+  let verify stats options prover path =
     let streamSource path =
       Stream.of_string (readFile path)
     in
     try
-      verify_program prover stats verbose path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ());
+      verify_program prover stats options path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ());
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
@@ -29,11 +29,12 @@ let _ =
   if n = 1 then
   begin
     print_endline "Verifast 2.0 for C";
-    print_endline "Usage: verifast [-stats] [-verbose] [-prover z3|redux] [-c] [-shared] [-allow_assume] {sourcefile|objectfile}"
+    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] {sourcefile|objectfile}"
   end
   else
   let stats = ref false in
   let verbose = ref false in
+  let disable_overflow_check = ref false in
   let prover: string option ref = ref None in
   let compileOnly = ref false in
   let isLibrary = ref false in
@@ -47,6 +48,7 @@ let _ =
       match arg with
         "-stats" -> stats := true
       | "-verbose" -> verbose := true
+      | "-disable_overflow_check" -> disable_overflow_check := true
       | "-prover" -> prover := Some Sys.argv.(!i); i := !i + 1
       | "-c" -> compileOnly := true
       | "-shared" -> isLibrary := true
@@ -58,7 +60,7 @@ let _ =
 	  then
       begin
         print_endline arg;
-        verify !stats !verbose !prover arg
+        verify !stats {option_verbose = !verbose; option_disable_overflow_check = !disable_overflow_check} !prover arg
       end;
       modules := arg::!modules
     end

@@ -1180,8 +1180,11 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) verbose path stream streamSource reportKeyword reportGhostRange =
+type options = {option_verbose: bool; option_disable_overflow_check: bool}
 
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path stream streamSource reportKeyword reportGhostRange =
+
+  let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check} = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
@@ -2191,10 +2194,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_overflow l min t max =
       begin
       match assert_term with
-        None -> ()
-      | Some assert_term ->
+        Some assert_term when not disable_overflow_check ->
         assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow.";
         assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow."
+      | _ -> ()
       end;
       t
     in
@@ -3553,11 +3556,11 @@ let lookup_prover prover =
       | Some f -> f
     end
       
-let verify_program prover print_stats verbose path stream streamSource reportKeyword reportGhostRange =
+let verify_program prover print_stats options path stream streamSource reportKeyword reportGhostRange =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange
+         fun ctxt -> verify_program_with_stats ctxt print_stats options path stream streamSource reportKeyword reportGhostRange
      end)
 
 let remove_dups bs =

@@ -6,6 +6,7 @@ let show_ide initialPath prover =
   let msg = ref None in
   let root = GWindow.window ~width:800 ~height:600 ~title:"VeriFast IDE" () in
   let actionGroup = GAction.action_group ~name:"Actions" () in
+  let disableOverflowCheck = ref false in
   let _ =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
@@ -16,6 +17,7 @@ let show_ide initialPath prover =
       a "SaveAs" ~label:"Save _as";
       a "Close" ~stock:`CLOSE;
       a "Verify" ~label:"_Verify";
+      GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5"
     ]
   in
@@ -34,6 +36,8 @@ let show_ide initialPath prover =
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
+          <separator />
+          <menuitem action='CheckOverflow' />
         </menu>
       </menubar>
       <toolbar name='ToolBar'>
@@ -424,7 +428,8 @@ let show_ide initialPath prover =
           begin
             let streamSource path = Stream.of_string (readFile path) in
             try
-              verify_program None false false path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange;
+              let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
+              verify_program None false options path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange;
               msg := Some "0 errors found";
               updateWindowTitle()
             with
