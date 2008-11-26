@@ -3085,6 +3085,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	    if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
+        let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
         let ys = List.map (function (p, t) -> p) ps in
         let _ =
           match zip pats ps with

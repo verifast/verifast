@@ -1,3 +1,5 @@
+#include "stdlib.h"
+
 struct node {
   struct node *next;
   int value;
@@ -27,6 +29,9 @@ struct llist *create_llist()
 {
   struct llist *l = malloc(sizeof(struct llist));
   struct node *n = malloc(sizeof(struct node));
+  if (l == 0 || n == 0) {
+    abort();
+  }
   //@ struct node *next = n->next;
   //@ int value = n->value;
   //@ close node(n, next, value);
@@ -80,6 +85,9 @@ void add(struct llist *list, int x)
 {
   //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
+  if (n == 0) {
+    abort();
+  }
   //@ struct node *next = n->next;
   //@ int value = n->value;
   //@ close node(n, next, value);

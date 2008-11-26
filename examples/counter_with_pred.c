@@ -1,3 +1,5 @@
+#include "stdlib.h"
+
 struct Counter {
   int value;
 };
@@ -12,6 +14,9 @@ struct Counter* init(int v)
   //@ ensures Counter(result, v);
 {
   struct Counter* c = malloc(sizeof(struct Counter));
+  if (c == 0) {
+    abort();
+  }
   c->value = v;
 
   //@ close Counter(c, v);
@@ -60,7 +65,7 @@ int get(struct Counter* c)
   return tmp;
 }
 
-void main()
+int main()
   //@ requires emp;
   //@ ensures emp;
 {
@@ -70,5 +75,5 @@ void main()
   //@ assert tmp == 1;
   
   dispose(c1); dispose(c2);
-
+  return 0;
 }

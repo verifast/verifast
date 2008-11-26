@@ -1,3 +1,5 @@
+#include "stdlib.h"
+
 struct Counter {
   int value;
 };
@@ -7,6 +9,9 @@ struct Counter* init(int v)
   //@ ensures result->value |-> v &*& malloc_block_Counter(result);
 {
   struct Counter* c = malloc(sizeof(struct Counter));
+  if (c == 0) {
+    abort();
+  }
   c->value = v;
   return c;
 }
@@ -36,7 +41,7 @@ void swap(struct Counter* c1, struct Counter* c2)
   c1->value = tmp2;
 }
 
-void main()
+int main()
   //@ requires emp;
   //@ ensures emp;
 {
@@ -46,6 +51,7 @@ void main()
   //@ assert tmp == 1;
   
   dispose(c1); dispose(c2);
+  return 0;
 }
 
 

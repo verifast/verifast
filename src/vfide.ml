@@ -4,7 +4,7 @@ open GMain
 let show_ide initialPath prover =
   let ctxts_lifo = ref None in
   let msg = ref None in
-  let root = GWindow.window ~width:800 ~height:600 ~title:"VeriFast IDE" () in
+  let root = GWindow.window ~width:800 ~height:600 ~title:"VeriFast 3.0 IDE" () in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let _ =
@@ -18,7 +18,11 @@ let show_ide initialPath prover =
       a "Close" ~stock:`CLOSE;
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5"
+      a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5";
+      a "Help" ~label:"_Help";
+      a "About" ~stock:`ABOUT ~callback:(fun _ ->
+        GToolbox.message_box "VeriFast IDE"
+          "VeriFast 3.0 for C and Java (released 2008-11-26)\n\nhttp://www.cs.kuleuven.be/~bartj/verifast/\n\nBy Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, with contributions by Jan Smans and Cedric Cuypers")
     ]
   in
   let ui = GAction.ui_manager() in
@@ -38,6 +42,9 @@ let show_ide initialPath prover =
           <menuitem action='VerifyProgram' />
           <separator />
           <menuitem action='CheckOverflow' />
+        </menu>
+        <menu action='Help'>
+          <menuitem action='About'/>
         </menu>
       </menubar>
       <toolbar name='ToolBar'>
@@ -106,7 +113,7 @@ let show_ide initialPath prover =
   in
   let updateWindowTitle() =
     let text = match !msg with None -> "" | Some msg -> " - " ^ msg in
-    root#set_title ("VeriFast IDE" ^ text)
+    root#set_title ("VeriFast 3.0 IDE" ^ text)
   in
   let load ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
     try
