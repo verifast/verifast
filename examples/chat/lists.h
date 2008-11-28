@@ -72,7 +72,7 @@ lemma void lengthPositive(listval v)
 }
 
 lemma void containsIth(listval v, int i)
-  requires 0<=i && i<length(v);
+  requires 0<=i &*& i<length(v);
   ensures contains(v, ith(v, i)) == true;
 {
   switch(v){

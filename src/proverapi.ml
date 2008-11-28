@@ -1,6 +1,9 @@
+open Big_int
+
 type assume_result = Unknown | Unsat
 
-type symbol_kind = Ctor of int | Fixpoint of int | Uninterp
+type ctor_symbol = CtorByOrdinal of int | NumberCtor of big_int
+type symbol_kind = Ctor of ctor_symbol | Fixpoint of int | Uninterp
 
 class virtual ['typenode, 'symbol, 'termnode] context =
   object

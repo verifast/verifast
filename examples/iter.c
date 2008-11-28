@@ -45,8 +45,11 @@ struct llist *create_llist()
   //@ ensures llist(result, nil);
 {
   struct llist *l = malloc(sizeof(struct llist));
+  if (l == 0) {
+    abort();
+  }
   struct node *n = malloc(sizeof(struct node));
-  if (l == 0 || n == 0) {
+  if (n == 0) {
     abort();
   }
   //@ struct node *next = n->next;

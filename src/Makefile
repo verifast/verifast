@@ -1,6 +1,7 @@
 test: verifastz3.opt.exe
 	cd ..\examples
 	..\src\verifastz3.opt linkedlist.c
+	..\src\verifastz3.opt linkedlist2.c
 	..\src\verifastz3.opt composite.c
 	..\src\verifastz3.opt composite4.c
 	..\src\verifastz3.opt sorted_bintree.c
@@ -11,6 +12,30 @@ test: verifastz3.opt.exe
 	cd ..
 	cd chat
 	..\..\src\verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+	cd ..
+	cd chatbot
+	..\..\src\verifastz3.opt -c bot.c
+	cd ..
+
+reduxtest: verifastredux.opt.exe
+	cd ..\examples
+	..\src\verifastredux.opt linkedlist.c
+	..\src\verifastz3.opt linkedlist2.c
+#	..\src\verifastredux.opt composite.c
+	..\src\verifastredux.opt composite4.c
+#	..\src\verifastredux.opt sorted_bintree.c
+	..\src\verifastredux.opt -c iter.c
+	cd java
+#	..\..\src\verifastredux.opt -c Tree.java
+#	..\..\src\verifastredux.opt -c Tree2.java
+	cd ..
+	cd chat
+	..\..\src\verifastredux.opt -c stringBuffers.c
+#	..\..\src\verifastredux.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+	cd ..
+	cd chatbot
+	..\..\src\verifastz3.opt -c bot.c
+	cd ..
 
 verifastRedux.exe: proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlc -warn-error F -w p -g -pp camlp4o -o verifastRedux.exe unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml

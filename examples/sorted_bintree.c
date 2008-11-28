@@ -86,6 +86,8 @@ lemma void contains_max(bintree r)
 	case cons(a,b,c):if(c!=nil){
 			   min_le_max(c);
 			   contains_max(c);
+                           /* Needed by Redux. */ if (a == max(r)) {} else {}
+                           /* Needed by Redux. */ if ((max(r) < a) == true) {} else {}
 			 }
   }
 }
@@ -98,6 +100,8 @@ lemma void contains_min(bintree r)
 	case cons(a,b,c):if(b!=nil){
 			  min_le_max(b);
 			  contains_min(b);
+                          /* Needed by Redux. */ if (a == min(r)) {} else {}
+                          /* Needed by Redux. */ if ((min(r) < a) == true) {} else {}
 			 }
   }
 }
@@ -108,11 +112,17 @@ lemma void max_conj_add(bintree l,int v,int x)
   switch(l){
 	case nil:
 	case cons(a,b,c):if(x<a){
+                          /* Needed by Redux. */ if (b == nil) {} else {}
 			  max_conj_add(b,a,x);
 			 }
 			 if(a<x){
+                          /* Needed by Redux. */ if (c == nil) {} else {}
 			  max_conj_add(c,v,x);
 			 }
+                         /* Needed by Redux. */ if ((x < a) == true) {} else { if (x == a) {} else {} }
+                         /* Needed by Redux. */ if (c == nil) {} else {}
+                         /* Needed by Redux. */ if (x == a) {} else {}
+                         /* Needed by Redux. */ if (tree_add(c, x) == nil) {} else {}
   }
 }
 lemma void min_conj_add(bintree r,int v,int x)

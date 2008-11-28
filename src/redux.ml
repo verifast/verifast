@@ -1,3 +1,4 @@
+open Big_int
 open Proverapi
 
 let print_endline_disabled msg = ()
@@ -16,6 +17,7 @@ type ('symbol, 'termnode) term =
 | Lt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Not of ('symbol, 'termnode) term
 | And of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| Or of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | IntLit of int
@@ -24,6 +26,10 @@ type ('symbol, 'termnode) term =
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+
+module BigIntMap = Map.Make (struct type t = big_int let compare a b = compare_big_int a b end)
+
+let neg_unit_big_int = minus_big_int unit_big_int
 
 class symbol (kind: symbol_kind) (name: string) =
   object (self)
@@ -38,7 +44,7 @@ class symbol (kind: symbol_kind) (name: string) =
       let a = Array.make (List.length cs) (fun _ _ -> assert false) in
       List.iter
         (fun (c, f) ->
-           let k = match c#kind with Ctor k -> k | _ -> assert false in
+           let k = match c#kind with Ctor (CtorByOrdinal k) -> k | _ -> assert false in
            a.(k) <- f
         )
         cs;
@@ -96,11 +102,9 @@ and termnode (ctxt: context) s initial_children =
       | Uninterp ->
         print_endline_disabled ("Created uninterpreted termnode " ^ symbol#name);
         begin
-          match symbol#name with
-            "==" ->
+          match (symbol#name, children) with
+            ("==", [v1; v2]) ->
             begin
-              match children with
-                [v1; v2] ->
                 if v1 = v2 then
                 begin
                   print_endline_disabled ("Equality termnode: operands are equal");
@@ -123,6 +127,28 @@ and termnode (ctxt: context) s initial_children =
                   in
                   print_endline_disabled ("Equality termnode: undecided: " ^ pprint v1 ^ ", " ^ pprint v2);
             end
+          | ("||", [v1; v2]) ->
+            begin
+              if v1 = ctxt#true_node#value then
+                ignore (ctxt#assert_eq value ctxt#true_node#value)
+              else if v1 = ctxt#false_node#value then
+                ignore (ctxt#assert_eq value v2)
+              else if v2 = ctxt#true_node#value then
+                ignore (ctxt#assert_eq value ctxt#true_node#value)
+              else if v2 = ctxt#false_node#value then
+                ignore (ctxt#assert_eq value v1)
+            end
+          | ("&&", [v1; v2]) ->
+            begin
+              if v1 = ctxt#true_node#value then
+                ignore (ctxt#assert_eq value v2)
+              else if v1 = ctxt#false_node#value then
+                ignore (ctxt#assert_eq value ctxt#false_node#value)
+              else if v2 = ctxt#true_node#value then
+                ignore (ctxt#assert_eq value v1)
+              else if v2 = ctxt#false_node#value then
+                ignore (ctxt#assert_eq value ctxt#false_node#value)
+            end
           | _ -> ()
         end
     end
@@ -143,23 +169,62 @@ and termnode (ctxt: context) s initial_children =
     method child_ctorchild_added k =
       if symbol#kind = Fixpoint k then
         ctxt#add_redex (fun () -> self#reduce)
-      else if symbol#kind = Uninterp && symbol#name = "==" then
-        match children with
-          [v1; v2] ->
+      else if symbol#kind = Uninterp then
+        match (symbol#name, children, k) with
+          ("==", [v1; v2], _) ->
           begin
           match (v1#ctorchild, v2#ctorchild) with
             (Some t1, Some t2) when t1#symbol <> t2#symbol -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#false_node#value)
           | _ -> ()
           end
+        | ("&&", [v1; v2], 0) ->
+          let newNode = if v1#ctorchild = Some ctxt#true_node then v2#initial_child else ctxt#false_node in
+          ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | ("&&", [v1; v2], 1) ->
+          let newNode = if v2#ctorchild = Some ctxt#true_node then v1#initial_child else ctxt#false_node in
+          ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | ("||", [v1; v2], 0) ->
+          let newNode = if v1#ctorchild = Some ctxt#true_node then ctxt#true_node else v2#initial_child in
+          ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | ("||", [v1; v2], 1) ->
+          let newNode = if v2#ctorchild = Some ctxt#true_node then ctxt#true_node else v1#initial_child in
+          ctxt#add_redex (fun () -> ctxt#assert_eq value newNode#value)
+        | _ -> ()
     method parent_ctorchild_added =
-      if symbol#name = "==" then
-        match children with
-          [v1; v2] ->
+      match (symbol#name, children) with
+        ("==", [v1; v2]) ->
           begin
             match value#ctorchild with
               Some t when t = ctxt#true_node -> ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value v2#initial_child#value)
             | Some t when t = ctxt#false_node -> ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
           end
+      | ("<=", [v1; v2]) ->
+        begin
+          if value = ctxt#true_node#value then
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_big_int v2#initial_child)
+          else
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child unit_big_int v1#initial_child)
+        end
+      | ("<", [v1; v2]) ->
+        begin
+          if value = ctxt#true_node#value then
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child unit_big_int v2#initial_child)
+          else
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_big_int v1#initial_child)
+        end
+      | ("&&", [v1; v2]) ->
+        if value = ctxt#true_node#value then
+        begin
+          ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#true_node#value);
+          ctxt#add_redex (fun () -> ctxt#assert_eq v2#initial_child#value ctxt#true_node#value)
+        end
+      | ("||", [v1; v2]) ->
+        if value = ctxt#false_node#value then
+        begin
+          ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#false_node#value);
+          ctxt#add_redex (fun () -> ctxt#assert_eq v2#initial_child#value ctxt#false_node#value)
+        end
+      | _ -> ()
     method matches s vs =
       symbol = s && children = vs
     method lookup_equivalent_parent_of v =
@@ -177,7 +242,7 @@ and termnode (ctxt: context) s initial_children =
           match v#ctorchild with
             Some n ->
             let s = n#symbol in
-            let j = match s#kind with Ctor j -> j | _ -> assert false in
+            let j = match s#kind with Ctor (CtorByOrdinal j) -> j | _ -> assert false in
             let clause = clauses.(j) in
             let vs = n#children in
             let t = clause (List.map (fun v -> TermNode v#initial_child) children) (List.map (fun v -> TermNode v#initial_child) vs) in
@@ -191,12 +256,18 @@ and termnode (ctxt: context) s initial_children =
       else
         Unknown
     method pprint =
-      "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^
+      (* "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^ *)
       begin
       if initial_children = [] then symbol#name else
         symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#pprint) initial_children) ^ ")"
       end
-
+    method toString =
+      if children = [] then symbol#name else
+        match (symbol#name, children) with
+          (("&&"|"||"|"+"|"-"|"=="|"<"|"<="|"</"|"<=/"), [v1; v2]) ->
+          "(" ^ v1#representativeString ^ " " ^ symbol#name ^ " " ^ v2#representativeString ^ ")"
+        | _ ->
+          symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#representativeString) children) ^ ")"
   end
 and valuenode (ctxt: context) =
   object (self)
@@ -209,6 +280,11 @@ and valuenode (ctxt: context) =
     val mutable ctorchild: termnode option = None
     val mutable unknown: termnode Simplex.unknown option = None
     val mutable neqs: valuenode list = []
+    (* For diagnostics only *)
+    val mutable representative = None
+    initializer begin
+      ctxt#register_valuenode (self :> valuenode)
+    end
     method set_initial_child t =
       initial_child <- Some t;
       begin
@@ -270,7 +346,7 @@ and valuenode (ctxt: context) =
       | None -> ()
     method neq_merging_into vold vnew =
       self#push;
-      neqs <- List.map (fun v0 -> if v0 = vold then vnew else vold) neqs;
+      neqs <- List.map (fun v0 -> if v0 = vold then vnew else v0) neqs;
       vnew#add_neq (self :> valuenode)
     method lookup_parent s vs =
       let rec iter ns =
@@ -283,7 +359,6 @@ and valuenode (ctxt: context) =
       List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
       List.iter (fun n -> n#parent_ctorchild_added) children
     method merge_into v =
-      print_endline_disabled ("Merging " ^ string_of_int (Oo.id self) ^ " into " ^ string_of_int (Oo.id v));
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
@@ -294,8 +369,8 @@ and valuenode (ctxt: context) =
         match (ctorchild, v#ctorchild) with
           (None, Some _) ->
           self#ctorchild_added
-        | (Some _, None) ->
-          v#ctorchild_added
+        | (Some n, None) ->
+          v#set_ctorchild n; assert (n#value = v); v#ctorchild_added (* TODO: Eliminate the redundancy caused by processing the newly acquired parents and children of v! *)
         | _ -> ()
       end;
       let redundant_parents =
@@ -332,7 +407,7 @@ and valuenode (ctxt: context) =
       let process_ctorchildren () =
         match (ctorchild, v#ctorchild) with
           (None, _) -> process_redundant_parents()
-        | (Some n, None) -> v#set_ctorchild n; process_redundant_parents()
+        | (Some n, None) -> process_redundant_parents()
         | (Some n, Some n') ->
           (* print_endline_disabled "Adding injectiveness edges..."; *)
           let rec iter vs =
@@ -353,8 +428,8 @@ and valuenode (ctxt: context) =
           (Some u, None) -> v#set_unknown u; process_ctorchildren()
         | (Some u1, Some u2) ->
           begin
-            print_endline_disabled ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name);
-            match ctxt#simplex#assert_eq 0 [1, u1; -1, u2] with
+            (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
+            match ctxt#simplex#assert_eq zero_big_int [unit_big_int, u1; neg_unit_big_int, u2] with
               Simplex.Unsat -> Unsat
             | Simplex.Sat -> process_ctorchildren()
           end
@@ -364,14 +439,53 @@ and valuenode (ctxt: context) =
       match initial_child with
         Some n -> n#pprint
       | None -> assert false
+    method representative_pair =
+      match representative with
+        Some (n, s) -> (n, s)
+      | None ->
+        let newrep =
+          match ctorchild with
+            Some n when n#children = [] -> n
+          | _ ->
+            begin
+            match List.filter (fun n -> n#children = []) children with
+              n::_ -> n
+            | _ ->
+              begin
+              match initial_child with
+                Some n -> n
+              | None -> assert false
+              end
+            end
+        in
+          let pair = (newrep, newrep#toString) in
+          representative <- Some pair;
+          pair
+    method representative = let (n, _) = self#representative_pair in n
+    method representativeString = let (_, s) = self#representative_pair in s
+    method dump_state =
+      if List.tl children <> [] || neqs <> [] then
+      begin
+        print_endline (self#representativeString);
+        List.iter (fun t -> if t <> self#representative then print_endline ("== " ^ t#toString)) children;
+        List.iter (fun v -> print_endline ("!= " ^ v#representativeString)) neqs;
+        print_newline()
+      end
   end
 and context =
   object (self)
     val eq_symbol = new symbol Uninterp "=="
+    val and_symbol = new symbol Uninterp "&&"
+    val or_symbol = new symbol Uninterp "||"
     val not_symbol = new symbol Uninterp "!"
     val add_symbol = new symbol Uninterp "+"
     val sub_symbol = new symbol Uninterp "-"
-    val mutable intlitnodes: (int * termnode) list = []
+    val int_le_symbol = new symbol Uninterp "<="
+    val int_lt_symbol = new symbol Uninterp "<"
+    val real_le_symbol = new symbol Uninterp "<=/"
+    val real_lt_symbol = new symbol Uninterp "</"
+    
+    val mutable intlitnodes: termnode BigIntMap.t = BigIntMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
     val simplex = new Simplex.simplex
@@ -381,24 +495,30 @@ and context =
     val mutable simplex_eqs = []
     val mutable simplex_consts = []
     val mutable redexes = []
+    (* For diagnostics only. *)
+    val mutable values = []
     
     initializer
       simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
-      ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor 0)) []);
-      tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor 1)) [])
+      ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
+      tfalse <- Some (self#get_node (self#mk_symbol "false" [] () (Ctor (CtorByOrdinal 1))) [])
     
     method simplex = simplex
     method eq_symbol = eq_symbol
     
-    method get_intlitnode n =
-      match try_assoc n intlitnodes with
-        None ->
-        (* print_endline_disabled ("Creating intlit node for " ^ string_of_int n); *)
-        let node = self#get_node (new symbol (Ctor n) (string_of_int n)) [] in
-        intlitnodes <- (n, node)::intlitnodes;
-        node
-      | Some n -> n
+    method register_valuenode v =
+      values <- v::values
     
+    method get_intlitnode n =
+      try
+        BigIntMap.find n intlitnodes
+      with
+        Not_found ->
+        (* print_endline_disabled ("Creating intlit node for " ^ string_of_int n); *)
+        let node = self#get_node (new symbol (Ctor (NumberCtor n)) (string_of_big_int n)) [] in
+        intlitnodes <- BigIntMap.add n node intlitnodes;
+        node
+
     method get_ifthenelsenode t1 t2 t3 =
       print_endline_disabled ("Producing ifthenelse termnode");
       let symname = "ifthenelse(" ^ self#pprint t2 ^ ", " ^ self#pprint t3 ^ ")" in
@@ -418,8 +538,8 @@ and context =
     method type_inductive = ()
     method mk_true: (symbol, termnode) term = let Some ttrue = ttrue in TermNode ttrue
     method mk_false: (symbol, termnode) term = let Some tfalse = tfalse in TermNode tfalse
-    method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = assert false
-    method mk_or (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = assert false
+    method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = And (t1, t2)
+    method mk_or (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Or (t1, t2)
     method mk_not (t: (symbol, termnode) term): (symbol, termnode) term = Not t
     method mk_ifthenelse (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) (t3: (symbol, termnode) term): (symbol, termnode) term =
       IfThenElse (t1, t2, t3)
@@ -436,14 +556,14 @@ and context =
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     method assume (t: (symbol, termnode) term): assume_result =
-      print_endline_disabled ("Assume: " ^ self#pprint t);
+      (* print_endline ("Assume: " ^ self#pprint t); *)
       let rec assume_true t =
         match t with
           TermNode t -> self#assume_eq t self#true_node
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#assume_le t1 0 t2
-        | Lt (t1, t2) -> self#assume_le t1 1 t2
-        | RealLe (t1, t2) -> self#assume_le t1 0 t2
+        | Le (t1, t2) -> self#assume_le t1 zero_big_int t2
+        | Lt (t1, t2) -> self#assume_le t1 unit_big_int t2
+        | RealLe (t1, t2) -> self#assume_le t1 zero_big_int t2
         | RealLt (t1, t2) -> self#assume (And (Not (Eq (t1, t2)), (RealLe (t1, t2))))
         | And (t1, t2) ->
           begin
@@ -452,37 +572,41 @@ and context =
             | Unknown -> self#assume t2
           end
         | Not t -> assume_false t
+        | t -> self#assume_eq (self#termnode_of_term t) self#true_node
       and assume_false t =
         match t with
           TermNode t -> self#assume_eq t self#false_node
         | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#assume_le t2 1 t1
-        | Lt (t1, t2) -> self#assume_le t2 0 t1
+        | Le (t1, t2) -> self#assume_le t2 unit_big_int t1
+        | Lt (t1, t2) -> self#assume_le t2 zero_big_int t1
         | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
         | RealLt (t1, t2) -> assume_true (RealLe (t2, t1))
         | Not t -> assume_true t
+        | t -> self#assume_eq (self#termnode_of_term t) self#false_node
       in
       assume_true t
     method query (t: (symbol, termnode) term): bool =
-      print_endline_disabled ("Query: " ^ self#pprint t);
+      (* print_endline ("Query: " ^ self#pprint t); *)
       let rec query_true t =
         match t with
           TermNode t -> self#query_eq t self#true_node
         | Eq (t1, t2) -> self#query_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t1 0 t2
-        | Lt (t1, t2) -> self#query_le t1 1 t2
+        | Le (t1, t2) -> self#query_le t1 zero_big_int t2
+        | Lt (t1, t2) -> self#query_le t1 unit_big_int t2
         | RealLe (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
         | RealLt (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
         | Not t -> query_false t
+        | t -> self#query_eq (self#termnode_of_term t) self#true_node
       and query_false t =
         match t with
           TermNode t -> assert false
         | Eq (t1, t2) -> self#query_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t2 1 t1
-        | Lt (t1, t2) -> self#query_le t2 0 t1
+        | Le (t1, t2) -> self#query_le t2 unit_big_int t1
+        | Lt (t1, t2) -> self#query_le t2 zero_big_int t1
         | RealLe (t1, t2) -> self#as_query (fun () -> self#assume t)
         | RealLt (t1, t2) -> self#as_query (fun () -> self#assume t)
         | Not t -> query_true t
+        | t -> self#query_eq (self#termnode_of_term t) self#false_node
       in
       query_true t
     
@@ -497,30 +621,37 @@ and context =
         let uv2 = v2#mk_unknown in
         let utn = tn#value#mk_unknown in
         print_endline_disabled ("Exporting addition to Simplex: " ^ utn#name ^ " = " ^ uv1#name ^ " + " ^ uv2#name);
-        ignore (simplex#assert_eq 0 [-1, utn; 1, uv1; sign, uv2]);
+        ignore (simplex#assert_eq zero_big_int [neg_unit_big_int, utn; unit_big_int, uv1; big_int_of_int sign, uv2]);
         tn
       in
+      let termnode_of_big_int n =
+        let tn = self#get_intlitnode n in
+        let v = tn#value in
+        let u = v#mk_unknown in
+        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_big_int n);
+        ignore (simplex#assert_eq n [neg_unit_big_int, u]);
+        tn
+      in
+      let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
         TermNode t -> t
       | Add (IntLit 0, t2) -> self#termnode_of_term t2
       | Add (t1, IntLit 0) -> self#termnode_of_term t1
       | Add (t1, t2) -> addition add_symbol 1 t1 t2
       | Sub (t1, t2) -> addition sub_symbol (-1) t1 t2
-      | IntLit n ->
-        let tn = self#get_intlitnode n in
-        let v = tn#value in
-        let u = v#mk_unknown in
-        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_int n);
-        ignore (simplex#assert_eq n [-1, u]);
-        tn
-      | App (s, ts) ->
-        self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts)
+      | IntLit n -> termnode_of_big_int (big_int_of_int n)
+      | IntLitOfString s -> termnode_of_big_int (big_int_of_string s)
+      | App (s, ts) -> get_node s ts
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
-      | Eq (t1, t2) ->
-        print_endline_disabled ("Producing equality termnode");
-        self#get_node eq_symbol [(self#termnode_of_term t1)#value; (self#termnode_of_term t2)#value]
+      | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
       | Not t -> self#termnode_of_term (Eq (t, self#mk_false))
-      | _ -> print_endline_disabled ("Not supported: " ^ self#pprint t); assert false
+      | And (t1, t2) -> get_node and_symbol [t1; t2]
+      | Or (t1, t2) -> get_node or_symbol [t1; t2]
+      | Le (t1, t2) -> get_node int_le_symbol [t1; t2]
+      | Lt (t1, t2) -> get_node int_lt_symbol [t1; t2]
+      | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
+      | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
+      | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
 
     method pushdepth = pushdepth
     method push =
@@ -530,7 +661,7 @@ and context =
       assert (redexes = []);
       assert (simplex_eqs = []);
       assert (simplex_consts = []);
-      popstack <- (pushdepth, popactionlist)::popstack;
+      popstack <- (pushdepth, popactionlist, values)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- [];
       simplex#push
@@ -546,10 +677,11 @@ and context =
       simplex_consts <- [];
       simplex#pop;
       match popstack with
-        (pushdepth0, popactionlist0)::popstack0 ->
+        (pushdepth0, popactionlist0, values0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
+        values <- values0;
         popstack <- popstack0
       | [] -> failwith "Popstack is empty"
 
@@ -566,12 +698,14 @@ and context =
       self#reduce;
       let result = t1#value = t2#value in
       print_endline_disabled ("Equality query: " ^ t1#pprint ^ " = " ^ t2#pprint ^ ": " ^ (if result then "true" else "false"));
+      if not result then self#dump_state;
       result
     
     method as_query f =
       self#reduce;
       self#push;
       let result = f() in
+      if result = Unknown then self#dump_state;
       self#pop;
       match result with
         Unsat -> true
@@ -581,7 +715,7 @@ and context =
       self#as_query (fun _ -> self#assume_eq t1 t2)
 
     method query_le t1 offset t2 =
-      self#as_query (fun _ -> self#assume_le t2 (1 - offset) t1)
+      self#as_query (fun _ -> self#assume_le t2 (sub_big_int unit_big_int offset) t1)
     
     method mk_app (s: symbol) (ts: (symbol, termnode) term list): (symbol, termnode) term = App (s, ts)
     
@@ -594,6 +728,7 @@ and context =
       | RealLe (t1, t2) -> self#pprint t1 ^ " </ " ^ self#pprint t2
       | RealLt (t1, t2) -> self#pprint t1 ^ " <=/ " ^ self#pprint t2
       | And (t1, t2) -> self#pprint t1 ^ " && " ^ self#pprint t2
+      | Or (t1, t2) -> self#pprint t1 ^ " || " ^ self#pprint t2
       | Not t -> "!(" ^ self#pprint t ^ ")"
       | Add (t1, t2) -> "(" ^ self#pprint t1 ^ " + " ^ self#pprint t2 ^ ")"
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"
@@ -628,6 +763,14 @@ and context =
         Unsat
       else if v1#neq v2 then
         Unknown
+      else if v1 = self#true_node#value then
+        self#assert_eq v2 self#false_node#value
+      else if v1 = self#false_node#value then
+        self#assert_eq v2 self#true_node#value
+      else if v2 = self#true_node#value then
+        self#assert_eq v1 self#false_node#value
+      else if v2 = self#false_node#value then
+        self#assert_eq v1 self#true_node#value
       else
       begin
         v1#add_neq v2;
@@ -640,14 +783,17 @@ and context =
     
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
+    method assert_le t1 offset t2 =
+      let u1 = t1#value#mk_unknown in
+      let u2 = t2#value#mk_unknown in
+      match simplex#assert_ge (minus_big_int offset) [neg_unit_big_int, u1; unit_big_int, u2] with
+        Simplex.Unsat -> Unsat
+      | Simplex.Sat -> Unknown
+
     method assume_le t1 offset t2 =   (* t1 + offset <= t2 *)
       self#reduce;
       self#do_and_reduce (fun () ->
-        let u1 = (self#termnode_of_term t1)#value#mk_unknown in
-        let u2 = (self#termnode_of_term t2)#value#mk_unknown in
-        match simplex#assert_ge (-offset) [-1, u1; 1, u2] with
-          Simplex.Unsat -> Unsat
-        | Simplex.Sat -> Unknown
+        self#assert_le (self#termnode_of_term t1) offset (self#termnode_of_term t2)
       )
     
     method assert_neq_and_reduce v1 v2 =
@@ -663,7 +809,6 @@ and context =
       end
       else if v1#neq v2 then
       begin
-        (* print_endline_disabled "assert_eq: values are neq"; *)
         Unsat
       end
       else
@@ -691,7 +836,7 @@ and context =
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = u#tag in
-              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_int c);
+              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_big_int c);
               match self#assert_eq tn#value (self#get_intlitnode c)#value with
                 Unsat -> Unsat
               | Unknown -> iter()
@@ -714,4 +859,9 @@ and context =
       match action() with
         Unsat -> Unsat
       | Unknown -> self#reduce0
+    
+    method dump_state =
+      (* print_endline ("==== Redux query failed: State report ====");
+      List.iter (fun v -> if v#initial_child#value = v then (v#dump_state)) values; *)
+      ()
   end
