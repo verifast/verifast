@@ -280,22 +280,20 @@ public class Tree{
 	public int value;
 	public Tree left;
 	public Tree right;
-	
-	public static Tree init_tree(int x)
+
+	public Tree(int x)
 	//@ requires true;
 	//@ ensures tree(result,cons(x,nil,nil));
 	{
-		Tree t=new Tree();
-		t.value=x;
-		t.left=null;
-		t.right=null;
-		//@ Tree l = t.left;
+	    	this.value=x;
+		this.left=null;
+		this.right=null;
+		//@ Tree l = this.left;
 		//@ close tree(l,nil);
-		//@ Tree r = t.right;
+		//@ Tree r = this.right;
 		//@ close tree(r,nil);
-		//@ int v = t.value;
-		//@ close tree(t,cons(x,nil,nil));
-		return t;
+		//@ int v = this.value;
+		//@ close tree(this,cons(x,nil,nil));
 	}
 	public boolean contains(int x)
 	//@ requires tree(this,?b);
@@ -345,7 +343,7 @@ public class Tree{
 				//@ tree_add_inorder(b,x);
 				//@ close tree(this,cons(v,tree_add(bl,x),br));
 			}else{
-				Tree temp=init_tree(x);
+				Tree temp=new Tree(x);
 				this.left=temp;
 				//@ open tree(l,bl);
 				//@ close tree(this,cons(v,cons(x,nil,nil),br));
@@ -358,7 +356,7 @@ public class Tree{
 					//@ tree_add_inorder(b,x);
 					//@ close tree(this,cons(v,bl,tree_add(br,x)));	
 				}else{
-					Tree temp=init_tree(x);
+					Tree temp=new Tree(x);
 					this.right=temp;
 					//@ open tree(r,br);
 					//@ close tree(this,cons(v,bl,cons(x,nil,nil)));
@@ -453,7 +451,7 @@ public class Tree{
 		boolean e=false;
 		boolean f=false;
 
-		t1 = init_tree(3);
+		t1 = new Tree(3);
 		b=t1.contains(2);
 		assert(!b);
 		t1.add(2);

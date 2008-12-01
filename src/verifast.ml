@@ -590,10 +590,13 @@ and
   meth =
   | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
 and
+  cons =
+  | Cons of loc * (type_expr * string) list * spec option * stmt list option * visibility
+and
   decl =
     Struct of loc * string * field list option
   | Inductive of loc * string * ctor list (* inductief data type regel-naam-lijst van constructors*)
-  | Class of loc * string * meth list * field list (* java *)
+  | Class of loc * string * meth list * field list(* java *)
   | PredFamilyDecl of loc * string * int * type_expr list 
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
@@ -607,7 +610,7 @@ and
   ctor =
   | Ctor of loc * string * type_expr list  (* constructor met regel-naam-lijst v types v args*)
  and
-  member = FieldMember of field | MethMember of meth
+  member = FieldMember of field | MethMember of meth | ConsMember of cons
 
 (*
 Visual Studio format:
@@ -625,7 +628,9 @@ http://blogs.msdn.com/msbuild/archive/2006/11/03/msbuild-visual-studio-aware-err
 and
 http://www.gnu.org/prep/standards/standards.html#Errors
 *)
-
+let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
+  let dummy_loc = (dummy_srcpos, dummy_srcpos)
+  
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
 let string_of_path (basedir, relpath) = Filename.concat basedir relpath
@@ -747,14 +752,16 @@ and
   parse_decls = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
 | [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);'(_, Kwd "{"); mem=parse_java_members s
-    ;'(_, Kwd "}");ds=parse_decls>]->Class(l,s,methods mem,fields mem)::ds
+    ;'(_, Kwd "}");ds=parse_decls>]->Class(l,s,methods s mem,fields mem)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
 and
-  methods m=
+  methods cn m=
   match m with
-    MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods ms)
-    |_::ms -> methods ms
+    MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods cn ms)
+	| ConsMember(Cons(l,ps,co,ss,v))::ms -> Meth(l,Some (IdentTypeExpr(l,cn)),"new "^cn,ps,co,ss,Static,v)
+	  ::(methods cn ms)
+    |_::ms -> methods cn ms
     | []->[]
 and
   fields m=
@@ -763,6 +770,12 @@ and
     |_::ms -> fields ms
     | []->[]
 and
+  cons m=
+  match m with
+    ConsMember(Cons(l,ps,co,ss,v))::ms -> Cons(l,ps,co,ss,v)
+    |_::ms -> cons ms
+    | []->Cons(dummy_loc,[],None,None,Public) (* default constructor with no arguments*)
+and
   parse_java_members cn= parser
   [<'(l, Kwd "public");m=parse_java_member l cn;mr=parse_java_members cn>] -> m::mr
 | [<>] -> []
@@ -770,6 +783,16 @@ and
   parse_java_member l cn= parser
   [< '(_, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
     ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,Public))
+| [<'(_,Ident t);e=parser
+		[<'(_,Ident f);r=parser
+       [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance))
+	   |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+	   -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
+	   >] -> r
+		|[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+	   -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
+	   ConsMember(Cons(l,ps,co,Some stms,Public))
+		>] -> e
 | [< t=parse_type;'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance))
 	   |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
@@ -1025,7 +1048,7 @@ and
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, Kwd "null") >] -> Null l
-| [< '(l, Kwd "new");'(_, Ident x);'(_, Kwd "(");'(_, Kwd ")");>] -> CallExpr(l,"new",[],[],Static)
+| [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],args0,Static)
 | [< '(l, Ident x); ex = parser
     [< args0 = parse_patlist; e = parser
       [< args = parse_patlist >] -> CallExpr (l, x, args0, args,Static)
@@ -1294,8 +1317,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structdeclmap
   in
   
-  let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0) in
-  let dummy_loc = (dummy_srcpos, dummy_srcpos) in
+  
   
   let inductivedeclmap =
     let rec iter idm ds =
@@ -3264,7 +3286,41 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_chunk h [] [("x", arg)] l malloc_block_symb real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
-    | Assign (l, x, CallExpr (lc, g, [], pats,fb)) ->
+    | Assign (l, x, CallExpr (lc, g, [], pats,fb)) -> 
+	  let iscons = ((compare (String.sub g 0 4) "new ")==0) && (List.length pats==0) in
+	  if iscons then begin match pats with
+	    [] -> 
+          let tpx = vartp l x in
+          let _ = check_assign l x in
+          let tn =
+            match tpx with
+              ObjType sn -> sn
+            | _ -> static_error l ("Type mismatch")
+          in
+		  let checktype=print_endline (String.sub g 4 (String.length g-4));(compare (String.sub g 4 (String.length g-4)) tn)==0 in
+		  let _= print_endline tn;if not checktype then static_error l "constructor of wrong type is called" in
+		  let (_,_,fds_opt) = List.assoc tn classmap in
+		  let fds =
+            match fds_opt with
+              Some fds -> fds
+            | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+          in
+          let result = get_unique_var_symb "block" tpx in
+               assume_neq result (ctxt#mk_intlit 0) (fun () ->
+                 let rec iter h fds =
+                   match fds with
+                     [] ->
+                     let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+                     cont (h @ [(malloc_block_symb, real_unit, [result], None)]) (update env x result)
+                   | (f, (lf, t))::fds ->
+                     let fref = new fieldref f in
+                     fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+                 in
+                 iter h fds
+               )
+		 | _-> call_stmt l (Some x) "malloc" pats Static
+		end
+	  else
       call_stmt l (Some x) g pats fb
     | Assign (l, x, e) -> 
       let tpx = vartp l x in

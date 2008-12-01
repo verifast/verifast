@@ -9,6 +9,7 @@ test: verifastz3.opt.exe
 	cd java
 	..\..\src\verifastz3.opt -c Tree.java
 	..\..\src\verifastz3.opt -c Tree2.java
+	..\..\src\verifastz3.opt -c Tree3.java
 	cd ..
 	cd chat
 	..\..\src\verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
