@@ -3440,7 +3440,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
         | Some bs ->
-          List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp) bs
+          List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
       in
       let ts = List.map (function LitPat e -> ev e) pats in
       let coef = match coef with None -> real_unit | Some (LitPat coef) -> check_expr_t tenv coef RealType; ev coef | _ -> static_error l "Coefficient in close statement must be expression." in
