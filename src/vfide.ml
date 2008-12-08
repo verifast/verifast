@@ -385,6 +385,7 @@ let show_ide initialPath prover =
     begin
       textNotebook#remove textScroll#coerce;
       subNotebook#remove subScroll#coerce;
+      buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
       match !current_tab with None -> () | Some tab0 -> if tab == tab0 then current_tab := None
     end
   in
