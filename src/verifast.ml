@@ -452,7 +452,8 @@ let preprocess path loc stream streamSource =
       | None -> pop()
       | t -> skip(); t
   in
-  Stream.from (fun count -> next_token())
+  let current_loc() = !loc() in
+  (current_loc, Stream.from (fun count -> next_token()))
 
 type type_ =
     Bool
@@ -745,7 +746,7 @@ in
 begin
 let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
 let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) stream reportKeyword in
-let pp_token_stream = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
+let (loc, pp_token_stream) = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
 let rec parse_decls_eof = parser
   [< ds = parse_decls; _ = Stream.empty >] -> ds
 and
