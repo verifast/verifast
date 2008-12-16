@@ -129,14 +129,17 @@ struct session {
 
 /*@
 
+predicate_ctor room_ctor(struct room *room)()
+    requires room(room);
+
 predicate session(struct session *session)
     requires session->room |-> ?room &*& session->room_lock |-> ?roomLock &*& session->socket |-> ?socket &*& malloc_block_session(session)
-        &*& lock_permission(roomLock, @room, room) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+        &*& lock_permission(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
 
 @*/
 
 struct session *create_session(struct room *room, struct lock *roomLock, struct socket *socket)
-    //@ requires lock_permission(roomLock, @room, room) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+    //@ requires lock_permission(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
     //@ ensures session(result);
 {
     struct session *session = malloc(sizeof(struct session));
@@ -151,8 +154,8 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
 }
 
 void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
-    //@ requires lock_permission(roomLock, @room, room) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
-    //@ ensures lock_permission(roomLock, @room, room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    //@ requires lock_permission(roomLock, room_ctor(room)) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    //@ ensures lock_permission(roomLock, room_ctor(room)) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
 {
     struct member *member = 0;
 
@@ -180,20 +183,22 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ close room(room);
     }
     
-    //@ close_lock_invariant(@room, room);
+    //@ close room_ctor(room)();
+    //@ close_lock_invariant(room_ctor(room));
     lock_release(roomLock);
     
     {
         bool eof = false;
         struct string_buffer *message = create_string_buffer();
         while (!eof)
-            //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& lock_permission(roomLock, @room, room);
+            //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& lock_permission(roomLock, room_ctor(room));
         {
             eof = reader_read_line(reader, message);
             if (eof) {
             } else {
                 lock_acquire(roomLock);
-                //@ open_lock_invariant(@room, room);
+                //@ open_lock_invariant();
+                //@ open room_ctor(room)();
                 {
                     struct string_buffer *fullMessage = create_string_buffer();
                     string_buffer_append_string_buffer(fullMessage, nick);
@@ -202,7 +207,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
                     room_broadcast_message(room, fullMessage);
                     string_buffer_dispose(fullMessage);
                 }
-                //@ close_lock_invariant(@room, room);
+                //@ close room_ctor(room)();
+                //@ close_lock_invariant(room_ctor(room));
                 lock_release(roomLock);
             }
         }
@@ -210,7 +216,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     }
     
     lock_acquire(roomLock);
-    //@ open_lock_invariant(@room, room);
+    //@ open_lock_invariant();
+    //@ open room_ctor(room)();
     //@ open room(room);
     {
         struct list *membersList = room->members;
@@ -227,7 +234,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         room_broadcast_message(room, goodbyeMessage);
         string_buffer_dispose(goodbyeMessage);
     }
-    //@ close_lock_invariant(@room, room);
+    //@ close room_ctor(room)();
+    //@ close_lock_invariant(room_ctor(room));
     lock_release(roomLock);
     
     //@ open member(member);
@@ -260,7 +268,8 @@ void session_run(void *data) //@ : thread_run
     writer_write_string(writer, "The following members are present:\r\n");
     
     lock_acquire(roomLock);
-    //@ open_lock_invariant(@room, room);
+    //@ open_lock_invariant();
+    //@ open room_ctor(room)();
     //@ open room(room);
     {
         struct list *membersList = room->members;
@@ -284,14 +293,15 @@ void session_run(void *data) //@ : thread_run
         iter_dispose(iter);
     }
     //@ close room(room);
-    //@ close_lock_invariant(@room, room);
+    //@ close room_ctor(room)();
+    //@ close_lock_invariant(room_ctor(room));
     lock_release(roomLock);
 
     {
         struct string_buffer *nick = create_string_buffer();
         bool done = false;
         while (!done)
-          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& lock_permission(roomLock, @room, room);
+          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& lock_permission(roomLock, room_ctor(room));
         {
             writer_write_string(writer, "Please enter your nick: ");
             {
@@ -300,11 +310,13 @@ void session_run(void *data) //@ : thread_run
                     done = true;
                 } else {
                     lock_acquire(roomLock);
-                    //@ open_lock_invariant(@room, room);
+                    //@ open_lock_invariant();
+                    //@ open room_ctor(room)();
                     {
                         bool hasMember = room_has_member(room, nick);
                         if (hasMember) {
-                            //@ close_lock_invariant(@room, room);
+                            //@ close room_ctor(room)();
+                            //@ close_lock_invariant(room_ctor(room));
                             lock_release(roomLock);
                             writer_write_string(writer, "Error: This nick is already in use.\r\n");
                         } else {
@@ -326,12 +338,13 @@ int main()
     //@ ensures false;
 {
     struct room *room = create_room();
-    //@ close_lock_invariant(@room, room);
+    //@ close room_ctor(room)();
+    //@ close_lock_invariant(room_ctor(room));
     struct lock *roomLock = create_lock();
     struct server_socket *serverSocket = create_server_socket(12345);
 
     while (true)
-        //@ invariant lock_permission(roomLock, @room, room) &*& server_socket(serverSocket);
+        //@ invariant lock_permission(roomLock, room_ctor(room)) &*& server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
         //@ split_lock_permission(roomLock);
