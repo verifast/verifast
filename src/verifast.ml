@@ -2000,7 +2000,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Read (l, e, f) -> check_deref l tenv e f
     | CallExpr (l, g', [], pats,_) -> (
       match try_assoc g' purefuncmap with
-        Some (l, t, ts, _) -> (
+        Some (_, t, ts, _) -> (
         match zip pats ts with
           None -> static_error l "Incorrect argument count."
         | Some pts -> (
