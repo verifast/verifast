@@ -410,7 +410,7 @@ let preprocess path loc stream streamSource =
                 begin
                   match includePath with
                     "bool.h" -> ()
-				  | "assert.h" -> ()
+                  | "assert.h" -> ()
                   | _ ->
                     let (basedir, relpath) = !path in
                     let resolvedRelPath = Filename.concat (Filename.dirname relpath) includePath in
@@ -777,21 +777,21 @@ and
   [< '(_, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
     ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,Public))
 | [<'(_,Ident t);e=parser
-		[<'(_,Ident f);r=parser
+      [<'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance))
-	   |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-	   -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
-	   >] -> r
-		|[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-	   -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
-	   ConsMember(Cons(l,ps,co,Some stms,Public))
-		>] -> e
+       |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+       -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
+       >] -> r
+        |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
+       ConsMember(Cons(l,ps,co,Some stms,Public))
+        >] -> e
 | [< t=parse_type;'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance))
-	   |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-	   -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
-	   MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
-	   >] -> r
+       |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+       -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
+       MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,Public))
+       >] -> r
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
@@ -940,8 +940,8 @@ and
 (*| [< '(l, Ident x); s= parser
     [<'(_, Kwd "->");'(_, Ident f);'(l, Kwd "=");rhs = parse_expr; '(_, Kwd ";")>]
        ->Write (l, Var (l, x), new fieldref f, rhs)
-	| [<'(_, Kwd "=");e=parser
-			[<rhs = parse_expr; '(_, Kwd ";")>]-> Assign (l, x, rhs)
+    | [<'(_, Kwd "=");e=parser
+            		[<rhs = parse_expr; '(_, Kwd ";")>]-> Assign (l, x, rhs)
 			| [<'(_, Kwd "new");'(_, Ident y);'(_, Kwd "(");'(_, Kwd ")");'(_, Kwd ";")>] -> Assign(l,x,CallExpr(l,"new",[],[]))
 			| [<'(_, Kwd ".");'(_, Ident f);args0 = parse_patlist;'(_, Kwd ";")>] -> Assign (l, x,CallExpr (l, x, [], args0))
 			| [<'(_, Ident y);'(_, Kwd ".");'(_, Ident f);args0 = parse_patlist;'(_, Kwd ";")>] -> Assign (l, x,CallExpr (l, f, [], args0))
@@ -1049,10 +1049,10 @@ and
       [< args = parse_patlist >] -> CallExpr (l, x, args0, args,Static)
     | [< >] -> CallExpr (l, x, [], args0,Static)
       >] -> e
-	| [<'(l, Kwd ".");'(l, Ident f);e=parser
-	    [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x))::args0,Instance)
-	   |[<>] -> Read (l, Var(l,x), new fieldref f)
-	 >]->e
+    | [<'(l, Kwd ".");'(l, Ident f);e=parser
+        [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x))::args0,Instance)
+       |[<>] -> Read (l, Var(l,x), new fieldref f)
+     >]->e
     | [< >] -> Var (l, x)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
@@ -1254,12 +1254,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let myPath = Filename.dirname (Sys.argv.(0)) in
   let ds= 
     match file_type (Filename.basename path) with
-	Java-> read_decls path stream streamSource reportKeyword reportGhostRange
-	| _->
-		let preludePath = Filename.concat myPath "prelude.h" in
-		let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
-		let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
-		ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange 
+    Java-> read_decls path stream streamSource reportKeyword reportGhostRange
+    | _->
+        let preludePath = Filename.concat myPath "prelude.h" in
+        let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
+        let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
+        ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange 
   in
   
   (* failwith "Done parsing."; *)
@@ -1356,8 +1356,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  match te with
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
-				 | IdentTypeExpr(lt, sn) -> 
-				   if List.mem_assoc sn classdeclmap then
+                 | IdentTypeExpr(lt, sn) -> 
+                   if List.mem_assoc sn classdeclmap then
                      ObjType sn
                    else
                      static_error lt "No such struct."
@@ -1388,20 +1388,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  match te with
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
-				 | ManifestTypeExpr (_, Bool) -> Bool
-				 | IdentTypeExpr(lt, sn) -> 
-				   if List.mem_assoc sn classdeclmap then
+                 | ManifestTypeExpr (_, Bool) -> Bool
+                 | IdentTypeExpr(lt, sn) -> 
+                 if List.mem_assoc sn classdeclmap then
                      ObjType sn
                    else
                      static_error lt "No such struct."
                  | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
                in
-			   let check_t t=
-			     match t with
-				   Some ManifestTypeExpr (_, Void) -> None
-				 | Some t-> Some (check_type t)
-				 | None -> None
-			   in
+               let check_t t=
+                 match t with
+                   Some ManifestTypeExpr (_, Void) -> None
+                 | Some t-> Some (check_type t)
+                 | None -> None
+               in
                iter ((n, (lm, check_t t,ps,co,ss,fb,v))::mmap) meths
              )
          in
@@ -1417,14 +1417,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec check_pure_type te =
     match te with
       ManifestTypeExpr (l, t) -> t
-	| ArrayTypeExpr (l, t) -> check_pure_type t
+    | ArrayTypeExpr (l, t) -> check_pure_type t
     | IdentTypeExpr (l, id) ->
       if (List.mem_assoc id inductivedeclmap) then
-	    InductiveType id
-	  else
-	    if (List.mem_assoc id classdeclmap) then 
-		ObjType id
-		else
+        InductiveType id
+      else
+        if (List.mem_assoc id classdeclmap) then 
+        ObjType id
+        else
         static_error l ("No such datatype."^id)
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap) then
@@ -1447,7 +1447,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | RealType -> "real"
     | Char -> "char"
     | InductiveType i -> i
-	| ObjType l -> l
+    | ObjType l -> l
     | StructType sn -> "struct " ^ sn
     | PtrType t -> string_of_type t ^ " *"
     | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
@@ -1459,10 +1459,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IntType -> ctxt#type_int
     | RealType -> ctxt#type_real
     | Char -> ctxt#type_int
-	| StringType -> ctxt#type_int
+    | StringType -> ctxt#type_int
     | InductiveType i -> ctxt#type_inductive
     | StructType sn -> assert false
-	| ObjType n -> ctxt#type_int
+    | ObjType n -> ctxt#type_int
     | PtrType t -> ctxt#type_int
     | PredType t -> ctxt#type_inductive
   in
@@ -1480,7 +1480,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec expect_type l t t0 =
     match (t, t0) with
       (PtrType _, PtrType Void) -> ()
-	| (ObjType "null", ObjType _) -> ()
+    | (ObjType "null", ObjType _) -> ()
     | (PtrType Void, PtrType _) -> ()
     | (Char, IntType) -> ()
     | (PredType ts, PredType ts0) ->
@@ -1754,15 +1754,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let malloc_block_pred_map = 
     match file_type path with
-	Java-> flatmap (function (sn, (_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn])] 
-	        | _ -> []) classmap
-	| _ -> flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 
-	        [PtrType (StructType sn)])] | _ -> []) structmap 
-	in
+    Java-> flatmap (function (sn, (_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn])] 
+            | _ -> []) classmap
+    | _ -> flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 
+            [PtrType (StructType sn)])] | _ -> []) structmap 
+    in
 
   let field_pred_map =
     match file_type path with
-	Java-> flatmap
+    Java-> flatmap
       (fun (sn, (_,_, fds_opt)) ->
          match fds_opt with
            None -> []
@@ -1774,7 +1774,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              fds
       )
       classmap
-	| _ ->
+    | _ ->
     flatmap
       (fun (sn, (_, fds_opt)) ->
          match fds_opt with
@@ -1865,19 +1865,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let funcnames = 
     match file_type path with
-	Java -> let rec mnames meths=
-	  match meths with
-	  Meth(l,rt,g,ps,c,b,fb,v)::rest -> g::mnames rest
-	  | []->[]
-	in
+    Java -> let rec mnames meths=
+      match meths with
+      Meth(l,rt,g,ps,c,b,fb,v)::rest -> g::mnames rest
+      | []->[]
+    in
     list_remove_dups (flatmap (function (Class (l,cn,meths,fds)) -> mnames meths | _ -> []) ds )
-	| _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+    | _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_funcnamelist is =
     match file_type path with
     Java->List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is
-	| _ -> List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is 
+    | _ -> List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is 
   in
   
   let predinstmap = 
@@ -1932,7 +1932,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       True l -> boolt
     | False l -> boolt
-	| Null l -> ObjType "null"
+    | Null l -> ObjType "null"
     | Var (l, x) ->
       begin
       match try_assoc x tenv with
@@ -1944,8 +1944,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin
               if List.mem x funcnames then
                 match file_type path with
-				Java -> static_error l "In java methods can't be used as pointers"
-				| _ -> PtrType Void
+                Java -> static_error l "In java methods can't be used as pointers"
+                | _ -> PtrType Void
               else
                 begin
                   match try_assoc x predfammap with
@@ -2095,8 +2095,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
-	| ObjType sn ->
-	  begin
+    | ObjType sn ->
+      begin
       match List.assoc sn classmap with
         (_,_, Some fds) ->
         begin
@@ -2255,8 +2255,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let funcnameterms = 
     match file_type path with
-	Java ->[] (* in java methods can't be used as pointers *)
-	| _ -> List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
+    Java ->[] (* in java methods can't be used as pointers *)
+    | _ -> List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
   let real_unit = ctxt#mk_reallit 1 in
@@ -2283,7 +2283,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       True l -> ctxt#mk_true
     | False l -> ctxt#mk_false
-	| Null l -> ctxt#mk_intlit 0
+    | Null l -> ctxt#mk_intlit 0
     | Var (l, x) ->
       begin (* Note: this lookup sequence must match exactly the one in check_expr *)
         match try_assoc x env with
@@ -2740,7 +2740,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let (funcmap, prototypes_implemented) =
     match file_type path with
-	Java -> let rec iter funcmap prototypes_implemented ds =
+    Java -> let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap,prototypes_implemented)
       | Meth (l,rt, fn, xs, contract_opt, body,fb,v)::ds->
@@ -2843,9 +2843,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
-	let iter2 f funcmap prototypes_implemented=
-	  match f with
-	  | Func (l, k, rt, fn, xs, contract_opt, body,fb,v) when k <> Fixpoint ->
+    let iter2 f funcmap prototypes_implemented=
+      match f with
+      | Func (l, k, rt, fn, xs, contract_opt, body,fb,v) when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2944,17 +2944,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             pop();
             (((fn, (l, k, rt, xmap, cenv, pre, post, body,fb,v))::funcmap),((fn, l0)::prototypes_implemented));
         end
-		| _ -> (funcmap,prototypes_implemented)
-	in
-	let rec iter1 (funcmap,prototypes_implemented) ds=
-	  match ds with
-	  Class(l,cn,meths,fds)::rest->iter1 (iter funcmap prototypes_implemented meths) rest
-	  | Func(l,k,rt, fn, xs, contract_opt, body,Static,Public)::rest -> iter1 (iter2 (Func(l,k,rt,fn,xs,contract_opt,body,Static,Public)) funcmap prototypes_implemented) rest
-	  | _::rest -> iter1 (funcmap,prototypes_implemented) rest
-	  | []-> (List.rev funcmap,List.rev prototypes_implemented)
-	in
+        | _ -> (funcmap,prototypes_implemented)
+    in
+    let rec iter1 (funcmap,prototypes_implemented) ds=
+      match ds with
+      Class(l,cn,meths,fds)::rest->iter1 (iter funcmap prototypes_implemented meths) rest
+      | Func(l,k,rt, fn, xs, contract_opt, body,Static,Public)::rest -> iter1 (iter2 (Func(l,k,rt,fn,xs,contract_opt,body,Static,Public)) funcmap prototypes_implemented) rest
+      | _::rest -> iter1 (funcmap,prototypes_implemented) rest
+      | []-> (List.rev funcmap,List.rev prototypes_implemented)
+    in
     iter1 ([],[]) ds
-	|_ ->
+    |_ ->
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (List.rev funcmap, List.rev prototypes_implemented)
@@ -3101,18 +3101,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let eval_h is_ghost_expr h env e cont =
     match e with
       StringLit (l, s)->
-	    if(file_type path <> Java) then
-		  let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
-		  let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
-		  let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+        if(file_type path <> Java) then
+          let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
+          let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+          let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
           let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
           let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
           let coef = get_unique_var_symb "stringLiteralCoef" RealType in
             assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
               cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
             )
-	    else
-		  cont h (eval_non_pure is_ghost_expr h env e)
+        else
+          cont h (eval_non_pure is_ghost_expr h env e)
     | e -> cont h (eval_non_pure is_ghost_expr h env e)
   in
   
@@ -3166,7 +3166,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         )
       | Some (lg,k, tr, ps, cenv0, pre, post, body,fbf,v) ->
-	    if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
+        if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
@@ -3288,9 +3288,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         | _ -> call_stmt l (Some x) "malloc" args Static
       end
-	| Assign (l, x, CallExpr (lc, "new", [], args,Static)) ->
-	  begin match args with
-	    [] -> 
+    | Assign (l, x, CallExpr (lc, "new", [], args,Static)) ->
+      begin match args with
+        [] -> 
           let tpx = vartp l x in
           let _ = check_assign l x in
           let tn =
@@ -3298,8 +3298,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               ObjType sn -> sn
             | _ -> static_error l ("Type mismatch")
           in
-		  let (_,_,fds_opt) = List.assoc tn classmap in
-		  let fds =
+          let (_,_,fds_opt) = List.assoc tn classmap in
+          let fds =
             match fds_opt with
               Some fds -> fds
             | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
@@ -3317,8 +3317,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter h fds
                )
-		 | _-> call_stmt l (Some x) "malloc" args Static
-		end
+         | _-> call_stmt l (Some x) "malloc" args Static
+        end
     | CallStmt (l, "assume_is_int", [Var (lv, x) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
@@ -3349,9 +3349,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
     | Assign (l, x, CallExpr (lc, g, [], pats,fb)) -> 
-	  let iscons = ((compare (String.sub g 0 4) "new ")==0) && (List.length pats==0) in
-	  if iscons then begin match pats with
-	    [] -> 
+      let iscons = ((compare (String.sub g 0 4) "new ")==0) && (List.length pats==0) in
+      if iscons then begin match pats with
+        [] -> 
           let tpx = vartp l x in
           let _ = check_assign l x in
           let tn =
@@ -3359,10 +3359,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               ObjType sn -> sn
             | _ -> static_error l ("Type mismatch")
           in
-		  let checktype=print_endline (String.sub g 4 (String.length g-4));(compare (String.sub g 4 (String.length g-4)) tn)==0 in
-		  let _= print_endline tn;if not checktype then static_error l "constructor of wrong type is called" in
-		  let (_,_,fds_opt) = List.assoc tn classmap in
-		  let fds =
+          let checktype=print_endline (String.sub g 4 (String.length g-4));(compare (String.sub g 4 (String.length g-4)) tn)==0 in
+          let _= print_endline tn;if not checktype then static_error l "constructor of wrong type is called" in
+          let (_,_,fds_opt) = List.assoc tn classmap in
+          let fds =
             match fds_opt with
               Some fds -> fds
             | None -> static_error l "Argument of sizeof cannot be struct type declared without a body."
@@ -3380,9 +3380,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter h fds
                )
-		 | _-> call_stmt l (Some x) "malloc" pats Static
-		end
-	  else
+         | _-> call_stmt l (Some x) "malloc" pats Static
+        end
+      else
       call_stmt l (Some x) g pats fb
     | Assign (l, x, e) -> 
       let tpx = vartp l x in
@@ -3394,7 +3394,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
       verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
-	  ;
+      ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
       let tp = check_deref l tenv e f in
@@ -3641,13 +3641,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ =
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
-		    match file_type path with
-			Java -> assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
+            match file_type path with
+            Java -> assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
                 check_leaks h env l "Function leaks heap chunks."
               )
             )
-			|_ ->
+            |_ ->
              assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
               with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
                 check_leaks h env l "Function leaks heap chunks."
