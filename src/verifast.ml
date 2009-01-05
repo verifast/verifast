@@ -1167,7 +1167,7 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 
-let string_of_chunk ((g, literal), coef, ts, size) = "[" ^ coef ^ "]" ^ g ^ "(" ^ String.concat ", " ts ^ ")"
+let string_of_chunk ((g, literal), coef, ts, size) = (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ "(" ^ String.concat ", " ts ^ ")"
 
 let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
 
@@ -2533,7 +2533,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let rec assume_pred h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
-    with_context (Executing (h, env, pred_loc p, "Assuming predicate")) (fun _ ->
+    let with_context_helper cont =
+      match p with
+        Sep (_, _, _) -> cont()
+      | _ -> with_context (Executing (h, env, pred_loc p, "Producing assertion")) cont
+    in
+    with_context_helper (fun _ ->
     let ev = eval None env in
     match p with
     | Access (l, e, f, rhs) ->
@@ -2640,7 +2645,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let rec assert_pred h ghostenv env p coef (cont: 'termnode heap -> string list -> 'termnode env -> int option -> unit) =
-    with_context (Executing (h, env, pred_loc p, "Asserting predicate")) (fun _ ->
+    let with_context_helper cont =
+      match p with
+        Sep (_, _, _) -> cont()
+      | _ -> with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
+    in
+    with_context_helper (fun _ ->
     let ev = eval None env in
     let access l coefpat e f rhs =
       let (_, (_, _, _, symb)) = List.assoc (f#parent, f#name) field_pred_map in
@@ -2832,7 +2842,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       | Some v -> ("result", v)::env0
                     in
                     assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
-                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                      with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks.")
                     )
                   )
                 )
@@ -2935,7 +2945,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       | Some v -> ("result", v)::env0
                     in
                     assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
-                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                      with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks.")
                     )
                   )
                 )
@@ -3048,7 +3058,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       | Some v -> ("result", v)::env0
                     in
                     assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
-                      if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks."
+                      with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks.")
                     )
                   )
                 )
@@ -3081,7 +3091,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter stringlitchunks otherchunks =
       match stringlitchunks with
         [] ->
-        if otherchunks = [] then () else assert_false h env l msg
+        if otherchunks = [] then () else with_context (Executing (otherchunks, env, l, "Leak check.")) (fun _ -> assert_false h env l msg)
       | (_, coef, [arr; cs], _)::stringlitchunks ->
         let rec consume_chars_chunk otherchunks h =
           match h with
@@ -3091,7 +3101,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         consume_chars_chunk [] otherchunks
     in
-    iter stringlitchunks otherchunks
+    with_context (Executing (h, env, l, "Cleaning up string literal chunks.")) (fun _ -> iter stringlitchunks otherchunks)
   in 
   let eval_non_pure is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
@@ -3643,15 +3653,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let do_return h env_post =
             match file_type path with
             Java -> assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
-                check_leaks h env l "Function leaks heap chunks."
-              )
+              check_leaks h env l "Function leaks heap chunks."
             )
             |_ ->
              assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              with_context (Executing (h, env, l, "Checking emptyness.")) (fun _ ->
-                check_leaks h env l "Function leaks heap chunks."
-              )
+              check_leaks h env l "Function leaks heap chunks."
             )
           in
           let return_cont h retval =

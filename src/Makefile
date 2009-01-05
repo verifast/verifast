@@ -1,4 +1,4 @@
-test: verifastz3.opt.exe
+test: verifastz3.opt.exe vfidez3.opt.exe
 	cd ..\examples
 	..\src\verifastz3.opt linkedlist.c
 	..\src\verifastz3.opt linkedlist2.c
