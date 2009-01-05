@@ -129,7 +129,7 @@ let show_ide initialPath prover =
       let gIter = buffer#start_iter in
       List.iter (fun chunk -> (buffer: GText.buffer)#insert ~iter:gIter chunk) chunks;
       buffer#set_modified false;
-      path := Some newPath;
+      path := Some (Filename.concat (Filename.dirname newPath) (Filename.basename newPath));
       updateBufferTitle tab
     with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg)
   in
