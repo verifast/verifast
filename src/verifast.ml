@@ -3349,7 +3349,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
     | Assign (l, x, CallExpr (lc, g, [], pats,fb)) -> 
-      let iscons = ((compare (String.sub g 0 4) "new ")==0) && (List.length pats==0) in
+      let iscons = startswith g "new " && (List.length pats==0) in
       if iscons then begin match pats with
         [] -> 
           let tpx = vartp l x in
