@@ -9,10 +9,10 @@ REVISION=71
 !endif
 
 release:
-	rmdir /s /q exportdir
+	-rmdir /s /q exportdir
 	svn export $(VERIFAST_REPOSITORY_URL)@$(REVISION) exportdir
 	cd exportdir
 	cd src
 	nmake release
-	del ..\..\verifast-$(VFVERSION).zip
+	-del ..\..\verifast-$(VFVERSION).zip
 	7z a ..\..\verifast-$(VFVERSION).zip verifast-$(VFVERSION)

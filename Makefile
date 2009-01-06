@@ -1,11 +1,11 @@
 revrelease:
 	set VFVERSION=r$(REVISION)
-	rmdir /s /q exportdir
+	-rmdir /s /q exportdir
 	svn export $(VERIFAST_REPOSITORY_URL)@$(REVISION) exportdir
 	cd exportdir
 	cd src
 	nmake release
-	del ..\..\verifast-r$(REVISION).zip
+	-del ..\..\verifast-r$(REVISION).zip
 	7z a ..\..\verifast-r$(REVISION).zip verifast-r$(REVISION)
 
 release:
