@@ -3,7 +3,7 @@
 !endif
 
 !if "$(VFVERSION)" == "3.1"
-REVISION=71
+REVISION=74
 !else
 !	error "Environment variable VFVERSION has invalid value: Unknown release name '$(VFVERSION)'"
 !endif

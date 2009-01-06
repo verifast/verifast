@@ -2711,13 +2711,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | s::ss -> assigned_variables s @ block_assigned_variables ss
   and assigned_variables s =
     match s with
-      Assign (l, x, e) -> [x]
+      PureStmt (l, s) -> assigned_variables s
+    | Assign (l, x, e) -> [x]
+    | DeclStmt (l, t, x, e) -> []
+    | Write (l, e, f, e') -> []
+    | CallStmt (l, g, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
     | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
+    | Assert (l, p) -> []
+    | Open (l, g, ps0, ps1, coef) -> []
+    | Close (l, g, ps0, ps1, coef) -> []
+    | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
-    | _ -> []
+    | BlockStmt (l, ss) -> block_assigned_variables ss
   in
-  
+
   let get_field h t f l cont =
     let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
     assert_chunk h [] [("x", t)] l (f_symb, true) real_unit DummyPat [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h coef ts size ghostenv env ->
