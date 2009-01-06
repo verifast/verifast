@@ -28,8 +28,7 @@ let _ =
   let n = Array.length Sys.argv in
   if n = 1 then
   begin
-    print_endline "Verifast 3.0 for C and Java (released 2008-11-26) <http://www.cs.kuleuven.be/~bartj/verifast/>";
-    print_endline "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, with contributions by Jan Smans and Cedric Cuypers";
+    print_endline Verifast.banner;
     print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] {sourcefile|objectfile}"
   end
   else

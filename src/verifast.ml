@@ -1,6 +1,10 @@
 open Proverapi
 open Big_int
 
+let banner =
+  "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
+  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans"
+
 class stats =
   object (self)
     val mutable stmtsParsedCount = 0
