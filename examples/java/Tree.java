@@ -173,7 +173,7 @@ lemma void max_all(bintree r,int x)
   switch(r){
 	case nil:
 	case cons(a,b,c):if(c!=nil){
-			   contains_min(c);
+			  contains_min(c);
 			   min_le_max(c);
 			 }
 			 if(t_contains(c,x)){

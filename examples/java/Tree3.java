@@ -292,7 +292,6 @@ public class Tree{
 		//@ close tree(l,nil);
 		//@ Tree r = this.right;
 		//@ close tree(r,nil);
-		//@ int v = this.value;
 		//@ close tree(this,cons(x,nil,nil));
 	}
 	public boolean contains(int x)
@@ -383,7 +382,7 @@ public class Tree{
 		}
 	}
 	public Tree remove(int x)
-	//@ requires tree(this,?b) &*& b!=nil &*& true==t_contains(b,x) &*& inorder(b)==true;
+	//@ requires tree(this,?b) &*& b!=nil &*& true==t_contains(b,x)  &*& inorder(b)==true;
 	//@ ensures tree(result,tree_rem(b,x))&*& inorder(tree_rem(b,x))==true &*& false==t_contains(tree_rem(b,x),x);
 	{
 		//@ open tree(this,b);
