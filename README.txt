@@ -1,6 +1,8 @@
 How to build VeriFast
 =====================
 
+NOTE: These instructions do not work for O'Caml version 3.11 or later. Please use O'Caml 3.10.2.
+
 Outputs
 -------
 
@@ -47,7 +49,9 @@ VeriFast uses the Z3 Ocaml API.
 
 2) Download and unzip the CamlIDL sources .zip file from http://caml.inria.fr/pub/old_caml_site/camlidl/
 
-3) Install CamlIDL as per the README file. Specifically, in a Cygwin shell started from a Visual Studio command prompt (so that the Visual C++ compiler (cl.exe) is in the PATH):
+3) Install CamlIDL as per the README file.
+  Unfortunately, this requires Cygwin. Important: before starting Cygwin, set the CYGWIN=nontsec environment variable.
+  In a Cygwin shell started from a Visual Studio command prompt (so that the Visual C++ compiler (cl.exe) is in the PATH):
   3.1) Copy config/Makefile.win32 to config/Makefile
   3.2) If your Ocaml is not in C:\Ocaml, edit OCAMLLIB and BINDIR in config/Makefile
   3.3) Do
@@ -56,7 +60,7 @@ VeriFast uses the Z3 Ocaml API.
 
        to check that Visual C++'s LINK.EXE is not hidden by GCC 'link'. If it is, do
 
-           export PATH=/cygdrive/c/Program\ Files/Visual\ Studio\ 8/VC/bin:$PATH
+           export PATH=/cygdrive/c/Program\ Files/Microsoft\ Visual\ Studio\ 9.0/VC/bin:$PATH
 
   3.4) Do 'make all'
   3.5) Assuming you have write access to your Ocaml installation, do 'make install'
@@ -89,7 +93,7 @@ ocaml build.ml
 
 xcopy /E <lablgtkdir>\lib\lablgtk2 <ocamldir>\lib
 xcopy <lablgtkdir>\lib\stublibs\dlllablgtk2.dll <ocamldir>\lib\stublibs
-xcopy <lablgtkdir>\bin\labkgtk2.bat <ocamldir>\bin
+xcopy <lablgtkdir>\bin\lablgtk2.bat <ocamldir>\bin
 
 Before running a program that uses GTK, put the GTK DLLs in your PATH:
 
