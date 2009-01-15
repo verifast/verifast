@@ -72,7 +72,7 @@ public class IteratorUtil {
   }
 }
 public class Program {
-  public static void main(string[] args)
+  public static void main(String[] args)
       //@ requires true;
       //@ ensures true;
   {

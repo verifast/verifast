@@ -7,6 +7,7 @@ test: verifastz3.opt.exe vfidez3.opt.exe
 	..\src\verifastz3.opt sorted_bintree.c
 	..\src\verifastz3.opt -c iter.c
 	cd java
+	..\..\src\verifastz3.opt -disable_overflow_check -c Counter.java
 	..\..\src\verifastz3.opt -c Tree.java
 	..\..\src\verifastz3.opt -c Tree2.java
 	..\..\src\verifastz3.opt -c Tree3.java

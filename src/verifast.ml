@@ -465,7 +465,6 @@ type type_ =
   | IntType
   | RealType
   | Char
-  | StringType
   | StructType of string
   | PtrType of type_
   | InductiveType of string (* type van inductive type *)
@@ -730,7 +729,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
 ]
-let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "string"; "boolean";"new";"null";"interface";"implements"(*"extends";*)
+let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
 ]
 
 
@@ -914,7 +913,6 @@ and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
-| [< '(l, Kwd "string") >] -> ManifestTypeExpr (l, StringType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
@@ -1366,12 +1364,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [("uint", (dummy_loc, []))] ds
   in
   
-  let basicclassdeclmap= [("Object", (dummy_loc,
-[Meth(dummy_loc,Some (IdentTypeExpr(dummy_loc,"Class")),"getClass",[(IdentTypeExpr(dummy_loc,"Object"),"this")],None,None,Instance,Public,"Object")],[],[],"Object",[]));
-("Class", (dummy_loc,
-[Meth(dummy_loc,Some (ManifestTypeExpr(dummy_loc,StringType)),"getName",[(IdentTypeExpr(dummy_loc,"Class"),"this")],None,None,Instance,Public,"Object")],[],[],"Class",[]))
-]
-in
+  let basicclassdeclmap =
+    [("Object",
+      (dummy_loc,
+       [
+         Meth
+           (dummy_loc, Some (IdentTypeExpr (dummy_loc, "Class")), "getClass",
+            [(IdentTypeExpr (dummy_loc, "Object"), "this")], None, None, Instance, Public, "Object")
+       ], [], [], "Object", []));
+     ("Class", (dummy_loc, [], [], [], "Class", []));
+     ("String", (dummy_loc, [], [], [], "String", []))
+    ]
+  in
 
   let interfdeclmap =
     let rec iter idm ds =
@@ -1404,7 +1408,6 @@ in
                  match te with
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, StringType) -> StringType
                  | ManifestTypeExpr (_, Bool) -> Bool
                  | IdentTypeExpr(lt, sn) ->
                  if (List.mem_assoc sn interfdeclmap)||((List.mem_assoc sn basicclassdeclmap)) then
@@ -1469,7 +1472,6 @@ in
                  match te with
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, StringType) -> StringType
                  | ManifestTypeExpr (_, Bool) -> Bool
                  | IdentTypeExpr(lt, sn) ->
                    if List.mem_assoc sn classdeclmap then
@@ -1506,7 +1508,6 @@ in
                  match te with
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, StringType) -> StringType
                  | ManifestTypeExpr (_, Bool) -> Bool
                  | IdentTypeExpr(lt, sn) ->
                  if List.mem_assoc sn classdeclmap then
@@ -1566,7 +1567,7 @@ in
           if (List.mem_assoc id interfdeclmap) then 
             ObjType id
           else
-            static_error l ("No such datatype."^id)
+            static_error l ("No such inductive datatype, class, or interface: " ^ id)
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap) then
         static_error l "No such struct."
@@ -1600,7 +1601,6 @@ in
     | IntType -> ctxt#type_int
     | RealType -> ctxt#type_real
     | Char -> ctxt#type_int
-    | StringType -> ctxt#type_int
     | InductiveType i -> ctxt#type_inductive
     | StructType sn -> assert false
     | ObjType n -> ctxt#type_int
