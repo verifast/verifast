@@ -173,7 +173,7 @@ lemma void max_all(bintree r,int x)
   switch(r){
 	case nil:
 	case cons(a,b,c):if(c!=nil){
-			  contains_min(c);
+			   contains_min(c);
 			   min_le_max(c);
 			 }
 			 if(t_contains(c,x)){
@@ -280,13 +280,12 @@ public class Tree{
 	public int value;
 	public Tree left;
 	public Tree right;
-
+	
 	public static Tree init_tree(int x)
 	//@ requires true;
 	//@ ensures tree(result,cons(x,nil,nil));
 	{
-		Tree t=null;
-	        t=new Tree();
+		Tree t=new Tree();
 		t.value=x;
 		t.left=null;
 		t.right=null;
@@ -298,128 +297,129 @@ public class Tree{
 		//@ close tree(t,cons(x,nil,nil));
 		return t;
 	}
-	public static boolean contains(Tree t,int x)
-	//@ requires tree(t,?b);
-	//@ ensures tree(t,b) &*& result==t_contains(b,x);
+	public boolean contains(int x)
+	//@ requires tree(this,?b);
+	//@ ensures tree(this,b) &*& result==t_contains(b,x);
 	{
-		if(t==null){
-			//@ open tree(t,b);
-			//@ close tree(t,nil);
+		if(this==null){
+			//@ open tree(this,b);
+			//@ close tree(this,nil);
 			return false;
 		}else{
-			//@ open tree(t,b);
-			int v=t.value;
-			Tree l=t.left;
-			Tree r=t.right;
+			//@ open tree(this,b);
+			int v=this.value;
+			Tree l=this.left;
+			Tree r=this.right;
 			if(v==x){
-				//@close tree(t,b);
+				//@close tree(this,b);
 				return true;
 			}else{
 				if(x<v){
-					boolean temp1=Tree.contains(l,x);
-					//@close tree(t,b);
+					boolean temp1=false;
+					temp1=l.contains(x);
+					//@close tree(this,b);
 					return temp1;
 				}else{
-					boolean temp2=Tree.contains(r,x);
-					//@close tree(t,b);
+					boolean temp2=r.contains(x);
+					//@close tree(this,b);
 					return temp2;
 				}
 			}
 		}
 	}
-	public static void add(Tree t, int x)
-	//@ requires tree(t,?b) &*& b!=nil &*& false==t_contains(b,x) &*& inorder(b)==true;
-	//@ ensures tree(t,tree_add(b,x)) &*& inorder(tree_add(b,x))==true;
+	public void add(int x)
+	//@ requires tree(this,?b) &*& b!=nil &*& false==t_contains(b,x) &*& inorder(b)==true;
+	//@ ensures tree(this,tree_add(b,x)) &*& inorder(tree_add(b,x))==true;
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree l=t.left;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
 		//@ open tree(l,?bl);
 		//@ close tree(l,bl);
-		Tree r=t.right;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		if(x<v){
 			if(l!=null){
-				Tree.add(l,x);
+				l.add(x);
 				//@ tree_add_inorder(b,x);
-				//@ close tree(t,cons(v,tree_add(bl,x),br));
+				//@ close tree(this,cons(v,tree_add(bl,x),br));
 			}else{
 				Tree temp=Tree.init_tree(x);
-				t.left=temp;
+				this.left=temp;
 				//@ open tree(l,bl);
-				//@ close tree(t,cons(v,cons(x,nil,nil),br));
+				//@ close tree(this,cons(v,cons(x,nil,nil),br));
 				//@ tree_add_inorder(b,x);
 			}
 		}else{
 			if(v<x){
 				if(r!=null){
-					Tree.add(r,x);
+					r.add(x);
 					//@ tree_add_inorder(b,x);
-					//@ close tree(t,cons(v,bl,tree_add(br,x)));	
+					//@ close tree(this,cons(v,bl,tree_add(br,x)));	
 				}else{
 					Tree temp=Tree.init_tree(x);
-					t.right=temp;
+					this.right=temp;
 					//@ open tree(r,br);
-					//@ close tree(t,cons(v,bl,cons(x,nil,nil)));
+					//@ close tree(this,cons(v,bl,cons(x,nil,nil)));
 				}
 			}
 		}
 	}
-	public static int maximum(Tree t)
-	//@ requires tree(t,?b) &*& b!=nil &*& inorder(b)==true;
-	//@ ensures result==max(b) &*& tree(t,b);
+	public int maximum()
+	//@ requires tree(this,?b) &*& b!=nil &*& inorder(b)==true;
+	//@ ensures result==max(b) &*& tree(this,b);
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree r=t.right;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		if(r==null){
-			//@ close tree(t,b);
+			//@ close tree(this,b);
 			return v;
 		}else{
-			int m= Tree.maximum(r);
-			//@ close tree(t,b);
+			int m= r.maximum();
+			//@ close tree(this,b);
 			return m;
 		}
 	}
-	public static Tree remove(Tree t, int x)
-	//@ requires tree(t,?b) &*& b!=nil &*& true==t_contains(b,x) &*& inorder(b)==true;
+	public Tree remove(int x)
+	//@ requires tree(this,?b) &*& b!=nil &*& true==t_contains(b,x) &*& inorder(b)==true;
 	//@ ensures tree(result,tree_rem(b,x))&*& inorder(tree_rem(b,x))==true &*& false==t_contains(tree_rem(b,x),x);
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree l=t.left;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
 		//@ open tree(l,?bl);
 		//@ close tree(l,bl);
-		Tree r=t.right;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		//@ tree_rem_inorder(b,x);
 		if(x<v){
 			if(l!=null){
-				Tree temp=Tree.remove(l,x);
-				t.left=temp;
-				//@ close tree(t,cons(v,tree_rem(bl,x),br));
-				return t;
+				Tree temp=l.remove(x);
+				this.left=temp;
+				//@ close tree(this,cons(v,tree_rem(bl,x),br));
+				return this;
 			}
 		}
 		if(v<x){
 			if(r!=null){
-				Tree temp=Tree.remove(r,x);
-				t.right=temp;
-				//@ close tree(t,cons(v,bl,tree_rem(br,x)));
-				return t;
+				Tree temp=r.remove(x);
+				this.right=temp;
+				//@ close tree(this,cons(v,bl,tree_rem(br,x)));
+				return this;
 			}
 		}
-		else{
+		if(v==x){
 			if(l!=null&&r==null){
 				//@ open tree(r,nil);
 				return l;
 			}
 			if(l==null&&r==null){
-				//@ close tree(t,b);
+				//@ close tree(this,b);
 				//@ close tree(null,nil);
 				return null;
 			}
@@ -429,13 +429,13 @@ public class Tree{
 			}
 			if(l!=null&&r!=null){
 				Tree temp=null;
-				int m=Tree.maximum(l);
-				t.value=m;
+				int m=l.maximum();
+				this.value=m;
 				//@ contains_max(bl);
-				temp=Tree.remove(l,m);
-				t.left=temp;
-				//@ close tree(t,cons(m,tree_rem(bl,m),br));
-				return t;
+				temp=l.remove(m);
+				this.left=temp;
+				//@ close tree(this,cons(m,tree_rem(bl,m),br));
+				return this;
 			}
 		}
 		//this return statement is necessary because javac can't tell that this code will never be reached
@@ -456,23 +456,23 @@ public class Tree{
 		boolean f=false;
 
 		t1 = Tree.init_tree(3);
-		b= Tree.contains(t1,2);
+		b=t1.contains(2);
 		assert(!b);
-		Tree.add(t1,2);
+		t1.add(2);
 
-		a= Tree.contains(t1,2);
+		a=t1.contains(2);
 		assert(a);
-		c= Tree.contains(t1,3);
+		c=t1.contains(3);
 		assert(c);
-		t2=Tree.remove(t1,3);
-		d= Tree.contains(t2,3);
+		t2=t1.remove(3);
+		d= t2.contains(3);
 		assert(!d);
 
-		Tree.add(t2,3);
-		e= Tree.contains(t2,2);
+		t2.add(3);
+		e= t2.contains(2);
 		assert(e);
-		t3=Tree.remove(t2,3);
-		f= Tree.contains(t3,3);
+		t3=t2.remove(3);
+		f=t3.contains(3);
 		assert(!f);
 	}
 }

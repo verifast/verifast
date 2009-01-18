@@ -32,7 +32,7 @@ public class Counter {
     Counter c1 = new Counter(0);
     Counter c2 = new Counter(5);
     c1.increment();
-    swap(c1, c2);
+    Counter.swap(c1, c2);
     int tmp = c2.value;
     //@ assert tmp == 1;
   }

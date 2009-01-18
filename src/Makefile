@@ -9,8 +9,12 @@ test: verifastz3.opt.exe vfidez3.opt.exe
 	cd java
 	..\..\src\verifastz3.opt -disable_overflow_check -c Counter.java
 	..\..\src\verifastz3.opt -c Tree.java
-	..\..\src\verifastz3.opt -c Tree2.java
-	..\..\src\verifastz3.opt -c Tree3.java
+	cd Tree2
+	..\..\..\src\verifastz3.opt -c Tree.java
+	cd ..
+	cd Tree3
+	..\..\..\src\verifastz3.opt -c Tree.java
+	cd ..
 	..\..\src\verifastz3.opt -c Iterator.java
 	cd ..
 	cd chat

@@ -594,10 +594,10 @@ and
   | FuncTypeSpec of string
 and
   meth =
-  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility * string
+  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
 and
   meth_spec =
-  | MethSpec of loc * type_expr option * string * (type_expr * string) list * spec option* func_binding * visibility * string
+  | MethSpec of loc * type_expr option * string * (type_expr * string) list * spec option* func_binding * visibility
 and
   cons =
   | Cons of loc * (type_expr * string) list * spec option * stmt list option * visibility
@@ -732,9 +732,6 @@ let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typed
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
 ]
 
-
-let current_class = ref "";; (* global variable referencing the name of the current class being verified*)
-
 let file_type path=
   begin
   if Filename.check_suffix (Filename.basename path) ".c" then C
@@ -779,8 +776,8 @@ and
 and
   methods cn m=
   match m with
-    MethMember (Meth (l, t, n, ps, co, ss,s,v,cln))::ms -> Meth (l, t, n, ps, co, ss,s,v,cln)::(methods cn ms)
-    | ConsMember(Cons(l,ps,co,ss,v))::ms -> Meth(l,Some (IdentTypeExpr(l,cn)),"new "^cn,ps,co,ss,Static,v,cn)
+    MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods cn ms)
+    | ConsMember(Cons(l,ps,co,ss,v))::ms -> Meth(l,Some (IdentTypeExpr(l,cn)),"new "^cn,ps,co,ss,Static,v)
       ::(methods cn ms)
     |_::ms -> methods cn ms
     | []->[]
@@ -807,10 +804,10 @@ and
 and
   parse_interface_meth vis cn= parser
 [<'(l,Ident t);'(_,Ident f);'(_, Kwd "(");ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
-       -> MethSpec(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis,cn)
+       -> MethSpec(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis)
 | [< t=parse_type;'(l,Ident f);'(_, Kwd "(");ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
        -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
-       MethSpec(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis,cn)
+       MethSpec(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis)
 and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
@@ -824,12 +821,12 @@ and
 and
   parse_java_member vis cn= parser
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
-    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,vis,cn))
+    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,vis))
 | [<'(l,Ident t);e=parser
       [<'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
        |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis,cn))
+       -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
         |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
        -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
@@ -839,7 +836,7 @@ and
        [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance,vis))
        |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
        -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
-       MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis,cn))
+       MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
 and
   parse_decl = parser
@@ -1150,11 +1147,6 @@ let flatmap f xs = List.concat (List.map f xs)
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
 let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
-let rec find_list x xys =
-  match xys with
-    [] -> false
-  | (x', y)::xys when x' = x -> true
-  | (a,b)::xys ->find_list x xys
 let rec try_assoc x xys =
   match xys with
     [] -> None
@@ -1370,7 +1362,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
        [
          Meth
            (dummy_loc, Some (IdentTypeExpr (dummy_loc, "Class")), "getClass",
-            [(IdentTypeExpr (dummy_loc, "Object"), "this")], None, None, Instance, Public, "Object")
+            [(IdentTypeExpr (dummy_loc, "Object"), "this")], None, None, Instance, Public)
        ], [], [], "Object", []));
      ("Class", (dummy_loc, [], [], [], "Class", []));
      ("String", (dummy_loc, [], [], [], "String", []))
@@ -1378,29 +1370,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let interfdeclmap =
-    let rec iter idm ds =
+    let rec iter ifdm ds =
       match ds with
-        [] -> idm
+        [] -> ifdm
       | (Interface (l, i, meth_specs))::ds ->
-        if List.mem_assoc i idm then
-          static_error l "Duplicate datatype name."
+        if List.mem_assoc i ifdm then
+          static_error l "Duplicate interface name."
         else
-         iter ((i, (l,meth_specs))::idm) ds
-      | _::ds -> iter idm ds
+         iter ((i, (l,meth_specs))::ifdm) ds
+      | _::ds -> iter ifdm ds
     in
     iter [] ds
   in
   
   let interfmap =
     List.map
-      (fun (sn, (l,specs)) ->
+      (fun (ifn, (l,specs)) ->
          let rec iter mmap meth_specs =
            match meth_specs with
-             [] -> (sn, (l,(List.rev mmap)))
-           | MethSpec (lm, t, n, ps, co,fb,v,cn)::meths ->
-             if not (List.mem_assoc cn interfdeclmap) then
-               static_error lm "Class of method wasn't found."
-             else
+             [] -> (ifn, (l,(List.rev mmap)))
+           | MethSpec (lm, t, n, ps, co,fb,v)::meths ->
              if List.mem_assoc n mmap then
                static_error lm "Duplicate method name."
              else (
@@ -1434,14 +1423,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
 in
   let classdeclmap =
-    let rec iter idm ds =
+    let rec iter classlist ds =
       match ds with
-        [] -> idm
+        [] -> classlist
       | (Class (l, i, meths,fields,constr,super,interfs))::ds ->
-        if List.mem_assoc i idm then
-          static_error l "Duplicate datatype name."
+        if List.mem_assoc i classlist || List.mem_assoc i interfmap then
+          static_error l "Duplicate class name."
         else
-          if not(List.mem_assoc super idm) then
+          if not(List.mem_assoc super classlist) then
              static_error l "Superclass wasn't found!"
           else
           let rec check_interfs ls=
@@ -1452,8 +1441,8 @@ in
           if not(check_interfs interfs) then
               static_error l "Interface wasn't found!"
           else
-          iter ((i, (l,meths,fields,constr,super,interfs))::idm) ds
-      | _::ds -> iter idm ds
+          iter ((i, (l,meths,fields,constr,super,interfs))::classlist) ds
+      | _::ds -> iter classlist ds
     in
     iter basicclassdeclmap ds
   in
@@ -1497,10 +1486,7 @@ in
          let rec iter mmap meths =
            match meths with
              [] -> (sn, (l,Some (List.rev mmap),fds,constr,super,interfs))
-           | Meth (lm, t, n, ps, co, ss,fb,v,cn)::meths ->
-             if not (List.mem_assoc cn classdeclmap) then
-               static_error lm "Class of method wasn't found."
-             else
+           | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
              if List.mem_assoc n mmap then
                static_error lm "Duplicate meth name."
              else (
@@ -1622,7 +1608,7 @@ in
     let super= match x with ObjType sp ->sp in
     let sub = match y with ObjType sp ->sp in
     let rec search a b=
-      if a==b then true
+      if a=b then true
       else if b="Object" then false
         else 
           let s = match try_assoc b classdeclmap with Some (_,_,_,_,s,_) -> s in
@@ -1654,7 +1640,7 @@ in
         | Some tpairs ->
           List.iter (fun (t, t0) -> expect_type l t t0) tpairs
       end
-    | _ -> if t = t0 then () else static_error l ("TESTType mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   (* opstellen van inductivemap en purefuncmap *)
   let (inductivemap, purefuncmap) =
@@ -2028,19 +2014,11 @@ in
     iter [] purefuncmap ds
   in
   
-  let funcnames = 
-    match file_type path with
-    Java -> let rec mnames meths=
-      match meths with
-      Meth(l,rt,g,ps,c,b,fb,v,cn)::rest -> g::mnames rest
-      | []->[]
-    in
-    list_remove_dups (flatmap (function (Class (l,cn,meths,fds,cns,super,interfs)) -> mnames meths | _ -> []) ds )
-    | _ -> list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_classnamelist is =
-    List.map (fun (l, i) -> if not (find_list i classdeclmap) then static_error l "No such class name."; i) is
+    List.map (fun (l, i) -> if not (List.mem_assoc i classdeclmap) then static_error l "No such class name."; i) is
   in
   
   let check_funcnamelist is =
@@ -2074,9 +2052,7 @@ in
           | (t0, (te, x))::xs ->
             let t = check_pure_type te in 
             let _ =
-            match file_type path with
-            Java-> if (t <> t0) && not(checksuper t0 t) && not(checkinter t0 t) then static_error (type_expr_loc te) "Predicate family instance parameter type does not match predicate family parameter type.";
-          | _ -> if t <> t0 then static_error (type_expr_loc te) "Predicate family instance parameter type does not match predicate family parameter type.";
+            expect_type l t t0
             in
             if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
             iter2 ((x, t)::xm) xs
@@ -2434,10 +2410,7 @@ in
     iter e
   in
 
-  let funcnameterms = 
-    match file_type path with
-    Java ->[] (* in java methods can't be used as pointers *)
-    | _ -> List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
+  let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
   let real_unit = ctxt#mk_reallit 1 in
@@ -2946,10 +2919,10 @@ in
   let (jmethmap,jfuncmap)= (* opstellen van funcmap met lijst van java methodes en lemma/fixpoint functions*)
     match file_type path with
     Java ->
-    let rec iter jmethmap jfuncmap ds = (* Java methods*)
+    let rec iter cn jmethmap jfuncmap ds = (* Java methods*)
       match ds with
         [] -> (jmethmap,jfuncmap)
-      | Meth (l,rt, fn, xs, contract_opt, body,fb,v,cn)::ds->
+      | Meth (l,rt, fn, xs, contract_opt, body,fb,v)::ds->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -2998,15 +2971,15 @@ in
         in
         begin
           match try_assoc (fn,cn,fb) jmethmap with
-            None -> iter (((fn,cn,fb), (l,rt, xmap, cenv, pre, post, body,v))::jmethmap) jfuncmap ds
+            None -> iter cn (((fn,cn,fb), (l,rt, xmap, cenv, pre, post, body,v))::jmethmap) jfuncmap ds
           | Some _ -> static_error l "This method already exists in this class (overloading isn't supported yet)"
         end
-      | _::ds -> iter jmethmap jfuncmap ds
+      | _::ds -> iter cn jmethmap jfuncmap ds
     in
-    let rec iter3 jmethmap jfuncmap ds = (* Java interface methods*)
+    let rec iter3 cn jmethmap jfuncmap ds = (* Java interface methods*)
       match ds with
         [] -> (jmethmap,jfuncmap)
-      | MethSpec(l,rt, fn, xs, contract_opt,fb,v,cn)::ds->
+      | MethSpec(l,rt, fn, xs, contract_opt,fb,v)::ds->
         let body= None in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
@@ -3056,10 +3029,10 @@ in
         in
         begin
           match try_assoc (fn,cn,fb) jmethmap with
-            None -> iter3 (((fn,cn,fb), (l,rt, xmap, cenv, pre, post, body,v))::jmethmap) jfuncmap ds
+            None -> iter3 cn (((fn,cn,fb), (l,rt, xmap, cenv, pre, post, body,v))::jmethmap) jfuncmap ds
           | Some _ -> static_error l "This method already exists in this class (overloading isn't supported yet)"
         end
-      | _::ds -> iter3 jmethmap jfuncmap ds
+      | _::ds -> iter3 cn jmethmap jfuncmap ds
     in
     let iter2 f jfuncmap= (* Lemma functions *)
       match f with
@@ -3099,8 +3072,8 @@ in
     in
     let rec iter1 (jmethmap,jfuncmap) ds=
       match ds with
-      Class(l,cn,meths,fds,cns,super,interfs)::rest->iter1 (iter jmethmap jfuncmap meths) rest
-      | Interface(l,cn,meth_specs)::rest -> iter1 (iter3 jmethmap jfuncmap meth_specs) rest
+      Class(l,cn,meths,fds,cns,super,interfs)::rest->iter1 (iter cn jmethmap jfuncmap meths) rest
+      | Interface(l,cn,meth_specs)::rest -> iter1 (iter3 cn jmethmap jfuncmap meth_specs) rest
       | Func(l,k,rt, fn, xs, contract_opt, body,fb,vis)::rest when k<>Regular-> iter1 (jmethmap,(iter2 (Func(l,k,rt,fn,xs,contract_opt,body,fb,vis))jfuncmap )) rest
       | _::rest -> iter1 (jmethmap,jfuncmap) rest
       | []-> (List.rev jmethmap,List.rev jfuncmap)
@@ -3390,7 +3363,7 @@ let (funcmap, prototypes_implemented) =(* the C part*)
         let (class_name,fb,pats)= 
           (if fb=Static then 
             (if startswith g "new " then (String.sub g 4 ((String.length g)-4),Static,pats)
-            else (!current_class,Static,pats)
+            else ("",Static,pats)
             )
           else(
             if (match pats with LitPat(Var(_,cn))::_->(List.mem_assoc cn classmap) |_->false)
@@ -3509,7 +3482,8 @@ let (funcmap, prototypes_implemented) =(* the C part*)
       let tp = check_expr tenv e in
       assume_is_of_type (ev e) tp (fun () -> cont h env)
     | CallStmt (l, "assume_class_this", [],Instance) when file_type path=Java && List.mem_assoc "this" env->
-      assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc !current_class class_symbols) [])(fun () ->cont h env)
+    let classname= match vartp l "this" with ObjType cn -> cn in
+      assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
     | CallStmt (l, "free", args,Static) ->
       begin
         match List.map (check_expr tenv) args with
@@ -3816,7 +3790,6 @@ let (funcmap, prototypes_implemented) =(* the C part*)
         let ss= if fb= Instance then CallStmt (l, "assume_class_this", [],Instance)::sts 
                 else sts
         in
-        let _= current_class.contents<-cn in
         let _ = push() in
         let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
         let (sizemap, indinfo) =
