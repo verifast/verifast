@@ -27,7 +27,7 @@ fixpoint Object objects_last(objects a) {
 @*/
 
 //@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, objects xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
-public class SingletonIterator implements Iterator {
+class SingletonIterator implements Iterator {
   Object value;
   boolean done;
 
@@ -55,7 +55,7 @@ public class SingletonIterator implements Iterator {
       return result;
   }
 }
-public class IteratorUtil {
+class IteratorUtil {
   public static Object getLast(Iterator iterator)
       //@ requires iterator(iterator.getClass())(iterator, ?xs);
       //@ ensures iterator(iterator.getClass())(iterator, nil) &*& result == objects_last(xs);
@@ -71,7 +71,7 @@ public class IteratorUtil {
       return value;
   }
 }
-public class Program {
+class Program {
   public static void main(String[] args)
       //@ requires true;
       //@ ensures true;
