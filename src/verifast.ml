@@ -490,17 +490,6 @@ class fieldref (name: string) =
     method set_range r = range <- Some r
   end
 
-(*class methodref (name: string) =
-  object
-    val mutable parent: string option = None
-    val mutable args: list type_ option = None
-    method name = name
-    method parent = match parent with None -> assert false | Some s -> s
-    method args = match args with None -> assert false | Some r -> r
-    method set_parent s = parent <- Some s
-    method set_args r = args <- Some r
-  end*)
-  
 class predref (name: string) =
   object
     val mutable domain: type_ list option = None
@@ -620,7 +609,7 @@ and
 and
   ctor =
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
- and
+and
   member = FieldMember of field | MethMember of meth | ConsMember of cons
 
 (*
@@ -732,10 +721,14 @@ let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typed
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
 ]
 
+let jarsrc_keywords= ["java";"."
+]
+
 let file_type path=
   begin
   if Filename.check_suffix (Filename.basename path) ".c" then C
   else if Filename.check_suffix (Filename.basename path) ".java" then Java
+  else if Filename.check_suffix (Filename.basename path) ".jarsrc" then Java
   else if Filename.check_suffix (Filename.basename path) ".h" then Header
   else failwith ("unknown extension")
   end
@@ -744,12 +737,17 @@ let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 
 let read_decls path stream streamSource reportKeyword reportGhostRange =
-let lexer=
+let java_lexer=  make_lexer (veri_keywords@java_keywords) in
+let lexer= if Filename.check_suffix (Filename.basename path) ".jarsrc" then make_lexer(jarsrc_keywords) else
   match file_type path with
-  Java -> make_lexer (veri_keywords@java_keywords)
+  Java -> java_lexer
   | _ -> make_lexer (veri_keywords@c_keywords)
 in
 begin
+let rec parse_java_files = parser
+[< '(l, Ident n);'(_, Kwd ".");'(_, Kwd "java");rest=parse_java_files>] -> (n^".java")::rest
+| [<_ = Stream.empty>]-> []
+in
 let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
 let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) stream reportKeyword in
 let (loc, pp_token_stream) = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
@@ -757,7 +755,7 @@ let rec parse_decls_eof = parser
   [< ds = parse_decls; _ = Stream.empty >] -> ds
 and
   parse_decls = parser
-  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
+[< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
 | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
 Interface(l,cn,mem)::ds
 | [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
@@ -1140,6 +1138,23 @@ and
 | [< '(_, Kwd ")") >] -> []
 in
   try
+    if Filename.check_suffix (Filename.basename path) ".jarsrc" then
+      let filelist= parse_java_files pp_token_stream in
+      let rec parsefiles flist= 
+        match flist with
+          file::flist -> 
+            let path'=(Filename.dirname path)^"\\"^file in
+            let decl=
+              let stream'= Stream.of_string (readFile path') in
+              let tokenStreamSource' path' = java_lexer path' (streamSource (string_of_path path')) reportKeyword in
+              let (loc, token_stream') = java_lexer (Filename.dirname path', Filename.basename path') stream' reportKeyword in
+              let (loc, pp_token_stream') = preprocess (Filename.dirname path', Filename.basename path') loc token_stream' tokenStreamSource' in
+              parse_decls_eof pp_token_stream'
+            in 
+            decl@(parsefiles flist)
+          | [] -> []
+        in parsefiles filelist
+    else
     parse_decls_eof pp_token_stream
   with Stream.Error msg -> raise (ParseException (loc(), msg))
 end
