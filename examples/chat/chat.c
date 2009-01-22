@@ -331,7 +331,7 @@ void session_run(void *data) //@ : thread_run
     }
 
     socket_close(socket);
-    //@ remove_lock_permission(roomLock);
+    //@ leak lock_permission(roomLock, _);
 }
 
 int main()

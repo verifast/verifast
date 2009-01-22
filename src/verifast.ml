@@ -551,6 +551,7 @@ and
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
+  | Leak of loc * pred
   | Open of loc * string * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
   | Close of loc * string * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
@@ -695,6 +696,7 @@ let stmt_loc s =
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
+  | Leak (l, _) -> l
   | Open (l, _, _, _, coef) -> l
   | Close (l, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
@@ -712,7 +714,7 @@ let type_expr_loc t =
   
 let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint"; "switch"; "case"; ":";"return";
   "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&";
-  "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert"; "@"; "["; "]";"{";
+  "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
 ]
 let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
@@ -964,6 +966,7 @@ and
   >] -> s
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); sscs = parse_switch_stmt_clauses; '(_, Kwd "}") >] -> SwitchStmt (l, e, sscs)
 | [< '(l, Kwd "assert"); p = parse_pred; '(_, Kwd ";") >] -> Assert (l, p)
+| [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
      CallExpr (_, g, es1, es2,_) -> Open (l, g, es1, es2, coef)
@@ -2935,6 +2938,7 @@ in
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
     | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
     | Assert (l, p) -> []
+    | Leak (l, p) -> []
     | Open (l, g, ps0, ps1, coef) -> []
     | Close (l, g, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> []
@@ -3529,6 +3533,12 @@ let (funcmap, prototypes_implemented) =
     | Assert (l, p) ->
       check_pred tenv p (fun tenv ->
         assert_pred h ghostenv env p real_unit (fun _ ghostenv env _ ->
+          tcont sizemap tenv ghostenv h env
+        )
+      )
+    | Leak (l, p) ->
+      check_pred tenv p (fun tenv ->
+        assert_pred h ghostenv env p real_unit (fun h ghostenv env size ->
           tcont sizemap tenv ghostenv h env
         )
       )
