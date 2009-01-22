@@ -470,6 +470,8 @@ type type_ =
   | InductiveType of string (* type van inductive type *)
   | PredType of type_ list (* type van predicate -> lijst van types van args*)
   | ObjType of string (* voor java *)
+  | BoxIdType
+  | HandleIdType
 
 type type_expr =
     StructTypeExpr of loc * string
@@ -557,6 +559,7 @@ and
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list (* while regel-conditie-lus invariant- lus body *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
+  | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -604,6 +607,16 @@ and
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
+  | BoxClassDecl of loc * string * (type_expr * string) list * action_decl list * handle_pred_decl list
+and
+  action_decl =
+  | ActionDecl of loc * string * (type_expr * string) list * expr * expr
+and
+  handle_pred_decl =
+  | HandlePredDecl of loc * string * (type_expr * string) list * expr * preserved_by_clause list
+and
+  preserved_by_clause =
+  | PreservedByClause of loc * string * string list * stmt list
 and
   field =
   | Field of loc * type_expr * string * func_binding* visibility(* veld met regel-type-naam*)
@@ -702,6 +715,7 @@ let stmt_loc s =
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _) -> l
   | BlockStmt (l, ss) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -716,6 +730,8 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
+  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"
 ]
 let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
@@ -870,6 +886,34 @@ and
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); '(_, Kwd "("); ps1 = parse_paramlist; '(_, Kwd "("); ps2 = parse_paramlist;
      '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
+  | [< '(l, Kwd "box_class"); '(_, Ident bcn); '(_, Kwd "("); ps = parse_paramlist;
+       '(_, Kwd "{"); ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, ads, hpds)]
+and
+  parse_action_decls = parser
+  [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
+| [< >] -> []
+and
+  parse_action_decl = parser
+  [< '(l, Kwd "action"); '(_, Ident an); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";");
+     '(_, Kwd "requires"); pre = parse_expr; '(_, Kwd ";");
+     '(_, Kwd "ensures"); post = parse_expr; '(_, Kwd ";") >] -> ActionDecl (l, an, ps, pre, post)
+and
+  parse_handle_pred_decls = parser
+  [< hpd = parse_handle_pred_decl; hpds = parse_handle_pred_decls >] -> hpd::hpds
+| [< >] -> []
+and
+  parse_handle_pred_decl = parser
+  [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); '(_, Kwd "("); ps = parse_paramlist;
+     '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_expr; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
+     -> HandlePredDecl (l, hpn, ps, inv, pbcs)
+and
+  parse_preserved_by_clauses = parser
+  [< pbc = parse_preserved_by_clause; pbcs = parse_preserved_by_clauses >] -> pbc::pbcs
+| [< >] -> []
+and
+  parse_preserved_by_clause = parser
+  [< '(l, Kwd "preserved_by"); '(_, Ident an); '(_, Kwd "("); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ")");
+     ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
 and
   parse_func_rest k t = parser
   [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
@@ -915,6 +959,8 @@ and
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
 | [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Kwd "predicate"); '(_, Kwd "("); ts = parse_types >] -> PredTypeExpr (l, ts)
+| [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
+| [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Ident n) >] -> IdentTypeExpr (l, n)
 and
   parse_type_suffix t0 = parser
@@ -980,6 +1026,14 @@ and
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
+| [< '(l, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
+     '(_, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
+     '(_, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; ss = parse_block;
+     '(_, Kwd "producing_box_predicate"); '(_, Ident post_bpn); post_bp_args = parse_arglist;
+     '(_, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
+     '(_, Kwd ";") >] ->
+     if post_bpn <> pre_bpn then raise (ParseException (l, "The box predicate name cannot change."));
+     PerformActionStmt (l, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, post_bp_args, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
@@ -1499,6 +1553,8 @@ in
     | StructType sn -> "struct " ^ sn
     | PtrType t -> string_of_type t ^ " *"
     | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
+    | BoxIdType -> "box"
+    | HandleIdType -> "handle"
   in
   
   let typenode_of_type t =
@@ -1512,6 +1568,8 @@ in
     | ObjType n -> ctxt#type_int
     | PtrType t -> ctxt#type_int
     | PredType t -> ctxt#type_inductive
+    | BoxIdType -> ctxt#type_int
+    | HandleIdType -> ctxt#type_int
   in
   
   let functypenames = flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds in
@@ -1557,7 +1615,7 @@ in
         | Some tpairs ->
           List.iter (fun (t, t0) -> expect_type l t t0) tpairs
       end
-    | _ -> if t = t0 then () else static_error l ("AType mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
   let (inductivemap, purefuncmap) =
@@ -1857,7 +1915,6 @@ in
       structmap
   in
   
-  
   let predfammap = 
     let rec iter pm ds =
       match ds with
@@ -1876,6 +1933,79 @@ in
     in
     let structpreds = List.map (fun (_, p) -> p) malloc_block_pred_map @ List.map (fun (_, p) -> p) field_pred_map in
     iter structpreds ds
+  in
+  
+  let (boxmap, predfammap) =
+    let rec iter bm pfm ds =
+      match ds with
+        [] -> (bm, pfm)
+      | BoxClassDecl (l, bcn, ps, ads, hpds)::ds ->
+        if List.mem_assoc bcn pfm then static_error l "Box class name clashes with existing predicate name.";
+        let default_hpn = bcn ^ "_handle" in
+        if List.mem_assoc default_hpn pfm then static_error l ("Default handle predicate name '" ^ default_hpn ^ "' clashes with existing predicate name.");
+        let boxpmap =
+          let rec iter pmap ps =
+            match ps with
+              [] -> List.rev pmap
+            | (te, x)::ps ->
+              if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
+              if startswith x "old_" then static_error l "Box parameter name cannot start with old_.";
+              iter ((x, check_pure_type te)::pmap) ps
+          in
+          iter [] ps
+        in
+        let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
+        let pfm = mk_predfam bcn l 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap)::pfm in
+        let pfm = mk_predfam default_hpn l 0 (HandleIdType::BoxIdType::[])::pfm in
+        let amap =
+          let rec iter amap ads =
+            match ads with
+              [] -> List.rev amap
+            | ActionDecl (l, an, ps, pre, post)::ads ->
+              if List.mem_assoc an amap then static_error l "Duplicate action name.";
+              let pmap =
+                let rec iter pmap ps =
+                  match ps with
+                    [] -> List.rev pmap
+                  | (te, x)::ps ->
+                    if List.mem_assoc x boxpmap then static_error l "Action parameter clashes with box parameter.";
+                    if List.mem_assoc x pmap then static_error l "Duplicate action parameter name.";
+                    if startswith x "old_" then static_error l "Action parameter name cannot start with old_.";
+                    iter ((x, check_pure_type te)::pmap) ps
+                in
+                iter [] ps
+              in
+              iter ((an, (l, pmap, pre, post))::amap) ads
+          in
+          iter [] ads
+        in
+        let (pfm, hpm) =
+          let rec iter pfm hpm hpds =
+            match hpds with
+              [] -> (pfm, List.rev hpm)
+            | HandlePredDecl (l, hpn, ps, inv, pbcs)::hpds ->
+              if List.mem_assoc hpn hpm then static_error l "Duplicate handle predicate name.";
+              if List.mem_assoc hpn pfm then static_error l "Handle predicate name clashes with existing predicate name.";
+              let pmap =
+                let rec iter pmap ps =
+                  match ps with
+                    [] -> List.rev pmap
+                  | (te, x)::ps ->
+                    if List.mem_assoc x boxpmap then static_error l "Handle predicate parameter clashes with box parameter.";
+                    if List.mem_assoc x pmap then static_error l "Duplicate handle predicate parameter name.";
+                    if startswith x "old_" then static_error l "Handle predicate parameter name cannot start with old_.";
+                    iter ((x, check_pure_type te)::pmap) ps
+                in
+                iter [] ps
+              in
+              iter (mk_predfam hpn l 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
+          in
+          iter pfm [] hpds
+        in
+        iter ((bcn, (l, boxpmap, amap, hpm))::bm) pfm ds
+      | _::ds -> iter bm pfm ds
+    in
+    iter [] predfammap ds
   in
   
   let (predctormap, purefuncmap) =
@@ -2944,6 +3074,8 @@ in
     | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
     | BlockStmt (l, ss) -> block_assigned_variables ss
+    | PerformActionStmt (l, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, post_boxargs, post_handlepredname, post_handlepredargs) ->
+      block_assigned_variables body
   in
 
   let get_field h t f l cont =
@@ -2980,10 +3112,27 @@ in
     iter [] ds
   in
   
-let (funcmap, prototypes_implemented) =
+  let funcmap =
+    flatmap
+      (fun (bcn, (l, boxpmap, amap, hpmap)) ->
+         let cenv = List.map (fun (x, t) -> (x, Var (l, x))) boxpmap in
+         let bcpred = new predref bcn in
+         bcpred#set_domain (BoxIdType::List.map (fun (x, t) -> t) boxpmap);
+         if List.mem_assoc "result" boxpmap then static_error l "Name of box class parameter cannot be 'result'.";
+         let post = CallPred (l, bcpred, [], LitPat (Var (l, "result"))::List.map (fun (x, t) -> LitPat (Var (l, x))) boxpmap) in
+         let hpred = new predref (bcn ^ "_handle") in
+         hpred#set_domain [HandleIdType; BoxIdType];
+         [("create_" ^ bcn, (l, Lemma, Some BoxIdType, boxpmap, cenv, EmpPred l, post, Some None, Static, Public));
+          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], [("boxId", Var (l, "boxId"))], EmpPred l,
+             CallPred (l, hpred, [], [LitPat (Var (l, "result")); LitPat (Var (l, "boxId"))]), Some None, Static, Public))]
+      )
+      boxmap
+  in
+  
+  let (funcmap, prototypes_implemented) =
     let rec iter funcmap prototypes_implemented ds =
       match ds with
-        [] -> (List.rev funcmap, List.rev prototypes_implemented)
+        [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, rt, fn, xs, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
@@ -3032,8 +3181,9 @@ let (funcmap, prototypes_implemented) =
             end
         in
         begin
+          let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body,Static,Public))::funcmap) prototypes_implemented ds
+            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body',Static,Public))::funcmap) prototypes_implemented ds
           | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
@@ -3081,11 +3231,11 @@ let (funcmap, prototypes_implemented) =
               )
             in
             pop();
-            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body,Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
-    iter [] [] ds
+    iter funcmap [] ds
   in
   
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb))) -> symb) field_pred_map in
@@ -3155,7 +3305,7 @@ let (funcmap, prototypes_implemented) =
     | _ -> cont()
   in
   
-  let rec verify_stmt pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
+  let rec verify_stmt boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
@@ -3341,7 +3491,7 @@ let (funcmap, prototypes_implemented) =
     in 
     match s with
       PureStmt (l, s) ->
-      verify_stmt true leminfo sizemap tenv ghostenv h env s tcont return_cont
+      verify_stmt boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
     | Assign (l, x, CallExpr (lc, "malloc", [], args,Static)) ->
       begin
         match args with
@@ -3460,7 +3610,7 @@ let (funcmap, prototypes_implemented) =
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+      verify_stmt boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
@@ -3479,8 +3629,8 @@ let (funcmap, prototypes_implemented) =
       let _ = check_expr_t tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
-        (fun _ -> assume (ev e) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
+        (fun _ -> assume (ev e) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
     | SwitchStmt (l, e, cs) ->
       let tp = check_expr tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -3526,7 +3676,7 @@ let (funcmap, prototypes_implemented) =
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont return_cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont return_cont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -3662,7 +3812,7 @@ let (funcmap, prototypes_implemented) =
           (fun _ ->
              assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
                assume (eval0 (Some (fun l t f -> read_field h' env l t f)) env e) (fun _ ->
-                 verify_cont pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
+                 verify_cont boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
                      check_leaks h''' env l "Loop leaks heap chunks."
@@ -3677,23 +3827,105 @@ let (funcmap, prototypes_implemented) =
                  tcont sizemap tenv' ghostenv' h env')))
       )
       )
+    | PerformActionStmt (l, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, post_bcp_args, post_hpn, post_hp_args) ->
+      let (_, boxpmap, amap, hpmap) =
+        match try_assoc pre_bcn boxmap with
+          None -> static_error l "No such box class."
+        | Some boxinfo -> boxinfo
+      in
+      if not (List.mem pre_bcn boxes) then static_error l "You cannot perform an action a box class that has not yet been declared.";
+      let tenv = check_pats l tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
+      let (_, _, _, boxpred_symb) = List.assoc pre_bcn predfammap in
+      assert_chunk h ghostenv env l (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h coef ts chunk_size ghostenv env ->
+        if not (coef == real_unit) then assert_false h env l "Box predicate coefficient must be 1.";
+        let (boxId::pre_boxPredArgs) = ts in
+        let (pre_handlePred_parammap, pre_handlePred_inv) =
+          if pre_hpn = pre_bcn ^ "_handle" then
+            ([], True l)
+          else
+            match try_assoc pre_hpn hpmap with
+              None -> static_error l "No such handle predicate in box class."
+            | Some (_, hppmap, inv, _) ->
+              (hppmap, inv)
+        in
+        let (_, _, _, pre_handlepred_symb) = List.assoc pre_hpn predfammap in
+        let tenv = check_pats l tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
+        let (pre_handleId_pat::pre_hpargs_pats) = pre_hp_pats in
+        assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId"))::pre_hpargs_pats)
+          (fun h coef ts chunk_size ghostenv env ->
+             if not (coef == real_unit) then assert_false h env l "Handle predicate coefficient must be 1.";
+             let (handleId::_::pre_handlePredArgs) = ts in
+             let (apmap, pre, post) =
+               match try_assoc an amap with
+                 None -> static_error l "No such action in box class."
+               | Some (_, apmap, pre, post) -> (apmap, pre, post)
+             in
+             let aargbs =
+               match zip apmap aargs with
+                 None -> static_error l "Incorrect number of action arguments."
+               | Some bs ->
+                 List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+             in
+             let Some pre_boxargbs = zip boxpmap pre_boxPredArgs in
+             let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
+             let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
+             let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
+             assume (eval (pre_hpArgMap @ pre_boxArgMap) pre_handlePred_inv) (fun () ->
+               verify_cont boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+                 let pre_env = pre_boxArgMap @ aargbs in
+                 assert_term (eval pre_env pre) h pre_env l "Action precondition failure.";
+                 let post_bcp_argts =
+                   match zip boxpmap post_bcp_args with
+                     None -> static_error l "Incorrect number of post-state box arguments."
+                   | Some bs ->
+                     List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+                 in
+                 let old_bcp_argts = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxArgMap in
+                 let post_env = old_bcp_argts @ post_bcp_argts @ aargbs in
+                 assert_term (eval post_env post) h post_env l "Action postcondition failure.";
+                 let (post_handlePred_parammap, post_handlePred_inv) =
+                   if post_hpn = pre_bcn ^ "_handle" then
+                     ([], True l)
+                   else
+                     match try_assoc post_hpn hpmap with
+                       None -> static_error l "Post-state handle predicate: No such handle predicate in box class."
+                     | Some (_, hppmap, inv, _) ->
+                       (hppmap, inv)
+                 in
+                 let (_, _, _, post_handlePred_symb) = List.assoc post_hpn predfammap in
+                 let post_hpargs =
+                   match zip post_handlePred_parammap post_hp_args with
+                     None -> static_error l "Post-state handle predicate: Incorrect number of arguments."
+                   | Some bs ->
+                     List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+                 in
+                 let post_hpinv_env = post_hpargs @ post_bcp_argts in
+                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env l "Post-state handle predicate invariant failure.";
+                 let boxChunk = ((boxpred_symb, true), real_unit, boxId::List.map (fun (x, t) -> t) post_bcp_argts, None) in
+                 let hpChunk = ((post_handlePred_symb, true), real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
+                 let h = boxChunk::hpChunk::h in
+                 tcont sizemap tenv ghostenv h env
+               ) return_cont
+             )
+          )
+      )
     | BlockStmt (l, ss) ->
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      verify_cont pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
+      verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
   and
-    verify_cont pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
+    verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        verify_stmt pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont pure leminfo sizemap tenv ghostenv h env ss cont return_cont
+        verify_stmt boxes pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont
         ) return_cont
       )
   in
 
   let _ =
-    let rec verify_meths lems meths=
+    let rec verify_meths boxes lems meths=
       match meths with
         [] -> ()
       | (g, (l,rt, ps,cenv,pre,post, Some sts,fb,v))::meths ->
@@ -3743,31 +3975,32 @@ let (funcmap, prototypes_implemented) =
             | (None, Some _) -> assert_false h env l "Void function returns a value."
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
-          verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_cont boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
         )
         in
         let _ = pop() in
-          verify_meths lems' meths
+          verify_meths boxes lems' meths
         )
-      | _::meths -> verify_meths lems meths
+      | _::meths -> verify_meths boxes lems meths
     in
-    let rec verify_classes lems classm=
+    let rec verify_classes boxes lems classm=
       match classm with
         [] -> ()
       | (cn,(l,meths,_,_,_,_))::classm ->
           (match meths with
-            None -> verify_classes lems classm
-          | Some m -> verify_meths lems m; verify_classes lems classm)
+            None -> verify_classes boxes lems classm
+          | Some m -> verify_meths boxes lems m; verify_classes boxes lems classm)
     in
-  let rec verify_funcs lems funcs =
-    match funcs with
+  let rec verify_funcs boxes lems ds =
+    match ds with
     | [] -> (match file_type path with
-              Java -> verify_classes lems classmap;
+              Java -> verify_classes boxes lems classmap;
             | _ -> () 
             )
-    | (g, (l, Lemma, rt, ps, cenv0, pre, post, None,fb,v))::funcs ->
-      verify_funcs (g::lems) funcs
-    | (g, (l, k, rt, ps, cenv0, pre, post, Some ss,fb,v))::funcs ->
+    | Func (l, Lemma, rt, g, ps, _, None, _, _)::ds ->
+      verify_funcs boxes (g::lems) ds
+    | Func (_, k, _, g, _, _, Some _, _, _)::ds when k <> Fixpoint ->
+      let (l, k, rt, ps, cenv0, pre, post, Some (Some ss),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =
@@ -3814,17 +4047,84 @@ let (funcmap, prototypes_implemented) =
             | (None, Some _) -> assert_false h env l "Void function returns a value."
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
-          verify_cont in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_cont boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
         )
       in
       let _ = pop() in
-      verify_funcs lems' funcs
+      verify_funcs boxes lems' ds
       )
-    | _::funcs -> verify_funcs lems funcs
+    | BoxClassDecl (_, bcn, _, _, _)::ds ->
+      let (l, boxpmap, amap, hpmap) = List.assoc bcn boxmap in
+      let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
+      List.iter
+        (fun (an, (l, pmap, pre, post)) ->
+           check_expr_t (pmap @ boxpmap) pre boolt;
+           check_expr_t (pmap @ boxpmap @ old_boxpmap) post boolt
+        )
+        amap;
+      let leminfo = Some (lems, "", None) in
+      List.iter
+        (fun (hpn, (l, pmap, inv, pbcs)) ->
+           check_expr_t (pmap @ boxpmap) inv boolt;
+           let pbcans =
+             List.map
+               (fun (PreservedByClause (l, an, xs, ss)) ->
+                  begin
+                  match try_assoc an amap with
+                    None -> static_error l "No such action."
+                  | Some (_, apmap, pre, post) ->
+                    let _ =
+                      let rec iter ys xs =
+                        match xs with
+                          [] -> ()
+                        | x::xs ->
+                          if List.mem_assoc x boxpmap then static_error l "Action parameter name clashes with box parameter.";
+                          if List.mem_assoc x pmap then static_error l "Action parameter name clashes with handle predicate parameter.";
+                          if List.mem x ys then static_error l "Duplicate action parameter.";
+                          if startswith x "old_" then static_error l "Action parameter name cannot start with old_.";
+                          iter (x::ys) xs
+                      in
+                      iter [] xs
+                    in
+                    let apbs =
+                      match zip xs apmap with
+                        None -> static_error l "Incorrect number of action parameters."
+                      | Some bs -> bs
+                    in
+                    let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
+                    let tenv = boxpmap @ old_boxpmap @ pmap @ apmap' in
+                    push();
+                    let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
+                    let old_boxargs = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxargs in
+                    let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
+                    let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
+                    let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
+                    let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
+                    let ghostenv = List.map (fun (x, t) -> x) tenv in
+                    assume (eval None (pre_boxargs @ apre_env) pre) (fun () ->
+                      assume (eval None (pre_boxargs @ hpargs) inv) (fun () ->
+                        assume (eval None (post_boxargs @ old_boxargs @ apre_env) post) (fun () ->
+                          let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
+                          let env = post_boxargs @ old_boxargs @ aarg_env @ hpargs in
+                          verify_cont boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
+                            let post_inv_env = post_boxargs @ hpargs in
+                            assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
+                          ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
+                        )
+                      )
+                    );
+                    pop();
+                    an
+                  end)
+               pbcs
+           in
+           List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.")) amap)
+        hpmap;
+      let lems = ("create_" ^ bcn)::("create_" ^ bcn ^ "_handle")::lems in
+      verify_funcs (bcn::boxes) lems ds
+    | _::ds -> verify_funcs boxes lems ds
   in
-  match file_type path with
-  Java -> verify_funcs [] funcmap;
-  | _ -> verify_funcs [] funcmap;
+  verify_funcs [] [] ds
   
   in
   

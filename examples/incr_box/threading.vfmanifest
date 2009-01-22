@@ -1,0 +1,8 @@
+.provides .\threading.h#close_lock_invariant
+.provides .\threading.h#create_lock
+.provides .\threading.h#lock_acquire
+.provides .\threading.h#lock_release
+.provides .\threading.h#open_lock_invariant
+.provides .\threading.h#split_lock_permission
+.provides .\threading.h#remove_lock_permission
+.provides .\threading.h#thread_start
