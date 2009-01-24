@@ -26,9 +26,10 @@ test: verifastz3.opt.exe vfidez3.opt.exe
 	cd chatbot
 	..\..\src\verifastz3.opt -c bot.c
 	cd ..
-  cd incr_box
-  ..\..\src\verifastz3.opt -c incr_box.c
-  cd ..
+	cd incr_box
+	..\..\src\verifastz3.opt -c incr_box.c
+	cd ..
+        ..\src\verifastz3.opt -c contrib.c
 	cd ..\src
 
 reduxtest: verifastredux.opt.exe

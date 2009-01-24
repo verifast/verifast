@@ -472,6 +472,7 @@ type type_ =
   | ObjType of string (* voor java *)
   | BoxIdType
   | HandleIdType
+  | AnyType
 
 type type_expr =
     StructTypeExpr of loc * string
@@ -731,7 +732,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"
 ]
 let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
@@ -961,6 +962,7 @@ and
 | [< '(l, Kwd "predicate"); '(_, Kwd "("); ts = parse_types >] -> PredTypeExpr (l, ts)
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
+| [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
 | [< '(l, Ident n) >] -> IdentTypeExpr (l, n)
 and
   parse_type_suffix t0 = parser
@@ -1570,6 +1572,7 @@ in
     | PredType t -> ctxt#type_inductive
     | BoxIdType -> ctxt#type_int
     | HandleIdType -> ctxt#type_int
+    | AnyType -> ctxt#type_inductive
   in
   
   let functypenames = flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds in
@@ -1615,6 +1618,7 @@ in
         | Some tpairs ->
           List.iter (fun (t, t0) -> expect_type l t t0) tpairs
       end
+    | (InductiveType _, AnyType) -> ()
     | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
@@ -3870,9 +3874,9 @@ in
              let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
              let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
-             assume (eval (pre_hpArgMap @ pre_boxArgMap) pre_handlePred_inv) (fun () ->
+             assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMap) pre_handlePred_inv) (fun () ->
                verify_cont boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
-                 let pre_env = pre_boxArgMap @ aargbs in
+                 let pre_env = [("actionHandle", handleId)] @ pre_boxArgMap @ aargbs in
                  assert_term (eval pre_env pre) h pre_env l "Action precondition failure.";
                  let post_bcp_argts =
                    match zip boxpmap post_bcp_args with
@@ -3881,7 +3885,7 @@ in
                      List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
                  in
                  let old_bcp_argts = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxArgMap in
-                 let post_env = old_bcp_argts @ post_bcp_argts @ aargbs in
+                 let post_env = [("actionHandle", handleId)] @ old_bcp_argts @ post_bcp_argts @ aargbs in
                  assert_term (eval post_env post) h post_env l "Action postcondition failure.";
                  let (post_handlePred_parammap, post_handlePred_inv) =
                    if post_hpn = pre_bcn ^ "_handle" then
@@ -3899,7 +3903,7 @@ in
                    | Some bs ->
                      List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
                  in
-                 let post_hpinv_env = post_hpargs @ post_bcp_argts in
+                 let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_bcp_argts in
                  assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env l "Post-state handle predicate invariant failure.";
                  let boxChunk = ((boxpred_symb, true), real_unit, boxId::List.map (fun (x, t) -> t) post_bcp_argts, None) in
                  let hpChunk = ((post_handlePred_symb, true), real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
@@ -4058,14 +4062,14 @@ in
       let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
       List.iter
         (fun (an, (l, pmap, pre, post)) ->
-           check_expr_t (pmap @ boxpmap) pre boolt;
-           check_expr_t (pmap @ boxpmap @ old_boxpmap) post boolt
+           check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap) pre boolt;
+           check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap @ old_boxpmap) post boolt
         )
         amap;
       let leminfo = Some (lems, "", None) in
       List.iter
         (fun (hpn, (l, pmap, inv, pbcs)) ->
-           check_expr_t (pmap @ boxpmap) inv boolt;
+           check_expr_t ([("predicateHandle", HandleIdType)] @ pmap @ boxpmap) inv boolt;
            let pbcans =
              List.map
                (fun (PreservedByClause (l, an, xs, ss)) ->
@@ -4094,6 +4098,9 @@ in
                     let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
                     let tenv = boxpmap @ old_boxpmap @ pmap @ apmap' in
                     push();
+                    let actionHandle = get_unique_var_symb "actionHandle" HandleIdType in
+                    let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
+                    assume (ctxt#mk_not (ctxt#mk_eq actionHandle predicateHandle)) (fun () ->
                     let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
                     let old_boxargs = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxargs in
                     let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
@@ -4101,17 +4108,19 @@ in
                     let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
                     let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
                     let ghostenv = List.map (fun (x, t) -> x) tenv in
-                    assume (eval None (pre_boxargs @ apre_env) pre) (fun () ->
-                      assume (eval None (pre_boxargs @ hpargs) inv) (fun () ->
-                        assume (eval None (post_boxargs @ old_boxargs @ apre_env) post) (fun () ->
+                    assume (eval None ([("actionHandle", actionHandle)] @ pre_boxargs @ apre_env) pre) (fun () ->
+                      assume (eval None ([("predicateHandle", predicateHandle)] @ pre_boxargs @ hpargs) inv) (fun () ->
+                        assume (eval None ([("actionHandle", actionHandle)] @ post_boxargs @ old_boxargs @ apre_env) post) (fun () ->
                           let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
-                          let env = post_boxargs @ old_boxargs @ aarg_env @ hpargs in
+                          let env = [("actionHandle", actionHandle)] @ [("predicateHandle", predicateHandle)] @
+                            post_boxargs @ old_boxargs @ aarg_env @ hpargs in
                           verify_cont boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
-                            let post_inv_env = post_boxargs @ hpargs in
+                            let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxargs @ hpargs in
                             assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
                           ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
                         )
                       )
+                    )
                     );
                     pop();
                     an
