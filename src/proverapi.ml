@@ -1,4 +1,5 @@
 open Big_int
+open Num
 
 type assume_result = Unknown | Unsat
 
@@ -28,8 +29,10 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_le: 'termnode -> 'termnode -> 'termnode
     method virtual mk_reallit: int -> 'termnode
+    method virtual mk_reallit_of_num: num -> 'termnode
     method virtual mk_real_add: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_sub: 'termnode -> 'termnode -> 'termnode
+    method virtual mk_real_mul: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_le: 'termnode -> 'termnode -> 'termnode
     method virtual get_type: 'termnode -> 'typenode

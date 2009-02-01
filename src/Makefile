@@ -29,7 +29,8 @@ test: verifastz3.opt.exe vfidez3.opt.exe
 	cd incr_box
 	..\..\src\verifastz3.opt -c incr_box.c
 	cd ..
-        ..\src\verifastz3.opt -c contrib.c
+	..\src\verifastz3.opt -c contrib.c
+	..\src\verifastz3.opt reallittest.c
 	cd ..\src
 
 reduxtest: verifastredux.opt.exe

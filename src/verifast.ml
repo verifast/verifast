@@ -502,7 +502,7 @@ class predref (name: string) =
   end
 
 type
-  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not
+  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div
 and
   expr =
     True of loc
@@ -732,9 +732,9 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"
 ]
-let c_keywords= ["struct";"*";"real";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
+let c_keywords= ["struct";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
 ]
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
@@ -1114,7 +1114,10 @@ and
   [< e0 = parse_expr_arith; e = parse_expr_rel_rest e0 >] -> e
 and
   parse_expr_arith = parser
-  [< e0 = parse_expr_suffix; e = parse_expr_arith_rest e0 >] -> e
+  [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
+and
+  parse_expr_mul = parser
+  [< e0 = parse_expr_suffix; e = parse_expr_mul_rest e0 >] -> e
 and
   parse_expr_suffix = parser
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
@@ -1162,9 +1165,14 @@ and
 | [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] ->e
 | [< >] -> e0
 and
+  parse_expr_mul_rest e0 = parser
+  [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
   parse_expr_arith_rest e0 = parser
-  [< '(l, Kwd "+"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "-"); e1 = parse_expr_suffix; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1], ref None)) >] -> e
+  [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
@@ -1757,6 +1765,10 @@ in
                             boolt
                           | Operation (l, (Add | Sub), [e1; e2], ts) ->
                             promote l e1 e2 ts
+                          | Operation (l, (Mul | Div), [e1; e2], ts) ->
+                            checkt e1 RealType;
+                            checkt e2 RealType;
+                            RealType
                           | IntLit (l, n, t) -> t := Some intt; intt
                           | StringLit (l, s) -> PtrType Char
                           | CallExpr (l, g', [], pats,_) -> (
@@ -2188,6 +2200,10 @@ in
           PtrType Char | PtrType Void -> checkt e2 intt; ts:=Some [t1; IntType]; t1
         | IntType | RealType -> promote l e1 e2 ts
       end
+    | Operation (l, (Mul | Div), [e1; e2], ts) ->
+      checkt e1 RealType;
+      checkt e2 RealType;
+      RealType
     | IntLit (l, n, t) -> t := Some intt; intt
     | ClassLit (l, s) -> ObjType "Class"
     | StringLit (l, s) -> PtrType Char
@@ -2675,8 +2691,7 @@ in
       end
     | IntLit (l, n, t) when !t = Some RealType ->
       if eq_big_int n unit_big_int then real_unit
-      else if eq_big_int n zero_big_int then ctxt#mk_reallit 0
-      else static_error l "Real number literals other than 0 and 1 are not yet supported."
+      else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
     | ClassLit (l,s) -> ctxt#mk_app (List.assoc s class_symbols) []
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
     | CallExpr (l, g, [], pats,_) ->
@@ -2717,6 +2732,14 @@ in
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
       end
+    | Operation (l, Mul, [e1; e2], ts) -> ctxt#mk_real_mul (ev e1) (ev e2)
+    | Operation (l, Div, [e1; e2], ts) ->
+      let rec eval_reallit e =
+        match e with
+          IntLit (l, n, t) -> Num.num_of_big_int n
+        | _ -> static_error (expr_loc e) "The denominator of a division must be a literal."
+      in
+      ctxt#mk_real_mul (ev e1) (ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (eval_reallit e2)))
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->

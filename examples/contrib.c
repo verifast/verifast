@@ -5,14 +5,14 @@ struct lock;
 /*@
 predicate lock(struct lock *lock, predicate() inv);
 
-lemma real lock_fractions_split(struct lock *lock);
-    requires [?f]lock(lock, ?a);
-    ensures [result]lock(lock, a) &*& [f - result]lock(lock, a);
+lemma void lock_fractions_split(struct lock *lock, real coef);
+    requires [?f]lock(lock, ?a) &*& 0 < coef &*& coef < 1;
+    ensures [coef * f]lock(lock, a) &*& [(1 - coef) * f]lock(lock, a);
 
 lemma void lock_fractions_merge(struct lock *lock);
     requires [?f1]lock(lock, ?a1) &*& [?f2]lock(lock, ?a2);
     ensures [f1 + f2]lock(lock, a1) &*& a2 == a1;
-    
+
 predicate create_lock_ghost_arg(predicate() inv)
     requires inv();
 
@@ -92,25 +92,25 @@ predicate_ctor sum(struct sum *sumObject, box box1, box box2)()
         0 <= contrib1 &*& contrib1 <= 1 &*&
         0 <= sum - contrib1 &*& sum - contrib1 <= 1;
 
-inductive contribute_info = contribute_info(box, box, box, struct sum *, struct lock *, real);
+inductive contribute_info = contribute_info(box, box, box, struct sum *, struct lock *);
 
 predicate_family_instance thread_run_pre(contribute)(struct session *session, contribute_info info)
     requires
         switch (info) {
-            case contribute_info(box1, box2, thisBox, sumObject, lock, lockFrac):
-                return contribute_pre(session, box1, box2, thisBox, sumObject, lock, lockFrac);
+            case contribute_info(box1, box2, thisBox, sumObject, lock):
+                return contribute_pre(session, box1, box2, thisBox, sumObject, lock);
         };
 
-predicate contribute_pre(struct session *session, box box1, box box2, box thisBox, struct sum *sumObject, struct lock *lock, real lockFrac)
+predicate contribute_pre(struct session *session, box box1, box box2, box thisBox, struct sum *sumObject, struct lock *lock)
     requires
         session->sum_object |-> sumObject &*& session->lock |-> lock &*& malloc_block_session(session) &*&
-        [lockFrac]lock(lock, sum(sumObject, box1, box2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
+        [1/2]lock(lock, sum(sumObject, box1, box2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
 
 predicate_family_instance thread_run_post(contribute)(struct session *session, contribute_info info)
     requires
         switch (info) {
-            case contribute_info(box1, box2, thisBox, sumObject, lock, lockFrac):
-                return [lockFrac]lock(lock, sum(sumObject, box1, box2)) &*& contrib_box(thisBox, 1, _);
+            case contribute_info(box1, box2, thisBox, sumObject, lock):
+                return [1/2]lock(lock, sum(sumObject, box1, box2)) &*& contrib_box(thisBox, 1, _);
         };
 
 @*/
@@ -119,7 +119,7 @@ void contribute(void *data) //@ : thread_run
 {
     //@ open thread_run_pre(contribute)(data, _);
     struct session *session = data;
-    //@ open contribute_pre(session, ?box1, ?box2, ?thisBox, _, _, ?lockFrac);
+    //@ open contribute_pre(session, ?box1, ?box2, ?thisBox, _, _);
     struct lock *lock = session->lock;
     struct sum *sumObject = session->sum_object;
     free(session);
@@ -138,7 +138,7 @@ void contribute(void *data) //@ : thread_run
     sumObject->sum = sum + 1;
     //@ close sum(sumObject, box1, box2)();
     lock_release(lock);
-    //@ close thread_run_post(contribute)(session, contribute_info(box1, box2, thisBox, sumObject, lock, lockFrac));
+    //@ close thread_run_post(contribute)(session, contribute_info(box1, box2, thisBox, sumObject, lock));
 }
 
 int main()
@@ -175,7 +175,7 @@ int main()
     //@ close sum(sumObject, box1, box2)();
     //@ close create_lock_ghost_arg(sum(sumObject, box1, box2));
     struct lock *lock = create_lock();
-    //@ real lockFrac1 = lock_fractions_split(lock);
+    //@ lock_fractions_split(lock, 1/2);
     
     struct session *session1 = malloc(sizeof(struct session));
     if (session1 == 0) {
@@ -183,8 +183,8 @@ int main()
     }
     session1->sum_object = sumObject;
     session1->lock = lock;
-    //@ close contribute_pre(session1, box1, box2, box1, sumObject, lock, lockFrac1);
-    //@ close thread_run_pre(contribute)(session1, contribute_info(box1, box2, box1, sumObject, lock, lockFrac1));
+    //@ close contribute_pre(session1, box1, box2, box1, sumObject, lock);
+    //@ close thread_run_pre(contribute)(session1, contribute_info(box1, box2, box1, sumObject, lock));
     struct thread *thread1 = thread_start(contribute, session1);
     
     struct session *session2 = malloc(sizeof(struct session));
@@ -193,15 +193,15 @@ int main()
     }
     session2->sum_object = sumObject;
     session2->lock = lock;
-    //@ close contribute_pre(session2, box1, box2, box2, sumObject, lock, 1 - lockFrac1);
-    //@ close thread_run_pre(contribute)(session2, contribute_info(box1, box2, box2, sumObject, lock, 1 - lockFrac1));
+    //@ close contribute_pre(session2, box1, box2, box2, sumObject, lock);
+    //@ close thread_run_pre(contribute)(session2, contribute_info(box1, box2, box2, sumObject, lock));
     struct thread *thread2 = thread_start(contribute, session2);
     
     thread_join(thread1);
-    //@ open thread_run_post(contribute)(session1, contribute_info(box1, box2, box1, sumObject, lock, lockFrac1));
+    //@ open thread_run_post(contribute)(session1, contribute_info(box1, box2, box1, sumObject, lock));
     
     thread_join(thread2);
-    //@ open thread_run_post(contribute)(session2, contribute_info(box1, box2, box2, sumObject, lock, 1 - lockFrac1));
+    //@ open thread_run_post(contribute)(session2, contribute_info(box1, box2, box2, sumObject, lock));
     
     //@ lock_fractions_merge(lock);
     lock_dispose(lock);
@@ -230,6 +230,6 @@ int main()
     int sum = sumObject->sum;
     assert(sum == 2);
     free(sumObject);
-  
+
     return 0;
 }
