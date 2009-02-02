@@ -274,26 +274,14 @@ lemma void lseg2_to_lseg(struct node *first)
   }
 }
 
-lemma void field_next_fractions_merge(struct node *n);
-  requires [?f1] n->next |-> ?next1 &*& [?f2] n->next |-> ?next2;
-  ensures [f1 + f2] n->next |-> next1 &*& next2 == next1;
-
-lemma void field_value_fractions_merge(struct node *n);
-  requires [?f1] n->value |-> ?value1 &*& [?f2] n->value |-> ?value2;
-  ensures [f1 + f2] n->value |-> value1 &*& value2 == value1;
-
-lemma void malloc_block_node_fractions_merge(struct node *n);
-  requires [?f1] malloc_block_node(n) &*& [?f2] malloc_block_node(n);
-  ensures [f1 + f2] malloc_block_node(n);
-
 lemma void node_fractions_merge(struct node *n)
   requires [?f1] node(n, ?next1, ?value1) &*& [?f2] node(n, ?next2, ?value2);
   ensures [f1 + f2] node(n, next1, value1) &*& next2 == next1 &*& value2 == value1;
 {
   open node(n, next1, value1);
   open node(n, next2, value2);
-  field_next_fractions_merge(n);
-  field_value_fractions_merge(n);
+  node_next_fractions_merge(n);
+  node_value_fractions_merge(n);
   malloc_block_node_fractions_merge(n);
   close [f1 + f2] node(n, next1, value1);
 }
@@ -519,30 +507,26 @@ predicate llist_with_node(struct llist *list, intlist v0, struct node *n, intlis
 predicate iter(struct iter *i, real frac, struct llist *l, intlist v0, intlist v)
   requires i->current |-> ?n &*& [frac]llist_with_node(l, v0, n, v) &*& malloc_block_iter(i);
 
-lemma real llist_split_fraction(real frac, struct llist *l, intlist v);
-  requires [frac]llist(l, v);
-  ensures [result]llist(l, v) &*& [frac - result]llist(l, v);
-
 @*/
 
 struct iter *llist_create_iter(struct llist *l)
     //@ requires [?frac]llist(l, ?v);
-    //@ ensures [?frac1]llist(l, v) &*& iter(result, frac - frac1, l, v, v);
+    //@ ensures [frac/2]llist(l, v) &*& iter(result, frac/2, l, v, v);
 {
     struct iter *i = 0;
     struct node *f = 0;
-    //@ real frac2 = llist_split_fraction(frac, l, v);
+    //@ split_fraction llist(l, v) by 1/2;
     i = malloc(sizeof(struct iter));
     if (i == 0) {
       abort();
     }
-    //@ open [frac2]llist(l, v);
+    //@ open [frac/2]llist(l, v);
     f = l->first;
     i->current = f;
     //@ struct node *last = l->last;
-    //@ close [frac2]lseg2(f, f, last, nil);
-    //@ close [frac2]llist_with_node(l, v, f, v);
-    //@ close iter(i, frac2, l, v, v);
+    //@ close [frac/2]lseg2(f, f, last, nil);
+    //@ close [frac/2]llist_with_node(l, v, f, v);
+    //@ close iter(i, frac/2, l, v, v);
     return i;
 }
 
@@ -584,18 +568,6 @@ lemma void lseg2_lseg_append(struct node *n)
       close [frac]lseg(f, l, list_append(vs1, vs2));
   }
 }
-
-lemma void llist_first_fractions_merge(struct llist *l);
-  requires [?f1] l->first |-> ?v1 &*& [?f2] l->first |-> ?v2;
-  ensures [f1 + f2] l->first |-> v1 &*& v2 == v1;
-
-lemma void llist_last_fractions_merge(struct llist *l);
-  requires [?f1] l->last |-> ?v1 &*& [?f2] l->last |-> ?v2;
-  ensures [f1 + f2] l->last |-> v1 &*& v2 == v1;
-
-lemma void malloc_block_llist_fractions_merge(struct llist *l);
-  requires [?f1] malloc_block_llist(l) &*& [?f2] malloc_block_llist(l);
-  ensures [f1 + f2] malloc_block_llist(l);
 
 lemma void llist_fractions_merge(struct llist *l)
   requires [?f1]llist(l, ?v1) &*& [?f2]llist(l, ?v2);

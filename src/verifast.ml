@@ -561,6 +561,7 @@ and
   | WhileStmt of loc * expr * pred * stmt list (* while regel-conditie-lus invariant- lus body *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
   | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
+  | SplitFractionStmt of loc * string * pat list * expr option
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -717,6 +718,7 @@ let stmt_loc s =
   | WhileStmt (l, _, _, _) -> l
   | BlockStmt (l, ss) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
+  | SplitFractionStmt (l, _, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -732,7 +734,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"
 ]
 let c_keywords= ["struct";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
@@ -1023,6 +1025,9 @@ and
   (match e with
      CallExpr (_, g, es1, es2,_) -> Close (l, g, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
+| [< '(l, Kwd "split_fraction"); '(_, Ident p); pats = parse_patlist;
+     coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
+     '(_, Kwd ";") >] -> SplitFractionStmt (l, p, pats, coefopt)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
@@ -1898,7 +1903,7 @@ in
     match file_type path with
     Java-> flatmap (function (sn, (_,_,_,_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn])] 
             | _ -> []) classdeclmap
-    | _ -> flatmap (function (sn, (_, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 
+    | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l 0 
             [PtrType (StructType sn)])] | _ -> []) structmap 
     in
 
@@ -1910,8 +1915,8 @@ in
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (_, t,_)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) dummy_loc 0 [ObjType sn; t])
+             (fun (fn, (l, t,_)) ->
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [ObjType sn; t])
              )
              fds
       )
@@ -1923,8 +1928,8 @@ in
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (_, t)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) dummy_loc 0 [PtrType (StructType sn); t])
+             (fun (fn, (l, t)) ->
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [PtrType (StructType sn); t])
              )
              fds
       )
@@ -2626,7 +2631,9 @@ in
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
+  let real_zero = ctxt#mk_reallit 0 in
   let real_unit = ctxt#mk_reallit 1 in
+  let real_half = ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (Num.num_of_int 2)) in
   
   let min_int_big_int = big_int_of_string "-2147483648" in
   let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
@@ -3140,6 +3147,41 @@ in
   in
   
   let funcmap =
+    List.map
+      (fun (sn, (p, (l, _, _, g_symb))) ->
+         let pref = new predref p in
+         pref#set_domain [PtrType (StructType sn)];
+         (p ^ "_fractions_merge",
+          (l, Lemma, None, [("block", PtrType (StructType sn))], [("block", Var (l, "block"))],
+           Sep (l,
+             CoefPred (l, VarPat "f1", CallPred (l, pref, [], [LitPat (Var (l, "block"))])),
+             CoefPred (l, VarPat "f2", CallPred (l, pref, [], [LitPat (Var (l, "block"))]))),
+           CoefPred (l, LitPat (Operation (l, Add, [Var (l, "f1"); Var (l, "f2")], ref (Some [RealType; RealType]))),
+             CallPred (l, pref, [], [LitPat (Var (l, "block"))])),
+           Some None, Static, Public)))
+      malloc_block_pred_map
+    @
+    List.map
+      (fun ((sn, fn), (p, (l, _, [t1; t2], g_symb))) ->
+         let pref = new predref p in
+         pref#set_domain [t1; t2];
+         (p ^ "_fractions_merge",
+          (l, Lemma, None, [(sn, t1)], [(sn, Var (l, sn))],
+           Sep (l,
+             CoefPred (l, VarPat "f1", CallPred (l, pref, [], [LitPat (Var (l, sn)); VarPat "#v1"])),
+             CoefPred (l, VarPat "f2", CallPred (l, pref, [], [LitPat (Var (l, sn)); VarPat "#v2"]))),
+           Sep (l,
+             CoefPred (l, LitPat (Operation (l, Add, [Var (l, "f1"); Var (l, "f2")], ref (Some [RealType; RealType]))),
+               CallPred (l, pref, [], [LitPat (Var (l, sn)); LitPat (Var (l, "#v1"))])),
+             ExprPred (l, Operation (l, Eq, [Var (l, "#v1"); Var (l, "#v2")], ref (Some [t2; t2])))),
+           Some None, Static, Public)))
+      field_pred_map
+  in
+  
+  let lems0 = List.map (fun (g, _) -> g) funcmap in
+  
+  let funcmap =
+    funcmap @
     flatmap
       (fun (bcn, (l, boxpmap, amap, hpmap)) ->
          let cenv = List.map (fun (x, t) -> (x, Var (l, x))) boxpmap in
@@ -3771,6 +3813,29 @@ in
           )
         )
       )
+    | SplitFractionStmt (l, p, pats, coefopt) ->
+      let (g_symb, pts) =
+        match try_assoc p predfammap with
+          None -> static_error l "No such predicate."
+        | Some (_, arity, pts, g_symb) -> ((g_symb, true), pts)
+      in
+      let splitcoef =
+        match coefopt with
+          None -> real_half
+        | Some e ->
+          check_expr_t tenv e RealType;
+          let coef = ev e in
+          assert_term (ctxt#mk_real_lt real_zero coef) h env l "Split coefficient must be positive.";
+          assert_term (ctxt#mk_real_lt coef real_unit) h env l "Split coefficient must be less than one.";
+          coef
+      in
+      let tenv' = check_pats l tenv pts pats in
+      assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef ts chunk_size ghostenv env ->
+        let coef1 = ctxt#mk_real_mul splitcoef coef in
+        let coef2 = ctxt#mk_real_mul (ctxt#mk_real_sub real_unit splitcoef) coef in
+        let h = (g_symb, coef1, ts, None)::(g_symb, coef2, ts, None)::h in
+        tcont sizemap tenv' ghostenv h env
+      )
     | Close (l, g, pats0, pats, coef) ->
       let (ps, bs0, g_symb, p, ts0) =
         match try_assoc g predfammap with
@@ -4156,7 +4221,7 @@ in
       verify_funcs (bcn::boxes) lems ds
     | _::ds -> verify_funcs boxes lems ds
   in
-  verify_funcs [] [] ds
+  verify_funcs [] lems0 ds
   
   in
   
