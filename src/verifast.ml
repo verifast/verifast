@@ -820,9 +820,9 @@ and
 | [<v=parse_interface_visibility;m=parse_interface_meth v cn;mr=parse_interface_members cn>] -> m::mr
 and
   parse_interface_meth vis cn= parser
-[<'(l,Ident t);'(_,Ident f);'(_, Kwd "(");ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
+[<'(l,Ident t);'(_,Ident f);ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
        -> MethSpec(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis)
-| [< t=parse_type;'(l,Ident f);'(_, Kwd "(");ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
+| [< t=parse_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
        -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
        MethSpec(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis)
 and
@@ -837,21 +837,21 @@ and
 | [<v=parse_visibility;m=parse_java_member v cn;mr=parse_java_members cn>] -> m::mr
 and
   parse_java_member vis cn= parser
-  [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);'(_, Kwd "(");
+  [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
     ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,vis))
 | [<'(l,Ident t);e=parser
       [<'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
-       |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+       |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
        -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
-        |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+        |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
        -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
        ConsMember(Cons(l,ps,co,Some stms,vis))
         >] -> e
 | [< t=parse_type;'(l,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance,vis))
-       |[< '(_, Kwd "(");ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
+       |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
        -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
        MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
@@ -862,7 +862,7 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";"); c = parse_contract l >] ->
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); ps = parse_paramlist; '(_, Kwd ";"); c = parse_contract l >] ->
   [FuncTypeDecl (l, rt, g, ps, c)]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
@@ -879,17 +879,17 @@ and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
-  | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = parse_paramlist;
+  | [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
      body = (parser [< '(_, Kwd "requires"); p = parse_pred >] -> Some p | [< >] -> None); '(_, Kwd ";");
   >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
-  | [< '(l, Kwd "predicate_family"); '(_, Ident g); '(_, Kwd "("); is = parse_paramlist; '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";") >]
+  | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; ps = parse_paramlist; '(_, Kwd ";") >]
   -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps)]
-  | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; '(_, Kwd "("); ps = parse_paramlist;
+  | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
      '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
-  | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); '(_, Kwd "("); ps1 = parse_paramlist; '(_, Kwd "("); ps2 = parse_paramlist;
+  | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
      '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
-  | [< '(l, Kwd "box_class"); '(_, Ident bcn); '(_, Kwd "("); ps = parse_paramlist;
+  | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, ads, hpds)]
 and
   parse_action_decls = parser
@@ -897,7 +897,7 @@ and
 | [< >] -> []
 and
   parse_action_decl = parser
-  [< '(l, Kwd "action"); '(_, Ident an); '(_, Kwd "("); ps = parse_paramlist; '(_, Kwd ";");
+  [< '(l, Kwd "action"); '(_, Ident an); ps = parse_paramlist; '(_, Kwd ";");
      '(_, Kwd "requires"); pre = parse_expr; '(_, Kwd ";");
      '(_, Kwd "ensures"); post = parse_expr; '(_, Kwd ";") >] -> ActionDecl (l, an, ps, pre, post)
 and
@@ -906,7 +906,7 @@ and
 | [< >] -> []
 and
   parse_handle_pred_decl = parser
-  [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); '(_, Kwd "("); ps = parse_paramlist;
+  [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); ps = parse_paramlist;
      '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_expr; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
      -> HandlePredDecl (l, hpn, ps, inv, pbcs)
 and
@@ -919,7 +919,7 @@ and
      ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
 and
   parse_func_rest k t = parser
-  [< '(l, Ident g); '(_, Kwd "("); ps = parse_paramlist; f =
+  [< '(l, Ident g); ps = parse_paramlist; f =
     (parser
        [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, co, None,Static,Public)
      | [< co = opt parse_spec; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss,Static,Public)
@@ -972,16 +972,10 @@ and
 | [<'(l, Kwd "[");'(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
 | [< >] -> t0
 and
-  parse_paramlist = parser
-  [< '(_, Kwd ")") >] -> []
-| [< p = parse_param; ps = parse_more_params >] -> p::ps
+  parse_paramlist = parser [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
 and
   parse_param = parser
   [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
-and
-  parse_more_params = parser
-  [< '(_, Kwd ","); p = parse_param; ps = parse_more_params >] -> p::ps
-| [< '(_, Kwd ")") >] -> []
 and
   parse_spec = parser
   [< '((sp1, _), Kwd "/*@"); spec = parser
