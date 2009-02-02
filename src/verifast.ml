@@ -496,10 +496,20 @@ class fieldref (name: string) =
 class predref (name: string) =
   object
     val mutable domain: type_ list option = None
+    val mutable inputParamCount: int option option = None
     method name = name
     method domain = match domain with None -> assert false | Some d -> d
+    method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
     method set_domain d = domain <- Some d
+    method set_inputParamCount c = inputParamCount <- Some c
   end
+
+type
+  ident_scope =
+    LocalVar
+  | PureCtor
+  | FuncName
+  | PredFamName
 
 type
   operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div
@@ -508,7 +518,7 @@ and
     True of loc
   | False of loc
   | Null of loc
-  | Var of loc * string
+  | Var of loc * string * ident_scope option ref
   | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | StringLit of loc * string (* string literal *)
@@ -562,6 +572,7 @@ and
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
   | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
   | SplitFractionStmt of loc * string * pat list * expr option
+  | MergeFractionsStmt of loc * string * pat list
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -602,7 +613,7 @@ and
   | Inductive of loc * string * ctor list (* inductief data type regel-naam-lijst van constructors*)
   | Class of loc * string * meth list * field list *cons list* string * string list(* laatste 2 strings zijn naam v superklasse en lijst van namen van interfaces*)
   | Interface of loc * string * meth_spec list
-  | PredFamilyDecl of loc * string * int * type_expr list 
+  | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
   | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
@@ -677,7 +688,7 @@ let expr_loc e =
     True l -> l
   | False l -> l
   | Null l -> l
-  | Var (l, x) -> l
+  | Var (l, x, _) -> l
   | IntLit (l, n, t) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
@@ -719,6 +730,7 @@ let stmt_loc s =
   | BlockStmt (l, ss) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _) -> l
+  | MergeFractionsStmt (l, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -734,7 +746,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif";
@@ -846,7 +858,7 @@ and
        -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
         |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this")))] in
+       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this",ref (Some LocalVar))))] in
        ConsMember(Cons(l,ps,co,Some stms,vis))
         >] -> e
 | [< t=parse_type;'(l,Ident f);r=parser
@@ -879,11 +891,13 @@ and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
-  | [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
+  | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = rep_comma parse_param;
+     (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None));
+     '(_, Kwd ")");
      body = (parser [< '(_, Kwd "requires"); p = parse_pred >] -> Some p | [< >] -> None); '(_, Kwd ";");
-  >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
+  >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps, inputParamCount)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; ps = parse_paramlist; '(_, Kwd ";") >]
-  -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps)]
+  -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps, None)]
   | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
      '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
@@ -1022,6 +1036,7 @@ and
 | [< '(l, Kwd "split_fraction"); '(_, Ident p); pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, pats, coefopt)
+| [< '(l, Kwd "merge_fractions"); '(_, Ident p); pats = parse_patlist; '(_, Kwd ";") >] -> MergeFractionsStmt (l, p, pats)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
@@ -1039,13 +1054,13 @@ and
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
-     | Var (lx, x) -> Assign (l, x, rhs)
+     | Var (lx, x, _) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
   | [<'(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >]->
     (match e with
-     | Var (lx, t) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
+     | Var (lx, t, _) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
      | _ -> raise (ParseException (expr_loc e, "Parse error blabla."))
     )
   >] -> s
@@ -1134,11 +1149,11 @@ and
     | [<'(l, Kwd ".");r=parser
         [<'(l, Kwd "class")>]-> ClassLit(l,x)
       | [<'(l, Ident f);e=parser
-          [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x))::args0,Instance)
-         |[<>] -> Read (l, Var(l,x), new fieldref f)
+          [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x,ref None))::args0,Instance)
+         |[<>] -> Read (l, Var(l,x, ref None), new fieldref f)
        >]->e 
       >]-> r
-    | [< >] -> Var (l, x)
+    | [< >] -> Var (l, x, ref None)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
@@ -1223,8 +1238,19 @@ in
   with Stream.Error msg -> raise (ParseException (loc(), msg))
 end
 
+let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
 let flatmap f xs = List.concat (List.map f xs)
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
+let take_drop n xs =
+  let rec iter left right k =
+    if k = 0 then
+      (left, right)
+    else
+      match right with
+        [] -> (left, right)
+      | x::right -> iter (x::left) right (k - 1)
+  in
+  iter [] xs n
 let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
 let rec try_assoc x xys =
@@ -1617,6 +1643,7 @@ in
     | (ObjType "null", ObjType _) -> ()
     | (PtrType Void, PtrType _) -> ()
     | (Char, IntType) -> ()
+    | (ObjType _, ObjType "Object") -> ()
     | (ObjType x, ObjType y) when x=y||(checkinter y x)||(checksuper x y)->() 
     | (PredType ts, PredType ts0) ->
       begin
@@ -1682,7 +1709,7 @@ in
             Some [SwitchStmt (ls, e, cs)] -> (
             let ctorcount = List.length cs in
             match e with
-              Var (l, x) -> (
+              Var (l, x, _) -> (
               match try_assoc_i x pmap with
                 None -> static_error l "Fixpoint function must switch on a parameter."
               | Some (index, InductiveType i) -> (
@@ -1740,14 +1767,14 @@ in
                             True l -> boolt
                           | False l -> boolt
                           | Null l-> (match rt with ObjType id -> ObjType id ) (* null is allowed for every object type*)
-                          | Var (l, x) -> (
+                          | Var (l, x, scope) -> (
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
-                                  Some (_, t, [], _) -> t
+                                  Some (_, t, [], _) -> scope := Some PureCtor; t
                                 | _ -> static_error l "No such variable or constructor."
                               )
-                            | Some t -> t
+                            | Some t -> scope := Some LocalVar; t
                             )
                           | Operation (l, (Eq | Neq), [e1; e2], ts) ->
                             ignore (promote_numeric e1 e2 ts);
@@ -1798,7 +1825,7 @@ in
                                   in
                                   let _ =
                                     match flatmap (function ((p, t), LitPat e) -> if p = x then [e] else []) pts with
-                                      [Var (l, x)] when List.mem_assoc x xmap -> ()
+                                      [Var (l, x, _)] when List.mem_assoc x xmap -> ()
                                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
                                   in
                                   rt
@@ -1891,14 +1918,14 @@ in
   
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
   
-  let mk_predfam p l arity ts = (p, (l, arity, ts, get_unique_var_symb p (PredType ts))) in
+  let mk_predfam p l arity ts inputParamCount = (p, (l, arity, ts, get_unique_var_symb p (PredType ts), inputParamCount)) in
   
   let malloc_block_pred_map = 
     match file_type path with
-    Java-> flatmap (function (sn, (_,_,_,_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn])] 
+    Java-> flatmap (function (sn, (_,_,_,_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn] (Some 1))] 
             | _ -> []) classdeclmap
     | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l 0 
-            [PtrType (StructType sn)])] | _ -> []) structmap 
+            [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap 
     in
 
   let field_pred_map = (* dient om dingen te controleren bij read/write controle v velden*)
@@ -1910,7 +1937,7 @@ in
          | Some fds ->
            List.map
              (fun (fn, (l, t,_)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [ObjType sn; t])
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [ObjType sn; t] (Some 1))
              )
              fds
       )
@@ -1923,7 +1950,7 @@ in
          | Some fds ->
            List.map
              (fun (fn, (l, t)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [PtrType (StructType sn); t])
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [PtrType (StructType sn); t] (Some 1))
              )
              fds
       )
@@ -1933,15 +1960,15 @@ in
   let predfammap = 
     let rec iter pm ds =
       match ds with
-        PredFamilyDecl (l, p, arity, tes)::ds ->
+        PredFamilyDecl (l, p, arity, tes, inputParamCount)::ds ->
         let ts = List.map check_pure_type tes in
         begin
           match try_assoc p pm with
-            Some (l0, arity0, ts0, symb0) ->
-            if arity <> arity0 || ts <> ts0 then static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
+            Some (l0, arity0, ts0, symb0, inputParamCount0) ->
+            if arity <> arity0 || ts <> ts0 || inputParamCount <> inputParamCount0 then static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
             iter pm ds
           | None ->
-            iter (mk_predfam p l arity ts::pm) ds
+            iter (mk_predfam p l arity ts inputParamCount::pm) ds
         end
       | _::ds -> iter pm ds
       | [] -> List.rev pm
@@ -1970,8 +1997,8 @@ in
           iter [] ps
         in
         let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
-        let pfm = mk_predfam bcn l 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap)::pfm in
-        let pfm = mk_predfam default_hpn l 0 (HandleIdType::BoxIdType::[])::pfm in
+        let pfm = mk_predfam bcn l 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
+        let pfm = mk_predfam default_hpn l 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
         let amap =
           let rec iter amap ads =
             match ads with
@@ -2013,7 +2040,7 @@ in
                 in
                 iter [] ps
               in
-              iter (mk_predfam hpn l 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
+              iter (mk_predfam hpn l 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
           in
           iter pfm [] hpds
         in
@@ -2091,10 +2118,10 @@ in
     let rec iter pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, is, xs, body)::ds ->
-        let (arity, ps) =
+        let (arity, ps, inputParamCount) =
           match try_assoc p predfammap with
             None -> static_error l "No such predicate family."
-          | Some (_, arity, ps, _) -> (arity, ps)
+          | Some (_, arity, ps, _, inputParamCount) -> (arity, ps, inputParamCount)
         in
         if List.length is <> arity then static_error l "Incorrect number of indexes.";
         let pxs =
@@ -2110,7 +2137,7 @@ in
         let _ = if List.mem_assoc pfns pm then static_error l "Duplicate predicate family instance." in
         let rec iter2 xm pxs =
           match pxs with
-            [] -> iter ((pfns, (l, List.rev xm, body))::pm) ds
+            [] -> iter ((pfns, (l, List.rev xm, inputParamCount, body))::pm) ds
           | (t0, (te, x))::xs ->
             let t = check_pure_type te in 
             let _ =
@@ -2145,36 +2172,37 @@ in
       True l -> boolt
     | False l -> boolt
     | Null l -> ObjType "Object"
-    | Var (l, x) ->
+    | Var (l, x, scope) ->
       begin
       match try_assoc x tenv with
         None ->
         begin
           match try_assoc x purefuncmap with
-            Some (_, t, [], _) -> t
+            Some (_, t, [], _) -> scope := Some PureCtor; t
           | _ ->
             begin
               if List.mem x funcnames then
                 match file_type path with
                 Java -> static_error l "In java methods can't be used as pointers"
-                | _ -> PtrType Void
+                | _ -> scope := Some FuncName; PtrType Void
               else
                 begin
                   match try_assoc x predfammap with
-                    Some (_, arity, ts, _) ->
+                    Some (_, arity, ts, _, _) ->
                     if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
+                    scope := Some PredFamName;
                     PredType ts
                   | None ->
                     static_error l "No such variable, constructor, regular function, or predicate."
                 end
             end
         end
-      | Some t -> t
+      | Some t -> scope := Some LocalVar; t
       end
     | PredNameExpr (l, g) ->
       begin
         match try_assoc g predfammap with
-          Some (_, arity, ts, _) ->
+          Some (_, arity, ts, _, _) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
           PredType ts
         | None -> static_error l "No such predicate."
@@ -2231,7 +2259,7 @@ in
         )
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
-                   [LitPat target] -> ObjType "Class"
+                   [LitPat target] -> checkt target (ObjType "Object"); ObjType "Class"
                 else static_error l ("No such pure function: "^g')
       )
     | IfExpr (l, e1, e2, e3) ->
@@ -2355,14 +2383,14 @@ in
       let tenv' = check_pat l tenv t v in
       cont tenv'
     | CallPred (l, p, ps0, ps) ->
-      let (arity, xs) =
+      let (arity, xs, inputParamCount) =
         match try_assoc p#name predfammap with
-          Some (_, arity, xs, _) ->(arity, xs)
+          Some (_, arity, xs, _, inputParamCount) -> (arity, xs, inputParamCount)
         | None ->
           begin
             match try_assoc p#name tenv with
               None -> static_error l "No such predicate."
-            | Some (PredType ts) -> (0, ts)
+            | Some (PredType ts) -> (0, ts, None)
             | Some _ -> static_error l "Variable is not of predicate type."
           end
       in
@@ -2378,7 +2406,7 @@ in
         | Some bs ->
           let rec iter tenv bs =
             match bs with
-              [] -> p#set_domain ts; cont tenv
+              [] -> p#set_domain ts; p#set_inputParamCount inputParamCount; cont tenv
             | (t, p)::bs ->
               let tenv = check_pat l tenv t p in iter tenv bs
           in
@@ -2488,7 +2516,7 @@ in
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                          check_pred postmap post (fun _ -> ())
                      );
-                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
                in
                iter ((n, (lm,check_t t, xmap, cenv0, pre, post,fb,v))::mmap) meths
              )
@@ -2561,7 +2589,7 @@ in
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                          check_pred postmap post (fun _ -> ())
                      );
-                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
                in
                iter ((n, (lm,check_t t, xmap, cenv0, pre, post, ss,fb,v))::mmap) meths
             )
@@ -2591,11 +2619,136 @@ in
       classmethmap
   in
   
+  let rec vars_used e =
+    match e with
+      True l -> []
+    | False l -> []
+    | Null l -> []
+    | Var (l, x, scope) -> begin match !scope with Some LocalVar -> [x] | Some _ -> [] end
+    | Operation (l, op, es, _) ->
+      flatmap vars_used es
+    | IntLit (l, _, _) -> []
+    | StringLit (_, _) -> []
+    | ClassLit (l, _) -> []
+    | Read (l, e, f) -> assert false
+    | CallExpr (l, g, [], pats, _) ->
+      flatmap (fun (LitPat e) -> vars_used e) pats
+    | IfExpr (l, e, e1, e2) -> vars_used e @ vars_used e1 @ vars_used e2
+    | SwitchExpr (l, e, cs, _) ->
+      vars_used e @
+      flatmap
+        (fun (SwitchExprClause (l, c, xs, e)) ->
+         let xs' = vars_used e in
+         List.filter (fun x -> not (List.mem x xs)) xs'
+        )
+        cs
+    | PredNameExpr (l, _) -> []
+    | FuncNameExpr _ -> []
+    | CastExpr (_, _, e) -> vars_used e
+    | SizeofExpr (_, _) -> []
+  in
+  
+  let assert_expr_fixed fixed e =
+    let used = vars_used e in
+    let nonfixed = List.filter (fun x -> not (List.mem x fixed)) used in
+    if nonfixed <> [] then
+      let xs = String.concat ", " (List.map (fun x -> "'" ^ x ^ "'") nonfixed) in
+      static_error (expr_loc e) ("Preciseness check failure: non-fixed variable(s) " ^ xs ^ " used in input expression.")
+  in
+  
+  let fixed_pat_fixed_vars pat =
+    match pat with
+      LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> [x]
+    | LitPat _ -> []
+    | VarPat x -> [x]
+    | DummyPat -> []
+  in
+  
+  let assume_pat_fixed fixed pat =
+    fixed_pat_fixed_vars pat @ fixed
+  in
+  
+  let assert_pats_fixed l fixed pats =
+    List.iter (function (LitPat e) -> assert_expr_fixed fixed e | _ -> static_error l "Non-fixed pattern used in input position.") pats
+  in
+  
+  let assume_pats_fixed fixed pats =
+    flatmap fixed_pat_fixed_vars pats @ fixed
+  in
+  
+  let expr_is_fixed fixed e =
+    let used = vars_used e in
+    List.for_all (fun x -> List.mem x fixed) used
+  in
+  
+  let rec check_pred_precise fixed p =
+    match p with
+      Access (l, et, f, pv) ->
+      assert_expr_fixed fixed et;
+      assume_pat_fixed fixed pv
+    | CallPred (l, g, pats0, pats) ->
+      begin
+        match g#inputParamCount with
+          None -> static_error l "Preciseness check failure: callee is not precise."
+        | Some n ->
+          let (inpats, outpats) = take_drop n pats in
+          let inpats = pats0 @ inpats in
+          assert_pats_fixed l fixed inpats;
+          assume_pats_fixed fixed outpats
+      end
+    | ExprPred (l, Operation (_, Eq, [Var (_, x, scope); e2], _)) when !scope = Some LocalVar ->
+      if not (List.mem x fixed) && expr_is_fixed fixed e2 then
+        x::fixed
+      else
+        fixed
+    | ExprPred (_, _) -> fixed
+    | Sep (l, p1, p2) ->
+      let fixed = check_pred_precise fixed p1 in
+      check_pred_precise fixed p2
+    | IfPred (l, e, p1, p2) ->
+      assert_expr_fixed fixed e;
+      let fixed1 = check_pred_precise fixed p1 in
+      let fixed2 = check_pred_precise fixed p2 in
+      intersect fixed1 fixed2
+    | SwitchPred (l, e, cs) ->
+      assert_expr_fixed fixed e;
+      let rec iter fixed' cs =
+        match cs with
+          [] -> fixed'
+        | SwitchPredClause (l, c, xs, p)::cs ->
+          let fixed = check_pred_precise (xs@fixed) p in
+          iter (intersect fixed' fixed) cs
+      in
+      iter fixed cs
+    | EmpPred l -> fixed
+    | CoefPred (l, coefpat, p) ->
+      begin
+        match coefpat with
+          LitPat e -> assert_expr_fixed fixed e
+        | VarPat x -> static_error l "Precision check failure: variable patterns not supported as coefficients."
+        | DummyPat -> ()
+      end;
+      check_pred_precise fixed p
+  in
+  
   let _ =
     List.iter
       (
         function
-          (pfns, (l, xs, body)) -> check_pred xs body (fun _ -> ())
+          (pfns, (l, xs, inputParamCount, body)) ->
+          check_pred xs body (fun _ -> ());
+          begin
+            match inputParamCount with
+              None -> ()
+            | Some n ->
+              let (inps, outps) = take_drop n (List.map (fun (x, t) -> x) xs) in
+              let fixed = check_pred_precise inps body in
+              List.iter
+                (fun x ->
+                 if not (List.mem x fixed) then
+                   static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'."))
+                outps
+          end
         | _ -> ()
       )
       predinstmap
@@ -2613,7 +2766,7 @@ in
   let check_ghost ghostenv l e =
     let rec iter e =
       match e with
-        Var (l, x) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
+        Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
       | Operation (l, _, es, _) -> List.iter iter es
       | CallExpr (l, _, [], pats,_) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
       | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
@@ -2652,28 +2805,17 @@ in
       True l -> ctxt#mk_true
     | False l -> ctxt#mk_false
     | Null l -> ctxt#mk_intlit 0
-    | Var (l, x) ->
-      begin (* Note: this lookup sequence must match exactly the one in check_expr *)
-        match try_assoc x env with
-          None ->
-          begin
-            match try_assoc x purefuncmap with
-              Some (lg, t, [], s) -> ctxt#mk_app s []
-            | _ ->
-              begin
-                match try_assoc x funcnameterms with
-                  Some t -> t
-                | None ->
-                  begin
-                    match try_assoc x predfammap with
-                      Some (_, _, _, symb) -> symb
-                    | None -> static_error l "No such variable, constructor, regular function, or predicate."
-                  end
-              end
-          end
-        | Some t -> t
+    | Var (l, x, scope) ->
+      begin
+        if !scope = None then print_endline (string_of_loc l);
+        let (Some scope) = !scope in
+        match scope with
+          LocalVar -> List.assoc x env
+        | PureCtor -> let (lg, t, [], s) = List.assoc x purefuncmap in ctxt#mk_app s []
+        | FuncName -> List.assoc x funcnameterms
+        | PredFamName -> let (_, _, _, symb, _) = List.assoc x predfammap in symb
       end
-    | PredNameExpr (l, g) -> let (_, _, _, symb) = List.assoc g predfammap in symb
+    | PredNameExpr (l, g) -> let (_, _, _, symb, _) = List.assoc g predfammap in symb
     | CastExpr (l, te, e) ->
       let t = check_pure_type te in
       begin
@@ -2788,7 +2930,7 @@ in
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x), cs)],Static,Public) ->
+     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x, _), cs)],Static,Public) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -2903,7 +3045,7 @@ in
   in
   
   let assume_field h0 f tp tv tcoef cont =
-    let (_, (_, _, _, symb)) = List.assoc (f#parent, f#name) field_pred_map in
+    let (_, (_, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     let rec iter h =
       match h with
         [] -> cont (((symb, true), tcoef, [tp; tv], None)::h0)
@@ -2927,7 +3069,7 @@ in
     | CallPred (l, g, pats0, pats) ->
       let g_symb =
         match try_assoc g#name predfammap with
-          Some (_, _, _, symb) -> (symb, true)
+          Some (_, _, _, symb, _) -> (symb, true)
         | None -> (List.assoc g#name env, false)
       in
       evalpats ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts, size_first)::h) ghostenv env)
@@ -2994,7 +3136,7 @@ in
   in
   
   let read_field h env l t f =
-    let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
+    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     let rec iter h =
       match h with
         [] -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
@@ -3034,13 +3176,13 @@ in
     with_context_helper (fun _ ->
     let ev = eval None env in
     let access l coefpat e f rhs =
-      let (_, (_, _, _, symb)) = List.assoc (f#parent, f#name) field_pred_map in
+      let (_, (_, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
       assert_chunk h ghostenv env l (symb, true) coef coefpat [LitPat e; rhs] (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
     let callpred l coefpat g pats0 pats =
       let g_symb =
         match try_assoc g#name predfammap with
-          Some (_, _, _, symb) -> (symb, true)
+          Some (_, _, _, symb, _) -> (symb, true)
         | None -> (List.assoc g#name env, false)
       in
       assert_chunk h ghostenv env l g_symb coef coefpat (pats0 @ pats) (fun h coef ts size ghostenv env -> cont h ghostenv env size)
@@ -3107,8 +3249,8 @@ in
   in
 
   let get_field h t f l cont =
-    let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
-    assert_chunk h [] [("x", t)] l (f_symb, true) real_unit DummyPat [LitPat (Var (dummy_loc, "x")); VarPat "y"] (fun h coef ts size ghostenv env ->
+    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+    assert_chunk h [] [("x", t)] l (f_symb, true) real_unit DummyPat [LitPat (Var (dummy_loc, "x", ref (Some LocalVar))); VarPat "y"] (fun h coef ts size ghostenv env ->
       cont h coef (lookup env "y"))
   in
   
@@ -3141,53 +3283,18 @@ in
   in
   
   let funcmap =
-    List.map
-      (fun (sn, (p, (l, _, _, g_symb))) ->
-         let pref = new predref p in
-         pref#set_domain [PtrType (StructType sn)];
-         (p ^ "_fractions_merge",
-          (l, Lemma, None, [("block", PtrType (StructType sn))], [("block", Var (l, "block"))],
-           Sep (l,
-             CoefPred (l, VarPat "f1", CallPred (l, pref, [], [LitPat (Var (l, "block"))])),
-             CoefPred (l, VarPat "f2", CallPred (l, pref, [], [LitPat (Var (l, "block"))]))),
-           CoefPred (l, LitPat (Operation (l, Add, [Var (l, "f1"); Var (l, "f2")], ref (Some [RealType; RealType]))),
-             CallPred (l, pref, [], [LitPat (Var (l, "block"))])),
-           Some None, Static, Public)))
-      malloc_block_pred_map
-    @
-    List.map
-      (fun ((sn, fn), (p, (l, _, [t1; t2], g_symb))) ->
-         let pref = new predref p in
-         pref#set_domain [t1; t2];
-         (p ^ "_fractions_merge",
-          (l, Lemma, None, [(sn, t1)], [(sn, Var (l, sn))],
-           Sep (l,
-             CoefPred (l, VarPat "f1", CallPred (l, pref, [], [LitPat (Var (l, sn)); VarPat "#v1"])),
-             CoefPred (l, VarPat "f2", CallPred (l, pref, [], [LitPat (Var (l, sn)); VarPat "#v2"]))),
-           Sep (l,
-             CoefPred (l, LitPat (Operation (l, Add, [Var (l, "f1"); Var (l, "f2")], ref (Some [RealType; RealType]))),
-               CallPred (l, pref, [], [LitPat (Var (l, sn)); LitPat (Var (l, "#v1"))])),
-             ExprPred (l, Operation (l, Eq, [Var (l, "#v1"); Var (l, "#v2")], ref (Some [t2; t2])))),
-           Some None, Static, Public)))
-      field_pred_map
-  in
-  
-  let lems0 = List.map (fun (g, _) -> g) funcmap in
-  
-  let funcmap =
-    funcmap @
     flatmap
       (fun (bcn, (l, boxpmap, amap, hpmap)) ->
-         let cenv = List.map (fun (x, t) -> (x, Var (l, x))) boxpmap in
+         let cenv = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) boxpmap in
          let bcpred = new predref bcn in
          bcpred#set_domain (BoxIdType::List.map (fun (x, t) -> t) boxpmap);
          if List.mem_assoc "result" boxpmap then static_error l "Name of box class parameter cannot be 'result'.";
-         let post = CallPred (l, bcpred, [], LitPat (Var (l, "result"))::List.map (fun (x, t) -> LitPat (Var (l, x))) boxpmap) in
+         let post = CallPred (l, bcpred, [], LitPat (Var (l, "result", ref (Some LocalVar)))::List.map (fun (x, t) -> LitPat (Var (l, x, ref (Some LocalVar)))) boxpmap) in
          let hpred = new predref (bcn ^ "_handle") in
          hpred#set_domain [HandleIdType; BoxIdType];
          [("create_" ^ bcn, (l, Lemma, Some BoxIdType, boxpmap, cenv, EmpPred l, post, Some None, Static, Public));
-          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], [("boxId", Var (l, "boxId"))], EmpPred l,
-             CallPred (l, hpred, [], [LitPat (Var (l, "result")); LitPat (Var (l, "boxId"))]), Some None, Static, Public))]
+          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], [("boxId", Var (l, "boxId", ref (Some LocalVar)))], EmpPred l,
+             CallPred (l, hpred, [], [LitPat (Var (l, "result", ref (Some LocalVar))); LitPat (Var (l, "boxId", ref (Some LocalVar)))]), Some None, Static, Public))]
       )
       boxmap
   in
@@ -3217,7 +3324,7 @@ in
               let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
               check_pred postmap post (fun _ -> ())
             );
-            (List.map (fun (x, t) -> (x, Var (dummy_loc, x))) xmap, pre, post)
+            (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
           | Some (FuncTypeSpec ftn) ->
             begin
               match try_assoc ftn functypemap with
@@ -3232,7 +3339,7 @@ in
                       List.map
                         (fun ((x, t), (x0, t0)) ->
                          if t <> t0 then static_error l ("Type of parameter '" ^ x ^ "' does not match type of function type parameter '" ^ x0 ^ "'.");
-                         (x0, Var (dummy_loc, x))
+                         (x0, Var (dummy_loc, x, ref (Some LocalVar)))
                         )
                         bs
                       @ [("this", FuncNameExpr fn)]
@@ -3301,13 +3408,13 @@ in
     iter funcmap [] ds
   in
   
-  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb))) -> symb) field_pred_map in
+  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb, _))) -> symb) field_pred_map in
   
   let check_leaks h env l msg =
     match file_type path with
     Java -> ()
-    | _ -> let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
-    let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+    | _ -> let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+    let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
     let (stringlitchunks, otherchunks) =
       let rec iter stringlitchunks otherchunks h =
         match h with
@@ -3341,8 +3448,8 @@ in
     match e with
       StringLit (l, s)->
         if(file_type path <> Java) then
-          let (_, _, _, chars_symb) = List.assoc "chars" predfammap in
-          let (_, _, _, string_literal_symb) = List.assoc "string_literal" predfammap in
+          let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+          let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
           let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
           let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
           let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
@@ -3474,10 +3581,10 @@ in
             else ("",Static,pats)
             )
            else(
-             if (match pats with LitPat(Var(_,cn))::_->(List.mem_assoc cn classmap) |_->false)
-               then match pats with LitPat(Var(_,cn))::rest->(cn,Static,rest)
+             if (match pats with LitPat(Var(_,cn,_))::_->(List.mem_assoc cn classmap) |_->false)
+               then match pats with LitPat(Var(_,cn,_))::rest->(cn,Static,rest)
              else
-               match List.hd pats with LitPat (Var(_,x)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) ObjType(class_name)->(class_name,Instance,pats))
+               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) ObjType(class_name)->(class_name,Instance,pats))
             )
            )
         in
@@ -3538,7 +3645,7 @@ in
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            let _ = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) in
+            check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx;
             let _ = check_assign l x in
             let ts = List.map (function (LitPat e) -> ev e) pats in
             cont h (update env x (ctxt#mk_app gs ts))
@@ -3584,7 +3691,7 @@ in
                  let rec iter h fds =
                    match fds with
                      [] ->
-                     let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+                     let (_, (_, _, _, malloc_block_symb, _)) = List.assoc tn malloc_block_pred_map in
                      cont (h @ [((malloc_block_symb, true), real_unit, [result], None)]) (update env x result)
                    | (f, (lf, t))::fds ->
                      let fref = new fieldref f in
@@ -3595,7 +3702,7 @@ in
             )
         | _ -> call_stmt l (Some x) "malloc" args Static
       end
-    | CallStmt (l, "assume_is_int", [Var (lv, x) as e],Static) ->
+    | CallStmt (l, "assume_is_int", [Var (lv, x, _) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let tp = check_expr tenv e in
@@ -3623,8 +3730,8 @@ in
               fref#set_parent tn;
               get_field h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
-          let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
-          assert_chunk h [] [("x", arg)] l (malloc_block_symb, true) real_unit DummyPat [LitPat (Var (l, "x"))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
+          let (_, (_, _, _, malloc_block_symb, _)) = List.assoc tn malloc_block_pred_map in
+          assert_chunk h [] [("x", arg)] l (malloc_block_symb, true) real_unit DummyPat [LitPat (Var (l, "x", ref (Some LocalVar)))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
     | Assign (l, x, CallExpr (lc, g, [], pats,fb)) ->
@@ -3652,7 +3759,7 @@ in
                 let rec iter h fds =
                   match fds with
                    [] ->
-                     let (_, (_, _, _, malloc_block_symb)) = List.assoc tn malloc_block_pred_map in
+                     let (_, (_, _, _, malloc_block_symb, _)) = List.assoc tn malloc_block_pred_map in
                      cont (h @ [((malloc_block_symb, true), real_unit, [result], None)]) (update env x result)
                  | (f, (lf, t,vis))::fds ->
                      let fref = new fieldref f in
@@ -3680,7 +3787,7 @@ in
       let tp = check_deref l tenv e f in
       let _ = check_expr_t tenv rhs tp in
       eval_h h env e (fun h t ->
-        let (_, (_, _, _, f_symb)) = List.assoc (f#parent, f#name) field_pred_map in
+        let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont (((f_symb, true), real_unit, [t; ev rhs], None)::h) env)
@@ -3758,21 +3865,21 @@ in
     | Open (l, g, pats0, pats, coefpat) ->
       let (g_symb, pats0, dropcount, ps, env0, p) =
         match try_assoc g predfammap with
-          Some (_, _, _, g_symb) ->
+          Some (_, _, _, g_symb, _) ->
           let fns = match file_type path with
             Java-> check_classnamelist (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
-          | _ -> check_funcnamelist (List.map (function LitPat (Var (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be function names.") pats0)
+          | _ -> check_funcnamelist (List.map (function LitPat (Var (l, x, _)) -> (l, x) | _ -> static_error l "Predicate family indices must be function names.") pats0)
           in
           begin
             match file_type path with
             Java->
               (match try_assoc (g, fns) predinstmap with
-                Some (_, ps, p) ->
+                Some (_, ps, _, p) ->
                 ((g_symb, true), List.map (fun fn -> LitPat (ClassLit(l,fn))) fns, List.length fns, ps, [], p)
               | None -> static_error l "No such predicate instance.")
             |_ ->
               (match try_assoc (g, fns) predinstmap with
-                Some (_, ps, p) ->
+                Some (_, ps, _, p) ->
                 ((g_symb, true), List.map (fun fn -> LitPat (FuncNameExpr fn)) fns, List.length fns, ps, [], p)
               | None -> static_error l "No such predicate instance.")
           end
@@ -3811,7 +3918,9 @@ in
       let (g_symb, pts) =
         match try_assoc p predfammap with
           None -> static_error l "No such predicate."
-        | Some (_, arity, pts, g_symb) -> ((g_symb, true), pts)
+        | Some (_, arity, pts, g_symb, _) ->
+          if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements.";
+          ((g_symb, true), pts)
       in
       let splitcoef =
         match coefopt with
@@ -3830,17 +3939,51 @@ in
         let h = (g_symb, coef1, ts, None)::(g_symb, coef2, ts, None)::h in
         tcont sizemap tenv' ghostenv h env
       )
+    | MergeFractionsStmt (l, p, pats) ->
+      let (g_symb, pts, inputParamCount) =
+        match try_assoc p predfammap with
+          None -> static_error l "No such predicate."
+        | Some (_, arity, pts, g_symb, inputParamCount) ->
+          if arity <> 0 then static_error l "Predicate families are not supported in merge_fractions statements.";
+          begin
+            match inputParamCount with
+              None ->
+              static_error l
+                ("Cannot merge this predicate: it is not declared precise. "
+                 ^ "To declare a predicate precise, separate the input parameters "
+                 ^ "from the output parameters using a semicolon in the predicate declaration.");
+            | Some n -> ((g_symb, true), pts, n)
+          end
+      in
+      let tenv' = check_pats l tenv pts pats in
+      let (inpats, outpats) = take_drop inputParamCount pats in
+      List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
+      assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef1 ts1 _ ghostenv env ->
+        assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef2 ts2 _ _ _ ->
+          let (Some tpairs) = zip ts1 ts2 in
+          let (ints, outts) = take_drop inputParamCount tpairs in
+          let merged_chunk = (g_symb, ctxt#mk_real_add coef1 coef2, ts1, None) in
+          let h = merged_chunk::h in
+          let rec iter outts =
+            match outts with
+              [] -> tcont sizemap tenv' ghostenv h env
+            | (t1, t2)::ts ->
+              assume (ctxt#mk_eq t1 t2) (fun () -> iter ts)
+          in
+          iter outts
+        )
+      )
     | Close (l, g, pats0, pats, coef) ->
       let (ps, bs0, g_symb, p, ts0) =
         match try_assoc g predfammap with
-          Some (_, _, _, g_symb) ->
+          Some (_, _, _, g_symb, inputParamCount) ->
           let fns = match file_type path with
             Java-> check_classnamelist (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
-          | _ -> check_funcnamelist (List.map (function LitPat (Var (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be function names.") pats0)
+          | _ -> check_funcnamelist (List.map (function LitPat (Var (l, x, _)) -> (l, x) | _ -> static_error l "Predicate family indices must be function names.") pats0)
           in
           begin
           match try_assoc (g, fns) predinstmap with
-            Some (l, ps, body) ->
+            Some (l, ps, inputParamCount, body) ->
             let ts0 = match file_type path with
               Java -> List.map(fun cn -> ctxt#mk_app (List.assoc cn class_symbols) []) fns
             | _ -> List.map (fun fn -> List.assoc fn funcnameterms) fns in
@@ -3921,7 +4064,7 @@ in
       in
       if not (List.mem pre_bcn boxes) then static_error l "You cannot perform an action a box class that has not yet been declared.";
       let tenv = check_pats l tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
-      let (_, _, _, boxpred_symb) = List.assoc pre_bcn predfammap in
+      let (_, _, _, boxpred_symb, _) = List.assoc pre_bcn predfammap in
       assert_chunk h ghostenv env l (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h coef ts chunk_size ghostenv env ->
         if not (coef == real_unit) then assert_false h env l "Box predicate coefficient must be 1.";
         let (boxId::pre_boxPredArgs) = ts in
@@ -3934,10 +4077,10 @@ in
             | Some (_, hppmap, inv, _) ->
               (hppmap, inv)
         in
-        let (_, _, _, pre_handlepred_symb) = List.assoc pre_hpn predfammap in
+        let (_, _, _, pre_handlepred_symb, _) = List.assoc pre_hpn predfammap in
         let tenv = check_pats l tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = pre_hp_pats in
-        assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId"))::pre_hpargs_pats)
+        assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env ->
              if not (coef == real_unit) then assert_false h env l "Handle predicate coefficient must be 1.";
              let (handleId::_::pre_handlePredArgs) = ts in
@@ -3978,7 +4121,7 @@ in
                      | Some (_, hppmap, inv, _) ->
                        (hppmap, inv)
                  in
-                 let (_, _, _, post_handlePred_symb) = List.assoc post_hpn predfammap in
+                 let (_, _, _, post_handlePred_symb, _) = List.assoc post_hpn predfammap in
                  let post_hpargs =
                    match zip post_handlePred_parammap post_hp_args with
                      None -> static_error l "Post-state handle predicate: Incorrect number of arguments."
@@ -4022,7 +4165,7 @@ in
         let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
         let (sizemap, indinfo) =
           match ss with
-            [SwitchStmt (_, Var (_, x), _)] -> (
+            [SwitchStmt (_, Var (_, x, _), _)] -> (
               match try_assoc x env with
                 None -> ([], None)
               | Some t -> ([(t, 0)], Some x)
@@ -4091,7 +4234,7 @@ in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =
         match ss with
-          [SwitchStmt (_, Var (_, x), _)] -> (
+          [SwitchStmt (_, Var (_, x, _), _)] -> (
           match try_assoc x env with
             None -> ([], None)
           | Some t -> ([(t, 0)], Some x)
@@ -4215,7 +4358,7 @@ in
       verify_funcs (bcn::boxes) lems ds
     | _::ds -> verify_funcs boxes lems ds
   in
-  verify_funcs [] lems0 ds
+  verify_funcs [] [] ds
   
   in
   
