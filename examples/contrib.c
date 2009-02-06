@@ -116,6 +116,8 @@ predicate_family_instance thread_run_post(contribute)(struct session *session, c
 @*/
 
 void contribute(void *data) //@ : thread_run
+    //@ requires thread_run_pre(contribute)(data, ?info);
+    //@ ensures thread_run_post(contribute)(data, info);
 {
     //@ open thread_run_pre(contribute)(data, _);
     struct session *session = data;

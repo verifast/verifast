@@ -38,6 +38,8 @@ predicate_family_instance thread_run_data(incrementor)(void *data)
 
 
 void incrementor(void *data) //@ : thread_run
+    //@ requires thread_run_data(incrementor)(data);
+    //@ ensures true;
 {
     //@ open thread_run_data(incrementor)(data);
     struct counter *counter = data;

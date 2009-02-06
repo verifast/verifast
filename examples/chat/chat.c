@@ -253,6 +253,8 @@ predicate_family_instance thread_run_data(session_run)(void *data)
 @*/
 
 void session_run(void *data) //@ : thread_run
+    //@ requires thread_run_data(session_run)(data);
+    //@ ensures true;
 {
     //@ open thread_run_data(session_run)(data);
     struct session *session = data;

@@ -595,18 +595,14 @@ and
   | Fixpoint
   | Lemma
 and
-  spec =
-    Contract of pred * pred (* contract van een functie requires predicate-ensures predicate *)
-  | FuncTypeSpec of string
-and
   meth =
-  | Meth of loc * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
+  | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list option * func_binding * visibility
 and
   meth_spec =
-  | MethSpec of loc * type_expr option * string * (type_expr * string) list * spec option* func_binding * visibility
+  | MethSpec of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option* func_binding * visibility
 and
   cons =
-  | Cons of loc * (type_expr * string) list * spec option * stmt list option * visibility
+  | Cons of loc * (type_expr * string) list * (pred * pred) option * stmt list option * visibility
 and
   decl =
     Struct of loc * string * field list option
@@ -616,7 +612,7 @@ and
   | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * spec option * stmt list option * func_binding * visibility
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * string option (* function type *) * (pred * pred) option * stmt list option * func_binding * visibility
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
@@ -765,6 +761,12 @@ let file_type path=
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
+let rec rep p = parser [< v = p; vs = rep p >] -> v::vs | [< >] -> []
+
+type spec_clause =
+  FuncTypeClause of string
+| RequiresClause of pred
+| EnsuresClause of pred
 
 let read_decls path stream streamSource reportKeyword reportGhostRange =
 let java_lexer= make_lexer (veri_keywords@java_keywords) in
@@ -874,7 +876,7 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); ps = parse_paramlist; '(_, Kwd ";"); c = parse_contract l >] ->
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
   [FuncTypeDecl (l, rt, g, ps, c)]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
@@ -935,8 +937,18 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, co, None,Static,Public)
-     | [< co = opt parse_spec; ss = parse_block >] -> Func (l, k, t, g, ps, co, Some ss,Static,Public)
+       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, None, co, None,Static,Public)
+     | [< scs = opt parse_spec_clauses;
+          ss = parse_block >]
+          -> 
+          let (ft, co) =
+            match scs with
+              None -> (None, None)
+            | Some [RequiresClause pre; EnsuresClause post] -> (None, Some (pre, post))
+            | Some [FuncTypeClause ft; RequiresClause pre; EnsuresClause post] -> (Some ft, Some (pre, post))
+            | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: function type (optional), requires clause, ensures clause.")
+          in
+          Func (l, k, t, g, ps, ft, co, Some ss,Static,Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -991,17 +1003,28 @@ and
   parse_param = parser
   [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
 and
-  parse_spec = parser
-  [< '((sp1, _), Kwd "/*@"); spec = parser
-      [< '(_, Kwd ":"); '(_, Ident fn); '(_, Kwd "@*/") >] -> FuncTypeSpec fn
-    | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
-         '((sp3, _), Kwd "/*@"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";"); '((_, sp4), Kwd "@*/")
-         >] -> let _ = reportGhostRange (sp1, sp2); reportGhostRange (sp3, sp4) in Contract (p, q)
-    >] -> spec
-| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "ensures"); q = parse_pred; '(_, Kwd ";") >] -> Contract (p, q)
+  parse_pure_spec_clause = parser
+  [< '(_, Kwd ":"); '(_, Ident ft) >] -> FuncTypeClause ft
+| [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
+| [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
 and
-  parse_contract l = parser
-  [< spec = parse_spec >] -> match spec with Contract (p, q) -> (p, q) | FuncTypeSpec ftn -> raise (ParseException (l, "Function type specification not allowed here."))
+  parse_spec_clause = parser
+  [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> reportGhostRange (sp1, sp2); c
+| [< c = parse_pure_spec_clause >] -> c
+and
+  parse_spec_clauses = parser
+  [< c1 = parse_spec_clause;
+     cs = (match c1 with
+             FuncTypeClause ft -> (parser [< c2 = parse_spec_clause; c3 = parse_spec_clause >] -> [c2; c3])
+           | _ -> (parser [< c2 = parse_spec_clause >] -> [c2]))
+     >] -> c1::cs
+and
+  parse_spec = parser
+    [< scs = parse_spec_clauses >] ->
+    match scs with
+      [] -> raise Stream.Failure
+    | [RequiresClause pre; EnsuresClause post] -> (pre, post)
+    | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
 and
   parse_block = parser
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss
@@ -1590,6 +1613,7 @@ in
     | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
     | BoxIdType -> "box"
     | HandleIdType -> "handle"
+    | AnyType -> "any"
   in
   
   let typenode_of_type t =
@@ -1637,7 +1661,7 @@ in
     List.mem inter s
   in
   
-  let rec expect_type l t t0 =
+  let rec expect_type_core l msg t t0 =
     match (t, t0) with
       (PtrType _, PtrType Void) -> ()
     | (ObjType "null", ObjType _) -> ()
@@ -1648,13 +1672,15 @@ in
     | (PredType ts, PredType ts0) ->
       begin
         match zip ts ts0 with
-          None -> static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+          None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
         | Some tpairs ->
-          List.iter (fun (t, t0) -> expect_type l t t0) tpairs
+          List.iter (fun (t, t0) -> expect_type_core l msg t t0) tpairs
       end
     | (InductiveType _, AnyType) -> ()
-    | _ -> if t = t0 then () else static_error l ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if t = t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
+  
+  let expect_type l t t0 = expect_type_core l "" t t0 in
   
   let (inductivemap, purefuncmap) =
     let rec iter imap pfm ds =
@@ -1679,7 +1705,7 @@ in
             )
         in
         citer 0 [] pfm ctors
-      | Func (l, Fixpoint, rto, g, ps, contract, body_opt,Static,Public)::ds ->
+      | Func (l, Fixpoint, rto, g, ps, functype, contract, body_opt,Static,Public)::ds ->
         let _ =
           if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
         in
@@ -1688,6 +1714,7 @@ in
             None -> static_error l "Return type of fixpoint functions cannot be void."
           | Some rt -> (check_pure_type rt)
         in
+        if functype <> None then static_error l "Fixpoint functions cannot implement a function type.";
         let _ =
           match contract with
             None -> ()
@@ -2103,7 +2130,7 @@ in
     iter [] purefuncmap ds
   in
   
-  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, rt, g, ps, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_classnamelist is =
@@ -2508,17 +2535,17 @@ in
                  in
                  iter [] ps
                in
-               let (cenv0, pre, post) =
+               let (pre, post) =
                  match co with
                    None -> static_error lm ("Non-fixpoint function must have contract: "^n)
-                 | Some (Contract (pre, post)) ->
+                 | Some (pre, post) ->
                      check_pred xmap pre (fun tenv ->
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                          check_pred postmap post (fun _ -> ())
                      );
-                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
+                     (pre, post)
                in
-               iter ((n, (lm,check_t t, xmap, cenv0, pre, post,fb,v))::mmap) meths
+               iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
              )
          in
           begin
@@ -2572,7 +2599,7 @@ in
                               |(an',x')::xs' when an=an'-> expect_type lm x x';matchargs xs xs'
                               | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
                in
-               let (cenv0, pre, post) =
+               let (pre, post) =
                  match co with
                    None -> let rec search i=
                        match i with
@@ -2581,17 +2608,17 @@ in
                                            None -> search rest
                                           |Some(_,meth_specs) -> match try_assoc n meth_specs with
                                                                    None -> search rest
-                                                                 | Some(_,_, xmap', cenv0, pre, post,Instance,v)-> matchargs xmap xmap';(cenv0,pre,post)
+                                                                 | Some(_,_, xmap', pre, post,Instance,v)-> matchargs xmap xmap';(pre,post)
                            in
                            search interfs
-                 | Some (Contract (pre, post)) ->
+                 | Some (pre, post) ->
                      check_pred xmap pre (fun tenv ->
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                          check_pred postmap post (fun _ -> ())
                      );
-                     (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
+                     (pre, post)
                in
-               iter ((n, (lm,check_t t, xmap, cenv0, pre, post, ss,fb,v))::mmap) meths
+               iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
             )
          in
           begin
@@ -2930,7 +2957,7 @@ in
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, Some [SwitchStmt (_, Var (_, x, _), cs)],Static,Public) ->
+     | Func (l, Fixpoint, t, g, ps, _, _, Some [SwitchStmt (_, Var (_, x, _), cs)],Static,Public) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -3285,25 +3312,69 @@ in
   let funcmap =
     flatmap
       (fun (bcn, (l, boxpmap, amap, hpmap)) ->
-         let cenv = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) boxpmap in
          let bcpred = new predref bcn in
          bcpred#set_domain (BoxIdType::List.map (fun (x, t) -> t) boxpmap);
          if List.mem_assoc "result" boxpmap then static_error l "Name of box class parameter cannot be 'result'.";
          let post = CallPred (l, bcpred, [], LitPat (Var (l, "result", ref (Some LocalVar)))::List.map (fun (x, t) -> LitPat (Var (l, x, ref (Some LocalVar)))) boxpmap) in
          let hpred = new predref (bcn ^ "_handle") in
          hpred#set_domain [HandleIdType; BoxIdType];
-         [("create_" ^ bcn, (l, Lemma, Some BoxIdType, boxpmap, cenv, EmpPred l, post, Some None, Static, Public));
-          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], [("boxId", Var (l, "boxId", ref (Some LocalVar)))], EmpPred l,
+         [("create_" ^ bcn, (l, Lemma, Some BoxIdType, boxpmap, EmpPred l, post, Some None, Static, Public));
+          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], EmpPred l,
              CallPred (l, hpred, [], [LitPat (Var (l, "result", ref (Some LocalVar))); LitPat (Var (l, "boxId", ref (Some LocalVar)))]), Some None, Static, Public))]
       )
       boxmap
+  in
+  
+  let check_func_header_compat l msg (k, rt, xmap, pre, post) (k0, rt0, xmap0, cenv0, pre0, post0) =
+    if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
+    begin
+      match (rt, rt0) with
+        (None, None) -> ()
+      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") rt rt0
+      | _ -> static_error l (msg ^ "Return types do not match.")
+    end;
+    begin
+      match zip xmap xmap0 with
+        None -> static_error l (msg ^ "Parameter counts do not match.")
+      | Some pairs ->
+        List.iter
+          (fun ((x, t), (x0, t0)) ->
+           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 t;
+          )
+          pairs
+    end;
+    push();
+    let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
+    let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
+    assume_pred [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+      let (Some bs) = zip xmap env0_0 in
+      let env = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
+      assert_pred h [] env pre real_unit (fun h _ env _ ->
+        let (result, env) =
+          match rt with
+            None -> (None, env)
+          | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
+        in
+        assume_pred h [] env post real_unit None None (fun h _ _ ->
+          let env0 =
+            match result with
+              None -> env0
+            | Some v -> ("result", v)::env0
+          in
+          assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
+            with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l (msg ^ "Implementation leaks heap chunks."))
+          )
+        )
+      )
+    );
+    pop()
   in
   
   let (funcmap, prototypes_implemented) =
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, rt, fn, xs, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
+      | Func (l, k, rt, fn, xs, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
         let xmap =
           let rec iter xm xs =
@@ -3316,92 +3387,44 @@ in
           in
           iter [] xs
         in
-        let (cenv, pre, post) =
+        let (pre, post) =
           match contract_opt with
             None -> static_error l "Non-fixpoint function must have contract."
-          | Some (Contract (pre, post)) ->
+          | Some (pre, post) ->
             check_pred xmap pre (fun tenv ->
               let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
               check_pred postmap post (fun _ -> ())
             );
-            (List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap, pre, post)
-          | Some (FuncTypeSpec ftn) ->
+            (pre, post)
+        in
+        begin
+          match functype_opt with
+            None -> ()
+          | Some ftn ->
             begin
               match try_assoc ftn functypemap with
                 None -> static_error l "No such function type."
-              | Some (_, rt0, xmap0, pre, post) ->
-                if rt <> rt0 then static_error l "Function return type differs from function type return type.";
-                begin
-                  match zip xmap xmap0 with
-                    None -> static_error l "Function parameter count differs from function type parameter count."
-                  | Some bs ->
-                    let cenv =
-                      List.map
-                        (fun ((x, t), (x0, t0)) ->
-                         if t <> t0 then static_error l ("Type of parameter '" ^ x ^ "' does not match type of function type parameter '" ^ x0 ^ "'.");
-                         (x0, Var (dummy_loc, x, ref (Some LocalVar)))
-                        )
-                        bs
-                      @ [("this", FuncNameExpr fn)]
-                    in
-                    let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
-                    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true));
-                    (cenv, pre, post)
-                end
+              | Some (_, rt0, xmap0, pre0, post0) ->
+                let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
+                check_func_header_compat l "Function type implementation check: " (k, rt, xmap, pre, post) (Regular, rt0, xmap0, cenv0, pre0, post0);
+                let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
-        in
+        end;
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l, k, rt, xmap, cenv, pre, post, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, Some _,Static,Public) ->
+            None -> iter ((fn, (l, k, rt, xmap, pre, post, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (l0, k0, rt0, xmap0, pre0, post0, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, rt0, xmap0, cenv0, pre0, post0, None,Static,Public) ->
+          | Some (l0, k0, rt0, xmap0, pre0, post0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
-            if k <> k0 then static_error l "Function implementation does not match prototype: modifiers do not match.";
-            if rt <> rt0 then static_error l "Function implementation does not match prototype: return types do not match.";
-            begin
-              match zip xmap xmap0 with
-                None -> static_error l "Function implementation does not match prototype: parameter counts do not match."
-              | Some pairs ->
-                List.iter
-                  (fun ((x, t), (x0, t0)) ->
-                   if t <> t0 then static_error l ("Function implementation does not match prototype: parameter '" ^ x ^ "': wrong type.")
-                  )
-                  pairs
-            end;
-            push();
-            let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
-            let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
-            let _ =
-              assume_pred [] [] env0 pre0 real_unit None None (fun h _ env0 ->
-                let (Some bs) = zip xmap env0_0 in
-                let env_0 = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs in
-                let env = List.map (fun (x, e) -> (x, eval None env_0 e)) cenv in
-                assert_pred h [] env pre real_unit (fun h _ env _ ->
-                  let (result, env) =
-                    match rt with
-                      None -> (None, env)
-                    | Some t -> let result = get_unique_var_symb "result" t in (Some result, ("result", result)::env)
-                  in
-                  assume_pred h [] env post real_unit None None (fun h _ _ ->
-                    let env0 =
-                      match result with
-                        None -> env0
-                      | Some v -> ("result", v)::env0
-                    in
-                    assert_pred h [] env0 post0 real_unit (fun h _ env0 _ ->
-                      with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l "Function redeclaration leaks heap chunks.")
-                    )
-                  )
-                )
-              )
-            in
-            pop();
-            iter ((fn, (l, k, rt, xmap, cenv, pre, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            let cenv0 = List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap0 in
+            check_func_header_compat l "Function prototype implementation check: " (k, rt, xmap, pre, post) (k0, rt0, xmap0, cenv0, pre0, post0);
+            iter ((fn, (l, k, rt, xmap, pre, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
@@ -3495,7 +3518,7 @@ in
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
-    let check_correct xo g pats (lg,tr, ps, cenv0, pre, post, body,v)=
+    let check_correct xo g pats (lg,tr, ps, pre, post, body,v)=
       let ys = List.map (function (p, t) -> p) ps in
         let _ =
           match zip pats ps with
@@ -3508,7 +3531,7 @@ in
         in
         evhs h env (List.map (function (LitPat e) -> e) pats) (fun h ts ->
         let Some env' = zip ys ts in
-        let cenv = List.map (fun (x, e) -> (x, eval0 None env' e)) cenv0 in
+        let cenv = env' in
         with_context PushSubcontext (fun () ->
           assert_pred h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
             let _ =
@@ -3591,22 +3614,22 @@ in
         match try_assoc class_name classmap with
           Some(_,Some methmap,_,_,super,interfs) -> 
             (match try_assoc g methmap with
-               Some (lm,rt, xmap, cenv, pre, post, body,fbm,v) ->
+               Some (lm,rt, xmap, pre, post, body,fbm,v) ->
                  if fb <>fbm 
                    then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                    let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                   check_correct xo g pats (lm,rt, xmap, cenv, pre, post, body,v)
+                   check_correct xo g pats (lm,rt, xmap, pre, post, body,v)
              | None->  static_error l ("Method "^class_name^" not found!!")
             )
         | None ->
            (match try_assoc class_name interfmap with
               Some(_,methmap) -> 
                 (match try_assoc g methmap with
-                   Some(lm,rt, xmap, cenv, pre, post,fbm,v) ->
+                   Some(lm,rt, xmap, pre, post,fbm,v) ->
                     if fb <>fbm 
                       then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                       let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                      check_correct xo g pats (lm,rt, xmap, cenv, pre, post, None,v)
+                      check_correct xo g pats (lm,rt, xmap, pre, post, None,v)
                  | None->  static_error l ("Method "^class_name^" not found!!")
                 )
             | None ->
@@ -3625,12 +3648,12 @@ in
                              cont h (update env x (ctxt#mk_app gs ts))
                         )
                      )
-                 | Some (lg,k, tr, ps, cenv0, pre, post, body,fbf,v) ->
+                 | Some (lg,k, tr, ps, pre, post, body,fbf,v) ->
                      if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
                      let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context."        in
-                     check_correct xo g pats (lg,tr, ps, cenv0, pre, post, body,v)
+                     check_correct xo g pats (lg,tr, ps, pre, post, body,v)
                 )
             )
       )
@@ -3651,12 +3674,12 @@ in
             cont h (update env x (ctxt#mk_app gs ts))
           )
         )
-      | Some (lg,k, tr, ps, cenv0, pre, post, body,fbf,v) ->
+      | Some (lg,k, tr, ps, pre, post, body,fbf,v) ->
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
-        check_correct xo g pats (lg,tr, ps, cenv0, pre, post, body,v)
+        check_correct xo g pats (lg,tr, ps, pre, post, body,v)
       ) 
     in 
     match s with
@@ -4157,7 +4180,7 @@ in
     let rec verify_meths boxes lems meths=
       match meths with
         [] -> ()
-      | (g, (l,rt, ps,cenv,pre,post, Some sts,fb,v))::meths ->
+      | (g, (l,rt, ps,pre,post, Some sts,fb,v))::meths ->
         let ss= if fb= Instance then CallStmt (l, "assume_class_this", [],Instance)::sts 
                 else sts
         in
@@ -4174,7 +4197,6 @@ in
         in
         let pts = ps in
         let tenv = pts in
-        let tenv = List.map (fun (x, e) -> (x, check_expr tenv e)) cenv in
         let (tenv, rxs) =
           match rt with
             None -> (tenv, [])
@@ -4184,7 +4206,6 @@ in
           (false, None, lems, [])
         in
         check_pred tenv pre (fun tenv ->
-          let env = List.map (fun (x, e) -> (x, eval None env e)) cenv in
         let _ =
           assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
@@ -4226,10 +4247,10 @@ in
               Java -> verify_classes boxes lems classmap;
             | _ -> () 
             )
-    | Func (l, Lemma, rt, g, ps, _, None, _, _)::ds ->
+    | Func (l, Lemma, rt, g, ps, _, _, None, _, _)::ds ->
       verify_funcs boxes (g::lems) ds
-    | Func (_, k, _, g, _, _, Some _, _, _)::ds when k <> Fixpoint ->
-      let (l, k, rt, ps, cenv0, pre, post, Some (Some ss),fb,v) = List.assoc g funcmap in
+    | Func (_, k, _, g, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
+      let (l, k, rt, ps, pre, post, Some (Some ss),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =
@@ -4243,7 +4264,6 @@ in
       in
       let pts = ps in
       let tenv = pts in
-      let tenv = List.map (fun (x, e) -> (x, check_expr tenv e)) cenv0 in
       let (tenv, rxs) =
         match rt with
           None -> (tenv, [])
@@ -4256,7 +4276,6 @@ in
           (false, None, lems, [])
       in
       check_pred tenv pre (fun tenv ->
-      let env = List.map (fun (x, e) -> (x, eval None env e)) cenv0 in
       let _ =
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
