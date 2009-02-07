@@ -3,7 +3,8 @@ open Big_int
 
 let banner =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
-  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans"
+  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans\n" ^
+  "Powered by the excellent SMT solver Z3 <http://research.microsoft.com/projects/z3> by Leonardo de Maura and Nikolaj Bjorner"
 
 class stats =
   object (self)
@@ -4469,6 +4470,9 @@ let link_program isLibrary modulepaths =
           let space = String.index line ' ' in
           let command = String.sub line 0 space in
           let symbol = String.sub line (space + 1) (String.length line - space - 1) in
+          let n = String.length symbol in
+          for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
+          let symbol = if n > 0 && symbol.[n - 1] = '\r' then String.sub symbol 0 (n - 1) else symbol in
           begin
             match command with
               ".requires" -> if List.mem symbol impls then iter0 impls' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
