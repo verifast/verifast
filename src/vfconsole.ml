@@ -9,7 +9,7 @@ let _ =
       Stream.of_string (readFile path)
     in
     try
-      verify_program prover stats options path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ());
+      verify_program prover stats options path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ()) None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1

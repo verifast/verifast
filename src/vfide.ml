@@ -20,6 +20,7 @@ let show_ide initialPath prover =
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5";
+      a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" Verifast.banner)
     ]
@@ -39,6 +40,7 @@ let show_ide initialPath prover =
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
+          <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='CheckOverflow' />
         </menu>
@@ -49,6 +51,7 @@ let show_ide initialPath prover =
       <toolbar name='ToolBar'>
         <toolitem action='Save' />
         <toolitem action='VerifyProgram' />
+        <toolitem action='RunToCursor' />
         <toolitem action='Close' />
       </toolbar>
     </ui>
@@ -421,7 +424,7 @@ let show_ide initialPath prover =
     | Some path ->
       if (tab_buffer tab)#modified then store tab path else Some path
   in
-  let verifyProgram() =
+  let verifyProgram runToCursor () =
     clearTrace();
     List.iter (fun tab ->
       let buffer = tab_buffer tab in
@@ -436,11 +439,22 @@ let show_ide initialPath prover =
           None -> ()
         | Some path ->
           begin
+            let breakpoint =
+              if runToCursor then
+              begin
+                let buffer = tab_buffer tab in
+                let insert_iter = buffer#get_iter_at_mark `INSERT in
+                let insert_line = insert_iter#line in
+                Some (path, insert_line + 1)
+              end
+              else
+                None
+            in
             let streamSource path = Stream.of_string (readFile path) in
             try
               let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
-              verify_program None false options path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange;
-              msg := Some "0 errors found";
+              verify_program None false options path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange breakpoint;
+              msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateWindowTitle()
             with
               ParseException (l, emsg) ->
@@ -464,7 +478,8 @@ let show_ide initialPath prover =
           end
       end
   in
-  (actionGroup#get_action "VerifyProgram")#connect#activate verifyProgram;
+  (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
+  (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
   let _ = root#show() in
   (* This hack works around the problem that GText.text_view#scroll_to_mark does not seem to work if called before the GUI is running properly. *)
   Glib.Idle.add (fun () -> stepSelected(); false);

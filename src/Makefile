@@ -103,8 +103,8 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifast.opt.exe: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt.exe -I $(Z3)\ocaml ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifastz3.opt.exe: vfversion_cmx proverapi.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifastz3.opt.exe -I $(Z3)\ocaml ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml vfconsole.ml
+verifastz3.opt.exe: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifastz3.opt.exe -I $(Z3)\ocaml ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml

@@ -569,7 +569,7 @@ and
   | Open of loc * string * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
   | Close of loc * string * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
-  | WhileStmt of loc * expr * pred * stmt list (* while regel-conditie-lus invariant- lus body *)
+  | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
   | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
   | SplitFractionStmt of loc * string * pat list * expr option
@@ -613,7 +613,8 @@ and
   | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * string option (* function type *) * (pred * pred) option * stmt list option * func_binding * visibility
+  | Func of loc * func_kind * type_expr option * string * (type_expr * string) list * string option (* function type *)
+    * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
@@ -723,7 +724,7 @@ let stmt_loc s =
   | Open (l, _, _, _, coef) -> l
   | Close (l, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
-  | WhileStmt (l, _, _, _) -> l
+  | WhileStmt (l, _, _, _, _) -> l
   | BlockStmt (l, ss) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _) -> l
@@ -940,7 +941,7 @@ and
     (parser
        [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, t, g, ps, None, co, None,Static,Public)
      | [< scs = opt parse_spec_clauses;
-          ss = parse_block >]
+          '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >]
           -> 
           let (ft, co) =
             match scs with
@@ -949,7 +950,7 @@ and
             | Some [FuncTypeClause ft; RequiresClause pre; EnsuresClause post] -> (Some ft, Some (pre, post))
             | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: function type (optional), requires clause, ensures clause.")
           in
-          Func (l, k, t, g, ps, ft, co, Some ss,Static,Public)
+          Func (l, k, t, g, ps, ft, co, Some (ss, closeBraceLoc),Static,Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -1064,7 +1065,7 @@ and
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
-     b = parse_block >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b)
+     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b, closeBraceLoc)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
 | [< '(l, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
      '(_, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
@@ -1358,7 +1359,7 @@ let do_finally tryBlock finallyBlock =
 
 type options = {option_verbose: bool; option_disable_overflow_check: bool}
 
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path stream streamSource reportKeyword reportGhostRange =
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path stream streamSource reportKeyword reportGhostRange breakpoint =
 
   let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check} = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
@@ -1734,7 +1735,7 @@ in
         in
         let (index, ctorcount) = 
           match body_opt with
-            Some [SwitchStmt (ls, e, cs)] -> (
+            Some ([SwitchStmt (ls, e, cs)], _) -> (
             let ctorcount = List.length cs in
             match e with
               Var (l, x, _) -> (
@@ -2958,7 +2959,7 @@ in
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, _, Some [SwitchStmt (_, Var (_, x, _), cs)],Static,Public) ->
+     | Func (l, Fixpoint, t, g, ps, _, _, Some ([SwitchStmt (_, Var (_, x, _), cs)], _),Static,Public) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
@@ -3270,7 +3271,7 @@ in
     | Open (l, g, ps0, ps1, coef) -> []
     | Close (l, g, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> []
-    | WhileStmt (l, e, p, ss) -> block_assigned_variables ss
+    | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
     | BlockStmt (l, ss) -> block_assigned_variables ss
     | PerformActionStmt (l, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, post_boxargs, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
@@ -3434,9 +3435,17 @@ in
   
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb, _))) -> symb) field_pred_map in
   
+  let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
+    match breakpoint with
+      None -> ()
+    | Some (path0, line0) ->
+      if line = line0 && Filename.concat basepath relpath = path0 then
+        assert_false h env l "Breakpoint reached."
+  in
+  
   let check_leaks h env l msg =
     match file_type path with
-    Java -> ()
+    Java -> check_breakpoint h env l
     | _ -> let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
     let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
     let (stringlitchunks, otherchunks) =
@@ -3451,7 +3460,12 @@ in
     let rec iter stringlitchunks otherchunks =
       match stringlitchunks with
         [] ->
-        if otherchunks = [] then () else with_context (Executing (otherchunks, env, l, "Leak check.")) (fun _ -> assert_false h env l msg)
+        with_context (Executing (otherchunks, env, l, "Leak check.")) (fun _ -> 
+          if otherchunks = [] then
+            check_breakpoint [] env l
+          else
+            assert_false otherchunks env l msg
+        )
       | (_, coef, [arr; cs], _)::stringlitchunks ->
         let rec consume_chars_chunk otherchunks h =
           match h with
@@ -3503,6 +3517,7 @@ in
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
+    check_breakpoint h env l;
     let eval0 = eval in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h0 = eval_h in
@@ -4051,7 +4066,7 @@ in
       let _ = check_expr_t tenv e tp in
       return_cont h (Some (ev e))
     | ReturnStmt (l, None) -> return_cont h None
-    | WhileStmt (l, e, p, ss) ->
+    | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let _ = check_expr_t tenv e boolt in
       check_ghost ghostenv l e;
@@ -4068,7 +4083,7 @@ in
                  verify_cont boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
-                     check_leaks h''' env l "Loop leaks heap chunks."
+                     check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
                    )
                  ) (fun h'' retval -> return_cont (h'' @ h) retval)
                )
@@ -4251,7 +4266,7 @@ in
     | Func (l, Lemma, rt, g, ps, _, _, None, _, _)::ds ->
       verify_funcs boxes (g::lems) ds
     | Func (_, k, _, g, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
-      let (l, k, rt, ps, pre, post, Some (Some ss),fb,v) = List.assoc g funcmap in
+      let (l, k, rt, ps, pre, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =
@@ -4282,11 +4297,11 @@ in
           let do_return h env_post =
             match file_type path with
             Java ->assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              check_leaks h env l "Function leaks heap chunks."
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
             )
             |_ ->
              assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              check_leaks h env l "Function leaks heap chunks."
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
             )
           in
           let return_cont h retval =
@@ -4396,9 +4411,9 @@ in
   in
   create_manifest_file()
 
-let verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange =
+let verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange breakpoint =
   do_finally
-    (fun () -> verify_program_core ctxt verbose path stream streamSource reportKeyword reportGhostRange)
+    (fun () -> verify_program_core ctxt verbose path stream streamSource reportKeyword reportGhostRange breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -4426,11 +4441,11 @@ let lookup_prover prover =
       | Some f -> f
     end
       
-let verify_program prover print_stats options path stream streamSource reportKeyword reportGhostRange =
+let verify_program prover print_stats options path stream streamSource reportKeyword reportGhostRange breakpoint =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats options path stream streamSource reportKeyword reportGhostRange
+         fun ctxt -> verify_program_with_stats ctxt print_stats options path stream streamSource reportKeyword reportGhostRange breakpoint
      end)
 
 let remove_dups bs =
