@@ -351,10 +351,13 @@ let show_ide initialPath prover =
     ) !buffers
   in
   bufferChangeListener := (fun tab ->
-    msg := None;
-    stepItems := None;
-    updateWindowTitle();
-    clearTrace()
+    if !msg <> None then
+    begin
+      msg := None;
+      stepItems := None;
+      updateWindowTitle();
+      clearTrace()
+    end
   );
   let _ = root#event#connect#delete ~callback:(fun _ ->
     let rec iter tabs =
