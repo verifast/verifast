@@ -147,8 +147,15 @@ release: test
 	copy ..\..\..\examples\malloc.h
 	copy ..\..\..\examples\sorted_bintree.c
 	copy ..\..\..\examples\stdlib.h
+	copy ..\..\..\examples\contrib.c
 	copy ..\..\..\examples\verify.bat
-        mkdir chat
+	mkdir incr_box
+	cd incr_box
+	copy ..\..\..\..\examples\incr_box\incr_box.c
+	copy ..\..\..\..\examples\incr_box\threading.h
+	copy ..\..\..\..\examples\incr_box\stdlib.h
+	cd ..
+	mkdir chat
 	cd chat
 	copy ..\..\..\..\examples\chat\bool.h
 	copy ..\..\..\..\examples\chat\chat.c
@@ -195,7 +202,17 @@ release: test
 	mkdir java
 	cd java
 	copy ..\..\..\..\examples\java\Tree.java
-	copy ..\..\..\..\examples\java\Tree2.java
+	copy ..\..\..\..\examples\java\Tree2\Tree.java Tree2.java
+	copy ..\..\..\..\examples\java\Tree3\Tree.java Tree3.java
+	copy ..\..\..\..\examples\java\Iterator.java
+	copy ..\..\..\..\examples\java\Counter.java
 	copy ..\..\..\..\examples\java\verify.bat
+	mkdir iterator
+	cd iterator
+	copy ..\..\..\..\..\examples\java\iterator\it.jarsrc
+	copy ..\..\..\..\..\examples\java\iterator\Iterator.java
+	copy ..\..\..\..\..\examples\java\iterator\IteratorUtil.java
+	copy ..\..\..\..\..\examples\java\iterator\Program.java
+	copy ..\..\..\..\..\examples\java\iterator\SingletonIterator.java
 	cd ..
 	cd ..
