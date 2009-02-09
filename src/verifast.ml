@@ -3066,7 +3066,7 @@ in
   in
 
   let real_mul l t1 t2 =
-    if t1 == real_unit then t2 else if t2 == real_unit then t1 else static_error l "Real multiplication not yet supported."
+    if t1 == real_unit then t2 else if t2 == real_unit then t1 else ctxt#mk_real_mul t1 t2
   in
   
   let real_div l t1 t2 =
@@ -3275,6 +3275,8 @@ in
     | BlockStmt (l, ss) -> block_assigned_variables ss
     | PerformActionStmt (l, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, post_boxargs, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
+    | SplitFractionStmt (l, p, pats, coefopt) -> []
+    | MergeFractionsStmt (l, p, pats) -> []
   in
 
   let get_field h t f l cont =
@@ -3493,7 +3495,9 @@ in
           let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
           let coef = get_unique_var_symb "stringLiteralCoef" RealType in
             assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
-              cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
+              assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
+                cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
+              )
             )
         else
           cont h (eval_non_pure is_ghost_expr h env e)
