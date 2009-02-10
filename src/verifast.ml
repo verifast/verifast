@@ -562,6 +562,7 @@ and
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
+  | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
   | CallStmt of loc * string * expr list * func_binding(* oproep regel-naam-argumenten*)
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
@@ -718,6 +719,7 @@ let stmt_loc s =
   | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
+  | WriteDeref (l, _, _) -> l
   | CallStmt (l,  _, _,_) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
@@ -1083,6 +1085,7 @@ and
     (match e with
      | Var (lx, x, _) -> Assign (l, x, rhs)
      | Read (_, e, f) -> Write (l, e, f, rhs)
+     | Deref (_, e, _) -> WriteDeref (l, e, rhs)
      | _ -> raise (ParseException (expr_loc e, "The left-hand side of an assignment must be an identifier or a field dereference expression."))
     )
   | [<'(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >]->
@@ -3215,19 +3218,24 @@ in
     lookup_points_to_chunk h env l f_symb t
   in
   
-  let pointer_pred_symb =
+  let (pointer_pred_symb, int_pred_symb) =
     match file_type path with
-      Java -> real_unit (* Anything, doesn't matter. *)
-    | _ -> let (_, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in pointer_pred_symb
+      Java -> (real_unit, real_unit) (* Anything, doesn't matter. *)
+    | _ ->
+      let (_, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
+      let (_, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
+      (pointer_pred_symb, int_pred_symb)
+  in
+  
+  let pointee_pred_symb l pointeeType =
+    match pointeeType with
+      PtrType _ -> pointer_pred_symb
+    | IntType -> int_pred_symb
+    | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
   in
   
   let deref_pointer h env l pointerTerm pointeeType =
-    let predSymb =
-      match pointeeType with
-        PtrType _ -> pointer_pred_symb
-      | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
-    in
-    lookup_points_to_chunk h env l predSymb pointerTerm
+    lookup_points_to_chunk h env l (pointee_pred_symb l pointeeType) pointerTerm
   in
 
   let assert_chunk h ghostenv env l g coef coefpat pats cont =
@@ -3318,6 +3326,7 @@ in
     | Assign (l, x, e) -> [x]
     | DeclStmt (l, t, x, e) -> []
     | Write (l, e, f, e') -> []
+    | WriteDeref (l, e, e') -> []
     | CallStmt (l, g, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
     | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
@@ -3334,10 +3343,14 @@ in
     | MergeFractionsStmt (l, p, pats) -> []
   in
 
+  let get_points_to h p predSymb l cont =
+    assert_chunk h [] [("x", p)] l (predSymb, true) real_unit DummyPat [LitPat (Var (dummy_loc, "x", ref (Some LocalVar))); VarPat "y"] (fun h coef ts size ghostenv env ->
+      cont h coef (lookup env "y"))
+  in
+    
   let get_field h t f l cont =
     let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-    assert_chunk h [] [("x", t)] l (f_symb, true) real_unit DummyPat [LitPat (Var (dummy_loc, "x", ref (Some LocalVar))); VarPat "y"] (fun h coef ts size ghostenv env ->
-      cont h coef (lookup env "y"))
+    get_points_to h t f_symb l cont
   in
   
   let functypemap =
@@ -3889,6 +3902,21 @@ in
         get_field h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont (((f_symb, true), real_unit, [t; ev rhs], None)::h) env)
+      )
+    | WriteDeref (l, e, rhs) ->
+      if pure then static_error l "Cannot write in a pure context.";
+      let pointerType = check_expr tenv e in
+      let pointeeType = 
+        match pointerType with
+          PtrType t -> t
+        | _ -> static_error l "Operand of dereference must be pointer."
+      in
+      check_expr_t tenv rhs pointeeType;
+      eval_h h env e (fun h t ->
+        let predSymb = pointee_pred_symb l pointeeType in
+        get_points_to h t predSymb l (fun h coef _ ->
+          if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
+          cont (((predSymb, true), real_unit, [t; ev rhs], None)::h) env)
       )
     | CallStmt (l, g, es,fb) ->
 
