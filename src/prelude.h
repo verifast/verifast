@@ -79,6 +79,8 @@ lemma void assume(bool b);
     requires true;
     ensures b;
 
+predicate pointer(void **pp, void *p);
+
 @*/
 
 int main();

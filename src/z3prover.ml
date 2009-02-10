@@ -105,6 +105,7 @@ class z3_context () =
     method mk_intlit_of_string s = Z3.mk_numeral ctxt s int_type
     method mk_add t1 t2 = Z3.mk_add ctxt [| t1; t2 |]
     method mk_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
+    method mk_mul t1 t2 = Z3.mk_mul ctxt [| t1; t2 |]
     method mk_lt t1 t2 = Z3.mk_lt ctxt t1 t2
     method mk_le t1 t2 = Z3.mk_le ctxt t1 t2
     method mk_reallit n = Z3.mk_int ctxt n real_type

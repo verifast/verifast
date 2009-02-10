@@ -150,7 +150,7 @@ let make_lexer keywords path stream reportKeyword =
     | Some '(' -> Stream.junk strm__; Some(ident_or_keyword "(" false)
     | Some
         ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
-         '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
+         '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         Stream.junk strm__;
         let s = strm__ in reset_buffer (); store c; ident2 s
@@ -525,6 +525,7 @@ and
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field acces *)
+  | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
   | CallExpr of loc * string * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
@@ -692,6 +693,7 @@ let expr_loc e =
   | ClassLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
+  | Deref (l, e, t) -> l
   | CallExpr (l, g, pats0, pats,_) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs, _) -> l
@@ -1191,6 +1193,7 @@ and
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
+| [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -1662,12 +1665,19 @@ in
     in
     List.mem inter s
   in
+
+  let rec compatible_pointees t t0 =
+    match (t, t0) with
+      (_, Void) -> true
+    | (Void, _) -> true
+    | (PtrType t, PtrType t0) -> compatible_pointees t t0
+    | _ -> t = t0
+  in
   
   let rec expect_type_core l msg t t0 =
     match (t, t0) with
-      (PtrType _, PtrType Void) -> ()
+      (PtrType t, PtrType t0) when compatible_pointees t t0 -> ()
     | (ObjType "null", ObjType _) -> ()
-    | (PtrType Void, PtrType _) -> ()
     | (Char, IntType) -> ()
     | (ObjType _, ObjType "Object") -> ()
     | (ObjType x, ObjType y) when x=y||(checkinter y x)||(checksuper x y)->() 
@@ -2253,7 +2263,7 @@ in
       let t1 = check e1 in
       begin
         match t1 with
-          PtrType Char | PtrType Void -> checkt e2 intt; ts:=Some [t1; IntType]; t1
+          PtrType _ -> checkt e2 intt; ts:=Some [t1; IntType]; t1
         | IntType | RealType -> promote l e1 e2 ts
       end
     | Operation (l, (Mul | Div), [e1; e2], ts) ->
@@ -2272,6 +2282,13 @@ in
       end;
       t
     | Read (l, e, f) -> check_deref l tenv e f
+    | Deref (l, e, tr) ->
+      let t = check e in
+      begin
+        match t with
+          PtrType t0 -> tr := Some t0; t0
+        | _ -> static_error l "Operand must be pointer."
+      end
     | CallExpr (l, g', [], pats,_) -> (
       match try_assoc g' purefuncmap with
         Some (_, t, ts, _) -> (
@@ -2660,6 +2677,7 @@ in
     | StringLit (_, _) -> []
     | ClassLit (l, _) -> []
     | Read (l, e, f) -> assert false
+    | Deref (l, e, t) -> assert false
     | CallExpr (l, g, [], pats, _) ->
       flatmap (fun (LitPat e) -> vars_used e) pats
     | IfExpr (l, e, e1, e2) -> vars_used e @ vars_used e1 @ vars_used e2
@@ -2818,6 +2836,14 @@ in
   let max_ptr_big_int = big_int_of_string "4294967295" in
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
   
+  let sizeof l t =
+    match t with
+      Void | Char -> 1
+    | IntType -> 4
+    | PtrType _ -> 4
+    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.")
+  in
+  
   let rec eval_core assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval_core assert_term read_field env in
     let check_overflow l min t max =
@@ -2888,8 +2914,9 @@ in
         match !ts with
           Some [IntType; IntType] ->
           check_overflow l min_int_term (ctxt#mk_add (ev e1) (ev e2)) max_int_term
-        | Some [PtrType (Char|Void); IntType] ->
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ev e2)) max_ptr_term
+        | Some [PtrType t; IntType] ->
+          let n = sizeof l t in
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ctxt#mk_mul (ctxt#mk_intlit n) (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_add (ev e1) (ev e2)
         | _ -> static_error l "Internal error in eval."
@@ -2899,8 +2926,9 @@ in
         match !ts with
           Some [IntType; IntType] ->
           check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
-        | Some [PtrType Char; IntType] ->
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ev e2)) max_ptr_term
+        | Some [PtrType t; IntType] ->
+          let n = sizeof l t in
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul (ctxt#mk_intlit n) (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
       end
@@ -2918,7 +2946,15 @@ in
       begin
         match read_field with
           None -> static_error l "Cannot use field dereference in this context."
-        | Some read_field -> read_field l (ev e) f
+        | Some (read_field, deref_pointer) -> read_field l (ev e) f
+      end
+    | Deref (l, e, t) ->
+      begin
+        match read_field with
+          None -> static_error l "Cannot use field dereference in this context."
+        | Some (read_field, deref_pointer) ->
+          let (Some t) = !t in
+          deref_pointer l (ev e) t
       end
     | FuncNameExpr fn -> List.assoc fn funcnameterms
     | SwitchExpr (l, e, cs, tref) ->
@@ -3164,15 +3200,34 @@ in
         None
   in
   
-  let read_field h env l t f =
-    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+  let lookup_points_to_chunk h0 env l f_symb t =
     let rec iter h =
       match h with
-        [] -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
+        [] -> assert_false h0 env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
       | ((g, true), coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> v
       | _::h -> iter h
     in
-    iter h
+    iter h0
+  in
+
+  let read_field h env l t f =
+    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+    lookup_points_to_chunk h env l f_symb t
+  in
+  
+  let pointer_pred_symb =
+    match file_type path with
+      Java -> real_unit (* Anything, doesn't matter. *)
+    | _ -> let (_, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in pointer_pred_symb
+  in
+  
+  let deref_pointer h env l pointerTerm pointeeType =
+    let predSymb =
+      match pointeeType with
+        PtrType _ -> pointer_pred_symb
+      | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
+    in
+    lookup_points_to_chunk h env l predSymb pointerTerm
   in
 
   let assert_chunk h ghostenv env l g coef coefpat pats cont =
@@ -3481,7 +3536,7 @@ in
   in 
   let eval_non_pure is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
-    eval_core assert_term (Some (fun l t f -> read_field h env l t f)) env e
+    eval_core assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e
   in 
   
   let eval_h is_ghost_expr h env e cont =
@@ -4083,7 +4138,7 @@ in
         branch
           (fun _ ->
              assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
-               assume (eval0 (Some (fun l t f -> read_field h' env l t f)) env e) (fun _ ->
+               assume (eval0 (Some ((fun l t f -> read_field h' env l t f), (fun l p t -> deref_pointer h' env l p t))) env e) (fun _ ->
                  verify_cont boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
@@ -4095,7 +4150,7 @@ in
           )
           (fun _ ->
              assume_pred h ghostenv env p real_unit None None (fun h ghostenv' env' ->
-               assume (ctxt#mk_not (eval0 (Some (fun l t f -> read_field h env l t f)) env e)) (fun _ ->
+               assume (ctxt#mk_not (eval0 (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
       )
