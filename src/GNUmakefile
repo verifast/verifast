@@ -102,7 +102,7 @@ verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml
 release: test
 	mkdir verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/bin
-#	cp $(Z3)/LICENSE.txt verifast-$(VFVERSION)/bin/z3.LICENSE.txt
+	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 	cp assume.vfmanifest crt.vfmanifest prelude.h verifast-$(VFVERSION)/bin
 	cp verifastz3.opt verifast-$(VFVERSION)/bin/verifast-core
 	cp vfidez3.opt verifast-$(VFVERSION)/bin/vfide-core
