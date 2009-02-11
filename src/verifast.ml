@@ -533,6 +533,7 @@ and
   | FuncNameExpr of string (*function name *)
   | CastExpr of loc * type_expr * expr (* cast *)
   | SizeofExpr of loc * type_expr
+  | AddressOf of loc * expr
 and
   pat =
     LitPat of expr (* literal pattern *)
@@ -701,6 +702,7 @@ let expr_loc e =
   | SizeofExpr (l, t) -> l
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
+  | AddressOf (l, e) -> l
 
 let pred_loc p =
   match p with
@@ -751,7 +753,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif";
+  "define"; "endif"; "&"
 ]
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
 ]
@@ -1197,6 +1199,7 @@ and
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
+| [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -2156,6 +2159,41 @@ in
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is 
   in
   
+  let predinstmap =
+    flatmap
+      begin
+        function
+          (sn, (_, Some fmap)) ->
+          flatmap
+            begin
+              fun (f, (l, t)) ->
+                let predinst p =
+                  ((sn ^ "_" ^ f, []),
+                   (l, [sn, PtrType (StructType sn); "value", t], Some 1,
+                    let fref = new fieldref f in
+                    fref#set_parent sn;
+                    fref#set_range t;
+                    CallPred (l, p, [], [LitPat (AddressOf (l, Read (l, Var (l, sn, ref (Some LocalVar)), fref))); LitPat (Var (l, "value", ref (Some LocalVar)))])
+                   )
+                  )
+                in
+                match t with
+                  PtrType _ ->
+                  let pref = new predref "pointer" in
+                  pref#set_domain [PtrType (PtrType Void); PtrType Void];
+                  [predinst pref]
+                | IntType ->
+                  let pref = new predref "integer" in
+                  pref#set_domain [PtrType IntType; IntType];
+                  [predinst pref]
+                | _ -> []
+            end
+            fmap
+        | _ -> []
+      end
+      structmap
+  in
+  
   let predinstmap = 
     let rec iter pm ds =
       match ds with
@@ -2192,7 +2230,7 @@ in
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in  (* TODO: Include field_xxx predicate bodies in terms of 'range' predicates, so that a field can be turned into a range by opening it. *)
-    iter [] ds
+    iter predinstmap ds
   in
   
   let rec check_expr tenv e =
@@ -2292,6 +2330,9 @@ in
           PtrType t0 -> tr := Some t0; t0
         | _ -> static_error l "Operand must be pointer."
       end
+    | AddressOf (l, e) ->
+      let t = check e in
+      PtrType t
     | CallExpr (l, g', [], pats,_) -> (
       match try_assoc g' purefuncmap with
         Some (_, t, ts, _) -> (
@@ -2679,8 +2720,9 @@ in
     | IntLit (l, _, _) -> []
     | StringLit (_, _) -> []
     | ClassLit (l, _) -> []
-    | Read (l, e, f) -> assert false
-    | Deref (l, e, t) -> assert false
+    | Read (l, e, f) -> vars_used e
+    | Deref (l, e, t) -> vars_used e
+    | AddressOf (l, e) -> vars_used e
     | CallExpr (l, g, [], pats, _) ->
       flatmap (fun (LitPat e) -> vars_used e) pats
     | IfExpr (l, e, e1, e2) -> vars_used e @ vars_used e1 @ vars_used e2
@@ -2847,6 +2889,19 @@ in
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.")
   in
   
+  let field_offsets =
+    flatmap
+      begin
+        function
+          (sn, (_, Some fmap)) -> List.map (fun (f, (_, _)) -> ((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)) fmap
+        | _ -> []
+      end
+      structmap
+  in
+  
+  let field_offset f = List.assoc (f#parent, f#name) field_offsets in
+  let field_address t f = ctxt#mk_add t (field_offset f) in
+  
   let rec eval_core assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval_core assert_term read_field env in
     let check_overflow l min t max =
@@ -2958,6 +3013,15 @@ in
         | Some (read_field, deref_pointer) ->
           let (Some t) = !t in
           deref_pointer l (ev e) t
+      end
+    | AddressOf (l, e) ->
+      begin
+        match e with
+          Read (le, e, f) -> 
+          (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
+          (* GCC documentation is not clear about it. *)
+          field_address (ev e) f
+        | _ -> static_error l "Taking the address of this expression is not supported."
       end
     | FuncNameExpr fn -> List.assoc fn funcnameterms
     | SwitchExpr (l, e, cs, tref) ->

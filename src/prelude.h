@@ -60,6 +60,10 @@ lemma void chars_nil(char *array);
     requires emp;
     ensures chars(array, chars_nil);
 
+lemma void open_chars_nil(char *array);
+    requires chars(array, chars_nil);
+    ensures emp;
+
 lemma void chars_split(char *array, int offset);
    requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= chars_length(cs);
    ensures
@@ -79,9 +83,25 @@ lemma void assume(bool b);
     requires true;
     ensures b;
 
-predicate integer(int *p, int v);
+predicate integer(int *p; int v);
 
-predicate pointer(void **pp, void *p);
+lemma void chars_to_integer(void *p);
+    requires chars(p, ?cs) &*& chars_length(cs) == 4;
+    ensures integer(p, _);
+
+lemma void integer_to_chars(void *p);
+    requires integer(p, _);
+    ensures chars(p, ?cs) &*& chars_length(cs) == 4;
+
+predicate pointer(void **pp; void *p);
+
+lemma void chars_to_pointer(void *p);
+    requires chars(p, ?cs) &*& chars_length(cs) == 4;
+    ensures pointer(p, _);
+
+lemma void pointer_to_chars(void *p);
+    requires pointer(p, _);
+    ensures chars(p, ?cs) &*& chars_length(cs) == 4;
 
 @*/
 
