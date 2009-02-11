@@ -55,7 +55,7 @@ vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
 vfidez3.opt: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3 -cclib -lz3stubs
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -82,7 +82,7 @@ verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml ver
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
 verifastz3.opt: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifastz3.opt -I $(Z3)/ocaml unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3 -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifastz3.opt -I $(Z3)/ocaml unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
@@ -108,7 +108,7 @@ release: test
 	cp vfidez3.opt verifast-$(VFVERSION)/bin/vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
-	cp $(Z3)/lib/libz3.so verifast-$(VFVERSION)/bin
+	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
 	mkdir verifast-$(VFVERSION)/examples
 	cp ../examples/Composite.c verifast-$(VFVERSION)/examples
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/composite4.c .
