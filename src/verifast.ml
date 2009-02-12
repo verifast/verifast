@@ -1700,14 +1700,14 @@ in
   
   let expect_type l t t0 = expect_type_core l "" t t0 in
   
-  let (inductivemap, purefuncmap) =
-    let rec iter imap pfm ds =
+  let (inductivemap, purefuncmap, fixpointmap) =
+    let rec iter imap pfm fpm ds =
       match ds with
-        [] -> (List.rev imap, List.rev pfm)
+        [] -> (List.rev imap, List.rev pfm, List.rev fpm)
       | Inductive (l, i, ctors)::ds ->
         let rec citer j ctormap pfm ctors =
           match ctors with
-            [] -> iter ((i, (l, List.rev ctormap))::imap) pfm ds
+            [] -> iter ((i, (l, List.rev ctormap))::imap) pfm fpm ds
           | Ctor (lc, cn, tes)::ctors ->
             if List.mem_assoc cn pfm then
               static_error lc "Duplicate pure function name."
@@ -1749,7 +1749,7 @@ in
           in
           iter [] ps
         in
-        let (index, ctorcount) = 
+        let (index, ctorcount, ls, w, wcs) = 
           match body_opt with
             Some ([SwitchStmt (ls, e, cs)], _) -> (
             let ctorcount = List.length cs in
@@ -1761,7 +1761,7 @@ in
                 match try_assoc i imap with
                   None -> static_error ls "Switch statement cannot precede inductive declaration."
                 | Some (l, ctormap) ->
-                  let rec iter ctormap cs =
+                  let rec iter ctormap wcs cs =
                     match cs with
                       [] ->
                       let _ = 
@@ -1769,7 +1769,7 @@ in
                           [] -> ()
                         | (cn, _)::_ ->
                           static_error ls ("Missing case: '" ^ cn ^ "'.")
-                      in (index, ctorcount)
+                      in (index, ctorcount, ls, e, wcs)
                     | SwitchStmtClause (lc, cn, xs, body)::cs -> (
                       match try_assoc cn ctormap with
                         None -> static_error lc "No such constructor."
@@ -1788,72 +1788,80 @@ in
                           iter [] ts xs
                         in
                         let tenv = xmap @ pmap in
-                        let body =
+                        let (lret, body) =
                           match body with
-                            [ReturnStmt (_, Some e)] -> e
+                            [ReturnStmt (lret, Some e)] -> (lret, e)
                           | _ -> static_error lc "Body of switch clause must be a return statement with a result expression."
                         in
                         let rec check_ tenv e =
                           let check e = check_ tenv e in
                           let checkt e = checkt_ tenv e in
                           let promote_numeric e1 e2 ts =
-                            let t1 = check e1 in
-                            let t2 = check e2 in
+                            let (w1, t1) = check e1 in
+                            let (w2, t2) = check e2 in
                             match (t1, t2) with
-                              (IntType, RealType) -> checkt e1 RealType; ts := Some [RealType; RealType]; RealType
-                            | (t1, t2) -> checkt e2 t1; ts := Some [t1; t1]; t1
+                              (IntType, RealType) ->
+                              let w1 = checkt e1 RealType in
+                              ts := Some [RealType; RealType];
+                              (w1, w2, RealType)
+                            | (t1, t2) ->
+                              let w2 = checkt e2 t1 in
+                              ts := Some [t1; t1];
+                              (w1, w2, t1)
                           in
                           let promote l e1 e2 ts =
                             match promote_numeric e1 e2 ts with
-                              (IntType | RealType) as t -> t
+                              (w1, w2, (IntType | RealType)) as result -> result
                             | _ -> static_error l "Expression of type int or real expected."
                           in
                           match e with
-                            True l -> boolt
-                          | False l -> boolt
-                          | Null l-> (match rt with ObjType id -> ObjType id ) (* null is allowed for every object type*)
+                            True l -> (e, boolt)
+                          | False l -> (e, boolt)
+                          | Null l -> (e, match rt with ObjType id -> ObjType id ) (* null is allowed for every object type*)
                           | Var (l, x, scope) -> (
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
-                                  Some (_, t, [], _) -> scope := Some PureCtor; t
+                                  Some (_, t, [], _) -> scope := Some PureCtor; (e, t)
                                 | _ -> static_error l "No such variable or constructor."
                               )
-                            | Some t -> scope := Some LocalVar; t
+                            | Some t -> scope := Some LocalVar; (e, t)
                             )
-                          | Operation (l, (Eq | Neq), [e1; e2], ts) ->
-                            ignore (promote_numeric e1 e2 ts);
-                            boolt
-                          | Operation (l, (Or | And), [e1; e2], ts) ->
-                            let _ = checkt e1 boolt in
-                            let _ = checkt e2 boolt in
-                            boolt
+                          | Operation (l, ((Eq | Neq) as operator), [e1; e2], ts) ->
+                            let (w1, w2, t) = promote_numeric e1 e2 ts in
+                            (Operation (l, operator, [w1; w2], ts), boolt)
+                          | Operation (l, ((Or | And) as operator), [e1; e2], ts) ->
+                            let w1 = checkt e1 boolt in
+                            let w2 = checkt e2 boolt in
+                            (Operation (l, operator, [w1; w2], ts), boolt)
                           | Operation (l, Not, [e], ts) ->
-                            let _ = checkt e boolt in
-                            boolt
-                          | Operation (l, (Le | Lt), [e1; e2], ts) ->
-                            ignore (promote l e1 e2 ts);
-                            boolt
-                          | Operation (l, (Add | Sub), [e1; e2], ts) ->
-                            promote l e1 e2 ts
-                          | Operation (l, (Mul | Div), [e1; e2], ts) ->
-                            checkt e1 RealType;
-                            checkt e2 RealType;
-                            RealType
-                          | IntLit (l, n, t) -> t := Some intt; intt
-                          | StringLit (l, s) -> PtrType Char
-                          | CallExpr (l, g', [], pats,_) -> (
+                            let w = checkt e boolt in
+                            (Operation (l, Not, [w], ts), boolt)
+                          | Operation (l, ((Le | Lt) as operator), [e1; e2], ts) ->
+                            let (w1, w2, t) = promote l e1 e2 ts in
+                            (Operation (l, operator, [w1; w2], ts), boolt)
+                          | Operation (l, ((Add | Sub) as operator), [e1; e2], ts) ->
+                            let (w1, w2, t) = promote l e1 e2 ts in
+                            (Operation (l, operator, [w1; w2], ts), t)
+                          | Operation (l, ((Mul | Div) as operator), [e1; e2], ts) ->
+                            let w1 = checkt e1 RealType in
+                            let w2 = checkt e2 RealType in
+                            (Operation (l, operator, [w1; w2], ts), RealType)
+                          | IntLit (l, n, t) -> t := Some intt; (e, intt)
+                          | StringLit (l, s) -> (e, PtrType Char)
+                          | CallExpr (l, g', [], pats, info) -> (
                             match try_assoc g' pfm with
                               Some (l, t, ts, _) -> (
                               match zip pats ts with
                                 None -> static_error l "Incorrect argument count."
                               | Some pts -> (
-                                List.iter (fun (pat, t) ->
+                                let wpats =
+                                List.map (fun (pat, t) ->
                                   match pat with
-                                    LitPat e -> checkt e t
+                                    LitPat e -> LitPat (checkt e t)
                                   | _ -> static_error l "Patterns are not allowed here."
-                                ) pts;
-                                t
+                                ) pts in
+                                (CallExpr (l, g', [], wpats, info), t)
                                 )
                               )
                             | None ->
@@ -1861,10 +1869,10 @@ in
                                 match zip pmap pats with
                                   None -> static_error l "Incorrect argument count."
                                 | Some pts ->
-                                  let _ =
-                                    List.iter (fun ((p, t), pat) ->
+                                  let wpats =
+                                    List.map (fun ((p, t), pat) ->
                                       match pat with
-                                        LitPat e -> checkt e t
+                                        LitPat e -> LitPat (checkt e t)
                                       | _ -> static_error l "Patterns are not allowed here."
                                     ) pts
                                   in
@@ -1873,30 +1881,30 @@ in
                                       [Var (l, x, _)] when List.mem_assoc x xmap -> ()
                                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
                                   in
-                                  rt
+                                  (CallExpr (l, g', [], wpats, info), rt)
                               else
                                 static_error l ("No such pure function: " ^ g')
                             )
                           | IfExpr (l, e1, e2, e3) ->
-                            let _ = checkt e1 boolt in
-                            let t = check e2 in
-                            let _ = checkt e3 t in
-                            t
+                            let w1 = checkt e1 boolt in
+                            let (w2, t) = check e2 in
+                            let w3  = checkt e3 t in
+                            (IfExpr (l, w1, w2, w3), t)
                           | SwitchExpr (l, e, cs, tref) ->
-                            let t = check e in
+                            let (w, t) = check e in
                             begin
                               match t with
                                 InductiveType i ->
                                 begin
                                   let (_, ctormap) = List.assoc i imap in
-                                  let rec iter t0 ctors cs =
+                                  let rec iter t0 wcs ctors cs =
                                     match cs with
                                       [] ->
                                       if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
                                       begin
                                         match t0 with
                                           None -> static_error l "Switch expressions with zero cases are not yet supported."
-                                        | Some t0 -> tref := t0; t0
+                                        | Some t0 -> tref := t0; (SwitchExpr (l, w, List.rev wcs, tref), t0)
                                       end
                                     | SwitchExprClause (lc, cn, xs, e)::cs ->
                                       begin
@@ -1916,32 +1924,33 @@ in
                                             in
                                             iter2 ts xs []
                                           in
-                                          let t = check_ (xenv@tenv) e in
+                                          let (w, t) = check_ (xenv@tenv) e in
                                           let t0 =
                                             match t0 with
                                               None -> Some t
                                             | Some t0 -> expect_type (expr_loc e) t t0; Some t0
                                           in
-                                          iter t0 (List.filter (fun (ctorname, _) -> ctorname <> cn) ctors) cs
+                                          let ctors = List.filter (fun (ctorname, _) -> ctorname <> cn) ctors in
+                                          iter t0 (SwitchExprClause (lc, cn, xs, w)::wcs) ctors cs
                                       end
                                   in
-                                  iter None ctormap cs
+                                  iter None [] ctormap cs
                                 end
                             end
                           | e -> static_error (expr_loc e) "Expression form not allowed in fixpoint function body."
                         and checkt_ tenv e t0 =
                           match (e, t0) with
-                            (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType
-                          | (IntLit (l, n, t), RealType) -> t:=Some RealType
+                            (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType; e
+                          | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
                           | _ ->
-                            let t = check_ tenv e in
-                            if t = t0 then () else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+                            let (w, t) = check_ tenv e in
+                            if t = t0 then w else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
                         in
-                        let _ = checkt_ tenv body rt in
-                        iter (List.remove_assoc cn ctormap) cs
+                        let wbody = checkt_ tenv body rt in
+                        iter (List.remove_assoc cn ctormap) (SwitchStmtClause (lc, cn, xs, [ReturnStmt (lret, Some wbody)])::wcs) cs
                       )
                   in
-                  iter ctormap cs
+                  iter ctormap [] cs
                 )
               | _ -> static_error l "Switch operand is not an inductive value."
               )
@@ -1949,8 +1958,8 @@ in
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
         let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ds
-      | _::ds -> iter imap pfm ds
+        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs))::fpm) ds
+      | _::ds -> iter imap pfm fpm ds
     in
     let indtypemap0 = [("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))] in
     let purefuncmap0 = 
@@ -1958,7 +1967,7 @@ in
        ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal 1))))]
     in
     let purefuncmap0 = purefuncmap0 @ isfuncs in
-    iter indtypemap0 purefuncmap0 ds
+    iter indtypemap0 purefuncmap0 [] ds
   in
   
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
@@ -2237,142 +2246,155 @@ in
     let check e = check_expr tenv e in
     let checkt e t0 = check_expr_t tenv e t0 in
     let promote_numeric e1 e2 ts =
-      let t1 = check e1 in
-      let t2 = check e2 in
+      let (w1, t1) = check e1 in
+      let (w2, t2) = check e2 in
       match (t1, t2) with
-        (IntType, RealType) -> checkt e1 RealType; ts := Some [RealType; RealType]; RealType
-      | (t1, t2) -> checkt e2 t1; ts := Some [t1; t1]; t1
+        (IntType, RealType) ->
+        let w1 = checkt e1 RealType in
+        ts := Some [RealType; RealType];
+        (w1, w2, RealType)
+      | (t1, t2) ->
+        let w2 = checkt e2 t1 in
+        ts := Some [t1; t1];
+        (w1, w2, t1)
     in
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
-        (IntType | RealType | PtrType _) as t -> t
+        (w1, w2, (IntType | RealType | PtrType _)) as result -> result
       | _ -> static_error l "Expression of type int, real, or pointer type expected."
     in
     match e with
-      True l -> boolt
-    | False l -> boolt
-    | Null l -> ObjType "Object"
+      True l -> (e, boolt)
+    | False l -> (e, boolt)
+    | Null l -> (e, ObjType "Object")
     | Var (l, x, scope) ->
       begin
       match try_assoc x tenv with
         None ->
         begin
           match try_assoc x purefuncmap with
-            Some (_, t, [], _) -> scope := Some PureCtor; t
+            Some (_, t, [], _) -> scope := Some PureCtor; (e, t)
           | _ ->
             begin
               if List.mem x funcnames then
                 match file_type path with
                 Java -> static_error l "In java methods can't be used as pointers"
-                | _ -> scope := Some FuncName; PtrType Void
+                | _ -> scope := Some FuncName; (e, PtrType Void)
               else
                 begin
                   match try_assoc x predfammap with
                     Some (_, arity, ts, _, _) ->
                     if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
                     scope := Some PredFamName;
-                    PredType ts
+                    (e, PredType ts)
                   | None ->
                     static_error l "No such variable, constructor, regular function, or predicate."
                 end
             end
         end
-      | Some t -> scope := Some LocalVar; t
+      | Some t -> scope := Some LocalVar; (e, t)
       end
     | PredNameExpr (l, g) ->
       begin
         match try_assoc g predfammap with
           Some (_, arity, ts, _, _) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
-          PredType ts
+          (e, PredType ts)
         | None -> static_error l "No such predicate."
       end
-    | Operation (l, (Eq | Neq), [e1; e2], ts) -> 
-      ignore (promote_numeric e1 e2 ts);
-      boolt
-    | Operation (l, (Or | And), [e1; e2], ts) -> 
-      let _ = checkt e1 boolt in
-      let _ = checkt e2 boolt in
-      boolt
+    | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
+      let (w1, w2, t) = promote_numeric e1 e2 ts in
+      (Operation (l, operator, [w1; w2], ts), boolt)
+    | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
+      let w1 = checkt e1 boolt in
+      let w2 = checkt e2 boolt in
+      (Operation (l, operator, [w1; w2], ts), boolt)
     | Operation (l, Not, [e], ts) -> 
-      let _ = checkt e boolt in
-      boolt
-    | Operation (l, (Le | Lt), [e1; e2], ts) -> 
-      ignore (promote l e1 e2 ts);
-      boolt
-    | Operation (l, (Add | Sub), [e1; e2], ts) ->
-      let t1 = check e1 in
+      let w = checkt e boolt in
+      (Operation (l, Not, [w], ts), boolt)
+    | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
+      let (w1, w2, t) = promote l e1 e2 ts in
+      (Operation (l, operator, [w1; w2], ts), boolt)
+    | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
+      let (w1, t1) = check e1 in
       begin
         match t1 with
-          PtrType _ -> checkt e2 intt; ts:=Some [t1; IntType]; t1
-        | IntType | RealType -> promote l e1 e2 ts
+          PtrType _ ->
+          let w2 = checkt e2 intt in
+          ts:=Some [t1; IntType];
+          (Operation (l, operator, [w1; w2], ts), t1)
+        | IntType | RealType ->
+          let (w1, w2, t) = promote l e1 e2 ts in
+          (Operation (l, operator, [w1; w2], ts), t)
       end
-    | Operation (l, (Mul | Div), [e1; e2], ts) ->
-      checkt e1 RealType;
-      checkt e2 RealType;
-      RealType
-    | IntLit (l, n, t) -> t := Some intt; intt
-    | ClassLit (l, s) -> ObjType "Class"
-    | StringLit (l, s) -> PtrType Char
+    | Operation (l, (Mul | Div as operator), [e1; e2], ts) ->
+      let w1 = checkt e1 RealType in
+      let w2 = checkt e2 RealType in
+      (Operation (l, operator, [w1; w2], ts), RealType)
+    | IntLit (l, n, t) -> t := Some intt; (e, intt)
+    | ClassLit (l, s) -> (e, ObjType "Class")
+    | StringLit (l, s) -> (e, PtrType Char)
     | CastExpr (l, te, e) ->
       let t = check_pure_type te in
-      begin
+      let w =
         match (e, t) with
-          (IntLit (_, n, tp), PtrType _) -> tp := Some t
+          (IntLit (_, n, tp), PtrType _) -> tp := Some t; e
         | _ -> checkt e t
-      end;
-      t
-    | Read (l, e, f) -> check_deref l tenv e f
+      in
+      (CastExpr (l, te, w), t)
+    | Read (l, e, f) -> let (w, t) = check_deref l tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
-      let t = check e in
+      let (w, t) = check e in
       begin
         match t with
-          PtrType t0 -> tr := Some t0; t0
+          PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0)
         | _ -> static_error l "Operand must be pointer."
       end
     | AddressOf (l, e) ->
-      let t = check e in
-      PtrType t
-    | CallExpr (l, g', [], pats,_) -> (
+      let (w, t) = check e in
+      (AddressOf (l, w), PtrType t)
+    | CallExpr (l, g', [], pats, info) -> (
       match try_assoc g' purefuncmap with
         Some (_, t, ts, _) -> (
         match zip pats ts with
           None -> static_error l "Incorrect argument count."
         | Some pts -> (
-          List.iter (fun (pat, t) ->
+          let wpats =
+          List.map (fun (pat, t) ->
             match pat with
-              LitPat e -> checkt e t
+              LitPat e -> LitPat (checkt e t)
             | _ -> static_error l "Patterns are not allowed here."
-          ) pts;
-          t
+          ) pts
+          in
+          (CallExpr (l, g', [], wpats, info), t)
           )
         )
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
-                   [LitPat target] -> checkt target (ObjType "Object"); ObjType "Class"
+                   [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [LitPat w], info), ObjType "Class")
                 else static_error l ("No such pure function: "^g')
       )
     | IfExpr (l, e1, e2, e3) ->
-      let _ = checkt e1 boolt in
-      let t = check e2 in
-      let _ = checkt e3 t in
-      t
-    | FuncNameExpr _ -> PtrType Void
+      let w1 = checkt e1 boolt in
+      let (w2, t) = check e2 in
+      let w3 = checkt e3 t in
+      (IfExpr (l, w1, w2, w3), t)
+    | FuncNameExpr _ -> (e, PtrType Void)
     | SwitchExpr (l, e, cs, tref) ->
-      let t = check e in
+      let (w, t) = check e in
       begin
         match t with
           InductiveType i ->
           begin
             let (_, ctormap) = List.assoc i inductivemap in
-            let rec iter t0 ctors cs =
+            let rec iter t0 wcs ctors cs =
               match cs with
                 [] ->
                 if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported."
-                  | Some t0 -> tref := t0; t0
+                  | Some t0 -> tref := t0; (SwitchExpr (l, w, wcs, tref), t0)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -2394,32 +2416,33 @@ in
                       in
                       iter2 ts xs []
                     in
-                    let t = check_expr (xenv@tenv) e in
+                    let (w, t) = check_expr (xenv@tenv) e in
                     let t0 =
                       match t0 with
                         None -> Some t
                       | Some t0 -> expect_type (expr_loc e) t t0; Some t0
                     in
-                    iter t0 (List.filter (fun (ctorname, _) -> ctorname <> cn) ctors) cs
+                    let ctors = List.filter (fun (ctorname, _) -> ctorname <> cn) ctors in
+                    iter t0 (SwitchExprClause (lc, cn, xs, w)::wcs) ctors cs
                 end
             in
-            iter None ctormap cs
+            iter None [] ctormap cs
           end
         | _ -> static_error l "Switch expression operand must be inductive value."
       end
     | e -> static_error (expr_loc e) "Expression form not allowed here."
   and check_expr_t tenv e t0 =
     match (e, t0) with
-      (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType
-    | (IntLit (l, n, t), RealType) -> t:=Some RealType
+      (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType; e
+    | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), Char) ->
       if not (le_big_int zero_big_int n && le_big_int n (big_int_of_int 127)) then
         static_error l "Integer literal used as char must be between 0 and 127.";
-      t:=Some IntType
+      t:=Some IntType; e
     | _ ->
-      let t = check_expr tenv e in expect_type (expr_loc e) t t0
+      let (w, t) = check_expr tenv e in expect_type (expr_loc e) t t0; w
   and check_deref l tenv e f =
-    let t = check_expr tenv e in
+    let (w, t) = check_expr tenv e in
     begin
     match t with
     | PtrType (StructType sn) ->
@@ -2429,7 +2452,7 @@ in
         begin
           match try_assoc f#name fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
-          | Some (_, t) -> f#set_parent sn; f#set_range t; t
+          | Some (_, t) -> f#set_parent sn; f#set_range t; (w, t)
         end
       | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
@@ -2440,7 +2463,7 @@ in
         begin
           match try_assoc f#name fds with
             None -> static_error l ("No such field in class '" ^ sn ^ "'.")
-          | Some (_, t,_) -> f#set_parent sn; f#set_range t; t
+          | Some (_, t,_) -> f#set_parent sn; f#set_range t; (w, t)
         end
       | (_,_,None,_,_,_) -> static_error l ("Invalid dereference; class '" ^ sn ^ "' was declared without a body.")
       end
@@ -2450,28 +2473,30 @@ in
 
   let check_pat l tenv t p =
     match p with
-      LitPat e -> check_expr_t tenv e t; tenv
+      LitPat e -> let w = check_expr_t tenv e t in (LitPat w, tenv)
     | VarPat x ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
-      (x, t)::tenv
-    | DummyPat -> tenv
+      (p, (x, t)::tenv)
+    | DummyPat -> (p, tenv)
   in
   
   let rec check_pats l tenv ts ps =
     match (ts, ps) with
-      ([], []) -> tenv
+      ([], []) -> ([], tenv)
     | (t::ts, p::ps) ->
-      check_pats l (check_pat l tenv t p) ts ps
+      let (wpat, tenv) = check_pat l tenv t p in
+      let (wpats, tenv) = check_pats l tenv ts ps in
+      (wpat::wpats, tenv)
     | ([], _) -> static_error l "Too many patterns"
     | (_, []) -> static_error l "Too few patterns"
   in
 
-  let rec check_pred tenv p cont =
+  let rec check_pred tenv p =
     match p with
       Access (l, e, f, v) ->
-      let t = check_deref l tenv e f in
-      let tenv' = check_pat l tenv t v in
-      cont tenv'
+      let (w, t) = check_deref l tenv e f in
+      let (wv, tenv') = check_pat l tenv t v in
+      (Access (l, w, f, wv), tenv')
     | CallPred (l, p, ps0, ps) ->
       let (arity, xs, inputParamCount) =
         match try_assoc p#name predfammap with
@@ -2486,34 +2511,27 @@ in
       in
       begin
         if List.length ps0 <> arity then static_error l "Incorrect number of indexes.";
-        let ts = match file_type path with
-          Java-> list_make arity (ObjType "Class") @ xs 
-        | _   -> list_make arity (PtrType Void) @ xs 
+        let ts0 = match file_type path with
+          Java-> list_make arity (ObjType "Class")
+        | _   -> list_make arity (PtrType Void)
         in
-        begin
-        match zip ts (ps0 @ ps) with
-          None -> static_error l "Incorrect number of arguments."
-        | Some bs ->
-          let rec iter tenv bs =
-            match bs with
-              [] -> p#set_domain ts; p#set_inputParamCount inputParamCount; cont tenv
-            | (t, p)::bs ->
-              let tenv = check_pat l tenv t p in iter tenv bs
-          in
-          iter tenv bs
-        end
+        let (wps0, tenv) = check_pats l tenv ts0 ps0 in
+        let (wps, tenv) = check_pats l tenv xs ps in
+        p#set_domain (ts0 @ xs); p#set_inputParamCount inputParamCount; (CallPred (l, p, wps0, wps), tenv)
       end
     | ExprPred (l, e) ->
-      check_expr_t tenv e boolt; cont tenv
+      let w = check_expr_t tenv e boolt in (ExprPred (l, w), tenv)
     | Sep (l, p1, p2) ->
-      check_pred tenv p1 (fun tenv -> check_pred tenv p2 cont)
+      let (p1, tenv) = check_pred tenv p1 in
+      let (p2, tenv) = check_pred tenv p2 in
+      (Sep (l, p1, p2), tenv)
     | IfPred (l, e, p1, p2) ->
-      check_expr_t tenv e boolt;
-      check_pred tenv p1 (fun _ -> ());
-      check_pred tenv p2 (fun _ -> ());
-      cont tenv
+      let w = check_expr_t tenv e boolt in
+      let (wp1, _) = check_pred tenv p1 in
+      let (wp2, _) = check_pred tenv p2 in
+      (IfPred (l, w, wp1, wp2), tenv)
     | SwitchPred (l, e, cs) ->
-      let t = check_expr tenv e in
+      let (w, t) = check_expr tenv e in
       begin
       match t with
       | InductiveType i ->
@@ -2521,7 +2539,7 @@ in
         match try_assoc i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
         | Some (l, ctormap) ->
-          let rec iter ctormap cs =
+          let rec iter wcs ctormap cs =
             match cs with
               [] ->
               let _ = 
@@ -2529,7 +2547,7 @@ in
                   [] -> ()
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.")
-              in cont tenv
+              in (SwitchPred (l, w, wcs), tenv)
             | SwitchPredClause (lc, cn, xs, body)::cs ->
               begin
               match try_assoc cn ctormap with
@@ -2549,18 +2567,19 @@ in
                   iter [] ts xs
                 in
                 let tenv = xmap @ tenv in
-                (check_pred tenv body (fun _ -> ());
-                iter (List.remove_assoc cn ctormap) cs)
+                let (wbody, _) = check_pred tenv body in
+                iter (SwitchPredClause (lc, cn, xs, wbody)::wcs) (List.remove_assoc cn ctormap) cs
               end
           in
-          iter ctormap cs
+          iter [] ctormap cs
         end
       | _ -> static_error l "Switch operand is not an inductive value."
       end
-    | EmpPred l -> cont tenv
+    | EmpPred l -> (p, tenv)
     | CoefPred (l, coef, body) ->
-      let tenv = check_pat l tenv RealType coef in
-      check_pred tenv body cont
+      let (wcoef, tenv) = check_pat l tenv RealType coef in
+      let (wbody, tenv) = check_pred tenv body in
+      (CoefPred (l, wcoef, wbody), tenv)
   in
   let interfmap = if file_type path<>Java then [] else
     List.map
@@ -2602,11 +2621,10 @@ in
                  match co with
                    None -> static_error lm ("Non-fixpoint function must have contract: "^n)
                  | Some (pre, post) ->
-                     check_pred xmap pre (fun tenv ->
-                       let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                         check_pred postmap post (fun _ -> ())
-                     );
-                     (pre, post)
+                   let (pre, tenv) = check_pred xmap pre in
+                   let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                   let (post, _) = check_pred postmap post in
+                   (pre, post)
                in
                iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
              )
@@ -2675,11 +2693,10 @@ in
                            in
                            search interfs
                  | Some (pre, post) ->
-                     check_pred xmap pre (fun tenv ->
-                       let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                         check_pred postmap post (fun _ -> ())
-                     );
-                     (pre, post)
+                     let (wpre, tenv) = check_pred xmap pre in
+                     let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                     let (wpost, _) = check_pred postmap post in
+                     (wpre, wpost)
                in
                iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
             )
@@ -2707,6 +2724,33 @@ in
          end
       )
       classmethmap
+  in
+
+  let boxmap =
+    List.map
+      begin
+        fun (bcn, (l, boxpmap, amap, hpmap)) ->
+        let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
+        let amap =
+        List.map
+          (fun (an, (l, pmap, pre, post)) ->
+             let pre = check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap) pre boolt in
+             let post = check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap @ old_boxpmap) post boolt in
+             (an, (l, pmap, pre, post))
+          )
+          amap
+        in
+        let hpmap =
+        List.map
+          (fun (hpn, (l, pmap, inv, pbcs)) ->
+             let inv = check_expr_t ([("predicateHandle", HandleIdType)] @ pmap @ boxpmap) inv boolt in
+             (hpn, (l, pmap, inv, pbcs))
+          )
+          hpmap
+        in
+        (bcn, (l, boxpmap, amap, hpmap))
+      end
+      boxmap
   in
   
   let rec vars_used e =
@@ -2823,34 +2867,36 @@ in
       check_pred_precise fixed p
   in
   
-  let _ =
-    List.iter
+  let predinstmap =
+    List.map
       (
-        function
+        fun
           (pfns, (l, xs, inputParamCount, body)) ->
-          check_pred xs body (fun _ -> ());
+          let (wbody, _) = check_pred xs body in
           begin
             match inputParamCount with
               None -> ()
             | Some n ->
               let (inps, outps) = take_drop n (List.map (fun (x, t) -> x) xs) in
-              let fixed = check_pred_precise inps body in
+              let fixed = check_pred_precise inps wbody in
               List.iter
                 (fun x ->
                  if not (List.mem x fixed) then
                    static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'."))
                 outps
-          end
-        | _ -> ()
+          end;
+          (pfns, (l, xs, inputParamCount, wbody))
       )
       predinstmap
   in
   
-  let _ =
-    List.iter
+  let predctormap =
+    List.map
       (
         function
-          (g, (l, ps1, ps2, body, funcsym)) -> check_pred (ps1 @ ps2) body (fun _ -> ())
+          (g, (l, ps1, ps2, body, funcsym)) ->
+          let (wbody, _) = check_pred (ps1 @ ps2) body in
+          (g, (l, ps1, ps2, wbody, funcsym))
       )
       predctormap
   in
@@ -3062,21 +3108,21 @@ in
   let _ =
     List.iter
     (function
-     | Func (l, Fixpoint, t, g, ps, _, _, Some ([SwitchStmt (_, Var (_, x, _), cs)], _),Static,Public) ->
+       (g, (l, t, pmap, _, Var (_, x, _), cs)) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
-         | (tp, x)::ps -> if x = x0 then i else index_of_param (i + 1) x0 ps
+         | (x, tp)::ps -> if x = x0 then i else index_of_param (i + 1) x0 ps
        in
-       let i = index_of_param 0 x ps in
+       let i = index_of_param 0 x pmap in
        let fsym = match List.assoc g purefuncmap with (l, rt, ts, s) -> s in
        let clauses =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
               let ctorsym = match List.assoc cn purefuncmap with (l, rt, ts, s) -> s in
               let eval_body gts cts =
-                let Some pts = zip ps gts in
-                let penv = List.map (fun ((tp, p), t) -> (p, t)) pts in
+                let Some pts = zip pmap gts in
+                let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
                 let Some patenv = zip pats cts in
                 eval None (patenv @ penv) e
               in
@@ -3085,9 +3131,8 @@ in
            cs
        in
        ctxt#set_fpclauses fsym i clauses
-     | _ -> ()
     )
-    ds
+    fixpointmap
   in
 
   let contextStack = ref ([]: 'termnode context list) in
@@ -3435,10 +3480,12 @@ in
           in
           iter [] xs
         in
-        check_pred (xmap @ [("this", PtrType Void)]) pre (fun tenv ->
+        let (pre, post) =
+          let (wpre, tenv) = check_pred (xmap @ [("this", PtrType Void)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          check_pred postmap post (fun _ -> ())
-        );
+          let (wpost, tenv) = check_pred postmap post in
+          (wpre, wpost)
+        in
         iter ((ftn, (l, rt, xmap, pre, post))::functypemap) ds
       | _::ds -> iter functypemap ds
     in
@@ -3527,11 +3574,10 @@ in
           match contract_opt with
             None -> static_error l "Non-fixpoint function must have contract."
           | Some (pre, post) ->
-            check_pred xmap pre (fun tenv ->
-              let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-              check_pred postmap post (fun _ -> ())
-            );
-            (pre, post)
+            let (wpre, tenv) = check_pred xmap pre in
+            let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+            let (wpost, tenv) = check_pred postmap post in
+            (wpre, wpost)
         in
         begin
           match functype_opt with
@@ -3672,16 +3718,16 @@ in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
     let check_correct xo g pats (lg,tr, ps, pre, post, body,v)=
       let ys = List.map (function (p, t) -> p) ps in
-        let _ =
+        let ws =
           match zip pats ps with
             None -> static_error l "Incorrect number of arguments."
           | Some bs ->
-            List.iter
+            List.map
               (function (LitPat e, (x, tp)) ->
                  check_expr_t tenv e tp
               ) bs
         in
-        evhs h env (List.map (function (LitPat e) -> e) pats) (fun h ts ->
+        evhs h env ws (fun h ts ->
         let Some env' = zip ys ts in
         let cenv = env' in
         with_context PushSubcontext (fun () ->
@@ -3794,10 +3840,9 @@ in
                            None -> static_error l "Cannot write call of pure function as statement."
                          | Some x ->
                              let tpx = vartp l x in
-                             let _ = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) in
+                             let w = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx in
                              let _ = check_assign l x in
-                             let ts = List.map (function (LitPat e) -> ev e) pats in
-                             cont h (update env x (ctxt#mk_app gs ts))
+                             cont h (update env x (ev w))
                         )
                      )
                  | Some (lg,k, tr, ps, pre, post, body,fbf,v) ->
@@ -3820,10 +3865,9 @@ in
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx;
+            let w = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx in
             let _ = check_assign l x in
-            let ts = List.map (function (LitPat e) -> ev e) pats in
-            cont h (update env x (ctxt#mk_app gs ts))
+            cont h (update env x (ev w))
           )
         )
       | Some (lg,k, tr, ps, pre, post, body,fbf,v) ->
@@ -3880,16 +3924,15 @@ in
     | CallStmt (l, "assume_is_int", [Var (lv, x, _) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
-      let tp = check_expr tenv e in
-      assume_is_of_type (ev e) tp (fun () -> cont h env)
+      let (w, tp) = check_expr tenv e in
+      assume_is_of_type (ev w) tp (fun () -> cont h env)
     | CallStmt (l, "assume_class_this", [],Instance) when file_type path=Java && List.mem_assoc "this" env->
     let classname= match vartp l "this" with ObjType cn -> cn in
       assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
     | CallStmt (l, "free", args,Static) ->
       begin
         match List.map (check_expr tenv) args with
-          [PtrType (StructType tn)] ->
-          let [arg] = args in
+          [(arg, PtrType (StructType tn))] ->
           let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
           let fds =
             match flatmap (function (Struct (ls, sn, Some fds)) when sn = tn -> [fds] | _ -> []) ds with
@@ -3948,9 +3991,9 @@ in
       call_stmt l (Some x) g pats fb
     | Assign (l, x, e) -> 
       let tpx = vartp l x in
-      let _ = check_expr_t tenv e tpx in
+      let w = check_expr_t tenv e tpx in
       let _ = check_assign l x in
-      eval_h h env e (fun h v -> cont h ((x, v)::env));
+      eval_h h env w (fun h v -> cont h ((x, v)::env));
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type te in
@@ -3959,47 +4002,46 @@ in
       ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
-      let tp = check_deref l tenv e f in
-      let _ = check_expr_t tenv rhs tp in
-      eval_h h env e (fun h t ->
+      let (w, tp) = check_deref l tenv e f in
+      let wrhs = check_expr_t tenv rhs tp in
+      eval_h h env w (fun h t ->
         let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-          cont (((f_symb, true), real_unit, [t; ev rhs], None)::h) env)
+          cont (((f_symb, true), real_unit, [t; ev wrhs], None)::h) env)
       )
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
-      let pointerType = check_expr tenv e in
+      let (w, pointerType) = check_expr tenv e in
       let pointeeType = 
         match pointerType with
           PtrType t -> t
         | _ -> static_error l "Operand of dereference must be pointer."
       in
-      check_expr_t tenv rhs pointeeType;
-      eval_h h env e (fun h t ->
+      let wrhs = check_expr_t tenv rhs pointeeType in
+      eval_h h env w (fun h t ->
         let predSymb = pointee_pred_symb l pointeeType in
         get_points_to h t predSymb l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
-          cont (((predSymb, true), real_unit, [t; ev rhs], None)::h) env)
+          cont (((predSymb, true), real_unit, [t; ev wrhs], None)::h) env)
       )
     | CallStmt (l, g, es,fb) ->
-
       call_stmt l None g (List.map (fun e -> LitPat e) es) fb
     | IfStmt (l, e, ss1, ss2) ->
-      let _ = check_expr_t tenv e boolt in
+      let w = check_expr_t tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
-        (fun _ -> assume (ev e) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
+        (fun _ -> assume (ev w) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
+        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
     | SwitchStmt (l, e, cs) ->
-      let tp = check_expr tenv e in
+      let (w, tp) = check_expr tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let (tn, (_, ctormap)) =
         match tp with
           InductiveType i -> (i, List.assoc i inductivemap)
         | _ -> static_error l "Switch statement operand is not an inductive value."
       in
-      let t = ev e in
+      let t = ev w in
       let rec iter ctors cs =
         match cs with
           [] ->
@@ -4041,16 +4083,14 @@ in
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Assert (l, p) ->
-      check_pred tenv p (fun tenv ->
-        assert_pred h ghostenv env p real_unit (fun _ ghostenv env _ ->
-          tcont sizemap tenv ghostenv h env
-        )
+      let (wp, tenv) = check_pred tenv p in
+      assert_pred h ghostenv env wp real_unit (fun _ ghostenv env _ ->
+        tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
-      check_pred tenv p (fun tenv ->
-        assert_pred h ghostenv env p real_unit (fun h ghostenv env size ->
-          tcont sizemap tenv ghostenv h env
-        )
+      let (wp, tenv) = check_pred tenv p in
+      assert_pred h ghostenv env wp real_unit (fun h ghostenv env size ->
+        tcont sizemap tenv ghostenv h env
       )
     | Open (l, g, pats0, pats, coefpat) ->
       let (g_symb, pats0, dropcount, ps, env0, p) =
@@ -4082,16 +4122,15 @@ in
               match zip pats0 ps1 with
                 None -> static_error l "Incorrect number of predicate constructor arguments."
               | Some bs ->
-                List.map (function (LitPat e, (x, t)) -> check_expr_t tenv e t; (x, ev e) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
             in
             let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             ((g_symb, false), [], 0, ps2, bs0, body)
           end
       in
-      let tenv = match coefpat with None -> tenv | Some coefpat -> check_pat l tenv RealType coefpat in
-      let tenv' = check_pats l tenv (List.map (fun (x, t) -> t) ps) pats in
-      let pats = pats0 @ pats in
-      let coefpat = match coefpat with None -> DummyPat | Some coefpat -> coefpat in
+      let (coefpat, tenv) = match coefpat with None -> (DummyPat, tenv) | Some coefpat -> check_pat l tenv RealType coefpat in
+      let (wpats, tenv') = check_pats l tenv (List.map (fun (x, t) -> t) ps) pats in
+      let pats = pats0 @ wpats in
       assert_chunk h ghostenv env l g_symb real_unit coefpat pats (fun h coef ts chunk_size ghostenv env ->
         let ts = drop dropcount ts in
         let ys = List.map (function (p, t) -> p) ps in
@@ -4116,14 +4155,14 @@ in
         match coefopt with
           None -> real_half
         | Some e ->
-          check_expr_t tenv e RealType;
-          let coef = ev e in
+          let w = check_expr_t tenv e RealType in
+          let coef = ev w in
           assert_term (ctxt#mk_real_lt real_zero coef) h env l "Split coefficient must be positive.";
           assert_term (ctxt#mk_real_lt coef real_unit) h env l "Split coefficient must be less than one.";
           coef
       in
-      let tenv' = check_pats l tenv pts pats in
-      assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef ts chunk_size ghostenv env ->
+      let (wpats, tenv') = check_pats l tenv pts pats in
+      assert_chunk h ghostenv env l g_symb real_unit DummyPat wpats (fun h coef ts chunk_size ghostenv env ->
         let coef1 = ctxt#mk_real_mul splitcoef coef in
         let coef2 = ctxt#mk_real_mul (ctxt#mk_real_sub real_unit splitcoef) coef in
         let h = (g_symb, coef1, ts, None)::(g_symb, coef2, ts, None)::h in
@@ -4145,7 +4184,7 @@ in
             | Some n -> ((g_symb, true), pts, n)
           end
       in
-      let tenv' = check_pats l tenv pts pats in
+      let (pats, tenv') = check_pats l tenv pts pats in
       let (inpats, outpats) = take_drop inputParamCount pats in
       List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
       assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef1 ts1 _ ghostenv env ->
@@ -4189,20 +4228,20 @@ in
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments."
                 | Some bs ->
-                  List.map (function (LitPat e, (x, t)) -> check_expr_t tenv e t; (x, ev e) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
               in
               let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               (ps2, bs0, (g_symb, false), body, [])
           end
       in
-      let _ =
+      let ws =
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
         | Some bs ->
-          List.iter (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
+          List.map (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
       in
       let ts = List.map (function LitPat e -> ev e) pats in
-      let coef = match coef with None -> real_unit | Some (LitPat coef) -> check_expr_t tenv coef RealType; ev coef | _ -> static_error l "Coefficient in close statement must be expression." in
+      let coef = match coef with None -> real_unit | Some (LitPat coef) -> let coef = check_expr_t tenv coef RealType in ev coef | _ -> static_error l "Coefficient in close statement must be expression." in
       let ys = List.map (function (p, t) -> p) ps in
       let Some env' = zip ys ts in
       let env' = bs0 @ env' in
@@ -4214,16 +4253,16 @@ in
     | ReturnStmt (l, Some e) ->
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
-      let _ = check_expr_t tenv e tp in
-      return_cont h (Some (ev e))
+      let w = check_expr_t tenv e tp in
+      return_cont h (Some (ev w))
     | ReturnStmt (l, None) -> return_cont h None
     | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
-      let _ = check_expr_t tenv e boolt in
+      let e = check_expr_t tenv e boolt in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-      check_pred tenv p (fun tenv' ->
+      let (p, tenv') = check_pred tenv p in
       assert_pred h ghostenv env p real_unit (fun h _ _ _ ->
         let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
@@ -4245,7 +4284,6 @@ in
                assume (ctxt#mk_not (eval0 (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
-      )
     | PerformActionStmt (l, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, post_bcp_args, post_hpn, post_hp_args) ->
       let (_, boxpmap, amap, hpmap) =
         match try_assoc pre_bcn boxmap with
@@ -4253,7 +4291,7 @@ in
         | Some boxinfo -> boxinfo
       in
       if not (List.mem pre_bcn boxes) then static_error l "You cannot perform an action a box class that has not yet been declared.";
-      let tenv = check_pats l tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
+      let (pre_bcp_pats, tenv) = check_pats l tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let (_, _, _, boxpred_symb, _) = List.assoc pre_bcn predfammap in
       assert_chunk h ghostenv env l (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h coef ts chunk_size ghostenv env ->
         if not (coef == real_unit) then assert_false h env l "Box predicate coefficient must be 1.";
@@ -4268,7 +4306,7 @@ in
               (hppmap, inv)
         in
         let (_, _, _, pre_handlepred_symb, _) = List.assoc pre_hpn predfammap in
-        let tenv = check_pats l tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
+        let (pre_hp_pats, tenv) = check_pats l tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = pre_hp_pats in
         assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env ->
@@ -4283,7 +4321,7 @@ in
                match zip apmap aargs with
                  None -> static_error l "Incorrect number of action arguments."
                | Some bs ->
-                 List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+                 List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
              in
              let Some pre_boxargbs = zip boxpmap pre_boxPredArgs in
              let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
@@ -4297,7 +4335,7 @@ in
                    match zip boxpmap post_bcp_args with
                      None -> static_error l "Incorrect number of post-state box arguments."
                    | Some bs ->
-                     List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+                     List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
                  in
                  let old_bcp_argts = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxArgMap in
                  let post_env = [("actionHandle", handleId)] @ old_bcp_argts @ post_bcp_argts @ aargbs in
@@ -4316,7 +4354,7 @@ in
                    match zip post_handlePred_parammap post_hp_args with
                      None -> static_error l "Post-state handle predicate: Incorrect number of arguments."
                    | Some bs ->
-                     List.map (fun ((x, t), e) -> check_expr_t tenv e t; (x, eval env e)) bs
+                     List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
                  in
                  let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_bcp_argts in
                  assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env l "Post-state handle predicate invariant failure.";
@@ -4372,7 +4410,7 @@ in
         let (in_pure_context, leminfo, lems', ghostenv) =
           (false, None, lems, [])
         in
-        check_pred tenv pre (fun tenv ->
+        let (_, tenv) = check_pred tenv pre in
         let _ =
           assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
@@ -4393,11 +4431,10 @@ in
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
           verify_cont boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
-        )
+          )
         in
         let _ = pop() in
-          verify_meths boxes lems' meths
-        )
+        verify_meths boxes lems' meths
       | _::meths -> verify_meths boxes lems meths
     in
     let rec verify_classes boxes lems classm=
@@ -4442,7 +4479,7 @@ in
         else
           (false, None, lems, [])
       in
-      check_pred tenv pre (fun tenv ->
+      let (_, tenv) = check_pred tenv pre in
       let _ =
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
@@ -4467,20 +4504,12 @@ in
       in
       let _ = pop() in
       verify_funcs boxes lems' ds
-      )
     | BoxClassDecl (_, bcn, _, _, _)::ds ->
       let (l, boxpmap, amap, hpmap) = List.assoc bcn boxmap in
       let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
-      List.iter
-        (fun (an, (l, pmap, pre, post)) ->
-           check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap) pre boolt;
-           check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap @ old_boxpmap) post boolt
-        )
-        amap;
       let leminfo = Some (lems, "", None) in
       List.iter
         (fun (hpn, (l, pmap, inv, pbcs)) ->
-           check_expr_t ([("predicateHandle", HandleIdType)] @ pmap @ boxpmap) inv boolt;
            let pbcans =
              List.map
                (fun (PreservedByClause (l, an, xs, ss)) ->
