@@ -66,7 +66,7 @@ lemma void lengthPositive(listval v);
   ensures 0<=length(v);
 
 lemma void containsIth(listval v, int i);
-  requires 0<=i && i<length(v);
+  requires 0<=i && i < length(v);
   ensures contains(v, ith(v, i)) == true;
 
 predicate list(struct list* l, listval v);
@@ -82,9 +82,9 @@ struct iter *list_create_iter(struct list *list);
   //@ ensures iter(result, list, v, 0);
 bool iter_has_next(struct iter *iter);
   //@ requires iter(iter, ?l, ?v, ?i);
-  //@ ensures iter(iter, l, v, i) &*& result == (i<length(v));   
+  //@ ensures iter(iter, l, v, i) &*& result == (i < length(v));   
 void *iter_next(struct iter *iter);
-  //@ requires iter(iter, ?l, ?v, ?i) &*& i<length(v);
+  //@ requires iter(iter, ?l, ?v, ?i) &*& i < length(v);
   //@ ensures iter(iter, l, v, i + 1) &*& result==ith(v, i);
 void iter_dispose(struct iter *iter);
   //@ requires iter(iter, ?l, ?v, ?i);

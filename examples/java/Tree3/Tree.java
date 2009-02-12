@@ -11,13 +11,13 @@ inductive bintree = |nil |cons(int,bintree,bintree);
 fixpoint boolean t_contains(bintree b, int v) {
   switch (b) {
     case nil: return false;
-    case cons(a,l,r): return (a==v ? true: (v<a? t_contains(l,v):t_contains(r,v)));
+    case cons(a,l,r): return (a==v ? true: (v < a? t_contains(l,v):t_contains(r,v)));
   }
 }
 fixpoint bintree tree_add(bintree b, int x) {
   switch (b) {
     case nil: return cons(x,nil,nil);
-    case cons(v,l,r): return x<v? cons(v,tree_add(l,x),r):
+    case cons(v,l,r): return x < v? cons(v,tree_add(l,x),r):
 			(x==v? cons(v,l,r):cons(v,l,tree_add(r,x)));
   }
 }
@@ -39,14 +39,14 @@ fixpoint bintree tree_rem(bintree b, int x) {
 			(x==v&&l==nil? r:
 			(x==v&&r==nil? l:
 			(x==v? cons(max(l),tree_rem(l,max(l)),r):
-			x<v? cons(v,tree_rem(l,x),r):cons(v,l,tree_rem(r,x)) ))) ;
+			x < v? cons(v,tree_rem(l,x),r):cons(v,l,tree_rem(r,x)) ))) ;
     case nil: return nil;
   }
 }
 fixpoint boolean inorder(bintree b){
   switch(b){
 	case nil: return true;
-	case cons(a,bl,br): return (bl==nil? true:max(bl)<a)&& (br==nil? true: a<min(br))
+	case cons(a,bl,br): return (bl==nil? true:max(bl) < a)&& (br==nil? true: a < min(br))
 		&& inorder(bl) && inorder(br);
   }
 }
@@ -93,43 +93,43 @@ lemma void contains_min(bintree r)
   }
 }
 lemma void max_conj_add(bintree l,int v,int x)
-  requires x<v &*& (max(l)<v||l==nil) &*& inorder(l)==true;
-  ensures max(tree_add(l,x))<v &*& inorder(l)==true;
+  requires x < v &*& (max(l) < v||l==nil) &*& inorder(l)==true;
+  ensures max(tree_add(l,x)) < v &*& inorder(l)==true;
 {
   switch(l){
 	case nil:
-	case cons(a,b,c):if(x<a){
+	case cons(a,b,c):if(x < a){
 			  max_conj_add(b,a,x);
 			 }
-			 if(a<x){
+			 if(a < x){
 			  max_conj_add(c,v,x);
 			 }
   }
 }
 lemma void min_conj_add(bintree r,int v,int x)
-  requires v<x &*& (v<min(r)||r==nil) &*& inorder(r)==true;
-  ensures v<min(tree_add(r,x)) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
+  ensures v < min(tree_add(r,x)) &*& inorder(r)==true;
 {
   switch(r){
 	case nil:
-	case cons(a,b,c):if(a<x){
+	case cons(a,b,c):if(a < x){
 			  min_conj_add(c,a,x);
 			 }
-			 if(x<a){
+			 if(x < a){
 			  min_conj_add(b,v,x);
 			 }
   }
 }
 lemma void max_conj_rem(bintree l,int v,int x)
-  requires x<v &*& (max(l)<v||l==nil) &*& inorder(l)==true;
-  ensures (max(tree_rem(l,x))<v||tree_rem(l,x)==nil) &*& inorder(l)==true;
+  requires x < v &*& (max(l) < v||l==nil) &*& inorder(l)==true;
+  ensures (max(tree_rem(l,x)) < v||tree_rem(l,x)==nil) &*& inorder(l)==true;
 {
   switch(l){
 	case nil:
-	case cons(a,b,c):if(x<a){
+	case cons(a,b,c):if(x < a){
 			  max_conj_rem(b,a,x);
 			 }
-			 if(a<x){
+			 if(a < x){
 			  max_conj_rem(c,v,x);
 			 }
   }
@@ -141,11 +141,11 @@ lemma void tree_add_inorder(bintree b, int x)
 {
     switch (b) {
         case nil:
-        case cons(v,l,r):if(x<v){
+        case cons(v,l,r):if(x < v){
 			  max_conj_add(l,v,x);
 			  tree_add_inorder(l,x);
 			 }
-			 if(v<x){
+			 if(v < x){
 			  min_conj_add(r,v,x);
 			  tree_add_inorder(r,x);
 		  	 }
@@ -168,7 +168,7 @@ lemma void min_all(bintree r,int x)
 }
 lemma void max_all(bintree r,int x)
   requires inorder(r)==true &*& t_contains(r,x)==true &*& x!=max(r);
-  ensures x<max(r);
+  ensures x < max(r);
 {
   switch(r){
 	case nil:
@@ -182,15 +182,15 @@ lemma void max_all(bintree r,int x)
   }
 }
 lemma void min_conj_rem(bintree r,int v,int x)
-  requires v<x &*& (v<min(r)||r==nil) &*& inorder(r)==true;
-  ensures (v<min(tree_rem(r,x))||tree_rem(r,x)==nil) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
+  ensures (v < min(tree_rem(r,x))||tree_rem(r,x)==nil) &*& inorder(r)==true;
 {
   switch(r){
 	case nil:
-	case cons(a,b,c):if(a<x){
+	case cons(a,b,c):if(a < x){
 			  min_conj_rem(c,a,x);
 			 }
-			 if(x<a){
+			 if(x < a){
 			  min_conj_rem(b,v,x);
 			 }
 			 if(b!=nil&&c!=nil){
@@ -228,11 +228,11 @@ lemma void tree_rem_inorder(bintree b, int x)
 {
     switch (b) {
         case nil:
-        case cons(v,l,r):if(x<v){
+        case cons(v,l,r):if(x < v){
 			  max_conj_rem(l,v,x);
 			  tree_rem_inorder(l,x);
 			 }
-		  	 if(v<x){
+		  	 if(v < x){
 			  min_conj_rem(r,v,x);
 			  tree_rem_inorder(r,x);
 			 }
@@ -311,7 +311,7 @@ public class Tree{
 				//@close tree(this,b);
 				return true;
 			}else{
-				if(x<v){
+				if(x < v){
 					boolean temp1=false;
 					temp1=l.contains(x);
 					//@close tree(this,b);
@@ -336,7 +336,7 @@ public class Tree{
 		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
-		if(x<v){
+		if(x < v){
 			if(l!=null){
 				l.add(x);
 				//@ tree_add_inorder(b,x);
@@ -349,7 +349,7 @@ public class Tree{
 				//@ tree_add_inorder(b,x);
 			}
 		}else{
-			if(v<x){
+			if(v < x){
 				if(r!=null){
 					r.add(x);
 					//@ tree_add_inorder(b,x);
@@ -394,7 +394,7 @@ public class Tree{
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		//@ tree_rem_inorder(b,x);
-		if(x<v){
+		if(x < v){
 			if(l!=null){
 				Tree temp=l.remove(x);
 				this.left=temp;
@@ -402,7 +402,7 @@ public class Tree{
 				return this;
 			}
 		}
-		if(v<x){
+		if(v < x){
 			if(r!=null){
 				Tree temp=r.remove(x);
 				this.right=temp;

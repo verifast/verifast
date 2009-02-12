@@ -468,19 +468,21 @@ type type_ =
   | Char
   | StructType of string
   | PtrType of type_
-  | InductiveType of string (* type van inductive type *)
+  | InductiveType of string * type_ list
   | PredType of type_ list (* type van predicate -> lijst van types van args*)
   | ObjType of string (* voor java *)
   | BoxIdType
   | HandleIdType
   | AnyType
+  | TypeParam of string
 
 type type_expr =
     StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | ManifestTypeExpr of loc * type_ (* primitive types? met regel-type*)
-  | IdentTypeExpr of loc * string (*type van inductive type met regel-naam *)
+  | IdentTypeExpr of loc * string
+  | ConstructedTypeExpr of loc * string * type_expr list
   | PredTypeExpr of loc * type_expr list (* type def van predicate met regel-lijst van types van args *)
 
 class fieldref (name: string) =
@@ -526,7 +528,7 @@ and
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field acces *)
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
-  | CallExpr of loc * string * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
+  | CallExpr of loc * string * type_expr list * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
@@ -610,7 +612,7 @@ and
 and
   decl =
     Struct of loc * string * field list option
-  | Inductive of loc * string * ctor list (* inductief data type regel-naam-lijst van constructors*)
+  | Inductive of loc * string * string list * ctor list (* inductief data type regel-naam-type parameters-lijst van constructors*)
   | Class of loc * string * meth list * field list *cons list* string * string list(* laatste 2 strings zijn naam v superklasse en lijst van namen van interfaces*)
   | Interface of loc * string * meth_spec list
   | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
@@ -696,7 +698,7 @@ let expr_loc e =
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
   | Deref (l, e, t) -> l
-  | CallExpr (l, g, pats0, pats,_) -> l
+  | CallExpr (l, g, targs, pats0, pats,_) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
@@ -741,12 +743,13 @@ let type_expr_loc t =
     ManifestTypeExpr (l, t) -> l
   | StructTypeExpr (l, sn) -> l
   | IdentTypeExpr (l, x) -> l
+  | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l
   | ArrayTypeExpr(l,te) -> l
   | PredTypeExpr(l,te) ->l
   
 let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint"; "switch"; "case"; ":";"return";
-  "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; "<="; "&&";
+  "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; ">"; "<="; "&&";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
@@ -770,6 +773,8 @@ let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rec rep p = parser [< v = p; vs = rep p >] -> v::vs | [< >] -> []
+let parse_angle_brackets (_, sp) p =
+  parser [< '((sp', _), Kwd "<") when sp = sp'; v = p; '(_, Kwd ">") >] -> v
 
 type spec_clause =
   FuncTypeClause of string
@@ -868,7 +873,7 @@ and
        -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
        >] -> r
         |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this",ref (Some LocalVar))))] in
+       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this",ref (Some LocalVar))))] in
        ConsMember(Cons(l,ps,co,Some stms,vis))
         >] -> e
 | [< t=parse_type;'(l,Ident f);r=parser
@@ -898,8 +903,12 @@ and
       [<'(_, Kwd ".");'(_, Kwd "class")>]-> (l,i)
       |[<>]->(l,i)>] -> e); '(_, Kwd ")") >] -> is
 and
+  parse_type_params l = parser
+    [< xs = parse_angle_brackets l (rep_comma (parser [< '(_, Ident x) >] -> x)) >] -> xs
+  | [< >] -> []
+and
   parse_pure_decl = parser
-    [< '(l, Kwd "inductive"); '(_, Ident i); '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, cs)]
+    [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
   | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = rep_comma parse_param;
      (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None));
@@ -999,7 +1008,7 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n) >] -> IdentTypeExpr (l, n)
+| [< '(l, Ident n); targs = parse_type_args l >] -> if targs <> [] then ConstructedTypeExpr (l, n, targs) else IdentTypeExpr (l, n)
 and
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
@@ -1058,11 +1067,11 @@ and
 | [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, es1, es2,_) -> Open (l, g, es1, es2, coef)
+     CallExpr (_, g, [], es1, es2,_) -> Open (l, g, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, es1, es2,_) -> Close (l, g, es1, es2, coef)
+     CallExpr (_, g, [], es1, es2,_) -> Close (l, g, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "split_fraction"); '(_, Ident p); pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
@@ -1082,7 +1091,7 @@ and
      if post_bpn <> pre_bpn then raise (ParseException (l, "The box predicate name cannot change."));
      PerformActionStmt (l, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, post_bp_args, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (lx, x, _) -> Assign (l, x, rhs)
@@ -1130,7 +1139,7 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, pats0, pats,_) -> CallPred (l, new predref g, pats0, pats)
+     | CallExpr (l, g, [], pats0, pats,_) -> CallPred (l, new predref g, pats0, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -1168,24 +1177,37 @@ and
   parse_expr_suffix = parser
   [< e0 = parse_expr_primary; e = parse_expr_suffix_rest e0 >] -> e
 and
+  parse_type_args l = parser
+    [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
+  | [< >] -> []
+and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, Kwd "null") >] -> Null l
-| [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],args0,Static)
-| [< '(l, Ident x); ex = parser
-    [< args0 = parse_patlist; e = parser
-      [< args = parse_patlist >] -> CallExpr (l, x, args0, args,Static)
-    | [< >] -> CallExpr (l, x, [], args0,Static)
+| [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],[],args0,Static)
+| [<
+    '(l, Ident x);
+    targs = parse_type_args l;
+    ex = parser
+      [<
+        args0 = parse_patlist;
+        e = parser
+          [< args = parse_patlist >] -> CallExpr (l, x, targs, args0, args,Static)
+        | [< >] -> CallExpr (l, x, targs, [], args0,Static)
       >] -> e
-    | [<'(l, Kwd ".");r=parser
-        [<'(l, Kwd "class")>]-> ClassLit(l,x)
-      | [<'(l, Ident f);e=parser
-          [<args0 = parse_patlist;>] -> CallExpr (l, f, [], LitPat(Var(l,x,ref None))::args0,Instance)
-         |[<>] -> Read (l, Var(l,x, ref None), new fieldref f)
-       >]->e 
+    | [<
+        '(l, Kwd ".") when targs = [];
+        r = parser
+          [<'(l, Kwd "class")>] -> ClassLit(l,x)
+        | [<
+            '(l, Ident f);
+            e = parser
+              [<args0 = parse_patlist;>] -> CallExpr (l, f, [], [], LitPat(Var(l,x,ref None))::args0,Instance)
+            | [<>] -> Read (l, Var(l,x, ref None), new fieldref f)
+          >]->e 
       >]-> r
-    | [< >] -> Var (l, x, ref None)
+    | [< >] -> if targs = [] then Var (l, x, ref None) else CallExpr (l, x, targs, [], [], Static)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
@@ -1486,14 +1508,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter idm ds =
       match ds with
         [] -> idm
-      | (Inductive (l, i, ctors))::ds ->
+      | (Inductive (l, i, tparams, ctors))::ds ->
         if i = "bool" || i = "boolean" || i = "int" || List.mem_assoc i idm then
           static_error l "Duplicate datatype name."
         else
-          iter ((i, (l, ctors))::idm) ds
+          iter ((i, (l, tparams, ctors))::idm) ds
       | _::ds -> iter idm ds
     in
-    iter [("uint", (dummy_loc, []))] ds
+    iter [("uint", (dummy_loc, [], []))] ds
   in
   
   let basicclassdeclmap =
@@ -1575,31 +1597,63 @@ in
       classdeclmap
   in
   
-  let rec check_pure_type te =
+  let rec check_pure_type tpenv te =
     match te with
       ManifestTypeExpr (l, t) -> t
-    | ArrayTypeExpr (l, t) -> check_pure_type t
+    | ArrayTypeExpr (l, t) -> check_pure_type tpenv t
     | IdentTypeExpr (l, id) ->
-      if (List.mem_assoc id inductivedeclmap) then
-        InductiveType id
+      if List.mem id tpenv then
+        TypeParam id
       else
+      begin
+      match try_assoc id inductivedeclmap with
+        Some (_, tparams, _) ->
+        if tparams <> [] then static_error l "Missing type arguments.";
+        InductiveType (id, [])
+      | None ->
         if (List.mem_assoc id classdeclmap) then 
         ObjType id
         else
           if (List.mem_assoc id interfdeclmap) then 
             ObjType id
           else
-            static_error l ("No such inductive datatype, class, or interface: " ^ id)
+            static_error l ("No such type parameter, inductive datatype, class, or interface: " ^ id)
+      end
+    | ConstructedTypeExpr (l, id, targs) ->
+      begin
+      match try_assoc id inductivedeclmap with
+        Some (_, tparams, _) ->
+        if List.length tparams <> List.length targs then static_error l "Incorrect number of type arguments.";
+        InductiveType (id, List.map (check_type_arg tpenv) targs)
+      | None -> static_error l "No such inductive datatype."
+      end
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap) then
         static_error l "No such struct."
       else
         StructType sn
-    | PtrTypeExpr (l, te) -> PtrType (check_pure_type te)
-    | PredTypeExpr (l, tes) -> PredType (List.map check_pure_type tes)
+    | PtrTypeExpr (l, te) -> PtrType (check_pure_type tpenv te)
+    | PredTypeExpr (l, tes) -> PredType (List.map (check_pure_type tpenv) tes)
+  and check_type_arg tpenv te =
+    let t = check_pure_type tpenv te in
+    begin
+    match t with
+      InductiveType _ -> ()
+    | TypeParam _ -> ()
+    | _ -> static_error (type_expr_loc te) "Only inductive types and type parameters are supported as type arguments."
+    end;
+    t
   in
   
-  
+  let rec instantiate_type tpenv t =
+    if tpenv = [] then t else
+    match t with
+      TypeParam x -> List.assoc x tpenv
+    | PtrType t -> PtrType (instantiate_type tpenv t)
+    | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
+    | PredType pts -> PredType (List.map (instantiate_type tpenv) pts)
+    | _ -> t
+  in
   
   let class_symbols = List.map (fun (c,_) -> (c, mk_symbol c [] ctxt#type_int Uninterp)) classdeclmap in
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
@@ -1608,7 +1662,7 @@ in
   
   let boolt = Bool in
   let intt = IntType in
-  let uintt = InductiveType "uint" in
+  let uintt = InductiveType ("uint", []) in
   
   let rec string_of_type t =
     match t with
@@ -1617,7 +1671,8 @@ in
     | IntType -> "int"
     | RealType -> "real"
     | Char -> "char"
-    | InductiveType i -> i
+    | InductiveType (i, []) -> i
+    | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
     | ObjType l -> "class " ^ l
     | StructType sn -> "struct " ^ sn
     | PtrType t -> string_of_type t ^ " *"
@@ -1625,6 +1680,7 @@ in
     | BoxIdType -> "box"
     | HandleIdType -> "handle"
     | AnyType -> "any"
+    | TypeParam x -> x
   in
   
   let typenode_of_type t =
@@ -1633,7 +1689,7 @@ in
     | IntType -> ctxt#type_int
     | RealType -> ctxt#type_real
     | Char -> ctxt#type_int
-    | InductiveType i -> ctxt#type_inductive
+    | InductiveType _ -> ctxt#type_inductive
     | StructType sn -> assert false
     | ObjType n -> ctxt#type_int
     | PtrType t -> ctxt#type_int
@@ -1641,6 +1697,7 @@ in
     | BoxIdType -> ctxt#type_int
     | HandleIdType -> ctxt#type_int
     | AnyType -> ctxt#type_inductive
+    | TypeParam _ -> ctxt#type_inductive
   in
   
   let functypenames = flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds in
@@ -1649,7 +1706,7 @@ in
       let isfuncname = "is_" ^ ftn in
       let domain = [ctxt#type_int] in
       let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
-      (isfuncname, (dummy_loc, Bool, [PtrType Void], symb))
+      (isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))
     ) functypenames
   in
   
@@ -1704,22 +1761,31 @@ in
     let rec iter imap pfm fpm ds =
       match ds with
         [] -> (List.rev imap, List.rev pfm, List.rev fpm)
-      | Inductive (l, i, ctors)::ds ->
+      | Inductive (l, i, tparams, ctors)::ds ->
+        begin
+          let rec iter tparams' tparams =
+            match tparams with
+              [] -> ()
+            | x::xs -> if List.mem x tparams' then static_error l "Duplicate type parameter."; iter (x::tparams') xs
+          in
+          iter [] tparams
+        end;
         let rec citer j ctormap pfm ctors =
           match ctors with
-            [] -> iter ((i, (l, List.rev ctormap))::imap) pfm fpm ds
+            [] -> iter ((i, (l, tparams, List.rev ctormap))::imap) pfm fpm ds
           | Ctor (lc, cn, tes)::ctors ->
             if List.mem_assoc cn pfm then
               static_error lc "Duplicate pure function name."
             else (
-              let ts = List.map check_pure_type tes in
+              let ts = List.map (check_pure_type tparams) tes in
               let csym =
                 if ts = [] then
                   alloc_nullary_ctor j cn
                 else
                   mk_symbol cn (List.map typenode_of_type ts) ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j))
               in
-              citer (j + 1) ((cn, (lc, ts))::ctormap) ((cn, (lc, InductiveType i, ts, csym))::pfm) ctors
+              let purefunc = (cn, (lc, tparams, InductiveType (i, List.map (fun x -> TypeParam x) tparams), ts, csym)) in
+              citer (j + 1) ((cn, (lc, ts))::ctormap) (purefunc::pfm) ctors
             )
         in
         citer 0 [] pfm ctors
@@ -1730,7 +1796,7 @@ in
         let rt =
           match rto with
             None -> static_error l "Return type of fixpoint functions cannot be void."
-          | Some rt -> (check_pure_type rt)
+          | Some rt -> (check_pure_type [] rt)
         in
         if functype <> None then static_error l "Fixpoint functions cannot implement a function type.";
         let _ =
@@ -1744,7 +1810,7 @@ in
               [] -> List.rev pmap
             | (te, p)::ps ->
               let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." in
-              let t = check_pure_type te in
+              let t = check_pure_type [] te in
               iter ((p, t)::pmap) ps
           in
           iter [] ps
@@ -1757,10 +1823,11 @@ in
               Var (l, x, _) -> (
               match try_assoc_i x pmap with
                 None -> static_error l "Fixpoint function must switch on a parameter."
-              | Some (index, InductiveType i) -> (
+              | Some (index, InductiveType (i, targs)) -> (
                 match try_assoc i imap with
                   None -> static_error ls "Switch statement cannot precede inductive declaration."
-                | Some (l, ctormap) ->
+                | Some (l, tparams, ctormap) ->
+                  let (Some tpenv) = zip tparams targs in
                   let rec iter ctormap wcs cs =
                     match cs with
                       [] ->
@@ -1781,7 +1848,7 @@ in
                             | (t::ts, x::xs) ->
                               if List.mem_assoc x pmap then static_error lc "Pattern variable hides parameter.";
                               let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
-                              iter ((x, t)::xmap) ts xs
+                              iter ((x, instantiate_type tpenv t)::xmap) ts xs
                             | ([], _) -> static_error lc "Too many pattern variables."
                             | _ -> static_error lc "Too few pattern variables."
                           in
@@ -1822,7 +1889,10 @@ in
                             match try_assoc x tenv with
                               None -> (
                                 match try_assoc x pfm with
-                                  Some (_, t, [], _) -> scope := Some PureCtor; (e, t)
+                                  Some (_, tparams, t, [], _) ->
+                                  if tparams <> [] then static_error l "Missing type arguments.";
+                                  scope := Some PureCtor;
+                                  (e, t)
                                 | _ -> static_error l "No such variable or constructor."
                               )
                             | Some t -> scope := Some LocalVar; (e, t)
@@ -1849,9 +1919,17 @@ in
                             (Operation (l, operator, [w1; w2], ts), RealType)
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
                           | StringLit (l, s) -> (e, PtrType Char)
-                          | CallExpr (l, g', [], pats, info) -> (
+                          | CallExpr (l, g', targes, [], pats, info) -> (
                             match try_assoc g' pfm with
-                              Some (l, t, ts, _) -> (
+                              Some (l, tparams, t, ts, _) -> (
+                              let targs = List.map (check_pure_type []) targes in
+                              let tpenv =
+                                match zip tparams targs with
+                                  None -> static_error l "Incorrect number of type arguments."
+                                | Some bs -> bs
+                              in
+                              let t = instantiate_type tpenv t in
+                              let ts = List.map (instantiate_type tpenv) ts in
                               match zip pats ts with
                                 None -> static_error l "Incorrect argument count."
                               | Some pts -> (
@@ -1861,7 +1939,7 @@ in
                                     LitPat e -> LitPat (checkt e t)
                                   | _ -> static_error l "Patterns are not allowed here."
                                 ) pts in
-                                (CallExpr (l, g', [], wpats, info), t)
+                                (CallExpr (l, g', targes, [], wpats, info), t)
                                 )
                               )
                             | None ->
@@ -1869,8 +1947,16 @@ in
                                 match zip pmap pats with
                                   None -> static_error l "Incorrect argument count."
                                 | Some pts ->
+                                  let tparams = [] in
+                                  let targs = List.map (check_pure_type []) targes in
+                                  let tpenv =
+                                    match zip tparams targs with
+                                      None -> static_error l "Incorrect number of type arguments."
+                                    | Some bs -> bs
+                                  in
                                   let wpats =
                                     List.map (fun ((p, t), pat) ->
+                                      let t = instantiate_type tpenv t in
                                       match pat with
                                         LitPat e -> LitPat (checkt e t)
                                       | _ -> static_error l "Patterns are not allowed here."
@@ -1881,7 +1967,7 @@ in
                                       [Var (l, x, _)] when List.mem_assoc x xmap -> ()
                                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
                                   in
-                                  (CallExpr (l, g', [], wpats, info), rt)
+                                  (CallExpr (l, g', targes, [], wpats, info), instantiate_type tpenv rt)
                               else
                                 static_error l ("No such pure function: " ^ g')
                             )
@@ -1894,9 +1980,10 @@ in
                             let (w, t) = check e in
                             begin
                               match t with
-                                InductiveType i ->
+                                InductiveType (i, targs) ->
                                 begin
-                                  let (_, ctormap) = List.assoc i imap in
+                                  let (_, tparams, ctormap) = List.assoc i imap in
+                                  let (Some tpenv) = zip tparams targs in
                                   let rec iter t0 wcs ctors cs =
                                     match cs with
                                       [] ->
@@ -1920,7 +2007,7 @@ in
                                               | ([], _) -> static_error lc "Too many pattern variables."
                                               | (t::ts, x::xs) ->
                                                 if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
-                                                iter2 ts xs ((x, t)::xenv)
+                                                iter2 ts xs ((x, instantiate_type tpenv t)::xenv)
                                             in
                                             iter2 ts xs []
                                           in
@@ -1958,13 +2045,13 @@ in
           | _ -> static_error l "Body of fixpoint function must be switch statement."
         in
         let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
-        iter imap ((g, (l, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs))::fpm) ds
+        iter imap ((g, (l, [], rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs))::fpm) ds
       | _::ds -> iter imap pfm fpm ds
     in
-    let indtypemap0 = [("uint", (dummy_loc, [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))] in
+    let indtypemap0 = [("uint", (dummy_loc, [], [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))] in
     let purefuncmap0 = 
-      [("zero", (dummy_loc, uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal 1))))]
+      [("zero", (dummy_loc, [], uintt, [], alloc_nullary_ctor 0 "zero"));
+       ("succ", (dummy_loc, [], uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal 1))))]
     in
     let purefuncmap0 = purefuncmap0 @ isfuncs in
     iter indtypemap0 purefuncmap0 [] ds
@@ -2015,7 +2102,7 @@ in
     let rec iter pm ds =
       match ds with
         PredFamilyDecl (l, p, arity, tes, inputParamCount)::ds ->
-        let ts = List.map check_pure_type tes in
+        let ts = List.map (check_pure_type []) tes in
         begin
           match try_assoc p pm with
             Some (l0, arity0, ts0, symb0, inputParamCount0) ->
@@ -2046,7 +2133,7 @@ in
             | (te, x)::ps ->
               if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
               if startswith x "old_" then static_error l "Box parameter name cannot start with old_.";
-              iter ((x, check_pure_type te)::pmap) ps
+              iter ((x, check_pure_type [] te)::pmap) ps
           in
           iter [] ps
         in
@@ -2067,7 +2154,7 @@ in
                     if List.mem_assoc x boxpmap then static_error l "Action parameter clashes with box parameter.";
                     if List.mem_assoc x pmap then static_error l "Duplicate action parameter name.";
                     if startswith x "old_" then static_error l "Action parameter name cannot start with old_.";
-                    iter ((x, check_pure_type te)::pmap) ps
+                    iter ((x, check_pure_type [] te)::pmap) ps
                 in
                 iter [] ps
               in
@@ -2090,7 +2177,7 @@ in
                     if List.mem_assoc x boxpmap then static_error l "Handle predicate parameter clashes with box parameter.";
                     if List.mem_assoc x pmap then static_error l "Duplicate handle predicate parameter name.";
                     if startswith x "old_" then static_error l "Handle predicate parameter name cannot start with old_.";
-                    iter ((x, check_pure_type te)::pmap) ps
+                    iter ((x, check_pure_type [] te)::pmap) ps
                 in
                 iter [] ps
               in
@@ -2128,7 +2215,7 @@ in
                   Some _ -> static_error l "Duplicate parameter name."
                 | _ -> ()
               end;
-              let t = check_pure_type te in
+              let t = check_pure_type [] te in
               iter ((x, t)::pmap) ps
           in
           iter [] ps1
@@ -2143,13 +2230,13 @@ in
                   Some _ -> static_error l "Duplicate parameter name."
                 | _ -> ()
               end;
-              let t = check_pure_type te in
+              let t = check_pure_type [] te in
               iter ((x, t)::psmap) ((x, t)::pmap) ps
           in
           iter ps1 [] ps2
         in
         let funcsym = mk_symbol p (List.map (fun (x, t) -> typenode_of_type t) ps1) ctxt#type_inductive Proverapi.Uninterp in
-        let pf = (p, (l, PredType (List.map (fun (x, t) -> t) ps2), List.map (fun (x, t) -> t) ps1, funcsym)) in
+        let pf = (p, (l, [], PredType (List.map (fun (x, t) -> t) ps2), List.map (fun (x, t) -> t) ps1, funcsym)) in
         iter ((p, (l, ps1, ps2, body, funcsym))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter pcm pfm ds
@@ -2228,7 +2315,7 @@ in
           match pxs with
             [] -> iter ((pfns, (l, List.rev xm, inputParamCount, body))::pm) ds
           | (t0, (te, x))::xs ->
-            let t = check_pure_type te in 
+            let t = check_pure_type [] te in 
             let _ =
             expect_type l t t0
             in
@@ -2273,7 +2360,9 @@ in
         None ->
         begin
           match try_assoc x purefuncmap with
-            Some (_, t, [], _) -> scope := Some PureCtor; (e, t)
+            Some (_, tparams, t, [], _) ->
+            if tparams <> [] then static_error l "Missing type arguments.";
+            scope := Some PureCtor; (e, t)
           | _ ->
             begin
               if List.mem x funcnames then
@@ -2335,7 +2424,7 @@ in
     | ClassLit (l, s) -> (e, ObjType "Class")
     | StringLit (l, s) -> (e, PtrType Char)
     | CastExpr (l, te, e) ->
-      let t = check_pure_type te in
+      let t = check_pure_type [] te in
       let w =
         match (e, t) with
           (IntLit (_, n, tp), PtrType _) -> tp := Some t; e
@@ -2353,25 +2442,31 @@ in
     | AddressOf (l, e) ->
       let (w, t) = check e in
       (AddressOf (l, w), PtrType t)
-    | CallExpr (l, g', [], pats, info) -> (
+    | CallExpr (l, g', targes, [], pats, info) -> (
       match try_assoc g' purefuncmap with
-        Some (_, t, ts, _) -> (
+        Some (_, tparams, t, ts, _) -> (
+        let targs = List.map (check_pure_type []) targes in
+        let tpenv =
+          match zip tparams targs with
+            None -> static_error l "Incorrect number of type arguments."
+          | Some bs -> bs
+        in
         match zip pats ts with
           None -> static_error l "Incorrect argument count."
         | Some pts -> (
           let wpats =
           List.map (fun (pat, t) ->
             match pat with
-              LitPat e -> LitPat (checkt e t)
+              LitPat e -> LitPat (checkt e (instantiate_type tpenv t))
             | _ -> static_error l "Patterns are not allowed here."
           ) pts
           in
-          (CallExpr (l, g', [], wpats, info), t)
+          (CallExpr (l, g', targes, [], wpats, info), instantiate_type tpenv t)
           )
         )
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
-                   [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [LitPat w], info), ObjType "Class")
+                   [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "Class")
                 else static_error l ("No such pure function: "^g')
       )
     | IfExpr (l, e1, e2, e3) ->
@@ -2384,9 +2479,10 @@ in
       let (w, t) = check e in
       begin
         match t with
-          InductiveType i ->
+          InductiveType (i, targs) ->
           begin
-            let (_, ctormap) = List.assoc i inductivemap in
+            let (_, tparams, ctormap) = List.assoc i inductivemap in
+            let (Some tpenv) = zip tparams targs in
             let rec iter t0 wcs ctors cs =
               match cs with
                 [] ->
@@ -2412,7 +2508,7 @@ in
                         | (t::ts, x::xs) ->
                           if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                           if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
-                          iter2 ts xs ((x, t)::xenv)
+                          iter2 ts xs ((x, instantiate_type tpenv t)::xenv)
                       in
                       iter2 ts xs []
                     in
@@ -2534,11 +2630,12 @@ in
       let (w, t) = check_expr tenv e in
       begin
       match t with
-      | InductiveType i ->
+      | InductiveType (i, targs) ->
         begin
         match try_assoc i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
-        | Some (l, ctormap) ->
+        | Some (l, tparams, ctormap) ->
+          let (Some tpenv) = zip tparams targs in
           let rec iter wcs ctormap cs =
             match cs with
               [] ->
@@ -2560,7 +2657,7 @@ in
                     | (t::ts, x::xs) ->
                       if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
-                      iter ((x, t)::xmap) ts xs
+                      iter ((x, instantiate_type tpenv t)::xmap) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables."
                     | _ -> static_error lc "Too few pattern variables."
                   in
@@ -2612,7 +2709,7 @@ in
                    match xs with
                     [] -> List.rev xm
                   | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type te in
+                      let t = check_pure_type [] te in
                       iter ((x, t)::xm) xs
                  in
                  iter [] ps
@@ -2667,7 +2764,7 @@ in
                    match xs with
                     [] -> List.rev xm
                   | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type te in
+                      let t = check_pure_type [] te in
                       iter ((x, t)::xm) xs
                  in
                  iter [] ps
@@ -2767,7 +2864,7 @@ in
     | Read (l, e, f) -> vars_used e
     | Deref (l, e, t) -> vars_used e
     | AddressOf (l, e) -> vars_used e
-    | CallExpr (l, g, [], pats, _) ->
+    | CallExpr (l, g, targs, [], pats, _) ->
       flatmap (fun (LitPat e) -> vars_used e) pats
     | IfExpr (l, e, e1, e2) -> vars_used e @ vars_used e1 @ vars_used e2
     | SwitchExpr (l, e, cs, _) ->
@@ -2906,7 +3003,7 @@ in
       match e with
         Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
       | Operation (l, _, es, _) -> List.iter iter es
-      | CallExpr (l, _, [], pats,_) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
+      | CallExpr (l, _, targs, [], pats,_) -> List.iter (function LitPat e -> iter e | _ -> ()) pats
       | IfExpr (l, e1, e2, e3) -> (iter e1; iter e2; iter e3)
       | _ -> ()
     in
@@ -2970,13 +3067,13 @@ in
         let (Some scope) = !scope in
         match scope with
           LocalVar -> List.assoc x env
-        | PureCtor -> let (lg, t, [], s) = List.assoc x purefuncmap in ctxt#mk_app s []
+        | PureCtor -> let (lg, tparams, t, [], s) = List.assoc x purefuncmap in ctxt#mk_app s []
         | FuncName -> List.assoc x funcnameterms
         | PredFamName -> let (_, _, _, symb, _) = List.assoc x predfammap in symb
       end
     | PredNameExpr (l, g) -> let (_, _, _, symb, _) = List.assoc g predfammap in symb
     | CastExpr (l, te, e) ->
-      let t = check_pure_type te in
+      let t = check_pure_type [] te in
       begin
         match (e, t) with
           (IntLit (_, n, _), PtrType _) ->
@@ -2996,7 +3093,7 @@ in
       else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
     | ClassLit (l,s) -> ctxt#mk_app (List.assoc s class_symbols) []
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
-    | CallExpr (l, g, [], pats,_) ->
+    | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
         match pats with
           [LitPat target] ->
@@ -3005,7 +3102,7 @@ in
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
+        | Some (lg, tparams, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
       end
     | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
     | Operation (l, Or, [e1; e2], ts) -> ctxt#mk_or (ev e1) (ev e2)
@@ -3087,7 +3184,7 @@ in
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
-             let (_, pts, _, csym) = List.assoc cn purefuncmap in
+             let (_, tparams, pts, _, csym) = List.assoc cn purefuncmap in
              let apply gvs cvs =
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
@@ -3115,11 +3212,11 @@ in
          | (x, tp)::ps -> if x = x0 then i else index_of_param (i + 1) x0 ps
        in
        let i = index_of_param 0 x pmap in
-       let fsym = match List.assoc g purefuncmap with (l, rt, ts, s) -> s in
+       let fsym = match List.assoc g purefuncmap with (l, tparams, rt, ts, s) -> s in
        let clauses =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-              let ctorsym = match List.assoc cn purefuncmap with (l, rt, ts, s) -> s in
+              let ctorsym = match List.assoc cn purefuncmap with (l, tparams, rt, ts, s) -> s in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
@@ -3263,7 +3360,7 @@ in
           SwitchPredClause (lc, cn, pats, p)::cs ->
           branch
             (fun _ ->
-               let (_, _, tps, cs) = List.assoc cn purefuncmap in
+               let (_, tparams, _, tps, cs) = List.assoc cn purefuncmap in
                let Some pts = zip pats tps in
                let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
                assume_eq t (ctxt#mk_app cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p coef size_all size_all cont))
@@ -3410,7 +3507,7 @@ in
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, p)::cs ->
-          let (_, _, tps, ctorsym) = List.assoc cn purefuncmap in
+          let (_, tparams, _, tps, ctorsym) = List.assoc cn purefuncmap in
           let Some pts = zip pats tps in
           let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
           branch
@@ -3468,14 +3565,14 @@ in
         [] -> List.rev functypemap
       | FuncTypeDecl (l, rt, ftn, xs, (pre, post))::ds ->
         let _ = if List.mem_assoc ftn functypemap then static_error l "Duplicate function type name." in
-        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type [] rt) in
         let xmap =
           let rec iter xm xs =
             match xs with
               [] -> List.rev xm
             | (te, x)::xs ->
               if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-              let t = check_pure_type te in
+              let t = check_pure_type [] te in
               iter ((x, t)::xm) xs
           in
           iter [] xs
@@ -3558,14 +3655,14 @@ in
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, rt, fn, xs, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
-        let rt = match rt with None -> None | Some rt -> Some (check_pure_type rt) in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type [] rt) in
         let xmap =
           let rec iter xm xs =
             match xs with
               [] -> List.rev xm
             | (te, x)::xs ->
               if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-              let t = check_pure_type te in
+              let t = check_pure_type [] te in
               iter ((x, t)::xm) xs
           in
           iter [] xs
@@ -3589,7 +3686,7 @@ in
               | Some (_, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
                 check_func_header_compat l "Function type implementation check: " (k, rt, xmap, pre, post) (Regular, rt0, xmap0, cenv0, pre0, post0);
-                let (_, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
                 ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
         end;
@@ -3668,9 +3765,9 @@ in
         if(file_type path <> Java) then
           let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
           let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
-          let (_, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+          let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
           let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-          let cs = get_unique_var_symb "stringLiteralChars" (InductiveType "chars") in
+          let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
           let coef = get_unique_var_symb "stringLiteralCoef" RealType in
             assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
               assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
@@ -3835,12 +3932,13 @@ in
                    None -> 
                      (match try_assoc g purefuncmap with
                         None -> static_error l ("No such method: " ^ g)
-                      | Some (lg, rt, pts, gs) ->
+                      | Some (lg, tparams, rt, pts, gs) ->
+                        if tparams <> [] then static_error l "Missing type arguments.";
                         (match xo with
                            None -> static_error l "Cannot write call of pure function as statement."
                          | Some x ->
                              let tpx = vartp l x in
-                             let w = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx in
+                             let w = check_expr_t tenv (CallExpr (l, g, [], [], pats,fb)) tpx in
                              let _ = check_assign l x in
                              cont h (update env x (ev w))
                         )
@@ -3860,12 +3958,12 @@ in
         None -> (
         match try_assoc g purefuncmap with
           None -> static_error l ("No such function: " ^ g)
-        | Some (lg, rt, pts, gs) -> (
+        | Some (lg, tparams, rt, pts, gs) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            let w = check_expr_t tenv (CallExpr (l, g, [], pats,fb)) tpx in
+            let w = check_expr_t tenv (CallExpr (l, g, [], [], pats,fb)) tpx in
             let _ = check_assign l x in
             cont h (update env x (ev w))
           )
@@ -3881,7 +3979,7 @@ in
     match s with
       PureStmt (l, s) ->
       verify_stmt boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
-    | Assign (l, x, CallExpr (lc, "malloc", [], args,Static)) ->
+    | Assign (l, x, CallExpr (lc, "malloc", [], [], args,Static)) ->
       begin
         match args with
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
@@ -3952,7 +4050,7 @@ in
           assert_chunk h [] [("x", arg)] l (malloc_block_symb, true) real_unit DummyPat [LitPat (Var (l, "x", ref (Some LocalVar)))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
         | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
       end
-    | Assign (l, x, CallExpr (lc, g, [], pats,fb)) ->
+    | Assign (l, x, CallExpr (lc, g, [], [], pats,fb)) ->
       let iscons = startswith g "new " && (List.length pats==0) in
       if iscons then 
         begin 
@@ -3996,7 +4094,7 @@ in
       eval_h h env w (fun h v -> cont h ((x, v)::env));
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
-      let t = check_pure_type te in
+      let t = check_pure_type [] te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
       verify_stmt boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       ;
@@ -4036,11 +4134,12 @@ in
     | SwitchStmt (l, e, cs) ->
       let (w, tp) = check_expr tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      let (tn, (_, ctormap)) =
+      let (tn, targs, (_, tparams, ctormap)) =
         match tp with
-          InductiveType i -> (i, List.assoc i inductivemap)
+          InductiveType (i, targs) -> (i, targs, List.assoc i inductivemap)
         | _ -> static_error l "Switch statement operand is not an inductive value."
       in
+      let (Some tpenv) = zip tparams targs in
       let t = ev w in
       let rec iter ctors cs =
         match cs with
@@ -4064,14 +4163,14 @@ in
               | (pat::pats, tp::pts) ->
                 if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
                 if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
-                iter ((pat, tp)::ptenv) pats pts
+                iter ((pat, instantiate_type tpenv tp)::ptenv) pats pts
               | ([], _) -> static_error lc "Too few arguments."
               | _ -> static_error lc "Too many arguments."
             in
             iter [] pats pts
           in
           let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) ptenv in
-          let (_, _, _, ctorsym) = List.assoc cn purefuncmap in
+          let (_, _, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assq t sizemap with
               None -> sizemap
