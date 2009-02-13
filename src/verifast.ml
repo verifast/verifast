@@ -476,6 +476,8 @@ type type_ =
   | AnyType
   | TypeParam of string
 
+type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
+
 type type_expr =
     StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
@@ -530,7 +532,7 @@ and
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
   | CallExpr of loc * string * type_expr list * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
-  | SwitchExpr of loc * expr * switch_expr_clause list * type_ ref
+  | SwitchExpr of loc * expr * switch_expr_clause list * (type_ list * type_) option ref
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
   | FuncNameExpr of string (*function name *)
   | CastExpr of loc * type_expr * expr (* cast *)
@@ -594,7 +596,7 @@ and
   | CoefPred of loc * pat * pred
 and
   switch_pred_clause =
-  | SwitchPredClause of loc * string * string list * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
+  | SwitchPredClause of loc * string * string list * prover_type option list option ref * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
 and
   func_kind =
   | Regular
@@ -1154,7 +1156,7 @@ and
 | [< >] -> []
 and
   parse_switch_pred_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, p)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, ref None, p)
 and
   parse_expr = parser
   [< e0 = parse_conj_expr; e = parser
@@ -1216,7 +1218,7 @@ and
      [< e = parse_expr; '(_, Kwd ")") >] -> e
    | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
    >] -> e
-| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref Void)
+| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
@@ -1636,12 +1638,6 @@ in
     | PredTypeExpr (l, tes) -> PredType (List.map (check_pure_type tpenv) tes)
   and check_type_arg tpenv te =
     let t = check_pure_type tpenv te in
-    begin
-    match t with
-      InductiveType _ -> ()
-    | TypeParam _ -> ()
-    | _ -> static_error (type_expr_loc te) "Only inductive types and type parameters are supported as type arguments."
-    end;
     t
   in
   
@@ -1683,22 +1679,32 @@ in
     | TypeParam x -> x
   in
   
-  let typenode_of_type t =
+  let typenode_of_provertype t =
     match t with
-      Bool -> ctxt#type_bool
-    | IntType -> ctxt#type_int
-    | RealType -> ctxt#type_real
-    | Char -> ctxt#type_int
-    | InductiveType _ -> ctxt#type_inductive
-    | StructType sn -> assert false
-    | ObjType n -> ctxt#type_int
-    | PtrType t -> ctxt#type_int
-    | PredType t -> ctxt#type_inductive
-    | BoxIdType -> ctxt#type_int
-    | HandleIdType -> ctxt#type_int
-    | AnyType -> ctxt#type_inductive
-    | TypeParam _ -> ctxt#type_inductive
+      ProverInt -> ctxt#type_int
+    | ProverBool -> ctxt#type_bool
+    | ProverReal -> ctxt#type_real
+    | ProverInductive -> ctxt#type_inductive
   in
+  
+  let provertype_of_type t =
+    match t with
+      Bool -> ProverBool
+    | IntType -> ProverInt
+    | RealType -> ProverReal
+    | Char -> ProverInt
+    | InductiveType _ -> ProverInductive
+    | StructType sn -> assert false
+    | ObjType n -> ProverInt
+    | PtrType t -> ProverInt
+    | PredType t -> ProverInductive
+    | BoxIdType -> ProverInt
+    | HandleIdType -> ProverInt
+    | AnyType -> ProverInductive
+    | TypeParam _ -> ProverInductive
+  in
+  
+  let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
   
   let functypenames = flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds in
   let isfuncs =
@@ -1991,7 +1997,7 @@ in
                                       begin
                                         match t0 with
                                           None -> static_error l "Switch expressions with zero cases are not yet supported."
-                                        | Some t0 -> tref := t0; (SwitchExpr (l, w, List.rev wcs, tref), t0)
+                                        | Some t0 -> tref := Some (targs, t0); (SwitchExpr (l, w, List.rev wcs, tref), t0)
                                       end
                                     | SwitchExprClause (lc, cn, xs, e)::cs ->
                                       begin
@@ -2490,7 +2496,7 @@ in
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported."
-                  | Some t0 -> tref := t0; (SwitchExpr (l, w, wcs, tref), t0)
+                  | Some t0 -> tref := Some (targs, t0); (SwitchExpr (l, w, wcs, tref), t0)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -2645,27 +2651,29 @@ in
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.")
               in (SwitchPred (l, w, wcs), tenv)
-            | SwitchPredClause (lc, cn, xs, body)::cs ->
+            | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor."
               | Some (_, ts) ->
-                let xmap =
-                  let rec iter xmap ts xs =
+                let (xmap, xsInfo) =
+                  let rec iter xmap xsInfo ts xs =
                     match (ts, xs) with
-                      ([], []) -> xmap
+                      ([], []) -> (xmap, List.rev xsInfo)
                     | (t::ts, x::xs) ->
                       if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
-                      iter ((x, instantiate_type tpenv t)::xmap) ts xs
+                      let xInfo = match t with TypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
+                      iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables."
                     | _ -> static_error lc "Too few pattern variables."
                   in
-                  iter [] ts xs
+                  iter [] [] ts xs
                 in
+                ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
                 let (wbody, _) = check_pred tenv body in
-                iter (SwitchPredClause (lc, cn, xs, wbody)::wcs) (List.remove_assoc cn ctormap) cs
+                iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs
               end
           in
           iter [] ctormap cs
@@ -2948,7 +2956,7 @@ in
       let rec iter fixed' cs =
         match cs with
           [] -> fixed'
-        | SwitchPredClause (l, c, xs, p)::cs ->
+        | SwitchPredClause (l, c, xs, _, p)::cs ->
           let fixed = check_pred_precise (xs@fixed) p in
           iter (intersect fixed' fixed) cs
       in
@@ -3045,6 +3053,23 @@ in
   let field_offset f = List.assoc (f#parent, f#name) field_offsets in
   let field_address t f = ctxt#mk_add t (field_offset f) in
   
+  let pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb in
+  
+  let convert_provertype term proverType proverType0 =
+    match (proverType, proverType0) with (* TODO: Cache these pure function symbols as soon as there is support for a Java prelude. *)
+      _ when proverType = proverType0 -> term
+    | (ProverBool, ProverInductive) -> ctxt#mk_app (pure_func_symb "boxed_bool") [term]
+    | (ProverInt, ProverInductive) -> ctxt#mk_app (pure_func_symb "boxed_int") [term]
+    | (ProverReal, ProverInductive) -> ctxt#mk_app (pure_func_symb "boxed_real") [term]
+    | (ProverInductive, ProverBool) -> ctxt#mk_app (pure_func_symb "unboxed_bool") [term]
+    | (ProverInductive, ProverInt) -> ctxt#mk_app (pure_func_symb "unboxed_int") [term]
+    | (ProverInductive, ProverReal) -> ctxt#mk_app (pure_func_symb "unboxed_real") [term]
+  in
+  
+  let prover_convert_term term t t0 =
+    if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
+  in
+
   let rec eval_core assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval_core assert_term read_field env in
     let check_overflow l min t max =
@@ -3102,7 +3127,29 @@ in
       begin
         match try_assoc g purefuncmap with
           None -> static_error l "No such pure function."
-        | Some (lg, tparams, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
+        | Some (lg, tparams, t, pts, s) ->
+          if tparams = [] then
+            ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
+          else
+            let targs = List.map (check_pure_type []) targs in (* TODO: Optimize *)
+            let (Some tpenv) = zip tparams targs in
+            let (Some params) = zip pats pts in
+            let ts =
+              List.map
+                (fun (LitPat e, typ) ->
+                 let t = ev e in
+                 match typ with
+                   TypeParam x -> convert_provertype (ev e) (provertype_of_type (List.assoc x tpenv)) ProverInductive
+                 | _ -> t
+                )
+                params
+            in
+            let term = ctxt#mk_app s ts in
+            begin
+            match t with
+              TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
+            | _ -> term
+            end
       end
     | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
     | Operation (l, Or, [e1; e2], ts) -> ctxt#mk_or (ev e1) (ev e2)
@@ -3179,15 +3226,27 @@ in
         in
         iter [] env
       in
-      let tp = !tref in
+      let (Some (targs, tp)) = !tref in
       let symbol = ctxt#mk_symbol g (ctxt#get_type t :: List.map (fun (x, t) -> ctxt#get_type t) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
-             let (_, tparams, pts, _, csym) = List.assoc cn purefuncmap in
+             let (_, tparams, _, pts, csym) = List.assoc cn purefuncmap in
              let apply gvs cvs =
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
+               let penv =
+                 if tparams = [] then penv else
+                 let Some penv = zip penv pts in
+                 let Some tpenv = zip tparams targs in
+                 List.map
+                   (fun ((pat, term), typ) ->
+                    match typ with
+                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
+                    | _ -> (pat, term)
+                   )
+                   penv
+               in
                let env = penv@genv in
                eval_core None None env e
              in
@@ -3209,18 +3268,33 @@ in
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
-         | (x, tp)::ps -> if x = x0 then i else index_of_param (i + 1) x0 ps
+         | (x, tp)::ps -> if x = x0 then (i, tp) else index_of_param (i + 1) x0 ps
        in
-       let i = index_of_param 0 x pmap in
+       let (i, InductiveType (_, targs)) = index_of_param 0 x pmap in
        let fsym = match List.assoc g purefuncmap with (l, tparams, rt, ts, s) -> s in
        let clauses =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-              let ctorsym = match List.assoc cn purefuncmap with (l, tparams, rt, ts, s) -> s in
+              let (_, tparams, _, ts, ctorsym) = List.assoc cn purefuncmap in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
                 let Some patenv = zip pats cts in
+                let patenv =
+                  if tparams = [] then patenv else
+                  let Some tpenv = zip tparams targs in
+                  let Some patenv = zip patenv ts in
+                  List.map
+                    (fun ((x, term), typ) ->
+                     let term =
+                     match typ with
+                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
+                     | _ -> term
+                     in
+                     (x, term)
+                    )
+                    patenv
+                in
                 eval None (patenv @ penv) e
               in
               (ctorsym, eval_body)
@@ -3357,13 +3431,30 @@ in
       let t = ev e in
       let rec iter cs =
         match cs with
-          SwitchPredClause (lc, cn, pats, p)::cs ->
+          SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
                let (_, tparams, _, tps, cs) = List.assoc cn purefuncmap in
                let Some pts = zip pats tps in
-               let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
-               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xts @ env) p coef size_all size_all cont))
+               let xts =
+                 if tparams = [] then
+                   List.map (fun (x, tp) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
+                 else
+                   let Some patsInfo = !patsInfo in
+                   let Some pts = zip pts patsInfo in
+                   List.map
+                     (fun ((x, tp), info) ->
+                      match info with
+                        None -> let term = get_unique_var_symb x tp in (x, term, term)
+                      | Some proverType ->
+                        let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
+                        let term' = convert_provertype term proverType ProverInductive in
+                        (x, term', term)
+                     )
+                     pts
+               in
+               let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
+               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred h (pats @ ghostenv) (xenv @ env) p coef size_all size_all cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -3506,12 +3597,35 @@ in
       let t = ev e in
       let rec iter cs =
         match cs with
-          SwitchPredClause (lc, cn, pats, p)::cs ->
+          SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
           let (_, tparams, _, tps, ctorsym) = List.assoc cn purefuncmap in
           let Some pts = zip pats tps in
-          let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
+          let (xs, xenv) =
+            if tparams = [] then
+              let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
+              let xs = List.map (fun (x, t) -> t) xts in
+              (xs, xts)
+            else
+              let Some patsInfo = !patsInfo in
+              let Some pts = zip pts patsInfo in
+              let xts =
+                List.map
+                  (fun ((x, tp), info) ->
+                   match info with
+                     None -> let term = get_unique_var_symb x tp in (x, term, term)
+                   | Some proverType ->
+                     let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
+                     let term' = convert_provertype term proverType ProverInductive in
+                     (x, term', term)
+                  )
+                  pts
+              in
+              let xs = List.map (fun (x, t, _) -> t) xts in
+              let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
+              (xs, xenv)
+          in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> assert_pred h (pats @ ghostenv) (xts @ env) p coef cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xs) (fun _ -> assert_pred h (pats @ ghostenv) (xenv @ env) p coef cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -4156,28 +4270,34 @@ in
             | Some (l, pts) -> pts
           in
           let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
-          let ptenv =
-            let rec iter ptenv pats pts =
+          let (ptenv, xterms, xenv) =
+            let rec iter ptenv xterms xenv pats pts =
               match (pats, pts) with
-                ([], []) -> List.rev ptenv
+                ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
               | (pat::pats, tp::pts) ->
                 if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
                 if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
-                iter ((pat, instantiate_type tpenv tp)::ptenv) pats pts
+                let tp' = instantiate_type tpenv tp in
+                let term = get_unique_var_symb pat tp' in
+                let term' =
+                  match tp with
+                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                  | _ -> term
+                in
+                iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
               | ([], _) -> static_error lc "Too few arguments."
               | _ -> static_error lc "Too many arguments."
             in
-            iter [] pats pts
+            iter [] [] [] pats pts
           in
-          let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) ptenv in
           let (_, _, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assq t sizemap with
               None -> sizemap
-            | Some k -> List.map (fun (x, t) -> (t, k - 1)) xts @ sizemap
+            | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym (List.map (fun (x, t) -> t) xts)) (fun _ -> verify_cont boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xts @ env) ss tcont return_cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs

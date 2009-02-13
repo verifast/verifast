@@ -8,6 +8,7 @@ test: verifastz3.opt.exe vfidez3.opt.exe
 	..\src\verifastz3.opt iter.c
 	..\src\verifastz3.opt -c args.c
 	..\src\verifastz3.opt swap.c
+	..\src\verifastz3.opt -shared polytest.c
 	cd java
 	..\..\src\verifastz3.opt -disable_overflow_check -c Counter.java
 	..\..\src\verifastz3.opt -c Tree.java
