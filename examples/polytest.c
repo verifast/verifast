@@ -2,10 +2,17 @@
 
 inductive list<t> = nil | cons(t, list<t>);
 
-fixpoint int length(list<int> xs) {
+fixpoint int length<t>(list<t> xs) {
     switch (xs) {
          case nil: return 0;
-         case cons(x, xs0): return 1 + length(xs0);
+         case cons(x, xs0): return 1 + length<t>(xs0);
+    }
+}
+
+fixpoint list<t> append<t>(list<t> l1, list<t> l2) {
+    switch (l1) {
+        case nil: return l2;
+        case cons(x, xs): return cons<t>(x, append<t>(xs, l2));
     }
 }
 
@@ -33,11 +40,13 @@ lemma void foo(list<int> l)
     ensures sum(l) == 30;
 {
     assert le(cons<int>(5, cons<int>(7, nil<int>)), cons<int>(10, cons<int>(100, cons<int>(1000, nil<int>)))) == true;
+    assert length<int>(l) == 2;
+    assert length<int>(append<int>(l, l)) == 4;
 }
 
 lemma void length_nonnegative(list<int> xs)
     requires true;
-    ensures 0 <= length(xs);
+    ensures 0 <= length<int>(xs);
 {
     switch (xs) {
         case nil:
