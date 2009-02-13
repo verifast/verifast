@@ -475,6 +475,7 @@ type type_ =
   | HandleIdType
   | AnyType
   | TypeParam of string
+  | InferredType of type_ option ref
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
 
@@ -1682,6 +1683,7 @@ in
     | HandleIdType -> "handle"
     | AnyType -> "any"
     | TypeParam x -> x
+    | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
   in
   
   let typenode_of_provertype t =
@@ -1692,7 +1694,7 @@ in
     | ProverInductive -> ctxt#type_inductive
   in
   
-  let provertype_of_type t =
+  let rec provertype_of_type t =
     match t with
       Bool -> ProverBool
     | IntType -> ProverInt
@@ -1707,6 +1709,7 @@ in
     | HandleIdType -> ProverInt
     | AnyType -> ProverInductive
     | TypeParam _ -> ProverInductive
+    | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
   in
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
@@ -1748,8 +1751,29 @@ in
     | _ -> t = t0
   in
   
+  let rec unfold_inferred_type t =
+    match t with
+      InferredType t' ->
+      begin
+        match !t' with
+          None -> t
+        | Some t -> unfold_inferred_type t
+      end
+    | _ -> t
+  in
+  
+  let rec unify t1 t2 =
+    t1 == t2 ||
+    match (unfold_inferred_type t1, unfold_inferred_type t2) with
+      (InferredType t', InferredType t0') -> if t' = t0' then true else begin t0' := Some t1; true end
+    | (t, InferredType t0) -> t0 := Some t; true
+    | (InferredType t, t0) -> t := Some t0; true
+    | (InductiveType (i1, args1), InductiveType (i2, args2)) -> i1 = i2 && List.for_all2 unify args1 args2 
+    | (t1, t2) -> t1 = t2
+  in
+  
   let rec expect_type_core l msg t t0 =
-    match (t, t0) with
+    match (unfold_inferred_type t, unfold_inferred_type t0) with
       (PtrType t, PtrType t0) when compatible_pointees t t0 -> ()
     | (ObjType "null", ObjType _) -> ()
     | (Char, IntType) -> ()
@@ -1763,7 +1787,7 @@ in
           List.iter (fun (t, t0) -> expect_type_core l msg t t0) tpairs
       end
     | (InductiveType _, AnyType) -> ()
-    | _ -> if t = t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
   let expect_type l t t0 = expect_type_core l "" t t0 in
@@ -1924,9 +1948,16 @@ in
                               None -> (
                                 match try_assoc x pfm with
                                   Some (_, tparams, t, [], _) ->
-                                  if tparams <> [] then static_error l "Missing type arguments.";
-                                  scope := Some PureCtor;
-                                  (e, t)
+                                  if tparams <> [] then
+                                    let targs = List.map (fun _ -> InferredType (ref None)) tparams in
+                                    let Some tpenv = zip tparams targs in
+                                    scope := Some PureCtor;
+                                    (e, instantiate_type tpenv t)
+                                  else
+                                  begin
+                                    scope := Some PureCtor;
+                                    (e, t)
+                                  end
                                 | _ -> static_error l "No such variable or constructor."
                               )
                             | Some t -> scope := Some LocalVar; (e, t)
@@ -1956,11 +1987,19 @@ in
                           | CallExpr (l, g', targes, [], pats, info) -> (
                             match try_assoc g' pfm with
                               Some (l, callee_tparams, t0, ts0, _) -> (
-                              let targs = List.map (check_pure_type tparams) targes in
-                              let tpenv =
-                                match zip callee_tparams targs with
-                                  None -> static_error l "Incorrect number of type arguments."
-                                | Some bs -> bs
+                              let (targs, tpenv) =
+                                if callee_tparams <> [] && targes = [] then
+                                  let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
+                                  let Some tpenv = zip tparams targs in
+                                  (targs, tpenv)
+                                else
+                                  let targs = List.map (check_pure_type tparams) targes in
+                                  let tpenv =
+                                    match zip callee_tparams targs with
+                                      None -> static_error l "Incorrect number of type arguments."
+                                    | Some bs -> bs
+                                  in
+                                  (targs, tpenv)
                               in
                               let t = instantiate_type tpenv t0 in
                               let ts = List.map (instantiate_type tpenv) ts0 in
@@ -1982,11 +2021,19 @@ in
                                 match zip pmap pats with
                                   None -> static_error l "Incorrect argument count."
                                 | Some pts ->
-                                  let targs = List.map (check_pure_type tparams) targes in
-                                  let tpenv =
-                                    match zip tparams targs with
-                                      None -> static_error l "Incorrect number of type arguments."
-                                    | Some bs -> bs
+                                  let (targs, tpenv) =
+                                    if tparams <> [] && targes = [] then
+                                      let targs = List.map (fun _ -> InferredType (ref None)) tparams in
+                                      let Some tpenv = zip tparams targs in
+                                      (targs, tpenv)
+                                    else
+                                      let targs = List.map (check_pure_type tparams) targes in
+                                      let tpenv =
+                                        match zip tparams targs with
+                                          None -> static_error l "Incorrect number of type arguments."
+                                        | Some bs -> bs
+                                      in
+                                      (targs, tpenv)
                                   in
                                   let wpats =
                                     List.map (fun ((p, t0), pat) ->
@@ -2066,7 +2113,8 @@ in
                           | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
                           | _ ->
                             let (w, t) = check_ tenv e in
-                            if t = t0 then w else static_error (expr_loc e) ("Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+                            expect_type (expr_loc e) t t0;
+                            w
                         in
                         let wbody = checkt_ tenv body rt in
                         iter (List.remove_assoc cn ctormap) (SwitchStmtClause (lc, cn, xs, [ReturnStmt (lret, Some wbody)])::wcs) cs
@@ -2396,8 +2444,17 @@ in
         begin
           match try_assoc x purefuncmap with
             Some (_, tparams, t, [], _) ->
-            if tparams <> [] then static_error l "Missing type arguments.";
-            scope := Some PureCtor; (e, t)
+            if tparams <> [] then
+            begin
+              let targs = List.map (fun _ -> InferredType (ref None)) tparams in
+              let Some tpenv = zip tparams targs in
+              scope := Some PureCtor;
+              (e, instantiate_type tpenv t)
+            end
+            else
+            begin
+              scope := Some PureCtor; (e, t)
+            end
           | _ ->
             begin
               if List.mem x funcnames then
@@ -2480,11 +2537,19 @@ in
     | CallExpr (l, g', targes, [], pats, info) -> (
       match try_assoc g' purefuncmap with
         Some (_, callee_tparams, t0, ts, _) -> (
-        let targs = List.map (check_pure_type tparams) targes in
-        let tpenv =
-          match zip callee_tparams targs with
-            None -> static_error l "Incorrect number of type arguments."
-          | Some bs -> bs
+        let (targs, tpenv) =
+          if callee_tparams <> [] && targes = [] then
+            let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
+            let Some tpenv = zip callee_tparams targs in
+            (targs, tpenv)
+          else
+            let targs = List.map (check_pure_type tparams) targes in
+            let tpenv =
+              match zip callee_tparams targs with
+                None -> static_error l "Incorrect number of type arguments."
+              | Some bs -> bs
+            in
+            (targs, tpenv)
         in
         match zip pats ts with
           None -> static_error l "Incorrect argument count."
@@ -3936,7 +4001,12 @@ in
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
     let check_correct xo g targs pats (lg, callee_tparams, tr, ps, pre, post, body,v)=
-      let targs = List.map (check_pure_type tparams) targs in
+      let targs =
+        if callee_tparams <> [] && targs = [] then
+          List.map (fun _ -> InferredType (ref None)) callee_tparams
+        else
+          List.map (check_pure_type tparams) targs
+      in
       let tpenv =
         match zip callee_tparams targs with
           None -> static_error l "Incorrect number of type arguments."
