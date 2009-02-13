@@ -44,14 +44,14 @@ lemma void foo(list<int> l)
     assert length<int>(append<int>(l, l)) == 4;
 }
 
-lemma void length_nonnegative(list<int> xs)
+lemma void length_nonnegative<t>(list<t> xs)
     requires true;
-    ensures 0 <= length<int>(xs);
+    ensures 0 <= length<t>(xs);
 {
     switch (xs) {
         case nil:
         case cons(x, xs0):
-            length_nonnegative(xs0);
+            length_nonnegative<t>(xs0);
     }
 }
 

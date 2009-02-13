@@ -568,7 +568,7 @@ and
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
   | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
-  | CallStmt of loc * string * expr list * func_binding(* oproep regel-naam-argumenten*)
+  | CallStmt of loc * string * type_expr list * expr list * func_binding(* oproep regel-naam-argumenten*)
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
@@ -726,7 +726,7 @@ let stmt_loc s =
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
   | WriteDeref (l, _, _) -> l
-  | CallStmt (l,  _, _,_) -> l
+  | CallStmt (l, _, _, _, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
@@ -1093,7 +1093,7 @@ and
      if post_bpn <> pre_bpn then raise (ParseException (l, "The box predicate name cannot change."));
      PerformActionStmt (l, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, post_bp_args, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, [], [], es,fb) -> CallStmt (l, g, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, targs, [], es,fb) -> CallStmt (l, g, targs, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     (match e with
      | Var (lx, x, _) -> Assign (l, x, rhs)
@@ -2364,9 +2364,9 @@ in
     iter predinstmap ds
   in
   
-  let rec check_expr tenv e =
-    let check e = check_expr tenv e in
-    let checkt e t0 = check_expr_t tenv e t0 in
+  let rec check_expr tparams tenv e =
+    let check e = check_expr tparams tenv e in
+    let checkt e t0 = check_expr_t tparams tenv e t0 in
     let promote_numeric e1 e2 ts =
       let (w1, t1) = check e1 in
       let (w2, t2) = check e2 in
@@ -2459,14 +2459,14 @@ in
     | ClassLit (l, s) -> (e, ObjType "Class")
     | StringLit (l, s) -> (e, PtrType Char)
     | CastExpr (l, te, e) ->
-      let t = check_pure_type [] te in
+      let t = check_pure_type tparams te in
       let w =
         match (e, t) with
           (IntLit (_, n, tp), PtrType _) -> tp := Some t; e
         | _ -> checkt e t
       in
       (CastExpr (l, te, w), t)
-    | Read (l, e, f) -> let (w, t) = check_deref l tenv e f in (Read (l, w, f), t)
+    | Read (l, e, f) -> let (w, t) = check_deref l tparams tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
       let (w, t) = check e in
       begin
@@ -2479,10 +2479,10 @@ in
       (AddressOf (l, w), PtrType t)
     | CallExpr (l, g', targes, [], pats, info) -> (
       match try_assoc g' purefuncmap with
-        Some (_, tparams, t0, ts, _) -> (
-        let targs = List.map (check_pure_type []) targes in
+        Some (_, callee_tparams, t0, ts, _) -> (
+        let targs = List.map (check_pure_type tparams) targes in
         let tpenv =
-          match zip tparams targs with
+          match zip callee_tparams targs with
             None -> static_error l "Incorrect number of type arguments."
           | Some bs -> bs
         in
@@ -2550,7 +2550,7 @@ in
                       in
                       iter2 ts xs []
                     in
-                    let (w, t) = check_expr (xenv@tenv) e in
+                    let (w, t) = check_expr tparams (xenv@tenv) e in
                     let t0 =
                       match t0 with
                         None -> Some t
@@ -2565,7 +2565,7 @@ in
         | _ -> static_error l "Switch expression operand must be inductive value."
       end
     | e -> static_error (expr_loc e) "Expression form not allowed here."
-  and check_expr_t tenv e t0 =
+  and check_expr_t tparams tenv e t0 =
     match (e, t0) with
       (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
@@ -2574,9 +2574,9 @@ in
         static_error l "Integer literal used as char must be between 0 and 127.";
       t:=Some IntType; e
     | _ ->
-      let (w, t) = check_expr tenv e in expect_type (expr_loc e) t t0; w
-  and check_deref l tenv e f =
-    let (w, t) = check_expr tenv e in
+      let (w, t) = check_expr tparams tenv e in expect_type (expr_loc e) t t0; w
+  and check_deref l tparams tenv e f =
+    let (w, t) = check_expr tparams tenv e in
     begin
     match t with
     | PtrType (StructType sn) ->
@@ -2605,31 +2605,31 @@ in
     end
   in
 
-  let check_pat l tenv t p =
+  let check_pat l tparams tenv t p =
     match p with
-      LitPat e -> let w = check_expr_t tenv e t in (LitPat w, tenv)
+      LitPat e -> let w = check_expr_t tparams tenv e t in (LitPat w, tenv)
     | VarPat x ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
       (p, (x, t)::tenv)
     | DummyPat -> (p, tenv)
   in
   
-  let rec check_pats l tenv ts ps =
+  let rec check_pats l tparams tenv ts ps =
     match (ts, ps) with
       ([], []) -> ([], tenv)
     | (t::ts, p::ps) ->
-      let (wpat, tenv) = check_pat l tenv t p in
-      let (wpats, tenv) = check_pats l tenv ts ps in
+      let (wpat, tenv) = check_pat l tparams tenv t p in
+      let (wpats, tenv) = check_pats l tparams tenv ts ps in
       (wpat::wpats, tenv)
     | ([], _) -> static_error l "Too many patterns"
     | (_, []) -> static_error l "Too few patterns"
   in
 
-  let rec check_pred tenv p =
+  let rec check_pred tparams tenv p =
     match p with
       Access (l, e, f, v) ->
-      let (w, t) = check_deref l tenv e f in
-      let (wv, tenv') = check_pat l tenv t v in
+      let (w, t) = check_deref l tparams tenv e f in
+      let (wv, tenv') = check_pat l tparams tenv t v in
       (Access (l, w, f, wv), tenv')
     | CallPred (l, p, ps0, ps) ->
       let (arity, xs, inputParamCount) =
@@ -2649,31 +2649,31 @@ in
           Java-> list_make arity (ObjType "Class")
         | _   -> list_make arity (PtrType Void)
         in
-        let (wps0, tenv) = check_pats l tenv ts0 ps0 in
-        let (wps, tenv) = check_pats l tenv xs ps in
+        let (wps0, tenv) = check_pats l tparams tenv ts0 ps0 in
+        let (wps, tenv) = check_pats l tparams tenv xs ps in
         p#set_domain (ts0 @ xs); p#set_inputParamCount inputParamCount; (CallPred (l, p, wps0, wps), tenv)
       end
     | ExprPred (l, e) ->
-      let w = check_expr_t tenv e boolt in (ExprPred (l, w), tenv)
+      let w = check_expr_t tparams tenv e boolt in (ExprPred (l, w), tenv)
     | Sep (l, p1, p2) ->
-      let (p1, tenv) = check_pred tenv p1 in
-      let (p2, tenv) = check_pred tenv p2 in
+      let (p1, tenv) = check_pred tparams tenv p1 in
+      let (p2, tenv) = check_pred tparams tenv p2 in
       (Sep (l, p1, p2), tenv)
     | IfPred (l, e, p1, p2) ->
-      let w = check_expr_t tenv e boolt in
-      let (wp1, _) = check_pred tenv p1 in
-      let (wp2, _) = check_pred tenv p2 in
+      let w = check_expr_t tparams tenv e boolt in
+      let (wp1, _) = check_pred tparams tenv p1 in
+      let (wp2, _) = check_pred tparams tenv p2 in
       (IfPred (l, w, wp1, wp2), tenv)
     | SwitchPred (l, e, cs) ->
-      let (w, t) = check_expr tenv e in
+      let (w, t) = check_expr tparams tenv e in
       begin
       match t with
       | InductiveType (i, targs) ->
         begin
         match try_assoc i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
-        | Some (l, tparams, ctormap) ->
-          let (Some tpenv) = zip tparams targs in
+        | Some (l, inductive_tparams, ctormap) ->
+          let (Some tpenv) = zip inductive_tparams targs in
           let rec iter wcs ctormap cs =
             match cs with
               [] ->
@@ -2704,7 +2704,7 @@ in
                 in
                 ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
-                let (wbody, _) = check_pred tenv body in
+                let (wbody, _) = check_pred tparams tenv body in
                 iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs
               end
           in
@@ -2714,8 +2714,8 @@ in
       end
     | EmpPred l -> (p, tenv)
     | CoefPred (l, coef, body) ->
-      let (wcoef, tenv) = check_pat l tenv RealType coef in
-      let (wbody, tenv) = check_pred tenv body in
+      let (wcoef, tenv) = check_pat l tparams tenv RealType coef in
+      let (wbody, tenv) = check_pred tparams tenv body in
       (CoefPred (l, wcoef, wbody), tenv)
   in
   let interfmap = if file_type path<>Java then [] else
@@ -2758,9 +2758,9 @@ in
                  match co with
                    None -> static_error lm ("Non-fixpoint function must have contract: "^n)
                  | Some (pre, post) ->
-                   let (pre, tenv) = check_pred xmap pre in
+                   let (pre, tenv) = check_pred [] xmap pre in
                    let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                   let (post, _) = check_pred postmap post in
+                   let (post, _) = check_pred [] postmap post in
                    (pre, post)
                in
                iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
@@ -2830,9 +2830,9 @@ in
                            in
                            search interfs
                  | Some (pre, post) ->
-                     let (wpre, tenv) = check_pred xmap pre in
+                     let (wpre, tenv) = check_pred [] xmap pre in
                      let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                     let (wpost, _) = check_pred postmap post in
+                     let (wpost, _) = check_pred [] postmap post in
                      (wpre, wpost)
                in
                iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
@@ -2871,8 +2871,8 @@ in
         let amap =
         List.map
           (fun (an, (l, pmap, pre, post)) ->
-             let pre = check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap) pre boolt in
-             let post = check_expr_t ([("actionHandle", HandleIdType)] @ pmap @ boxpmap @ old_boxpmap) post boolt in
+             let pre = check_expr_t [] ([("actionHandle", HandleIdType)] @ pmap @ boxpmap) pre boolt in
+             let post = check_expr_t [] ([("actionHandle", HandleIdType)] @ pmap @ boxpmap @ old_boxpmap) post boolt in
              (an, (l, pmap, pre, post))
           )
           amap
@@ -2880,7 +2880,7 @@ in
         let hpmap =
         List.map
           (fun (hpn, (l, pmap, inv, pbcs)) ->
-             let inv = check_expr_t ([("predicateHandle", HandleIdType)] @ pmap @ boxpmap) inv boolt in
+             let inv = check_expr_t [] ([("predicateHandle", HandleIdType)] @ pmap @ boxpmap) inv boolt in
              (hpn, (l, pmap, inv, pbcs))
           )
           hpmap
@@ -3009,7 +3009,7 @@ in
       (
         fun
           (pfns, (l, xs, inputParamCount, body)) ->
-          let (wbody, _) = check_pred xs body in
+          let (wbody, _) = check_pred [] xs body in
           begin
             match inputParamCount with
               None -> ()
@@ -3032,7 +3032,7 @@ in
       (
         function
           (g, (l, ps1, ps2, body, funcsym)) ->
-          let (wbody, _) = check_pred (ps1 @ ps2) body in
+          let (wbody, _) = check_pred [] (ps1 @ ps2) body in
           (g, (l, ps1, ps2, wbody, funcsym))
       )
       predctormap
@@ -3650,7 +3650,7 @@ in
     | DeclStmt (l, t, x, e) -> []
     | Write (l, e, f, e') -> []
     | WriteDeref (l, e, e') -> []
-    | CallStmt (l, g, es, _) -> []
+    | CallStmt (l, g, targs, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
     | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
     | Assert (l, p) -> []
@@ -3695,9 +3695,9 @@ in
           iter [] xs
         in
         let (pre, post) =
-          let (wpre, tenv) = check_pred (xmap @ [("this", PtrType Void)]) pre in
+          let (wpre, tenv) = check_pred [] (xmap @ [("this", PtrType Void)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          let (wpost, tenv) = check_pred postmap post in
+          let (wpost, tenv) = check_pred [] postmap post in
           (wpre, wpost)
         in
         iter ((ftn, (l, rt, xmap, pre, post))::functypemap) ds
@@ -3715,19 +3715,24 @@ in
          let post = CallPred (l, bcpred, [], LitPat (Var (l, "result", ref (Some LocalVar)))::List.map (fun (x, t) -> LitPat (Var (l, x, ref (Some LocalVar)))) boxpmap) in
          let hpred = new predref (bcn ^ "_handle") in
          hpred#set_domain [HandleIdType; BoxIdType];
-         [("create_" ^ bcn, (l, Lemma, Some BoxIdType, boxpmap, EmpPred l, boxpmap, post, Some None, Static, Public));
-          ("create_" ^ bcn ^ "_handle", (l, Lemma, Some HandleIdType, [("boxId", BoxIdType)], EmpPred l, [("boxId", BoxIdType)],
+         [("create_" ^ bcn, (l, Lemma, [], Some BoxIdType, boxpmap, EmpPred l, boxpmap, post, Some None, Static, Public));
+          ("create_" ^ bcn ^ "_handle", (l, Lemma, [], Some HandleIdType, [("boxId", BoxIdType)], EmpPred l, [("boxId", BoxIdType)],
              CallPred (l, hpred, [], [LitPat (Var (l, "result", ref (Some LocalVar))); LitPat (Var (l, "boxId", ref (Some LocalVar)))]), Some None, Static, Public))]
       )
       boxmap
   in
   
-  let check_func_header_compat l msg (k, rt, xmap, pre, post) (k0, rt0, xmap0, cenv0, pre0, post0) =
+  let check_func_header_compat l msg (k, tparams, rt, xmap, pre, post) (k0, tparams0, rt0, xmap0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
+    let tpenv =
+      match zip tparams tparams0 with
+        None -> static_error l (msg ^ "Type parameter counts do not match.")
+      | Some bs -> List.map (fun (x, x0) -> (x, TypeParam x0)) bs
+    in
     begin
       match (rt, rt0) with
         (None, None) -> ()
-      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") rt rt0
+      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
       | _ -> static_error l (msg ^ "Return types do not match.")
     end;
     begin
@@ -3736,7 +3741,7 @@ in
       | Some pairs ->
         List.iter
           (fun ((x, t), (x0, t0)) ->
-           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 t;
+           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
           )
           pairs
     end;
@@ -3772,15 +3777,14 @@ in
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams, rt, fn, xs, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
-        if tparams <> [] then static_error l "Type parameterization of non-fixpoint functions is not yet supported.";
-        let rt = match rt with None -> None | Some rt -> Some (check_pure_type [] rt) in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type tparams rt) in
         let xmap =
           let rec iter xm xs =
             match xs with
               [] -> List.rev xm
             | (te, x)::xs ->
               if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-              let t = check_pure_type [] te in
+              let t = check_pure_type tparams te in
               iter ((x, t)::xm) xs
           in
           iter [] xs
@@ -3789,9 +3793,9 @@ in
           match contract_opt with
             None -> static_error l "Non-fixpoint function must have contract."
           | Some (pre, post) ->
-            let (wpre, pre_tenv) = check_pred xmap pre in
+            let (wpre, pre_tenv) = check_pred tparams xmap pre in
             let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
-            let (wpost, tenv) = check_pred postmap post in
+            let (wpost, tenv) = check_pred tparams postmap post in
             (wpre, pre_tenv, wpost)
         in
         begin
@@ -3803,7 +3807,7 @@ in
                 None -> static_error l "No such function type."
               | Some (_, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
-                check_func_header_compat l "Function type implementation check: " (k, rt, xmap, pre, post) (Regular, rt0, xmap0, cenv0, pre0, post0);
+                check_func_header_compat l "Function type implementation check: " (k, tparams, rt, xmap, pre, post) (Regular, [], rt0, xmap0, cenv0, pre0, post0);
                 let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
                 ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
@@ -3811,17 +3815,17 @@ in
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc fn funcmap with
-            None -> iter ((fn, (l, k, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (l0, k0, rt0, xmap0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
+            None -> iter ((fn, (l, k, tparams, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (l0, k0, tparams0, rt0, xmap0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, rt0, xmap0, pre0, pre_tenv0, post0, None,Static,Public) ->
+          | Some (l0, k0, tparams0, rt0, xmap0, pre0, pre_tenv0, post0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
             let cenv0 = List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap0 in
-            check_func_header_compat l "Function prototype implementation check: " (k, rt, xmap, pre, post) (k0, rt0, xmap0, cenv0, pre0, post0);
-            iter ((fn, (l, k, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            check_func_header_compat l "Function prototype implementation check: " (k, tparams, rt, xmap, pre, post) (k0, tparams0, rt0, xmap0, cenv0, pre0, post0);
+            iter ((fn, (l, k, tparams, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
@@ -3910,7 +3914,7 @@ in
     | _ -> cont()
   in
   
-  let rec verify_stmt boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
+  let rec verify_stmt tparams boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
@@ -3931,7 +3935,13 @@ in
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l "No such variable." | Some tp -> tp in
-    let check_correct xo g pats (lg,tr, ps, pre, post, body,v)=
+    let check_correct xo g targs pats (lg, callee_tparams, tr, ps, pre, post, body,v)=
+      let targs = List.map (check_pure_type tparams) targs in
+      let tpenv =
+        match zip callee_tparams targs with
+          None -> static_error l "Incorrect number of type arguments."
+        | Some tpenv -> tpenv
+      in
       let ys = List.map (function (p, t) -> p) ps in
         let ws =
           match zip pats ps with
@@ -3939,7 +3949,7 @@ in
           | Some bs ->
             List.map
               (function (LitPat e, (x, tp)) ->
-                 check_expr_t tenv e tp
+                 check_expr_t tparams tenv e (instantiate_type tpenv tp)
               ) bs
         in
         evhs h env ws (fun h ts ->
@@ -4007,7 +4017,7 @@ in
         )
         )
     in
-    let call_stmt l xo g pats fb=
+    let call_stmt l xo g targs pats fb=
       match file_type path with
       Java ->
       (
@@ -4031,7 +4041,7 @@ in
                  if fb <>fbm 
                    then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                    let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                   check_correct xo g pats (lm,rt, xmap, pre, post, body,v)
+                   check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
              | None->  static_error l ("Method "^class_name^" not found!!")
             )
         | None ->
@@ -4042,7 +4052,7 @@ in
                     if fb <>fbm 
                       then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                       let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                      check_correct xo g pats (lm,rt, xmap, pre, post, None,v)
+                      check_correct xo g targs pats (lm, [], rt, xmap, pre, post, None,v)
                  | None->  static_error l ("Method "^class_name^" not found!!")
                 )
             | None ->
@@ -4050,23 +4060,22 @@ in
                    None -> 
                      (match try_assoc g purefuncmap with
                         None -> static_error l ("No such method: " ^ g)
-                      | Some (lg, tparams, rt, pts, gs) ->
-                        if tparams <> [] then static_error l "Missing type arguments.";
+                      | Some (lg, callee_tparams, rt, pts, gs) ->
                         (match xo with
                            None -> static_error l "Cannot write call of pure function as statement."
                          | Some x ->
                              let tpx = vartp l x in
-                             let w = check_expr_t tenv (CallExpr (l, g, [], [], pats,fb)) tpx in
+                             let w = check_expr_t tparams tenv (CallExpr (l, g, targs, [], pats,fb)) tpx in
                              let _ = check_assign l x in
                              cont h (update env x (ev w))
                         )
                      )
-                 | Some (lg,k, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
+                 | Some (lg, k, tparams, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
                      if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
                      let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context."        in
-                     check_correct xo g pats (lg,tr, ps, pre, post, body,v)
+                     check_correct xo g targs pats (lg, tparams, tr, ps, pre, post, body,v)
                 )
             )
       )
@@ -4076,27 +4085,27 @@ in
         None -> (
         match try_assoc g purefuncmap with
           None -> static_error l ("No such function: " ^ g)
-        | Some (lg, tparams, rt, pts, gs) -> (
+        | Some (lg, callee_tparams, rt, pts, gs) -> (
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
             let tpx = vartp l x in
-            let w = check_expr_t tenv (CallExpr (l, g, [], [], pats,fb)) tpx in
+            let w = check_expr_t tparams tenv (CallExpr (l, g, targs, [], pats,fb)) tpx in
             let _ = check_assign l x in
             cont h (update env x (ev w))
           )
         )
-      | Some (lg,k, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
+      | Some (lg,k, tparams, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
-        check_correct xo g pats (lg,tr, ps, pre, post, body,v)
+        check_correct xo g targs pats (lg, tparams, tr, ps, pre, post, body,v)
       ) 
     in 
     match s with
       PureStmt (l, s) ->
-      verify_stmt boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
+      verify_stmt tparams boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
     | Assign (l, x, CallExpr (lc, "malloc", [], [], args,Static)) ->
       begin
         match args with
@@ -4135,19 +4144,19 @@ in
                  iter h fds
                )
             )
-        | _ -> call_stmt l (Some x) "malloc" args Static
+        | _ -> call_stmt l (Some x) "malloc" [] args Static
       end
-    | CallStmt (l, "assume_is_int", [Var (lv, x, _) as e],Static) ->
+    | CallStmt (l, "assume_is_int", [], [Var (lv, x, _) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
-      let (w, tp) = check_expr tenv e in
+      let (w, tp) = check_expr tparams tenv e in
       assume_is_of_type (ev w) tp (fun () -> cont h env)
-    | CallStmt (l, "assume_class_this", [],Instance) when file_type path=Java && List.mem_assoc "this" env->
+    | CallStmt (l, "assume_class_this", [], [],Instance) when file_type path=Java && List.mem_assoc "this" env->
     let classname= match vartp l "this" with ObjType cn -> cn in
       assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
-    | CallStmt (l, "free", args,Static) ->
+    | CallStmt (l, "free", [], args,Static) ->
       begin
-        match List.map (check_expr tenv) args with
+        match List.map (check_expr tparams tenv) args with
           [(arg, PtrType (StructType tn))] ->
           let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
           let fds =
@@ -4166,9 +4175,9 @@ in
           in
           let (_, (_, _, _, malloc_block_symb, _)) = List.assoc tn malloc_block_pred_map in
           assert_chunk h [] [("x", arg)] l (malloc_block_symb, true) real_unit DummyPat [LitPat (Var (l, "x", ref (Some LocalVar)))] (fun h coef _ _ _ _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission."; iter h fds)
-        | _ -> call_stmt l None "free" (List.map (fun e -> LitPat e) args) Static
+        | _ -> call_stmt l None "free" [] (List.map (fun e -> LitPat e) args) Static
       end
-    | Assign (l, x, CallExpr (lc, g, [], [], pats,fb)) ->
+    | Assign (l, x, CallExpr (lc, g, targs, [], pats,fb)) ->
       let iscons = startswith g "new " && (List.length pats==0) in
       if iscons then 
         begin 
@@ -4201,25 +4210,25 @@ in
                  in
                  iter h fds
               )))
-          | _->  call_stmt l (Some x) g pats fb
+          | _->  call_stmt l (Some x) g targs pats fb
         end
       else
-      call_stmt l (Some x) g pats fb
+      call_stmt l (Some x) g targs pats fb
     | Assign (l, x, e) -> 
       let tpx = vartp l x in
-      let w = check_expr_t tenv e tpx in
+      let w = check_expr_t tparams tenv e tpx in
       let _ = check_assign l x in
       eval_h h env w (fun h v -> cont h ((x, v)::env));
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
-      let t = check_pure_type [] te in
+      let t = check_pure_type tparams te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+      verify_stmt tparams boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
-      let (w, tp) = check_deref l tenv e f in
-      let wrhs = check_expr_t tenv rhs tp in
+      let (w, tp) = check_deref l tparams tenv e f in
+      let wrhs = check_expr_t tparams tenv rhs tp in
       eval_h h env w (fun h t ->
         let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field h t f l (fun h coef _ ->
@@ -4228,29 +4237,29 @@ in
       )
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
-      let (w, pointerType) = check_expr tenv e in
+      let (w, pointerType) = check_expr tparams tenv e in
       let pointeeType = 
         match pointerType with
           PtrType t -> t
         | _ -> static_error l "Operand of dereference must be pointer."
       in
-      let wrhs = check_expr_t tenv rhs pointeeType in
+      let wrhs = check_expr_t tparams tenv rhs pointeeType in
       eval_h h env w (fun h t ->
         let predSymb = pointee_pred_symb l pointeeType in
         get_points_to h t predSymb l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
           cont (((predSymb, true), real_unit, [t; ev wrhs], None)::h) env)
       )
-    | CallStmt (l, g, es,fb) ->
-      call_stmt l None g (List.map (fun e -> LitPat e) es) fb
+    | CallStmt (l, g, targs, es,fb) ->
+      call_stmt l None g targs (List.map (fun e -> LitPat e) es) fb
     | IfStmt (l, e, ss1, ss2) ->
-      let w = check_expr_t tenv e boolt in
+      let w = check_expr_t tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
-        (fun _ -> assume (ev w) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
-        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
+        (fun _ -> assume (ev w) (fun _ -> verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
+        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
     | SwitchStmt (l, e, cs) ->
-      let (w, tp) = check_expr tenv e in
+      let (w, tp) = check_expr tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let (tn, targs, (_, tparams, ctormap)) =
         match tp with
@@ -4301,17 +4310,17 @@ in
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont tparams boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Assert (l, p) ->
-      let (wp, tenv) = check_pred tenv p in
+      let (wp, tenv) = check_pred tparams tenv p in
       assert_pred h ghostenv env wp real_unit (fun _ ghostenv env _ ->
         tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
-      let (wp, tenv) = check_pred tenv p in
+      let (wp, tenv) = check_pred tparams tenv p in
       assert_pred h ghostenv env wp real_unit (fun h ghostenv env size ->
         tcont sizemap tenv ghostenv h env
       )
@@ -4345,14 +4354,14 @@ in
               match zip pats0 ps1 with
                 None -> static_error l "Incorrect number of predicate constructor arguments."
               | Some bs ->
-                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
             in
             let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             ((g_symb, false), [], 0, ps2, bs0, body)
           end
       in
-      let (coefpat, tenv) = match coefpat with None -> (DummyPat, tenv) | Some coefpat -> check_pat l tenv RealType coefpat in
-      let (wpats, tenv') = check_pats l tenv (List.map (fun (x, t) -> t) ps) pats in
+      let (coefpat, tenv) = match coefpat with None -> (DummyPat, tenv) | Some coefpat -> check_pat l tparams tenv RealType coefpat in
+      let (wpats, tenv') = check_pats l tparams tenv (List.map (fun (x, t) -> t) ps) pats in
       let pats = pats0 @ wpats in
       assert_chunk h ghostenv env l g_symb real_unit coefpat pats (fun h coef ts chunk_size ghostenv env ->
         let ts = drop dropcount ts in
@@ -4378,13 +4387,13 @@ in
         match coefopt with
           None -> real_half
         | Some e ->
-          let w = check_expr_t tenv e RealType in
+          let w = check_expr_t tparams tenv e RealType in
           let coef = ev w in
           assert_term (ctxt#mk_real_lt real_zero coef) h env l "Split coefficient must be positive.";
           assert_term (ctxt#mk_real_lt coef real_unit) h env l "Split coefficient must be less than one.";
           coef
       in
-      let (wpats, tenv') = check_pats l tenv pts pats in
+      let (wpats, tenv') = check_pats l tparams tenv pts pats in
       assert_chunk h ghostenv env l g_symb real_unit DummyPat wpats (fun h coef ts chunk_size ghostenv env ->
         let coef1 = ctxt#mk_real_mul splitcoef coef in
         let coef2 = ctxt#mk_real_mul (ctxt#mk_real_sub real_unit splitcoef) coef in
@@ -4407,7 +4416,7 @@ in
             | Some n -> ((g_symb, true), pts, n)
           end
       in
-      let (pats, tenv') = check_pats l tenv pts pats in
+      let (pats, tenv') = check_pats l tparams tenv pts pats in
       let (inpats, outpats) = take_drop inputParamCount pats in
       List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
       assert_chunk h ghostenv env l g_symb real_unit DummyPat pats (fun h coef1 ts1 _ ghostenv env ->
@@ -4451,7 +4460,7 @@ in
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments."
                 | Some bs ->
-                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
               in
               let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               (ps2, bs0, (g_symb, false), body, [])
@@ -4461,10 +4470,10 @@ in
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
         | Some bs ->
-          List.map (function (LitPat e, (_, tp)) -> check_expr_t tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
+          List.map (function (LitPat e, (_, tp)) -> check_expr_t tparams tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
       in
       let ts = List.map ev ws in
-      let coef = match coef with None -> real_unit | Some (LitPat coef) -> let coef = check_expr_t tenv coef RealType in ev coef | _ -> static_error l "Coefficient in close statement must be expression." in
+      let coef = match coef with None -> real_unit | Some (LitPat coef) -> let coef = check_expr_t tparams tenv coef RealType in ev coef | _ -> static_error l "Coefficient in close statement must be expression." in
       let ys = List.map (function (p, t) -> p) ps in
       let Some env' = zip ys ts in
       let env' = bs0 @ env' in
@@ -4476,16 +4485,16 @@ in
     | ReturnStmt (l, Some e) ->
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
-      let w = check_expr_t tenv e tp in
+      let w = check_expr_t tparams tenv e tp in
       return_cont h (Some (ev w))
     | ReturnStmt (l, None) -> return_cont h None
     | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
-      let e = check_expr_t tenv e boolt in
+      let e = check_expr_t tparams tenv e boolt in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-      let (p, tenv') = check_pred tenv p in
+      let (p, tenv') = check_pred tparams tenv p in
       assert_pred h ghostenv env p real_unit (fun h _ _ _ ->
         let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
@@ -4493,7 +4502,7 @@ in
           (fun _ ->
              assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
                assume (eval0 (Some ((fun l t f -> read_field h' env l t f), (fun l p t -> deref_pointer h' env l p t))) env e) (fun _ ->
-                 verify_cont boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
+                 verify_cont tparams boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
                      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
@@ -4514,7 +4523,7 @@ in
         | Some boxinfo -> boxinfo
       in
       if not (List.mem pre_bcn boxes) then static_error l "You cannot perform an action a box class that has not yet been declared.";
-      let (pre_bcp_pats, tenv) = check_pats l tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
+      let (pre_bcp_pats, tenv) = check_pats l tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let (_, _, _, boxpred_symb, _) = List.assoc pre_bcn predfammap in
       assert_chunk h ghostenv env l (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h coef ts chunk_size ghostenv env ->
         if not (coef == real_unit) then assert_false h env l "Box predicate coefficient must be 1.";
@@ -4529,7 +4538,7 @@ in
               (hppmap, inv)
         in
         let (_, _, _, pre_handlepred_symb, _) = List.assoc pre_hpn predfammap in
-        let (pre_hp_pats, tenv) = check_pats l tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
+        let (pre_hp_pats, tenv) = check_pats l tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = pre_hp_pats in
         assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env ->
@@ -4544,21 +4553,21 @@ in
                match zip apmap aargs with
                  None -> static_error l "Incorrect number of action arguments."
                | Some bs ->
-                 List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
+                 List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
              in
              let Some pre_boxargbs = zip boxpmap pre_boxPredArgs in
              let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
              let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
              assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMap) pre_handlePred_inv) (fun () ->
-               verify_cont boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+               verify_cont tparams boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxArgMap @ aargbs in
                  assert_term (eval pre_env pre) h pre_env l "Action precondition failure.";
                  let post_bcp_argts =
                    match zip boxpmap post_bcp_args with
                      None -> static_error l "Incorrect number of post-state box arguments."
                    | Some bs ->
-                     List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
+                     List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
                  in
                  let old_bcp_argts = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxArgMap in
                  let post_env = [("actionHandle", handleId)] @ old_bcp_argts @ post_bcp_argts @ aargbs in
@@ -4577,7 +4586,7 @@ in
                    match zip post_handlePred_parammap post_hp_args with
                      None -> static_error l "Post-state handle predicate: Incorrect number of arguments."
                    | Some bs ->
-                     List.map (fun ((x, t), e) -> let e = check_expr_t tenv e t in (x, eval env e)) bs
+                     List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
                  in
                  let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_bcp_argts in
                  assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env l "Post-state handle predicate invariant failure.";
@@ -4591,15 +4600,15 @@ in
       )
     | BlockStmt (l, ss) ->
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
+      verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
   and
-    verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
+    verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        verify_stmt boxes pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont
+        verify_stmt tparams boxes pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont
         ) return_cont
       )
   in
@@ -4609,7 +4618,7 @@ in
       match meths with
         [] -> ()
       | (g, (l,rt, ps,pre,post, Some sts,fb,v))::meths ->
-        let ss= if fb= Instance then CallStmt (l, "assume_class_this", [],Instance)::sts 
+        let ss= if fb= Instance then CallStmt (l, "assume_class_this", [], [],Instance)::sts 
                 else sts
         in
         let _ = push() in
@@ -4633,7 +4642,7 @@ in
         let (in_pure_context, leminfo, lems', ghostenv) =
           (false, None, lems, [])
         in
-        let (_, tenv) = check_pred tenv pre in
+        let (_, tenv) = check_pred [] tenv pre in
         let _ =
           assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
@@ -4653,7 +4662,7 @@ in
             | (None, Some _) -> assert_false h env l "Void function returns a value."
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
-          verify_cont boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_cont [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
           )
         in
         let _ = pop() in
@@ -4677,7 +4686,7 @@ in
     | Func (l, Lemma, _, rt, g, ps, _, _, None, _, _)::ds ->
       verify_funcs boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
-      let (l, k, rt, ps, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
+      let (l, k, tparams, rt, ps, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =
@@ -4721,7 +4730,7 @@ in
             | (None, Some _) -> assert_false h env l "Void function returns a value."
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
-          verify_cont boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_cont tparams boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
         )
       in
       let _ = pop() in
@@ -4776,7 +4785,7 @@ in
                           let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                           let env = [("actionHandle", actionHandle)] @ [("predicateHandle", predicateHandle)] @
                             post_boxargs @ old_boxargs @ aarg_env @ hpargs in
-                          verify_cont boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
+                          verify_cont [] boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxargs @ hpargs in
                             assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
                           ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
