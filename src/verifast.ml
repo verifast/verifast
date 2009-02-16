@@ -2507,6 +2507,7 @@ in
         | IntType | RealType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
+        | _ -> static_error l "Operand of addition or subtraction must be pointer, integer, or real number."
       end
     | Operation (l, (Mul | Div as operator), [e1; e2], ts) ->
       let w1 = checkt e1 RealType in
