@@ -14,13 +14,13 @@ let show_ide initialPath prover =
       a "File" ~label:"_File";
       a "New" ~stock:`NEW;
       a "Open" ~stock:`OPEN;
-      a "Save" ~stock:`SAVE ~accel:"<control>S";
+      a "Save" ~stock:`SAVE ~accel:"<control>S" ~tooltip:"Save";
       a "SaveAs" ~label:"Save _as";
-      a "Close" ~stock:`CLOSE;
+      a "Close" ~stock:`CLOSE ~tooltip:"Close";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5";
-      a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5";
+      a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
+      a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" Verifast.banner)
     ]
@@ -61,6 +61,12 @@ let show_ide initialPath prover =
   let toolbar = new GButton.toolbar (GtkButton.Toolbar.cast (ui#get_widget "/ToolBar")#as_widget) in
   toolbar#set_icon_size `SMALL_TOOLBAR;
   toolbar#set_style `ICONS;
+  let separatorToolItem = GButton.separator_tool_item () in
+  toolbar#insert separatorToolItem;
+  let messageToolItem = GButton.tool_item ~expand:true () in
+  messageToolItem#set_border_width 3;
+  let messageEntry = GEdit.entry ~show:false ~editable:false ~has_frame:false ~packing:(messageToolItem#add) () in
+  toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
   let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
   let _ = rootTable#set_position 350 in
@@ -113,9 +119,15 @@ let show_ide initialPath prover =
     buffers := !buffers @ [tab];
     tab
   in
-  let updateWindowTitle() =
-    let text = match !msg with None -> "" | Some msg -> " - " ^ msg in
-    root#set_title (appTitle ^ text)
+  let updateMessageEntry() =
+    match !msg with
+      None -> messageEntry#coerce#misc#hide()
+    | Some msg ->
+      let (backColor, textColor) = if msg = "0 errors found" then ("green", "black") else ("red", "white") in
+      messageEntry#coerce#misc#show();
+      messageEntry#set_text msg;
+      messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
+      messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]
   in
   let load ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
     try
@@ -288,16 +300,19 @@ let show_ide initialPath prover =
       begin
         match locstack with
           [] ->
+          if textPaned#max_position - textPaned#position < 10 then
+            textPaned#set_position 0;
           apply_tag_by_loc "currentLine" l;
           let ((path, line, col), _) = l in
           let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
           textNotebook#goto_page k;
           buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
-          srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark);
+          Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
           append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
         | (caller_loc, caller_env)::_ ->
+          if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
+            textPaned#set_position 150;
           begin
-            if textPaned#position < 10 then textPaned#set_position 150;
             apply_tag_by_loc "currentLine" l;
             let ((path, line, col), _) = l in
             let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
@@ -312,7 +327,7 @@ let show_ide initialPath prover =
             let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
             textNotebook#goto_page k;
             buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter buffer (line, col));
-            srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark);
+            Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
             append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups caller_env))
           end
       end;
@@ -321,7 +336,6 @@ let show_ide initialPath prover =
       ()
   in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
-  let _ = updateWindowTitle() in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
   let get_last_step_path() =
     let lastBigStep = stepStore#iter_children ~nth:(stepStore#iter_n_children None - 1) None in
@@ -358,7 +372,7 @@ let show_ide initialPath prover =
     begin
       msg := None;
       stepItems := None;
-      updateWindowTitle();
+      updateMessageEntry();
       clearTrace()
     end
   );
@@ -400,7 +414,7 @@ let show_ide initialPath prover =
   let handleStaticError l emsg =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
-    updateWindowTitle();
+    updateMessageEntry();
     let (start, stop) = l in
     let (path, line, col) = stop in
     let (k, tab) = get_tab_for_path (string_of_path path) in
@@ -455,7 +469,7 @@ let show_ide initialPath prover =
               let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
               verify_program None false options path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
-              updateWindowTitle()
+              updateMessageEntry()
             with
               ParseException (l, emsg) ->
               handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
@@ -471,7 +485,7 @@ let show_ide initialPath prover =
               begin
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
-                updateWindowTitle()
+                updateMessageEntry()
               end
               else
                 handleStaticError l emsg
