@@ -69,7 +69,7 @@ let _ =
   begin
     try
       print_endline "Linking...";
-      let mydir = Filename.dirname Sys.argv.(0) in
+      let mydir = Filename.dirname Sys.executable_name in
       let crt = Filename.concat mydir "crt.a" in
       let assume_lib = Filename.concat mydir "assume.a" in
       let modules = crt::List.rev !modules in

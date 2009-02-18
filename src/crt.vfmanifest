@@ -2,7 +2,7 @@
 .provides .\malloc.h#malloc
 .provides .\malloc.h#malloc_block_null
 .provides .\malloc.h#malloc_block_limits
-.provides .\stdlib.h#abort
+.provides stdlib.h#abort
 .provides .\string.h#memcmp
 .provides .\string.h#memcpy
 .provides .\string.h#strlen

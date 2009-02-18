@@ -1,6 +1,8 @@
 open Proverapi
 open Big_int
 
+let bindir = Filename.dirname Sys.executable_name
+
 let banner =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
   "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans\n" ^
@@ -327,10 +329,16 @@ let preprocess path loc stream streamSource =
   let startOfLine = ref true in
   let stack: ((string * string) * (unit -> loc) * (loc * token) Stream.t * bool) list ref = ref [] in
   let defines: (string * (loc * token) list) list ref = ref [] in
+  let error msg = raise (ParseException (!loc(), msg)) in
   let push newPath =
+    let (newloc, newstream) =
+      try
+        streamSource newPath
+      with Sys_error msg ->
+        error msg
+    in
     stack := (!path, !loc, !stream, !startOfLine)::!stack;
     path := newPath;
-    let (newloc, newstream) = streamSource newPath in
     loc := newloc;
     stream := newstream;
     startOfLine := true
@@ -343,7 +351,6 @@ let preprocess path loc stream streamSource =
     startOfLine := begin match peek() with Some (_, Eol) -> true | _ -> false end;
     if peek() <> None then Stream.junk (!stream)
   in
-  let error msg = raise (ParseException (!loc(), msg)) in
   let next() =
     match peek() with
       Some t -> skip(); t
@@ -419,7 +426,12 @@ let preprocess path loc stream streamSource =
                   | _ ->
                     let (basedir, relpath) = !path in
                     let resolvedRelPath = Filename.concat (Filename.dirname relpath) includePath in
-                    push (basedir, resolvedRelPath)
+                    if Sys.file_exists (Filename.concat basedir resolvedRelPath) then
+                      push (basedir, resolvedRelPath)
+                    else if Sys.file_exists (Filename.concat bindir includePath) then
+                      push (bindir, includePath)
+                    else
+                      error "No such file."
                 end;
                 next_token()
               | _ ->
@@ -1457,13 +1469,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     imapi 0 xs
   in
   
-  let myPath = Filename.dirname (Sys.argv.(0)) in
   let ds= 
     match file_type (Filename.basename path) with
     Java-> read_decls path stream streamSource reportKeyword reportGhostRange
     | _->
-        let preludePath = Filename.concat myPath "prelude.h" in
-        let preludeStreamSource path = Stream.of_string (readFile (Filename.concat myPath path)) in
+        let preludePath = Filename.concat bindir "prelude.h" in
+        let preludeStreamSource path = Stream.of_string (readFile (Filename.concat bindir path)) in
         let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
         ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange 
   in
