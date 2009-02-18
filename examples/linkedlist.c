@@ -243,10 +243,8 @@ int length(struct llist *list)
     //@ close lseg(next, l, ls3);
     n = next;
     //@ assume_is_int(c);
-    if (2147483647 <= c) {
-      abort();
-    }
-    c = c + 1;
+    if (c >= 2147483647) abort();
+    c++;
     //@ add_append_lemma(_ls1, value, ls3);
   }
   //@ open lseg(n, l, _ls2);
@@ -341,7 +339,7 @@ int lookup(struct llist *list, int index)
     //@ close lseg(next, l, ls3);
     //@ drop_cons_lemma(i, _v, value, ls3);
     n = next;
-    i = i + 1;
+    i++;
     //@ add_append_lemma(_ls1, value, ls3);
   }
   //@ open lseg(n, l, _ls2);

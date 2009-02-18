@@ -347,16 +347,14 @@ bool contains(struct tree *t,int x)
     if(v==x){
       //@close tree(t,b);
       return true;
+    }else if(x < v){
+      bool temp1=contains(l,x);
+      //@close tree(t,b);
+      return temp1;
     }else{
-      if(x < v){
-        bool temp1=contains(l,x);
-        //@close tree(t,b);
-        return temp1;
-      }else{
-        bool temp2=contains(r,x);
-        //@close tree(t,b);
-        return temp2;
-      }
+      bool temp2=contains(r,x);
+      //@close tree(t,b);
+      return temp2;
     }
   }
 }
