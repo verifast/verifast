@@ -4067,7 +4067,17 @@ in
                       else
                         static_error l "A lemma can call only preceding lemmas or itself."
             in
-            let r = match tr with None -> None | Some t -> Some (get_unique_var_symb "result" t, t) in
+            let r =
+              match tr with
+                None -> None
+              | Some t ->
+                let symbol_name =
+                  match xo with
+                    None -> "result"
+                  | Some x -> x
+                in
+                Some (get_unique_var_symb symbol_name t, t)
+            in
             let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
             assume_pred h ghostenv' env'' post real_unit None None (fun h _ _ ->
               let env =
@@ -4194,7 +4204,7 @@ in
               PtrType (StructType sn) when sn = tn -> ()
             | _ -> static_error l ("Type mismatch: actual: '" ^ string_of_type tpx ^ "'; expected: 'struct " ^ tn ^ " *'.")
           in
-          let result = get_unique_var_symb "block" tpx in
+          let result = get_unique_var_symb x tpx in
           branch
             (fun () ->
                assume_eq result (ctxt#mk_intlit 0) (fun () ->
@@ -4267,7 +4277,7 @@ in
                   Some fds -> fds
                 | None -> static_error l "An object with no fields is useless."
               in
-              let result = get_unique_var_symb "block" tpx in
+              let result = get_unique_var_symb x tpx in
               assume_eq (ctxt#mk_app get_class_symbol [result]) (ctxt#mk_app (List.assoc tn class_symbols) []) ( fun () ->(
               assume_neq result (ctxt#mk_intlit 0) (fun () ->
                 let rec iter h fds =
