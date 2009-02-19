@@ -1,6 +1,10 @@
 open Verifast
 open GMain
 
+type undo_action =
+  Insert of int * string
+| Delete of int * string
+
 let show_ide initialPath prover =
   let ctxts_lifo = ref None in
   let msg = ref None in
@@ -17,6 +21,9 @@ let show_ide initialPath prover =
       a "Save" ~stock:`SAVE ~accel:"<control>S" ~tooltip:"Save";
       a "SaveAs" ~label:"Save _as";
       a "Close" ~stock:`CLOSE ~tooltip:"Close";
+      a "Edit" ~label:"_Edit";
+      a "Undo" ~stock:`UNDO ~accel:"<Ctrl>Z";
+      a "Redo" ~stock:`REDO ~accel:"<Ctrl>Y";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
@@ -38,6 +45,10 @@ let show_ide initialPath prover =
           <menuitem action='SaveAs' />
           <menuitem action='Close' />
         </menu>
+        <menu action='Edit'>
+          <menuitem action='Undo' />
+          <menuitem action='Redo' />
+        </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
           <menuitem action='RunToCursor' />
@@ -50,12 +61,19 @@ let show_ide initialPath prover =
       </menubar>
       <toolbar name='ToolBar'>
         <toolitem action='Save' />
+        <toolitem action='Close' />
+        <separator />
+        <toolitem action='Undo' />
+        <toolitem action='Redo' />
+        <separator />
         <toolitem action='VerifyProgram' />
         <toolitem action='RunToCursor' />
-        <toolitem action='Close' />
       </toolbar>
     </ui>
   ");
+  let undoAction = actionGroup#get_action "Undo" in
+  let redoAction = actionGroup#get_action "Redo" in
+  let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
   rootVbox#pack (ui#get_widget "/MenuBar");
   let toolbar = new GButton.toolbar (GtkButton.Toolbar.cast (ui#get_widget "/ToolBar")#as_widget) in
@@ -79,13 +97,24 @@ let show_ide initialPath prover =
   let textNotebook = GPack.notebook ~scrollable:true ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let subNotebook = GPack.notebook ~scrollable:true ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let buffers = ref [] in
-  let updateBufferTitle (path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) =
+  let updateBufferTitle (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) =
     let text = (match !path with None -> "(New buffer)" | Some path -> Filename.basename path) ^ (if buffer#modified then "*" else "") in
     textLabel#set_text text;
     subLabel#set_text text
   in
   let bufferChangeListener = ref (fun _ -> ()) in
   let current_tab = ref None in
+  let set_current_tab tab =
+    current_tab := tab;
+    let (undoSensitive, redoSensitive) =
+      match tab with
+        None -> (false, false)
+      | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+        (!undoList <> [], !redoList <> [])
+    in
+    undoAction#set_sensitive undoSensitive;
+    redoAction#set_sensitive redoSensitive
+  in
   let add_buffer() =
     let path = ref None in
     let textLabel = GMisc.label ~text:"(untitled)" () in
@@ -108,12 +137,47 @@ let show_ide initialPath prover =
     let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
     let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
     let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name "Courier 10" in
-    let tab = (path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
+    let undoList: undo_action list ref = ref [] in
+    let redoList: undo_action list ref = ref [] in
+    let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
     buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
     );
+    buffer#connect#insert_text (fun iter text ->
+      if not !ignore_text_changes then
+      begin
+        let offset = iter#offset in
+        undoList :=
+          begin
+            match !undoList with
+              Insert (offset0, text0)::acs when offset = offset0 + String.length text0 ->
+              Insert (offset0, text0 ^ text)::acs
+            | acs -> Insert (offset, text)::acs
+          end;
+        redoList := [];
+        undoAction#set_sensitive true;
+        redoAction#set_sensitive false
+      end
+    );
+    buffer#connect#delete_range (fun ~start:start ~stop:stop ->
+      if not !ignore_text_changes then
+      begin
+        let offset = start#offset in
+        let text = buffer#get_text ~start:start ~stop:stop () in
+        undoList := 
+          begin
+            match !undoList with
+              Delete (offset0, text0)::acs when offset = offset0 ->
+              Delete (offset0, text0 ^ text)::acs
+            | acs -> Delete (offset, text)::acs
+          end;
+        redoList := [];
+        undoAction#set_sensitive true;
+        redoAction#set_sensitive false
+      end
+    );
     buffer#connect#changed (fun () -> !bufferChangeListener tab);
-    let focusIn _ = current_tab := Some tab; false in
+    let focusIn _ = set_current_tab (Some tab); false in
     srcText#event#connect#focus_in ~callback:focusIn;
     subText#event#connect#focus_in ~callback:focusIn;
     buffers := !buffers @ [tab];
@@ -129,7 +193,7 @@ let show_ide initialPath prover =
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
       messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]
   in
-  let load ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
+  let load ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
     try
       let chan = open_in newPath in
       let rec iter () =
@@ -139,9 +203,13 @@ let show_ide initialPath prover =
       in
       let chunks = iter() in
       let _ = close_in chan in
+      ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
       List.iter (fun chunk -> (buffer: GText.buffer)#insert ~iter:gIter chunk) chunks;
+      ignore_text_changes := false;
+      undoList := [];
+      redoList := [];
       buffer#set_modified false;
       path := Some (Filename.concat (Filename.dirname newPath) (Filename.basename newPath));
       updateBufferTitle tab
@@ -149,10 +217,10 @@ let show_ide initialPath prover =
   in
   begin
     let tab = add_buffer() in
-    current_tab := Some tab;
+    set_current_tab (Some tab);
     match initialPath with None -> () | Some path -> load tab path
   end;
-  let store ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) thePath =
+  let store ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) thePath =
     path := Some thePath;
     let chan = open_out thePath in
     let gBuf = buffer in
@@ -175,7 +243,7 @@ let show_ide initialPath prover =
       else
         store tab thePath
   in
-  let save ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
+  let save ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
     match !path with
       None -> saveAs tab
     | Some thePath ->
@@ -251,7 +319,7 @@ let show_ide initialPath prover =
     iter 0 items
   in
   let clearStepInfo() =
-    List.iter (fun ((path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) ->
+    List.iter (fun ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) ->
       buffer#remove_tag_by_name "currentLine" ~start:buffer#start_iter ~stop:buffer#end_iter;
       buffer#remove_tag_by_name "currentCaller" ~start:buffer#start_iter ~stop:buffer#end_iter
     ) !buffers;
@@ -260,9 +328,9 @@ let show_ide initialPath prover =
     srcEnvStore#clear();
     subEnvStore#clear()
   in
-  let tab_path (path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
-  let tab_buffer (path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = buffer in
-  let tab_srcText (path, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
+  let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
+  let tab_buffer (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = buffer in
+  let tab_srcText (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
   let get_tab_for_path path0 =
     (* This function is called only at a time when no buffers are modified. *)
     let rec iter k tabs =
@@ -304,7 +372,7 @@ let show_ide initialPath prover =
             textPaned#set_position 0;
           apply_tag_by_loc "currentLine" l;
           let ((path, line, col), _) = l in
-          let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+          let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
           textNotebook#goto_page k;
           buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
           Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
@@ -315,7 +383,7 @@ let show_ide initialPath prover =
           begin
             apply_tag_by_loc "currentLine" l;
             let ((path, line, col), _) = l in
-            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+            let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
             subNotebook#goto_page k;
             buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
             Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
@@ -324,7 +392,7 @@ let show_ide initialPath prover =
           begin
             apply_tag_by_loc "currentCaller" caller_loc;
             let ((path, line, col), _) = caller_loc in
-            let (k, (_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+            let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
             textNotebook#goto_page k;
             buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter buffer (line, col));
             Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
@@ -399,13 +467,13 @@ let show_ide initialPath prover =
       Some tab -> Some tab
     | None -> GToolbox.message_box "VeriFast IDE" ("Please select a buffer."); None
   in
-  let close ((_, buffer, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
+  let close ((_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
     if not (ensureSaved tab) then
     begin
       textNotebook#remove textScroll#coerce;
       subNotebook#remove subScroll#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
-      match !current_tab with None -> () | Some tab0 -> if tab == tab0 then current_tab := None
+      match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None
     end
   in
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
@@ -437,6 +505,66 @@ let show_ide initialPath prover =
       None -> save tab
     | Some path ->
       if (tab_buffer tab)#modified then store tab path else Some path
+  in
+  let undo () =
+    match get_current_tab() with
+      None -> ()
+    | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+      begin
+        match !undoList with
+          [] -> ()
+        | ac::acs ->
+          ignore_text_changes := true;
+          let offset =
+            match ac with
+              Insert (offset, text) ->
+              let start = buffer#get_iter (`OFFSET offset) in
+              let stop = buffer#get_iter (`OFFSET (offset + String.length text)) in
+              buffer#delete ~start:start ~stop:stop;
+              offset
+            | Delete (offset, text) ->
+              let start = buffer#get_iter (`OFFSET offset) in
+              buffer#insert ~iter:start text;
+              offset + String.length text
+          in
+          ignore_text_changes := false;
+          undoList := acs;
+          redoList := ac::!redoList;
+          undoAction#set_sensitive (acs <> []);
+          redoAction#set_sensitive true;
+          buffer#place_cursor ~where:(buffer#get_iter (`OFFSET offset));
+          srcText#scroll_to_mark ~within_margin:0.2 `INSERT 
+      end
+  in
+  let redo () =
+    match get_current_tab() with
+      None -> ()
+    | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+      begin
+        match !redoList with
+          [] -> ()
+        | ac::acs ->
+          ignore_text_changes := true;
+          let offset =
+            match ac with
+              Insert (offset, text) ->
+              let start = buffer#get_iter (`OFFSET offset) in
+              buffer#insert ~iter:start text;
+              offset + String.length text
+            | Delete (offset, text) ->
+              let start = buffer#get_iter (`OFFSET offset) in
+              let stop = buffer#get_iter (`OFFSET (offset + String.length text)) in
+              buffer#delete ~start:start ~stop:stop;
+              offset
+          in
+          ignore_text_changes := false;
+          redoList := acs;
+          undoList := ac::!undoList;
+          undoAction#set_sensitive true;
+          redoAction#set_sensitive (acs <> []);
+          buffer#place_cursor ~where:(buffer#get_iter (`OFFSET offset));
+          srcText#scroll_to_mark ~within_margin:0.2 `INSERT
+      end
   in
   let verifyProgram runToCursor () =
     clearTrace();
@@ -494,6 +622,8 @@ let show_ide initialPath prover =
   in
   (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
   (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
+  undoAction#connect#activate undo;
+  redoAction#connect#activate redo;
   let _ = root#show() in
   (* This hack works around the problem that GText.text_view#scroll_to_mark does not seem to work if called before the GUI is running properly. *)
   Glib.Idle.add (fun () -> stepSelected(); false);
