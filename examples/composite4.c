@@ -35,21 +35,20 @@ lemma void count_nonnegative(tree nodes)
   }
 }
 
-predicate subtree(struct node * root, struct node * parent, tree t)
-  requires
-    switch (t) {
-      case nil: return root == 0;
-      case tree(root0, leftNodes, rightNodes):
-        return
-          root == root0 &*& root != 0 &*&
-          root->left |-> ?left &*&
-          root->right |-> ?right &*&
-          root->parent |-> parent &*&
-          root->count |-> count(t) &*&
-          malloc_block_node(root) &*&
-          subtree(left, root, leftNodes) &*&
-          subtree(right, root, rightNodes);
-    };
+predicate subtree(struct node * root, struct node * parent, tree t) =
+  switch (t) {
+    case nil: return root == 0;
+    case tree(root0, leftNodes, rightNodes):
+      return
+        root == root0 &*& root != 0 &*&
+        root->left |-> ?left &*&
+        root->right |-> ?right &*&
+        root->parent |-> parent &*&
+        root->count |-> count(t) &*&
+        malloc_block_node(root) &*&
+        subtree(left, root, leftNodes) &*&
+        subtree(right, root, rightNodes);
+  };
 
 inductive context =
     root
@@ -57,38 +56,36 @@ inductive context =
   | right_context(context, struct node *, tree);
 
 predicate context(struct node * node, struct node * parent,
-                  int count, context nodes)
-  requires
-    switch (nodes) {
-      case root: return parent == 0;
-      case left_context(pns, parent0, rightNodes):
-        return
-          parent == parent0 &*& parent != 0 &*&
-          parent->left |-> node &*&
-          parent->right |-> ?right &*&
-          parent->parent |-> ?gp &*&
-          parent->count |-> ?pcount &*&
-          malloc_block_node(parent) &*&
-          context(parent, gp, pcount, pns) &*&
-          subtree(right, parent, rightNodes) &*&
-          pcount == 1 + count + count(rightNodes);
-      case right_context(pns, parent0, leftNodes):
-        return
-          parent == parent0 &*& parent != 0 &*&
-          parent->left |-> ?left &*&
-          parent->right |-> node &*&
-          parent->parent |-> ?gp &*&
-          parent->count |-> ?pcount &*&
-          malloc_block_node(parent) &*&
-          context(parent, gp, pcount, pns) &*&
-          subtree(left, parent, leftNodes) &*&
-          pcount == 1 + count(leftNodes) + count;
-    };
+                  int count, context nodes) =
+  switch (nodes) {
+    case root: return parent == 0;
+    case left_context(pns, parent0, rightNodes):
+      return
+        parent == parent0 &*& parent != 0 &*&
+        parent->left |-> node &*&
+        parent->right |-> ?right &*&
+        parent->parent |-> ?gp &*&
+        parent->count |-> ?pcount &*&
+        malloc_block_node(parent) &*&
+        context(parent, gp, pcount, pns) &*&
+        subtree(right, parent, rightNodes) &*&
+        pcount == 1 + count + count(rightNodes);
+    case right_context(pns, parent0, leftNodes):
+      return
+        parent == parent0 &*& parent != 0 &*&
+        parent->left |-> ?left &*&
+        parent->right |-> node &*&
+        parent->parent |-> ?gp &*&
+        parent->count |-> ?pcount &*&
+        malloc_block_node(parent) &*&
+        context(parent, gp, pcount, pns) &*&
+        subtree(left, parent, leftNodes) &*&
+        pcount == 1 + count(leftNodes) + count;
+  };
 
-predicate tree(struct node * node, context c, tree subtree)
-  requires
-    context(node, ?parent, count(subtree), c) &*&
-    subtree(node, parent, subtree);
+predicate tree(struct node * node, context c, tree subtree) =
+  context(node, ?parent, count(subtree), c) &*&
+  subtree(node, parent, subtree);
 
 @*/
 
