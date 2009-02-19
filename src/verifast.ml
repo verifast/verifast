@@ -3668,7 +3668,7 @@ in
     | Access (l, e, f, rhs) -> access l real_unit_pat e f rhs
     | CallPred (l, g, pats0, pats) -> callpred l real_unit_pat g pats0 pats
     | ExprPred (l, e) ->
-      assert_expr env e h env l "Expression is false."; cont h ghostenv env None
+      assert_expr env e h env l "Cannot prove condition."; cont h ghostenv env None
     | Sep (l, p1, p2) ->
       assert_pred h ghostenv env p1 coef (fun h ghostenv env size -> assert_pred h ghostenv env p2 coef (fun h ghostenv env _ -> cont h ghostenv env size))
     | IfPred (l, e, p1, p2) ->
