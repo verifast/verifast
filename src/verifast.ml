@@ -4601,7 +4601,7 @@ in
         branch
           (fun _ ->
              assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
-               assume (eval0 (Some ((fun l t f -> read_field h' env l t f), (fun l p t -> deref_pointer h' env l p t))) env e) (fun _ ->
+               assume (eval_non_pure false h' env e) (fun _ ->
                  verify_cont tparams boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
@@ -4613,7 +4613,7 @@ in
           )
           (fun _ ->
              assume_pred h ghostenv env p real_unit None None (fun h ghostenv' env' ->
-               assume (ctxt#mk_not (eval0 (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e)) (fun _ ->
+               assume (ctxt#mk_not (eval_non_pure false h env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
     | PerformActionStmt (l, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, post_bcp_args, post_hpn, post_hp_args) ->
