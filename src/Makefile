@@ -39,6 +39,13 @@ test: verifast.exe vfide.exe
 	..\src\verifast reallittest.c
 	cd ..\src
 
+refman:
+	cd ..\doc\refman
+	pdflatex refman.tex
+	pdflatex refman.tex
+	pdflatex refman.tex
+	cd ..\..\src
+
 reduxtest: verifastredux_opt.exe
 	cd ..\examples
 	..\src\verifastredux_opt linkedlist.c
@@ -127,7 +134,7 @@ z3prover.cmx: proverapi.cmx z3prover.ml
 verifastRedux_opt.exe: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux_opt.exe unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 
-release: test
+release: test refman
 	mkdir verifast-$(VFVERSION)
 	cd verifast-$(VFVERSION)
 	copy $(Z3)\LICENSE.txt z3.LICENSE.txt
@@ -142,6 +149,10 @@ release: test
 	copy ..\..\vfide.exe vfide.exe
 	copy $(Z3)\bin\z3.dll
 	cd ..
+	mkdir doc
+	cd doc
+	copy ..\..\..\doc\refman\refman.pdf
+	cd ..
 	mkdir examples
 	cd examples
 	copy ..\..\..\examples\Composite.c
@@ -153,14 +164,12 @@ release: test
 	copy ..\..\..\examples\linkedlist2.c
 	copy ..\..\..\examples\malloc.h
 	copy ..\..\..\examples\sorted_bintree.c
-	copy ..\..\..\examples\stdlib.h
 	copy ..\..\..\examples\contrib.c
 	copy ..\..\..\examples\verify.bat
 	mkdir incr_box
 	cd incr_box
 	copy ..\..\..\..\examples\incr_box\incr_box.c
 	copy ..\..\..\..\examples\incr_box\threading.h
-	copy ..\..\..\..\examples\incr_box\stdlib.h
 	cd ..
 	mkdir chat
 	cd chat
@@ -179,7 +188,6 @@ release: test
 	copy ..\..\..\..\examples\chat\sockets.c
 	copy ..\..\..\..\examples\chat\sockets.h
 	copy ..\..\..\..\examples\chat\sockets.vfmanifest
-	copy ..\..\..\..\examples\chat\stdlib.h
 	copy ..\..\..\..\examples\chat\string.h
 	copy ..\..\..\..\examples\chat\stringBuffers.c
 	copy ..\..\..\..\examples\chat\stringBuffers.h
