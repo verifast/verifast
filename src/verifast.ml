@@ -1517,6 +1517,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      StructType sn
                    else
                      static_error lt "No such struct."
+                 | PtrTypeExpr (_, ManifestTypeExpr (_, Void)) -> PtrType Void
                  | PtrTypeExpr (lt, te) -> PtrType (check_type te)
                  | _ -> static_error (type_expr_loc te) "Invalid field type or field type component."
                in
@@ -3164,7 +3165,15 @@ in
     flatmap
       begin
         function
-          (sn, (_, Some fmap)) -> List.map (fun (f, (_, _)) -> ((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)) fmap
+          (sn, (_, Some fmap)) ->
+          let offsets = List.map (fun (f, (_, _)) -> ((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)) fmap in
+          begin
+            match offsets with
+              ((_, _), offset0)::_ ->
+              ignore (ctxt#assume (ctxt#mk_eq offset0 (ctxt#mk_intlit 0)))
+            | _ -> ()
+          end;
+          offsets
         | _ -> []
       end
       structmap

@@ -11,6 +11,7 @@ test: verifast.exe vfide.exe
 	..\src\verifast -c args.c
 	..\src\verifast swap.c
 	..\src\verifast -shared polytest.c
+	..\src\verifast -disable_overflow_check expr.c
 	cd java
 	..\..\src\verifast -disable_overflow_check -c Counter.java
 	..\..\src\verifast -c Tree.java
