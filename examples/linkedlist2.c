@@ -212,6 +212,8 @@ lemma void add_append_lemma(intlist v1, int x, intlist v2)
   }
 }
 
+inductive uint = zero | succ(uint);
+
 fixpoint uint len(intlist v) {
   switch (v) {
     case nil: return zero;

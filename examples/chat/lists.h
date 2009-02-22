@@ -123,7 +123,7 @@ lemma void removeUniqueElements(listval v, void *x)
     }
 }
 
-lemma void remove_not_contains(listval v, struct member *mem)
+lemma void remove_not_contains(listval v, void *mem)
   requires !contains(v, mem);
   ensures remove(v, mem) == v;
 {

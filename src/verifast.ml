@@ -42,6 +42,14 @@ let try_assoc_i x xys =
   in
   iter 0 xys
 
+let imap f xs =
+  let rec imapi i xs =
+    match xs with
+      [] -> []
+    | x::xs -> f i x::imapi (i + 1) xs
+  in
+  imapi 0 xs
+
 let list_remove_dups xs =
   let rec iter ys xs =
     match xs with
@@ -680,7 +688,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
-let c_keywords= ["struct";"uint"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
+let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"
 ]
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
@@ -911,7 +919,6 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
-| [< '(l, Kwd "uint") >] -> IdentTypeExpr (l, "uint")
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
@@ -1387,24 +1394,99 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
   
-  let imap f xs =
-    let rec imapi i xs =
-      match xs with
-        [] -> []
-      | x::xs -> f i x::imapi (i + 1) xs
+  let basicclassdeclmap =
+    [("Object",(dummy_loc,[], [], [], "Object", []));
+     ("Class", (dummy_loc, [], [], [], "Class", []));
+     ("String", (dummy_loc, [], [], [], "String", []))
+    ]
+  in
+
+  let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
+  
+  let boolt = Bool in
+  let intt = IntType in
+
+  let real_zero = ctxt#mk_reallit 0 in
+  let real_unit = ctxt#mk_reallit 1 in
+  let real_half = ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (Num.num_of_int 2)) in
+  
+  let min_int_big_int = big_int_of_string "-2147483648" in
+  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let max_int_big_int = big_int_of_string "2147483647" in
+  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
+  let max_ptr_big_int = big_int_of_string "4294967295" in
+  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
+  
+  let real_unit_pat = LitPat (IntLit (dummy_loc, unit_big_int, ref (Some RealType))) in
+
+  let programDir = Filename.dirname path in
+  let preludePath = Filename.concat bindir "prelude.h" in
+  
+  let headermap = ref [] in
+  
+  let rec check_file include_prelude basedir headers ds =
+  
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) =
+    if include_prelude then
+    begin
+      match try_assoc preludePath !headermap with
+        None ->
+        let ([], ds) = parse_header_file bindir "prelude.h" reportKeyword reportGhostRange in
+        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0))::!headermap;
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
+      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) ->
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
+    end
+    else
+     ([], [], [], [], [], [], [], [], [], [])
+  in
+  
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) =
+    let headers_included = ref [] in
+    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers =
+      match headers with
+        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
+      | (l, header_path)::headers ->
+        if List.mem header_path ["bool.h"; "assert.h"] then
+          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
+        else
+        begin
+          if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
+          let localpath = Filename.concat basedir header_path in
+          let (basedir, relpath, path) =
+            if Sys.file_exists localpath then
+              (basedir, Filename.concat "." header_path, localpath)
+            else
+              let systempath = Filename.concat bindir header_path in
+              if Sys.file_exists systempath then
+                (bindir, header_path, systempath)
+              else
+                static_error l "No such file."
+          in
+          if List.mem path !headers_included then
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
+          else
+          begin
+            headers_included := path::!headers_included;
+            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap) =
+              match try_assoc path !headermap with
+                None ->
+                let (headers', ds) = parse_header_file basedir relpath reportKeyword reportGhostRange in
+                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _) = check_file true basedir headers' ds in
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
+              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap) ->
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
+            in
+            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers' in
+            iter (structmap @ structmap0) (inductivemap @ inductivemap0) (purefuncmap @ purefuncmap0) (fixpointmap @ fixpointmap0) (malloc_block_pred_map @ malloc_block_pred_map0) (field_pred_map @ field_pred_map0) (predfammap @ predfammap0) (predinstmap @ predinstmap0) (functypemap @ functypemap0) (funcmap @ funcmap0) headers
+          end
+        end
     in
-    imapi 0 xs
+    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
   in
   
-  let ds= 
-    match file_type (Filename.basename path) with
-    Java-> parse_input_file path reportKeyword reportGhostRange
-    | _->
-        let ([], ds0) = parse_header_file bindir "prelude.h" reportKeyword reportGhostRange in
-        ds0 @ parse_input_file path reportKeyword reportGhostRange
-  in
-  
-  (* failwith "Done parsing."; *)
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -1420,7 +1502,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] ds
   in
   
-  let structmap =
+  let structmap1 =
     List.map
       (fun (sn, (l, fds_opt)) ->
          let rec iter fmap fds =
@@ -1435,7 +1517,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
                  | StructTypeExpr (lt, sn) ->
-                   if List.mem_assoc sn structdeclmap then
+                   if List.mem_assoc sn structdeclmap || List.mem_assoc sn structmap0 then
                      StructType sn
                    else
                      static_error lt "No such struct."
@@ -1455,7 +1537,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structdeclmap
   in
   
-  
+  let structmap = structmap1 @ structmap0 in
   
   let inductivedeclmap =
     let rec iter idm ds =
@@ -1468,16 +1550,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter ((i, (l, tparams, ctors))::idm) ds
       | _::ds -> iter idm ds
     in
-    iter [("uint", (dummy_loc, [], []))] ds
+    iter [] ds
   in
   
-  let basicclassdeclmap =
-    [("Object",(dummy_loc,[], [], [], "Object", []));
-     ("Class", (dummy_loc, [], [], [], "Class", []));
-     ("String", (dummy_loc, [], [], [], "String", []))
-    ]
-  in
-
   let (interfdeclmap,classdeclmap) =
     let rec iter ifdm classlist ds =
       match ds with
@@ -1513,9 +1588,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] basicclassdeclmap ds
   in
   
-  
-in
-  
   let classfmap =
     List.map
       (fun (sn, (l,meths, fds_opt,constr,super,interfs)) ->
@@ -1550,6 +1622,11 @@ in
       classdeclmap
   in
   
+  let inductive_arities =
+    List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivedeclmap
+    @ List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivemap0
+  in
+  
   let rec check_pure_type tpenv te =
     match te with
       ManifestTypeExpr (l, t) -> t
@@ -1559,9 +1636,9 @@ in
         TypeParam id
       else
       begin
-      match try_assoc id inductivedeclmap with
-        Some (_, tparams, _) ->
-        if tparams <> [] then static_error l "Missing type arguments.";
+      match try_assoc id inductive_arities with
+        Some n ->
+        if n > 0 then static_error l "Missing type arguments.";
         InductiveType (id, [])
       | None ->
         if (List.mem_assoc id classdeclmap) then 
@@ -1574,9 +1651,9 @@ in
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
-      match try_assoc id inductivedeclmap with
-        Some (_, tparams, _) ->
-        if List.length tparams <> List.length targs then static_error l "Incorrect number of type arguments.";
+      match try_assoc id inductive_arities with
+        Some n ->
+        if n <> List.length targs then static_error l "Incorrect number of type arguments.";
         InductiveType (id, List.map (check_type_arg tpenv) targs)
       | None -> static_error l "No such inductive datatype."
       end
@@ -1603,13 +1680,6 @@ in
   in
   
   let class_symbols = List.map (fun (c,_) -> (c, mk_symbol c [] ctxt#type_int Uninterp)) classdeclmap in
-  let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
-  
-   
-  
-  let boolt = Bool in
-  let intt = IntType in
-  let uintt = InductiveType ("uint", []) in
   
   let rec string_of_type t =
     match t with
@@ -1759,7 +1829,7 @@ in
     match t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
   in
   
-  let (inductivemap, purefuncmap, fixpointmap) =
+  let (inductivemap1, purefuncmap1, fixpointmap1) =
     let rec iter imap pfm fpm ds =
       match ds with
         [] -> (List.rev imap, List.rev pfm, List.rev fpm)
@@ -2076,28 +2146,28 @@ in
         iter imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs))::fpm) ds
       | _::ds -> iter imap pfm fpm ds
     in
-    let indtypemap0 = [("uint", (dummy_loc, [], [("zero", (dummy_loc, [])); ("succ", (dummy_loc, [uintt]))]))] in
-    let purefuncmap0 = 
-      [("zero", (dummy_loc, [], uintt, [], alloc_nullary_ctor 0 "zero"));
-       ("succ", (dummy_loc, [], uintt, [uintt], mk_symbol "succ" [ctxt#type_inductive] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal 1))))]
-    in
-    let purefuncmap0 = purefuncmap0 @ isfuncs in
-    iter indtypemap0 purefuncmap0 [] ds
+    iter [] isfuncs [] ds
   in
+  
+  let inductivemap = inductivemap1 @ inductivemap0 in
+  let purefuncmap = purefuncmap1 @ purefuncmap0 in
+  let fixpointmap = fixpointmap1 @ fixpointmap0 in
   
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
   
   let mk_predfam p l arity ts inputParamCount = (p, (l, arity, ts, get_unique_var_symb p (PredType ts), inputParamCount)) in
   
-  let malloc_block_pred_map = 
+  let malloc_block_pred_map1 = 
     match file_type path with
     Java-> flatmap (function (sn, (_,_,_,_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn] (Some 1))] 
             | _ -> []) classdeclmap
     | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l 0 
-            [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap 
-    in
+            [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap1 
+  in
+  
+  let malloc_block_pred_map = malloc_block_pred_map1 @ malloc_block_pred_map0 in
 
-  let field_pred_map = (* dient om dingen te controleren bij read/write controle v velden*)
+  let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
     Java-> flatmap
       (fun (sn, (_,_, fds_opt,_,_,_)) ->
@@ -2123,10 +2193,14 @@ in
              )
              fds
       )
-      structmap
+      structmap1
   in
   
-  let predfammap = 
+  let field_pred_map = field_pred_map1 @ field_pred_map0 in
+  
+  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 in
+
+  let predfammap1 =
     let rec iter pm ds =
       match ds with
         PredFamilyDecl (l, p, arity, tes, inputParamCount)::ds ->
@@ -2142,11 +2216,10 @@ in
       | _::ds -> iter pm ds
       | [] -> List.rev pm
     in
-    let structpreds = List.map (fun (_, p) -> p) malloc_block_pred_map @ List.map (fun (_, p) -> p) field_pred_map in
-    iter structpreds ds
+    iter [] ds
   in
   
-  let (boxmap, predfammap) =
+  let (boxmap, predfammap1) =
     let rec iter bm pfm ds =
       match ds with
         [] -> (bm, pfm)
@@ -2216,8 +2289,10 @@ in
         iter ((bcn, (l, boxpmap, amap, hpm))::bm) pfm ds
       | _::ds -> iter bm pfm ds
     in
-    iter [] predfammap ds
+    iter [] predfammap1 ds
   in
+  
+  let predfammap = predfammap1 @ structpreds1 @ predfammap0 in
   
   let (predctormap, purefuncmap) =
     let rec iter pcm pfm ds =
@@ -2283,7 +2358,7 @@ in
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such regular function name."; i) is 
   in
   
-  let predinstmap =
+  let predinstmap1 =
     flatmap
       begin
         function
@@ -2315,10 +2390,10 @@ in
             fmap
         | _ -> []
       end
-      structmap
+      structmap1
   in
   
-  let predinstmap = 
+  let predinstmap1 = 
     let rec iter pm ds =
       match ds with
         PredFamilyInstanceDecl (l, p, is, xs, body)::ds ->
@@ -2353,9 +2428,11 @@ in
         iter2 [] pxs
       | _::ds -> iter pm ds
       | [] -> List.rev pm
-    in  (* TODO: Include field_xxx predicate bodies in terms of 'range' predicates, so that a field can be turned into a range by opening it. *)
-    iter predinstmap ds
+    in
+    iter predinstmap1 ds
   in
+  
+  let predinstmap = predinstmap1 @ predinstmap0 in
   
   let rec check_expr tparams tenv e =
     let check e = check_expr tparams tenv e in
@@ -3064,17 +3141,6 @@ in
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
-  let real_zero = ctxt#mk_reallit 0 in
-  let real_unit = ctxt#mk_reallit 1 in
-  let real_half = ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (Num.num_of_int 2)) in
-  
-  let min_int_big_int = big_int_of_string "-2147483648" in
-  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
-  let max_int_big_int = big_int_of_string "2147483647" in
-  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
-  let max_ptr_big_int = big_int_of_string "4294967295" in
-  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
-  
   let sizeof l t =
     match t with
       Void | Char -> 1
@@ -3325,7 +3391,7 @@ in
        in
        ctxt#set_fpclauses fsym i clauses
     )
-    fixpointmap
+    fixpointmap1
   in
 
   let contextStack = ref ([]: 'termnode context list) in
@@ -3389,8 +3455,6 @@ in
     in_temporary_context (fun _ -> cont1());
     in_temporary_context (fun _ -> cont2())
   in
-  
-  let real_unit_pat = LitPat (IntLit (dummy_loc, unit_big_int, ref (Some RealType))) in
   
   let evalpat ghostenv env pat tp cont =
     if pat == real_unit_pat then cont ghostenv env real_unit else
@@ -3695,7 +3759,7 @@ in
     get_points_to h t f_symb l cont
   in
   
-  let functypemap =
+  let functypemap1 =
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
@@ -3725,7 +3789,9 @@ in
     iter [] ds
   in
   
-  let funcmap =
+  let functypemap = functypemap1 @ functypemap0 in
+  
+  let funcmap1 =
     flatmap
       (fun (bcn, (l, boxpmap, amap, hpmap)) ->
          let bcpred = new predref bcn in
@@ -3791,7 +3857,13 @@ in
     pop()
   in
   
-  let (funcmap, prototypes_implemented) =
+  let try_assoc2 x xys1 xys2 =
+    match try_assoc x xys1 with
+      None -> try_assoc x xys2
+    | result -> result
+  in
+  
+  let (funcmap1, prototypes_implemented) =
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
@@ -3827,13 +3899,13 @@ in
               | Some (_, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
                 check_func_header_compat l "Function type implementation check: " (k, tparams, rt, xmap, pre, post) (Regular, [], rt0, xmap0, cenv0, pre0, post0);
-                let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) isfuncs in
+                let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
                 ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
         end;
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
-          match try_assoc fn funcmap with
+          match try_assoc2 fn funcmap funcmap0 with
             None -> iter ((fn, (l, k, tparams, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
           | Some (l0, k0, tparams0, rt0, xmap0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
             if body = None then
@@ -3848,8 +3920,10 @@ in
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
-    iter funcmap [] ds
+    iter funcmap1 [] ds
   in
+  
+  let funcmap = funcmap1 @ funcmap0 in
   
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb, _))) -> symb) field_pred_map in
   
@@ -4842,6 +4916,21 @@ in
   
   in
   
+  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented)
+  
+  in
+  
+  let (prototypes_used, prototypes_implemented) =
+    let (headers, ds) = 
+      match file_type (Filename.basename path) with
+      Java-> ([], parse_input_file path reportKeyword reportGhostRange)
+      | _->
+        parse_c_file path reportKeyword reportGhostRange
+    in
+    let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented) = check_file true programDir headers ds in
+    (prototypes_used, prototypes_implemented)
+  in
+
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
     let file = open_out manifest_filename in
@@ -4850,7 +4939,7 @@ in
       List.sort compare lines
     in
     do_finally (fun () ->
-      List.iter (fun line -> output_string file (".requires " ^ line ^ "\n")) (sorted_lines !prototypes_used);
+      List.iter (fun line -> output_string file (".requires " ^ line ^ "\n")) (sorted_lines prototypes_used);
       List.iter (fun line -> output_string file (".provides " ^ line ^ "\n")) (sorted_lines prototypes_implemented)
     ) (fun () -> close_out file)
   in
