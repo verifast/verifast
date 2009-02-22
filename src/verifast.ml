@@ -796,7 +796,8 @@ type spec_clause =
 | RequiresClause of pred
 | EnsuresClause of pred
 
-let read_decls path stream streamSource reportKeyword reportGhostRange =
+let read_decls path reportKeyword reportGhostRange =
+let streamSource path = Stream.of_string (readFile path) in
 let java_lexer= make_lexer (veri_keywords@java_keywords) in
 let lexer=
   match file_type path with
@@ -809,7 +810,7 @@ let rec parse_java_files = parser
 | [<_ = Stream.empty>]-> []
 in
 let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
-let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) stream reportKeyword in
+let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
 let (loc, pp_token_stream) = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
 let rec parse_decls_eof = parser
   [< ds = parse_decls; _ = Stream.empty >] -> ds
@@ -1421,7 +1422,7 @@ let do_finally tryBlock finallyBlock =
 
 type options = {option_verbose: bool; option_disable_overflow_check: bool}
 
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path stream streamSource reportKeyword reportGhostRange breakpoint =
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportKeyword reportGhostRange breakpoint =
 
   let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check} = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
@@ -1474,12 +1475,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let ds= 
     match file_type (Filename.basename path) with
-    Java-> read_decls path stream streamSource reportKeyword reportGhostRange
+    Java-> read_decls path reportKeyword reportGhostRange
     | _->
         let preludePath = Filename.concat bindir "prelude.h" in
-        let preludeStreamSource path = Stream.of_string (readFile (Filename.concat bindir path)) in
-        let ds0 = read_decls preludePath (Stream.of_string (readFile preludePath)) preludeStreamSource reportKeyword reportGhostRange in
-        ds0 @ read_decls path stream streamSource reportKeyword reportGhostRange 
+        let ds0 = read_decls preludePath reportKeyword reportGhostRange in
+        ds0 @ read_decls path reportKeyword reportGhostRange 
   in
   
   (* failwith "Done parsing."; *)
@@ -4934,9 +4934,9 @@ in
   in
   create_manifest_file()
 
-let verify_program_with_stats ctxt print_stats verbose path stream streamSource reportKeyword reportGhostRange breakpoint =
+let verify_program_with_stats ctxt print_stats verbose path reportKeyword reportGhostRange breakpoint =
   do_finally
-    (fun () -> verify_program_core ctxt verbose path stream streamSource reportKeyword reportGhostRange breakpoint)
+    (fun () -> verify_program_core ctxt verbose path reportKeyword reportGhostRange breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -4964,11 +4964,11 @@ let lookup_prover prover =
       | Some f -> f
     end
       
-let verify_program prover print_stats options path stream streamSource reportKeyword reportGhostRange breakpoint =
+let verify_program prover print_stats options path reportKeyword reportGhostRange breakpoint =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats options path stream streamSource reportKeyword reportGhostRange breakpoint
+         fun ctxt -> verify_program_with_stats ctxt print_stats options path reportKeyword reportGhostRange breakpoint
      end)
 
 let remove_dups bs =

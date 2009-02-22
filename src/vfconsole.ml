@@ -5,11 +5,8 @@ let _ =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
   let verify stats options prover path =
-    let streamSource path =
-      Stream.of_string (readFile path)
-    in
     try
-      verify_program prover stats options path (streamSource path) streamSource (fun _ -> ()) (fun _ -> ()) None;
+      verify_program prover stats options path (fun _ -> ()) (fun _ -> ()) None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1

@@ -592,10 +592,9 @@ let show_ide initialPath prover =
               else
                 None
             in
-            let streamSource path = Stream.of_string (readFile path) in
             try
               let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
-              verify_program None false options path (Stream.of_string ((tab_buffer tab)#get_text())) streamSource reportKeyword reportGhostRange breakpoint;
+              verify_program None false options path reportKeyword reportGhostRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with
