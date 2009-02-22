@@ -1,6 +1,58 @@
 open Proverapi
 open Big_int
 
+let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
+let flatmap f xs = List.concat (List.map f xs)
+let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
+let take_drop n xs =
+  let rec iter left right k =
+    if k = 0 then
+      (left, right)
+    else
+      match right with
+        [] -> (left, right)
+      | x::right -> iter (x::left) right (k - 1)
+  in
+  iter [] xs n
+let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
+
+let rec distinct xs =
+  match xs with
+    [] -> true
+  | x::xs -> not (List.mem x xs) && distinct xs
+
+let rec try_assoc x xys =
+  match xys with
+    [] -> None
+  | (x', y)::xys when x' = x -> Some y
+  | _::xys -> try_assoc x xys
+
+let rec try_assq x xys =
+  match xys with
+    [] -> None
+  | (x', y)::xys when x' == x -> Some y
+  | _::xys -> try_assq x xys
+
+let try_assoc_i x xys =
+  let rec iter k xys =
+    match xys with
+      [] -> None
+    | (x', y)::xys when x' = x -> Some (k, y)
+    | _::xys -> iter (k + 1) xys
+  in
+  iter 0 xys
+
+let list_remove_dups xs =
+  let rec iter ys xs =
+    match xs with
+      [] -> List.rev ys
+    | x::xs -> if List.mem x ys then iter ys xs else iter (x::ys) xs
+  in
+  iter [] xs
+
+let startswith s s0 =
+  String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
+
 let bindir = Filename.dirname Sys.executable_name
 
 let banner =
@@ -64,6 +116,7 @@ type token =
   | Float of float
   | String of string
   | Char of char
+  | PreprocessorSymbol of string
   | Eol
 
 type srcpos = ((string * string) * int * int)
@@ -109,11 +162,15 @@ let make_lexer keywords path stream reportKeyword =
 
   let in_single_line_annotation = ref false in
   
+  let ignore_eol = ref true in
+  
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
   let ident_or_keyword id isAlpha =
     try let t = Hashtbl.find kwd_table id in if isAlpha then reportKeyword (current_loc()); t with
-      Not_found -> Ident id
+      Not_found ->
+      let n = String.length id in
+      if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
   and keyword_or_error c =
     let s = String.make 1 c in
     try Hashtbl.find kwd_table s with
@@ -133,7 +190,9 @@ let make_lexer keywords path stream reportKeyword =
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
         Some (Kwd "@*/")
-      ) else
+      ) else if !ignore_eol then
+        next_token strm__
+      else
         Some Eol
     in
     match Stream.peek strm__ with
@@ -317,160 +376,11 @@ let make_lexer keywords path stream reportKeyword =
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
   (current_loc,
+   ignore_eol,
    Stream.from (fun count ->
      (match next_token stream with
         Some t -> Some (current_loc(), t)
       | None -> None)))
-
-let preprocess path loc stream streamSource =
-  let path = ref path in
-  let loc = ref loc in
-  let stream = ref stream in
-  let startOfLine = ref true in
-  let stack: ((string * string) * (unit -> loc) * (loc * token) Stream.t * bool) list ref = ref [] in
-  let defines: (string * (loc * token) list) list ref = ref [] in
-  let error msg = raise (ParseException (!loc(), msg)) in
-  let push newPath =
-    let (newloc, newstream) =
-      try
-        streamSource newPath
-      with Sys_error msg ->
-        error msg
-    in
-    stack := (!path, !loc, !stream, !startOfLine)::!stack;
-    path := newPath;
-    loc := newloc;
-    stream := newstream;
-    startOfLine := true
-  in
-  let define x toks =
-    defines := (x, toks)::!defines
-  in
-  let peek() = Stream.peek (!stream) in
-  let skip() =
-    startOfLine := begin match peek() with Some (_, Eol) -> true | _ -> false end;
-    if peek() <> None then Stream.junk (!stream)
-  in
-  let next() =
-    match peek() with
-      Some t -> skip(); t
-    | None -> error "Token expected"
-  in
-  let expect_eol() =
-    match peek() with
-      None -> ()
-    | Some (_, Eol) -> ()
-    | _ -> error "End of line expected."
-  in
-  let expect token =
-    match next() with
-      (_, t) when t = token -> ()
-    | _ ->
-      let txt = match token with Eol -> "end of line" | Kwd s -> "'" ^ s ^ "'" in
-      error (txt ^ " expected")
-  in
-  let next_ident() =
-    match next() with
-      (_, Ident x) -> x
-    | _ ->
-      error "Identifier expected"
-  in
-  let rec skip_block() =
-    if !startOfLine then
-      match next() with
-        (l, Kwd "#") ->
-        begin
-          match next() with
-            (_, Kwd "endif") ->
-            expect_eol();
-            ()
-          | (_, Kwd "ifndef") ->
-            skip_block();
-            skip_block()
-          | _ -> skip_block()
-        end
-      | _ -> skip_block()
-    else
-    begin
-      ignore (next());
-      skip_block()
-    end
-  in
-  let rec next_token() =
-    let pop() =
-      match !stack with
-        [] -> None
-      | (path0, loc0, stream0, startOfLine0)::stack0 ->
-        path := path0;
-        loc := loc0;
-        stream := stream0;
-        stack := stack0;
-        startOfLine := startOfLine0;
-        next_token()
-    in
-    if !startOfLine then
-      match peek() with
-        Some (l, Kwd "#") ->
-        begin
-          skip();
-          match next() with
-            (_, Kwd "include") ->
-            begin
-              match next() with
-                (_, String includePath) ->
-                expect_eol();
-                begin
-                  match includePath with
-                    "bool.h" -> ()
-                  | "assert.h" -> ()
-                  | _ ->
-                    let (basedir, relpath) = !path in
-                    let resolvedRelPath = Filename.concat (Filename.dirname relpath) includePath in
-                    if Sys.file_exists (Filename.concat basedir resolvedRelPath) then
-                      push (basedir, resolvedRelPath)
-                    else if Sys.file_exists (Filename.concat bindir includePath) then
-                      push (bindir, includePath)
-                    else
-                      error "No such file."
-                end;
-                next_token()
-              | _ ->
-                error "String literal expected."
-            end
-          | (_, Kwd "define") ->
-            let x = next_ident() in
-            expect_eol();
-            define x [];
-            next_token()
-          | (_, Kwd "ifndef") ->
-            let x = next_ident() in
-            expect_eol();
-            if List.mem_assoc x !defines then
-            begin
-              skip_block();
-              next_token()
-            end
-            else
-              next_token()
-          | (_, Kwd "endif") ->
-            expect_eol();
-            next_token()
-          | (l, _) -> error "Expected one of: include, define, ifndef, endif."
-        end
-      | Some (_, Eol) -> skip(); next_token()
-      | None -> pop()
-      | t -> skip(); t
-    else
-      match peek() with
-        (Some (l, Ident x)) as t ->
-        skip();
-        if List.mem_assoc x !defines then next_token() else t
-      | Some (_, Eol) -> skip(); next_token()
-      | None -> pop()
-      | t -> skip(); t
-  in
-  let current_loc() = !loc() in
-  (current_loc, Stream.from (fun count -> next_token()))
 
 type type_ =
     Bool
@@ -796,25 +706,8 @@ type spec_clause =
 | RequiresClause of pred
 | EnsuresClause of pred
 
-let read_decls path reportKeyword reportGhostRange =
-let streamSource path = Stream.of_string (readFile path) in
-let java_lexer= make_lexer (veri_keywords@java_keywords) in
-let lexer=
-  match file_type path with
-  Java -> java_lexer
-  | _ -> make_lexer (veri_keywords@c_keywords)
-in
-begin
-let rec parse_java_files = parser
-[< '(l, Ident n);'(_, Kwd ".");'(_, Kwd "java");rest=parse_java_files>] -> (n^".java")::rest
-| [<_ = Stream.empty>]-> []
-in
-let tokenStreamSource path = lexer path (streamSource (string_of_path path)) reportKeyword in
-let (loc, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
-let (loc, pp_token_stream) = preprocess (Filename.dirname path, Filename.basename path) loc token_stream tokenStreamSource in
-let rec parse_decls_eof = parser
-  [< ds = parse_decls; _ = Stream.empty >] -> ds
-and
+let parse_decls reportGhostRange =
+let rec
   parse_decls = parser
 [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
 | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
@@ -1298,80 +1191,110 @@ and
   [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
 in
+  parse_decls
+
+let parse_java_file path reportKeyword reportGhostRange =
+  let lexer = make_lexer (veri_keywords@java_keywords) in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
+  let parse_decls_eof = parser [< ds = parse_decls reportGhostRange; _ = Stream.empty >] -> ds in
   try
-    if Filename.check_suffix (Filename.basename path) ".jarsrc" then 
-      let rec parsefiles channel=
-        let file= try Some(input_line channel) with End_of_file -> None in
-        match file with
-          None -> []
-        | Some file ->
-          let path'=Filename.concat (Filename.dirname path) file in
-          let decl=
-            let stream'= Stream.of_string (readFile path') in
-            let tokenStreamSource' path' = java_lexer path' (streamSource (string_of_path path')) reportKeyword in
-            let (loc, token_stream') = java_lexer (Filename.dirname path', Filename.basename path') stream' reportKeyword in
-            let (loc, pp_token_stream') = preprocess (Filename.dirname path', Filename.basename path') loc token_stream' tokenStreamSource' in
-            parse_decls_eof pp_token_stream'
-          in 
-          decl@(parsefiles channel) 
-	  in
-	  parsefiles (open_in path)
-    else
-    parse_decls_eof pp_token_stream
-  with Stream.Error msg -> raise (ParseException (loc(), msg))
-end
+    parse_decls_eof token_stream
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
-let flatmap f xs = List.concat (List.map f xs)
-let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
-let take_drop n xs =
-  let rec iter left right k =
-    if k = 0 then
-      (left, right)
-    else
-      match right with
-        [] -> (left, right)
-      | x::right -> iter (x::left) right (k - 1)
+let parse_include_directives ignore_eol =
+let rec parse_include_directives = parser
+  [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers
+| [< >] -> []
+and
+  parse_include_directive = parser
+  [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] -> ignore_eol := true; (l, header)
+in
+  parse_include_directives
+
+let parse_c_file path reportKeyword reportGhostRange =
+  let lexer = make_lexer (veri_keywords@c_keywords) in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
+  let parse_c_file =
+    parser
+      [< headers = parse_include_directives ignore_eol; ds = parse_decls reportGhostRange; _ = Stream.empty >] -> (headers, ds)
   in
-  iter [] xs n
-let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
+  try
+    parse_c_file token_stream
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let rec distinct xs =
-  match xs with
-    [] -> true
-  | x::xs -> not (List.mem x xs) && distinct xs
-
-let rec try_assoc x xys =
-  match xys with
-    [] -> None
-  | (x', y)::xys when x' = x -> Some y
-  | _::xys -> try_assoc x xys
-
-let rec try_assq x xys =
-  match xys with
-    [] -> None
-  | (x', y)::xys when x' == x -> Some y
-  | _::xys -> try_assq x xys
-
-let try_assoc_i x xys =
-  let rec iter k xys =
-    match xys with
-      [] -> None
-    | (x', y)::xys when x' = x -> Some (k, y)
-    | _::xys -> iter (k + 1) xys
+let parse_header_file basePath relPath reportKeyword reportGhostRange =
+  let lexer = make_lexer (veri_keywords@c_keywords) in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportKeyword in
+  let parse_header_file =
+    parser
+      [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
+         '(_, Kwd "#"); '(_,Kwd "define"); '(lx', PreprocessorSymbol x'); '(_, Eol); _ = (fun _ -> ignore_eol := true);
+         headers = parse_include_directives ignore_eol; ds = parse_decls reportGhostRange;
+         '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
+         _ = Stream.empty >] ->
+      if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));
+      (headers, ds)
   in
-  iter 0 xys
+  try
+    parse_header_file token_stream
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let list_remove_dups xs =
-  let rec iter ys xs =
-    match xs with
-      [] -> List.rev ys
-    | x::xs -> if List.mem x ys then iter ys xs else iter (x::ys) xs
-  in
-  iter [] xs
-
-let startswith s s0 =
-  String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
+let parse_input_file path reportKeyword reportGhostRange =
+  if Filename.check_suffix (Filename.basename path) ".jarsrc" then 
+    let rec parsefiles channel=
+      let file= try Some(input_line channel) with End_of_file -> None in
+      match file with
+        None -> []
+      | Some file ->
+        let path'=Filename.concat (Filename.dirname path) file in
+        let decl= parse_java_file path' reportKeyword reportGhostRange in 
+        decl@(parsefiles channel)
+    in
+    parsefiles (open_in path)
+  else
+    match file_type (Filename.basename path) with
+      Java -> parse_java_file path reportKeyword reportGhostRange
+    | C ->
+      let (headers, ds) = parse_c_file path reportKeyword reportGhostRange in
+      let programDir = Filename.dirname path in
+      let headers_included: string list ref = ref [] in
+      let rec header_ds baseDir (l, header_path) =
+        if List.mem header_path ["bool.h"; "assert.h"] then
+          []
+        else
+        begin
+          if Filename.basename header_path <> header_path then raise (ParseException (l, "Include paths must be simple file names."));
+          let (baseDir, relPath, path) =
+            let localPath = Filename.concat baseDir header_path in
+            if Sys.file_exists localPath then
+              (baseDir, Filename.concat "." header_path, localPath)
+            else
+              let systemPath = Filename.concat bindir header_path in
+              if Sys.file_exists systemPath then
+                (bindir, header_path, systemPath)
+              else
+                raise (ParseException (l, "No such file."))
+          in
+          if List.mem path !headers_included then
+            []
+          else
+            let (headers, ds) = parse_header_file baseDir relPath reportKeyword reportGhostRange in
+            let headers_ds = flatmap (header_ds baseDir) headers in
+            headers_included := path::!headers_included;
+            headers_ds @ ds
+        end
+      in
+      let headers_ds = flatmap (header_ds programDir) headers in
+      headers_ds @ ds
 
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
@@ -1475,11 +1398,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let ds= 
     match file_type (Filename.basename path) with
-    Java-> read_decls path reportKeyword reportGhostRange
+    Java-> parse_input_file path reportKeyword reportGhostRange
     | _->
-        let preludePath = Filename.concat bindir "prelude.h" in
-        let ds0 = read_decls preludePath reportKeyword reportGhostRange in
-        ds0 @ read_decls path reportKeyword reportGhostRange 
+        let ([], ds0) = parse_header_file bindir "prelude.h" reportKeyword reportGhostRange in
+        ds0 @ parse_input_file path reportKeyword reportGhostRange
   in
   
   (* failwith "Done parsing."; *)

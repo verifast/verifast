@@ -1,3 +1,6 @@
+#ifndef LISTS_H
+#define LISTS_H
+
 struct list;
 struct iter;
 
@@ -98,3 +101,5 @@ void list_remove(struct list *list, void *element);
 void list_dispose(struct list *list);
   //@ requires list(list, ?v);
   //@ ensures emp;
+
+#endif

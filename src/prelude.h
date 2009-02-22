@@ -1,3 +1,6 @@
+#ifndef PRELUDE_H
+#define PRELUDE_H
+
 /*@
 
 inductive unit = unit;
@@ -119,3 +122,5 @@ lemma void pointer_to_chars(void *p);
 int main();
     //@ requires emp;
     //@ ensures emp;
+
+#endif

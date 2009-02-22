@@ -1,3 +1,6 @@
+#ifndef MALLOC_H
+#define MALLOC_H
+
 /*@
 predicate malloc_block(void *array, int size);
 
@@ -18,3 +21,5 @@ void *malloc(int size);
 void free(void *array);
     //@ requires malloc_block(array, ?size) &*& chars(array, ?cs) &*& chars_length(cs) == size;
     //@ ensures emp;
+
+#endif
