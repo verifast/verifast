@@ -145,9 +145,12 @@ release: test refman
 	xcopy $(GTKLIB)\..\bin\*.dll .
 	copy ..\..\prelude.h
 	copy ..\..\stdlib.h
+	copy ..\..\malloc.h
+	copy ..\..\string.h
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
 	copy $(Z3)\bin\z3.dll
+	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
 	cd ..
 	mkdir doc
 	cd doc
@@ -162,7 +165,6 @@ release: test refman
 	copy ..\..\..\examples\iter.c
 	copy ..\..\..\examples\linkedlist.c
 	copy ..\..\..\examples\linkedlist2.c
-	copy ..\..\..\examples\malloc.h
 	copy ..\..\..\examples\sorted_bintree.c
 	copy ..\..\..\examples\contrib.c
 	copy ..\..\..\examples\verify.bat
@@ -182,13 +184,11 @@ release: test refman
 	copy ..\..\..\..\examples\chat\lists.h
 	copy ..\..\..\..\examples\chat\lists.vfmanifest
 	copy ..\..\..\..\examples\chat\make.bat
-	copy ..\..\..\..\examples\chat\malloc.h
 	copy ..\..\..\..\examples\chat\socketlib.c
 	copy ..\..\..\..\examples\chat\socketlib.h
 	copy ..\..\..\..\examples\chat\sockets.c
 	copy ..\..\..\..\examples\chat\sockets.h
 	copy ..\..\..\..\examples\chat\sockets.vfmanifest
-	copy ..\..\..\..\examples\chat\string.h
 	copy ..\..\..\..\examples\chat\stringBuffers.c
 	copy ..\..\..\..\examples\chat\stringBuffers.h
 	copy ..\..\..\..\examples\chat\stringBuffersExt.h
@@ -204,7 +204,6 @@ release: test refman
 	copy ..\..\..\..\examples\chatbot\chatbot.vcproj
 	copy ..\..\..\..\examples\chatbot\lists.c
 	copy ..\..\..\..\examples\chatbot\lists.h
-	copy ..\..\..\..\examples\chatbot\malloc.h
 	copy ..\..\..\..\examples\chatbot\socketlib.c
 	copy ..\..\..\..\examples\chatbot\socketlib.h
 	copy ..\..\..\..\examples\chatbot\sockets.c
