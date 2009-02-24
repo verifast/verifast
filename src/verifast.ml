@@ -61,6 +61,14 @@ let list_remove_dups xs =
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
+let try_assoc2 x xys1 xys2 =
+  match try_assoc x xys1 with
+    None -> try_assoc x xys2
+  | result -> result
+
+let assoc2 x xys1 xys2 =
+  let (Some y) = try_assoc2 x xys1 xys2 in y
+
 let bindir = Filename.dirname Sys.executable_name
 
 let banner =
@@ -1442,6 +1450,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
      ([], [], [], [], [], [], [], [], [], [])
   in
   
+  let append_nodups xys xys0 string_of_key l elementKind =
+    let rec iter xys =
+      match xys with
+        [] -> xys0
+      | ((x, y) as elem)::xys ->
+        if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
+        elem::iter xys
+    in
+    iter xys
+  in
+  
+  let id x = x in
+  
   let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) =
     let headers_included = ref [] in
     let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers =
@@ -1480,7 +1501,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
             in
             let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers' in
-            iter (structmap @ structmap0) (inductivemap @ inductivemap0) (purefuncmap @ purefuncmap0) (fixpointmap @ fixpointmap0) (malloc_block_pred_map @ malloc_block_pred_map0) (field_pred_map @ field_pred_map0) (predfammap @ predfammap0) (predinstmap @ predinstmap0) (functypemap @ functypemap0) (funcmap @ funcmap0) headers
+            iter
+              (append_nodups structmap structmap0 id l "struct")
+              (append_nodups inductivemap inductivemap0 id l "inductive datatype")
+              (append_nodups purefuncmap purefuncmap0 id l "pure function")
+              (append_nodups fixpointmap fixpointmap0 id l "fixpoint function")
+              (malloc_block_pred_map @ malloc_block_pred_map0)
+              (field_pred_map @ field_pred_map0)
+              (append_nodups predfammap predfammap0 id l "predicate")
+              (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
+              (append_nodups functypemap functypemap0 id l "function type")
+              (append_nodups funcmap funcmap0 id l "function")
+              headers
           end
         end
     in
@@ -1492,6 +1524,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> sdm
       | Struct (l, sn, fds_opt)::ds ->
+        begin
+          match try_assoc sn structmap0 with
+            Some (_, Some _) -> static_error l "Duplicate struct name."
+          | Some (_, None) | None -> ()
+        end;
         begin
           match try_assoc sn sdm with
             Some (_, Some _) -> static_error l "Duplicate struct name."
@@ -1544,7 +1581,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> idm
       | (Inductive (l, i, tparams, ctors))::ds ->
-        if i = "bool" || i = "boolean" || i = "int" || List.mem_assoc i idm then
+        if i = "bool" || i = "boolean" || i = "int" || List.mem_assoc i idm || List.mem_assoc i inductivemap0 then
           static_error l "Duplicate datatype name."
         else
           iter ((i, (l, tparams, ctors))::idm) ds
@@ -1846,7 +1883,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match ctors with
             [] -> iter ((i, (l, tparams, List.rev ctormap))::imap) pfm fpm ds
           | Ctor (lc, cn, tes)::ctors ->
-            if List.mem_assoc cn pfm then
+            if List.mem_assoc cn pfm || List.mem_assoc cn purefuncmap0 then
               static_error lc "Duplicate pure function name."
             else (
               let ts = List.map (check_pure_type tparams) tes in
@@ -1863,7 +1900,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         citer 0 [] pfm ctors
       | Func (l, Fixpoint, tparams, rto, g, ps, functype, contract, body_opt,Static,Public)::ds ->
         let _ =
-          if List.mem_assoc g pfm then static_error l "Duplicate pure function name."
+          if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l "Duplicate pure function name."
         in
         if not (distinct tparams) then static_error l "Duplicate type parameter names.";
         let rt =
@@ -1897,7 +1934,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match try_assoc_i x pmap with
                 None -> static_error l "Fixpoint function must switch on a parameter."
               | Some (index, InductiveType (i, targs)) -> (
-                match try_assoc i imap with
+                match try_assoc2 i imap inductivemap0 with
                   None -> static_error ls "Switch statement cannot precede inductive declaration."
                 | Some (l, inductive_tparams, ctormap) ->
                   let (Some tpenv) = zip inductive_tparams targs in
@@ -1961,7 +1998,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | Var (l, x, scope) -> (
                             match try_assoc x tenv with
                               None -> (
-                                match try_assoc x pfm with
+                                match try_assoc2 x pfm purefuncmap0 with
                                   Some (_, tparams, t, [], _) ->
                                   if tparams <> [] then
                                     let targs = List.map (fun _ -> InferredType (ref None)) tparams in
@@ -2000,7 +2037,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
                           | StringLit (l, s) -> (e, PtrType Char)
                           | CallExpr (l, g', targes, [], pats, info) -> (
-                            match try_assoc g' pfm with
+                            match try_assoc2 g' pfm purefuncmap0 with
                               Some (l, callee_tparams, t0, ts0, _) -> (
                               let (targs, tpenv) =
                                 if callee_tparams <> [] && targes = [] then
@@ -2079,7 +2116,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               match t with
                                 InductiveType (i, targs) ->
                                 begin
-                                  let (_, tparams, ctormap) = List.assoc i imap in
+                                  let (_, tparams, ctormap) = assoc2 i imap inductivemap0 in
                                   let (Some tpenv) = zip tparams targs in
                                   let rec iter t0 wcs ctors cs =
                                     match cs with
@@ -2199,14 +2236,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_pred_map = field_pred_map1 @ field_pred_map0 in
   
   let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 in
-
+  
   let predfammap1 =
     let rec iter pm ds =
       match ds with
         PredFamilyDecl (l, p, arity, tes, inputParamCount)::ds ->
         let ts = List.map (check_pure_type []) tes in
         begin
-          match try_assoc p pm with
+          match try_assoc2 p pm predfammap0 with
             Some (l0, arity0, ts0, symb0, inputParamCount0) ->
             if arity <> arity0 || ts <> ts0 || inputParamCount <> inputParamCount0 then static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
             iter pm ds
@@ -2224,7 +2261,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> (bm, pfm)
       | BoxClassDecl (l, bcn, ps, ads, hpds)::ds ->
-        if List.mem_assoc bcn pfm then static_error l "Box class name clashes with existing predicate name.";
+        if List.mem_assoc bcn pfm || List.mem_assoc bcn purefuncmap0 then static_error l "Box class name clashes with existing predicate name.";
         let default_hpn = bcn ^ "_handle" in
         if List.mem_assoc default_hpn pfm then static_error l ("Default handle predicate name '" ^ default_hpn ^ "' clashes with existing predicate name.");
         let boxpmap =
@@ -2292,14 +2329,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] predfammap1 ds
   in
   
-  let predfammap = predfammap1 @ structpreds1 @ predfammap0 in
+  let predfammap = predfammap1 @ structpreds1 @ predfammap0 in (* TODO: Check for name clashes here. *)
   
   let (predctormap, purefuncmap) =
     let rec iter pcm pfm ds =
       match ds with
         PredCtorDecl (l, p, ps1, ps2, body)::ds ->
         begin
-          match try_assoc p pfm with
+          match try_assoc2 p pfm purefuncmap0 with
             Some _ -> static_error l "Predicate constructor name clashes with existing pure function name."
           | None -> ()
         end;
@@ -2413,7 +2450,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> check_funcnamelist is 
         in
         let pfns = (p, fns) in
-        let _ = if List.mem_assoc pfns pm then static_error l "Duplicate predicate family instance." in
+        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." in
         let rec iter2 xm pxs =
           match pxs with
             [] -> iter ((pfns, (l, List.rev xm, inputParamCount, body))::pm) ds
@@ -3764,7 +3801,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> List.rev functypemap
       | FuncTypeDecl (l, rt, ftn, xs, (pre, post))::ds ->
-        let _ = if List.mem_assoc ftn functypemap then static_error l "Duplicate function type name." in
+        let _ = if List.mem_assoc ftn functypemap || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type [] rt) in
         let xmap =
           let rec iter xm xs =
@@ -3855,12 +3892,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     );
     pop()
-  in
-  
-  let try_assoc2 x xys1 xys2 =
-    match try_assoc x xys1 with
-      None -> try_assoc x xys2
-    | result -> result
   in
   
   let (funcmap1, prototypes_implemented) =
