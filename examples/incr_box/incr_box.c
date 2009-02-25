@@ -54,7 +54,7 @@ void incrementor(void *data) //@ : thread_run
     }
     //@ assume_is_int(count0);
     counter->count = count0 + 1;
-    //@ handle h = create_counter_box_handle(boxId);
+    //@ handle h = create_handle counter_box_handle(boxId);
     /*@
     consuming_box_predicate counter_box(boxId, count0)
     consuming_handle_predicate counter_box_handle(h)
@@ -79,7 +79,7 @@ int main()
         abort();
     }
     counter->count = 0;
-    //@ box boxId = create_counter_box(0);
+    //@ box boxId = create_box counter_box(0);
     //@ close counter(counter, boxId)();
     //@ close_lock_invariant(counter(counter, boxId));
     struct lock *lock = create_lock();
@@ -93,7 +93,7 @@ int main()
     lock_acquire(lock);
     //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
-    //@ handle h = create_counter_box_handle(boxId);
+    //@ handle h = create_handle counter_box_handle(boxId);
     int count0 = counter->count;
     /*@
     consuming_box_predicate counter_box(boxId, count0)

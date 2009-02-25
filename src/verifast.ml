@@ -61,6 +61,11 @@ let list_remove_dups xs =
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
+let chop_suffix s s0 =
+  let n0 = String.length s0 in
+  let n = String.length s in
+  if n0 <= n && String.sub s (n - n0) n0 = s0 then Some (String.sub s 0 (n - n0)) else None
+
 let try_assoc2 x xys1 xys2 =
   match try_assoc x xys1 with
     None -> try_assoc x xys2
@@ -520,6 +525,9 @@ and
   | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
   | SplitFractionStmt of loc * string * pat list * expr option
   | MergeFractionsStmt of loc * string * pat list
+  | CreateBoxStmt of loc * string * string * expr list
+  | CreateHandleStmt of loc * string * string * expr
+  | DisposeBoxStmt of loc * string * pat list
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -678,6 +686,9 @@ let stmt_loc s =
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _) -> l
   | MergeFractionsStmt (l, _, _) -> l
+  | CreateBoxStmt (l, _, _, _) -> l
+  | CreateHandleStmt (l, _, _, _) -> l
+  | DisposeBoxStmt (l, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -694,6 +705,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
+  "create_box"; "create_handle"; "dispose_box";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
@@ -1012,6 +1024,7 @@ and
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, pats, coefopt)
 | [< '(l, Kwd "merge_fractions"); '(_, Ident p); pats = parse_patlist; '(_, Kwd ";") >] -> MergeFractionsStmt (l, p, pats)
+| [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist; '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
@@ -1038,7 +1051,20 @@ and
      | _ -> raise (ParseException (expr_loc e, "Parse error blabla."))
     )
   >] -> s
-| [< te = parse_type; '(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
+| [< te = parse_type; '(_, Ident x); '(l, Kwd "=");
+     s = parser
+       [< '(l, Kwd "create_box"); '(_, Ident bcn); es = parse_arglist; '(_, Kwd ";") >] ->
+         begin
+           match te with ManifestTypeExpr (_, BoxIdType) -> () | _ -> raise (ParseException (l, "Target variable of box creation statement must have type 'box'."))
+         end;
+         CreateBoxStmt (l, x, bcn, es)
+     | [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+         begin
+           match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
+         end;
+         CreateHandleStmt (l, x, hpn, e)
+     | [< rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
+  >] -> s
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -3784,6 +3810,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       block_assigned_variables body
     | SplitFractionStmt (l, p, pats, coefopt) -> []
     | MergeFractionsStmt (l, p, pats) -> []
+    | CreateBoxStmt (l, x, bcn, es) -> []
+    | CreateHandleStmt (l, x, hpn, e) -> []
+    | DisposeBoxStmt (l, bcn, pats) -> []
   in
 
   let get_points_to h p predSymb l cont =
@@ -3827,22 +3856,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let functypemap = functypemap1 @ functypemap0 in
-  
-  let funcmap1 =
-    flatmap
-      (fun (bcn, (l, boxpmap, amap, hpmap)) ->
-         let bcpred = new predref bcn in
-         bcpred#set_domain (BoxIdType::List.map (fun (x, t) -> t) boxpmap);
-         if List.mem_assoc "result" boxpmap then static_error l "Name of box class parameter cannot be 'result'.";
-         let post = CallPred (l, bcpred, [], LitPat (Var (l, "result", ref (Some LocalVar)))::List.map (fun (x, t) -> LitPat (Var (l, x, ref (Some LocalVar)))) boxpmap) in
-         let hpred = new predref (bcn ^ "_handle") in
-         hpred#set_domain [HandleIdType; BoxIdType];
-         [("create_" ^ bcn, (l, Lemma, [], Some BoxIdType, boxpmap, EmpPred l, boxpmap, post, Some None, Static, Public));
-          ("create_" ^ bcn ^ "_handle", (l, Lemma, [], Some HandleIdType, [("boxId", BoxIdType)], EmpPred l, [("boxId", BoxIdType)],
-             CallPred (l, hpred, [], [LitPat (Var (l, "result", ref (Some LocalVar))); LitPat (Var (l, "boxId", ref (Some LocalVar)))]), Some None, Static, Public))]
-      )
-      boxmap
-  in
   
   let check_func_header_compat l msg (k, tparams, rt, xmap, pre, post) (k0, tparams0, rt0, xmap0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
@@ -3951,7 +3964,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
-    iter funcmap1 [] ds
+    iter [] [] ds
   in
   
   let funcmap = funcmap1 @ funcmap0 in
@@ -4573,6 +4586,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter outts
         )
       )
+    | DisposeBoxStmt (l, bcn, pats) ->
+      let (_, boxpmap, amap, hpmap) =
+        match try_assoc bcn boxmap with
+          None -> static_error l "No such box class."
+        | Some boxinfo -> boxinfo
+      in
+      let (_, _, pts, g_symb, _) = List.assoc bcn predfammap in
+      let (pats, tenv') = check_pats l tparams tenv pts pats in
+      assert_chunk h ghostenv env l (g_symb, true) real_unit DummyPat pats (fun h coef ts _ ghostenv env ->
+        if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
+        tcont sizemap tenv' ghostenv h env
+      )
     | Close (l, g, pats0, pats, coef) ->
       let (ps, bs0, g_symb, p, ts0) =
         match try_assoc g predfammap with
@@ -4621,6 +4646,43 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           with_context PopSubcontext (fun () -> cont ((g_symb, coef, ts0 @ ts, None)::h) env)
         )
       )
+    | CreateBoxStmt (l, x, bcn, args) ->
+      if not pure then static_error l "Box creation statements are allowed only in a pure context.";
+      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+      let (_, boxpmap, amap, hpmap) =
+        match try_assoc bcn boxmap with
+          None -> static_error l "No such box class."
+        | Some boxinfo -> boxinfo
+      in
+      let argTerms =
+        match zip args boxpmap with
+          None -> static_error l "Incorrect number of arguments."
+        | Some bs ->
+          List.map
+            begin
+              fun (e, (pn, pt)) ->
+                let w = check_expr_t tparams tenv e pt in
+                ev w
+            end
+            bs
+      in
+      let boxIdTerm = get_unique_var_symb x BoxIdType in
+      let (_, _, _, bcn_symb, _) = List.assoc bcn predfammap in
+      tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (((bcn_symb, true), real_unit, boxIdTerm::argTerms, None)::h) ((x, boxIdTerm)::env)
+    | CreateHandleStmt (l, x, hpn, arg) ->
+      if not pure then static_error l "Handle creation statements are allowed only in a pure context.";
+      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+      let bcn =
+        match chop_suffix hpn "_handle" with
+          None -> static_error l "Handle creation statement must mention predicate name that ends in '_handle'."
+        | Some bcn -> bcn
+      in
+      if not (List.mem_assoc bcn boxmap) then static_error l "No such box class.";
+      let w = check_expr_t tparams tenv arg BoxIdType in
+      let boxIdTerm = ev w in
+      let handleTerm = get_unique_var_symb x HandleIdType in
+      let (_, _, _, hpn_symb, _) = List.assoc hpn predfammap in
+      tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (((hpn_symb, true), real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, Some e) ->
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value." | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in

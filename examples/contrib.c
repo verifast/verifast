@@ -152,8 +152,8 @@ int main()
         abort();
     }
     sumObject->sum = 0;
-    //@ box box1 = create_contrib_box(0, handle_option_none);
-    //@ handle handle1 = create_contrib_box_handle(box1);
+    //@ box box1 = create_box contrib_box(0, handle_option_none);
+    //@ handle handle1 = create_handle contrib_box_handle(box1);
     /*@
     consuming_box_predicate contrib_box(box1, 0, handle_option_none)
     consuming_handle_predicate contrib_box_handle(handle1)
@@ -163,8 +163,8 @@ int main()
     producing_box_predicate contrib_box(0, handle_option_some(handle1))
     producing_handle_predicate contrib_handle(0);
     @*/
-    //@ box box2 = create_contrib_box(0, handle_option_none);
-    //@ handle handle2 = create_contrib_box_handle(box2);
+    //@ box box2 = create_box contrib_box(0, handle_option_none);
+    //@ handle handle2 = create_handle contrib_box_handle(box2);
     /*@
     consuming_box_predicate contrib_box(box2, 0, handle_option_none)
     consuming_handle_predicate contrib_box_handle(handle2)
@@ -217,7 +217,8 @@ int main()
     producing_box_predicate contrib_box(1, owner1)
     producing_handle_predicate contrib_box_handle();
     @*/
-    //@ leak contrib_box(box1, _, _) &*& contrib_box_handle(_, box1);
+    //@ dispose_box contrib_box(box1, _, _);
+    //@ leak contrib_box_handle(_, box1);
     
     // The following perform_action statement is only to show contrib_handle(_, box2, 1)
     /*@
@@ -227,7 +228,8 @@ int main()
     producing_box_predicate contrib_box(1, owner2)
     producing_handle_predicate contrib_box_handle();
     @*/
-    //@ leak contrib_box(box2, _, _) &*& contrib_box_handle(_, box2);
+    //@ dispose_box contrib_box(box2, _, _);
+    //@ leak contrib_box_handle(_, box2);
     
     int sum = sumObject->sum;
     assert(sum == 2);
