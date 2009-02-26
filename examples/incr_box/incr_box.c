@@ -8,7 +8,8 @@ struct counter {
 
 /*@
 
-box_class counter_box(int count) {
+box_class counter_box(struct counter *counter, int count) {
+    invariant counter->count |-> count;
 
     action increase();
         requires true;
@@ -23,7 +24,7 @@ box_class counter_box(int count) {
 }
 
 predicate_ctor counter(struct counter *counter, box boxId)()
-    requires counter->count |-> ?count &*& counter_box(boxId, count);
+    requires counter_box(boxId, counter, _);
 
 lemma real counter_lock_split_fractions(struct counter *counter);
     requires [?f]counter->lock |-> ?lock;
@@ -51,7 +52,7 @@ void incrementor(void *data) //@ : thread_run
     //@ handle h = create_handle counter_box_handle(boxId);
     int count0 = 0;
     /*@
-    consuming_box_predicate counter_box(boxId, _)
+    consuming_box_predicate counter_box(boxId, _, _)
     consuming_handle_predicate counter_box_handle(h)
     perform_action increase() {
         @*/
@@ -65,7 +66,7 @@ void incrementor(void *data) //@ : thread_run
         }
         /*@
     }
-    producing_box_predicate counter_box(count0 + 1)
+    producing_box_predicate counter_box(counter, count0 + 1)
     producing_handle_predicate counter_box_handle();
     @*/
     //@ leak counter_box_handle(h, boxId);
@@ -84,7 +85,7 @@ int main()
         abort();
     }
     counter->count = 0;
-    //@ box boxId = create_box counter_box(0);
+    //@ box boxId = create_box counter_box(counter, 0);
     //@ close counter(counter, boxId)();
     //@ close_lock_invariant(counter(counter, boxId));
     struct lock *lock = create_lock();
@@ -100,12 +101,12 @@ int main()
     //@ open counter(counter, boxId)();
     //@ handle h = create_handle counter_box_handle(boxId);
     /*@
-    consuming_box_predicate counter_box(boxId, _)
+    consuming_box_predicate counter_box(boxId, _, _)
     consuming_handle_predicate counter_box_handle(h)
     perform_action increase() {
         @*/ int count0 = counter->count; /*@
     }
-    producing_box_predicate counter_box(count0)
+    producing_box_predicate counter_box(counter, count0)
     producing_handle_predicate count_handle(count0);
     @*/
     //@ close counter(counter, boxId)();
@@ -116,12 +117,12 @@ int main()
     //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
     /*@
-    consuming_box_predicate counter_box(boxId, _)
+    consuming_box_predicate counter_box(boxId, _, _)
     consuming_handle_predicate count_handle(h, count0)
     perform_action increase() {
         @*/ int count1 = counter->count; /*@
     }
-    producing_box_predicate counter_box(count1)
+    producing_box_predicate counter_box(counter, count1)
     producing_handle_predicate counter_box_handle();
     @*/
     //@ leak counter_box_handle(h, boxId);

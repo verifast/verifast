@@ -72,6 +72,7 @@ struct session {
 inductive handle_option = handle_option_none | handle_option_some(handle);
 
 box_class contrib_box(int contrib, handle_option owner) {
+    invariant emp;
 
     action set_value(int contrib0);
         requires owner == handle_option_none || owner == handle_option_some(actionHandle);
