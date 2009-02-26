@@ -580,7 +580,7 @@ and
   | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * string list * type_expr option * string * (type_expr * string) list * string option (* function type *)
+  | Func of loc * func_kind * string list * type_expr option * string * (type_expr * string) list * bool (* atomic *) * string option (* function type *)
     * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
@@ -718,7 +718,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
-  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action";
+  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "create_handle"; "dispose_box";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
@@ -744,7 +744,8 @@ let parse_angle_brackets (_, sp) p =
   parser [< '((sp', _), Kwd "<") when sp = sp'; v = p; '(_, Kwd ">") >] -> v
 
 type spec_clause =
-  FuncTypeClause of string
+  AtomicClause
+| FuncTypeClause of string
 | RequiresClause of pred
 | EnsuresClause of pred
 
@@ -909,18 +910,11 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); tparams = parse_type_params l; ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); co = opt parse_spec >] -> Func (l, k, tparams, t, g, ps, None, co, None,Static,Public)
-     | [< scs = opt parse_spec_clauses;
+       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, co, None,Static,Public)
+     | [< (atomic, ft, co) = parse_spec_clauses;
           '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >]
           -> 
-          let (ft, co) =
-            match scs with
-              None -> (None, None)
-            | Some [RequiresClause pre; EnsuresClause post] -> (None, Some (pre, post))
-            | Some [FuncTypeClause ft; RequiresClause pre; EnsuresClause post] -> (Some ft, Some (pre, post))
-            | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: function type (optional), requires clause, ensures clause.")
-          in
-          Func (l, k, tparams, t, g, ps, ft, co, Some (ss, closeBraceLoc),Static,Public)
+          Func (l, k, tparams, t, g, ps, atomic, ft, co, Some (ss, closeBraceLoc), Static, Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -975,7 +969,8 @@ and
   [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
 and
   parse_pure_spec_clause = parser
-  [< '(_, Kwd ":"); '(_, Ident ft) >] -> FuncTypeClause ft
+  [< '(_, Kwd "atomic") >] -> AtomicClause
+| [< '(_, Kwd ":"); '(_, Ident ft) >] -> FuncTypeClause ft
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
 and
@@ -983,18 +978,21 @@ and
   [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> c
 | [< c = parse_pure_spec_clause >] -> c
 and
-  parse_spec_clauses = parser
-  [< c1 = parse_spec_clause;
-     cs = (match c1 with
-             FuncTypeClause ft -> (parser [< c2 = parse_spec_clause; c3 = parse_spec_clause >] -> [c2; c3])
-           | _ -> (parser [< c2 = parse_spec_clause >] -> [c2]))
-     >] -> c1::cs
+  parse_spec_clauses = fun token_stream ->
+    let in_count = ref 0 in
+    let out_count = ref 0 in
+    let clause_stream = Stream.from (fun _ -> try let clause = Some (parse_spec_clause token_stream) in in_count := !in_count + 1; clause with Stream.Failure -> None) in
+    let atomic = (parser [< 'AtomicClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
+    let ft = (parser [< 'FuncTypeClause ft >] -> out_count := !out_count + 1; Some ft | [< >] -> None) clause_stream in
+    let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
+    if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: atomic clause (optional), function type clause (optional), contract (optional).");
+    (atomic, ft, pre_post)
 and
   parse_spec = parser
-    [< scs = parse_spec_clauses >] ->
-    match scs with
-      [] -> raise Stream.Failure
-    | [RequiresClause pre; EnsuresClause post] -> (pre, post)
+    [< (atomic, ft, pre_post) = parse_spec_clauses >] ->
+    match (atomic, ft, pre_post) with
+      (false, None, None) -> raise Stream.Failure
+    | (false, None, Some (pre, post)) -> (pre, post)
     | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
 and
   parse_block = parser
@@ -1940,7 +1938,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         in
         citer 0 [] pfm ctors
-      | Func (l, Fixpoint, tparams, rto, g, ps, functype, contract, body_opt,Static,Public)::ds ->
+      | Func (l, Fixpoint, tparams, rto, g, ps, atomic, functype, contract, body_opt,Static,Public)::ds ->
         let _ =
           if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l "Duplicate pure function name."
         in
@@ -2426,7 +2424,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] purefuncmap ds
   in
   
-  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, tparams, rt, g, ps, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  let funcnames = list_remove_dups (flatmap (function (Func (l, Regular, tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_classnamelist is =
@@ -3929,7 +3927,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type tparams rt) in
         let xmap =
           let rec iter xm xs =
@@ -4937,9 +4935,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               Java -> verify_classes boxes lems classmap;
             | _ -> () 
             )
-    | Func (l, Lemma, _, rt, g, ps, _, _, None, _, _)::ds ->
+    | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds ->
       verify_funcs boxes (g::lems) ds
-    | Func (_, k, _, _, g, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
+    | Func (_, k, _, _, g, _, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
       let (l, k, tparams, rt, ps, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
