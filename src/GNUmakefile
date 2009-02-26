@@ -103,7 +103,7 @@ release: test
 	mkdir verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/bin
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
-	cp assume.vfmanifest crt.vfmanifest prelude.h verifast-$(VFVERSION)/bin
+	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h verifast-$(VFVERSION)/bin
 	cp verifastz3.opt verifast-$(VFVERSION)/bin/verifast-core
 	cp vfidez3.opt verifast-$(VFVERSION)/bin/vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
@@ -117,9 +117,7 @@ release: test
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/iter.c .
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/linkedlist.c .
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/linkedlist2.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/malloc.h .
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/sorted_bintree.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/stdlib.h .
 	cd verifast-$(VFVERSION)/examples; cp ../../../examples/verify.sh .
 	cd verifast-$(VFVERSION)/examples; mkdir chat
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/bool.h .
@@ -129,14 +127,11 @@ release: test
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.c .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.vfmanifest .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/malloc.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/socketlib.c .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/socketlib.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.c .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.vfmanifest .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stdlib.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/string.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffers.c .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffers.h .
 	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffersExt.h .
@@ -149,7 +144,6 @@ release: test
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/bot.c .
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/lists.c .
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/lists.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/malloc.h .
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/socketlib.c .
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/socketlib.h .
 	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/sockets.c .

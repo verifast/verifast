@@ -14,6 +14,8 @@ REVISION=100
 REVISION=120
 !elseif "$(VFVERSION)" == "5.1"
 REVISION=125
+!elseif "$(VFVERSION)" == "5.1.1"
+REVISION=130
 !else
 !	error "Environment variable VFVERSION has invalid value: Unknown release name '$(VFVERSION)'"
 !endif
