@@ -127,17 +127,21 @@ void contribute(void *data) //@ : thread_run
     free(session);
     lock_acquire(lock);
     //@ open sum(sumObject, box1, box2)();
-    int sum = sumObject->sum;
     //@ if (thisBox == box1) {} else {}
     /*@
     consuming_box_predicate contrib_box(thisBox, 0, _)
     consuming_handle_predicate contrib_handle(?thisHandle, _)
     perform_action set_value(1) {
+        @*/
+        {
+            int sum = sumObject->sum;
+            sumObject->sum = sum + 1;
+        }
+        /*@
     }
     producing_box_predicate contrib_box(1, handle_option_some(thisHandle))
     producing_handle_predicate contrib_handle(1);
     @*/
-    sumObject->sum = sum + 1;
     //@ close sum(sumObject, box1, box2)();
     lock_release(lock);
     //@ close thread_run_post(contribute)(session, contribute_info(box1, box2, thisBox, sumObject, lock));

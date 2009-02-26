@@ -147,7 +147,7 @@ exception ParseException of loc * string
 
 (* The lexer *)
 
-let make_lexer keywords path stream reportKeyword =
+let make_lexer keywords path stream reportKeyword reportGhostRange =
   let initial_buffer = String.create 32
   in
 
@@ -183,6 +183,8 @@ let make_lexer keywords path stream reportKeyword =
 
   let in_single_line_annotation = ref false in
   
+  let ghost_range_start: srcpos option ref = ref None in
+  
   let ignore_eol = ref true in
   
   let kwd_table = Hashtbl.create 17 in
@@ -210,6 +212,7 @@ let make_lexer keywords path stream reportKeyword =
       new_loc_line strm__;
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
+        ghost_range_end();
         Some (Kwd "@*/")
       ) else if !ignore_eol then
         next_token strm__
@@ -271,7 +274,10 @@ let make_lexer keywords path stream reportKeyword =
         ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
          '>' | '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
         Stream.junk strm__; let s = strm__ in store c; ident2 s
-    | _ -> Some (ident_or_keyword (get_string ()) false)
+    | _ ->
+      let s = get_string() in
+      if s = "@*/" then ghost_range_end();
+      Some (ident_or_keyword s false)
   and neg_number (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some ('0'..'9' as c) ->
@@ -347,16 +353,20 @@ let make_lexer keywords path stream reportKeyword =
         end
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
+  and ghost_range_end() =
+    match !ghost_range_start with
+      None -> ()
+    | Some sp -> reportGhostRange (sp, current_srcpos()); ghost_range_start := None
   and maybe_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some '/' ->
       Stream.junk strm__;
       (
         match Stream.peek strm__ with
-          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; Some (Kwd "/*@"))
+          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; ghost_range_start := Some !token_srcpos; Some (Kwd "/*@"))
         | _ ->
           if !in_single_line_annotation then (
-            in_single_line_annotation := false; single_line_comment strm__; Some (Kwd "@*/")
+            in_single_line_annotation := false; ghost_range_end(); single_line_comment strm__; Some (Kwd "@*/")
           ) else (
             single_line_comment strm__; next_token strm__
           )
@@ -365,7 +375,7 @@ let make_lexer keywords path stream reportKeyword =
       Stream.junk strm__;
       (
         match Stream.peek strm__ with
-          Some '@' -> (Stream.junk strm__; Some (Kwd "/*@"))
+          Some '@' -> (Stream.junk strm__; ghost_range_start := Some !token_srcpos; Some (Kwd "/*@"))
         | _ -> (multiline_comment strm__; next_token strm__)
       )
     | _ -> Some (keyword_or_error '/')
@@ -508,6 +518,7 @@ and
 and
   stmt =
     PureStmt of loc * stmt (* oproep van pure function in ghost range*)
+  | NonpureStmt of loc * stmt
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
@@ -522,7 +533,7 @@ and
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
-  | PerformActionStmt of loc * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
+  | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * string * pat list * string * expr list * stmt list * expr list * string * expr list
   | SplitFractionStmt of loc * string * pat list * expr option
   | MergeFractionsStmt of loc * string * pat list
   | CreateBoxStmt of loc * string * string * expr list
@@ -669,6 +680,7 @@ let pred_loc p =
 let stmt_loc s =
   match s with
     PureStmt (l, _) -> l
+  | NonpureStmt (l, _) -> l
   | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
@@ -683,7 +695,7 @@ let stmt_loc s =
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _, _) -> l
   | BlockStmt (l, ss) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _) -> l
   | MergeFractionsStmt (l, _, _) -> l
   | CreateBoxStmt (l, _, _, _) -> l
@@ -734,10 +746,10 @@ type spec_clause =
 | RequiresClause of pred
 | EnsuresClause of pred
 
-let parse_decls reportGhostRange =
+let parse_decls =
 let rec
   parse_decls = parser
-[< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> let _ = reportGhostRange (p1, p2) in ds @ ds'
+[< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
 | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
 Interface(l,cn,mem)::ds
 | [< '(l, Kwd "public");'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
@@ -965,7 +977,7 @@ and
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
 and
   parse_spec_clause = parser
-  [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> reportGhostRange (sp1, sp2); c
+  [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> c
 | [< c = parse_pure_spec_clause >] -> c
 and
   parse_spec_clauses = parser
@@ -1003,7 +1015,8 @@ and
     | _ -> raise (ParseException (expr_loc lhs, "The left-hand side of an assignment must be an identifier, a field dereference expression, or a pointer dereference expression."))
   in
   parser
-  [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> let _ = reportGhostRange (sp1, sp2) in PureStmt ((sp1, sp2), s)
+  [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
+| [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); s1 = parse_stmt;
      s = parser
        [< '(_, Kwd "else"); s2 = parse_stmt >] -> IfStmt (l, e, [s1], [s2])
@@ -1028,7 +1041,7 @@ and
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
-     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> let _ = reportGhostRange (sp1, sp2) in WhileStmt (l, e, p, b, closeBraceLoc)
+     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, p, b, closeBraceLoc)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
 | [< '(l, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
      '(_, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
@@ -1037,7 +1050,7 @@ and
      '(_, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
      '(_, Kwd ";") >] ->
      if post_bpn <> pre_bpn then raise (ParseException (l, "The box predicate name cannot change."));
-     PerformActionStmt (l, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, post_bp_args, post_hpn, post_hp_args)
+     PerformActionStmt (l, ref false, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, post_bp_args, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, targs, [], es,fb) -> CallStmt (l, g, targs, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e rhs
@@ -1237,8 +1250,8 @@ in
 let parse_java_file path reportKeyword reportGhostRange =
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
-  let parse_decls_eof = parser [< ds = parse_decls reportGhostRange; _ = Stream.empty >] -> ds in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword reportGhostRange in
+  let parse_decls_eof = parser [< ds = parse_decls; _ = Stream.empty >] -> ds in
   try
     parse_decls_eof token_stream
   with
@@ -1258,10 +1271,10 @@ in
 let parse_c_file path reportKeyword reportGhostRange =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword reportGhostRange in
   let parse_c_file =
     parser
-      [< headers = parse_include_directives ignore_eol; ds = parse_decls reportGhostRange; _ = Stream.empty >] -> (headers, ds)
+      [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, ds)
   in
   try
     parse_c_file token_stream
@@ -1272,12 +1285,12 @@ let parse_c_file path reportKeyword reportGhostRange =
 let parse_header_file basePath relPath reportKeyword reportGhostRange =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportKeyword in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportKeyword reportGhostRange in
   let parse_header_file =
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
          '(_, Kwd "#"); '(_,Kwd "define"); '(lx', PreprocessorSymbol x'); '(_, Eol); _ = (fun _ -> ignore_eol := true);
-         headers = parse_include_directives ignore_eol; ds = parse_decls reportGhostRange;
+         headers = parse_include_directives ignore_eol; ds = parse_decls;
          '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
          _ = Stream.empty >] ->
       if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));
@@ -3792,6 +3805,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   and assigned_variables s =
     match s with
       PureStmt (l, s) -> assigned_variables s
+    | NonpureStmt (l, s) -> assigned_variables s
     | Assign (l, x, e) -> [x]
     | DeclStmt (l, t, x, e) -> []
     | Write (l, e, f, e') -> []
@@ -3806,7 +3820,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
     | BlockStmt (l, ss) -> block_assigned_variables ss
-    | PerformActionStmt (l, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, post_boxargs, post_handlepredname, post_handlepredargs) ->
+    | PerformActionStmt (l, nonpure_ctxt, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, post_boxargs, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, pats, coefopt) -> []
     | MergeFractionsStmt (l, p, pats) -> []
@@ -4256,8 +4270,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ) 
     in 
     match s with
-      PureStmt (l, s) ->
-      verify_stmt tparams boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
+      NonpureStmt (l, s) ->
+      static_error l "Non-pure statements are not allowed here."
     | Assign (l, x, CallExpr (lc, "malloc", [], [], args,Static)) ->
       begin
         match args with
@@ -4717,7 +4731,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                assume (ctxt#mk_not (eval_non_pure false h env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
-    | PerformActionStmt (l, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, post_bcp_args, post_hpn, post_hp_args) ->
+    | PerformActionStmt (l, nonpure_ctxt, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, post_bcp_args, post_hpn, post_hp_args) ->
       let (_, boxpmap, amap, hpmap) =
         match try_assoc pre_bcn boxmap with
           None -> static_error l "No such box class."
@@ -4761,7 +4775,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
              assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMap) pre_handlePred_inv) (fun () ->
-               verify_cont tparams boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+               let (pureBody, body) =
+                 match ss with
+                   [NonpureStmt (_, s)] when !nonpure_ctxt -> (false, [s])
+                 | ss -> (true, ss)
+               in
+               verify_cont tparams boxes pureBody leminfo sizemap tenv ghostenv h env body (fun sizemap tenv ghostenv h env ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxArgMap @ aargbs in
                  assert_term (eval pre_env pre) h pre_env l "Action precondition failure.";
                  let post_bcp_argts =
@@ -4802,6 +4821,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | BlockStmt (l, ss) ->
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
+    | PureStmt (l, s) ->
+      begin
+        match s with
+          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _) ->
+          nonpure_ctxt := not pure
+        | _ -> ()
+      end;
+      verify_stmt tparams boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
+
   and
     verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
     match ss with

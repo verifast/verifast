@@ -48,17 +48,22 @@ void incrementor(void *data) //@ : thread_run
     lock_acquire(lock);
     //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
-    int count0 = counter->count;
-    if (count0 == 2147483647) {
-        abort();
-    }
-    //@ assume_is_int(count0);
-    counter->count = count0 + 1;
     //@ handle h = create_handle counter_box_handle(boxId);
+    int count0 = 0;
     /*@
-    consuming_box_predicate counter_box(boxId, count0)
+    consuming_box_predicate counter_box(boxId, _)
     consuming_handle_predicate counter_box_handle(h)
     perform_action increase() {
+        @*/
+        {
+            count0 = counter->count;
+            if (count0 == 2147483647) {
+                abort();
+            }
+            //@ assume_is_int(count0);
+            counter->count = count0 + 1;
+        }
+        /*@
     }
     producing_box_predicate counter_box(count0 + 1)
     producing_handle_predicate counter_box_handle();
@@ -94,11 +99,11 @@ int main()
     //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
     //@ handle h = create_handle counter_box_handle(boxId);
-    int count0 = counter->count;
     /*@
-    consuming_box_predicate counter_box(boxId, count0)
+    consuming_box_predicate counter_box(boxId, _)
     consuming_handle_predicate counter_box_handle(h)
     perform_action increase() {
+        @*/ int count0 = counter->count; /*@
     }
     producing_box_predicate counter_box(count0)
     producing_handle_predicate count_handle(count0);
@@ -110,11 +115,11 @@ int main()
     lock_acquire(lock);
     //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
-    int count1 = counter->count;
     /*@
-    consuming_box_predicate counter_box(boxId, count1)
+    consuming_box_predicate counter_box(boxId, _)
     consuming_handle_predicate count_handle(h, count0)
     perform_action increase() {
+        @*/ int count1 = counter->count; /*@
     }
     producing_box_predicate counter_box(count1)
     producing_handle_predicate counter_box_handle();
