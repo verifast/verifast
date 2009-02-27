@@ -11,3 +11,5 @@
 .provides prelude.h#chars_length_nonnegative
 .provides prelude.h#chars_nil
 .provides prelude.h#chars_split
+.provides atomics.h#atomic_load_pointer
+.provides atomics.h#atomic_compare_and_store_pointer

@@ -12,6 +12,7 @@ test: verifast.exe vfide.exe
 	..\src\verifast swap.c
 	..\src\verifast -shared polytest.c
 	..\src\verifast -disable_overflow_check expr.c
+	..\src\verifast -shared -allow_assume queue.c
 	cd java
 	..\..\src\verifast -disable_overflow_check -c Counter.java
 	..\..\src\verifast -c Tree.java

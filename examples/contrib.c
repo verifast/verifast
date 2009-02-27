@@ -69,17 +69,15 @@ struct session {
 };
 
 /*@
-inductive handle_option = handle_option_none | handle_option_some(handle);
-
-box_class contrib_box(int contrib, handle_option owner) {
+box_class contrib_box(int contrib, handle owner) {
     invariant emp;
 
     action set_value(int contrib0);
-        requires owner == handle_option_none || owner == handle_option_some(actionHandle);
-        ensures contrib == contrib0 && owner == handle_option_some(actionHandle);
+        requires actionHandle == owner;
+        ensures contrib == contrib0 && owner == old_owner;
 
     handle_predicate contrib_handle(int handleContrib) {
-        invariant owner == handle_option_some(predicateHandle) && contrib == handleContrib;
+        invariant owner == predicateHandle && contrib == handleContrib;
         
         preserved_by set_value(contrib0) {}
     }
@@ -140,7 +138,7 @@ void contribute(void *data) //@ : thread_run
         }
         /*@
     }
-    producing_box_predicate contrib_box(1, handle_option_some(thisHandle))
+    producing_box_predicate contrib_box(1, thisHandle)
     producing_handle_predicate contrib_handle(1);
     @*/
     //@ close sum(sumObject, box1, box2)();
@@ -157,27 +155,13 @@ int main()
         abort();
     }
     sumObject->sum = 0;
-    //@ box box1 = create_box contrib_box(0, handle_option_none);
-    //@ handle handle1 = create_handle contrib_box_handle(box1);
     /*@
-    consuming_box_predicate contrib_box(box1, 0, handle_option_none)
-    consuming_handle_predicate contrib_box_handle(handle1)
-    perform_action set_value(0)
-    {
-    }
-    producing_box_predicate contrib_box(0, handle_option_some(handle1))
-    producing_handle_predicate contrib_handle(0);
+    create_box box1 = contrib_box(0, handle1)
+    and_handle handle1 = contrib_handle(0);
     @*/
-    //@ box box2 = create_box contrib_box(0, handle_option_none);
-    //@ handle handle2 = create_handle contrib_box_handle(box2);
     /*@
-    consuming_box_predicate contrib_box(box2, 0, handle_option_none)
-    consuming_handle_predicate contrib_box_handle(handle2)
-    perform_action set_value(0)
-    {
-    }
-    producing_box_predicate contrib_box(0, handle_option_some(handle2))
-    producing_handle_predicate contrib_handle(0);
+    create_box box2 = contrib_box(0, handle2)
+    and_handle handle2 = contrib_handle(0);
     @*/
     //@ close sum(sumObject, box1, box2)();
     //@ close create_lock_ghost_arg(sum(sumObject, box1, box2));

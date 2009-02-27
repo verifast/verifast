@@ -520,7 +520,7 @@ and
 and
   stmt =
     PureStmt of loc * stmt (* oproep van pure function in ghost range*)
-  | NonpureStmt of loc * stmt
+  | NonpureStmt of loc * bool (* allowed *) * stmt
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
@@ -535,12 +535,12 @@ and
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
-  | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * string * pat list * string * expr list * stmt list * loc (* close brace of body *) * expr list * string * expr list
+  | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * pat list * expr option
   | MergeFractionsStmt of loc * string * pat list
-  | CreateBoxStmt of loc * string * string * expr list
+  | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of loc * string * string * expr
-  | DisposeBoxStmt of loc * string * pat list
+  | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -682,7 +682,7 @@ let pred_loc p =
 let stmt_loc s =
   match s with
     PureStmt (l, _) -> l
-  | NonpureStmt (l, _) -> l
+  | NonpureStmt (l, _, _) -> l
   | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
@@ -697,12 +697,12 @@ let stmt_loc s =
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _, _) -> l
   | BlockStmt (l, ss) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _) -> l
   | MergeFractionsStmt (l, _, _) -> l
-  | CreateBoxStmt (l, _, _, _) -> l
+  | CreateBoxStmt (l, _, _, _, _) -> l
   | CreateHandleStmt (l, _, _, _) -> l
-  | DisposeBoxStmt (l, _, _) -> l
+  | DisposeBoxStmt (l, _, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -719,7 +719,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
-  "create_box"; "create_handle"; "dispose_box";
+  "create_box"; "and_handle"; "create_handle"; "dispose_box";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
@@ -1017,7 +1017,7 @@ and
   in
   parser
   [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
-| [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), s)
+| [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), false, s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); s1 = parse_stmt;
      s = parser
        [< '(_, Kwd "else"); s2 = parse_stmt >] -> IfStmt (l, e, [s1], [s2])
@@ -1038,20 +1038,38 @@ and
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, pats, coefopt)
 | [< '(l, Kwd "merge_fractions"); '(_, Ident p); pats = parse_patlist; '(_, Kwd ";") >] -> MergeFractionsStmt (l, p, pats)
-| [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist; '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats)
+| [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist;
+     handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
+     '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats, handleClauses)
+| [< '(l, Kwd "create_box"); '(_, Ident x); '(_, Kwd "="); '(_, Ident bcn); args = parse_arglist;
+     handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, hpn, args));
+     '(_, Kwd ";")
+     >] -> CreateBoxStmt (l, x, bcn, args, handleClauses)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, p, b, closeBraceLoc)
 | [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> BlockStmt (l, ss)
-| [< '(l, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
-     '(_, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
-     '(_, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}");
-     '(_, Kwd "producing_box_predicate"); '(_, Ident post_bpn); post_bp_args = parse_arglist;
-     '(_, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
+| [< '(lcb, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
+     '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
+     '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; atomic = (parser [< '(_, Kwd "atomic") >] -> true | [< >] -> false);
+     '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}");
+     post_bp_args =
+       opt
+         begin
+           parser
+             [< '(lpb, Kwd "producing_box_predicate"); '(_, Ident post_bpn); post_bp_args = parse_arglist >] ->
+             if post_bpn <> pre_bpn then raise (ParseException (lpb, "The box predicate name cannot change."));
+             (lpb, post_bp_args)
+         end;
+     '(lph, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
      '(_, Kwd ";") >] ->
-     if post_bpn <> pre_bpn then raise (ParseException (l, "The box predicate name cannot change."));
-     PerformActionStmt (l, ref false, pre_bpn, pre_bp_args, pre_hpn, pre_hp_args, an, aargs, ss, closeBraceLoc, post_bp_args, post_hpn, post_hp_args)
+     begin
+       match (atomic, post_bp_args) with
+       | (true, Some (lpb, _)) -> raise (ParseException (lpb, "An atomic perform_action statement must not include a producing_box_predicate clause."))
+       | _ -> ()
+     end;
+     PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, targs, [], es,fb) -> CallStmt (l, g, targs, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e rhs
@@ -1067,12 +1085,7 @@ and
   >] -> s
 | [< te = parse_type; '(_, Ident x); '(l, Kwd "=");
      s = parser
-       [< '(l, Kwd "create_box"); '(_, Ident bcn); es = parse_arglist; '(_, Kwd ";") >] ->
-         begin
-           match te with ManifestTypeExpr (_, BoxIdType) -> () | _ -> raise (ParseException (l, "Target variable of box creation statement must have type 'box'."))
-         end;
-         CreateBoxStmt (l, x, bcn, es)
-     | [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+       [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
          begin
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
@@ -1948,6 +1961,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Return type of fixpoint functions cannot be void."
           | Some rt -> (check_pure_type tparams rt)
         in
+        if atomic then static_error l "A fixpoint function cannot be atomic.";
         if functype <> None then static_error l "Fixpoint functions cannot implement a function type.";
         let _ =
           match contract with
@@ -3807,7 +3821,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   and assigned_variables s =
     match s with
       PureStmt (l, s) -> assigned_variables s
-    | NonpureStmt (l, s) -> assigned_variables s
+    | NonpureStmt (l, _, s) -> assigned_variables s
     | Assign (l, x, e) -> [x]
     | DeclStmt (l, t, x, e) -> []
     | Write (l, e, f, e') -> []
@@ -3822,13 +3836,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
     | BlockStmt (l, ss) -> block_assigned_variables ss
-    | PerformActionStmt (l, nonpure_ctxt, bcn, pre_boxargs, pre_handlepredname, pre_handlepredargs, actionname, actionargs, body, closeBraceLoc, post_boxargs, post_handlepredname, post_handlepredargs) ->
+    | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, pats, coefopt) -> []
     | MergeFractionsStmt (l, p, pats) -> []
-    | CreateBoxStmt (l, x, bcn, es) -> []
+    | CreateBoxStmt (l, x, bcn, es, handleClauses) -> []
     | CreateHandleStmt (l, x, hpn, e) -> []
-    | DisposeBoxStmt (l, bcn, pats) -> []
+    | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
   in
 
   let get_points_to h p predSymb l cont =
@@ -3873,7 +3887,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let functypemap = functypemap1 @ functypemap0 in
   
-  let check_func_header_compat l msg (k, tparams, rt, xmap, pre, post) (k0, tparams0, rt0, xmap0, cenv0, pre0, post0) =
+  let check_func_header_compat l msg (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
     let tpenv =
       match zip tparams tparams0 with
@@ -3896,6 +3910,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
           pairs
     end;
+    if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.");
     push();
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let env0 = List.map (fun (x, e) -> (x, eval None env0_0 e)) cenv0 in
@@ -3949,16 +3964,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let (wpost, tenv) = check_pred tparams postmap post in
             (wpre, pre_tenv, wpost)
         in
+        if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported.";
         begin
           match functype_opt with
             None -> ()
           | Some ftn ->
+            if body = None then static_error l "A function prototype cannot implement a function type.";
             begin
               match try_assoc ftn functypemap with
                 None -> static_error l "No such function type."
               | Some (_, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
-                check_func_header_compat l "Function type implementation check: " (k, tparams, rt, xmap, pre, post) (Regular, [], rt0, xmap0, cenv0, pre0, post0);
+                check_func_header_compat l "Function type implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (Regular, [], rt0, xmap0, false, cenv0, pre0, post0);
                 let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
                 ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
@@ -3966,17 +3983,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc2 fn funcmap funcmap0 with
-            None -> iter ((fn, (l, k, tparams, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (l0, k0, tparams0, rt0, xmap0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
+            None -> iter ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, tparams0, rt0, xmap0, pre0, pre_tenv0, post0, None,Static,Public) ->
+          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
             let cenv0 = List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap0 in
-            check_func_header_compat l "Function prototype implementation check: " (k, tparams, rt, xmap, pre, post) (k0, tparams0, rt0, xmap0, cenv0, pre0, post0);
-            iter ((fn, (l, k, tparams, rt, xmap, pre, pre_tenv, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            check_func_header_compat l "Function prototype implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0);
+            iter ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter funcmap prototypes_implemented ds
     in
@@ -4238,7 +4255,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                              cont h (update env x (ev w))
                         )
                      )
-                 | Some (lg, k, tparams, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
+                 | Some (lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, body,fbf,v) ->
                      if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
@@ -4263,7 +4280,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ev w))
           )
         )
-      | Some (lg,k, tparams, tr, ps, pre, pre_tenv, post, body,fbf,v) ->
+      | Some (lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, body,fbf,v) ->
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
@@ -4272,8 +4289,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ) 
     in 
     match s with
-      NonpureStmt (l, s) ->
-      static_error l "Non-pure statements are not allowed here."
+      NonpureStmt (l, allowed, s) ->
+      if allowed then
+        verify_stmt tparams boxes false leminfo sizemap tenv ghostenv h env s tcont return_cont
+      else
+        static_error l "Non-pure statements are not allowed here."
     | Assign (l, x, CallExpr (lc, "malloc", [], [], args,Static)) ->
       begin
         match args with
@@ -4602,25 +4622,47 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter outts
         )
       )
-    | DisposeBoxStmt (l, bcn, pats) ->
+    | DisposeBoxStmt (l, bcn, pats, handleClauses) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc bcn boxmap with
           None -> static_error l "No such box class."
         | Some boxinfo -> boxinfo
       in
       let (_, _, pts, g_symb, _) = List.assoc bcn predfammap in
-      let (pats, tenv') = check_pats l tparams tenv pts pats in
-      assert_chunk h ghostenv env l (g_symb, true) real_unit DummyPat pats (fun h coef ts _ ghostenv env ->
-        if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
-        let _::argts = ts in
-        let Some env' = zip boxpmap argts in
-        let env' = List.map (fun ((x, _), t) -> (x, t)) env' in
-        with_context PushSubcontext (fun () ->
-          assume_pred h ghostenv env' inv real_unit None None (fun h _ _ ->
-            with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
-          )
-        )
-      )
+      let (pats, tenv) = check_pats l tparams tenv pts pats in
+      assert_chunk h ghostenv env l (g_symb, true) real_unit DummyPat pats $. fun h coef ts _ ghostenv env ->
+      if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
+      let boxId::argts = ts in
+      let Some boxArgMap = zip boxpmap argts in
+      let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
+      with_context PushSubcontext $. fun () ->
+      assume_pred h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
+      let rec dispose_handles tenv ghostenv h env handleClauses cont =
+        match handleClauses with
+          [] -> cont tenv ghostenv h env
+        | (l, hpn, pats)::handleClauses ->
+          begin
+            match try_assoc hpn hpmap with
+              None -> static_error l "No such handle predicate."
+            | Some (lhp, hpParamMap, hpInv, pbcs) ->
+              let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
+              let (wpats, tenv) = check_pats l tparams tenv (HandleIdType::hpParamTypes) pats in
+              let (_, _, _, hpn_symb, _) = List.assoc hpn predfammap in
+              let handlePat::argPats = wpats in
+              let pats = handlePat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::argPats in
+              assert_chunk h ghostenv (("#boxId", boxId)::env) l (hpn_symb, true) real_unit DummyPat pats $. fun h coef ts _ ghostenv env ->
+              if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission.";
+              let env = List.filter (fun (x, t) -> x <> "#boxId") env in
+              let handleId::_::hpArgs = ts in
+              let Some hpArgMap = zip (List.map (fun (x, t) -> x) hpParamMap) hpArgs in
+              let hpInvEnv = [("predicateHandle", handleId)] @ hpArgMap @ boxVarMap in
+              assume (eval hpInvEnv hpInv) $. fun () ->
+              dispose_handles tenv ghostenv h env handleClauses cont
+          end
+      in
+      dispose_handles tenv ghostenv h env handleClauses $. fun tenv ghostenv h env ->
+      with_context PopSubcontext $. fun () ->
+      tcont sizemap tenv ghostenv h env
     | Close (l, g, pats0, pats, coef) ->
       let (ps, bs0, g_symb, p, ts0) =
         match try_assoc g predfammap with
@@ -4669,15 +4711,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           with_context PopSubcontext (fun () -> cont ((g_symb, coef, ts0 @ ts, None)::h) env)
         )
       )
-    | CreateBoxStmt (l, x, bcn, args) ->
+    | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
       if not pure then static_error l "Box creation statements are allowed only in a pure context.";
-      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc bcn boxmap with
           None -> static_error l "No such box class."
         | Some boxinfo -> boxinfo
       in
-      let env' =
+      let (tenv, ghostenv, env) =
+        let rec iter tenv ghostenv env handleClauses =
+          match handleClauses with
+            [] -> (tenv, ghostenv, env)
+          | (l, x, hpn, args)::handleClauses ->
+            if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+            iter ((x, HandleIdType)::tenv) (x::ghostenv) ((x, get_unique_var_symb x HandleIdType)::env) handleClauses
+        in
+        iter tenv ghostenv env handleClauses
+      in
+      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+      let boxArgMap =
         match zip args boxpmap with
           None -> static_error l "Incorrect number of arguments."
         | Some bs ->
@@ -4685,20 +4737,47 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin
               fun (e, (pn, pt)) ->
                 let w = check_expr_t tparams tenv e pt in
-                (pn, ev w)
+                (pn, eval env w)
             end
             bs
       in
-      let argTerms = List.map (fun (x, t) -> t) env' in
-      with_context PushSubcontext (fun () ->
-        assert_pred h ghostenv env' inv real_unit (fun h _ _ _ ->
-          with_context PopSubcontext (fun () ->
-            let boxIdTerm = get_unique_var_symb x BoxIdType in
-            let (_, _, _, bcn_symb, _) = List.assoc bcn predfammap in
-            tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (((bcn_symb, true), real_unit, boxIdTerm::argTerms, None)::h) ((x, boxIdTerm)::env)
-          )
-        )
-      )
+      let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
+      with_context PushSubcontext $. fun () ->
+      assert_pred h ghostenv boxArgMap inv real_unit $. fun h _ boxVarMap _ ->
+      let boxIdTerm = get_unique_var_symb x BoxIdType in
+      begin fun cont ->
+        let rec iter handleChunks handleClauses =
+          match handleClauses with
+            (l, x, hpn, args)::handleClauses ->
+            begin
+            match try_assoc hpn hpmap with
+              None -> static_error l "No such handle predicate"
+            | Some (lhp, hpParamMap, hpInv, pbcs) ->
+              let hpArgMap =
+                match zip hpParamMap args with
+                  None -> static_error l "Incorrect number of arguments."
+                | Some bs ->
+                  List.map
+                    begin fun ((x, t), e) ->
+                      let w = check_expr_t tparams tenv e t in
+                      (x, eval env w)
+                    end
+                    bs
+              in
+              let handleIdTerm = List.assoc x env in
+              let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
+              with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
+              assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant.";
+              let (_, _, _, hpn_symb, _) = List.assoc hpn predfammap in
+              iter (((hpn_symb, true), real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::handleChunks) handleClauses
+            end
+          | [] -> cont handleChunks
+        in
+        iter [] handleClauses
+      end $. fun handleChunks ->
+      let (_, _, _, bcn_symb, _) = List.assoc bcn predfammap in
+      with_context PopSubcontext $. fun () ->
+      tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (((bcn_symb, true), real_unit, boxIdTerm::boxArgs, None)::(handleChunks@h)) ((x, boxIdTerm)::env)
     | CreateHandleStmt (l, x, hpn, arg) ->
       if not pure then static_error l "Handle creation statements are allowed only in a pure context.";
       if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
@@ -4747,33 +4826,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                assume (ctxt#mk_not (eval_non_pure false h env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
-    | PerformActionStmt (l, nonpure_ctxt, pre_bcn, pre_bcp_pats, pre_hpn, pre_hp_pats, an, aargs, ss, closeBraceLoc, post_bcp_args, post_hpn, post_hp_args) ->
+    | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc pre_bcn boxmap with
-          None -> static_error l "No such box class."
+          None -> static_error lcb "No such box class."
         | Some boxinfo -> boxinfo
       in
-      if not (List.mem pre_bcn boxes) then static_error l "You cannot perform an action a box class that has not yet been declared.";
-      let (pre_bcp_pats, tenv) = check_pats l tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
+      if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared.";
+      let (pre_bcp_pats, tenv) = check_pats lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let (_, _, _, boxpred_symb, _) = List.assoc pre_bcn predfammap in
-      assert_chunk h ghostenv env l (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h coef ts chunk_size ghostenv env ->
-        if not (coef == real_unit) then assert_false h env l "Box predicate coefficient must be 1.";
+      assert_chunk h ghostenv env lcb (boxpred_symb, true) real_unit DummyPat pre_bcp_pats (fun h box_coef ts chunk_size ghostenv env ->
+        if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement.";
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
           if pre_hpn = pre_bcn ^ "_handle" then
-            ([], True l)
+            ([], True lch)
           else
             match try_assoc pre_hpn hpmap with
-              None -> static_error l "No such handle predicate in box class."
+              None -> static_error lch "No such handle predicate in box class."
             | Some (_, hppmap, inv, _) ->
               (hppmap, inv)
         in
         let (_, _, _, pre_handlepred_symb, _) = List.assoc pre_hpn predfammap in
-        let (pre_hp_pats, tenv) = check_pats l tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
+        let (pre_hp_pats, tenv) = check_pats lch tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = pre_hp_pats in
-        assert_chunk h ghostenv (("#boxId", boxId)::env) l (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::pre_hpargs_pats)
+        assert_chunk h ghostenv (("#boxId", boxId)::env) lch (pre_handlepred_symb, true) real_unit DummyPat (pre_handleId_pat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env ->
-             if not (coef == real_unit) then assert_false h env l "Handle predicate coefficient must be 1.";
+             if not (coef == real_unit) then assert_false h env lch "Handle predicate coefficient must be 1.";
              let (handleId::_::pre_handlePredArgs) = ts in
              let (apmap, pre, post) =
                match try_assoc an amap with
@@ -4782,7 +4861,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              in
              let aargbs =
                match zip apmap aargs with
-                 None -> static_error l "Incorrect number of action arguments."
+                 None -> static_error lpa "Incorrect number of action arguments."
                | Some bs ->
                  List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
              in
@@ -4794,48 +4873,75 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              assume_pred h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
              with_context PopSubcontext $. fun () ->
              assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxVarMap) pre_handlePred_inv) (fun () ->
-               let (pureBody, body) =
-                 match ss with
-                   [NonpureStmt (_, s)] when !nonpure_ctxt -> (false, [s])
-                 | ss -> (true, ss)
+               let nonpureStmtCount = ref 0 in
+               let ss =
+                 List.map
+                   begin function
+                     NonpureStmt (l, _, s) when !nonpure_ctxt ->
+                     nonpureStmtCount := !nonpureStmtCount + 1;
+                     if atomic then
+                     begin
+                       let funcname =
+                         match s with
+                           CallStmt (lcall, g, targs, args, _) -> g
+                         | Assign (lcall, x, CallExpr (_, g, _, _, _, _)) -> g
+                         | DeclStmt (lcall, xtype, x, CallExpr (_, g, _, _, _, _)) -> g
+                         | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call."
+                       in
+                       match try_assoc funcname funcmap with
+                         None -> static_error l "No such function."
+                       | Some (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, body,fb,v) ->
+                         if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function."
+                     end;
+                     NonpureStmt (l, true, s)
+                   | s -> s
+                   end
+                   ss
                in
-               verify_cont tparams boxes pureBody leminfo sizemap tenv ghostenv h env body (fun sizemap tenv ghostenv h env ->
+               if atomic && !nonpureStmtCount <> 1 then static_error lpa "The body of an atomic perform_action statement must include exactly one non-pure statement.";
+               verify_cont tparams boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
-                 let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
-                 assert_term (eval pre_env pre) h pre_env l "Action precondition failure.";
-                 let post_boxArgMap =
-                   match zip boxpmap post_bcp_args with
-                     None -> static_error l "Incorrect number of post-state box arguments."
-                   | Some bs ->
-                     List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
-                 in
                  with_context PushSubcontext $. fun () ->
+                 let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
+                 assert_term (eval pre_env pre) h pre_env closeBraceLoc "Action precondition failure.";
+                 let post_boxArgMap =
+                   match post_bcp_args_opt with
+                     None -> pre_boxArgMap
+                   | Some (lpb, post_bcp_args) ->
+                     begin
+                       match zip boxpmap post_bcp_args with
+                         None -> static_error lpb "Incorrect number of post-state box arguments."
+                       | Some bs ->
+                         List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
+                     end
+                 in
                  assert_pred h ghostenv post_boxArgMap inv real_unit $. fun h _ post_boxVarMap _ ->
-                 with_context PopSubcontext $. fun () ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
-                 assert_term (eval post_env post) h post_env l "Action postcondition failure.";
+                 assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure.";
                  let (post_handlePred_parammap, post_handlePred_inv) =
                    if post_hpn = pre_bcn ^ "_handle" then
                      ([], True l)
                    else
                      match try_assoc post_hpn hpmap with
-                       None -> static_error l "Post-state handle predicate: No such handle predicate in box class."
+                       None -> static_error lph "Post-state handle predicate: No such handle predicate in box class."
                      | Some (_, hppmap, inv, _) ->
                        (hppmap, inv)
                  in
                  let (_, _, _, post_handlePred_symb, _) = List.assoc post_hpn predfammap in
                  let post_hpargs =
                    match zip post_handlePred_parammap post_hp_args with
-                     None -> static_error l "Post-state handle predicate: Incorrect number of arguments."
+                     None -> static_error lph "Post-state handle predicate: Incorrect number of arguments."
                    | Some bs ->
                      List.map (fun ((x, t), e) -> let e = check_expr_t tparams tenv e t in (x, eval env e)) bs
                  in
                  let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
-                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env l "Post-state handle predicate invariant failure.";
-                 let boxChunk = ((boxpred_symb, true), real_unit, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
+                 with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
+                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure.";
+                 let boxChunk = ((boxpred_symb, true), box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                  let hpChunk = ((post_handlePred_symb, true), real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
                  let h = boxChunk::hpChunk::h in
+                 with_context PopSubcontext $. fun () ->
                  tcont sizemap tenv ghostenv h env
                ) return_cont
              )
@@ -4847,7 +4953,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PureStmt (l, s) ->
       begin
         match s with
-          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _) ->
+          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
           nonpure_ctxt := not pure
         | _ -> ()
       end;
@@ -4938,7 +5044,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds ->
       verify_funcs boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, _, _, Some _, _, _)::ds when k <> Fixpoint ->
-      let (l, k, tparams, rt, ps, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
+      let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = List.assoc g funcmap in
       let _ = push() in
       let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
       let (sizemap, indinfo) =

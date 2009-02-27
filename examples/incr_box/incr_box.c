@@ -85,7 +85,7 @@ int main()
         abort();
     }
     counter->count = 0;
-    //@ box boxId = create_box counter_box(counter, 0);
+    //@ create_box boxId = counter_box(counter, 0);
     //@ close counter(counter, boxId)();
     //@ close_lock_invariant(counter(counter, boxId));
     struct lock *lock = create_lock();
