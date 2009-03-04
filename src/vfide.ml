@@ -115,6 +115,57 @@ let show_ide initialPath prover =
     undoAction#set_sensitive undoSensitive;
     redoAction#set_sensitive redoSensitive
   in
+  let tag_name_of_range_kind kind =
+    match kind with
+      KeywordRange -> "keyword"
+    | GhostKeywordRange -> "ghostKeyword"
+    | GhostRange -> "ghostRange"
+    | GhostRangeDelimiter -> "ghostRangeDelimiter"
+    | CommentRange -> "comment"
+    | ErrorRange -> "error"
+  in
+  let srcpos_iter buffer (line, col) =
+    buffer#get_iter (`LINECHAR (line - 1, col - 1))
+  in
+  let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
+  let rec perform_syntax_highlighting ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) start stop =
+    let Some commentTag = GtkText.TagTable.lookup buffer#tag_table "comment" in
+    let commentTag = new GText.tag commentTag in
+    let Some ghostRangeTag = GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
+    let ghostRangeTag = new GText.tag ghostRangeTag in
+    let start = start#backward_line in
+    let stop = stop#forward_line in
+    let startLine = start#line in
+    let startIsInComment = start#has_tag commentTag && not (start#begins_tag (Some commentTag)) in
+    let startIsInGhostRange = start#has_tag ghostRangeTag && not (start#begins_tag (Some ghostRangeTag)) in
+    let stopIsInComment = stop#has_tag commentTag && not (stop#begins_tag (Some commentTag)) in
+    let stopIsInGhostRange = stop#has_tag ghostRangeTag && not (start#begins_tag (Some ghostRangeTag)) in
+    buffer#remove_all_tags ~start:start ~stop:stop;
+    let reportRange kind ((_, line1, col1), (_, line2, col2)) =
+      buffer#apply_tag_by_name (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
+    in
+    let charStream =
+      let iter = start#copy in
+      let noCopyIter = iter#nocopy in
+      Stream.from (fun offset ->
+        if iter#equal stop then None else let c = char_of_int iter#char in noCopyIter#forward_char; Some c
+      )
+    in
+    let highlight keywords =
+      let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
+        make_lexer_core keywords ("<bufferBase>", "<buffer>") charStream reportRange startIsInComment startIsInGhostRange false in
+      Stream.iter (fun _ -> ()) tokenStream;
+      if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
+        perform_syntax_highlighting tab stop buffer#end_iter
+    in
+    match !path with
+      None -> ()
+    | Some path ->
+      if Filename.check_suffix path ".c" then highlight (veri_keywords @ c_keywords)
+      else if Filename.check_suffix path ".h" then highlight (veri_keywords @ c_keywords)
+      else if Filename.check_suffix path ".java" then highlight (veri_keywords @ java_keywords)
+      else ()
+  in
   let add_buffer() =
     let path = ref None in
     let textLabel = GMisc.label ~text:"(untitled)" () in
@@ -124,7 +175,10 @@ let show_ide initialPath prover =
     let srcText = GText.view ~packing:textScroll#add () in
     let buffer = srcText#buffer in
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
-    let _ = buffer#create_tag ~name:"ghostRange" [`BACKGROUND "#eeeeee"] in
+    let ghostRangeTag = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
+    let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
+    let commentTag = buffer#create_tag ~name:"comment" [`FOREGROUND "#008000"] in
+    let _ = buffer#create_tag ~name:"ghostRangeDelimiter" [`FOREGROUND "Gray"] in
     let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
     let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
     let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
@@ -137,11 +191,32 @@ let show_ide initialPath prover =
     let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
     let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
     let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name "Courier 10" in
+    srcText#set_pixels_above_lines 1;
+    srcText#set_pixels_below_lines 1;
+    subText#set_pixels_above_lines 1;
+    subText#set_pixels_below_lines 1;
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
     buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
+    );
+    srcText#event#connect#key_press (fun key ->
+      if GdkEvent.Key.keyval key = GdkKeysyms._Return then
+      begin
+        let cursor = buffer#get_iter `INSERT in
+        let lineStart = cursor#set_line_offset 0 in
+        let rec iter home =
+          if home#ends_line then home else if Glib.Unichar.isspace home#char then iter home#forward_char else home
+        in
+        let home = iter lineStart in
+        let indent = lineStart#get_text ~stop:home in
+        buffer#insert ("\n" ^ indent);
+        srcText#scroll_mark_onscreen `INSERT;
+        true
+      end
+      else
+        false
     );
     buffer#connect#insert_text (fun iter text ->
       if not !ignore_text_changes then
@@ -158,6 +233,13 @@ let show_ide initialPath prover =
         undoAction#set_sensitive true;
         redoAction#set_sensitive false
       end
+    );
+    buffer#connect#after#insert_text (fun iter text ->
+      let start = iter#backward_chars (Glib.Utf8.length text) in
+      perform_syntax_highlighting tab start iter
+    );
+    buffer#connect#after#delete_range (fun ~start:start ~stop:stop ->
+      perform_syntax_highlighting tab start stop
     );
     buffer#connect#delete_range (fun ~start:start ~stop:stop ->
       if not !ignore_text_changes then
@@ -212,6 +294,7 @@ let show_ide initialPath prover =
       redoList := [];
       buffer#set_modified false;
       path := Some (Filename.concat (Filename.dirname newPath) (Filename.basename newPath));
+      perform_syntax_highlighting tab buffer#start_iter buffer#end_iter;
       updateBufferTitle tab
     with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg)
   in
@@ -341,9 +424,6 @@ let show_ide initialPath prover =
         let tab = add_buffer() in load tab path0; (k, tab)
     in
     iter 0 !buffers
-  in
-  let srcpos_iter buffer (line, col) =
-    buffer#get_iter (`LINECHAR (line - 1, col - 1))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
     let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
@@ -494,11 +574,8 @@ let show_ide initialPath prover =
     ()
   in
   let loc_path ((path, _, _), _) = path in
-  let reportKeyword l =
-    apply_tag_by_loc "keyword" l
-  in
-  let reportGhostRange l =
-    apply_tag_by_loc "ghostRange" l
+  let reportRange kind l =
+    apply_tag_by_loc (tag_name_of_range_kind kind) l
   in
   let ensureHasPath tab =
     match !(tab_path tab) with
@@ -570,8 +647,7 @@ let show_ide initialPath prover =
     clearTrace();
     List.iter (fun tab ->
       let buffer = tab_buffer tab in
-      buffer#remove_tag_by_name "keyword" ~start:buffer#start_iter ~stop:buffer#end_iter;
-      buffer#remove_tag_by_name "ghostRange" ~start:buffer#start_iter ~stop:buffer#end_iter
+      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter
     ) !buffers;
     match get_current_tab() with
       None -> ()
@@ -594,7 +670,7 @@ let show_ide initialPath prover =
             in
             try
               let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
-              verify_program None false options path reportKeyword reportGhostRange breakpoint;
+              verify_program None false options path reportRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with

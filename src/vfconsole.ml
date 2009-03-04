@@ -6,7 +6,7 @@ let _ =
   in
   let verify stats options prover path =
     try
-      verify_program prover stats options path (fun _ -> ()) (fun _ -> ()) None;
+      verify_program prover stats options path (fun _ _ -> ()) None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1

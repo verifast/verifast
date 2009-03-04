@@ -141,6 +141,7 @@ type token =
   | Char of char
   | PreprocessorSymbol of string
   | Eol
+  | ErrorToken
 
 type srcpos = ((string * string) * int * int)
 type loc = (srcpos * srcpos)
@@ -149,7 +150,18 @@ exception ParseException of loc * string
 
 (* The lexer *)
 
-let make_lexer keywords path stream reportKeyword reportGhostRange =
+type range_kind =
+    KeywordRange
+  | GhostKeywordRange
+  | GhostRange
+  | GhostRangeDelimiter
+  | CommentRange
+  | ErrorRange
+
+let make_lexer_core keywords path stream reportRange inComment inGhostRange exceptionOnError =
+  let in_comment = ref inComment in
+  let in_ghost_range = ref inGhostRange in
+  
   let initial_buffer = String.create 32
   in
 
@@ -178,28 +190,37 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
   let line = ref 1 in
   let linepos = ref 0 in  (* Stream count at start of line *)
   let tokenpos = ref 0 in
-  let token_srcpos = ref (path, -1, -1) in
+  let token_srcpos = ref (path, 1, 1) in
 
   let current_srcpos() = (path, !line, Stream.count stream - !linepos + 1) in
   let current_loc() = (!token_srcpos, current_srcpos()) in
 
   let in_single_line_annotation = ref false in
   
-  let ghost_range_start: srcpos option ref = ref None in
+  let ghost_range_start: srcpos option ref = ref (if inGhostRange then Some (current_srcpos()) else None) in
   
   let ignore_eol = ref true in
+  
+  let error msg =
+      raise (Stream.Error msg)
+  in
   
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
   let ident_or_keyword id isAlpha =
-    try let t = Hashtbl.find kwd_table id in if isAlpha then reportKeyword (current_loc()); t with
+    try
+      let t = Hashtbl.find kwd_table id in
+      if isAlpha then
+        reportRange (if !ghost_range_start = None then KeywordRange else GhostKeywordRange) (current_loc());
+      t
+    with
       Not_found ->
       let n = String.length id in
       if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
   and keyword_or_error c =
     let s = String.make 1 c in
     try Hashtbl.find kwd_table s with
-      Not_found -> raise (Stream.Error ("Illegal character"))
+      Not_found -> error "Illegal character"
   in
   let start_token() =
     tokenpos := Stream.count stream;
@@ -210,6 +231,12 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
       linepos := Stream.count strm__
   in
   let rec next_token (strm__ : _ Stream.t) =
+    if !in_comment then
+    begin
+      in_comment := false;
+      multiline_comment strm__
+    end
+    else
     let new_line strm__ =
       new_loc_line strm__;
       if !in_single_line_annotation then (
@@ -250,11 +277,11 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
         Stream.junk strm__;
         let c =
           try char strm__ with
-            Stream.Failure -> raise (Stream.Error "Bad character literal.")
+            Stream.Failure -> error "Bad character literal."
         in
         begin match Stream.peek strm__ with
           Some '\'' -> Stream.junk strm__; Some (Char c)
-        | _ -> raise (Stream.Error "Single quote expected.")
+        | _ -> error "Single quote expected."
         end
     | Some '"' ->
         start_token();
@@ -263,7 +290,10 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
     | Some '-' -> start_token(); Stream.junk strm__; neg_number strm__
     | Some '/' -> start_token(); Stream.junk strm__; maybe_comment strm__
     | Some c -> start_token(); Stream.junk strm__; Some (keyword_or_error c)
-    | _ -> None
+    | _ ->
+      in_ghost_range := !ghost_range_start <> None;
+      ghost_range_end();
+      None
   and ident (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some
@@ -278,7 +308,11 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
         Stream.junk strm__; let s = strm__ in store c; ident2 s
     | _ ->
       let s = get_string() in
-      if s = "@*/" then ghost_range_end();
+      if s = "@*/" then
+      begin
+        ghost_range_end();
+        reportRange GhostRangeDelimiter (current_loc())
+      end;
       Some (ident_or_keyword s false)
   and neg_number (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
@@ -319,9 +353,10 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
         Stream.junk strm__;
         let c =
           try escape strm__ with
-            Stream.Failure -> raise (Stream.Error "Bad string literal.")
+            Stream.Failure -> error "Bad string literal."
         in
         let s = strm__ in store c; string s
+    | Some c when c < ' ' -> raise Stream.Failure
     | Some c -> Stream.junk strm__; let s = strm__ in store c; string s
     | _ -> raise Stream.Failure
   and char (strm__ : _ Stream.t) =
@@ -329,8 +364,9 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
       Some '\\' ->
         Stream.junk strm__;
         begin try escape strm__ with
-          Stream.Failure -> raise (Stream.Error "Bad character literal.")
+          Stream.Failure -> error "Bad character literal."
         end
+    | Some c when c < ' ' -> raise Stream.Failure
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
   and escape (strm__ : _ Stream.t) =
@@ -349,26 +385,38 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
                 Char.chr
                   ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
                      (Char.code c3 - 48))
-            | _ -> raise (Stream.Error "Bad escape sequence.")
+            | _ -> error "Bad escape sequence."
             end
-        | _ -> raise (Stream.Error "Bad escape sequence.")
+        | _ -> error "Bad escape sequence."
         end
+    | Some c when c < ' ' -> raise Stream.Failure
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
   and ghost_range_end() =
     match !ghost_range_start with
       None -> ()
-    | Some sp -> reportGhostRange (sp, current_srcpos()); ghost_range_start := None
+    | Some sp -> reportRange GhostRange (sp, current_srcpos()); ghost_range_start := None
   and maybe_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some '/' ->
       Stream.junk strm__;
       (
         match Stream.peek strm__ with
-          Some '@' -> (Stream.junk strm__; in_single_line_annotation := true; ghost_range_start := Some !token_srcpos; Some (Kwd "/*@"))
+          Some '@' ->
+          begin
+            Stream.junk strm__;
+            if !ghost_range_start <> None then raise Stream.Failure;
+            in_single_line_annotation := true;
+            ghost_range_start := Some !token_srcpos;
+            reportRange GhostRangeDelimiter (current_loc());
+            Some (Kwd "/*@")
+          end
         | _ ->
           if !in_single_line_annotation then (
-            in_single_line_annotation := false; ghost_range_end(); single_line_comment strm__; Some (Kwd "@*/")
+            in_single_line_annotation := false;
+            ghost_range_end();
+            single_line_comment strm__;
+            Some (Kwd "@*/")
           ) else (
             single_line_comment strm__; next_token strm__
           )
@@ -377,13 +425,18 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
       Stream.junk strm__;
       (
         match Stream.peek strm__ with
-          Some '@' -> (Stream.junk strm__; ghost_range_start := Some !token_srcpos; Some (Kwd "/*@"))
-        | _ -> (multiline_comment strm__; next_token strm__)
+          Some '@' ->
+          Stream.junk strm__;
+          if !ghost_range_start <> None then raise Stream.Failure;
+          ghost_range_start := Some !token_srcpos;
+          reportRange GhostRangeDelimiter (current_loc());
+          Some (Kwd "/*@")
+        | _ -> multiline_comment strm__
       )
     | _ -> Some (keyword_or_error '/')
   and single_line_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
-      Some '\010' | Some '\013' -> ()
+      Some '\010' | Some '\013' | None -> reportRange CommentRange (current_loc())
     | Some c -> Stream.junk strm__; single_line_comment strm__
     | _ -> raise Stream.Failure
   and multiline_comment (strm__ : _ Stream.t) =
@@ -393,7 +446,7 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
         Stream.junk strm__;
         (
           match Stream.peek strm__ with
-            Some '/' -> (Stream.junk strm__; ())
+            Some '/' -> (Stream.junk strm__; reportRange CommentRange (current_loc()); next_token strm__)
           | _ -> multiline_comment strm__
         )
       )
@@ -406,14 +459,30 @@ let make_lexer keywords path stream reportKeyword reportGhostRange =
        new_loc_line strm__;
        multiline_comment strm__
       )
+    | None when not exceptionOnError ->
+      in_ghost_range := !ghost_range_start <> None;
+      in_comment := true;
+      reportRange CommentRange (current_loc());
+      None
     | _ -> (Stream.junk strm__; multiline_comment strm__)
   in
   (current_loc,
    ignore_eol,
    Stream.from (fun count ->
-     (match next_token stream with
-        Some t -> Some (current_loc(), t)
-      | None -> None)))
+     (try
+        match next_token stream with
+          Some t -> Some (current_loc(), t)
+        | None -> None
+      with
+        Stream.Error msg when not exceptionOnError -> reportRange ErrorRange (current_loc()); Some (current_loc(), ErrorToken)
+      | Stream.Failure when not exceptionOnError -> reportRange ErrorRange (current_loc()); Some (current_loc(), ErrorToken)
+      )),
+   in_comment,
+   in_ghost_range)
+
+let make_lexer keywords path stream reportRange =
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords path stream reportRange false false true in
+  (loc, ignore_eol, token_stream)
 
 type type_ =
     Bool
@@ -1261,10 +1330,10 @@ and
 in
   parse_decls
 
-let parse_java_file path reportKeyword reportGhostRange =
+let parse_java_file path reportRange =
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword reportGhostRange in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange in
   let parse_decls_eof = parser [< ds = parse_decls; _ = Stream.empty >] -> ds in
   try
     parse_decls_eof token_stream
@@ -1282,10 +1351,10 @@ and
 in
   parse_include_directives
 
-let parse_c_file path reportKeyword reportGhostRange =
+let parse_c_file path reportRange =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportKeyword reportGhostRange in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange in
   let parse_c_file =
     parser
       [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, ds)
@@ -1296,10 +1365,10 @@ let parse_c_file path reportKeyword reportGhostRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_header_file basePath relPath reportKeyword reportGhostRange =
+let parse_header_file basePath relPath reportRange =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportKeyword reportGhostRange in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange in
   let parse_header_file =
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
@@ -1316,7 +1385,7 @@ let parse_header_file basePath relPath reportKeyword reportGhostRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_input_file path reportKeyword reportGhostRange =
+let parse_input_file path reportRange =
   if Filename.check_suffix (Filename.basename path) ".jarsrc" then 
     let rec parsefiles channel=
       let file= try Some(input_line channel) with End_of_file -> None in
@@ -1324,15 +1393,15 @@ let parse_input_file path reportKeyword reportGhostRange =
         None -> []
       | Some file ->
         let path'=Filename.concat (Filename.dirname path) file in
-        let decl= parse_java_file path' reportKeyword reportGhostRange in 
+        let decl= parse_java_file path' reportRange in 
         decl@(parsefiles channel)
     in
     parsefiles (open_in path)
   else
     match file_type (Filename.basename path) with
-      Java -> parse_java_file path reportKeyword reportGhostRange
+      Java -> parse_java_file path reportRange
     | C ->
-      let (headers, ds) = parse_c_file path reportKeyword reportGhostRange in
+      let (headers, ds) = parse_c_file path reportRange in
       let programDir = Filename.dirname path in
       let headers_included: string list ref = ref [] in
       let rec header_ds baseDir (l, header_path) =
@@ -1355,7 +1424,7 @@ let parse_input_file path reportKeyword reportGhostRange =
           if List.mem path !headers_included then
             []
           else
-            let (headers, ds) = parse_header_file baseDir relPath reportKeyword reportGhostRange in
+            let (headers, ds) = parse_header_file baseDir relPath reportRange in
             let headers_ds = flatmap (header_ds baseDir) headers in
             headers_included := path::!headers_included;
             headers_ds @ ds
@@ -1413,7 +1482,7 @@ let do_finally tryBlock finallyBlock =
 
 type options = {option_verbose: bool; option_disable_overflow_check: bool}
 
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportKeyword reportGhostRange breakpoint =
+let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
   let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check} = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
@@ -1492,7 +1561,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin
       match try_assoc preludePath !headermap with
         None ->
-        let ([], ds) = parse_header_file bindir "prelude.h" reportKeyword reportGhostRange in
+        let ([], ds) = parse_header_file bindir "prelude.h" reportRange in
         let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _) = check_file false bindir [] ds in
         headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0))::!headermap;
         (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
@@ -1546,7 +1615,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap) =
               match try_assoc path !headermap with
                 None ->
-                let (headers', ds) = parse_header_file basedir relpath reportKeyword reportGhostRange in
+                let (headers', ds) = parse_header_file basedir relpath reportRange in
                 let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _) = check_file true basedir headers' ds in
                 headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap))::!headermap;
                 (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
@@ -5177,9 +5246,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let (prototypes_used, prototypes_implemented) =
     let (headers, ds) = 
       match file_type (Filename.basename path) with
-      Java-> ([], parse_input_file path reportKeyword reportGhostRange)
+      Java-> ([], parse_input_file path reportRange)
       | _->
-        parse_c_file path reportKeyword reportGhostRange
+        parse_c_file path reportRange
     in
     let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented) = check_file true programDir headers ds in
     (prototypes_used, prototypes_implemented)
@@ -5199,9 +5268,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   create_manifest_file()
 
-let verify_program_with_stats ctxt print_stats verbose path reportKeyword reportGhostRange breakpoint =
+let verify_program_with_stats ctxt print_stats verbose path reportRange breakpoint =
   do_finally
-    (fun () -> verify_program_core ctxt verbose path reportKeyword reportGhostRange breakpoint)
+    (fun () -> verify_program_core ctxt verbose path reportRange breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -5229,11 +5298,11 @@ let lookup_prover prover =
       | Some f -> f
     end
       
-let verify_program prover print_stats options path reportKeyword reportGhostRange breakpoint =
+let verify_program prover print_stats options path reportRange breakpoint =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats options path reportKeyword reportGhostRange breakpoint
+         fun ctxt -> verify_program_with_stats ctxt print_stats options path reportRange breakpoint
      end)
 
 let remove_dups bs =
