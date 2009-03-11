@@ -4,7 +4,7 @@ class Program {
       //@ ensures true;
   {
       Object o=new Object();
-      SingletonIterator i=new SingletonIterator(o);
+      Iterator i=new SingletonIterator(o);
       boolean before=i.hasNext();
       assert(before);
 

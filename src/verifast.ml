@@ -493,13 +493,13 @@ type type_ =
   | StructType of string
   | PtrType of type_
   | InductiveType of string * type_ list
-  | PredType of type_ list (* type van predicate -> lijst van types van args*)
-  | ObjType of string (* voor java *)
-  | BoxIdType
-  | HandleIdType
-  | AnyType
-  | TypeParam of string
-  | InferredType of type_ option ref
+  | PredType of type_ list
+  | ObjType of string
+  | BoxIdType (* box type*)
+  | HandleIdType (* handle type *)
+  | AnyType (* any type, kan aan alle inductieve datatypes toegekend worden*)
+  | TypeParam of string (* type param, tussen <>*)
+  | InferredType of type_ option ref (* inferred type *)
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
 
@@ -507,10 +507,10 @@ type type_expr =
     StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
-  | ManifestTypeExpr of loc * type_ (* primitive types? met regel-type*)
+  | ManifestTypeExpr of loc * type_
   | IdentTypeExpr of loc * string
   | ConstructedTypeExpr of loc * string * type_expr list
-  | PredTypeExpr of loc * type_expr list (* type def van predicate met regel-lijst van types van args *)
+  | PredTypeExpr of loc * type_expr list
 
 class fieldref (name: string) =
   object
@@ -598,15 +598,15 @@ and
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
-  | Leak of loc * pred
+  | Leak of loc * pred (* expliciet lekken van assertie, nuttig op einde van thread*)
   | Open of loc * string * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
   | Close of loc * string * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * stmt list (* blok met {}   regel-body *)
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
-  | SplitFractionStmt of loc * string * pat list * expr option
-  | MergeFractionsStmt of loc * string * pat list
+  | SplitFractionStmt of loc * string * pat list * expr option (* split_fraction ... by ... *)
+  | MergeFractionsStmt of loc * string * pat list (* merge_fraction ...*)
   | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of loc * string * string * expr
   | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
@@ -622,7 +622,7 @@ and
   | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
   | SwitchPred of loc * expr * switch_pred_clause list (* switch over cons van inductive type regel-expr-clauses*)
   | EmpPred of loc (* als "emp" bij requires/ensures staat -regel-*)
-  | CoefPred of loc * pat * pred
+  | CoefPred of loc * pat * pred (* fractional permission met coeff-predicate*)
 and
   switch_pred_clause =
   | SwitchPredClause of loc * string * string list * prover_type option list option ref * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
@@ -655,13 +655,13 @@ and
   | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
-and
+and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl =
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
-and
+and (* action, kan value van shared box wijzigen*)
   handle_pred_decl =
   | HandlePredDecl of loc * string * (type_expr * string) list * expr * preserved_by_clause list
-and
+and (* handle predicate geeft info over ghost state van shared box, zelfs als er geen volledige eigendom is vd box*)
   preserved_by_clause =
   | PreservedByClause of loc * string * string list * stmt list
 and
@@ -794,14 +794,16 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"
 ]
-let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"(*"extends";*)
+let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"
 ]
 
 let file_type path=
   begin
   if Filename.check_suffix (Filename.basename path) ".c" then C
-  else if Filename.check_suffix (Filename.basename path) ".java" then Java
   else if Filename.check_suffix (Filename.basename path) ".jarsrc" then Java
+  else if Filename.check_suffix (Filename.basename path) ".jarspec" then Java
+  else if Filename.check_suffix (Filename.basename path) ".java" then Java
+  else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java
   else if Filename.check_suffix (Filename.basename path) ".h" then Header
   else failwith ("unknown extension")
   end
@@ -886,7 +888,7 @@ and
 and
   parse_java_member vis cn= parser
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
-    ps = parse_paramlist;co = opt parse_spec; ss = parse_block>] -> MethMember(Meth(l,t,n,ps,co,Some ss,Static,vis))
+    ps = parse_paramlist;co = opt parse_spec; ss = parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
       [<'(_,Ident f);r=parser
        [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
@@ -1066,6 +1068,10 @@ and
 and
   parse_block = parser
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss
+and
+  parse_some_block = parser
+  [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> Some ss
+| [<>] -> None
 and
   parse_stmts = parser
   [< s = parse_stmt; ss = parse_stmts >] -> s::ss
@@ -1330,7 +1336,7 @@ and
 in
   parse_decls
 
-let parse_java_file path reportRange =
+let rec parse_java_file path reportRange =
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange in
@@ -1340,12 +1346,12 @@ let parse_java_file path reportRange =
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
-
+  
 let parse_include_directives ignore_eol =
-let rec parse_include_directives = parser
-  [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers
-| [< >] -> []
-and
+  let rec parse_include_directives = parser
+    [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers
+  | [< >] -> []
+  and
   parse_include_directive = parser
   [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] -> ignore_eol := true; (l, header)
 in
@@ -1385,54 +1391,20 @@ let parse_header_file basePath relPath reportRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_input_file path reportRange =
-  if Filename.check_suffix (Filename.basename path) ".jarsrc" then 
+let parse_jarspec_file path reportRange=
+  if Filename.check_suffix path ".jarspec" then
     let rec parsefiles channel=
       let file= try Some(input_line channel) with End_of_file -> None in
-      match file with
-        None -> []
-      | Some file ->
-        let path'=Filename.concat (Filename.dirname path) file in
-        let decl= parse_java_file path' reportRange in 
-        decl@(parsefiles channel)
+        match file with
+          None -> []
+        | Some file -> if Filename.check_suffix file ".jar" then
+		    (parsefiles (open_in ((Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
+		    else let path'=Filename.concat (Filename.dirname path) file in
+            (parse_java_file path' reportRange)@(parsefiles channel)
     in
-    parsefiles (open_in path)
-  else
-    match file_type (Filename.basename path) with
-      Java -> parse_java_file path reportRange
-    | C ->
-      let (headers, ds) = parse_c_file path reportRange in
-      let programDir = Filename.dirname path in
-      let headers_included: string list ref = ref [] in
-      let rec header_ds baseDir (l, header_path) =
-        if List.mem header_path ["bool.h"; "assert.h"] then
-          []
-        else
-        begin
-          if Filename.basename header_path <> header_path then raise (ParseException (l, "Include paths must be simple file names."));
-          let (baseDir, relPath, path) =
-            let localPath = Filename.concat baseDir header_path in
-            if Sys.file_exists localPath then
-              (baseDir, Filename.concat "." header_path, localPath)
-            else
-              let systemPath = Filename.concat bindir header_path in
-              if Sys.file_exists systemPath then
-                (bindir, header_path, systemPath)
-              else
-                raise (ParseException (l, "No such file."))
-          in
-          if List.mem path !headers_included then
-            []
-          else
-            let (headers, ds) = parse_header_file baseDir relPath reportRange in
-            let headers_ds = flatmap (header_ds baseDir) headers in
-            headers_included := path::!headers_included;
-            headers_ds @ ds
-        end
-      in
-      let headers_ds = flatmap (header_ds programDir) headers in
-      headers_ds @ ds
-
+	parsefiles (open_in path)
+	else []
+  
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t) env)
@@ -1556,43 +1528,47 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let rec check_file include_prelude basedir headers ds =
   
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) =
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) =
     if include_prelude then
     begin
       match try_assoc preludePath !headermap with
         None ->
         let ([], ds) = parse_header_file bindir "prelude.h" reportRange in
-        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0))::!headermap;
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) ->
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
+        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0))::!headermap;
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
+      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) ->
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
     end
     else
-     ([], [], [], [], [], [], [], [], [], [])
+     ([], [], [], [], [], [], [], [], [], [], [], [])
   in
-  
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
       match xys with
         [] -> xys0
       | ((x, y) as elem)::xys ->
-        if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
+        if List.mem_assoc x xys0 then static_error l ("Duplicate TEST" ^ elementKind ^ " '" ^ string_of_key x ^ "'");
         elem::iter xys
     in
     iter xys
   in
   
-  let id x = x in
   
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) =
+
+  let id x = x in
+
+  
+  
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) =
     let headers_included = ref [] in
-    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers =
+    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers =
       match headers with
-        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0)
+        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
       | (l, header_path)::headers ->
+	    if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
+          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -1608,21 +1584,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l "No such file."
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap) =
+            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange in
-                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _) = check_file true basedir headers' ds in
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
-              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap) ->
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap)
+                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap) = check_file true basedir headers' ds in
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
+              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) ->
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
             in
-            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers' in
+            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers' in
             iter
               (append_nodups structmap structmap0 id l "struct")
               (append_nodups inductivemap inductivemap0 id l "inductive datatype")
@@ -1634,11 +1610,58 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
               (append_nodups functypemap functypemap0 id l "function type")
               (append_nodups funcmap funcmap0 id l "function")
+			  (append_nodups boxmap boxmap0 id l "box predicate")
+			  (append_nodups classmap classmap0 id l "class")
+              headers
+          end
+        end
+    else
+	      begin
+          let localpath = Filename.concat basedir header_path in
+          let (basedir, relpath, path) =
+            if Sys.file_exists localpath then
+              (basedir, Filename.concat "." header_path, localpath)
+            else
+              let systempath = Filename.concat bindir header_path in
+              if Sys.file_exists systempath then
+                (bindir, header_path, systempath)
+              else
+                static_error l "No such file."
+          in
+          if List.mem path !headers_included then
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
+          else
+          begin
+            headers_included := path::!headers_included;
+            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) =
+              match try_assoc path !headermap with
+                None ->
+                let (headers',ds) = ([],parse_jarspec_file relpath reportRange) in
+                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap) = check_file false basedir headers' ds in
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
+              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) ->
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
+            in
+            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers' in
+            iter
+              (append_nodups structmap structmap0 id l "struct")
+              (append_nodups inductivemap inductivemap0 id l "inductive datatype")
+              (append_nodups purefuncmap purefuncmap0 id l "pure function")
+              (append_nodups fixpointmap fixpointmap0 id l "fixpoint function")
+              (malloc_block_pred_map @ malloc_block_pred_map0)
+              (field_pred_map @ field_pred_map0)
+              (append_nodups predfammap predfammap0 id l "predicate")
+              (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
+              (append_nodups functypemap functypemap0 id l "function type")
+              (append_nodups funcmap funcmap0 id l "function")
+			  (append_nodups boxmap boxmap0 id l "box predicate")
+			  (append_nodups classmap classmap0 id l "class")
               headers
           end
         end
     in
-    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 headers
+    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
   in
   
   let structdeclmap =
@@ -1698,7 +1721,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let structmap = structmap1 @ structmap0 in
   
-  let inductivedeclmap =
+  let inductivedeclmap=
     let rec iter idm ds =
       match ds with
         [] -> idm
@@ -1712,7 +1735,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter [] ds
   in
   
-  let (interfdeclmap,classdeclmap) =
+  let declmaps dlist=
     let rec iter ifdm classlist ds =
       match ds with
         [] -> (ifdm,classlist)
@@ -1744,8 +1767,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter ifdm ((i, (l,meths,fields,constr,super,interfs))::classlist) ds
       | _::ds -> iter ifdm classlist ds
     in
-    iter [] basicclassdeclmap ds
+    iter [] basicclassdeclmap dlist
   in
+
+  let (interfdeclmap,classdeclmap)=declmaps ds in
   
   let classfmap =
     List.map
@@ -5239,18 +5264,43 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented)
+  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap)
   
   in
-  
+  let main_file= ref "" in
   let (prototypes_used, prototypes_implemented) =
     let (headers, ds) = 
       match file_type (Filename.basename path) with
-      Java-> ([], parse_input_file path reportRange)
+      Java-> if Filename.check_suffix path ".jarsrc" then
+		     let rec parsefiles channel=
+              let file= try Some(input_line channel) with End_of_file -> None in
+                match file with
+                  None -> []
+                | Some file -> 
+				   if startswith file "main-class " then let name=(String.sub file 11 ((String.length file)-11)) in
+main_file:=name;[] 				   else
+				   if Filename.check_suffix file ".jar" then
+		           (parsefiles (open_in (Filename.concat (Filename.dirname path) (Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
+		          else let path'=Filename.concat (Filename.dirname path) file in
+                       (parse_java_file path' reportRange)@(parsefiles channel)
+            in
+			let specpath=((Filename.chop_extension path)^".jarspec") in
+		    let headers= if Sys.file_exists specpath then 
+[(((("",path),1,1),(("",path),1,1)),specpath)]
+			else []
+            in
+            (headers,parsefiles (open_in path))
+			else
+            ([], parse_java_file path reportRange)
       | _->
         parse_c_file path reportRange
     in
-    let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented) = check_file true programDir headers ds in
+	let include_prelude=
+	  match file_type (Filename.basename path) with
+      Java-> false
+      | _->true
+	in
+    let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
     (prototypes_used, prototypes_implemented)
   in
 
@@ -5266,6 +5316,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       List.iter (fun line -> output_string file (".provides " ^ line ^ "\n")) (sorted_lines prototypes_implemented)
     ) (fun () -> close_out file)
   in
+  if file_type path <>Java then
   create_manifest_file()
 
 let verify_program_with_stats ctxt print_stats verbose path reportRange breakpoint =

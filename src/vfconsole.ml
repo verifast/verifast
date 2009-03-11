@@ -53,7 +53,7 @@ let _ =
       | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
     else
     begin
-      if Filename.check_suffix arg ".c" || Filename.check_suffix arg ".java" || Filename.check_suffix arg ".jarsrc"
+      if Filename.check_suffix arg ".c" || Filename.check_suffix arg ".java" || Filename.check_suffix arg ".jarsrc" || Filename.check_suffix arg ".javaspec"
 	  then
       begin
         print_endline arg;

@@ -1,4 +1,3 @@
-//@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, objects xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
 class SingletonIterator implements Iterator {
   Object value;
   boolean done;
