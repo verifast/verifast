@@ -25,6 +25,7 @@ test: verifast.exe vfide.exe
 	..\..\src\verifast -c Iterator.java
 	cd Iterator
 	..\..\..\src\verifast -c it.jarsrc
+	..\..\..\src\verifast -c prog.jarsrc
 	cd ..
 	cd ..
 	cd chat

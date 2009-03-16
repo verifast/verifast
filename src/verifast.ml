@@ -844,8 +844,6 @@ and
   methods cn m=
   match m with
     MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods cn ms)
-    | ConsMember(Cons(l,ps,co,ss,v))::ms -> Meth(l,Some (IdentTypeExpr(l,cn)),"new "^cn,ps,co,ss,Static,v)
-      ::(methods cn ms)
     |_::ms -> methods cn ms
     | []->[]
 and
@@ -890,21 +888,33 @@ and
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
     ps = parse_paramlist;co = opt parse_spec; ss = parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
-      [<'(_,Ident f);r=parser
-       [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
-       |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
-       >] -> r
-        |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this",ref (Some LocalVar))))] in
-       ConsMember(Cons(l,ps,co,Some stms,vis))
-        >] -> e
+    [<'(_,Ident f);r=parser
+      [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
+    | [< ps = parse_paramlist;(ss,co)=parser
+        [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
+      | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
+    >] -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
+    >] -> r
+  | [< ps = parse_paramlist;i=parser
+      [<'(_, Kwd ";");co = opt parse_spec>]-> ConsMember(Cons(l,ps,co,None,vis))
+    | [<co = opt parse_spec; ss = parse_block>]-> 
+        let stms= [DeclStmt (l,IdentTypeExpr(l,cn),"this",CallExpr(l,("new "^cn),[],[],[],Static))]@ss@[ReturnStmt(l,Some (Var(l,"this",ref (Some LocalVar))))]
+        in
+        ConsMember(Cons(l,ps,co,Some stms,vis))
+   >]-> i
+ >] -> e
 | [< t=parse_type;'(l,Ident f);r=parser
-       [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance,vis))
-       |[< ps = parse_paramlist;co = opt parse_spec; ss = parse_block>]
-       -> let tp=match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t	in
-       MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,Some ss,Instance,vis))
-       >] -> r
+    [<'(_, Kwd ";")>]->FieldMember(Field (l,t,f,Instance,vis))
+  | [< ps = parse_paramlist;(ss,co)=parser
+      [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
+    | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
+    >] -> 
+      let tp= match t with 
+        ManifestTypeExpr (_, Void) -> None 
+      | _ -> Some t
+      in
+      MethMember(Meth(l,tp,f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
+>] -> r
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
@@ -3121,16 +3131,36 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   let classmap = if file_type path<>Java then [] else
     List.map
-      (fun (sn, (l,meths, fds,constr_opt,super,interfs)) ->
+      (fun (cn, (l,meths, fds,constr_opt,super,interfs)) ->
          let rec iter cmap constr =
            match constr with
-             [] -> (sn, (l,meths,fds,Some (List.rev cmap),super,interfs))
-             | Cons (l,ps, co, ss,v)::constr -> iter ((ps, (l,co,ss,v))::cmap) constr
+             [] -> (cn, (l,meths,fds,Some (List.rev cmap),super,interfs))
+             | Cons (lm,ps, co, ss,v)::constr ->
+			   let xmap =
+                 let rec iter xm xs =
+                   match xs with
+                    [] -> List.rev xm
+                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                      let t = check_pure_type [] te in
+                      iter ((x, t)::xm) xs
+                 in
+                 iter [] ps
+               in
+			   let (pre, post) =
+                 match co with
+                   None -> static_error lm "Constructor must have contract: "
+                 | Some (pre, post) ->
+                     let (wpre, tenv) = check_pred [] xmap pre in
+                     let postmap = ("result", ObjType(cn))::tenv in
+                     let (wpost, _) = check_pred [] postmap post in
+                     (wpre, wpost)
+               in
+			   iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
          in
          begin
            match constr_opt with
              constr -> iter [] constr
-             | [] -> (sn, (l,meths,fds,None,super,interfs))
+             | [] -> (cn, (l,meths,fds,None,super,interfs))
          end
       )
       classmethmap
@@ -4214,7 +4244,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let ys = List.map (function (p, t) -> p) ps in
         let ws =
           match zip pats ps with
-            None -> static_error l "Incorrect number of arguments."
+            None -> static_error l "Incorrect number of arguments.BLA"
           | Some bs ->
             List.map
               (function (LitPat e, (x, tp)) ->
@@ -4300,28 +4330,47 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match file_type path with
       Java ->
       (
-        let (class_name,fb,pats)= 
+        let (class_name,fb,pats,iscons)= 
           (if fb=Static then 
-            (if startswith g "new " then (String.sub g 4 ((String.length g)-4),Static,pats)
-            else ("",Static,pats)
+            (if startswith g "new " then (String.sub g 4 ((String.length g)-4),Static,pats,true)
+            else ("",Static,pats,false)
             )
            else(
              if (match pats with LitPat(Var(_,cn,_))::_->(List.mem_assoc cn classmap) |_->false)
-               then match pats with LitPat(Var(_,cn,_))::rest->(cn,Static,rest)
+               then match pats with LitPat(Var(_,cn,_))::rest->(cn,Static,rest,false)
              else
-               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) ObjType(class_name)->(class_name,Instance,pats))
+               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) ObjType(class_name)->(class_name,Instance,pats,false))
             )
            )
         in
         match try_assoc class_name classmap with
-          Some(_,Some methmap,_,_,super,interfs) -> 
+          Some(_,Some methmap,_,Some consmap,super,interfs) -> 
             (match try_assoc g methmap with
                Some (lm,rt, xmap, pre, post, body,fbm,v) ->
                  if fb <>fbm 
                    then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                    let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
                    check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
-             | None->  static_error l ("Method "^class_name^" not found!!")
+             | None->  
+			   if iscons then
+			       let rec search clist=
+				   match clist with
+				   [] -> static_error l ("Constructor not found!")
+				   | (xmap,(lm,pre,post,ss,v))::rest->
+				     let rec match_arg_types xlist tlist=
+					 match xlist with
+					 [] -> List.length tlist==0
+					 |(x,t)::xrest ->
+					   match tlist with
+					   [] -> false
+					   | t'::trest -> t==t' && match_arg_types xrest trest
+					 in
+				     if(List.length xmap==List.length pats) then
+				     check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
+					 else search rest
+				   in
+				   search consmap
+			   else static_error l ("Method "^g^" not found!")
             )
         | None ->
            (match try_assoc class_name interfmap with
@@ -4460,7 +4509,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> call_stmt l None "free" [] (List.map (fun e -> LitPat e) args) Static
       end
     | Assign (l, x, CallExpr (lc, g, targs, [], pats,fb)) ->
-      let iscons = startswith g "new " && (List.length pats==0) in
+      let iscons = startswith g "new " && (List.length pats==0)in
       if iscons then 
         begin 
           let tpx = vartp l x in
@@ -5066,15 +5115,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let _ =
-    let rec verify_meths boxes lems meths=
-      match meths with
-        [] -> ()
-      | (g, (l,rt, ps,pre,post, Some sts,fb,v))::meths ->
-        let ss= if fb= Instance then CallStmt (l, "assume_class_this", [], [],Instance)::sts 
-                else sts
-        in
-        let _ = push() in
-        let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
+    let rec verify_cons cn boxes lems cons=
+	  match cons with
+	  [] -> ()
+	  | (xmap, (lm,pre,post,ss,v))::rest ->
+		  match ss with
+		  None -> let (((_,p),_,_),((_,_),_,_))=lm in 
+		  if Filename.check_suffix p ".javaspec" then verify_cons cn boxes lems rest
+		  else static_error lm "Constructor specification is only allowed in javaspec files!"
+		  |Some ss ->
+	    let _ = push() in
+        let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap in (* atcual params invullen *)
         let (sizemap, indinfo) =
           match ss with
             [SwitchStmt (_, Var (_, x, _), _)] -> (
@@ -5084,12 +5135,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
           | _ -> ([], None)
         in
-        let pts = ps in
+        let pts = xmap in
         let tenv = pts in
-        let (tenv, rxs) =
-          match rt with
-            None -> (tenv, [])
-          | Some rt -> (("#result", rt)::tenv, ["#result"])
+        let (tenv, rxs) =(("#result", ObjType(cn))::tenv, ["#result"])
         in
         let (in_pure_context, leminfo, lems', ghostenv) =
           (false, None, lems, [])
@@ -5098,33 +5146,83 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let _ =
           assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
-            match file_type path with
-            Java -> assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              (check_leaks h env l "Function leaks heap chunks.")
-            )
-            |_ ->
-             assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
-              (check_leaks h env l "Function leaks heap chunks.")
+            assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
+              (check_leaks h env lm "Function leaks heap chunks.")
             )
           in
           let return_cont h retval =
-            match (rt, retval) with
-              (None, None) -> do_return h env
-            | (Some tp, Some t) -> do_return h (("result", t)::env)
-            | (None, Some _) -> assert_false h env l "Void function returns a value."
-            | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
+            match retval with
+			None -> do_return h env
+            | Some t -> do_return h (("result", t)::env)
           in
           verify_cont [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
           )
         in
         let _ = pop() in
-        verify_meths boxes lems' meths
-      | _::meths -> verify_meths boxes lems meths
+	    verify_cons cn boxes lems' rest
+	in
+    let rec verify_meths boxes lems meths=
+      match meths with
+        [] -> ()
+      | (g, (l,rt, ps,pre,post,sts,fb,v))::meths ->
+	    match sts with
+		  None -> let (((_,p),_,_),((_,_),_,_))=l in 
+		  if Filename.check_suffix p ".javaspec" then verify_meths boxes lems meths
+		  else static_error l "Constructor specification is only allowed in javaspec files!"
+		| Some sts ->(
+          let ss= if fb= Instance then CallStmt (l, "assume_class_this", [], [],Instance)::sts 
+                else sts
+          in
+          let _ = push() in
+          let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) ps in (* atcual params invullen *)
+          let (sizemap, indinfo) =
+            match ss with
+              [SwitchStmt (_, Var (_, x, _), _)] -> (
+                match try_assoc x env with
+                  None -> ([], None)
+                | Some t -> ([(t, 0)], Some x)
+              )
+            | _ -> ([], None)
+          in
+          let pts = ps in
+          let tenv = pts in
+          let (tenv, rxs) =
+            match rt with
+              None -> (tenv, [])
+            | Some rt -> (("#result", rt)::tenv, ["#result"])
+          in
+          let (in_pure_context, leminfo, lems', ghostenv) =
+            (false, None, lems, [])
+          in
+          let (_, tenv) = check_pred [] tenv pre in
+          let _ =
+            assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+            let do_return h env_post = assert_pred h ghostenv env_post post real_unit (fun h ghostenv env size_first ->(check_leaks h env l "Function leaks heap chunks."))
+            in
+            let return_cont h retval =
+              match (rt, retval) with
+                (None, None) -> do_return h env
+              | (Some tp, Some t) -> do_return h (("result", t)::env)
+              | (None, Some _) -> assert_false h env l "Void function returns a value."
+              | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
+            in
+            verify_cont [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+            )
+          in
+          let _ = pop() in
+          verify_meths boxes lems' meths
+		  )
+      (*| _::meths -> verify_meths boxes lems meths*)
     in
     let rec verify_classes boxes lems classm=
       match classm with
         [] -> ()
-      | (cn,(l,meths,_,_,_,_))::classm ->
+      | (cn,(l,meths,_,cons,_,_))::classm ->
+	      let _=
+		    match cons with
+			None -> ()
+			| Some cons -> verify_cons cn boxes lems cons
+		  in
           (match meths with
             None -> verify_classes boxes lems classm
           | Some m -> verify_meths boxes lems m; verify_classes boxes lems classm)
@@ -5303,7 +5401,6 @@ main_file:=name;[] 				   else
     let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
     (prototypes_used, prototypes_implemented)
   in
-
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
     let file = open_out manifest_filename in
