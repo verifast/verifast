@@ -3146,6 +3146,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter [] ps
                in
+			   let rec equal_types x c=
+			     match x with
+				 [] -> List.length c==0
+				|(name,t)::xrest -> match c with
+				  []-> false
+				  | (name',t')::crest-> t==t' && equal_types xrest crest
+			   in
+			   let rec search_equal x c=
+			     match c with
+				 [] -> false
+				 | (c,_)::crest ->equal_types x c || search_equal x crest
+			   in
+			   if search_equal xmap cmap then
+               static_error lm "Duplicate constructor"
+               else (
 			   let (pre, post) =
                  match co with
                    None -> static_error lm "Constructor must have contract: "
@@ -3156,6 +3171,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      (wpre, wpost)
                in
 			   iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
+			   )
          in
          begin
            match constr_opt with
@@ -4244,7 +4260,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let ys = List.map (function (p, t) -> p) ps in
         let ws =
           match zip pats ps with
-            None -> static_error l "Incorrect number of arguments.BLA"
+            None -> static_error l "Incorrect number of arguments."
           | Some bs ->
             List.map
               (function (LitPat e, (x, tp)) ->
@@ -4352,25 +4368,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
                    check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
              | None->  
-			   if iscons then
-			       let rec search clist=
-				   match clist with
-				   [] -> static_error l ("Constructor not found!")
-				   | (xmap,(lm,pre,post,ss,v))::rest->
-				     let rec match_arg_types xlist tlist=
-					 match xlist with
-					 [] -> List.length tlist==0
-					 |(x,t)::xrest ->
-					   match tlist with
-					   [] -> false
-					   | t'::trest -> t==t' && match_arg_types xrest trest
-					 in
-				     if(List.length xmap==List.length pats) then
-				     check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
-					 else search rest
-				   in
-				   search consmap
-			   else static_error l ("Method "^g^" not found!")
+               if iscons then
+                   let rec search clist=
+                   match clist with
+                   [] -> static_error l ("Constructor not found!")
+                   | (xmap,(lm,pre,post,ss,v))::rest->
+                       let match_args xmap pats =
+                       match zip pats xmap with
+                         None -> false
+                       | Some bs -> 
+                         try List.map(function (LitPat e, (x, tp)) -> check_expr_t [] tenv e tp) bs; true
+                         with StaticError (l, msg) -> false
+                       in
+                     if(match_args xmap pats) then
+                     check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
+                     else search rest
+                   in
+                   search consmap
+               else static_error l ("Method "^g^" not found!")
             )
         | None ->
            (match try_assoc class_name interfmap with
