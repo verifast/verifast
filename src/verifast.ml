@@ -610,6 +610,9 @@ and
   | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of loc * string * string * expr
   | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
+  | LabelStmt of loc * string
+  | GotoStmt of loc * string
+  | InvariantStmt of loc * pred (* join point *)
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -772,6 +775,9 @@ let stmt_loc s =
   | CreateBoxStmt (l, _, _, _, _) -> l
   | CreateHandleStmt (l, _, _, _) -> l
   | DisposeBoxStmt (l, _, _, _) -> l
+  | LabelStmt (l, _) -> l
+  | GotoStmt (l, _) -> l
+  | InvariantStmt (l, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -792,7 +798,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"
+  "define"; "endif"; "&"; "goto"
 ]
 let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements"
 ]
@@ -1130,6 +1136,8 @@ and
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, hpn, args));
      '(_, Kwd ";")
      >] -> CreateBoxStmt (l, x, bcn, args, handleClauses)
+| [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
+| [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
@@ -1157,6 +1165,7 @@ and
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, targs, [], es,fb) -> CallStmt (l, g, targs, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+  | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e rhs
   | [< '(l, Kwd "++"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; IntLit (l, unit_big_int, ref None)], ref None))
   | [< '(l, Kwd "--"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; IntLit (l, unit_big_int, ref None)], ref None))
@@ -3968,7 +3977,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WriteDeref (l, e, e') -> []
     | CallStmt (l, g, targs, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
-    | SwitchStmt (l, e, cs) -> static_error l "Switch statements inside loops are not supported."
+    | SwitchStmt (l, e, cs) -> flatmap (fun (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
     | Open (l, g, ps0, ps1, coef) -> []
@@ -3983,6 +3992,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CreateBoxStmt (l, x, bcn, es, handleClauses) -> []
     | CreateHandleStmt (l, x, hpn, e) -> []
     | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
+    | GotoStmt _ -> []
+    | LabelStmt _ -> []
+    | InvariantStmt _ -> []
   in
 
   let get_points_to h p predSymb l cont =
@@ -4224,7 +4236,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _ -> cont()
   in
   
-  let rec verify_stmt tparams boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
+  let rec verify_stmt blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
     if verbose then print_endline (string_of_loc l ^ ": Executing statement");
@@ -4449,7 +4461,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
-        verify_stmt tparams boxes false leminfo sizemap tenv ghostenv h env s tcont return_cont
+        verify_stmt blocks_done lblenv tparams boxes false leminfo sizemap tenv ghostenv h env s tcont return_cont
       else
         static_error l "Non-pure statements are not allowed here."
     | Assign (l, x, CallExpr (lc, "malloc", [], [], args,Static)) ->
@@ -4569,7 +4581,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type tparams te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt tparams boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+      verify_stmt blocks_done lblenv tparams boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       ;
     | Write (l, e, f, rhs) ->
       let _ = if pure then static_error l "Cannot write in a pure context." in
@@ -4602,8 +4614,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w = check_expr_t tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
-        (fun _ -> assume (ev w) (fun _ -> verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
-        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
+        (fun _ -> assume (ev w) (fun _ -> verify_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss1 tcont return_cont))
+        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss2 tcont return_cont))
     | SwitchStmt (l, e, cs) ->
       let (w, tp) = check_expr tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -4656,7 +4668,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont tparams boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
             (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -4970,7 +4982,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (fun _ ->
              assume_pred [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
                assume (eval_non_pure false h' env e) (fun _ ->
-                 verify_cont tparams boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
+                 let lblenv =
+                   List.map
+                     begin fun (lbl, cont) ->
+                       (lbl, fun blocks_done sizemap tenv ghostenv h'' env -> cont blocks_done sizemap tenv ghostenv (h'' @ h) env)
+                     end
+                     lblenv
+                 in
+                 verify_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                    assert_pred h'' ghostenv env p real_unit (fun h''' _ _ _ ->
                      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
@@ -5057,7 +5076,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    ss
                in
                if atomic && !nonpureStmtCount <> 1 then static_error lpa "The body of an atomic perform_action statement must include exactly one non-pure statement.";
-               verify_cont tparams boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+               verify_cont blocks_done lblenv tparams boxes true leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
@@ -5107,7 +5126,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     | BlockStmt (l, ss) ->
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
+      verify_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
     | PureStmt (l, s) ->
       begin
         match s with
@@ -5115,18 +5134,160 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           nonpure_ctxt := not pure
         | _ -> ()
       end;
-      verify_stmt tparams boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
-
+      verify_stmt blocks_done lblenv tparams boxes true leminfo sizemap tenv ghostenv h env s tcont return_cont
+    | GotoStmt (l, lbl) ->
+      begin
+        match try_assoc lbl lblenv with
+          None -> static_error l "No such label."
+        | Some cont -> cont blocks_done sizemap tenv ghostenv h env
+      end
+    | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position."
+    | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position."
   and
-    verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
+    verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        verify_stmt tparams boxes pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont
+        verify_stmt blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont
         ) return_cont
       )
+  and
+    goto_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env return_cont block =
+    let `Block (inv, ss, cont) = block in
+    let l() =
+      match (inv, ss) with
+        (Some (l, _, _), _) -> l
+      | (_, s::_) -> stmt_loc s
+      | _ -> assert false (* A block that has no invariant and no body cannot be in a loop *)
+    in
+    begin
+      match (List.memq block blocks_done, inv) with
+        (true, _) when pure -> assert_false h env (l()) "Loops are not allowed in a pure context."
+      | (true, None) -> assert_false h env (l()) "Loop invariant required."
+      | (_, Some (l, inv, tenv)) ->
+        assert_pred h ghostenv env inv real_unit (fun h _ _ _ ->
+          check_leaks h env l "Loop leaks heap chunks."
+        )
+      | (false, None) ->
+        let blocks_done = block::blocks_done in
+        verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+    end
+  and
+    verify_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss cont return_cont =
+    let (decls, ss) =
+      let rec iter decls ss =
+        match ss with
+          (DeclStmt _) as s::ss -> iter (s::decls) ss
+        | _ -> (List.rev decls, ss)
+      in
+      iter [] ss
+    in
+    begin fun cont ->
+      verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env decls cont return_cont
+    end $. fun sizemap tenv ghostenv h env ->
+    let assigned_vars = block_assigned_variables ss in
+    let blocks =
+      let rec iter blocks ss =
+        if ss = [] then
+          List.rev blocks
+        else
+          let (lbls, ss) =
+            let rec iter2 lbls ss =
+              match ss with
+                LabelStmt (l, lbl)::ss ->
+                iter2 ((l, lbl)::lbls) ss
+              | _ -> (lbls, ss)
+            in
+            iter2 [] ss
+          in
+          let (inv, ss) =
+            let some_inv l inv ss =
+              let (inv, tenv) = check_pred tparams tenv inv in
+              (Some (l, inv, tenv), ss)
+            in
+            match ss with
+              (PureStmt (_, InvariantStmt (l, inv)))::ss -> some_inv l inv ss
+            | InvariantStmt (l, inv)::ss ->
+              if not pure then static_error l "Invariant statements must be inside an annotation.";
+              some_inv l inv ss
+            | _ -> (None, ss)
+          in
+          let (body, ss) =
+            let rec iter2 body ss =
+              match ss with
+                [] | LabelStmt _::_ | InvariantStmt _::_ | PureStmt (_, InvariantStmt _)::_ -> (List.rev body, ss)
+              | s::ss -> iter2 (s::body) ss
+            in
+            iter2 [] ss
+          in
+          iter ((lbls, inv, body)::blocks) ss
+      in
+      iter [] ss
+    in
+    let lblenv_ref = ref [] in
+    let (lblenv, blocks) =
+      let rec iter blocks =
+        match blocks with
+          [] -> (lblenv, [])
+        | (lbls, inv, ss)::blocks ->
+          let (lblenv, blocks') = iter blocks in
+          let cont blocks_done sizemap tenv ghostenv h env =
+            match blocks' with
+              [] -> cont sizemap tenv ghostenv h env
+            | block'::_ -> goto_block blocks_done !lblenv_ref tparams boxes pure leminfo sizemap tenv ghostenv h env return_cont block'
+          in
+          let block' = `Block (inv, ss, cont) in
+          let lblenv =
+            let cont blocks_done sizemap tenv ghostenv h env =
+              goto_block blocks_done !lblenv_ref tparams boxes pure leminfo sizemap tenv ghostenv h env return_cont block'
+            in
+            let rec iter lblenv lbls =
+              match lbls with
+                [] -> lblenv
+              | (l, lbl)::lbls ->
+                if List.mem_assoc lbl lblenv then static_error l "Duplicate label";
+                iter ((lbl, cont)::lblenv) lbls
+            in
+            iter lblenv lbls
+          in
+          (lblenv, block'::blocks')
+      in
+      iter blocks
+    in
+    lblenv_ref := lblenv;
+    begin
+      match blocks with
+        [] -> cont sizemap tenv ghostenv h env
+      | block0::_ -> goto_block blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env return_cont block0
+    end;
+    begin
+      List.iter
+        begin fun (`Block (inv, ss, cont) as block) ->
+          match inv with
+            None -> ()
+          | Some (l, inv, tenv) ->
+            let env =
+              flatmap
+                begin fun (x, v) ->
+                  match try_assoc x tenv with
+                    None -> []
+                  | Some t ->
+                    if List.mem x assigned_vars then
+                      [(x, get_unique_var_symb x t)]
+                    else
+                      [(x, v)]
+                end
+                env
+            in
+            assume_pred [] ghostenv env inv real_unit None None (fun h ghostenv env ->
+              let blocks_done = block::blocks_done in
+              verify_cont blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+            )
+        end
+        blocks
+    end
   in
 
   let _ =
@@ -5170,7 +5331,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 			None -> do_return h env
             | Some t -> do_return h (("result", t)::env)
           in
-          verify_cont [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_cont [] [] [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
           )
         in
         let _ = pop() in
@@ -5221,7 +5382,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | (None, Some _) -> assert_false h env l "Void function returns a value."
               | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
             in
-            verify_cont [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+            verify_cont [] [] [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
             )
           in
           let _ = pop() in
@@ -5295,7 +5456,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (None, Some _) -> assert_false h env l "Void function returns a value."
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
           in
-          verify_cont tparams boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+          verify_block [] [] tparams boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
         )
       in
       let _ = pop() in
@@ -5355,7 +5516,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                           let env = [("actionHandle", actionHandle)] @ [("predicateHandle", predicateHandle)] @
                             post_boxvars @ old_boxvars @ aarg_env @ hpargs in
-                          verify_cont [] boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
+                          verify_cont [] [] [] boxes true leminfo [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                             assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
                           ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
@@ -5373,7 +5534,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_funcs (bcn::boxes) lems ds
     | _::ds -> verify_funcs boxes lems ds
   in
-  verify_funcs [] [] ds
+  let lems0 = flatmap (function (g, (l, Lemma, tparams, rt, ps, atomic, pre, pre_tenv, post, body, fb, v)) -> [g] | _ -> []) funcmap0 in
+  verify_funcs [] lems0 ds
   
   in
   

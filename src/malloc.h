@@ -9,6 +9,8 @@ lemma void malloc_block_null();
     requires emp;
     ensures malloc_block(0, 0);
 
+// Notice that the value 4294967295 below should really be 4294967296.
+// But we assume here that malloc never allocates the last byte of the address space.
 lemma void malloc_block_limits(void *array);
     requires [?f]malloc_block(array, ?size);
     ensures [f]malloc_block(array, size) &*& true == ((void *)0 <= array) &*& 0 <= size &*& array + size <= (void *)4294967295;
