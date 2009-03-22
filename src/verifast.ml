@@ -1417,12 +1417,12 @@ let parse_jarspec_file path reportRange=
         match file with
           None -> []
         | Some file -> if Filename.check_suffix file ".jar" then
-		    (parsefiles (open_in ((Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
-		    else let path'=Filename.concat (Filename.dirname path) file in
+            (parsefiles (open_in ((Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
+            else let path'=Filename.concat (Filename.dirname path) file in
             (parse_java_file path' reportRange)@(parsefiles channel)
     in
-	parsefiles (open_in path)
-	else []
+    parsefiles (open_in path)
+    else []
   
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
@@ -1585,7 +1585,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match headers with
         [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
       | (l, header_path)::headers ->
-	    if file_type path <> Java then
+        if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
           iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
         else
@@ -1629,13 +1629,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
               (append_nodups functypemap functypemap0 id l "function type")
               (append_nodups funcmap funcmap0 id l "function")
-			  (append_nodups boxmap boxmap0 id l "box predicate")
-			  (append_nodups classmap classmap0 id l "class")
+              (append_nodups boxmap boxmap0 id l "box predicate")
+              (append_nodups classmap classmap0 id l "class")
               headers
           end
         end
     else
-	      begin
+          begin
           let localpath = Filename.concat basedir header_path in
           let (basedir, relpath, path) =
             if Sys.file_exists localpath then
@@ -1674,8 +1674,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
               (append_nodups functypemap functypemap0 id l "function type")
               (append_nodups funcmap funcmap0 id l "function")
-			  (append_nodups boxmap boxmap0 id l "box predicate")
-			  (append_nodups classmap classmap0 id l "class")
+              (append_nodups boxmap boxmap0 id l "box predicate")
+              (append_nodups classmap classmap0 id l "class")
               headers
           end
         end
@@ -3072,8 +3072,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            match meths with
              [] -> (cn, (l,Some (List.rev mmap),fds,constr,super,interfs))
            | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
-             if List.mem_assoc n mmap then
-               static_error lm "Duplicate meth name."
+             let xmap =
+                 let rec iter xm xs =
+                   match xs with
+                    [] -> List.rev xm
+                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                      let t = check_pure_type [] te in
+                      iter ((x, t)::xm) xs
+                 in
+                 iter [] ps
+             in
+             let rec equal_types x c=
+                 match x with
+                 [] -> List.length c==0
+                |(name,t)::xrest -> match c with
+                  []-> false
+                  | (name',t')::crest-> t==t' && equal_types xrest crest
+             in
+             let rec search_equal x c=
+                 match c with
+                 [] -> false
+                 | (g,(_,_,c,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
+             in
+             if List.mem_assoc n mmap && search_equal xmap mmap then
+               static_error lm "Duplicate method."
              else (
                let rec check_type te =
                  match te with
@@ -3090,16 +3112,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    Some ManifestTypeExpr (_, Void) -> None
                  | Some t-> Some (check_type t)
                  | None -> None
-               in
-               let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
                in
                let rec matchargs xs xs'= (* match the argument list of the method in the interface with the arg list of the method in the class *)
                   match xs with
@@ -3145,7 +3157,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            match constr with
              [] -> (cn, (l,meths,fds,Some (List.rev cmap),super,interfs))
              | Cons (lm,ps, co, ss,v)::constr ->
-			   let xmap =
+               let xmap =
                  let rec iter xm xs =
                    match xs with
                     [] -> List.rev xm
@@ -3155,22 +3167,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter [] ps
                in
-			   let rec equal_types x c=
-			     match x with
-				 [] -> List.length c==0
-				|(name,t)::xrest -> match c with
-				  []-> false
-				  | (name',t')::crest-> t==t' && equal_types xrest crest
-			   in
-			   let rec search_equal x c=
-			     match c with
-				 [] -> false
-				 | (c,_)::crest ->equal_types x c || search_equal x crest
-			   in
-			   if search_equal xmap cmap then
+               let rec equal_types x c=
+                 match x with
+                 [] -> List.length c==0
+                |(name,t)::xrest -> match c with
+                  []-> false
+                  | (name',t')::crest-> t==t' && equal_types xrest crest
+               in
+               let rec search_equal x c=
+                 match c with
+                 [] -> false
+                 | (c,_)::crest ->equal_types x c || search_equal x crest
+               in
+               if search_equal xmap cmap then
                static_error lm "Duplicate constructor"
                else (
-			   let (pre, post) =
+               let (pre, post) =
                  match co with
                    None -> static_error lm "Constructor must have contract: "
                  | Some (pre, post) ->
@@ -3179,8 +3191,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      let (wpost, _) = check_pred [] postmap post in
                      (wpre, wpost)
                in
-			   iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
-			   )
+               iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
+               )
          in
          begin
            match constr_opt with
@@ -4373,31 +4385,46 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         match try_assoc class_name classmap with
           Some(_,Some methmap,_,Some consmap,super,interfs) -> 
-            (match try_assoc g methmap with
-               Some (lm,rt, xmap, pre, post, body,fbm,v) ->
-                 if fb <>fbm 
-                   then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
-                   let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                   check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
-             | None->  
-               if iscons then
-                   let rec search clist=
-                   match clist with
-                   [] -> static_error l ("Constructor not found!")
-                   | (xmap,(lm,pre,post,ss,v))::rest->
-                       let match_args xmap pats =
-                       match zip pats xmap with
-                         None -> false
-                       | Some bs -> 
-                         try List.map(function (LitPat e, (x, tp)) -> check_expr_t [] tenv e tp) bs; true
-                         with StaticError (l, msg) -> false
-                       in
-                     if(match_args xmap pats) then
-                     check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
-                     else search rest
-                   in
-                   search consmap
-               else static_error l ("Method "^g^" not found!")
+            (if pure then 
+               static_error l "Cannot call methods in a pure context."
+             else
+             let rec search_meth mmap=
+               match mmap with
+                 [] -> static_error l ("Method "^g^" not found!")
+               | (n,(lm,rt, xmap, pre, post, body,fbm,v))::rest when n=g-> 
+                 let match_args xmap pats =
+                   match zip pats xmap with
+                     None -> false
+                   | Some bs ->
+                       try List.map(function (LitPat e, (x, tp)) -> check_expr_t [] tenv e tp) bs; true
+                       with StaticError (l, msg) -> false
+                 in
+                 if(match_args xmap pats) then
+                   if fb <>fbm then static_error l ("Wrong method binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm))
+                   else check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
+                 else
+                   search_meth rest
+               | _::rest -> search_meth rest
+             in
+             let rec search_cons clist=
+               match clist with
+                [] -> static_error l ("Constructor "^g^" not found!")
+              | (xmap,(lm,pre,post,ss,v))::rest->
+                let match_args xmap pats =
+                  match zip pats xmap with
+                    None -> false
+                  | Some bs -> 
+                      try List.map(function (LitPat e, (x, tp)) -> check_expr_t [] tenv e tp) bs; true
+                      with StaticError (l, msg) -> false
+                in
+                if(match_args xmap pats) then
+                  check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
+                else search_cons rest
+              in
+              if iscons then 
+                search_cons consmap
+              else 
+                search_meth methmap
             )
         | None ->
            (match try_assoc class_name interfmap with
@@ -5292,15 +5319,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let _ =
     let rec verify_cons cn boxes lems cons=
-	  match cons with
-	  [] -> ()
-	  | (xmap, (lm,pre,post,ss,v))::rest ->
-		  match ss with
-		  None -> let (((_,p),_,_),((_,_),_,_))=lm in 
-		  if Filename.check_suffix p ".javaspec" then verify_cons cn boxes lems rest
-		  else static_error lm "Constructor specification is only allowed in javaspec files!"
-		  |Some ss ->
-	    let _ = push() in
+      match cons with
+     [] -> ()
+      | (xmap, (lm,pre,post,ss,v))::rest ->
+          match ss with
+          None -> let (((_,p),_,_),((_,_),_,_))=lm in 
+          if Filename.check_suffix p ".javaspec" then verify_cons cn boxes lems rest
+          else static_error lm "Constructor specification is only allowed in javaspec files!"
+          |Some ss ->
+        let _ = push() in
         let env = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap in (* atcual params invullen *)
         let (sizemap, indinfo) =
           match ss with
@@ -5328,24 +5355,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let return_cont h retval =
             match retval with
-			None -> do_return h env
+            None -> do_return h env
             | Some t -> do_return h (("result", t)::env)
           in
           verify_cont [] [] [] boxes in_pure_context leminfo sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
           )
         in
         let _ = pop() in
-	    verify_cons cn boxes lems' rest
-	in
+        verify_cons cn boxes lems' rest
+    in
     let rec verify_meths boxes lems meths=
       match meths with
         [] -> ()
       | (g, (l,rt, ps,pre,post,sts,fb,v))::meths ->
-	    match sts with
-		  None -> let (((_,p),_,_),((_,_),_,_))=l in 
-		  if Filename.check_suffix p ".javaspec" then verify_meths boxes lems meths
-		  else static_error l "Constructor specification is only allowed in javaspec files!"
-		| Some sts ->(
+        match sts with
+          None -> let (((_,p),_,_),((_,_),_,_))=l in 
+          if Filename.check_suffix p ".javaspec" then verify_meths boxes lems meths
+          else static_error l "Constructor specification is only allowed in javaspec files!"
+        | Some sts ->(
           let ss= if fb= Instance then CallStmt (l, "assume_class_this", [], [],Instance)::sts 
                 else sts
           in
@@ -5387,18 +5414,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let _ = pop() in
           verify_meths boxes lems' meths
-		  )
+          )
       (*| _::meths -> verify_meths boxes lems meths*)
     in
     let rec verify_classes boxes lems classm=
       match classm with
         [] -> ()
       | (cn,(l,meths,_,cons,_,_))::classm ->
-	      let _=
-		    match cons with
-			None -> ()
-			| Some cons -> verify_cons cn boxes lems cons
-		  in
+          let _=
+            match cons with
+            None -> ()
+            | Some cons -> verify_cons cn boxes lems cons
+          in
           (match meths with
             None -> verify_classes boxes lems classm
           | Some m -> verify_meths boxes lems m; verify_classes boxes lems classm)
@@ -5546,35 +5573,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let (prototypes_used, prototypes_implemented) =
     let (headers, ds) = 
       match file_type (Filename.basename path) with
-      Java-> if Filename.check_suffix path ".jarsrc" then
-		     let rec parsefiles channel=
-              let file= try Some(input_line channel) with End_of_file -> None in
-                match file with
-                  None -> []
-                | Some file -> 
-				   if startswith file "main-class " then let name=(String.sub file 11 ((String.length file)-11)) in
-main_file:=name;[] 				   else
-				   if Filename.check_suffix file ".jar" then
-		           (parsefiles (open_in (Filename.concat (Filename.dirname path) (Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
-		          else let path'=Filename.concat (Filename.dirname path) file in
-                       (parse_java_file path' reportRange)@(parsefiles channel)
-            in
-			let specpath=((Filename.chop_extension path)^".jarspec") in
-		    let headers= if Sys.file_exists specpath then 
-[(((("",path),1,1),(("",path),1,1)),specpath)]
-			else []
-            in
-            (headers,parsefiles (open_in path))
-			else
-            ([], parse_java_file path reportRange)
+      Java->if Filename.check_suffix path ".jarsrc" then
+              let rec parsefiles channel=
+                let file= try Some(input_line channel) with End_of_file -> None in
+                  match file with
+                    None -> []
+                  | Some file -> 
+                    if startswith file "main-class " then 
+                    let name=(String.sub file 11 ((String.length file)-11)) in
+                      main_file:=name;[]
+                    else
+                      if Filename.check_suffix file ".jar" then
+                        (parsefiles (open_in (Filename.concat (Filename.dirname path) (Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
+                      else 
+                        let path'=Filename.concat (Filename.dirname path) file in
+                        (parse_java_file path' reportRange)@(parsefiles channel)
+              in
+              let specpath=((Filename.chop_extension path)^".jarspec") in
+              let headers= if Sys.file_exists specpath then [(((("",path),1,1),(("",path),1,1)),specpath)] else [] in
+              (headers,parsefiles (open_in path))
+            else
+              ([], parse_java_file path reportRange)
       | _->
         parse_c_file path reportRange
     in
-	let include_prelude=
-	  match file_type (Filename.basename path) with
+    let include_prelude=
+      match file_type (Filename.basename path) with
       Java-> false
       | _->true
-	in
+    in
     let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
     (prototypes_used, prototypes_implemented)
   in

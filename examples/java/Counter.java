@@ -27,7 +27,19 @@ public class Counter {
   {
     this.value = this.value + 1;
   }
-
+  void add(int x)
+    //@ requires this.value |-> ?v;
+    //@ ensures this.value |-> v + x;
+  {
+    this.value = this.value + x;
+  }
+  void add(Counter x)
+    //@ requires this.value |-> ?v &*& x.value |-> ?v';
+    //@ ensures this.value |-> v + v' &*& x.value |-> v';
+  {
+    this.add(x.value);
+  }
+  
   static void swap(Counter c1, Counter c2)
     //@ requires c1.value |-> ?v1 &*& c2.value |-> ?v2;
     //@ ensures c1.value |-> v2 &*& c2.value |-> v1;
@@ -54,5 +66,13 @@ public class Counter {
     tmp=c4.value;
     int tmp2=c1.value;
     //@ assert tmp==tmp2;
+    
+    c1.add(10);
+    tmp=c1.value;
+    //@ assert tmp==15;
+    
+    c1.add(c2);
+    tmp=c1.value;
+    //@ assert tmp==16;
   }
 }
