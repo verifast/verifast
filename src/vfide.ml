@@ -153,7 +153,7 @@ let show_ide initialPath prover =
     in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_core keywords ("<bufferBase>", "<buffer>") charStream reportRange startIsInComment startIsInGhostRange false in
+        make_lexer_core keywords ("<bufferBase>", "<buffer>") charStream reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
       Stream.iter (fun _ -> ()) tokenStream;
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter
@@ -669,7 +669,7 @@ let show_ide initialPath prover =
                 None
             in
             try
-              let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck} in
+              let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck; option_allow_should_fail = true} in
               verify_program None false options path reportRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()

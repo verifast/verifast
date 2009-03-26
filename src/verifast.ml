@@ -18,6 +18,8 @@ let take_drop n xs =
   iter [] xs n
 let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
+let remove f xs = List.filter (fun x -> not (f x)) xs
+
 let rec distinct xs =
   match xs with
     [] -> true
@@ -158,7 +160,7 @@ type range_kind =
   | CommentRange
   | ErrorRange
 
-let make_lexer_core keywords path stream reportRange inComment inGhostRange exceptionOnError =
+let make_lexer_core keywords path stream reportRange inComment inGhostRange exceptionOnError reportShouldFail =
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
   
@@ -436,8 +438,12 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
     | _ -> Some (keyword_or_error '/')
   and single_line_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
+      Some '~' -> Stream.junk strm__; reportShouldFail (current_loc()); single_line_comment_rest strm__
+    | _ -> single_line_comment_rest strm__
+  and single_line_comment_rest (strm__ : _ Stream.t) =
+    match Stream.peek strm__ with
       Some '\010' | Some '\013' | None -> reportRange CommentRange (current_loc())
-    | Some c -> Stream.junk strm__; single_line_comment strm__
+    | Some c -> Stream.junk strm__; single_line_comment_rest strm__
     | _ -> raise Stream.Failure
   and multiline_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
@@ -480,8 +486,8 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
    in_comment,
    in_ghost_range)
 
-let make_lexer keywords path stream reportRange =
-  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords path stream reportRange false false true in
+let make_lexer keywords path stream reportRange reportShouldFail =
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords path stream reportRange false false true reportShouldFail in
   (loc, ignore_eol, token_stream)
 
 type type_ =
@@ -1358,7 +1364,7 @@ in
 let rec parse_java_file path reportRange =
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange (fun _ -> ()) in
   let parse_decls_eof = parser [< ds = parse_decls; _ = Stream.empty >] -> ds in
   try
     parse_decls_eof token_stream
@@ -1376,10 +1382,10 @@ let parse_include_directives ignore_eol =
 in
   parse_include_directives
 
-let parse_c_file path reportRange =
+let parse_c_file path reportRange reportShouldFail =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange reportShouldFail in
   let parse_c_file =
     parser
       [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, ds)
@@ -1390,10 +1396,10 @@ let parse_c_file path reportRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_header_file basePath relPath reportRange =
+let parse_header_file basePath relPath reportRange reportShouldFail =
   let lexer = make_lexer (veri_keywords@c_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange reportShouldFail in
   let parse_header_file =
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
@@ -1471,11 +1477,11 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool}
+type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool}
 
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
-  let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check} = options in
+  let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check; option_allow_should_fail=allow_should_fail} = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
@@ -1543,6 +1549,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
   
+  let shouldFailLocs = ref [] in
+  
+  let reportShouldFail l =
+    if allow_should_fail then
+      shouldFailLocs := l::!shouldFailLocs
+    else
+      static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them."
+  in
+  
+  let check_should_fail default body =
+    let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
+    let should_fail l = List.exists (locs_match l) !shouldFailLocs in
+    let has_failed l = shouldFailLocs := remove (locs_match l) !shouldFailLocs; default in
+    try
+      body ()
+    with
+    | StaticError (l, msg) when should_fail l -> has_failed l
+    | SymbolicExecutionError (ctxts, phi, l, msg) when should_fail l -> has_failed l
+  in
+  
   let headermap = ref [] in
   
   let rec check_file include_prelude basedir headers ds =
@@ -1552,7 +1578,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin
       match try_assoc preludePath !headermap with
         None ->
-        let ([], ds) = parse_header_file bindir "prelude.h" reportRange in
+        let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
         let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0) = check_file false bindir [] ds in
         headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0))::!headermap;
         (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
@@ -1610,7 +1636,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) =
               match try_assoc path !headermap with
                 None ->
-                let (headers', ds) = parse_header_file basedir relpath reportRange in
+                let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
                 let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap) = check_file true basedir headers' ds in
                 headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap))::!headermap;
                 (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
@@ -5465,6 +5491,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (false, None, lems, [])
       in
       let _ =
+        check_should_fail () $. fun _ ->
         assume_pred [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
           let do_return h env_post =
             match file_type path with
@@ -5595,15 +5622,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             else
               ([], parse_java_file path reportRange)
       | _->
-        parse_c_file path reportRange
+        parse_c_file path reportRange reportShouldFail
     in
     let include_prelude=
       match file_type (Filename.basename path) with
       Java-> false
       | _->true
     in
-    let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
-    (prototypes_used, prototypes_implemented)
+    let result =
+      check_should_fail ([], []) $. fun () ->
+      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
+      (prototypes_used, prototypes_implemented)
+    in
+    begin
+      match !shouldFailLocs with
+        [] -> ()
+      | l::_ -> static_error l "No error found on line."
+    end;
+    result
   in
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in

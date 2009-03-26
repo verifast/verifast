@@ -36,6 +36,7 @@ let _ =
   let compileOnly = ref false in
   let isLibrary = ref false in
   let allowAssume = ref false in
+  let allowShouldFail = ref false in
   let modules: string list ref = ref [] in
   let i = ref 1 in
   while !i < n do
@@ -50,6 +51,7 @@ let _ =
       | "-c" -> compileOnly := true
       | "-shared" -> isLibrary := true
       | "-allow_assume" -> allowAssume := true
+      | "-allow_should_fail" -> allowShouldFail := true
       | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
     else
     begin
@@ -57,7 +59,7 @@ let _ =
 	  then
       begin
         print_endline arg;
-        verify !stats {option_verbose = !verbose; option_disable_overflow_check = !disable_overflow_check} !prover arg
+        verify !stats {option_verbose = !verbose; option_disable_overflow_check = !disable_overflow_check; option_allow_should_fail = !allowShouldFail} !prover arg
       end;
       modules := arg::!modules
     end

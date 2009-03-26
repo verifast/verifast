@@ -41,7 +41,10 @@ test: verifast.exe vfide.exe
 	cd ..
 	..\src\verifast -c contrib.c
 	..\src\verifast reallittest.c
-	cd ..\src
+	cd ..\tests\errors
+	..\..\src\verifast -c -allow_should_fail basics.c
+	..\..\src\verifast -c -allow_should_fail typecheck1.c
+	cd ..\..\src
 
 refman:
 	cd ..\doc\refman
