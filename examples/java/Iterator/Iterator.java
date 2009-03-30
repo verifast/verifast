@@ -1,7 +1,7 @@
 interface Iterator {
   boolean hasNext();
-      //@ requires iterator(this.getClass())(this, ?xs);
-      //@ ensures iterator(this.getClass())(this, xs) &*& result==(xs!=nil);
+      //@ requires iterator(this.getClass())(this, ?ys);
+      //@ ensures iterator(this.getClass())(this, ys) &*& result==(ys!=nil);
 
   Object next();
       //@ requires iterator(this.getClass())(this, ?xs) &*& xs!=nil;

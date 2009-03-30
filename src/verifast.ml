@@ -1361,10 +1361,10 @@ and
 in
   parse_decls
 
-let rec parse_java_file path reportRange =
+let rec parse_java_file path reportRange=
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange (fun _ -> ()) in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< ds = parse_decls; _ = Stream.empty >] -> ds in
   try
     parse_decls_eof token_stream
@@ -1416,19 +1416,64 @@ let parse_header_file basePath relPath reportRange reportShouldFail =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_jarspec_file path reportRange=
-  if Filename.check_suffix path ".jarspec" then
-    let rec parsefiles channel=
-      let file= try Some(input_line channel) with End_of_file -> None in
-        match file with
-          None -> []
-        | Some file -> if Filename.check_suffix file ".jar" then
-            (parsefiles (open_in ((Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
-            else let path'=Filename.concat (Filename.dirname path) file in
-            (parse_java_file path' reportRange)@(parsefiles channel)
-    in
-    parsefiles (open_in path)
-    else []
+let rec parse_jarspec_file basePath relPath reportRange =
+  let lexer = make_lexer ["."] in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
+  let rec parse_file=
+    parser
+      [< '(l, Ident a);'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
+        if extension="jar" then
+          match (parse_jarspec_file basePath (a^".jarspec") reportRange) with
+          (x,y) -> (match e with (u,v) -> (u,y@v))
+        else
+          if extension <> "javaspec" then 
+            raise (ParseException (l, "Only javaspec or jar files can be specified here."))
+          else
+            let fname=a^".javaspec" in (match e with (x,y) -> (fname::x,fname::y))
+    | [< _ = Stream.empty>] -> ([],[])
+  in
+  try
+    parse_file token_stream
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))  
+
+let rec parse_jarsrc_file basePath relPath reportRange =
+  let lexer = make_lexer [".";"-"] in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
+  let main=ref ("",dummy_loc) in
+  let rec parse_file =
+    parser
+      [< '(l, Ident a);z= parser
+        [<'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
+        if extension="jar" then
+          match (parse_jarspec_file basePath (a^".jarspec") reportRange) with
+          (x,y)->(match e with (b,c,d) -> (x@b,(List.map (fun n -> (l,n))y)@c,(a^"."^extension)::d))
+        else
+          if extension <> "java" then 
+            raise (ParseException (l, "Only java or jar files can be specified here."))
+          else
+            (match e with (x,y,z) -> ((a^".java")::x,y,z))
+      | [<'(_, Kwd "-");'(_, Ident b);'(x, Ident c);e= parse_file>] ->
+        if a="main" && b="class" then
+          begin
+          if !main<>("",dummy_loc) then
+            raise (ParseException (l, "There can only be one main method"))
+          else
+            main:=(c,x);e
+          end
+        else
+         raise (ParseException (l, "The class containing the main method should be specified as: main-class ClassName"))
+      >] -> z
+    | [< _ = Stream.empty>] -> ([],[],[])
+  in
+  try
+    match parse_file token_stream with (a,b,c) ->(!main,a,b,c)
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
   
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
@@ -1468,6 +1513,15 @@ let zip xs ys =
   in
   iter xs ys []
 
+let unzip xs=
+  let rec iter xs ys=
+    match xs with
+      [] -> Some (List.rev ys)
+    | (x, y)::rest -> iter rest ((x,y)::ys)
+    | _ -> None
+  in
+  iter xs []
+  
 let do_finally tryBlock finallyBlock =
   let result =
     try
@@ -1570,50 +1624,68 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let headermap = ref [] in
+  let spec_classes= ref [] in
+  let spec_lemmas= ref [] in
+  let meths_impl= ref [] in
+  let cons_impl= ref [] in
+  let main_meth= ref [] in
+  
+  let extract_specs ds=
+    let rec iter ds classes lemmas=
+      match ds with
+      [] -> (classes,lemmas)
+    | Class(l,cn,meths,fds,cons,super,inames)::rest -> 
+      let meths'= List.filter (fun x-> match x with Meth(lm, t, n, ps, co, ss,fb,v) -> match ss with None->true |Some _ -> false) meths 
+      in
+      let cons'= List.filter (fun x-> match x with Cons (lm,ps,co,ss,v) -> match ss with None->true |Some _ -> false) cons 
+      in
+      iter rest (Class(l,cn,meths',fds,cons,super,inames)::classes) lemmas
+    | Func(l,k,tparams,rt,fn,arglist,atomic,ftype,contract,body,fb,vis) as elem ::rest when k=Lemma && body=None->
+      iter rest classes (elem::lemmas)
+    | _::rest -> 
+      iter rest classes lemmas
+    in
+    iter ds [] []
+  in
   
   let rec check_file include_prelude basedir headers ds =
-  
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) =
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     if include_prelude then
     begin
       match try_assoc preludePath !headermap with
         None ->
         let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
-        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0))::!headermap;
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) ->
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
+        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
+        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
     end
     else
-     ([], [], [], [], [], [], [], [], [], [], [], [])
+     ([], [], [], [], [], [], [], [], [], [], [], [],[])
   in
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
       match xys with
         [] -> xys0
       | ((x, y) as elem)::xys ->
-        if List.mem_assoc x xys0 then static_error l ("Duplicate TEST" ^ elementKind ^ " '" ^ string_of_key x ^ "'");
+        if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
         elem::iter xys
     in
     iter xys
   in
-  
-  
 
   let id x = x in
-
   
-  
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) =
+  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     let headers_included = ref [] in
-    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers =
+    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
       match headers with
-        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0)
+        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       | (l, header_path)::headers ->
-        if file_type path <> Java then
+    if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
+          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -1629,21 +1701,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l "No such file."
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) =
+            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap) = check_file true basedir headers' ds in
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
-              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) ->
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
+                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
             in
-            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers' in
+            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
             iter
               (append_nodups structmap structmap0 id l "struct")
               (append_nodups inductivemap inductivemap0 id l "inductive datatype")
@@ -1657,10 +1729,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (append_nodups funcmap funcmap0 id l "function")
               (append_nodups boxmap boxmap0 id l "box predicate")
               (append_nodups classmap classmap0 id l "class")
+              (append_nodups interfmap interfmap0 id l "interface")
               headers
           end
         end
-    else
+    else (* JAVA DEEL*)
           begin
           let localpath = Filename.concat basedir header_path in
           let (basedir, relpath, path) =
@@ -1671,24 +1744,38 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               if Sys.file_exists systempath then
                 (bindir, header_path, systempath)
               else
-                static_error l "No such file."
+                static_error l ("No such file: "^systempath)
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+          else
+          if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
+            begin
+            headers_included := path::!headers_included;
+            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            end
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) =
+            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
               match try_assoc path !headermap with
                 None ->
-                let (headers',ds) = ([],parse_jarspec_file relpath reportRange) in
-                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap) = check_file false basedir headers' ds in
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
-              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap) ->
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap)
+                let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
+
+                let allspecs= remove (fun x -> List.mem x (List.tl !headers_included))(list_remove_dups allspecs) in
+                (*let _= print_string "jarspecs: ";List.map (fun x-> print_string (x^" ")) jarspecs;print_string "\n" in
+                let _= print_string "allpecs: ";List.map (fun x-> print_string (x^" ")) allspecs;print_string "\n" in*)
+                let (classes,lemmas)=extract_specs (List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
+                let (headers',ds) = ([],List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
+                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file false basedir headers' ds in
+                spec_classes:=classes;
+                spec_lemmas:=lemmas;
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
+                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
             in
-            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers' in
+            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
             iter
               (append_nodups structmap structmap0 id l "struct")
               (append_nodups inductivemap inductivemap0 id l "inductive datatype")
@@ -1702,11 +1789,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (append_nodups funcmap funcmap0 id l "function")
               (append_nodups boxmap boxmap0 id l "box predicate")
               (append_nodups classmap classmap0 id l "class")
+              (append_nodups interfmap interfmap0 id l "interface")
               headers
           end
         end
     in
-    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 headers
+    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
   in
   
   let structdeclmap =
@@ -2389,7 +2477,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let malloc_block_pred_map1 = 
     match file_type path with
-    Java-> flatmap (function (sn, (_,_,_,_,_,_)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) dummy_loc 0 [ObjType sn] (Some 1))] 
+    Java-> flatmap (function (cn, (_,_,_,_,_,_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc 0 [ObjType cn] (Some 1))] 
             | _ -> []) classdeclmap
     | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l 0 
             [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap1 
@@ -3036,199 +3124,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (wbody, tenv) = check_pred tparams tenv body in
       (CoefPred (l, wcoef, wbody), tenv)
   in
-  let interfmap = if file_type path<>Java then [] else
-    List.map
-      (fun (ifn, (l,specs)) ->
-         let rec iter mmap meth_specs =
-           match meth_specs with
-             [] -> (ifn, (l,(List.rev mmap)))
-           | MethSpec (lm, t, n, ps, co,fb,v)::meths ->
-             if List.mem_assoc n mmap then
-               static_error lm "Duplicate method name."
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, Bool) -> Bool
-                 | IdentTypeExpr(lt, sn) ->
-                     if (List.mem_assoc sn interfdeclmap)||((List.mem_assoc sn classdeclmap)) then ObjType sn
-                     else static_error lt "No such class."
-                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
-               in
-               let check_t t=
-                 match t with
-                   Some ManifestTypeExpr (_, Void) -> None
-                 | Some t-> Some (check_type t)
-                 | None -> None
-               in
-               let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-               in
-               let (pre, post) =
-                 match co with
-                   None -> static_error lm ("Non-fixpoint function must have contract: "^n)
-                 | Some (pre, post) ->
-                   let (pre, tenv) = check_pred [] xmap pre in
-                   let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                   let (post, _) = check_pred [] postmap post in
-                   (pre, post)
-               in
-               iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
-             )
-         in
-          begin
-           iter [] specs
-         end
-      )
-      interfdeclmap
-  in
   
-  let classmethmap = if file_type path<>Java then [] else
-    List.map
-      (fun (cn, (l,meths_opt, fds,constr,super,interfs)) ->
-         let rec iter mmap meths =
-           match meths with
-             [] -> (cn, (l,Some (List.rev mmap),fds,constr,super,interfs))
-           | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
-             let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-             in
-             let rec equal_types x c=
-                 match x with
-                 [] -> List.length c==0
-                |(name,t)::xrest -> match c with
-                  []-> false
-                  | (name',t')::crest-> t==t' && equal_types xrest crest
-             in
-             let rec search_equal x c=
-                 match c with
-                 [] -> false
-                 | (g,(_,_,c,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
-             in
-             if List.mem_assoc n mmap && search_equal xmap mmap then
-               static_error lm "Duplicate method."
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, Bool) -> Bool
-                 | IdentTypeExpr(lt, cn) ->
-                     if List.mem_assoc cn classdeclmap || List.mem_assoc cn interfdeclmap then ObjType cn
-                     else static_error lt ("No such class or interface: "^cn)
-                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
-               in
-               let check_t t=
-                 match t with
-                   Some ManifestTypeExpr (_, Void) -> None
-                 | Some t-> Some (check_type t)
-                 | None -> None
-               in
-               let rec matchargs xs xs'= (* match the argument list of the method in the interface with the arg list of the method in the class *)
-                  match xs with
-                  [] -> if xs'=[] then () else static_error lm ("Incorrect number of arguments: "^n)
-                  | (an,x)::xs -> match xs' with
-                              [] -> static_error lm ("Incorrect number of arguments: "^n)
-                              |(an',x')::xs' when an=an'-> expect_type lm x x';matchargs xs xs'
-                              | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
-               in
-               let (pre, post) =
-                 match co with
-                   None -> let rec search i=
-                       match i with
-                         [] -> static_error lm ("Non-fixpoint function must have contract: "^n)
-                         | name::rest -> match try_assoc name interfmap with
-                                           None -> search rest
-                                          |Some(_,meth_specs) -> match try_assoc n meth_specs with
-                                                                   None -> search rest
-                                                                 | Some(_,_, xmap', pre, post,Instance,v)-> matchargs xmap xmap';(pre,post)
-                           in
-                           search interfs
-                 | Some (pre, post) ->
-                     let (wpre, tenv) = check_pred [] xmap pre in
-                     let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                     let (wpost, _) = check_pred [] postmap post in
-                     (wpre, wpost)
-               in
-               iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
-            )
-         in
-          begin
-           match meths_opt with
-             meths -> iter [] meths
-           | [] -> (cn, (l,None,fds,constr,super,interfs))
-         end
-      )
-      classfmap
-  in
-  let classmap = if file_type path<>Java then [] else
-    List.map
-      (fun (cn, (l,meths, fds,constr_opt,super,interfs)) ->
-         let rec iter cmap constr =
-           match constr with
-             [] -> (cn, (l,meths,fds,Some (List.rev cmap),super,interfs))
-             | Cons (lm,ps, co, ss,v)::constr ->
-               let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-               in
-               let rec equal_types x c=
-                 match x with
-                 [] -> List.length c==0
-                |(name,t)::xrest -> match c with
-                  []-> false
-                  | (name',t')::crest-> t==t' && equal_types xrest crest
-               in
-               let rec search_equal x c=
-                 match c with
-                 [] -> false
-                 | (c,_)::crest ->equal_types x c || search_equal x crest
-               in
-               if search_equal xmap cmap then
-               static_error lm "Duplicate constructor"
-               else (
-               let (pre, post) =
-                 match co with
-                   None -> static_error lm "Constructor must have contract: "
-                 | Some (pre, post) ->
-                     let (wpre, tenv) = check_pred [] xmap pre in
-                     let postmap = ("result", ObjType(cn))::tenv in
-                     let (wpost, _) = check_pred [] postmap post in
-                     (wpre, wpost)
-               in
-               iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
-               )
-         in
-         begin
-           match constr_opt with
-             constr -> iter [] constr
-             | [] -> (cn, (l,meths,fds,None,super,interfs))
-         end
-      )
-      classmethmap
-  in
-
   let boxmap =
     List.map
       begin
@@ -4191,6 +4087,360 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let funcmap = funcmap1 @ funcmap0 in
+  
+  let interfmap1 = if file_type path<>Java then [] else
+    List.map
+      (fun (ifn, (l,specs)) ->
+         let rec iter mmap meth_specs =
+           match meth_specs with
+             [] -> (ifn, (l,(List.rev mmap)))
+           | MethSpec (lm, t, n, ps, co,fb,v)::meths ->
+             if List.mem_assoc n mmap then
+               static_error lm "Duplicate method name."
+             else (
+               let rec check_type te =
+                 match te with
+                   ManifestTypeExpr (_, IntType) -> IntType
+                 | ManifestTypeExpr (_, Char) -> Char
+                 | ManifestTypeExpr (_, Bool) -> Bool
+                 | IdentTypeExpr(lt, sn) ->
+                     if (List.mem_assoc sn interfdeclmap)||((List.mem_assoc sn classdeclmap)) then ObjType sn
+                     else static_error lt "No such class."
+                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
+               in
+               let check_t t=
+                 match t with
+                   Some ManifestTypeExpr (_, Void) -> None
+                 | Some t-> Some (check_type t)
+                 | None -> None
+               in
+               let xmap =
+                 let rec iter xm xs =
+                   match xs with
+                    [] -> List.rev xm
+                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                      let t = check_pure_type [] te in
+                      iter ((x, t)::xm) xs
+                 in
+                 iter [] ps
+               in
+               let (pre, post) =
+                 match co with
+                   None -> static_error lm ("Non-fixpoint function must have contract: "^n)
+                 | Some (pre, post) ->
+                   let (pre, tenv) = check_pred [] xmap pre in
+                   let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                   let (post, _) = check_pred [] postmap post in
+                   (pre, post)
+               in
+               iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
+             )
+         in
+          begin
+           iter [] specs
+         end
+      )
+      interfdeclmap
+  in
+  
+  let interfmap=
+    let rec iter map0 map1=
+      match map0 with
+        [] -> map1
+      | (i, (l0,meths0)) as elem::rest->
+        match try_assoc i map1 with
+          None -> iter rest (elem::map1)
+        | Some (l1,meths1) ->
+          let match_meths meths0 meths1=
+            let rec iter meths0 meths1=
+              match meths0 with
+                [] -> meths1
+              | (mn, (lm0,rt0,xmap0,pre0,post0,fb0,v0)) as elem::rest ->
+                match try_assoc mn meths1 with
+                  None-> iter rest (elem::meths1)
+                | Some(lm1,rt1,xmap1,pre1,post1,fb1,v1) -> 
+                  let cenv0 = List.map (fun (x, t) -> (x, Var (lm0, x, ref (Some LocalVar)))) xmap0 in
+                  check_func_header_compat lm1 "Method specification check: " (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, cenv0, pre0, post0);
+                  iter rest meths1
+            in
+            iter meths0 meths1
+          in
+          let meths'= match_meths meths0 meths1 in
+          iter rest ((i,(l1,meths'))::map1)
+    in
+    iter interfmap0 interfmap1
+  in
+  
+  let classmethmap = if file_type path<>Java then [] else
+    List.map
+      (fun (cn, (l,meths_opt, fds,constr,super,interfs)) ->
+         let rec iter mmap meths =
+           match meths with
+             [] -> (cn, (l,Some (List.rev mmap),fds,constr,super,interfs))
+           | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
+             let xmap =
+                 let rec iter xm xs =
+                   match xs with
+                    [] -> List.rev xm
+                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                      let t = check_pure_type [] te in
+                      iter ((x, t)::xm) xs
+                 in
+                 iter [] ps
+             in
+             let rec equal_types x c=
+                 match x with
+                 [] -> List.length c==0
+                |(name,t)::xrest -> match c with
+                  []-> false
+                  | (name',t')::crest-> t==t' && equal_types xrest crest
+             in
+             let rec search_equal x c=
+                 match c with
+                 [] -> false
+                 | (g,(_,_,c,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
+             in
+             if List.mem_assoc n mmap && search_equal xmap mmap then
+               static_error lm "Duplicate method."
+             else (
+               let rec check_type te =
+                 match te with
+                   ManifestTypeExpr (_, IntType) -> IntType
+                 | ManifestTypeExpr (_, Char) -> Char
+                 | ManifestTypeExpr (_, Bool) -> Bool
+                 | IdentTypeExpr(lt, cn) ->
+                     if List.mem_assoc cn classdeclmap || List.mem_assoc cn interfdeclmap then ObjType cn
+                     else static_error lt ("No such class or interface: "^cn)
+                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
+               in
+               let check_t t=
+                 match t with
+                   Some ManifestTypeExpr (_, Void) -> None
+                 | Some t-> Some (check_type t)
+                 | None -> None
+               in
+               let rec matchargs xs xs'= (* match the argument list of the method in the interface with the arg list of the method in the class *)
+                  match xs with
+                  [] -> if xs'=[] then () else static_error lm ("Incorrect number of arguments: "^n)
+                  | (an,x)::xs -> match xs' with
+                              [] -> static_error lm ("Incorrect number of arguments: "^n)
+                              |(an',x')::xs' when an=an'-> expect_type lm x x';matchargs xs xs'
+                              | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
+               in
+               let (pre, post) =
+                 match co with
+                   None -> let rec search i=
+                       match i with
+                         [] -> static_error lm ("Non-fixpoint function must have contract: "^n)
+                         | name::rest -> match try_assoc name interfmap with
+                                           None -> search rest
+                                          |Some(_,meth_specs) -> match try_assoc n meth_specs with
+                                                                   None -> search rest
+                                                                 | Some(_,_, xmap', pre, post,Instance,v)-> matchargs xmap xmap';(pre,post)
+                           in
+                           search interfs
+                 | Some (pre, post) ->
+                     let (wpre, tenv) = check_pred [] xmap pre in
+                     let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                     let (wpost, _) = check_pred [] postmap post in
+                     (wpre, wpost)
+               in
+			   (if n="main" then
+			     match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
+				   match pre with 
+				     True(_) -> 
+					   match post with
+					     True(_) -> main_meth:=(cn,l)::!main_meth
+					   | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
+				   | _ -> static_error lp "The precondition of the main method must be 'true'"
+				);
+               iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
+            )
+         in
+          begin
+           match meths_opt with
+             meths -> iter [] meths
+           | [] -> (cn, (l,None,fds,constr,super,interfs))
+         end
+      )
+      classfmap
+  in
+  let classmap1 = if file_type path<>Java then [] else
+    List.map
+      (fun (cn, (l,meths, fds,constr_opt,super,interfs)) ->
+         let rec iter cmap constr =
+           match constr with
+             [] -> (cn, (l,meths,fds,Some (List.rev cmap),super,interfs))
+             | Cons (lm,ps, co, ss,v)::constr ->
+               let xmap =
+                 let rec iter xm xs =
+                   match xs with
+                    [] -> List.rev xm
+                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                      let t = check_pure_type [] te in
+                      iter ((x, t)::xm) xs
+                 in
+                 iter [] ps
+               in
+               let rec equal_types x c=
+                 match x with
+                 [] -> List.length c==0
+                |(name,t)::xrest -> match c with
+                  []-> false
+                  | (name',t')::crest-> t==t' && equal_types xrest crest
+               in
+               let rec search_equal x c=
+                 match c with
+                 [] -> false
+                 | (c,_)::crest ->equal_types x c || search_equal x crest
+               in
+               if search_equal xmap cmap then
+               static_error lm "Duplicate constructor"
+               else (
+               let (pre, post) =
+                 match co with
+                   None -> static_error lm "Constructor must have contract: "
+                 | Some (pre, post) ->
+                     let (wpre, tenv) = check_pred [] xmap pre in
+                     let postmap = ("result", ObjType(cn))::tenv in
+                     let (wpost, _) = check_pred [] postmap post in
+                     (wpre, wpost)
+               in
+               iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
+               )
+         in
+         begin
+           match constr_opt with
+             constr -> iter [] constr
+             | [] -> (cn, (l,meths,fds,None,super,interfs))
+         end
+      )
+      classmethmap
+  in
+  
+  let classmap= 
+    let rec iter map0 map1 =
+      match map0 with
+        [] -> map1
+      | (cn, (l0,meths0,fds0,constr0,super0,interfs0)) as elem::rest ->
+        match try_assoc cn map1 with
+          None -> iter rest (elem::map1)
+        | Some (l1,meths1,fds1,constr1,super1,interfs1) ->
+          let match_fds fds0 fds1=
+            let rec iter fds0 fds1=
+            match fds0 with
+              [] -> fds1
+            | (f0, (lf0,t0,vis0)) as elem::rest ->
+              match try_assoc f0 fds1 with
+                None-> iter rest (elem::fds1)
+              | Some(lf1,t1,vis1) -> if t0<>t1 || vis0<>vis1 then static_error lf1 "Duplicate field"
+                else iter rest fds1
+            in
+            match fds0 with
+              None-> fds1
+            | Some fds0 -> (match fds1 with None-> Some fds0 | Some fds1 -> Some (iter fds0 fds1))
+          in
+          let match_meths meths0 meths1=
+            let rec iter meths0 meths1=
+              match meths0 with
+                [] -> meths1
+              | (n, (lm0,rt0,xmap0,pre0,post0,ss0,fb0,v0)) as elem::rest ->
+                match try_assoc n meths1 with
+                  None-> iter rest (elem::meths1)
+                | Some(lm1,rt1,xmap1,pre1,post1,ss1,fb1,v1) -> 
+                  let cenv0 = List.map (fun (x, t) -> (x, Var (lm0, x, ref (Some LocalVar)))) xmap0 in
+                  check_func_header_compat lm1 "Method implementation check: " (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, cenv0, pre0, post0);
+                  if ss0=None then meths_impl:=(n,lm0)::!meths_impl;
+                  iter rest meths1
+            in
+            match meths0 with
+              None-> meths1
+            | Some meths0 -> match meths1 with None-> Some meths0 | Some meths1 -> Some (iter meths0 meths1)
+          in
+          let match_constr constr0 constr1=
+            let rec iter constr0 constr1=
+              match constr0 with
+                [] -> constr1
+              | (xmap0, (lm0,pre0,post0,ss0,v0)) as elem::rest ->
+                match try_assoc xmap0 constr1 with
+                  None-> iter rest (elem::constr1)
+                | Some(lm1,pre1,post1,ss1,v1) ->
+                  let cenv0 = List.map (fun (x, t) -> (x, Var (lm0, x, ref (Some LocalVar)))) xmap0 in
+                  let rt= Some (ObjType(cn)) in
+                  check_func_header_compat lm1 "Constructor implementation check: " (Regular,[],rt, xmap0,false, pre1, post1) (Regular, [], rt, xmap0, false, cenv0, pre0, post0);
+                  if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
+                  iter rest constr1
+            in
+            match constr0 with
+              None-> constr1
+            | Some constr0 -> match constr1 with None-> Some constr0 | Some constr1 -> Some (iter constr0 constr1)
+          in
+          if super0<>super1 || interfs0<>interfs1 then static_error l1 "Duplicate class"
+          else 
+          let meths'= match_meths meths0 meths1 in
+          let fds'= match_fds fds0 fds1 in
+          let constr'= match_constr constr0 constr1 in
+          iter rest ((cn,(l1,meths',fds',constr',super1,interfs1))::map1)
+    in
+    iter classmap0 classmap1
+  in
+  
+  
+  let _=
+  if file_type path=Java then
+    let rec check_spec_lemmas lemmas impl=
+      match lemmas with
+        [] when List.length impl=0-> ()
+      | Func(l,Lemma,tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
+          if List.mem (fn,l) impl then
+            let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
+            check_spec_lemmas rest impl'
+          else
+            static_error l "No implementation found for this lemma."
+    in
+    check_spec_lemmas !spec_lemmas prototypes_implemented
+  else
+    ()
+  in
+  
+  let _=
+  if file_type path=Java then
+    let rec check_spec_classes classes meths_impl cons_impl=
+      match classes with
+        [] when List.length meths_impl=0-> ()
+      | Class(l,cn,meths,fds,cons,super,inames)::rest ->
+          let check_meths meths meths_impl=
+            let rec iter mlist meths_impl=
+              match mlist with
+                [] -> meths_impl
+              | Meth(lm,rt,n,ps,co,None,fb,v) as elem::rest ->
+                if List.mem (n,lm) meths_impl then
+                  let meths_impl'= remove (fun (x,l0) -> x=n && lm=l0) meths_impl in
+                  iter rest meths_impl'
+                else
+                static_error lm "No implementation found for this method."
+            in
+            iter meths meths_impl
+          in
+          let check_cons cons cons_impl=
+            let rec iter clist cons_impl=
+              match clist with
+                [] -> cons_impl
+              | Cons (lm,ps, co,None,v) as elem::rest ->
+                if List.mem (cn,lm) cons_impl then
+                  let cons_impl'= remove (fun (x,l0) -> x=cn && lm=l0) cons_impl in
+                  iter rest cons_impl'
+                else
+                static_error lm "No implementation found for this constructor."
+            in
+            iter cons cons_impl
+          in
+          check_spec_classes rest (check_meths meths meths_impl) (check_cons cons cons_impl)
+    in
+    check_spec_classes !spec_classes !meths_impl !cons_impl
+  else
+    ()
+  in
   
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb, _))) -> symb) field_pred_map in
   
@@ -5593,35 +5843,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap)
+  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap,interfmap)
   
   in
-  let main_file= ref "" in
+  let main_file= ref ("",dummy_loc) in
+  let jardeps= ref [] in
+  let basepath=(Filename.basename path) in
+  let dirpath= (Filename.dirname path) in
   let (prototypes_used, prototypes_implemented) =
-    let (headers, ds) = 
-      match file_type (Filename.basename path) with
+    let (headers, ds) =
+      match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
-              let rec parsefiles channel=
-                let file= try Some(input_line channel) with End_of_file -> None in
-                  match file with
-                    None -> []
-                  | Some file -> 
-                    if startswith file "main-class " then 
-                    let name=(String.sub file 11 ((String.length file)-11)) in
-                      main_file:=name;[]
-                    else
-                      if Filename.check_suffix file ".jar" then
-                        (parsefiles (open_in (Filename.concat (Filename.dirname path) (Filename.chop_extension file)^".jarspec")))@(parsefiles channel)
-                      else 
-                        let path'=Filename.concat (Filename.dirname path) file in
-                        (parse_java_file path' reportRange)@(parsefiles channel)
-              in
-              let specpath=((Filename.chop_extension path)^".jarspec") in
-              let headers= if Sys.file_exists specpath then [(((("",path),1,1),(("",path),1,1)),specpath)] else [] in
-              (headers,parsefiles (open_in path))
+              let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
+              let ds= List.concat(List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange)impllist)in
+              let specpath= (Filename.chop_extension basepath)^".jarspec" in
+              main_file:=main;
+              jardeps:=jdeps;
+              if Sys.file_exists (Filename.concat dirpath specpath) then
+                (jarlist@[(dummy_loc,specpath)],ds)
+              else
+                ([],ds)
             else
               ([], parse_java_file path reportRange)
-      | _->
+      | _-> 
         parse_c_file path reportRange reportShouldFail
     in
     let include_prelude=
@@ -5631,7 +5875,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_) = check_file include_prelude programDir headers ds in
+      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file include_prelude programDir headers ds in
       (prototypes_used, prototypes_implemented)
     in
     begin
@@ -5641,6 +5885,27 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end;
     result
   in
+
+  let _=
+    let rec iter (file,l) mainlist=
+      match mainlist with
+        [] -> static_error l "no main method was found"
+      | (cn,l)::_ when cn=file -> ()
+      | _::rest -> iter (file,l) rest
+    in
+    if !main_file<>("",dummy_loc) then
+    iter !main_file !main_meth
+  in
+  
+  
+  let create_jardeps_file() =
+    let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
+    let file = open_out jardeps_filename in
+    do_finally (fun () ->
+      List.iter (fun line -> output_string file (line ^ "\n")) !jardeps
+    ) (fun () -> close_out file)
+  in
+  
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
     let file = open_out manifest_filename in
@@ -5655,6 +5920,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   if file_type path <>Java then
   create_manifest_file()
+  else
+    if Filename.check_suffix path ".jarsrc" then create_jardeps_file()
 
 let verify_program_with_stats ctxt print_stats verbose path reportRange breakpoint =
   do_finally

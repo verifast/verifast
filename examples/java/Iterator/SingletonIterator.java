@@ -12,9 +12,9 @@ class SingletonIterator implements Iterator {
   }
   public boolean hasNext()
   {
-      //@ open iterator(SingletonIterator.class)(this, xs);
+      //@ open iterator(SingletonIterator.class)(this, ys);
       boolean result = !this.done;
-      //@ close iterator(SingletonIterator.class)(this, xs);
+      //@ close iterator(SingletonIterator.class)(this, ys);
       return result;
   }
   public Object next()
