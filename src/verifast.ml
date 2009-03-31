@@ -79,6 +79,7 @@ let assoc2 x xys1 xys2 =
   let (Some y) = try_assoc2 x xys1 xys2 in y
 
 let bindir = Filename.dirname Sys.executable_name
+let rtdir= Filename.concat bindir "rt"
 
 let banner =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
@@ -1422,15 +1423,15 @@ let rec parse_jarspec_file basePath relPath reportRange =
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (streamSource (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
   let rec parse_file=
     parser
-      [< '(l, Ident a);'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
+      [< '(l, Ident fname);'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
         if extension="jar" then
-          match (parse_jarspec_file basePath (a^".jarspec") reportRange) with
-          (x,y) -> (match e with (u,v) -> (u,y@v))
+          match (parse_jarspec_file basePath (fname^".jarspec") reportRange) with
+          (_,allspecs') -> (match e with (jarspecs,allspecs) -> (jarspecs,allspecs@allspecs'))
         else
           if extension <> "javaspec" then 
             raise (ParseException (l, "Only javaspec or jar files can be specified here."))
           else
-            let fname=a^".javaspec" in (match e with (x,y) -> (fname::x,fname::y))
+            let filename=fname^".javaspec" in (match e with (jarspecs,allspecs) -> (filename::jarspecs,filename::allspecs))
     | [< _ = Stream.empty>] -> ([],[])
   in
   try
@@ -1446,23 +1447,23 @@ let rec parse_jarsrc_file basePath relPath reportRange =
   let main=ref ("",dummy_loc) in
   let rec parse_file =
     parser
-      [< '(l, Ident a);z= parser
+      [< '(l, Ident fname);z= parser
         [<'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
         if extension="jar" then
-          match (parse_jarspec_file basePath (a^".jarspec") reportRange) with
-          (x,y)->(match e with (b,c,d) -> (x@b,(List.map (fun n -> (l,n))y)@c,(a^"."^extension)::d))
+          match (parse_jarspec_file basePath (fname^".jarspec") reportRange) with
+          (jarspecs,allspecs)->(match e with (implist,jarlist,jdepds) -> (jarspecs@implist,(List.map (fun n -> (l,n))allspecs)@jarlist,(fname^"."^extension)::jdepds))
         else
           if extension <> "java" then 
             raise (ParseException (l, "Only java or jar files can be specified here."))
           else
-            (match e with (x,y,z) -> ((a^".java")::x,y,z))
-      | [<'(_, Kwd "-");'(_, Ident b);'(x, Ident c);e= parse_file>] ->
-        if a="main" && b="class" then
+            (match e with (implist,jarlist,jdepds) -> ((fname^".java")::implist,jarlist,jdepds))
+      | [<'(_, Kwd "-");'(_, Ident cls);'(lm, Ident main_class);e= parse_file>] ->
+        if fname="main" && cls="class" then
           begin
           if !main<>("",dummy_loc) then
-            raise (ParseException (l, "There can only be one main method"))
+            raise (ParseException (lm, "There can only be one main method"))
           else
-            main:=(c,x);e
+            main:=(main_class,lm);e
           end
         else
          raise (ParseException (l, "The class containing the main method should be specified as: main-class ClassName"))
@@ -1470,7 +1471,7 @@ let rec parse_jarsrc_file basePath relPath reportRange =
     | [< _ = Stream.empty>] -> ([],[],[])
   in
   try
-    match parse_file token_stream with (a,b,c) ->(!main,a,b,c)
+    match parse_file token_stream with (implist,jarlist,jdepds) ->(!main,implist,jarlist,jdepds)
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
@@ -1754,44 +1755,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             headers_included := path::!headers_included;
             iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
             end
-          else
-          begin
-            headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
-              match try_assoc path !headermap with
-                None ->
-                let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
-
-                let allspecs= remove (fun x -> List.mem x (List.tl !headers_included))(list_remove_dups allspecs) in
-                (*let _= print_string "jarspecs: ";List.map (fun x-> print_string (x^" ")) jarspecs;print_string "\n" in
-                let _= print_string "allpecs: ";List.map (fun x-> print_string (x^" ")) allspecs;print_string "\n" in*)
-                let (classes,lemmas)=extract_specs (List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
-                let (headers',ds) = ([],List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
-                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file false basedir headers' ds in
-                spec_classes:=classes;
-                spec_lemmas:=lemmas;
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
-              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
-            in
-            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
-            iter
-              (append_nodups structmap structmap0 id l "struct")
-              (append_nodups inductivemap inductivemap0 id l "inductive datatype")
-              (append_nodups purefuncmap purefuncmap0 id l "pure function")
-              (append_nodups fixpointmap fixpointmap0 id l "fixpoint function")
-              (malloc_block_pred_map @ malloc_block_pred_map0)
-              (field_pred_map @ field_pred_map0)
-              (append_nodups predfammap predfammap0 id l "predicate")
-              (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
-              (append_nodups functypemap functypemap0 id l "function type")
-              (append_nodups funcmap funcmap0 id l "function")
-              (append_nodups boxmap boxmap0 id l "box predicate")
-              (append_nodups classmap classmap0 id l "class")
-              (append_nodups interfmap interfmap0 id l "interface")
-              headers
-          end
+          else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
+            let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
+            let allspecs= remove (fun x -> List.mem x !headers_included)(list_remove_dups allspecs) in
+            let (classes,lemmas)=extract_specs (List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
+            let ds = List.concat (List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs) in
+            let (structmap,inductivemap,purefuncmap,fixpointmap,malloc_block_pred_map,field_pred_map,predfammap,predinstmap,functypemap,funcmap, _, _,boxmap,classmap,interfmap) = check_file false basedir [] ds in
+            begin
+              spec_classes:=classes;
+              spec_lemmas:=lemmas;
+              (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+            end
         end
     in
     iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
@@ -5846,6 +5820,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap,interfmap)
   
   in
+  
   let main_file= ref ("",dummy_loc) in
   let jardeps= ref [] in
   let basepath=(Filename.basename path) in
