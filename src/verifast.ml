@@ -1380,7 +1380,7 @@ let rec parse_package_name= parser
   
 let parse_package= parser
   [<'(l, Kwd "package");n= parse_package_name>] ->(l,n)
-| [<>] -> (dummy_loc,"default")
+| [<>] -> (dummy_loc,"")
   
 let rec parse_import_names= parser
   [<'(_, Kwd ".");y=parser
@@ -1407,7 +1407,7 @@ let rec parse_non_ghost_import_list= parser
 | [<>]-> []
 
 let parse_package_decl= parser
-  [< (l,p) = parse_package; i=parse_ghost_import_list;i'=parse_non_ghost_import_list; ds=parse_decls;>] -> PackageDecl(l,p,i@i',ds)
+  [< (l,p) = parse_package; i=parse_ghost_import_list;i'=parse_non_ghost_import_list; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::(i@i'),ds)
   
 let parse_java_file path reportRange=
   let lexer = make_lexer (veri_keywords@java_keywords) in
@@ -1437,7 +1437,7 @@ let parse_c_file path reportRange reportShouldFail =
   let parse_c_file =
     parser
       [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers,
-[PackageDecl(dummy_loc,"default",[],ds)])
+[PackageDecl(dummy_loc,"",[],ds)])
   in
   try
     parse_c_file token_stream
@@ -1457,7 +1457,7 @@ let parse_header_file basePath relPath reportRange reportShouldFail =
          '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
          _ = Stream.empty >] ->
       if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));
-      (headers, [PackageDecl(dummy_loc,"default",[],ds)])
+      (headers, [PackageDecl(dummy_loc,"",[],ds)])
   in
   try
     parse_header_file token_stream
@@ -1560,8 +1560,8 @@ let string_of_context c =
 exception SymbolicExecutionError of string context list * string * loc * string
 
 let full_name pn n=
-  if pn="default" then n 
-  else if startswith n pn then n
+  if pn="" then n 
+  else if startswith n (pn^".") then n
        else (pn^"."^n)
 
 let zip xs ys =
@@ -1636,9 +1636,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
   
   let basicclassdeclmap =
-    [("Object",(dummy_loc,[], [], [], "Object", [],"default",[]));
-     ("Class", (dummy_loc, [], [], [], "Class", [],"default",[]));
-     ("String", (dummy_loc, [], [], [], "String", [],"default",[]))
+    [("java.lang.Object",(dummy_loc,[], [], [], "Object", [],"java.lang",[]));
+     ("java.lang.Class", (dummy_loc, [], [], [], "Class", [],"java.lang",[]));
+     ("java.lang.String", (dummy_loc, [], [], [], "String", [],"java.lang",[]))
     ]
   in
 
@@ -1853,7 +1853,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _::ds -> iter sdm ds
     in
     match ps with
-      [PackageDecl(_,"default",[],ds)] -> iter [] ds
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
   in
   
@@ -1910,32 +1910,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PackageDecl(l,pn,ilist,ds)::rest -> iter' (iter pn idm ds) rest
       | [] -> idm
     in
-	iter' [] ps
+    iter' [] ps
   in
   
   let rec try_assoc' (pn,imports) name map=
     match imports with
-      Import(l,p,None)::rest when List.mem_assoc (full_name p name) map->  Some (List.assoc (full_name p name) map)
+      _ when List.mem_assoc (full_name pn name) map -> Some (List.assoc (full_name pn name) map)
+    | _ when List.mem_assoc name map-> Some (List.assoc name map)
+    | Import(l,p,None)::rest when List.mem_assoc (full_name p name) map->  Some (List.assoc (full_name p name) map)
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map-> Some (List.assoc (full_name p name) map) 
     | _::rest -> try_assoc' (pn,rest) name map
-    | [] when List.mem_assoc name map-> Some (List.assoc name map)
-    | [] when List.mem_assoc (full_name pn name) map -> Some (List.assoc (full_name pn name) map)
     | [] -> None
-  in
-  
-  let rec full_name' pn nlist=
-    match nlist with
-      [] -> []
-    | n::rest -> full_name pn n ::full_name' pn rest
   in
   
   let rec try_assoc_pair' (pn,imports) (n,n') map=
     match imports with
-      Import(l,p,None)::rest when List.mem_assoc (full_name p n,full_name' p n') map->  Some (List.assoc (full_name p n,full_name' p n') map)
-    | Import(l,p,Some n2)::rest when n=n2 && List.mem_assoc (full_name p n,full_name' p n') map-> Some (List.assoc (full_name p n,full_name' p n') map) 
+      _ when List.mem_assoc (full_name pn n,List.map (fun n-> full_name pn n) n') map -> Some (List.assoc (full_name pn n,List.map (fun n-> full_name pn n) n') map)
+    | _ when List.mem_assoc (n,n') map-> Some (List.assoc (n,n') map)
+    | Import(l,p,None)::rest when List.mem_assoc (full_name p n,List.map (fun n-> full_name p n) n') map->  Some (List.assoc (full_name p n,List.map (fun n-> full_name p n) n') map)
+    | Import(l,p,Some n2)::rest when n=n2 && List.mem_assoc (full_name p n,List.map (fun n-> full_name p n) n') map-> Some (List.assoc (full_name p n,List.map (fun n-> full_name p n) n') map) 
     | _::rest -> try_assoc_pair' (pn,rest) (n,n') map
-    | [] when List.mem_assoc (n,n') map-> Some (List.assoc (n,n') map)
-    | [] when List.mem_assoc (full_name pn n,full_name' pn n') map -> Some (List.assoc (full_name pn n,full_name' pn n') map)
     | [] -> None
   in
 
@@ -1947,19 +1941,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let rec search name (pn,imports) map=
     match imports with
-      Import(l,p,None)::_ when List.mem_assoc (full_name p name) map-> true
+      _ when List.mem_assoc (full_name pn name) map -> true
+    | _ when List.mem_assoc name map -> true
+    | Import(l,p,None)::_ when List.mem_assoc (full_name p name) map-> true
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map-> true
     | _::rest -> search name (pn,rest) map
-    | []-> List.mem_assoc name map || List.mem_assoc (full_name pn name) map
+    | []->  false
   in
   
   let rec search' name (pn,imports) map=
     match imports with
-      Import(l,p,None)::_ when List.mem_assoc (full_name p name) map-> Some (full_name p name)
+      _ when List.mem_assoc name map-> Some name
+    | _ when List.mem_assoc (full_name pn name) map -> Some (full_name pn name)
+    | Import(l,p,None)::_ when List.mem_assoc (full_name p name) map-> Some (full_name p name)
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map ->Some (full_name p name)
     | _::rest -> search' name (pn,rest) map
-    | [] when List.mem_assoc name map-> Some name
-    | [] when List.mem_assoc (full_name pn name) map -> Some (full_name pn name)
     | [] -> None
   in
   
@@ -1982,18 +1978,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i)
         else
-          if not(List.mem_assoc super classlist) then
-             static_error l ("Superclass wasn't found: "^super)
-          else
-          let rec check_interfs ls=
+		  begin
+          match search' super (pn,il) classlist with
+            None-> static_error l ("Superclass wasn't found: "^super)
+          | Some _ ->
+            let rec check_interfs ls=
               match ls with
               [] -> ()
               |i::ls -> match search' i (pn,il) ifdm with 
                           Some _ -> check_interfs ls
                         | None -> static_error l ("Interface wasn't found: "^i^" "^pn)
-          in
-          check_interfs interfs;
-          iter (pn,il) ifdm ((i, (l,meths,fields,constr,super,interfs,pn,il))::classlist) ds
+            in
+            check_interfs interfs;
+            iter (pn,il) ifdm ((i, (l,meths,fields,constr,super,interfs,pn,il))::classlist) ds
+			end
       | _::ds -> iter (pn,il) ifdm classlist ds
     in
     let rec iter' (ifdm,classlist) ps =
@@ -2144,7 +2142,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let functypenames = 
     let ds=match ps with
-        [PackageDecl(_,"default",[],ds)] -> ds
+        [PackageDecl(_,"",[],ds)] -> ds
       | _ when file_type path=Java -> []
     in
   flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds
@@ -2797,7 +2795,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let funcnames = if file_type path=Java then [] else
-  let ds= (match ps with[PackageDecl(_,"default",[],ds)] ->ds) in
+  let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
   list_remove_dups (flatmap (function (Func (l, Regular, tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
@@ -2826,7 +2824,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     fref#set_parent sn;
                     fref#set_range t;
                     CallPred (l, p, [], [LitPat (AddressOf (l, Read (l, Var (l, sn, ref (Some LocalVar)), fref))); LitPat (Var (l, "value", ref (Some LocalVar)))]))
-                    ,"default",[]
+                    ,"",[]
                    )
                   )
                 in
@@ -4089,7 +4087,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> List.rev functypemap
       | FuncTypeDecl (l, rt, ftn, xs, (pre, post))::ds ->
-        let (pn,ilist) = ("default",[]) in
+        let (pn,ilist) = ("",[]) in
         let _ = if List.mem_assoc ftn functypemap || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
         let xmap =
@@ -4114,7 +4112,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     if file_type path=Java then [] else
     (match ps with
-      [PackageDecl(_,"default",[],ds)] -> iter [] ds
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
     )
   in
   
@@ -4256,8 +4254,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  | ManifestTypeExpr (_, Char) -> Char
                  | ManifestTypeExpr (_, Bool) -> Bool
                  | IdentTypeExpr(lt, sn) ->
-                     if (List.mem_assoc sn interfdeclmap)||((List.mem_assoc sn classdeclmap)) then ObjType sn
-                     else static_error lt "No such class."
+                     match search' sn (pn,ilist) interfdeclmap with
+                       Some i -> ObjType i
+                     | None -> match search' sn (pn,ilist) classdeclmap with
+                         Some cn -> ObjType cn
+                       | None ->static_error lt ("No such class or interface: "^sn)
                  | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
                in
                let check_t t=
@@ -4981,7 +4982,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           [(arg, PtrType (StructType tn))] ->
           let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
           let fds =
-            let ds=match ps with[PackageDecl(_,"default",[],ds)] -> ds in
+            let ds=match ps with[PackageDecl(_,"",[],ds)] -> ds in
             match flatmap (function (Struct (ls, sn, Some fds)) when sn = tn -> [fds] | _ -> []) ds with
               [fds] -> fds
             | [] -> static_error l "Freeing an object of a struct type declared without a body is not supported."
