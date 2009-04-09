@@ -813,7 +813,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"
 ]
-let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
+let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";"extends"
 ]
 
 let file_type path=
@@ -843,19 +843,19 @@ let parse_decls =
 let rec
   parse_decls = parser
 [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
-| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
-Interface(l,cn,mem)::ds
-| [< '(l, Kwd "public");ds=parser
+| [< '(l, Kwd "public");ds'=parser
     [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
   | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
 Interface(l,cn,mem)::ds
-  >]-> ds
+  >]-> ds'
+| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
+Interface(l,cn,mem)::ds (* TODO: enkel public classes/interfaces toelaten??*)
 | [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
 and
   parse_super_class= parser
-  [<'(_, Kwd "extends");'(_, Ident s);'(_, Kwd "{")>] -> s
+  [<'(_, Kwd "extends");'(_, Ident s)>] -> s
 | [<>] -> "Object"
 and
   parse_interfaces= parser
@@ -1963,7 +1963,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
         [] -> (ifdm,classlist)
-      | (Interface (l, i, meth_specs))::ds -> let i= full_name pn i in
+      | (Interface (l, i, meth_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i)
         else
@@ -1978,7 +1978,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i)
         else
-		  begin
+          begin
           match search' super (pn,il) classlist with
             None-> static_error l ("Superclass wasn't found: "^super)
           | Some _ ->
@@ -1991,7 +1991,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             check_interfs interfs;
             iter (pn,il) ifdm ((i, (l,meths,fields,constr,super,interfs,pn,il))::classlist) ds
-			end
+            end
       | _::ds -> iter (pn,il) ifdm classlist ds
     in
     let rec iter' (ifdm,classlist) ps =
@@ -2020,7 +2020,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  | IdentTypeExpr(lt, sn) ->
                    match search' sn (pn,ilist) classdeclmap with
                      Some s -> ObjType s
-                   | None -> static_error lt "No such class!!"
+                   | None -> match search' sn (pn,ilist) interfdeclmap with
+                       Some s -> ObjType s
+                     | None -> static_error lt ("No such class or interface!!"^sn)
                  | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class."
                in
                iter ((f, (lf, check_type t,vis))::fmap) fds
@@ -2431,6 +2433,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               Some (l, callee_tparams, t0, ts0, _) -> (
                               let (targs, tpenv) =
                                 if callee_tparams <> [] && targes = [] then
+								  let _= print_string ("het is: "^g'^"\n") in
                                   let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
                                   let Some tpenv = zip tparams targs in
                                   (targs, tpenv)
