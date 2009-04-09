@@ -1,4 +1,9 @@
-class IteratorUtil {
+package iterator.util;
+
+import iterator.it.*;
+import iterator.singleton.*;
+
+public class IteratorUtil {
   public static Object getLast(Iterator iterator)
       //@ requires iterator(iterator.getClass())(iterator, ?xs);
       //@ ensures iterator(iterator.getClass())(iterator, nil) &*& result == objects_last(xs);

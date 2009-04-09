@@ -1,3 +1,12 @@
+package program;
+/*@
+import iterator.it.iterator;
+import iterator.it.objects_last;
+@*/
+import iterator.it.Iterator;
+import iterator.util.IteratorUtil;
+import iterator.singleton.SingletonIterator;
+
 class Program {
   public static void main(String[] args)
       //@ requires true;

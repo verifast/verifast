@@ -1,4 +1,9 @@
-interface Iterator {
+package iterator.it;
+
+import iterator.singleton.*;
+import iterator.util.*;
+
+public interface Iterator {
   boolean hasNext();
       //@ requires iterator(this.getClass())(this, ?ys);
       //@ ensures iterator(this.getClass())(this, ys) &*& result==(ys!=nil);

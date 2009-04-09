@@ -1,4 +1,9 @@
-class SingletonIterator implements Iterator {
+package iterator.singleton;
+
+import iterator.it.*;
+import iterator.util.*;
+
+public class SingletonIterator implements Iterator {
   Object value;
   boolean done;
 

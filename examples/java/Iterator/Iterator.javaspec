@@ -1,3 +1,7 @@
+package iterator.it;
+
+import iterator.singleton.*;
+import iterator.util.*;
 /*@
 
 inductive objects = nil | cons(Object, objects);
@@ -5,7 +9,7 @@ inductive objects = nil | cons(Object, objects);
 predicate_family iterator(Class c)(Iterator i, objects xs);
 
 @*/
-interface Iterator {
+public interface Iterator {
   boolean hasNext();
       //@ requires iterator(this.getClass())(this, ?xs);
       //@ ensures iterator(this.getClass())(this, xs) &*& result==(xs!=nil);

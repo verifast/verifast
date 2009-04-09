@@ -1,3 +1,6 @@
+package tree;
+/*@@*/
+
 /*@
 predicate tree(Tree t,bintree b)
   requires switch(b){
