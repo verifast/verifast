@@ -824,6 +824,7 @@ let file_type path=
   else if Filename.check_suffix (Filename.basename path) ".jarspec" then Java
   else if Filename.check_suffix (Filename.basename path) ".java" then Java
   else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java
+  else if Filename.check_suffix (Filename.basename path) ".scala" then Java
   else if Filename.check_suffix (Filename.basename path) ".h" then Header
   else failwith ("unknown extension")
   end
@@ -840,6 +841,83 @@ type spec_clause =
 | RequiresClause of pred
 | EnsuresClause of pred
   
+module Scala = struct
+
+let keywords = ["def"; "var"; "class"; "object"; "."; "new"; "null"; "package"; "import"; "extends"]
+
+let rec
+  parse_decl = parser
+    [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
+    Class (l, cn, ms, [], [], "Object", [])
+and
+  parse_method = parser
+    [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "="); ss = parse_block >] ->
+    let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
+    Meth (l, rt, mn, ps, Some co, Some ss, Static, Public)
+and
+  parse_paramlist = parser
+    [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
+and
+  parse_param = parser
+    [< '(_, Ident x); t = parse_type_ann >] -> (t, x)
+and
+  parse_type_ann: (loc * token) Stream.t -> type_expr = parser
+    [< '(_, Kwd ":"); t = parse_type >] -> t
+and
+  parse_type = parser
+    [< '(l, Ident tn); targs = parse_targlist >] ->
+    begin
+      match (tn, targs) with
+        ("Unit", []) -> ManifestTypeExpr (l, Void)
+      | ("Int", []) -> ManifestTypeExpr (l, IntType)
+      | ("Array", [t]) -> ArrayTypeExpr (l, t)
+      | (_, []) -> IdentTypeExpr (l, tn)
+      | _ -> raise (ParseException (l, "Type arguments are not supported."))
+    end
+and
+  parse_targlist = parser
+    [< '(_, Kwd "["); ts = rep_comma parse_type; '(_, Kwd "]") >] -> ts
+  | [< >] -> []
+and
+  parse_contract = parser
+    [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
+       '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post)
+and
+  parse_asn = parser
+    [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
+  | [< e = parse_expr >] -> ExprPred (expr_loc e, e)
+and
+  parse_primary_expr = parser
+    [< '(l, Kwd "true") >] -> True l
+  | [< '(l, Kwd "false") >] -> False l
+  | [< '(l, Int n) >] -> IntLit (l, n, ref None)
+  | [< '(l, Ident x) >] -> Var (l, x, ref None)
+and
+  parse_add_expr = parser
+    [< e0 = parse_primary_expr; e = parse_add_expr_rest e0 >] -> e
+and
+  parse_add_expr_rest e0 = parser
+    [< '(l, Kwd "+"); e1 = parse_primary_expr; e = parse_add_expr_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
+  | [< >] -> e0
+and
+  parse_rel_expr = parser
+    [< e0 = parse_add_expr; e = parse_rel_expr_rest e0 >] -> e
+and
+  parse_rel_expr_rest e0 = parser
+    [< '(l, Kwd "=="); e1 = parse_add_expr; e = parse_rel_expr_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
+  | [< >] -> e0
+and
+  parse_expr stream = parse_rel_expr stream
+and
+  parse_block = parser
+    [< '(_, Kwd "{"); ss = rep parse_stmt; '(_, Kwd "}") >] -> ss
+and
+  parse_stmt = parser
+    [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, e)
+  | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
+
+end
+
 let parse_decls =
 let rec
   parse_decls = parser
@@ -1409,8 +1487,22 @@ let rec parse_non_ghost_import_list= parser
 
 let parse_package_decl= parser
   [< (l,p) = parse_package; i=parse_ghost_import_list;i'=parse_non_ghost_import_list; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::(i@i'),ds)
-  
+
+let parse_scala_file path reportRange =
+  let lexer = make_lexer (veri_keywords@Scala.keywords) in
+  let streamSource path = Stream.of_string (readFile path) in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange (fun x->()) in
+  let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,"java.lang",None)],ds) in
+  try
+    parse_decls_eof token_stream
+  with
+    Stream.Error msg -> raise (ParseException (loc(), msg))
+  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+
 let parse_java_file path reportRange=
+  if Filename.check_suffix (Filename.basename path) ".scala" then
+    parse_scala_file path reportRange
+  else
   let lexer = make_lexer (veri_keywords@java_keywords) in
   let streamSource path = Stream.of_string (readFile path) in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (streamSource path) reportRange (fun x->()) in

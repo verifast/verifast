@@ -17,6 +17,7 @@ test: verifast.exe vfide.exe
 	..\src\verifast -shared goto.c
 	..\src\verifast map.c
 	cd java
+	..\..\src\verifast -c hello.scala
 	..\..\src\verifast -disable_overflow_check -c Map.java
 	..\..\src\verifast -disable_overflow_check -c Counter.java
 	..\..\src\verifast -c Tree.java
