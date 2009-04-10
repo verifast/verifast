@@ -282,7 +282,6 @@ public class Tree{
 	public int value;
 	public Tree left;
 	public Tree right;
-	
 	public static Tree init_tree(int x)
 	//@ requires true;
 	//@ ensures tree(result,cons(x,nil,nil));
