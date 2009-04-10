@@ -4735,8 +4735,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Incorrect number of arguments."
           | Some bs ->
             List.map
-              (function (LitPat e, (x, tp)) ->
-                 check_expr_t (pn,ilist) tparams tenv e (instantiate_type tpenv tp)
+              (function (LitPat e, (x, t0)) ->
+                 let t = instantiate_type tpenv t0 in
+                 box (check_expr_t (pn,ilist) tparams tenv e t) t t0
               ) bs
         in
         evhs h env ws (fun h ts ->
