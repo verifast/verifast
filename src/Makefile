@@ -15,7 +15,9 @@ test: verifast.exe vfide.exe
 	..\src\verifast -shared queue.c
 	..\src\verifast -c ifs.c
 	..\src\verifast -shared goto.c
+	..\src\verifast map.c
 	cd java
+	..\..\src\verifast -disable_overflow_check -c Map.java
 	..\..\src\verifast -disable_overflow_check -c Counter.java
 	..\..\src\verifast -c Tree.java
 	cd Tree2

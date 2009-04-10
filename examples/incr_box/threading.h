@@ -29,7 +29,7 @@ lemma void remove_lock_permission(struct lock *lock);
 
 @*/
 
-typedef void (*thread_run)(void *data);
+typedef void thread_run(void *data);
     //@ requires thread_run_data(this)(data);
     //@ ensures emp;
 

@@ -41,7 +41,7 @@ predicate_family thread_run_post(void *thread_run)(void *data, any info);
 
 @*/
 
-typedef void (* thread_run)(void *data);
+typedef void thread_run(void *data);
     //@ requires thread_run_pre(this)(data, ?info);
     //@ ensures thread_run_post(this)(data, info);
 

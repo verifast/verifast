@@ -499,6 +499,7 @@ type type_ =
   | Char
   | StructType of string
   | PtrType of type_
+  | FuncType of string
   | InductiveType of string * type_ list
   | PredType of type_ list
   | ObjType of string
@@ -945,7 +946,7 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Kwd "("); '(_, Kwd "*"); '(_, Ident g); '(_, Kwd ")"); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
   [FuncTypeDecl (l, rt, g, ps, c)]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
@@ -1856,6 +1857,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
   in
+    
+  let functypenames = 
+    let ds=match ps with
+        [PackageDecl(_,"",[],ds)] -> ds
+      | _ when file_type path=Java -> []
+    in
+    flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds
+  in
   
   let structmap1 =
     List.map
@@ -2060,7 +2069,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Some s -> ObjType s
         | None -> match (search' id (pn,ilist) interfdeclmap) with
                     Some s->ObjType s
-                  | None -> static_error l ("No such type parameter, inductive datatype, class, or interface: " ^pn^" "^id)
+                  | None ->
+                    if List.mem id functypenames || List.mem_assoc id functypemap0 then
+                      FuncType id
+                    else
+                      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id)
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
@@ -2109,6 +2122,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ObjType l -> "class " ^ l
     | StructType sn -> "struct " ^ sn
     | PtrType t -> string_of_type t ^ " *"
+    | FuncType ft -> ft
     | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
     | BoxIdType -> "box"
     | HandleIdType -> "handle"
@@ -2135,6 +2149,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StructType sn -> assert false
     | ObjType n -> ProverInt
     | PtrType t -> ProverInt
+    | FuncType _ -> ProverInt
     | PredType t -> ProverInductive
     | BoxIdType -> ProverInt
     | HandleIdType -> ProverInt
@@ -2144,14 +2159,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
-  
-  let functypenames = 
-    let ds=match ps with
-        [PackageDecl(_,"",[],ds)] -> ds
-      | _ when file_type path=Java -> []
-    in
-  flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds
-  in
   
   let isfuncs = if file_type path=Java then [] else
     List.map (fun ftn ->
@@ -4749,10 +4756,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match leminfo with
                 None -> ()
               | Some (lems, g0, indinfo) ->
-                  if List.mem g lems then
+                  if match g with Some g -> List.mem g lems | None -> false then
                     ()
                   else 
-                      if g = g0 then
+                      if g = Some g0 then
                         let rec nonempty h =
                           match h with
                             [] -> false
@@ -4853,7 +4860,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  if(match_args xmap pats) then
                    if fb <>fbm then static_error l ("Wrong method binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm))
-                   else check_correct xo g targs pats (lm, [], rt, xmap, pre, post, body,v)
+                   else check_correct xo (Some g) targs pats (lm, [], rt, xmap, pre, post, body,v)
                  else
                    search_meth rest
                | _::rest -> search_meth rest
@@ -4870,7 +4877,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       with StaticError (l, msg) -> false
                 in
                 if(match_args xmap pats) then
-                  check_correct xo g targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
+                  check_correct xo (Some g) targs pats (lm, [],Some (ObjType(class_name)), xmap, pre, post,ss,Static)
                 else search_cons rest
               in
               if iscons then 
@@ -4886,7 +4893,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     if fb <>fbm 
                       then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                       let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                      check_correct xo g targs pats (lm, [], rt, xmap, pre, post, None,v)
+                      check_correct xo (Some g) targs pats (lm, [], rt, xmap, pre, post, None,v)
                  | None->  static_error l ("Method "^class_name^" not found!!")
                 )
             | None ->
@@ -4911,12 +4918,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
                      let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context."        in
-                     check_correct xo g targs pats (lg, tparams, tr, ps, pre, post, body,v)
+                     check_correct xo (Some g) targs pats (lg, tparams, tr, ps, pre, post, body,v)
                 )
             )
       )
     | _ ->
       (
+      match try_assoc g tenv with
+        Some (PtrType (FuncType ftn)) ->
+        let fterm = List.assoc g env in
+        let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
+        let phi = ctxt#mk_app isfuncsymb [fterm] in
+        assert_term phi h env l ("Could not prove " ^ ctxt#pprint phi); (* TODO: Evaluate error message lazily. *)
+        let (_, rt, xmap, pre, post) = List.assoc ftn functypemap in
+        if pure then static_error l "Cannot call function pointer in a pure context.";
+        check_correct xo None [] (LitPat (Var (dummy_loc, g, ref (Some LocalVar)))::pats) (lg, [], rt, (("this", PtrType Void)::xmap), pre, post, None, Public)
+      | _ ->
       match try_assoc' (pn,ilist) g funcmap with
         None -> (
         match try_assoc' (pn,ilist) g purefuncmap with
@@ -4936,7 +4953,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
-        check_correct xo g targs pats (lg, tparams, tr, ps, pre, post, body,v)
+        check_correct xo (Some g) targs pats (lg, tparams, tr, ps, pre, post, body,v)
       ) 
     in 
     match s with
