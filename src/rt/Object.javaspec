@@ -1,0 +1,9 @@
+package java.lang;
+
+public class Object{
+  public Object()
+  //@ requires true;
+  //@ ensures  result!=null &*& result.getClass() == Object.class;
+  {
+  }
+}

@@ -282,12 +282,26 @@ public class Tree{
 	public int value;
 	public Tree left;
 	public Tree right;
+	public Tree()
+	//@ requires true;
+	//@ ensures tree(result,cons(0,nil,nil));
+	{
+	this.value=0;
+        this.left=null;
+	this.right=null;
+	//@ Tree l = this.left;
+	//@ close tree(l,nil);
+        //@ Tree r = this.right;
+        //@ close tree(r,nil);
+        //@ close tree(this,cons(0,nil,nil));
+	}
 	public static Tree init_tree(int x)
 	//@ requires true;
 	//@ ensures tree(result,cons(x,nil,nil));
 	{
 		Tree t=null;
 	        t=new Tree();
+	        //@ open tree(t,cons(0,nil,nil));
 		t.value=x;
 		t.left=null;
 		t.right=null;

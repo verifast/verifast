@@ -1,3 +1,4 @@
+import java.lang.*;
 class Foo {}
 /*@
 
@@ -259,9 +260,9 @@ predicate_family_instance MapFunc(PlusOne.class)(PlusOne f, list<int> in, list<i
 
 class PlusOne implements MapFunc {
 
-    PlusOne(Object dummy)
+    PlusOne()
         //@ requires true;
-        //@ ensures result.getClass() == PlusOne.class;
+        //@ ensures  result!=null &*& result.getClass() == PlusOne.class;
     {
     }
     
