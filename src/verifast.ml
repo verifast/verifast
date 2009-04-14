@@ -1803,7 +1803,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if file_type path =Java then
       begin
       match try_assoc rtpath !headermap with
-        None ->
+        None -> 
           let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
           let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
           let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
@@ -4948,7 +4948,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       | Some (r, t) -> expect_type (pn,ilist) l t tpx; update env x r
                     end
               in
-              with_context PopSubcontext (fun () -> cont h env)
+              match g with
+                Some g when (startswith g "new ") -> 
+                  let cn= match (search' (String.sub g 4 ((String.length g)-4)) (pn,ilist) class_symbols) with Some s -> s in
+                  assume_neq (List.assoc (match xo with Some xo->xo) env) (ctxt#mk_intlit 0) (fun () ->
+                  assume_eq (ctxt#mk_app get_class_symbol [(List.assoc (match xo with Some xo->xo) env)]) (ctxt#mk_app (List.assoc cn class_symbols) [])(fun () -> with_context PopSubcontext (fun () -> cont h env)))
+              | _ -> with_context PopSubcontext (fun () -> cont h env)
             )
           )
         )
@@ -5938,8 +5943,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   in
                   let result = get_unique_var_symb "result" (ObjType cn) in
                   let this = get_unique_var_symb "this" (ObjType cn) in
-                  assume_eq (ctxt#mk_app get_class_symbol [result])(ctxt#mk_app (List.assoc cn class_symbols) []) 
-                    (fun()->( assume_neq result (ctxt#mk_intlit 0) 
+                  assume_neq this (ctxt#mk_intlit 0) 
                       (fun()->( assume_eq result this 
                         (fun()->
                           let fds= get_fields (pn,ilist) cn lm in 
@@ -5958,8 +5962,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         )
                        )
                       )
-                     )
-                    )
                 )
               in
               let _ = pop() in
@@ -6161,7 +6163,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let basepath=(Filename.basename path) in
   let dirpath= (Filename.dirname path) in
   let (prototypes_used, prototypes_implemented) =
-    let (headers, ds) =
+    let ((headers, ds),include_prelude) =
       match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
               let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
@@ -6170,17 +6172,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               main_file:=main;
               jardeps:=jdeps;
               if Sys.file_exists (Filename.concat dirpath specpath) then
-                (jarlist@[(dummy_loc,specpath)],ds)
+                ((jarlist@[(dummy_loc,specpath)],ds),false)
               else
-                ([],ds)
+                (([],ds),true)
             else
-              ([],[parse_java_file path reportRange])
+              (([],[parse_java_file path reportRange]),true)
       | _-> 
-        parse_c_file path reportRange reportShouldFail
+        (parse_c_file path reportRange reportShouldFail,true)
     in
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file true programDir headers ds in
+      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file include_prelude programDir headers ds in
       (prototypes_used, prototypes_implemented)
     in
     begin

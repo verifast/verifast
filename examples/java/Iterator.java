@@ -35,7 +35,7 @@ class SingletonIterator implements Iterator {
 
   public SingletonIterator(Object value)
       //@ requires value!=null;
-      //@ ensures iterator(SingletonIterator.class)(result, cons(value, nil))&*& result.getClass()==SingletonIterator.class;
+      //@ ensures iterator(SingletonIterator.class)(result, cons(value, nil));
   {
       this.value = value;
       this.done = false;

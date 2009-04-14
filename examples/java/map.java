@@ -109,9 +109,9 @@ predicate_family_instance List(Nil.class)(Nil l, list<int> xs) =
 
 class Nil implements List {
 
-    Nil(Object o)
+    Nil()
         //@ requires true;
-        //@ ensures List(Nil.class)(result,nil) &*& result.getClass() == Nil.class;
+        //@ ensures List(Nil.class)(result,nil);
     {
         //@ close List(Nil.class)(this, nil);
     }
@@ -169,7 +169,7 @@ class Cons implements List {
     
     Cons(int head, List tail)
         //@ requires List(tail.getClass())(tail, ?t);
-        //@ ensures List(Cons.class)(result, cons(head, t)) &*& result.getClass() == Cons.class;
+        //@ ensures List(Cons.class)(result, cons(head, t));
     {
         this.head = head;
         this.tail = tail;
@@ -262,7 +262,7 @@ class PlusOne implements MapFunc {
 
     PlusOne()
         //@ requires true;
-        //@ ensures  result!=null &*& result.getClass() == PlusOne.class;
+        //@ ensures  result!=null;
     {
     }
     
@@ -281,7 +281,7 @@ class Program {
     //@ requires true;
     //@ ensures true;
     {
-        List l = new Nil(null);
+        List l = new Nil();
         l = new Cons(3, l);
         l = new Cons(2, l);
         l = new Cons(1, l);
@@ -289,7 +289,7 @@ class Program {
         //@ close MapFunc(PlusOne.class)(f, cons(1, cons(2, cons(3, nil))), nil, cons(1, cons(2, cons(3, nil))));
         List l2 = l.map(f);
         //@ open MapFunc(PlusOne.class)(f, nil, ?ys, cons(1, cons(2, cons(3, nil))));
-        List l3 = new Nil(null);
+        List l3 = new Nil();
         l3 = new Cons(4, l3);
         l3 = new Cons(3, l3);
         l3 = new Cons(2, l3);
