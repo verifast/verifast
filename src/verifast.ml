@@ -2371,13 +2371,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	    Some x -> x
 	  | None -> match search2' x (pn,ilist) interfdeclmap interfmap0 with 
 	      Some x -> x
-		| None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+		| None -> assert(false)
 	  in
 	  let y= match search2' y (pn,ilist) classdeclmap classmap0 with 
 	    Some y -> y
 	  | None -> match search2' y (pn,ilist) interfdeclmap interfmap0 with 
 	      Some y -> y
-		| None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+		| None -> assert(false)
 	  in
       if y="Object"||y="java.lang.Object"||x=y||(checkinter (pn,ilist) y x)||(checksuper (pn,ilist) x y) then ()
 	  else static_error l (msg ^ "Type mismatch. Actual: " ^ x ^ ". Expected: " ^ y ^ ".")
@@ -3842,12 +3842,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          | (x, tp)::ps -> if x = x0 then (i, tp) else index_of_param (i + 1) x0 ps
        in
        let (i, InductiveType (_, targs)) = index_of_param 0 x pmap in
-       let fsym = match try_assoc' (pn,ilist) g purefuncmap with Some (l, tparams, rt, ts, s) -> s 
-	   | None -> static_error l ("pure function wasn't found: "^g)in
+       let fsym = match try_assoc' (pn,ilist) g purefuncmap with Some (l, tparams, rt, ts, s) -> s in
        let clauses =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
-              let (_, tparams, _, ts, ctorsym) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x | None -> static_error l ("pure function wasn't found: "^g)in
+              let (_, tparams, _, ts, ctorsym) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
@@ -5415,10 +5414,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such box class."
         | Some boxinfo -> boxinfo
       in
-      let (_, _, pts, g_symb, _) = match try_assoc' (pn,ilist) bcn predfammap with 
-	    None -> static_error l ("No such predicate family: "^bcn)
-	  | Some x-> x
-	  in
+      let Some (_, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
       assert_chunk (pn,ilist) h ghostenv env l (g_symb, true) real_unit DummyPat pats $. fun h coef ts _ ghostenv env ->
       if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
@@ -5437,10 +5433,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some (lhp, hpParamMap, hpInv, pbcs) ->
               let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
               let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (HandleIdType::hpParamTypes) pats in
-              let (_, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with
-			    None-> static_error l ("No such predicate family: "^hpn)
-			  | Some x-> x
-			  in
+              let Some (_, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
               let handlePat::argPats = wpats in
               let pats = handlePat::LitPat (Var (l, "#boxId", ref (Some LocalVar)))::argPats in
               assert_chunk (pn,ilist) h ghostenv (("#boxId", boxId)::env) l (hpn_symb, true) real_unit DummyPat pats $. fun h coef ts _ ghostenv env ->
