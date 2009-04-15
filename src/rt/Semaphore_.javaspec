@@ -1,0 +1,24 @@
+/*@@*/
+/*@
+predicate lock(Semaphore_ l; predicate() inv);
+
+predicate create_lock_ghost_arg(predicate() inv)
+    requires inv();
+
+lemma void lock_dispose(Semaphore_ lock);
+    requires lock(lock, ?a);
+    ensures a();
+@*/
+public class Semaphore_ extends Object{
+  Semaphore_(int n);
+    //@ requires n==1 &*& create_lock_ghost_arg(?a);
+    //@ ensures lock(result, a);
+
+  void acquire();
+    //@ requires [?f]lock(this, ?a);
+    //@ ensures [f]lock(this, a) &*& a();
+
+  void release();
+    //@ requires [?f]lock(this, ?a) &*& a();
+    //@ ensures [f]lock(this, a);
+}

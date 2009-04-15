@@ -262,7 +262,7 @@ class PlusOne implements MapFunc {
 
     PlusOne()
         //@ requires true;
-        //@ ensures  result!=null;
+        //@ ensures true;
     {
     }
     

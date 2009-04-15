@@ -1,29 +1,31 @@
+package java.lang;
 /*@@*/
 
 /*@
 
-predicate_family thread_run_pre(Class c)(Object data, any info);
-predicate_family thread_run_post(Class c)(Object data, any info);
+predicate_family thread_run_pre(Class c)(Runnable run, any info);
+predicate_family thread_run_post(Class c)(Runnable run, any info);
 
 @*/
 public interface Runnable{ 
   public void run();
-  //@ requires thread_run_pre(Runnable.class)(?data, ?info);
-  //@ ensures thread_run_post(Runnable.class)(data, info);
+  //@ requires thread_run_pre(this.getClass())(this, ?info);
+  //@ ensures thread_run_post(this.getClass())(this, info);
 }
 
 /*@
-predicate thread(struct thread *thread, void *thread_run, void *data, any info);
+predicate thread(Thread_ thread,Runnable run, any info);
 @*/
 
 
-public class Thread extends Object implements Runnable {
-  public Thread(Runnable target); 
-  void start(void *run, void *data);
-    //@ requires is_thread_run(run) == true &*& thread_run_pre(run)(data, ?info);
-    //@ ensures thread(result, run, data, info);
-    
-void thread_join(struct thread *thread);
-    //@ requires thread(thread, ?run, ?data, ?info);
-    //@ ensures thread_run_post(run)(data, info);
+public class Thread_ extends Object{
+  public Thread_(Runnable run);
+    //@ requires thread_run_pre(run.getClass())(run, ?info);
+    //@ ensures thread_run_pre(run.getClass())(run, info);
+  void start();
+    //@ requires thread_run_pre(?c)(?run, ?info) &*& c==run.getClass();
+    //@ ensures thread(this,run,info);
+  void join();
+    //@ requires thread(this,?run,?info);
+    //@ ensures thread_run_post(run.getClass())(run, info);
 }
