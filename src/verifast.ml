@@ -1616,7 +1616,7 @@ let rec parse_jarsrc_file basePath relPath reportRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
   
-let lookup env x = try(List.assoc x env)with Not_found -> print_string "10"; raise Not_found
+let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t) env)
 
@@ -1920,7 +1920,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
             begin
             headers_included := path::!headers_included;
-            print_string path;
             iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
             end
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
@@ -2040,7 +2039,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let rec try_assoc' (pn,imports) name map=
-    (try(
     match imports with
       _ when List.mem_assoc (full_name pn name) map -> Some (List.assoc (full_name pn name) map)
     | _ when List.mem_assoc name map-> Some (List.assoc name map)
@@ -2048,11 +2046,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map-> Some (List.assoc (full_name p name) map) 
     | _::rest -> try_assoc' (pn,rest) name map
     | [] -> None
-	)with Not_found -> print_string "145646848"; raise Not_found)
   in
   
   let rec try_assoc_pair' (pn,imports) (n,n') map=
-    (try(
     match imports with
       _ when List.mem_assoc (full_name pn n,List.map (fun n-> full_name pn n) n') map -> Some (List.assoc (full_name pn n,List.map (fun n-> full_name pn n) n') map)
     | _ when List.mem_assoc (n,n') map-> Some (List.assoc (n,n') map)
@@ -2060,7 +2056,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Import(l,p,Some n2)::rest when n=n2 && List.mem_assoc (full_name p n,List.map (fun n-> full_name p n) n') map-> Some (List.assoc (full_name p n,List.map (fun n-> full_name p n) n') map) 
     | _::rest -> try_assoc_pair' (pn,rest) (n,n') map
     | [] -> None
-	)with Not_found -> print_string "1456484"; raise Not_found)
   in
 
   let try_assoc2' (pn,imports)x xys1 xys2 =
@@ -2189,7 +2184,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
       begin
       match search' id (pn,ilist) inductive_arities with
-        Some s -> let n=(try(List.assoc s inductive_arities)with Not_found -> print_string "9"; raise Not_found)in
+        Some s -> let n=List.assoc s inductive_arities in
         if n > 0 then static_error l "Missing type arguments.";
         InductiveType (s, [])
       | None ->
@@ -2226,7 +2221,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
     match t with
-      TypeParam x -> (try(List.assoc x tpenv)with Not_found -> print_string "8"; raise Not_found)
+      TypeParam x -> List.assoc x tpenv
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
     | PredType pts -> PredType (List.map (instantiate_type tpenv) pts)
@@ -3231,7 +3226,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match t with
           InductiveType (i, targs) ->
           begin
-            let (_, tparams, ctormap) = try(List.assoc i inductivemap)with Not_found -> print_string "7"; raise Not_found in
+            let (_, tparams, ctormap) = List.assoc i inductivemap in
             let (Some tpenv) = zip tparams targs in
             let rec iter t0 wcs ctors cs =
               match cs with
@@ -3293,7 +3288,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match t with
     | PtrType (StructType sn) ->
       begin
-      match (try(List.assoc sn structmap)with Not_found -> print_string "21534564"; raise Not_found) with
+      match List.assoc sn structmap with
         (_, Some fds) ->
         begin
           match try_assoc' (pn,ilist) f#name fds with
@@ -3407,7 +3402,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     | (t::ts, x::xs) ->
                       if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
-                      let xInfo = match t with TypeParam x -> Some (provertype_of_type (try(List.assoc x tpenv)with Not_found -> print_string "4456456"; raise Not_found)) | _ -> None in
+                      let xInfo = match t with TypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
                       iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables."
                     | _ -> static_error lc "Too few pattern variables."
@@ -3648,10 +3643,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structmap
   in
   
-  let field_offset f = (try(List.assoc (f#parent, f#name) field_offsets)with Not_found -> print_string "fghgh45644"; raise Not_found) in
+  let field_offset f = (List.assoc (f#parent, f#name) field_offsets) in
   let field_address t f = ctxt#mk_add t (field_offset f) in
   
-  let pure_func_symb g = let (_, _, _, _, symb) = try(List.assoc g purefuncmap)with Not_found -> print_string "6"; raise Not_found in symb in
+  let pure_func_symb g = let (_, _, _, _, symb) = (List.assoc g purefuncmap) in symb in
   
   let convert_provertype term proverType proverType0 = (* TODO: Cache these pure function symbols as soon as there is support for a Java prelude. *)
     if proverType = proverType0 then term else ctxt#mk_app (pure_func_symb (get_conversion_funcname proverType proverType0)) [term]
@@ -3683,11 +3678,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (Some scope) = !scope in
         match scope with
           LocalVar -> (try(List.assoc x env)with Not_found -> static_error l ("Local var wasn't found: "^x))
-        | PureCtor -> let (lg, tparams, t, [], s) = (try(List.assoc x purefuncmap)with Not_found -> print_string "5"; raise Not_found) in ctxt#mk_app s []
-        | FuncName -> (try(List.assoc x funcnameterms)with Not_found -> print_string "fghgfh"; raise Not_found)
-        | PredFamName -> let (_, _, _, symb, _) = (try(List.assoc x predfammap)with Not_found -> print_string "4"; raise Not_found)in symb
+        | PureCtor -> let (lg, tparams, t, [], s) = (List.assoc x purefuncmap) in ctxt#mk_app s []
+        | FuncName -> (List.assoc x funcnameterms)
+        | PredFamName -> let (_, _, _, symb, _) = (List.assoc x predfammap)in symb
       end
-    | PredNameExpr (l, g) -> let (_, _, _, symb, _) = (try(List.assoc g predfammap)with Not_found -> print_string "3"; raise Not_found) in symb
+    | PredNameExpr (l, g) -> let (_, _, _, symb, _) = (List.assoc g predfammap) in symb
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) [] te in
       begin
@@ -3709,7 +3704,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
     | ClassLit (l,s) -> 
       let symb= match (search' s (pn,ilist) class_symbols) with Some s -> s in
-      ctxt#mk_app (try(List.assoc symb class_symbols)with Not_found -> print_string "2"; raise Not_found) []
+      ctxt#mk_app (List.assoc symb class_symbols) []
     | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
     | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
@@ -3784,7 +3779,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           field_address (ev e) f
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
-    | FuncNameExpr fn -> (try(List.assoc fn funcnameterms)with Not_found -> print_string "pfnay"; raise Not_found)
+    | FuncNameExpr fn -> (List.assoc fn funcnameterms)
     | SwitchExpr (l, e, cs, tref) ->
       let g = mk_ident "switch_expression" in
       let t = ev e in
@@ -3802,7 +3797,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
-             let (_, tparams, _, pts, csym) = (try(List.assoc cn purefuncmap)with Not_found -> print_string "1"; raise Not_found)in
+             let (_, tparams, _, pts, csym) = List.assoc cn purefuncmap in
              let apply gvs cvs =
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
@@ -3813,7 +3808,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  List.map
                    (fun ((pat, term), typ) ->
                     match typ with
-                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (try(List.assoc x tpenv)with Not_found -> print_string "786545645"; raise Not_found)))
+                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
                     | _ -> (pat, term)
                    )
                    penv
@@ -3859,7 +3854,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     (fun ((x, term), typ) ->
                      let term =
                      match typ with
-                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (try(List.assoc x tpenv)with Not_found -> print_string "1sdfdihgd21"; raise Not_found))
+                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
                      | _ -> term
                      in
                      (x, term)
@@ -3962,7 +3957,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let assume_field h0 f tp tv tcoef cont =
-    let (_, (_, _, _, symb, _)) = (try(List.assoc (f#parent, f#name) field_pred_map)with Not_found -> print_string "4564565"; raise Not_found)in
+    let (_, (_, _, _, symb, _)) =(List.assoc (f#parent, f#name) field_pred_map)in
     let rec iter h =
       match h with
         [] -> cont (((symb, true), tcoef, [tp; tv], None)::h0)
@@ -3987,7 +3982,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let g_symb =
         match try_assoc' (pn,ilist) g#name predfammap with
           Some (_, _, _, symb, _) -> (symb, true)
-        | None -> ((try(List.assoc g#name env)with Not_found -> print_string "5698"; raise Not_found), false)
+        | None -> (List.assoc g#name env, false)
       in
       evalpats (pn,ilist) ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts, size_first)::h) ghostenv env)
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
@@ -4003,7 +3998,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
-               let (_, tparams, _, tps, cs) = (try(List.assoc cn purefuncmap)with Not_found -> print_string "8713"; raise Not_found)in
+               let (_, tparams, _, tps, cs) = List.assoc cn purefuncmap in
                let Some pts = zip pats tps in
                let xts =
                  if tparams = [] then
@@ -4080,7 +4075,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let read_field h env l t f =
-    let (_, (_, _, _, f_symb, _)) = (try(List.assoc (f#parent, f#name) field_pred_map)with Not_found -> print_string "sdg867fg"; raise Not_found)in
+    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
   in
   
@@ -4134,14 +4129,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     with_context_helper (fun _ ->
     let ev = eval (pn,ilist) None env in
     let access l coefpat e f rhs =
-      let (_, (_, _, _, symb, _)) = (try(List.assoc (f#parent, f#name) field_pred_map)with Not_found -> print_string "dfgdh5456"; raise Not_found) in
+      let (_, (_, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
       assert_chunk (pn,ilist) h ghostenv env l (symb, true) coef coefpat [LitPat e; rhs] (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
     let callpred l coefpat g pats0 pats =
       let g_symb =
         match try_assoc' (pn,ilist) g#name predfammap with
           Some (_, _, _, symb, _) -> (symb, true)
-        | None -> ((try(List.assoc (g#name) env)with Not_found -> print_string ("dfgdh243454e "^g#name^"\n"); raise Not_found), false)
+        | None -> (List.assoc (g#name) env, false)
       in
       assert_chunk (pn,ilist) h ghostenv env l g_symb coef coefpat (pats0 @ pats) (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
@@ -4167,7 +4162,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
-          let (_, tparams, _, tps, ctorsym) = try(List.assoc cn purefuncmap)with Not_found -> print_string "18"; raise Not_found in
+          let (_, tparams, _, tps, ctorsym) = List.assoc cn purefuncmap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
             if tparams = [] then
@@ -4245,7 +4240,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
     
   let get_field (pn,ilist) h t f l cont =
-    let (_, (_, _, _, f_symb, _)) = (try(List.assoc (f#parent, f#name) field_pred_map)with Not_found -> print_string "dfgfg454"; raise Not_found)in
+    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     get_points_to (pn,ilist) h t f_symb l cont
   in
   
@@ -4374,7 +4369,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | Some (_, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
                 check_func_header_compat (pn,ilist) l "Function type implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (Regular, [], rt0, xmap0, false, cenv0, pre0, post0);
-                let (_, _, _, _, symb) = (try(List.assoc ("is_" ^ ftn) purefuncmap)with Not_found -> print_string "8713dfgfg"; raise Not_found)in
+                let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
                 ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
             end
         end;
@@ -5161,7 +5156,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume_is_of_type (ev w) tp (fun () -> cont h env)
     | CallStmt (l, "assume_class_this", [], [],Instance) when file_type path=Java && List.mem_assoc "this" env->
     let classname= match vartp l "this" with ObjType cn -> cn in
-      assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (try (List.assoc classname class_symbols)with Not_found -> print_string "17"; raise Not_found) [])(fun () ->cont h env)
+      assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
     | CallStmt (l, "free", [], args,Static) ->
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
@@ -5204,7 +5199,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, tp) = check_deref (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
       eval_h h env w (fun h t ->
-        let (_, (_, _, _, f_symb, _)) = try(List.assoc (f#parent, f#name) field_pred_map)with Not_found -> print_string "0"; raise Not_found in
+        let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field (pn,ilist) h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont (((f_symb, true), real_unit, [t; ev wrhs], None)::h) env)
@@ -5237,7 +5232,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let (tn, targs, (_, tparams, ctormap)) =
         match tp with
-          InductiveType (i, targs) -> (i, targs, try(List.assoc i inductivemap)with Not_found -> print_string "14"; raise Not_found)
+          InductiveType (i, targs) -> (i, targs, List.assoc i inductivemap)
         | _ -> static_error l "Switch statement operand is not an inductive value."
       in
       let (Some tpenv) = zip tparams targs in
@@ -5277,7 +5272,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             iter [] [] [] pats pts
           in
-          let (_, _, _, _, ctorsym) = try(List.assoc cn purefuncmap)with Not_found -> print_string "13"; raise Not_found in
+          let (_, _, _, _, ctorsym) = List.assoc cn purefuncmap in
           let sizemap =
             match try_assq t sizemap with
               None -> sizemap
@@ -5463,8 +5458,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let ts0 = match file_type path with
               Java -> List.map(fun cn -> 
                 let symb= match (search' cn (pn,ilist) class_symbols) with Some s -> s in
-                ctxt#mk_app (try(List.assoc symb class_symbols)with Not_found -> print_string "12"; raise Not_found) []) fns
-            | _ -> List.map (fun fn -> (try(List.assoc fn funcnameterms)with Not_found -> print_string "56465"; raise Not_found)) fns in
+                ctxt#mk_app (List.assoc symb class_symbols) []) fns
+            | _ -> List.map (fun fn -> (List.assoc fn funcnameterms)) fns in
             (ps, [], (g_symb, true), body, ts0)
           | None -> static_error l "No such predicate instance."
           end
@@ -5552,7 +5547,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     end
                     bs
               in
-              let handleIdTerm = (try(List.assoc x env)with Not_found -> print_string "65418"; raise Not_found) in
+              let handleIdTerm = (List.assoc x env) in
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant.";
@@ -5604,7 +5599,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
       assert_pred (pn,ilist) h ghostenv env p real_unit (fun h _ _ _ ->
-        let bs = List.map (fun x -> (x, get_unique_var_symb x (try(List.assoc x tenv)with Not_found -> print_string "456456"; raise Not_found))) xs in
+        let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
         branch
           (fun _ ->
@@ -5991,7 +5986,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                              [] -> 
                                let env'= update env "result" result in
                                let env''= update env' "this" this in
-                               let (_, (_, _, _, malloc_block_symb, _)) = (try(List.assoc cn malloc_block_pred_map)with Not_found -> print_string "5678687"; raise Not_found) in
+                               let (_, (_, _, _, malloc_block_symb, _)) = (List.assoc cn malloc_block_pred_map) in
                                (do_body (h @ [((malloc_block_symb, true), real_unit, [result], None)]) ghostenv env'')
                            | (f, (lf, t,vis))::fds ->
                                let fref = new fieldref f in
@@ -6062,7 +6057,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds -> let g=full_name pn g in
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, _, _, Some _, _, _)::ds when k <> Fixpoint -> let g=full_name pn g in
-      let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = try(List.assoc g funcmap)with Not_found -> print_string "11"; raise Not_found in
+      let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let _ = push() in
       let env = params ps in (* actual params invullen *)
       let (sizemap, indinfo) =
