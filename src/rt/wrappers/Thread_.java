@@ -1,23 +1,41 @@
 public class Thread_{
-  Thread t;
-  Exception e;
+  InnerThread t;
   public Thread_(Runnable run){
-    t=new Thread(run);
+    t=new InnerThread(run);
   }
-  void start(){
-    try{
-      t.run();
-    }catch(RuntimeException e1){
-      e=e1;
-    }
+  public void start(){
+    t.start();
   }
-  void join(){
+  public void join(){
     try{
       t.join();
     }catch(InterruptedException e){
-      throw new RuntimeException("Thread was interrupted.");
+      throw new RuntimeException("Thread was interrupted.",e);
     }
-    if(e!=null)
-      throw new RuntimeException("An exception occurred");
+    if(!t.done){
+      if(t.e==null){
+      throw new RuntimeException("Internal error occurred.");
+      }else{
+      throw new RuntimeException("Exception: ",t.e);
+      }
+    }
+  }
+}
+class InnerThread extends Thread{
+  Runnable run;
+  Throwable e;
+  boolean done;
+  InnerThread(Runnable run){
+    super();
+    this.run=run;
+  }
+  public void run(){
+    done=false;
+    try{
+      run.run();
+      done=true;
+    }catch(Throwable e1){
+      e=e1;
+    }
   }
 }

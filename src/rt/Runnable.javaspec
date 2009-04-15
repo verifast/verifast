@@ -21,12 +21,12 @@ predicate thread_run(Thread_ thread,Runnable run, any info);
 
 public class Thread_ extends Object{
   public Thread_(Runnable run);
-    //@ requires thread_run_pre(run.getClass())(run, ?info);
-    //@ ensures thread_run_pre(run.getClass())(run, info) &*& thread(result,run);
+    //@ requires true;
+    //@ ensures thread(result,run);
   void start();
     //@ requires thread_run_pre(?c)(?run, ?info) &*& c==run.getClass() &*& thread(this,run);
-    //@ ensures thread_run(this,run,info) &*& thread(this,run);
+    //@ ensures thread_run(this,run,info) ;
   void join();
-    //@ requires thread_run(this,?run,?info) &*& thread(this,run);
-    //@ ensures thread_run_post(run.getClass())(run, info) &*& thread(this,run);
+    //@ requires thread_run(this,?run,?info);
+    //@ ensures thread_run_post(run.getClass())(run, info);
 }
