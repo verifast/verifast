@@ -1,15 +1,22 @@
 call "C:\Program Files\Microsoft Visual Studio 8\VC\vcvarsall.bat" x86
 
-set OCAMLLIB=C:\Ocaml\lib
-set PATH=%PATH%;C:\Ocaml\bin
+set OCAMLLIB=C:\Ocaml311\lib
+set PATH=%PATH%;C:\Ocaml311\bin
 
 set GTKLIB=C:\gtk+-bundle-2.12.11\lib
 set PATH=C:\gtk+-bundle-2.12.11\bin;%PATH%
 
-set Z3=C:\Z3-1.3.6
-set PATH=C:\Z3-1.3.6\bin;%PATH%
+set Z3=C:\Z3-1.3.6-OCaml-3.11
+set PATH=C:\Z3-1.3.6-OCaml-3.11\bin;%PATH%
+
+set PATH=C:\flexdll-0.14;%PATH%
+
+set PATH=C:\VeriFast\workdir\src;%PATH%
+
+rem The settings below are only needed for release builds.
 
 set PATH=C:\svn-win32-1.5.5\bin;%PATH%
 
-set VERIFAST_REPOSITORY_URL=https://aramis.cs.kuleuven.be/svn/verifast/verifast/trunk
+set VERIFAST_REPOSITORY_URL=https://localhost:11443/svn/verifast/verifast/trunk
+
 set PATH=C:\Program Files\7-Zip;%PATH%

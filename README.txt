@@ -1,55 +1,70 @@
-How to build VeriFast
-=====================
+How to build VeriFast on Win32
+==============================
 
-NOTE: These instructions do not work for O'Caml version 3.11 or later. Please use O'Caml 3.10.2.
+In order to build VeriFast on an x86 Windows machine, you need to
+1) Install the required software packages
+2) Set environment variables
+3) Run nmake in the src directory
 
-Outputs
--------
+1) Install Required Software Packages
+=====================================
 
-You can build multiple outputs, depending on the following:
-- Do you want the command-line tool (verifast) or the IDE (vfide, depends on the GTK DLLs)?
-- Do you want the machine code version (.opt, does not print exception stack traces) (runs faster) or the bytecode version (compiles faster, prints exception stack traces)?
-- Do you want to include Redux (not as good as Z3 (yet ;-) )?
-- Do you want to include Z3 (depends on Z3.dll)?
+You can either use tools.zip, which contains all required tools (except Visual Studio),
+or you can do a manual install.
 
-So that's 12 possible outputs. The Makefile does not support all of them yet, though. Some supported ones:
+i) Use tools.zip
+----------------
 
-nmake verifastz3.opt.exe
-nmake vfidez3.opt.exe
+Simply download tools.zip from https://aramis.cs.kuleuven.be/verifast/chrome/site/tools.zip and unzip it to C:\.
 
-In order to build and run VeriFast, a number of environment variables need to be set. You can do this conveniently by creating a settings.bat file. Do
+Note: unfortunately, the tools are not relocatable. I installed them to C:\, so you
+MUST unzip them to C:\ as well.
 
-copy settings.bat.example settings.bat
+ii) Manual install
+------------------
 
-and edit settings.bat to update the paths as appropriate for your setup.
+You also need Microsoft Visual C++ 8.0 (Visual Studio 2005) or newer.
 
-The optimized executables do not print exception stack traces. To get exception stack traces, build verifastz3.exe and set OCAMLRUNPARAM=b:
+A. OCaml 3.11 or newer
+B. Flexdll 0.14 or newer
+C. Cygwin; GNU make (to build Camlidl)
+D. Camlidl 1.05 or newer
+E. Z3 1.3.6 or newer
+F. LablGTK 2.12.0 or newer
 
-nmake verifastz3.exe
-set OCAMLRUNPARAM=b
-verifastz3 nonexistent.c
+A. OCaml
+--------
 
-Output:
+VeriFast is written in O'Caml.
 
-nonexistent.c
-Fatal error: exception Sys_error("nonexistent.c: No such file or directory")
-Raised by primitive operation at unknown location
-Called from file "verifast.ml", line 32, characters 21-25
-Called from file "vfconsole.ml", line 9, characters 33-37
-Called from file "vfconsole.ml", line 12, characters 61-65
-Called from file "vfconsole.ml", line 12, characters 94-107
-Called from file "vfconsole.ml", line 60, characters 39-42
+1) Download the OCaml 3.11 Windows binaries (for the Microsoft Visual C++ toolchain) and install it.
+2) Add the bin directory to your PATH
+3) set OCAMLLIB=C:\Ocaml311\lib
 
-Z3
---
+B. Flexdll
+----------
 
-VeriFast uses the Z3 Ocaml API.
+Flexdll is a flexible, Unix-like linker used by O'Caml.
 
-1) Download and run the Z3 .msi file from http://research.microsoft.com/projects/z3/
+1) Download it and unzip it
+2) Put it in your PATH
 
-2) Download and unzip the CamlIDL sources .zip file from http://caml.inria.fr/pub/old_caml_site/camlidl/
+C. Cygwin
+---------
 
-3) Install CamlIDL as per the README file.
+Cygwin is needed to build Camlidl, which is needed for the Z3 O'Caml binding. VeriFast uses the Z3 SMT solver.
+
+1) Install Cygwin
+2) Install the GNU make package
+
+D. Camlidl
+----------
+
+Camlidl is needed for the Z3 O'Caml binding. VeriFast uses the Z3 SMT solver.
+
+1) Download and unzip the CamlIDL sources .zip file from http://caml.inria.fr/pub/old_caml_site/camlidl/
+
+2) Install CamlIDL as per the README file. Or see here.
   Unfortunately, this requires Cygwin. Important: before starting Cygwin, set the CYGWIN=nontsec environment variable.
   In a Cygwin shell started from a Visual Studio command prompt (so that the Visual C++ compiler (cl.exe) is in the PATH):
   3.1) Copy config/Makefile.win32 to config/Makefile
@@ -65,12 +80,29 @@ VeriFast uses the Z3 Ocaml API.
   3.4) Do 'make all'
   3.5) Assuming you have write access to your Ocaml installation, do 'make install'
 
-4) Build the Z3 Ocaml API
-  4.1) In Z3's ocaml directory, do 'build.cmd'
-  4.2) Optionally, test it by going to Z3's examples\ocaml directory and doing 'build' and then 'exec'
+E. Z3
+-----
 
-LablGTK
--------
+VeriFast uses the Z3 SMT solver.
+
+1) Download and run the Z3 .msi file from http://research.microsoft.com/projects/z3/
+
+2) Build the Z3 Ocaml API
+  4.1) In Z3's ocaml directory, issue the following commands (do not use build.cmd):
+
+           ocamlopt -ccopt "/DWIN32 /I ..\include" -c z3_stubs.c z3.mli z3.ml
+           ocamlopt -a -o z3.cmxa ..\bin\z3.lib z3_stubs.obj z3.cmx ole32.lib libcamlidl.lib
+
+  4.2) Optionally, test it
+    a) Go to Z3's examples\ocaml directory
+    b) Issue the following command:
+
+           ocamlopt -o test_mlapi.exe -I ..\..\ocaml z3.cmxa test_mlapi.ml
+
+    c) Run exec.cmd
+
+F. LablGTK
+----------
 
 VeriFast uses LablGTK, an OCaml language binding for the GTK GUI toolkit.
 To build and run VeriFast, you must first download and install GTK and
@@ -82,7 +114,7 @@ http://ftp.gnome.org/pub/gnome/binaries/win32/gtk+/2.12/gtk+-bundle-2.12.11.zip
 
 2) Download and unzip the LablGTK bundle:
 
-http://wwwfun.kurims.kyoto-u.ac.jp/soft/lsl/dist/lablgtk-2.10.1-win32.zip
+http://wwwfun.kurims.kyoto-u.ac.jp/soft/olabl/dist/lablgtk-2.12.0-win32.zip
 
 3) Build LablGTK:
 
@@ -98,3 +130,24 @@ xcopy <lablgtkdir>\bin\lablgtk2.bat <ocamldir>\bin
 Before running a program that uses GTK, put the GTK DLLs in your PATH:
 
 set PATH=<gtkdir>\bin;%PATH%
+
+2) Set Environment Variables
+============================
+
+In order to build and run VeriFast, a number of environment variables need to be set. You can do this conveniently by creating a settings.bat file. Do
+
+copy settings.bat.example settings.bat
+
+and edit settings.bat to update the paths as appropriate for your setup.
+(If you unzipped tools.zip, most paths are already correct.)
+
+It is convenient to create a "VeriFast Command Prompt" by copying the "Command Prompt" shortcut and modifying the command line to read as follows:
+
+C:\WINDOWS\system32\cmd.exe /k C:\verifast\settings.bat
+
+3) Run Nmake
+============
+
+Go to the src directory, and run nmake. You will get verify.exe and vfide.exe in the src directory.
+The makefile will also run the test suite.
+You might want to put the src directory in your PATH.

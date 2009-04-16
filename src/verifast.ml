@@ -966,7 +966,7 @@ and
 | [<>] -> Public
 and
   parse_interface_members cn=parser
-  [<'(_, Kwd "}");>] -> []
+  [<'(_, Kwd "}")>] -> []
 | [<v=parse_interface_visibility;m=parse_interface_meth v cn;mr=parse_interface_members cn>] -> m::mr
 and
   parse_interface_meth vis cn= parser
@@ -980,7 +980,7 @@ and
 | [<>] -> Package
 and
   parse_java_members cn= parser
-  [<'(_, Kwd "}");>] -> []
+  [<'(_, Kwd "}")>] -> []
 | [<v=parse_visibility;m=parse_java_member v cn;mr=parse_java_members cn>] -> m::mr
 and
   parse_java_member vis cn= parser
@@ -1372,7 +1372,7 @@ and
         | [<
             '(l, Ident f);
             e = parser
-              [<args0 = parse_patlist;>] -> CallExpr (l, f, [], [], LitPat(Var(l,x,ref None))::args0,Instance)
+              [<args0 = parse_patlist>] -> CallExpr (l, f, [], [], LitPat(Var(l,x,ref None))::args0,Instance)
             | [<>] -> Read (l, Var(l,x, ref None), new fieldref f)
           >]->e 
       >]-> r
