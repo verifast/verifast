@@ -1263,7 +1263,7 @@ and
   | [<'(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >]->
     (match e with
      | Var (lx, t, _) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
-     | _ -> raise (ParseException (expr_loc e, "Parse error blabla."))
+     | _ -> raise (ParseException (expr_loc e, "Parse error."))
     )
   >] -> s
 | [< te = parse_type; '(_, Ident x); '(l, Kwd "=");
@@ -3239,7 +3239,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
                    [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "Class")
-                else static_error l ("No such pure function:bla "^g')
+                else static_error l ("No such pure function: "^g')
       )
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
@@ -3744,7 +3744,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
       begin
         match try_assoc' (pn,ilist) g purefuncmap with
-          None -> static_error l ("No such pure functionbla: "^g)
+          None -> static_error l ("No such pure function: "^g)
         | Some (lg, tparams, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
       end
     | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
@@ -4846,17 +4846,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       StringLit (l, s)->( match file_type path with
         Java ->
-          let (_, _, _, chars_symb, _) = List.assoc "java.lang.chars" predfammap in
-          let (_, _, _, string_literal_symb, _) = List.assoc "java.lang.string_literal" predfammap in
-          let (_, _, _, _, chars_contains_symb) = List.assoc "java.lang.chars_contains" purefuncmap in
           let value = get_unique_var_symb "stringLiteral" (ObjType "String") in
-          let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
-          let coef = get_unique_var_symb "stringLiteralCoef" RealType in
-            assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
-              assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
-                cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
-              )
-            )
+          assume_neq value (ctxt#mk_intlit 0) 
+          (fun()-> cont h value)
       | _ ->
           let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
           let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in

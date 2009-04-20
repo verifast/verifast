@@ -2,6 +2,10 @@ package chat;
 
 import java.util.*;
 import wrapper.io.*;
+/*@
+predicate room(Room room)
+    requires room.members |-> ?membersList &*& list(membersList, ?members) &*& foreach(members, member);
+@*/
 public class Room{
   List members;
   public Room()

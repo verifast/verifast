@@ -22,7 +22,7 @@ public class Program {
         Socket_ socket = serverSocket.accept();
         //@ split_fraction lock(roomLock, _);
         Session session = new Session(room, roomLock, socket);
-        //@ close thread_run_pre(Session.class)(session,nil);
+        //@ close thread_run_pre(Session.class)(session,unit);
         Thread_ t=new Thread_(session);
         t.start();
     }

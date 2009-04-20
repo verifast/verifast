@@ -11,8 +11,8 @@ public class InputStreamReader_{
 }
 public class OutputStreamWriter_{
   void write(String string);
-    //@ requires writer(this) &*& [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
-    //@ ensures writer(this) &*& [f]chars(string, cs);
+    //@ requires writer(this)&*& string!=null;
+    //@ ensures writer(this);
   void write(StringBuffer buffer);
     //@ requires writer(this) &*& [?f]string_buffer(buffer);
     //@ ensures writer(this) &*& [f]string_buffer(buffer);

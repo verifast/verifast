@@ -5,6 +5,19 @@ import wrapper.net.*;
 import wrapper.util.concurrent.*;
 import wrapper.io.*;
 import wrapper.lang.*;
+/*@
+
+predicate_ctor room_ctor(Room room)()
+    requires room(room);
+
+predicate session(Session session)
+    requires session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket(socket, ?reader, ?writer)
+        &*& [?f]lock(roomLock, room_ctor(room)) &*& reader(reader) &*& writer(writer);
+
+predicate_family_instance thread_run_pre(Session.class)(Session session, any info)
+  requires session(session);
+
+@*/
 public class Session implements Runnable{
   Room room;
   Semaphore_ room_lock;
@@ -33,16 +46,12 @@ public class Session implements Runnable{
         //@ open room(room);
         member=new Member(nickCopy,writer);
         List list=room.members;
-        boolean success=list.add(member);
-        if(success){
+        list.add(member);
         //@ open foreach(?members, @member);
         //@ close foreach(members, @member);
         //@ foreach_member_not_contains(members, member);
         //@ close foreach(cons(member, members), @member);
         //@ close room(room);
-        }else{
-        //@ close room(room);
-        }
     }
     //@ close room_ctor(room)();
     roomLock.release();
