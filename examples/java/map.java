@@ -1,13 +1,4 @@
-import java.lang.*;
 class Foo {}
-/*@
-
-inductive unit = unit;
-
-inductive boxed_int = boxed_int(int);
-fixpoint int unboxed_int(boxed_int i) { switch (i) { case boxed_int(value): return value; } }
-
-@*/
 /*@
 
 inductive list<t> = nil | cons(t, list<t>);

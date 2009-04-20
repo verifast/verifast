@@ -1,7 +1,7 @@
 package iterator.it;
 
 import iterator.singleton.*;
-import iterator.util.*;
+import iterator.itutil.*;
 /*@
 
 inductive objects = nil | cons(Object, objects);

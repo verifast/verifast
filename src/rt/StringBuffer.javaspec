@@ -1,0 +1,19 @@
+package java.lang;
+/*@@*/
+/*@
+predicate string_buffer(StringBuffer buffer);
+@*/
+public class StringBuffer{
+  StringBuffer();
+    //@ requires emp;
+    //@ ensures string_buffer(result);
+  StringBuffer append(StringBuffer b);
+    //@ requires string_buffer(this) &*& [?f]string_buffer(b);
+    //@ ensures string_buffer(this) &*& [f]string_buffer(b)  &*& result==this;
+  StringBuffer append(String string);
+    //@ requires string_buffer(this) &*& [?f]chars(string, ?cs);
+    //@ ensures string_buffer(this) &*& [f]chars(string, cs) &*& result==this;
+  String toString();
+    //@ requires [?f]string_buffer(this);
+    //@ ensures [f]string_buffer(this) &*& chars(result,?cs);
+}

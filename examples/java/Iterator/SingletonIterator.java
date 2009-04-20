@@ -1,7 +1,7 @@
 package iterator.singleton;
 
 import iterator.it.*;
-import iterator.util.*;
+import iterator.itutil.*;
 
 public class SingletonIterator implements Iterator {
   Object value;

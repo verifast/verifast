@@ -1,26 +1,30 @@
-package java.net;
-/*@ @*/
-public class Socket extends Object{
+package wrapper.net;
 
-  public InputStream getInputStream();
+import wrapper.io.*;
+/*@ @*/
+/*@
+predicate server_socket(ServerSocket_ serverSocket);
+predicate socket(Socket_ socket, InputStreamReader_ reader, OutputStreamWriter_ writer);
+@*/
+public class Socket_{
+  public Socket_(int port);
+    //@ requires emp;
+    //@ ensures socket(result, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+  public InputStreamReader_ getReader();
     //@ requires socket(this, ?reader, ?writer);
     //@ ensures socket(this, reader, writer) &*& result == reader;
-  public OutputStream getOutputStream();
+  public OutputStreamWriter_ getWriter();
     //@ requires socket(this, ?reader, ?writer);
     //@ ensures socket(this, reader, writer) &*& result == writer;
-  public void close2();
-    //@ requires socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+  public void close_();
+    //@ requires socket(this, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
     //@ ensures emp;
 }
-public class ServerSocket extends Object{
+public class ServerSocket_{
   public ServerSocket(int port);
     //@ requires emp;
     //@ ensures server_socket(result);
-  public Socket accept();
+  public Socket_ accept();
     //@ requires server_socket(this);
     //@ ensures server_socket(this) &*& socket(result, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
-}
-public class InputStreamReader{
-  InputStreamReader(InputStream in);
-  
 }

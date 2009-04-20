@@ -1,4 +1,16 @@
 package java.lang;
 
 public class String{
+  public boolean equals(String other);
+    //@ requires [?f1]chars(this,?cs1) &*& [?f2]chars(other,?cs2);
+    //@ ensures [f1]chars(this,cs1) &*& [f2]chars(other,cs2);
+  public int indexOf(String other);
+    //@ requires [?f1]chars(this,?cs1) &*& [?f2]chars(other,?cs2);
+    //@ ensures [f1]chars(this,cs1) &*& [f2]chars(other,cs2) &*& result>=(-1) &*& chars_length(cs1)>result;
+  public String substring(int begin,int end);
+    //@ requires [?f]chars(this,?cs) &*& begin>=0 &*& chars_length(cs)>=end;
+    //@ ensures [f]chars(this,?cs1) &*& [f]chars(result,?cs2);
+  public int length();
+    //@ requires [?f]chars(this,?cs);
+    //@ ensures [f]chars(this,cs) &*& result==chars_length(cs);
 }

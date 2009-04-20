@@ -1,0 +1,20 @@
+package wrapper.io;
+/*@ @*/
+/*@
+predicate reader(InputStreamReader_ reader);
+predicate writer(OutputStreamWriter_ writer);
+@*/
+public class InputStreamReader_{
+  boolean readLine(StringBuffer buffer);
+    //@ requires reader(this) &*& string_buffer(buffer);
+    //@ ensures reader(this) &*& string_buffer(buffer);
+}
+public class OutputStreamWriter_{
+  void write(String string);
+    //@ requires writer(this) &*& [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
+    //@ ensures writer(this) &*& [f]chars(string, cs);
+  void write(StringBuffer buffer);
+    //@ requires writer(this) &*& [?f]string_buffer(buffer);
+    //@ ensures writer(this) &*& [f]string_buffer(buffer);
+  
+}

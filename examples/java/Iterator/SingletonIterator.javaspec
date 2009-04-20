@@ -1,7 +1,7 @@
 package iterator.singleton;
 
 import iterator.it.*;
-import iterator.util.*;
+import iterator.itutil.*;
 
 
 //@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, objects xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));

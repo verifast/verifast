@@ -1,11 +1,8 @@
 package program;
-/*@
-import iterator.it.iterator;
-import iterator.it.objects_last;
-@*/
-import iterator.it.Iterator;
-import iterator.util.IteratorUtil;
-import iterator.singleton.SingletonIterator;
+
+import iterator.it.*;
+import iterator.itutil.*;
+import iterator.singleton.*;
 
 class Program {
   public static void main(String[] args)

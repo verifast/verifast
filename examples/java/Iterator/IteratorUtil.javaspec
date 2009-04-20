@@ -1,4 +1,4 @@
-package iterator.util;
+package iterator.itutil;
 
 import iterator.it.*;
 import iterator.singleton.*;

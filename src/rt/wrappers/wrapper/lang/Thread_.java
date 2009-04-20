@@ -1,3 +1,5 @@
+package wrapper.lang;
+
 public class Thread_{
   InnerThread t;
   public Thread_(Runnable run){

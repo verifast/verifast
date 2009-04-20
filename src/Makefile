@@ -36,6 +36,12 @@ test: verifast.exe vfide.exe
 	..\..\..\src\verifast -c it.jarsrc
 	..\..\..\src\verifast -c prog.jarsrc
 	cd ..
+	cd chat
+	..\..\..\src\verifast -c chat.jarsrc
+	cd ..
+	cd chatbot
+	..\..\..\src\verifast -disable_overflow_check -c Bot.java
+	cd ..
 	cd ..
 	cd chat
 	..\..\src\verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c

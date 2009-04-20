@@ -1,0 +1,206 @@
+package java.util;
+/*@@*/
+
+/*@
+inductive listval = nil | cons(Object, listval);
+
+fixpoint listval list_add(listval xs, Object x) {
+    switch (xs) {
+        case nil: return cons(x, nil);
+        case cons(h, t): return cons(h, list_add(t, x));
+    }
+}
+
+fixpoint listval remove(listval v, Object e)
+{
+  switch(v) {
+    case nil: return nil;
+    case cons(h, t): return h==e?t:cons(h, remove(t, e));
+  }
+}
+
+fixpoint int length(listval v)
+{
+  switch(v) {
+    case nil: return 0;
+    case cons(h, t): return 1 + length(t);
+  }
+}
+
+fixpoint listval tail(listval v)
+{
+  switch(v) {
+    case nil: return nil;
+    case cons(h, t): return t;
+  }
+}
+
+fixpoint Object ith(listval v, int i)
+{
+  switch(v) {
+    case nil: return null;
+    case cons(h, t): return i==0 ? h : ith(t, i - 1);
+  }
+}
+
+
+fixpoint boolean contains(listval v, Object x)
+{
+  switch(v) {
+    case nil: return false;
+    case cons(h, t): return h==x ? true : contains(t, x);
+  }
+}
+
+fixpoint boolean uniqueElements(listval v)
+{
+  switch(v) {
+    case nil: return true;
+    case cons(h, t): return !contains(t, h) && uniqueElements(t);
+  }
+}
+
+lemma void lengthPositive(listval v)
+  requires true;
+  ensures 0<=length(v);
+{
+  switch(v){
+    case nil: return;
+    case cons(h, t): lengthPositive(t);
+  }
+}
+
+lemma void containsIth(listval v, int i)
+  requires 0<=i &*& i < length(v);
+  ensures contains(v, ith(v, i)) == true;
+{
+  switch(v){
+    case nil: return;
+    case cons(h, t):
+      if(i==0){
+      } else {
+        containsIth(t, i - 1);
+      }
+  }
+}
+
+predicate foreach(listval v, predicate(Object) p)
+  requires uniqueElements(v)==true &*& switch(v) { 
+             case nil: return emp; 
+             case cons(h, t): return p(h) &*& foreach(t, p);
+           }; 
+
+lemma void removeContains(listval v, Object x1, Object x2)
+    requires !contains(v, x1);
+    ensures  !contains(remove(v, x2), x1);
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x2) {
+            } else {
+                removeContains(t, x1, x2);
+            }
+    }
+}
+
+lemma void removeUniqueElements(listval v, Object x)
+    requires uniqueElements(v) == true;
+    ensures uniqueElements(remove(v, x)) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x) {
+            } else {
+                removeContains(t, h, x);
+                removeUniqueElements(t, x);
+            }
+    }
+}
+
+lemma void remove_not_contains(listval v, Object mem)
+  requires !contains(v, mem);
+  ensures remove(v, mem) == v;
+{
+  switch (v) {
+    case nil:
+    case cons(h, t):
+      if (h == mem) {
+      } else {
+      }
+      remove_not_contains(t, mem);
+  }
+}
+
+lemma void foreach_unremove(listval v, Object x)
+  requires foreach(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
+  ensures foreach(v, p);
+{
+  
+  switch(v) {
+    case nil: open foreach(remove(v, x), p); return;
+    case cons(h, t):
+      if(h==x){
+        remove_not_contains(t, x);
+        close foreach(v, p);
+      } else {
+        open foreach(remove(v, x), p);
+        foreach_unremove(t, x);
+        close foreach(v, p);
+      }
+  }
+}
+
+lemma void foreach_remove(listval v, Object x)
+    requires foreach(v, ?p) &*& contains(v, x) == true;
+    ensures foreach(remove(v, x), p) &*& p(x) &*& uniqueElements(v) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            open foreach(v, p);
+            if (h == x) {
+            } else {
+                foreach_remove(t, x);
+                removeUniqueElements(v, x);
+                close foreach(remove(v, x), p);
+            }
+    }
+}
+
+
+
+predicate list(List l, listval v);
+
+predicate iter(Iterator i, List l, listval v, int index);
+
+lemma void iter_dispose(Iterator iter);
+ requires iter(iter, ?l, ?v, ?i);
+ ensures list(l, v);
+@*/
+interface List{
+  boolean add(Object element);
+  //@ requires list(this, ?v);
+  //@ ensures result?list(this, cons(element, v)):list(this,v);
+  boolean remove(Object element);
+  //@ requires list(this, ?v);
+  //@ ensures contains(v, element) ?list(this, remove(v, element)):list(this,v);
+  Iterator iterator();
+  //@ requires list(this, ?v);
+  //@ ensures iter(result, this, v, 0);
+}
+interface Iterator{
+  boolean hasNext();
+  //@ requires iter(this, ?l, ?v, ?i);
+  //@ ensures iter(this, l, v, i) &*& result == (i < length(v));
+  Object next();
+  //@ requires iter(this, ?l, ?v, ?i) &*& i < length(v);
+  //@ ensures iter(this, l, v, i + 1) &*& result==ith(v, i);
+  
+}
+public class ArrayList implements List{
+  ArrayList();
+  //@ requires emp;
+  //@ ensures list(result, nil);
+}

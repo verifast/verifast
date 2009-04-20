@@ -814,7 +814,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"
 ]
-let java_keywords= ["public";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";"extends"
+let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";"extends"
 ]
 
 let file_type path=
@@ -1382,9 +1382,21 @@ and
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "(");
      e = parser
-     [< e = parse_expr; '(_, Kwd ")") >] -> e
+     [< e0 = parse_expr; '(_, Kwd ")");
+         e = parser
+           [< '(l', Ident y) >] -> (match e0 with 
+             Var (lt, x, _) ->CastExpr (l, IdentTypeExpr (lt, x), Var (l', y, ref (Some LocalVar)))
+           | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
+         | [<>] -> e0
+     >] -> e
    | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
    >] -> e
+(*
+| [< '(l, Kwd "(");
+     e = parser
+     [< e = parse_expr; '(_, Kwd ")") >] -> e
+   | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
+   >] -> e*)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
@@ -1794,7 +1806,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let rec check_file include_prelude basedir headers ps =
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     if include_prelude then
       if file_type path =Java then
       begin
@@ -1802,25 +1814,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> 
           let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
           let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
-          let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-          headermap := (rtpath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-          (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+          let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
+          headermap := (rtpath, ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
+          (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+      | Some ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
+        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       end
       else
       begin
       match try_assoc preludePath !headermap with
         None ->
         let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
-        let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
+        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+      | Some ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
+        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       end
       else
-      ([], [], [], [], [], [], [], [], [], [], [], [],[])
+      ([], [], [], [], [], [], [], [], [], [], [], [],[],[])
   in
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
@@ -1832,28 +1844,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter xys
   in
-  let append_nodups' xys xys0 string_of_key l elementKind =
-    let rec iter xys =
-      match xys with
-        [] -> xys0
-      | ((x, y) as elem)::xys ->
-        if List.mem_assoc x xys0 && not(startswith x "java.lang.") then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
-        elem::iter xys
-    in
-    iter xys
-  in
 
   let id x = x in
   
-  let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     let headers_included = ref [] in
-    let rec iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
+    let rec iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
       match headers with
-        [] -> (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        [] -> (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       | (l, header_path)::headers ->
     if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+          iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -1869,25 +1871,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l "No such file."
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
+            let (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
-              | Some (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
-                (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+                let (structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
+                headermap := (path, (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+                (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+              | Some (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
+                (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
             in
-            let (structmap0, inductivemap0, purefuncmap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
+            let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
             iter
               (append_nodups structmap structmap0 id l "struct")
               (append_nodups inductivemap inductivemap0 id l "inductive datatype")
               (append_nodups purefuncmap purefuncmap0 id l "pure function")
+			  (append_nodups predctormap predctormap0 id l "predicate constructor")
               (append_nodups fixpointmap fixpointmap0 id l "fixpoint function")
               (malloc_block_pred_map @ malloc_block_pred_map0)
               (field_pred_map @ field_pred_map0)
@@ -1915,12 +1918,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l ("No such file: "^systempath)
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
           else
           if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
             begin
             headers_included := path::!headers_included;
-            iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
             end
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
           begin
@@ -1929,27 +1932,28 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let allspecs= remove (fun x -> List.mem x !headers_included)(list_remove_dups allspecs) in
             let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
             let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
-            let (structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir [] ds in
-            headermap := (path, (headers', structmap, inductivemap, purefuncmap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+            let (structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir [] ds in
+            headermap := (path, (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
             spec_classes:=classes;
             spec_lemmas:=lemmas;
             ((append_nodups structmap structmap0 id l "struct"),
-            (append_nodups' inductivemap inductivemap0 id l "inductive datatype"),
-            (append_nodups' purefuncmap purefuncmap0 id l "pure function"),
-            (append_nodups' fixpointmap fixpointmap0 id l "fixpoint function"),
+            (append_nodups inductivemap inductivemap0 id l "inductive datatype"),
+            (append_nodups purefuncmap purefuncmap0 id l "pure function"),
+			(append_nodups predctormap predctormap0 id l "predicate constructor"),
+            (append_nodups fixpointmap fixpointmap0 id l "fixpoint function"),
             (malloc_block_pred_map @ malloc_block_pred_map0),
             (field_pred_map @ field_pred_map0),
-            (append_nodups' predfammap predfammap0 id l "predicate"),
+            (append_nodups predfammap predfammap0 id l "predicate"),
             (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance"),
             (append_nodups functypemap functypemap0 id l "function type"),
-            (append_nodups' funcmap funcmap0 id l "function"),
+            (append_nodups funcmap funcmap0 id l "function"),
             (append_nodups boxmap boxmap0 id l "box predicate"),
-            (append_nodups' classmap classmap0 id l "class"),
-            (append_nodups' interfmap interfmap0 id l "interface"))
+            (append_nodups classmap classmap0 id l "class"),
+            (append_nodups interfmap interfmap0 id l "interface"))
           end
         end
     in
-    iter structmap0 inductivemap0 purefuncmap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+    iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
   in
 
   let structdeclmap =
@@ -2200,7 +2204,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
-      match try_assoc id inductive_arities with
+      match try_assoc' (pn,ilist) id inductive_arities with
         Some n ->
         if n <> List.length targs then static_error l "Incorrect number of type arguments.";
         InductiveType (id, List.map (check_type_arg (pn,ilist) tpenv) targs)
@@ -2346,13 +2350,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _ -> t
   in
   
-  let rec unify t1 t2 =
+  let rec unify t1 t2 (pn,ilist)=
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
       (InferredType t', InferredType t0') -> if t' = t0' then true else begin t0' := Some t1; true end
     | (t, InferredType t0) -> t0 := Some t; true
     | (InferredType t, t0) -> t := Some t0; true
-    | (InductiveType (i1, args1), InductiveType (i2, args2)) -> i1 = i2 && List.for_all2 unify args1 args2 
+    | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
+	  let i1 = match search' i1 (pn,ilist) inductivedeclmap with 
+	    Some s-> s
+	  | None -> i1
+	  in
+	  let i2 = match search' i2 (pn,ilist) inductivedeclmap with 
+	    Some s-> s
+	  | None -> i2 
+	  in
+	  i1=i2 && List.for_all2 (fun a b ->unify a b (pn,ilist)) args1 args2
     | (t1, t2) -> t1 = t2
   in
   
@@ -2384,7 +2397,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           List.iter (fun (t, t0) -> expect_type_core (pn,ilist) l msg t t0) tpairs
       end
     | (InductiveType _, AnyType) -> ()
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if unify t t0 (pn,ilist) then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
   let expect_type (pn,ilist) l t t0 = expect_type_core (pn,ilist) l "" t t0 in
@@ -2427,7 +2440,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> iter (pn,ilist) ((i, (l, tparams, List.rev ctormap))::imap) pfm fpm ds
-          | Ctor (lc, cn, tes)::ctors ->
+          | Ctor (lc, cn, tes)::ctors -> let cn=full_name pn cn in
             if List.mem_assoc cn pfm || List.mem_assoc cn purefuncmap0 then
               static_error lc ("Duplicate pure function name: "^cn)
             else (
@@ -2495,7 +2508,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           static_error ls ("Missing case: '" ^ cn ^ "'.")
                       in (index, ctorcount, ls, e, wcs)
                     | SwitchStmtClause (lc, cn, xs, body)::cs -> (
-                      match try_assoc cn ctormap with
+                      match try_assoc' (pn,ilist) cn ctormap with
                         None -> static_error lc "No such constructor."
                       | Some (_, ts) ->
                         let xmap =
@@ -2541,7 +2554,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           match e with
                             True l -> (e, boolt)
                           | False l -> (e, boolt)
-                          | Null l -> (e, match rt with ObjType id -> ObjType id ) (* null is allowed for every object type*)
+                          | Null l -> (e, match rt with ObjType id -> ObjType id | TypeParam t -> TypeParam t) (* null is allowed for every object type or a type param*)
                           | Var (l, x, scope) -> (
                             match try_assoc x tenv with
                               None -> (
@@ -2582,7 +2595,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             let w2 = checkt e2 RealType in
                             (Operation (l, operator, [w1; w2], ts), RealType)
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
-                          | StringLit (l, s) -> (e, PtrType Char)
+                          | StringLit (l, s) ->(
+						    match file_type path with
+						      Java-> (e, ObjType "String")
+							| _ -> (e, PtrType Char)
+							)
                           | CallExpr (l', g', targes, [], pats, info) -> (
                             match (match try_assoc' (pn,ilist) g' pfm with
                               None -> try_assoc' (pn,ilist) g' purefuncmap0
@@ -2679,7 +2696,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                       end
                                     | SwitchExprClause (lc, cn, xs, e)::cs ->
                                       begin
-                                        match try_assoc cn ctormap with
+                                        match try_assoc' (pn,ilist) cn ctormap with
                                           None -> static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.")
                                         | Some (_, ts) ->
                                           if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause.";
@@ -2719,6 +2736,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             w
                         in
                         let wbody = checkt_ tenv body rt in
+						let Some cn= search' cn (pn,ilist) ctormap in
                         iter (List.remove_assoc cn ctormap) (SwitchStmtClause (lc, cn, xs, [ReturnStmt (lret, Some wbody)])::wcs) cs
                       )
                   in
@@ -2742,7 +2760,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let inductivemap = inductivemap1 @ inductivemap0 in
-  let purefuncmap = purefuncmap1 @ purefuncmap0 in
   let fixpointmap = fixpointmap1 @ fixpointmap0 in
   
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
@@ -2897,13 +2914,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let predfammap = predfammap1 @ structpreds1 @ predfammap0 in (* TODO: Check for name clashes here. *)
-
-  let (predctormap, purefuncmap) =
+  let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
       match ds with
         PredCtorDecl (l, p, ps1, ps2, body)::ds -> let p=full_name pn p in
         begin
-          match try_assoc2 p pfm purefuncmap0 with
+          match try_assoc2' (pn,ilist) p pfm purefuncmap0 with
             Some _ -> static_error l "Predicate constructor name clashes with existing pure function name."
           | None -> ()
         end;
@@ -2953,8 +2969,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PackageDecl(l,pn,il,ds)::rest -> iter' (iter (pn,il) pcm pfm ds) rest
       | [] -> (pcm,pfm)
     in
-    iter' ([],purefuncmap) ps
+    iter' ([],purefuncmap1) ps
   in
+  let purefuncmap = purefuncmap1 @ purefuncmap0 in
+  let predctormap = predctormap1 @ predctormap0 in
   
   let funcnames = if file_type path=Java then [] else
   let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
@@ -3139,6 +3157,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (Operation (l, operator, [w1; w2], ts), boolt)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
       let (w1, t1) = check e1 in
+	  let (w2, t2) = check e2 in
       begin
         match t1 with
           PtrType _ ->
@@ -3148,7 +3167,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | IntType | RealType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
-        | _ -> static_error l "Operand of addition or subtraction must be pointer, integer, or real number."
+		| ObjType "String" as t->
+		  let w2 = checkt e2 t in
+		  ts:=Some [t1; ObjType "String"];
+		  (Operation (l, operator, [w1; w2], ts), t1)
+        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
       end
     | Operation (l, (Mul | Div as operator), [e1; e2], ts) ->
       let w1 = checkt e1 RealType in
@@ -3156,13 +3179,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (Operation (l, operator, [w1; w2], ts), RealType)
     | IntLit (l, n, t) -> t := Some intt; (e, intt)
     | ClassLit (l, s) -> (e, ObjType "Class")
-    | StringLit (l, s) -> (e, PtrType Char)
-    | CastExpr (l, te, e) ->
+    | StringLit (l, s) -> (match file_type path with
+	    Java-> (e, ObjType "String")
+	  | _ -> (e, PtrType Char))
+    | CastExpr (l, te, e) -> 
       let t = check_pure_type (pn,ilist) tparams te in
       let w =
         match (e, t) with
           (IntLit (_, n, tp), PtrType _) -> tp := Some t; e
-        | _ -> checkt e t
+        | _ -> match file_type path with
+            Java -> e
+          | _ -> checkt e t
       in
       (CastExpr (l, te, w), t)
     | Read (l, e, f) -> let (w, t) = check_deref (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
@@ -3212,7 +3239,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
                    [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "Class")
-                else static_error l ("No such pure function: "^g')
+                else static_error l ("No such pure function:bla "^g')
       )
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
@@ -3377,7 +3404,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match t with
       | InductiveType (i, targs) ->
         begin
-        match try_assoc i inductivemap with
+        match try_assoc' (pn,ilist) i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
         | Some (l, inductive_tparams, ctormap) ->
           let (Some tpenv) = zip inductive_tparams targs in
@@ -3392,7 +3419,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in (SwitchPred (l, w, wcs), tenv)
             | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
-              match try_assoc cn ctormap with
+              match try_assoc' (pn,ilist) cn ctormap with
                 None -> static_error lc "No such constructor."
               | Some (_, ts) ->
                 let (xmap, xsInfo) =
@@ -3412,6 +3439,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
                 let (wbody, _) = check_pred (pn,ilist)  tparams tenv body in
+				let Some cn= search' cn (pn,ilist) ctormap in
                 iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs
               end
           in
@@ -3646,14 +3674,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_offset f = (List.assoc (f#parent, f#name) field_offsets) in
   let field_address t f = ctxt#mk_add t (field_offset f) in
   
-  let pure_func_symb g = let (_, _, _, _, symb) = (List.assoc g purefuncmap) in symb in
+  let pure_func_symb g (pn,ilist)= let Some(_, _, _, _, symb) = try_assoc' (pn,ilist) g purefuncmap in symb in
   
-  let convert_provertype term proverType proverType0 = (* TODO: Cache these pure function symbols as soon as there is support for a Java prelude. *)
-    if proverType = proverType0 then term else ctxt#mk_app (pure_func_symb (get_conversion_funcname proverType proverType0)) [term]
+  let convert_provertype term proverType proverType0 (pn,ilist)= (* TODO: Cache these pure function symbols as soon as there is support for a Java prelude. *)
+    if proverType = proverType0 then term else ctxt#mk_app (pure_func_symb (get_conversion_funcname proverType proverType0) (pn,ilist)) [term]
   in
   
-  let prover_convert_term term t t0 =
-    if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
+  let prover_convert_term term t t0 (pn,ilist)=
+    if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0) (pn,ilist)
   in
 
   let rec eval_core (pn,ilist) assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
@@ -3678,11 +3706,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (Some scope) = !scope in
         match scope with
           LocalVar -> (try(List.assoc x env)with Not_found -> static_error l ("Local var wasn't found: "^x))
-        | PureCtor -> let (lg, tparams, t, [], s) = (List.assoc x purefuncmap) in ctxt#mk_app s []
+        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in ctxt#mk_app s []
         | FuncName -> (List.assoc x funcnameterms)
-        | PredFamName -> let (_, _, _, symb, _) = (List.assoc x predfammap)in symb
+        | PredFamName -> let Some (_, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
       end
-    | PredNameExpr (l, g) -> let (_, _, _, symb, _) = (List.assoc g predfammap) in symb
+    | PredNameExpr (l, g) -> let Some (_, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) [] te in
       begin
@@ -3703,9 +3731,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if eq_big_int n unit_big_int then real_unit
       else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
     | ClassLit (l,s) -> 
-      let symb= match (search' s (pn,ilist) class_symbols) with Some s -> s in
+      let Some symb= search' s (pn,ilist) class_symbols in
       ctxt#mk_app (List.assoc symb class_symbols) []
-    | StringLit (l, s) -> get_unique_var_symb "stringLiteral" (PtrType Char)
+    | StringLit (l, s) -> (match file_type path with
+	    Java -> get_unique_var_symb "stringLiteral" (ObjType "String")
+	  | _ -> get_unique_var_symb "stringLiteral" (PtrType Char))
     | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
         match pats with
@@ -3714,7 +3744,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
       begin
         match try_assoc' (pn,ilist) g purefuncmap with
-          None -> static_error l "No such pure function."
+          None -> static_error l ("No such pure functionbla: "^g)
         | Some (lg, tparams, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
       end
     | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
@@ -3797,7 +3827,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
-             let (_, tparams, _, pts, csym) = List.assoc cn purefuncmap in
+             let Some (_, tparams, _, pts, csym) = try_assoc' (pn,ilist) cn purefuncmap in
              let apply gvs cvs =
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
@@ -3808,7 +3838,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  List.map
                    (fun ((pat, term), typ) ->
                     match typ with
-                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
+                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)) (pn,ilist))
                     | _ -> (pat, term)
                    )
                    penv
@@ -3837,7 +3867,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          | (x, tp)::ps -> if x = x0 then (i, tp) else index_of_param (i + 1) x0 ps
        in
        let (i, InductiveType (_, targs)) = index_of_param 0 x pmap in
-       let fsym = match try_assoc' (pn,ilist) g purefuncmap with Some (l, tparams, rt, ts, s) -> s in
+       let Some(_,_,_,_,fsym) =try_assoc' (pn,ilist) g purefuncmap in
        let clauses =
          List.map
            (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
@@ -3854,7 +3884,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     (fun ((x, term), typ) ->
                      let term =
                      match typ with
-                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
+                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))(pn,ilist)
                      | _ -> term
                      in
                      (x, term)
@@ -3998,7 +4028,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
-               let (_, tparams, _, tps, cs) = List.assoc cn purefuncmap in
+               let Some (_, tparams, _, tps, cs) = try_assoc' (pn,ilist) cn purefuncmap in
                let Some pts = zip pats tps in
                let xts =
                  if tparams = [] then
@@ -4012,7 +4042,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         None -> let term = get_unique_var_symb x tp in (x, term, term)
                       | Some proverType ->
                         let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
-                        let term' = convert_provertype term proverType ProverInductive in
+                        let term' = convert_provertype term proverType ProverInductive (pn,ilist) in
                         (x, term', term)
                      )
                      pts
@@ -4030,7 +4060,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let definitely_equal t1 t2 =
-    let result = t1 == t2 || ctxt#query (ctxt#mk_eq t1 t2) in
+    let result = t1 == t2 || (ctxt#query (ctxt#mk_eq t1 t2)) in
     (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
     result
   in
@@ -4162,7 +4192,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec iter cs =
         match cs with
           SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
-          let (_, tparams, _, tps, ctorsym) = List.assoc cn purefuncmap in
+          let Some (_, tparams, _, tps, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
             if tparams = [] then
@@ -4179,7 +4209,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      None -> let term = get_unique_var_symb x tp in (x, term, term)
                    | Some proverType ->
                      let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
-                     let term' = convert_provertype term proverType ProverInductive in
+                     let term' = convert_provertype term proverType ProverInductive (pn,ilist)in
                      (x, term', term)
                   )
                   pts
@@ -4814,8 +4844,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let eval_h (pn,ilist) is_ghost_expr h env e cont =
     match e with
-      StringLit (l, s)->
-        if(file_type path <> Java) then
+      StringLit (l, s)->( match file_type path with
+        Java ->
+          let (_, _, _, chars_symb, _) = List.assoc "java.lang.chars" predfammap in
+          let (_, _, _, string_literal_symb, _) = List.assoc "java.lang.string_literal" predfammap in
+          let (_, _, _, _, chars_contains_symb) = List.assoc "java.lang.chars_contains" purefuncmap in
+          let value = get_unique_var_symb "stringLiteral" (ObjType "String") in
+          let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
+          let coef = get_unique_var_symb "stringLiteralCoef" RealType in
+            assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
+              assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
+                cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
+              )
+            )
+      | _ ->
           let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
           let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
           let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
@@ -4827,8 +4869,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
               )
             )
-        else
-          cont h (eval_non_pure (pn,ilist) is_ghost_expr h env e)
+	  )
     | e -> cont h (eval_non_pure (pn,ilist) is_ghost_expr h env e)
   in
   
@@ -5053,7 +5094,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                            None -> static_error l "Cannot write call of pure function as statement."
                          | Some x ->
                              let tpx = vartp l x in
-                             let g= match search' g (pn,ilist) purefuncmap with Some s -> s in
+                             let Some g=search' g (pn,ilist) purefuncmap in
                              let w = check_expr_t (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) tpx in
                              let _ = check_assign l x in
                              cont h (update env x (ev w))
@@ -5230,9 +5271,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | SwitchStmt (l, e, cs) ->
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      let (tn, targs, (_, tparams, ctormap)) =
+      let (tn, targs, Some (_, tparams, ctormap)) =
         match tp with
-          InductiveType (i, targs) -> (i, targs, List.assoc i inductivemap)
+          InductiveType (i, targs) -> (i, targs, try_assoc' (pn,ilist) i inductivemap)
         | _ -> static_error l "Switch statement operand is not an inductive value."
       in
       let (Some tpenv) = zip tparams targs in
@@ -5247,10 +5288,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
         | SwitchStmtClause (lc, cn, pats, ss)::cs ->
           let pts =
-            match try_assoc cn ctormap with
+            match try_assoc' (pn,ilist) cn ctormap with
               None -> static_error lc ("Not a constructor of type " ^ tn)
             | Some (l, pts) -> pts
           in
+		  let Some cn= search' cn (pn,ilist) ctormap in
           let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
           let (ptenv, xterms, xenv) =
             let rec iter ptenv xterms xenv pats pts =
@@ -5263,7 +5305,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let term = get_unique_var_symb pat tp' in
                 let term' =
                   match tp with
-                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive (pn,ilist)
                   | _ -> term
                 in
                 iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -5272,7 +5314,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             iter [] [] [] pats pts
           in
-          let (_, _, _, _, ctorsym) = List.assoc cn purefuncmap in
+          let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
           let sizemap =
             match try_assq t sizemap with
               None -> sizemap
@@ -5307,7 +5349,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (match try_assoc_pair' (pn,ilist) (g, fns) predinstmap with
                 Some (_, ps, _, p) ->
                 ((g_symb, true), List.map (fun fn -> LitPat (ClassLit(l,fn))) fns, List.length fns, ps, [], p)
-              | None -> static_error l "No such predicate instance.")
+              | None -> static_error l ("No such predicate instance: "^g))
             |_ ->
               (match try_assoc_pair' (pn,ilist) (g, fns) predinstmap with
                 Some (_, ps, _, p) ->
@@ -6191,7 +6233,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  (structmap1, inductivemap1, purefuncmap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap,interfmap)
+  (structmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap1,interfmap1)
   
   in
   
@@ -6200,7 +6242,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let basepath=(Filename.basename path) in
   let dirpath= (Filename.dirname path) in
   let (prototypes_used, prototypes_implemented) =
-    let ((headers, ds),include_prelude) =
+    let (headers, ds)=
       match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
               let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
@@ -6209,17 +6251,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               main_file:=main;
               jardeps:=jdeps;
               if Sys.file_exists (Filename.concat dirpath specpath) then
-                ((jarlist@[(dummy_loc,specpath)],ds),false)
+                (jarlist@[(dummy_loc,specpath)],ds)
               else
-                (([],ds),true)
+                ([],ds)
             else
-              (([],[parse_java_file path reportRange]),true)
+              ([],[parse_java_file path reportRange])
       | _-> 
-        (parse_c_file path reportRange reportShouldFail,true)
+        parse_c_file path reportRange reportShouldFail
     in
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (_, _, _, _, _, _, _, _, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file include_prelude programDir headers ds in
+      let (_, _, _, _, _, _, _,_,_, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file true programDir headers ds in
       (prototypes_used, prototypes_implemented)
     in
     begin

@@ -1,3 +1,4 @@
+package wrapper.util.concurrent;
 /*@@*/
 /*@
 predicate lock(Semaphore_ l; predicate() inv);

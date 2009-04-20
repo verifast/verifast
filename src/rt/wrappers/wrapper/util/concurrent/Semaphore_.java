@@ -1,17 +1,18 @@
+package wrapper.util.concurrent;
 import java.util.concurrent.*;
 public class Semaphore_ extends Object{
   Semaphore obj;
-  Semaphore_(int n){
+  public Semaphore_(int n){
   obj=new Semaphore(n);
   }
-  void acquire(){
+  public void acquire(){
   try{
     obj.acquire();
   }catch(InterruptedException e){
     throw new RuntimeException("Thread was interrupted"); 
   }
   }
-  void release(){
+  public void release(){
     obj.release();
   }
 }
