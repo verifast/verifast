@@ -15,7 +15,7 @@ public interface Runnable{
 
 /*@
 predicate thread(Thread_ thread, Runnable run);
-predicate thread_run(Thread_ thread,Runnable run, any info);
+predicate thread_started(Thread_ thread,Runnable run, any info);
 @*/
 
 
@@ -24,9 +24,9 @@ public class Thread_ extends Object{
     //@ requires true;
     //@ ensures thread(result,run);
   void start();
-    //@ requires thread_run_pre(?c)(?run, ?info) &*& c==run.getClass() &*& thread(this,run);
-    //@ ensures thread_run(this,run,info) ;
+    //@ requires thread(this,?run) &*& thread_run_pre(run.getClass())(run, ?info);
+    //@ ensures thread_started(this,run,info) ;
   void join();
-    //@ requires thread_run(this,?run,?info);
+    //@ requires thread_started(this,?run,?info);
     //@ ensures thread_run_post(run.getClass())(run, info);
 }

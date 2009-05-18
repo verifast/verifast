@@ -17,7 +17,7 @@ public class Program {
     ServerSocket_ serverSocket = new ServerSocket_(12345);
 
     while (true)
-        //@ invariant [?f]lock(roomLock, room_ctor(room)) &*& server_socket(serverSocket);
+        //@ invariant [_]lock(roomLock, room_ctor(room)) &*& server_socket(serverSocket);
     {
         Socket_ socket = serverSocket.accept();
         //@ split_fraction lock(roomLock, _);

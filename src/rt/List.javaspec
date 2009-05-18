@@ -103,6 +103,38 @@ lemma void removeContains(listval v, Object x1, Object x2)
             }
     }
 }
+lemma void addContains(listval v, Object x1, Object x2)
+    requires !contains(v, x1) &*& x1!=x2 &*& uniqueElements(v)==true;
+    ensures  !contains(list_add(v, x2), x1);
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x2) {
+              addContains(t, x1, x2);
+            } else {
+                addContains(t, x1, x2);
+            }
+    }
+}
+lemma void addUniqueElements(listval v, Object x)
+    requires uniqueElements(v) == true &*& !contains(v,x);
+    ensures uniqueElements(list_add(v, x)) == true;
+{
+    switch (v) {
+        case nil:
+        case cons(h, t):
+            if (h == x) {
+            } else {
+                assert(!contains(t,h));
+                addContains(t,h,x);
+                addUniqueElements(t, x);
+                
+                assert(!contains(list_add(t,x),h));
+                assert(list_add(v,x)==cons(h,list_add(t,x)));
+            }
+    }
+}
 
 lemma void removeUniqueElements(listval v, Object x)
     requires uniqueElements(v) == true;
@@ -169,7 +201,22 @@ lemma void foreach_remove(listval v, Object x)
     }
 }
 
-
+lemma void foreach_add(listval v, Object x)
+    requires foreach(v, ?p) &*& p(x) &*& contains(v, x) == false;
+    ensures foreach(list_add(v, x), p) &*& uniqueElements(list_add(v,x)) == true;
+{
+    switch (v) {
+        case nil: close foreach(cons(x,nil), p);
+        case cons(h, t):
+            open foreach(v, p);
+            if (h == x) {
+            } else {
+                foreach_add(t, x);
+                addUniqueElements(v, x);
+                close foreach(list_add(v, x), p);
+            }
+    }
+}
 
 predicate list(List l, listval v);
 
@@ -182,7 +229,7 @@ lemma void iter_dispose(Iterator iter);
 interface List{
   boolean add(Object element);
   //@ requires list(this, ?v);
-  //@ ensures result?list(this, cons(element, v)):list(this,v);
+  //@ ensures list(this, list_add(v,element)) &*& result;
   boolean remove(Object element);
   //@ requires list(this, ?v);
   //@ ensures contains(v, element) ?list(this, remove(v, element)):list(this,v);

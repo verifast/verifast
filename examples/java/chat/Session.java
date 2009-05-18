@@ -16,6 +16,9 @@ predicate session(Session session)
 
 predicate_family_instance thread_run_pre(Session.class)(Session session, any info)
   requires session(session);
+  
+predicate_family_instance thread_run_post(Session.class)(Session session, any info)
+  requires true;
 
 @*/
 public class Session implements Runnable{
@@ -33,7 +36,7 @@ public class Session implements Runnable{
   }
   public void run_with_nick(Room room,Semaphore_ roomLock,InputStreamReader_ reader,OutputStreamWriter_ writer, StringBuffer nick)
     //@ requires [?f]lock(roomLock, room_ctor(room)) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
-    //@ ensures [f]lock(roomLock, room_ctor(room)) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
   {
     Member member=null;
     StringBuffer joinMessage = new StringBuffer();
@@ -50,7 +53,7 @@ public class Session implements Runnable{
         //@ open foreach(?members, @member);
         //@ close foreach(members, @member);
         //@ foreach_member_not_contains(members, member);
-        //@ close foreach(cons(member, members), @member);
+        //@ foreach_add(members, member);
         //@ close room(room);
     }
     //@ close room_ctor(room)();
@@ -105,10 +108,10 @@ public class Session implements Runnable{
     //@ assume(memberWriter == writer);
   }
   public void run()
-    //@ requires thread_run_pre(?c)(this,_) &*& c==this.getClass();
-    //@ ensures true;
+    //@ requires thread_run_pre(Session.class)(this,?info);
+    //@ ensures thread_run_post(Session.class)(this,info);
   {
-    //@ open thread_run_pre(Session.class)(this,_);
+    //@ open thread_run_pre(Session.class)(this,info);
     //@ open session(this);
     Room room = this.room;
     Semaphore_ roomLock = this.room_lock;
@@ -179,5 +182,6 @@ public class Session implements Runnable{
         }
     }
     socket.close_();
+    //@ close thread_run_post(Session.class)(this,info);
 }
 }
