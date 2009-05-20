@@ -45,6 +45,10 @@ test: verifast.exe vfide.exe
 	cd ..
 	cd chat
 	..\..\src\verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+	..\..\src\verifast -c -emit_vfmanifest stringBuffers.c
+	..\..\src\verifast -c -emit_vfmanifest chat.c
+	..\..\src\verifast stringBuffers.o sockets.o threading.o lists.o -allow_assume chat.o
+	del stringBuffers.vfmanifest chat.vfmanifest
 	cd ..
 	cd chatbot
 	..\..\src\verifast -c bot.c

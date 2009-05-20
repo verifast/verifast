@@ -26,7 +26,7 @@ let _ =
   if n = 1 then
   begin
     print_endline Verifast.banner;
-    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] {sourcefile|objectfile}"
+    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] [-emit_vfmanifest] {sourcefile|objectfile}"
   end
   else
   let stats = ref false in
@@ -37,6 +37,7 @@ let _ =
   let isLibrary = ref false in
   let allowAssume = ref false in
   let allowShouldFail = ref false in
+  let emitManifest = ref false in
   let modules: string list ref = ref [] in
   let i = ref 1 in
   while !i < n do
@@ -52,14 +53,21 @@ let _ =
       | "-shared" -> isLibrary := true
       | "-allow_assume" -> allowAssume := true
       | "-allow_should_fail" -> allowShouldFail := true
+      | "-emit_vfmanifest" -> emitManifest := true
       | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
     else
     begin
       if Filename.check_suffix arg ".c" || Filename.check_suffix arg ".java" || Filename.check_suffix arg ".jarsrc" || Filename.check_suffix arg ".javaspec"
-	  then
+      then
       begin
+        let options = {
+          option_verbose = !verbose;
+          option_disable_overflow_check = !disable_overflow_check;
+          option_allow_should_fail = !allowShouldFail;
+          option_emit_manifest = !emitManifest
+        } in
         print_endline arg;
-        verify !stats {option_verbose = !verbose; option_disable_overflow_check = !disable_overflow_check; option_allow_should_fail = !allowShouldFail} !prover arg
+        verify !stats options !prover arg
       end;
       modules := arg::!modules
     end

@@ -1,6 +1,9 @@
 open Proverapi
 open Big_int
 
+let manifest_map: (string * string list) list ref = ref []
+let jardeps_map: (string * string list) list ref = ref []
+
 let ($.) f x = f x
 
 let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
@@ -1689,11 +1692,16 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool}
+type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool}
 
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
-  let {option_verbose=verbose; option_disable_overflow_check=disable_overflow_check; option_allow_should_fail=allow_should_fail} = options in
+  let {
+    option_verbose=verbose;
+    option_disable_overflow_check=disable_overflow_check;
+    option_allow_should_fail=allow_should_fail;
+    option_emit_manifest=emit_manifest
+  } = options in
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
@@ -6278,23 +6286,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let create_jardeps_file() =
     let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
-    let file = open_out jardeps_filename in
-    do_finally (fun () ->
-      List.iter (fun line -> output_string file (line ^ "\n")) !jardeps
-    ) (fun () -> close_out file)
+    if emit_manifest then
+      let file = open_out jardeps_filename in
+      do_finally (fun () ->
+        List.iter (fun line -> output_string file (line ^ "\n")) !jardeps
+      ) (fun () -> close_out file)
+    else
+      jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
   in
   
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
-    let file = open_out manifest_filename in
     let sorted_lines protos =
       let lines = List.map (fun (g, (((_, path), _, _), _)) -> path ^ "#" ^ g) protos in
       List.sort compare lines
     in
-    do_finally (fun () ->
-      List.iter (fun line -> output_string file (".requires " ^ line ^ "\n")) (sorted_lines prototypes_used);
-      List.iter (fun line -> output_string file (".provides " ^ line ^ "\n")) (sorted_lines prototypes_implemented)
-    ) (fun () -> close_out file)
+    let lines =
+      List.map (fun line -> ".requires " ^ line) (sorted_lines prototypes_used)
+      @
+      List.map (fun line -> ".provides " ^ line) (sorted_lines prototypes_implemented)
+    in
+    if emit_manifest then
+      let file = open_out manifest_filename in
+      do_finally (fun () ->
+        List.iter (fun line -> output_string file (line ^ "\n")) lines
+      ) (fun () -> close_out file)
+    else
+      manifest_map := (manifest_filename, lines)::!manifest_map
   in
   if file_type path <>Java then
   create_manifest_file()
@@ -6354,19 +6372,26 @@ let link_program isLibrary modulepaths =
     match modulepaths with
       [] -> impls
     | modulepath::modulepaths ->
+      print_endline modulepath;
       let manifest_path = Filename.chop_extension modulepath ^ ".vfmanifest" in
       let lines =
-        let file = open_in manifest_path in
-        do_finally (fun () ->
-          let rec iter () =
-            try
-              let line = input_line file in
-              line::iter()
-            with
-              End_of_file -> []
-          in
-          iter()
-        ) (fun () -> close_in file)
+        if List.mem_assoc manifest_path !manifest_map then
+          List.assoc manifest_path !manifest_map
+        else if Sys.file_exists manifest_path then
+          let file = open_in manifest_path in
+          do_finally (fun () ->
+            let rec iter () =
+              try
+                let line = input_line file in
+                let n = String.length line in
+                let line = if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line in
+                line::iter()
+              with
+                End_of_file -> []
+            in
+            iter()
+          ) (fun () -> close_in file)
+        else failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
       in
       let rec iter0 impls' lines =
         match lines with
@@ -6377,7 +6402,6 @@ let link_program isLibrary modulepaths =
           let symbol = String.sub line (space + 1) (String.length line - space - 1) in
           let n = String.length symbol in
           for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
-          let symbol = if n > 0 && symbol.[n - 1] = '\r' then String.sub symbol 0 (n - 1) else symbol in
           begin
             match command with
               ".requires" -> if List.mem symbol impls then iter0 impls' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
