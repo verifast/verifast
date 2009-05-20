@@ -2,67 +2,15 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe
+test: verifast.exe vfide.exe mysh.exe
 	time < nl.txt
-	cd ..\examples
-	..\src\verifast linkedlist.c
-	..\src\verifast linkedlist2.c
-	..\src\verifast composite.c
-	..\src\verifast composite4.c
-	..\src\verifast sorted_bintree.c
-	..\src\verifast iter.c
-	..\src\verifast -c args.c
-	..\src\verifast swap.c
-	..\src\verifast -shared polytest.c
-	..\src\verifast -disable_overflow_check expr.c
-	..\src\verifast -shared queue.c
-	..\src\verifast -c ifs.c
-	..\src\verifast -shared goto.c
-	..\src\verifast map.c
-	cd java
-	..\..\src\verifast -c hello.scala
-	..\..\src\verifast -disable_overflow_check -c Map.java
-	..\..\src\verifast -disable_overflow_check -c Counter.java
-	..\..\src\verifast -disable_overflow_check -c Contrib.java
-	..\..\src\verifast -c Tree.java
-	cd Tree2
-	..\..\..\src\verifast -c Tree.java
 	cd ..
-	cd Tree3
-	..\..\..\src\verifast -c Tree.java
-	cd ..
-	..\..\src\verifast -c Iterator.java
-	cd Iterator
-	..\..\..\src\verifast -c it.jarsrc
-	..\..\..\src\verifast -c prog.jarsrc
-	cd ..
-	cd chat
-	..\..\..\src\verifast -c chat.jarsrc
-	cd ..
-	cd chatbot
-	..\..\..\src\verifast -disable_overflow_check -c Bot.java
-	cd ..
-	cd ..
-	cd chat
-	..\..\src\verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
-	..\..\src\verifast -c -emit_vfmanifest stringBuffers.c
-	..\..\src\verifast -c -emit_vfmanifest chat.c
-	..\..\src\verifast stringBuffers.o sockets.o threading.o lists.o -allow_assume chat.o
-	del stringBuffers.vfmanifest chat.vfmanifest
-	cd ..
-	cd chatbot
-	..\..\src\verifast -c bot.c
-	cd ..
-	cd incr_box
-	..\..\src\verifast -c incr_box.c
-	cd ..
-	..\src\verifast -c contrib.c
-	..\src\verifast reallittest.c
-	cd ..\tests\errors
-	..\..\src\verifast -c -allow_should_fail basics.c
-	..\..\src\verifast -c -allow_should_fail typecheck1.c
-	cd ..\..\src
+	mysh < src\testsuite.mysh
+	cd src
 	time < nl.txt
+
+mysh.exe: mysh.ml
+	ocamlopt.opt -o mysh.exe mysh.ml
 
 clean:
 	del *.cm* *.obj *.exe
@@ -196,8 +144,11 @@ release: test refman
 	copy ..\..\stdlib.h
 	copy ..\..\malloc.h
 	copy ..\..\string.h
+	copy ..\..\atomics.h
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
+	copy ..\..\mysh.exe mysh.exe
+	xcopy /E /I ..\..\rt rt
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
 	cd ..
@@ -205,77 +156,7 @@ release: test refman
 	cd doc
 	copy ..\..\..\doc\refman\refman.pdf
 	cd ..
-	mkdir examples
-	cd examples
-	copy ..\..\..\examples\Composite.c
-	copy ..\..\..\examples\composite4.c
-	copy ..\..\..\examples\counter.c
-	copy ..\..\..\examples\counter_with_pred.c
-	copy ..\..\..\examples\iter.c
-	copy ..\..\..\examples\linkedlist.c
-	copy ..\..\..\examples\linkedlist2.c
-	copy ..\..\..\examples\sorted_bintree.c
-	copy ..\..\..\examples\contrib.c
-	copy ..\..\..\examples\verify.bat
-	mkdir incr_box
-	cd incr_box
-	copy ..\..\..\..\examples\incr_box\incr_box.c
-	copy ..\..\..\..\examples\incr_box\threading.h
-	cd ..
-	mkdir chat
-	cd chat
-	copy ..\..\..\..\examples\chat\bool.h
-	copy ..\..\..\..\examples\chat\chat.c
-	copy ..\..\..\..\examples\chat\chat.vcproj
-	copy ..\..\..\..\examples\chat\helloworld_locking.c
-	copy ..\..\..\..\examples\chat\helloworld_threading.c
-	copy ..\..\..\..\examples\chat\lists.c
-	copy ..\..\..\..\examples\chat\lists.h
-	copy ..\..\..\..\examples\chat\lists.vfmanifest
-	copy ..\..\..\..\examples\chat\make.bat
-	copy ..\..\..\..\examples\chat\socketlib.c
-	copy ..\..\..\..\examples\chat\socketlib.h
-	copy ..\..\..\..\examples\chat\sockets.c
-	copy ..\..\..\..\examples\chat\sockets.h
-	copy ..\..\..\..\examples\chat\sockets.vfmanifest
-	copy ..\..\..\..\examples\chat\stringBuffers.c
-	copy ..\..\..\..\examples\chat\stringBuffers.h
-	copy ..\..\..\..\examples\chat\stringBuffersExt.h
-	copy ..\..\..\..\examples\chat\threading.c
-	copy ..\..\..\..\examples\chat\threading.h
-	copy ..\..\..\..\examples\chat\threading.vfmanifest
-	copy ..\..\..\..\examples\chat\verify.bat
-	cd ..
-	mkdir chatbot
-	cd chatbot
-	copy ..\..\..\..\examples\chatbot\bool.h
-	copy ..\..\..\..\examples\chatbot\bot.c
-	copy ..\..\..\..\examples\chatbot\chatbot.vcproj
-	copy ..\..\..\..\examples\chatbot\lists.c
-	copy ..\..\..\..\examples\chatbot\lists.h
-	copy ..\..\..\..\examples\chatbot\socketlib.c
-	copy ..\..\..\..\examples\chatbot\socketlib.h
-	copy ..\..\..\..\examples\chatbot\sockets.c
-	copy ..\..\..\..\examples\chatbot\sockets.h
-	copy ..\..\..\..\examples\chatbot\stringBuffers.c
-	copy ..\..\..\..\examples\chatbot\stringBuffers.h
-	copy ..\..\..\..\examples\chatbot\stringBuffersExt.h
-	copy ..\..\..\..\examples\chatbot\verify.bat
-	cd ..
-	mkdir java
-	cd java
-	copy ..\..\..\..\examples\java\Tree.java
-	copy ..\..\..\..\examples\java\Tree2\Tree.java Tree2.java
-	copy ..\..\..\..\examples\java\Tree3\Tree.java Tree3.java
-	copy ..\..\..\..\examples\java\Iterator.java
-	copy ..\..\..\..\examples\java\Counter.java
-	copy ..\..\..\..\examples\java\verify.bat
-	mkdir iterator
-	cd iterator
-	copy ..\..\..\..\..\examples\java\iterator\it.jarsrc
-	copy ..\..\..\..\..\examples\java\iterator\Iterator.java
-	copy ..\..\..\..\..\examples\java\iterator\IteratorUtil.java
-	copy ..\..\..\..\..\examples\java\iterator\Program.java
-	copy ..\..\..\..\..\examples\java\iterator\SingletonIterator.java
-	cd ..
-	cd ..
+	xcopy /E /I ..\..\examples examples
+	xcopy /E /I ..\..\tests tests
+	copy ..\..\src\testsuite.mysh
+	copy ..\..\test.bat

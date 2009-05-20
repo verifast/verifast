@@ -1,0 +1,57 @@
+cd examples
+verifast linkedlist.c
+verifast linkedlist2.c
+verifast composite.c
+verifast composite4.c
+verifast sorted_bintree.c
+verifast iter.c
+verifast -c args.c
+verifast swap.c
+verifast -shared polytest.c
+verifast -disable_overflow_check expr.c
+verifast -shared queue.c
+verifast -c ifs.c
+verifast -shared goto.c
+verifast map.c
+cd java
+verifast -c hello.scala
+verifast -disable_overflow_check -c Map.java
+verifast -disable_overflow_check -c Counter.java
+verifast -disable_overflow_check -c Contrib.java
+verifast -c Tree.java
+cd Tree2
+verifast -c Tree.java
+cd ..
+cd Tree3
+verifast -c Tree.java
+cd ..
+verifast -c Iterator.java
+cd Iterator
+verifast -c it.jarsrc
+verifast -c prog.jarsrc
+cd ..
+cd chat
+verifast -c chat.jarsrc
+cd ..
+cd chatbot
+verifast -disable_overflow_check -c Bot.java
+cd ..
+cd ..
+cd chat
+verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+verifast -c -emit_vfmanifest stringBuffers.c
+verifast -c -emit_vfmanifest chat.c
+verifast stringBuffers.o sockets.o threading.o lists.o -allow_assume chat.o
+del stringBuffers.vfmanifest chat.vfmanifest
+cd ..
+cd chatbot
+verifast -c bot.c
+cd ..
+cd incr_box
+verifast -c incr_box.c
+cd ..
+verifast -c contrib.c
+verifast reallittest.c
+cd ..\tests\errors
+verifast -c -allow_should_fail basics.c
+verifast -c -allow_should_fail typecheck1.c

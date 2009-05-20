@@ -6372,7 +6372,6 @@ let link_program isLibrary modulepaths =
     match modulepaths with
       [] -> impls
     | modulepath::modulepaths ->
-      print_endline modulepath;
       let manifest_path = Filename.chop_extension modulepath ^ ".vfmanifest" in
       let lines =
         if List.mem_assoc manifest_path !manifest_map then
