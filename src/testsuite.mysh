@@ -13,6 +13,7 @@ verifast -shared queue.c
 verifast -c ifs.c
 verifast -shared goto.c
 verifast map.c
+verifast ghost_field.c
 cd java
 verifast -c hello.scala
 verifast -disable_overflow_check -c Map.java
@@ -55,3 +56,4 @@ verifast reallittest.c
 cd ..\tests\errors
 verifast -c -allow_should_fail basics.c
 verifast -c -allow_should_fail typecheck1.c
+verifast -c -allow_should_fail ghost_field.c

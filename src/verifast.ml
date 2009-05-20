@@ -685,8 +685,10 @@ and (* handle predicate geeft info over ghost state van shared box, zelfs als er
   preserved_by_clause =
   | PreservedByClause of loc * string * string list * stmt list
 and
+  ghostness = Ghost | Real
+and
   field =
-  | Field of loc * type_expr * string * func_binding* visibility(* veld met regel-type-naam*)
+  | Field of loc * ghostness * type_expr * string * func_binding* visibility(* veld met regel-type-naam*)
 and
   ctor =
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
@@ -954,7 +956,7 @@ and
 and
   fields m=
   match m with
-    FieldMember (Field (l, t, f,fb,v))::ms -> Field (l, t, f,fb,v)::(fields ms)
+    FieldMember (Field (l, gh, t, f,fb,v))::ms -> Field (l, gh, t, f,fb,v)::(fields ms)
     |_::ms -> fields ms
     | []->[]
 and
@@ -991,7 +993,7 @@ and
     ps = parse_paramlist;co = opt parse_spec; ss = parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
     [<'(_,Ident f);r=parser
-      [<'(_, Kwd ";")>]->FieldMember(Field (l,IdentTypeExpr(l,t),f,Instance,vis))
+      [<'(_, Kwd ";")>]->FieldMember(Field (l,Real,IdentTypeExpr(l,t),f,Instance,vis))
     | [< ps = parse_paramlist;(ss,co)=parser
         [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
       | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
@@ -1006,7 +1008,7 @@ and
     [<'(_, Kwd ";")>] ->
       (match t with 
         None -> raise (ParseException (l, "Invalid type of field")) 
-      | Some t -> FieldMember(Field (l,t,f,Instance,vis)))
+      | Some t -> FieldMember(Field (l,Real,t,f,Instance,vis)))
   | [< ps = parse_paramlist;(ss,co)=parser
       [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
     | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
@@ -1115,7 +1117,11 @@ and
 | [< f = parse_field; fs = parse_fields >] -> f::fs
 and
   parse_field = parser
-  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, t, f,Instance,Public)
+  [< '(_, Kwd "/*@"); f = parse_field_core Ghost; '(_, Kwd "@*/") >] -> f
+| [< f = parse_field_core Real >] -> f
+and
+  parse_field_core gh = parser
+  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, gh, t, f,Instance,Public)
 and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
@@ -2000,7 +2006,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter fmap fds =
            match fds with
              [] -> (sn, (l, Some (List.rev fmap)))
-           | Field (lf, t, f,Instance,Public)::fds ->
+           | Field (lf, gh, t, f,Instance,Public)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
@@ -2017,7 +2023,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  | PtrTypeExpr (lt, te) -> PtrType (check_type te)
                  | _ -> static_error (type_expr_loc te) "Invalid field type or field type component."
                in
-               iter ((f, (lf, check_type t))::fmap) fds
+               iter ((f, (lf, gh, check_type t))::fmap) fds
              )
          in
          begin
@@ -2152,7 +2158,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter fmap fds =
            match fds with
              [] -> (sn, (l,meths, Some (List.rev fmap),constr,super,interfs,pn,ilist))
-           | Field (lf, t, f,Instance,vis)::fds ->
+           | Field (lf, _, t, f,Instance,vis)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
@@ -2807,7 +2813,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (l, t)) ->
+             (fun (fn, (l, gh, t)) ->
               ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [PtrType (StructType sn); t] (Some 1))
              )
              fds
@@ -3004,7 +3010,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (sn, (_, Some fmap)) ->
           flatmap
             begin
-              fun (f, (l, t)) ->
+              function
+                (f, (l, Real, t)) ->
+                begin
                 let predinst p =
                   ((sn ^ "_" ^ f, []),
                    (l, [sn, PtrType (StructType sn); "value", t], Some 1,
@@ -3026,6 +3034,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   pref#set_domain [PtrType IntType; IntType];
                   [predinst pref]
                 | _ -> []
+                end
+              | _ -> []
             end
             fmap
         | _ -> []
@@ -3200,7 +3210,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | _ -> checkt e t
       in
       (CastExpr (l, te, w), t)
-    | Read (l, e, f) -> let (w, t) = check_deref (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
+    | Read (l, e, f) -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
       let (w, t) = check e in
       begin
@@ -3317,7 +3327,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       t:=Some IntType; e
     | _ ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in expect_type (pn,ilist) (expr_loc e) t t0; w
-  and check_deref (pn,ilist) l tparams tenv e f =
+  and check_deref is_write pure (pn,ilist) l tparams tenv e f =
+    let check_ok gh =
+      if is_write && pure && gh = Real then static_error l "Cannot write in a pure context."
+    in
     let (w, t) = check_expr (pn,ilist) tparams tenv e in
     begin
     match t with
@@ -3328,7 +3341,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           match try_assoc' (pn,ilist) f#name fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
-          | Some (_, t) -> f#set_parent sn; f#set_range t; (w, t)
+          | Some (_, gh, t) -> check_ok gh; f#set_parent sn; f#set_range t; (w, t)
         end
       | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
@@ -3339,7 +3352,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           match try_assoc' (pn,ilist) f#name fds with
             None -> static_error l ("No such field in class '" ^ sn ^ "'.")
-          | Some (_, t,_) -> f#set_parent sn; f#set_range t; (w, t)
+          | Some (_, t,_) -> check_ok Real; f#set_parent sn; f#set_range t; (w, t)
         end
       | Some (_,_,None,_,_,_,_,_) -> static_error l ("Invalid dereference; class '" ^ sn ^ "' was declared without a body.")
       end
@@ -3370,7 +3383,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec check_pred (pn,ilist) tparams tenv p =
     match p with
       Access (l, e, f, v) ->
-      let (w, t) = check_deref (pn,ilist) l tparams tenv e f in
+      let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
       (Access (l, w, f, wv), tenv')
     | CallPred (l, p, ps0, ps) ->
@@ -3666,7 +3679,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         function
           (sn, (_, Some fmap)) ->
-          let offsets = List.map (fun (f, (_, _)) -> ((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)) fmap in
+          let offsets = flatmap (fun (f, (_, gh, _)) -> if gh = Ghost then [] else [((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)]) fmap in
           begin
             match offsets with
               ((_, _), offset0)::_ ->
@@ -5181,7 +5194,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      [] ->
                      let (_, (_, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
                      cont (h @ [((malloc_block_symb, true), real_unit, [result], None)]) (update env x result)
-                   | (f, (lf, t))::fds ->
+                   | (f, (lf, gh, t))::fds ->
                      let fref = new fieldref f in
                      fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
                  in
@@ -5213,7 +5226,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rec iter h fds =
             match fds with
               [] -> cont h env
-            | (Field (lf, t, f,Instance,Public))::fds ->
+            | (Field (lf, _, t, f,Instance,Public))::fds ->
               let fref = new fieldref f in
               fref#set_parent tn;
               get_field (pn,ilist) h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
@@ -5236,8 +5249,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       ;
     | Write (l, e, f, rhs) ->
-      let _ = if pure then static_error l "Cannot write in a pure context." in
-      let (w, tp) = check_deref (pn,ilist) l tparams tenv e f in
+      let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
       eval_h h env w (fun h t ->
         let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
