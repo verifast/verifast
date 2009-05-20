@@ -672,7 +672,7 @@ and
   | Func of loc * func_kind * string list * type_expr option * string * (type_expr * string) list * bool (* atomic *) * string option (* function type *)
     * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
   (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
-  | FuncTypeDecl of loc * type_expr option * string * (type_expr * string) list * (pred * pred)
+  | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
@@ -1023,7 +1023,7 @@ and
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
-  [FuncTypeDecl (l, rt, g, ps, c)]
+  [FuncTypeDecl (l, Real, rt, g, ps, c)]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -1061,6 +1061,8 @@ and
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
+  | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
+    [FuncTypeDecl (l, Ghost, rt, g, ps, c)]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
@@ -1106,10 +1108,10 @@ and parse_ctors = parser
 and
   parse_types = parser
   [< '(_, Kwd ")") >] -> []
-| [< t = parse_type; ts = parse_more_types >] -> t::ts
+| [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()); ts = parse_more_types >] -> t::ts
 and
   parse_more_types = parser
-  [< '(_, Kwd ","); t = parse_type; ts = parse_more_types >] -> t::ts
+  [< '(_, Kwd ","); t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()); ts = parse_more_types >] -> t::ts
 | [< '(_, Kwd ")") >] -> []
 and
   parse_fields = parser
@@ -1997,7 +1999,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [PackageDecl(_,"",[],ds)] -> ds
       | _ when file_type path=Java -> []
     in
-    flatmap (function (FuncTypeDecl (_, _, g, _, _)) -> [g] | _ -> []) ds
+    flatmap (function (FuncTypeDecl (_, gh, _, g, _, _)) -> [g] | _ -> []) ds
   in
   
   let structmap1 =
@@ -2990,7 +2992,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let funcnames = if file_type path=Java then [] else
   let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
-  list_remove_dups (flatmap (function (Func (l, Regular, tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  list_remove_dups (flatmap (function (Func (l, (Regular|Lemma), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_classnamelist (pn,ilist) is =
@@ -4299,7 +4301,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | FuncTypeDecl (l, rt, ftn, xs, (pre, post))::ds ->
+      | FuncTypeDecl (l, gh, rt, ftn, xs, (pre, post))::ds ->
         let (pn,ilist) = ("",[]) in
         let _ = if List.mem_assoc ftn functypemap || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
@@ -4320,7 +4322,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (wpost, tenv) = check_pred (pn,ilist) [] postmap post in
           (wpre, wpost)
         in
-        iter ((ftn, (l, rt, xmap, pre, post))::functypemap) ds
+        iter ((ftn, (l, gh, rt, xmap, pre, post))::functypemap) ds
       | _::ds -> iter functypemap ds
     in
     if file_type path=Java then [] else
@@ -4382,6 +4384,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     pop()
   in
   
+  let assume_is_functype fn ftn =
+    let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
+    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
+  in
+  
   let (funcmap1, prototypes_implemented) =
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
@@ -4417,11 +4424,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin
               match try_assoc ftn functypemap with
                 None -> static_error l "No such function type."
-              | Some (_, rt0, xmap0, pre0, post0) ->
+              | Some (_, gh, rt0, xmap0, pre0, post0) ->
                 let cenv0 = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap0 @ [("this", FuncNameExpr fn)] in
-                check_func_header_compat (pn,ilist) l "Function type implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (Regular, [], rt0, xmap0, false, cenv0, pre0, post0);
-                let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
-                ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
+                let k' = match gh with Real -> Regular | Ghost -> Lemma in
+                check_func_header_compat (pn,ilist) l "Function type implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (k', [], rt0, xmap0, false, cenv0, pre0, post0);
+                if gh = Real then
+                  assume_is_functype fn ftn
             end
         end;
         begin
@@ -4952,7 +4960,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match leminfo with
                 None -> ()
               | Some (lems, g0, indinfo) ->
-                  if match g with Some g -> List.mem g lems | None -> false then
+                  if match g with Some g -> List.mem g lems | None -> true then
                     ()
                   else 
                       if g = Some g0 then
@@ -5131,8 +5139,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
         let phi = ctxt#mk_app isfuncsymb [fterm] in
         assert_term phi h env l ("Could not prove " ^ ctxt#pprint phi); (* TODO: Evaluate error message lazily. *)
-        let (_, rt, xmap, pre, post) = List.assoc ftn functypemap in
-        if pure then static_error l "Cannot call function pointer in a pure context.";
+        let (_, gh, rt, xmap, pre, post) = List.assoc ftn functypemap in
+        if pure && gh = Real then static_error l "Cannot call function pointer in a pure context.";
         check_correct xo None [] (LitPat (Var (dummy_loc, g, ref (Some LocalVar)))::pats) (lg, [], rt, (("this", PtrType Void)::xmap), pre, post, None, Public)
       | _ ->
       match try_assoc' (pn,ilist) g funcmap with
@@ -6110,7 +6118,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
     | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds -> let g=full_name pn g in
       verify_funcs (pn,ilist)  boxes (g::lems) ds
-    | Func (_, k, _, _, g, _, _, _, _, Some _, _, _)::ds when k <> Fixpoint -> let g=full_name pn g in
+    | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint -> let g=full_name pn g in
       let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let _ = push() in
       let env = params ps in (* actual params invullen *)
@@ -6158,6 +6166,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       in
       let _ = pop() in
+      begin
+        match functype_opt with
+          Some ftn ->
+          assume_is_functype g ftn (* Contract implication was already checked during construction of funcmap *)
+        | _ -> ()
+      end;
       verify_funcs (pn,ilist)  boxes lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
       let (l, boxpmap, boxinv, boxvarmap, amap, hpmap) = match try_assoc' (pn,ilist) bcn boxmap with 

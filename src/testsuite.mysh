@@ -14,6 +14,7 @@ verifast -c ifs.c
 verifast -shared goto.c
 verifast map.c
 verifast ghost_field.c
+verifast -c lemmafuncptr.c
 cd java
 verifast -c hello.scala
 verifast -disable_overflow_check -c Map.java
