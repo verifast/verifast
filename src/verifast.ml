@@ -2002,43 +2002,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     flatmap (function (FuncTypeDecl (_, gh, _, g, _, _)) -> [g] | _ -> []) ds
   in
   
-  let structmap1 =
-    List.map
-      (fun (sn, (l, fds_opt)) ->
-         let rec iter fmap fds =
-           match fds with
-             [] -> (sn, (l, Some (List.rev fmap)))
-           | Field (lf, gh, t, f,Instance,Public)::fds ->
-             if List.mem_assoc f fmap then
-               static_error lf "Duplicate field name."
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | StructTypeExpr (lt, sn) ->
-                   if List.mem_assoc sn structdeclmap || List.mem_assoc sn structmap0 then
-                     StructType sn
-                   else
-                     static_error lt "No such struct."
-                 | PtrTypeExpr (_, ManifestTypeExpr (_, Void)) -> PtrType Void
-                 | PtrTypeExpr (lt, te) -> PtrType (check_type te)
-                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component."
-               in
-               iter ((f, (lf, gh, check_type t))::fmap) fds
-             )
-         in
-         begin
-           match fds_opt with
-             Some fds -> iter [] fds
-           | None -> (sn, (l, None))
-         end
-      )
-      structdeclmap
-  in
-  
-  let structmap = structmap1 @ structmap0 in
-  
   let inductivedeclmap=
     let rec iter pn idm ds =
       match ds with
@@ -2227,7 +2190,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | None -> static_error l "No such inductive datatype."
       end
     | StructTypeExpr (l, sn) ->
-      if not (List.mem_assoc sn structmap) then
+      if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
         static_error l "No such struct."
       else
         StructType sn
@@ -2275,6 +2238,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | TypeParam x -> x
     | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
   in
+  
+  let structmap1 =
+    List.map
+      (fun (sn, (l, fds_opt)) ->
+         let rec iter fmap fds =
+           match fds with
+             [] -> (sn, (l, Some (List.rev fmap)))
+           | Field (lf, gh, t, f,Instance,Public)::fds ->
+             if List.mem_assoc f fmap then
+               static_error lf "Duplicate field name."
+             else
+               iter ((f, (lf, gh, check_pure_type ("", []) [] t))::fmap) fds
+         in
+         begin
+           match fds_opt with
+             Some fds -> iter [] fds
+           | None -> (sn, (l, None))
+         end
+      )
+      structdeclmap
+  in
+  
+  let structmap = structmap1 @ structmap0 in
   
   let typenode_of_provertype t =
     match t with
@@ -2777,6 +2763,50 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let inductivemap = inductivemap1 @ inductivemap0 in
   let fixpointmap = fixpointmap1 @ fixpointmap0 in
+  
+  let () =
+    let inhabited_map = List.map (fun (i, info) -> (i, (info, ref 0))) inductivemap1 in
+    let rec check_inhabited i l ctors status =
+      if !status = 2 then
+        ()
+      else
+      begin
+        status := 1;
+        let rec find_ctor ctors =
+          match ctors with
+            [] -> static_error l "Inductive datatype is not inhabited."
+          | (_, (_, pts))::ctors ->
+            let rec check_paramtypes pts =
+              match pts with
+                [] -> ()
+              | pt::pts ->
+                begin
+                  match pt with
+                    InductiveType (i0, _) ->
+                    begin
+                      if List.mem_assoc i0 inductivemap0 then
+                        check_paramtypes pts
+                      else
+                        let ((l0, _, ctors0), status0) = List.assoc i0 inhabited_map in
+                        if !status0 = 1 then
+                          find_ctor ctors
+                        else
+                        begin
+                          check_inhabited i0 l0 ctors0 status0;
+                          check_paramtypes pts
+                        end
+                    end
+                  | _ -> check_paramtypes pts
+                end
+            in
+            check_paramtypes pts
+        in
+        find_ctor ctors;
+        status := 2
+      end
+    in
+    List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
+  in
   
   let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
   

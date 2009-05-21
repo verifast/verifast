@@ -58,3 +58,4 @@ cd ..\tests\errors
 verifast -c -allow_should_fail basics.c
 verifast -c -allow_should_fail typecheck1.c
 verifast -c -allow_should_fail ghost_field.c
+verifast -c -allow_should_fail inhabited.c
