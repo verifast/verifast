@@ -3459,7 +3459,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
         match try_assoc' (pn,ilist) i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
-        | Some (l, inductive_tparams, ctormap) ->
+        | Some (_, inductive_tparams, ctormap) ->
           let (Some tpenv) = zip inductive_tparams targs in
           let rec iter wcs ctormap cs =
             match cs with
