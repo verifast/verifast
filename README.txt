@@ -123,9 +123,9 @@ ocaml build.ml
 
 4) Install LablGTK:
 
-xcopy /E <lablgtkdir>\lib\lablgtk2 <ocamldir>\lib
-xcopy <lablgtkdir>\lib\stublibs\dlllablgtk2.dll <ocamldir>\lib\stublibs
-xcopy <lablgtkdir>\bin\lablgtk2.bat <ocamldir>\bin
+xcopy /E C:\lablgtk\lib\lablgtk2 C:\ocaml\lib
+xcopy C:\lablgtk\lib\stublibs\dlllablgtk2.dll C:\ocaml\lib\stublibs
+xcopy C:\lablgtk\bin\lablgtk2.bat C:\ocaml\bin
 
 Before running a program that uses GTK, put the GTK DLLs in your PATH:
 
