@@ -7,8 +7,8 @@ typedef lemma void foo();
     ensures bar();
 
 lemma void test(foo *f)
-    requires is_foo(f) == true;
-    ensures bar();
+    requires is_foo(f);
+    ensures is_foo(f) &*& bar();
 {
     f();
 }
@@ -24,7 +24,9 @@ lemma void test2()
     requires true;
     ensures bar();
 {
+    produce_lemma_function_pointer_chunk(quux);
     test(quux);
+    leak is_foo(quux);
 }
 
 @*/

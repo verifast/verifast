@@ -1655,6 +1655,19 @@ type 'termnode context =
 | PushSubcontext
 | PopSubcontext
 
+let get_callers ctxts =
+  let rec iter lo ls ctxts =
+    match ctxts with
+      [] -> ls
+    | Executing (_, _, l, _)::ctxts -> iter (Some l) ls ctxts
+    | PushSubcontext::ctxts -> iter lo (lo::ls) ctxts
+    | PopSubcontext::ctxts -> let ls = match ls with [] -> [] | _::ls -> ls in iter None ls ctxts
+    | _::ctxts -> iter lo ls ctxts
+  in
+  iter None [] (List.rev ctxts)
+
+let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ -> Some l | _ -> None
+
 let string_of_chunk ((g, literal), coef, ts, size) = (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ "(" ^ String.concat ", " ts ^ ")"
 
 let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
@@ -1784,11 +1797,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
     let should_fail l = List.exists (locs_match l) !shouldFailLocs in
     let has_failed l = shouldFailLocs := remove (locs_match l) !shouldFailLocs; default in
+    let loc_of_ctxts ctxts l = match get_root_caller ctxts with None -> l | Some l -> l in
     try
       body ()
     with
     | StaticError (l, msg) when should_fail l -> has_failed l
-    | SymbolicExecutionError (ctxts, phi, l, msg) when should_fail l -> has_failed l
+    | SymbolicExecutionError (ctxts, phi, l, msg) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
   in
   
   let headermap = ref [] in
@@ -1999,7 +2013,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [PackageDecl(_,"",[],ds)] -> ds
       | _ when file_type path=Java -> []
     in
-    flatmap (function (FuncTypeDecl (_, gh, _, g, _, _)) -> [g] | _ -> []) ds
+    flatmap (function (FuncTypeDecl (l, gh, _, g, _, _)) -> [g, (l, gh)] | _ -> []) ds
   in
   
   let inductivedeclmap=
@@ -2176,7 +2190,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | None -> match (search2' id (pn,ilist) interfdeclmap interfmap0) with
                     Some s->ObjType s
                   | None ->
-                    if List.mem id functypenames || List.mem_assoc id functypemap0 then
+                    if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
                       FuncType id
                     else
                       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id)
@@ -2292,11 +2306,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
   
   let isfuncs = if file_type path=Java then [] else
-    List.map (fun ftn ->
-      let isfuncname = "is_" ^ ftn in
-      let domain = [ctxt#type_int] in
-      let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
-      (isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))
+    flatmap (fun (ftn, (_, gh)) ->
+      match gh with
+        Real ->
+        let isfuncname = "is_" ^ ftn in
+        let domain = [ctxt#type_int] in
+        let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
+        [(isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))]
+      | _ -> []
     ) functypenames
   in
   
@@ -2812,6 +2829,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let mk_predfam p l arity ts inputParamCount = (p, (l, arity, ts, get_unique_var_symb p (PredType ts), inputParamCount)) in
   
+  let is_lemmafunctype_pred_map1 =
+    flatmap
+      (function
+         (g, (l, Ghost)) ->
+         [(g, mk_predfam ("is_" ^ g) l 0 [PtrType (FuncType g)] None)]
+       | _ -> []
+      )
+      functypenames
+  in
+  
+  let islemmafunctypepreds1 = List.map (fun (_, p) -> p) is_lemmafunctype_pred_map1 in
+  
   let malloc_block_pred_map1 = 
     match file_type path with
     Java-> (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc 0 [ObjType cn] (Some 1))] | _ -> []) classdeclmap) @
@@ -2878,7 +2907,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter (pn,il) pm ds) rest
       | [] -> pm
     in
-    iter' [] ps
+    iter' islemmafunctypepreds1 ps
   in
   
   let (boxmap, predfammap1) =
@@ -2959,7 +2988,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter' ([],predfammap1) ps
   in
   
-  let predfammap = predfammap1 @ structpreds1 @ predfammap0 in (* TODO: Check for name clashes here. *)
+  let predfammap = predfammap1 @ islemmafunctypepreds1 @ structpreds1 @ predfammap0 in (* TODO: Check for name clashes here. *)
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
       match ds with
@@ -4465,17 +4494,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc2 fn funcmap funcmap0 with
-            None -> iter pn ilist ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, Some _,Static,Public) ->
+            None -> iter pn ilist ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, _, Some _,Static,Public) ->
             if body = None then
               static_error l "Function prototype must precede function implementation."
             else
               static_error l "Duplicate function implementation."
-          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, None,Static,Public) ->
+          | Some (l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
             let cenv0 = List.map (fun (x, t) -> (x, Var (dummy_loc, x, ref (Some LocalVar)))) xmap0 in
             check_func_header_compat (pn,ilist) l "Function prototype implementation check: " (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0);
-            iter pn ilist ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            iter pn ilist ((fn, (l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
@@ -4937,6 +4966,124 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _ -> cont()
   in
   
+  let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, pre, post, body,v) pure leminfo sizemap h tparams tenv ghostenv env cont =
+    let eval0 = eval (pn,ilist) in
+    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
+    let eval_h0 = eval_h (pn,ilist) in
+    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont in
+    let rec evhs h env es cont =
+      match es with
+        [] -> cont h []
+      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+    in 
+    let ev e = eval env e in
+    let check_assign l x =
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
+    in
+    let vartp l x = match try_assoc x tenv with None -> static_error l ("No such variable: "^x) | Some tp -> tp in
+    let targs =
+      if callee_tparams <> [] && targs = [] then
+        List.map (fun _ -> InferredType (ref None)) callee_tparams
+      else
+        List.map (check_pure_type (pn,ilist) tparams) targs
+    in
+    let tpenv =
+      match zip callee_tparams targs with
+        None -> static_error l "Incorrect number of type arguments."
+      | Some tpenv -> tpenv
+    in
+    let ys = List.map (function (p, t) -> p) ps in
+    let ws =
+      match zip pats ps with
+        None -> static_error l "Incorrect number of arguments."
+      | Some bs ->
+        List.map
+          (function (LitPat e, (x, t0)) ->
+             let t = instantiate_type tpenv t0 in
+             box (check_expr_t (pn,ilist) tparams tenv e t) t t0
+          ) bs
+    in
+    evhs h env ws (fun h ts ->
+    let Some env' = zip ys ts in
+    let cenv = env' in
+    with_context PushSubcontext (fun () ->
+      assert_pred (pn,ilist) h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
+        let _ =
+          match leminfo with
+            None -> ()
+          | Some (lems, g0, indinfo) ->
+              if match g with Some g -> List.mem g lems | None -> true then
+                ()
+              else 
+                  if g = Some g0 then
+                    let rec nonempty h =
+                      match h with
+                        [] -> false
+                      | ((p, true), coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
+                      | _::h -> nonempty h
+                    in
+                    if nonempty h then
+                      ()
+                    else (
+                      match indinfo with
+                        None ->
+                          begin
+                            match chunk_size with
+                              Some k when k < 0 -> ()
+                            | _ ->
+                              with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter."
+                            )
+                          end
+                      | Some x -> (
+                          match try_assq (List.assoc x env') sizemap with
+                            Some k when k < 0 -> ()
+                          | _ ->
+                            with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                            assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter."
+                          )
+                        )
+                    )
+                  else
+                    static_error l "A lemma can call only preceding lemmas or itself."
+        in
+        let r =
+          match tr with
+            None -> None
+          | Some t ->
+            let symbol_name =
+              match xo with
+                None -> "result"
+              | Some x -> x
+            in
+            Some (get_unique_var_symb symbol_name t, t)
+        in
+        let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
+        assume_pred (pn,ilist) h ghostenv' env'' post real_unit None None (fun h _ _ ->
+          let env =
+            match xo with
+              None -> env
+            | Some x ->
+              let tpx = vartp l x in
+              let _ = check_assign l x in
+                begin
+                  match r with
+                    None -> static_error l "Call does not return a result."
+                  | Some (r, t) -> expect_type (pn,ilist) l t tpx; update env x r
+                end
+          in
+          match g with
+            Some g when (startswith g "new ") -> 
+              let cn= match (search' (String.sub g 4 ((String.length g)-4)) (pn,ilist) class_symbols) with Some s -> s in
+              assume_neq (List.assoc (match xo with Some xo->xo) env) (ctxt#mk_intlit 0) (fun () ->
+              assume_eq (ctxt#mk_app get_class_symbol [(List.assoc (match xo with Some xo->xo) env)]) (ctxt#mk_app (List.assoc cn class_symbols) [])(fun () -> with_context PopSubcontext (fun () -> cont h env)))
+          | _ -> with_context PopSubcontext (fun () -> cont h env)
+        )
+      )
+    )
+    )
+  in
+  
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
@@ -4958,108 +5105,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
     let vartp l x = match try_assoc x tenv with None -> static_error l ("No such variable: "^x) | Some tp -> tp in
-    let check_correct xo g targs pats (lg, callee_tparams, tr, ps, pre, post, body,v)=
-      let targs =
-        if callee_tparams <> [] && targs = [] then
-          List.map (fun _ -> InferredType (ref None)) callee_tparams
-        else
-          List.map (check_pure_type (pn,ilist) tparams) targs
-      in
-      let tpenv =
-        match zip callee_tparams targs with
-          None -> static_error l "Incorrect number of type arguments."
-        | Some tpenv -> tpenv
-      in
-      let ys = List.map (function (p, t) -> p) ps in
-        let ws =
-          match zip pats ps with
-            None -> static_error l "Incorrect number of arguments."
-          | Some bs ->
-            List.map
-              (function (LitPat e, (x, t0)) ->
-                 let t = instantiate_type tpenv t0 in
-                 box (check_expr_t (pn,ilist) tparams tenv e t) t t0
-              ) bs
-        in
-        evhs h env ws (fun h ts ->
-        let Some env' = zip ys ts in
-        let cenv = env' in
-        with_context PushSubcontext (fun () ->
-          assert_pred (pn,ilist) h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
-            let _ =
-              match leminfo with
-                None -> ()
-              | Some (lems, g0, indinfo) ->
-                  if match g with Some g -> List.mem g lems | None -> true then
-                    ()
-                  else 
-                      if g = Some g0 then
-                        let rec nonempty h =
-                          match h with
-                            [] -> false
-                          | ((p, true), coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
-                          | _::h -> nonempty h
-                        in
-                        if nonempty h then
-                          ()
-                        else (
-                          match indinfo with
-                            None ->
-                              begin
-                                match chunk_size with
-                                  Some k when k < 0 -> ()
-                                | _ ->
-                                  with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                                  assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter."
-                                )
-                              end
-                          | Some x -> (
-                              match try_assq (List.assoc x env') sizemap with
-                                Some k when k < 0 -> ()
-                              | _ ->
-                                with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                                assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter."
-                              )
-                            )
-                        )
-                      else
-                        static_error l "A lemma can call only preceding lemmas or itself."
-            in
-            let r =
-              match tr with
-                None -> None
-              | Some t ->
-                let symbol_name =
-                  match xo with
-                    None -> "result"
-                  | Some x -> x
-                in
-                Some (get_unique_var_symb symbol_name t, t)
-            in
-            let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
-            assume_pred (pn,ilist) h ghostenv' env'' post real_unit None None (fun h _ _ ->
-              let env =
-                match xo with
-                  None -> env
-                | Some x ->
-                  let tpx = vartp l x in
-                  let _ = check_assign l x in
-                    begin
-                      match r with
-                        None -> static_error l "Call does not return a result."
-                      | Some (r, t) -> expect_type (pn,ilist) l t tpx; update env x r
-                    end
-              in
-              match g with
-                Some g when (startswith g "new ") -> 
-                  let cn= match (search' (String.sub g 4 ((String.length g)-4)) (pn,ilist) class_symbols) with Some s -> s in
-                  assume_neq (List.assoc (match xo with Some xo->xo) env) (ctxt#mk_intlit 0) (fun () ->
-                  assume_eq (ctxt#mk_app get_class_symbol [(List.assoc (match xo with Some xo->xo) env)]) (ctxt#mk_app (List.assoc cn class_symbols) [])(fun () -> with_context PopSubcontext (fun () -> cont h env)))
-              | _ -> with_context PopSubcontext (fun () -> cont h env)
-            )
-          )
-        )
-        )
+    let check_correct xo g targs pats (lg, callee_tparams, tr, ps, pre, post, body, v) =
+      verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, pre, post, body, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let call_stmt l xo g targs pats fb=
       match file_type path with
@@ -5151,12 +5198,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                              cont h (update env x (ev w))
                         )
                      )
-                 | Some (lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, body,fbf,v) ->
+                 | Some (lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
                      let g= match search' g (pn,ilist) funcmap with Some s -> s in
                      if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-                     let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context."        in
+                     let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
                      check_correct xo (Some g) targs pats (lg, tparams, tr, ps, pre, post, body,v)
                 )
             )
@@ -5166,12 +5213,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc g tenv with
         Some (PtrType (FuncType ftn)) ->
         let fterm = List.assoc g env in
-        let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
-        let phi = ctxt#mk_app isfuncsymb [fterm] in
-        assert_term phi h env l ("Could not prove " ^ ctxt#pprint phi); (* TODO: Evaluate error message lazily. *)
         let (_, gh, rt, xmap, pre, post) = List.assoc ftn functypemap in
-        if pure && gh = Real then static_error l "Cannot call function pointer in a pure context.";
-        check_correct xo None [] (LitPat (Var (dummy_loc, g, ref (Some LocalVar)))::pats) (lg, [], rt, (("this", PtrType Void)::xmap), pre, post, None, Public)
+        if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
+        let check_call h cont =
+          verify_call l (pn, ilist) xo None [] (LitPat (Var (dummy_loc, g, ref (Some LocalVar)))::pats) ([], rt, (("this", PtrType Void)::xmap), pre, post, None, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+        in
+        begin
+          match gh with
+            Real ->
+            let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
+            let phi = ctxt#mk_app isfuncsymb [fterm] in
+            assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
+            check_call h cont
+          | Ghost ->
+            let (_, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
+            assert_chunk (pn,ilist) h [] [("f", fterm)] l (predsymb, true) real_unit DummyPat [LitPat (Var (l, "f", ref (Some LocalVar)))] $. fun h coef _ _ _ _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required.";
+            check_call h $. fun h env ->
+            cont (((predsymb, true), real_unit, [fterm], None)::h) env
+        end
       | _ ->
       match try_assoc' (pn,ilist) g funcmap with
         None -> (
@@ -5187,7 +5247,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (update env x (ev w))
           )
         )
-      | Some (lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, body,fbf,v) ->
+      | Some (lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
@@ -5246,9 +5306,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_is_of_type (ev w) tp (fun () -> cont h env)
-    | CallStmt (l, "assume_class_this", [], [],Instance) when file_type path=Java && List.mem_assoc "this" env->
-    let classname= match vartp l "this" with ObjType cn -> cn in
+    | CallStmt (l, "assume_class_this", [], [],Instance) when file_type path=Java && List.mem_assoc "this" env ->
+      let classname= match vartp l "this" with ObjType cn -> cn in
       assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
+    | CallStmt (l, "produce_lemma_function_pointer_chunk", [], [Var (lv, x, _) as e], Static) ->
+      if not pure then static_error l "This function may be called only from a pure context.";
+      begin
+        match try_assoc x funcmap with
+          None -> static_error lv "No such function."
+        | Some (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v) ->
+          if k <> Lemma then static_error lv "Not a lemma function.";
+          begin
+            match leminfo with
+              None -> ()
+            | Some (lems, g0, indinfo) ->
+              if not (List.mem x lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas."
+          end;
+          let ftn =
+            match functype_opt with
+              None -> static_error lv "Function does not implement a function type."
+            | Some ftn -> ftn
+          in
+          let (_, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
+          let funcsym = List.assoc x funcnameterms in
+          cont (((symb, true), real_unit, [funcsym], None)::h) env
+      end
     | CallStmt (l, "free", [], args,Static) ->
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
@@ -5793,7 +5875,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                        in
                        match try_assoc funcname funcmap with
                          None -> static_error l "No such function."
-                       | Some (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, body,fb,v) ->
+                       | Some (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v) ->
                          if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function."
                      end;
                      NonpureStmt (l, true, s)
@@ -6149,7 +6231,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds -> let g=full_name pn g in
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint -> let g=full_name pn g in
-      let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
+      let (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let _ = push() in
       let env = params ps in (* actual params invullen *)
       let (sizemap, indinfo) =
@@ -6196,18 +6278,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       in
       let _ = pop() in
-      begin
-        match functype_opt with
-          Some ftn ->
-          assume_is_functype g ftn (* Contract implication was already checked during construction of funcmap *)
-        | _ -> ()
-      end;
       verify_funcs (pn,ilist)  boxes lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
-      let (l, boxpmap, boxinv, boxvarmap, amap, hpmap) = match try_assoc' (pn,ilist) bcn boxmap with 
-	    None -> static_error l ("Box class wasn't found: "^bcn)
-	  | Some x -> x
-	  in
+      let (Some (l, boxpmap, boxinv, boxvarmap, amap, hpmap)) = try_assoc' (pn,ilist) bcn boxmap in
       let old_boxvarmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxvarmap in
       let leminfo = Some (lems, "", None) in
       List.iter
@@ -6279,7 +6352,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_funcs (pn,ilist)  (bcn::boxes) lems ds
     | _::ds -> verify_funcs (pn,ilist)  boxes lems ds
   in
-  let lems0 = flatmap (function (g, (l, Lemma, tparams, rt, ps, atomic, pre, pre_tenv, post, body, fb, v)) -> [g] | _ -> []) funcmap0 in
+  let lems0 = flatmap (function (g, (l, Lemma, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> []) funcmap0 in
   let rec verify_funcs' boxes lems ps=
     match ps with
       PackageDecl(l,pn,il,ds)::rest-> verify_funcs (pn,il)  boxes lems ds;verify_funcs' boxes lems rest
