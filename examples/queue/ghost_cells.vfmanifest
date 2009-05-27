@@ -1,0 +1,2 @@
+.provides .\ghost_cells.h#create_ghost_cell
+.provides .\ghost_cells.h#ghost_cell_set_value

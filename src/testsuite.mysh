@@ -9,7 +9,9 @@ verifast -c args.c
 verifast swap.c
 verifast -shared polytest.c
 verifast -disable_overflow_check expr.c
-verifast -shared queue.c
+cd queue
+verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
+cd ..
 verifast -c ifs.c
 verifast -shared goto.c
 verifast map.c

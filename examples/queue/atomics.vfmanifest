@@ -1,0 +1,4 @@
+.provides .\atomics.h#create_atomic_space
+.provides .\atomics.h#atomic_load_pointer
+.provides .\atomics.h#atomic_compare_and_store_pointer
+.provides .\atomics.h#atomic_noop
