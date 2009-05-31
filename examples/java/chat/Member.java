@@ -17,19 +17,10 @@ lemma void member_distinct(Member m1,Member m2)
     close member(m1);
 }
 
-lemma void foreach_member_not_contains(listval members,Member member)
+lemma void foreach_member_not_contains(listval members,Member member);
     requires foreach(members, @member) &*& member(member);
     ensures foreach(members, @member) &*& member(member) &*& !contains(members, member);
-{
-    switch (members) {
-        case nil:
-        case cons(member0, members0):
-            open foreach(members, @member);
-            member_distinct((Member)member0, member);
-            foreach_member_not_contains(members0, member);
-            close foreach(members, @member);
-    }
-}
+
 @*/
 class Member{
   StringBuffer nick;
