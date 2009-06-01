@@ -6160,8 +6160,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                              [] -> 
                                let env'= update env "result" result in
                                let env''= update env' "this" this in
-                               let (_, (_, _, _, malloc_block_symb, _)) = (List.assoc cn malloc_block_pred_map) in
-                               (do_body (h @ [((malloc_block_symb, true), real_unit, [result], None)]) ghostenv env'')
+                               (do_body h ghostenv env'')
                            | (f, (lf, t,vis))::fds ->
                                let fref = new fieldref f in
                                fref#set_parent cn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
