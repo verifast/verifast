@@ -93,16 +93,20 @@ typedef lemma void atomic_noop_context();
 
 predicate atomic_noop_ghost_arg(atomic_noop_context *ctxt) = true;
 
-lemma void atomic_noop();
+@*/
+
+void atomic_noop();
+    /*@
     requires
         [?f]atomic_space(?inv) &*&
         atomic_noop_ghost_arg(?ctxt) &*&
         is_atomic_noop_context(ctxt) &*&
         atomic_noop_context_pre(ctxt)(?info, inv);
+    @*/
+    /*@
     ensures
         [f]atomic_space(inv) &*&
         atomic_noop_context_post(ctxt)(info);
-
-@*/
+    @*/
 
 #endif

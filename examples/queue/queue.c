@@ -649,7 +649,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ close atomic_noop_context_pre(queue_try_dequeue_atomic_noop_context)(queue_try_dequeue_atomic_noop_context_info(ctxt, info, queue, frontValuesHead, frontValuesTail), inv);
         //@ close atomic_noop_ghost_arg(queue_try_dequeue_atomic_noop_context);
         //@ produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_noop_context);
-        //@ atomic_noop();
+        atomic_noop();
         //@ open atomic_noop_context_post(queue_try_dequeue_atomic_noop_context)(_);
     }
     //@ open lseg2(first, middle, _, _);
