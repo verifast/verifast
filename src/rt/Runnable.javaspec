@@ -19,7 +19,7 @@ predicate thread_started(Thread_ thread,Runnable run, any info);
 @*/
 
 
-public class Thread_ extends Object{
+public class Thread_{
   public Thread_(Runnable run);
     //@ requires true;
     //@ ensures thread(result,run);

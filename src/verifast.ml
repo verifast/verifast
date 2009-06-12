@@ -819,7 +819,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"
 ]
-let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";"extends"
+let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
 ]
 
 let file_type path=
@@ -848,7 +848,7 @@ type spec_clause =
   
 module Scala = struct
 
-let keywords = ["def"; "var"; "class"; "object"; "."; "new"; "null"; "package"; "import"; "extends"]
+let keywords = ["def"; "var"; "class"; "object"; "."; "new"; "null"; "package"; "import"]
 
 let rec
   parse_decl = parser
@@ -939,8 +939,8 @@ Interface(l,cn,mem)::ds (* TODO: enkel public classes/interfaces toelaten??*)
 | [< >] -> []
 and
   parse_super_class= parser
-  [<'(_, Kwd "extends");'(_, Ident s)>] -> s
-| [<>] -> "Object"
+  (*[<'(_, Kwd "extends");'(_, Ident s)>] -> s 
+|*) [<>] -> "Object"
 and
   parse_interfaces= parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 

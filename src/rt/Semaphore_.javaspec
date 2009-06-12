@@ -10,7 +10,7 @@ lemma void lock_dispose(Semaphore_ lock);
     requires lock(lock, ?a);
     ensures a();
 @*/
-public class Semaphore_ extends Object{
+public class Semaphore_{
   Semaphore_(int n);
     //@ requires n==1 &*& create_lock_ghost_arg(?a);
     //@ ensures lock(result, a);
