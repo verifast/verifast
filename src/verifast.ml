@@ -653,13 +653,13 @@ and
   | Lemma
 and
   meth =
-  | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * stmt list option * func_binding * visibility
+  | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
 and
   meth_spec =
   | MethSpec of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option* func_binding * visibility
 and
   cons =
-  | Cons of loc * (type_expr * string) list * (pred * pred) option * stmt list option * visibility
+  | Cons of loc * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * visibility
 and
   decl =
     Struct of loc * string * field list option
@@ -856,9 +856,9 @@ let rec
     Class (l, cn, ms, [], [], "Object", [])
 and
   parse_method = parser
-    [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "="); ss = parse_block >] ->
+    [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
     let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-    Meth (l, rt, mn, ps, Some co, Some ss, Static, Public)
+    Meth (l, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public)
 and
   parse_paramlist = parser
     [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
@@ -913,9 +913,6 @@ and
   | [< >] -> e0
 and
   parse_expr stream = parse_rel_expr stream
-and
-  parse_block = parser
-    [< '(_, Kwd "{"); ss = rep parse_stmt; '(_, Kwd "}") >] -> ss
 and
   parse_stmt = parser
     [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, e)
@@ -990,18 +987,18 @@ and
 and
   parse_java_member vis cn= parser
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
-    ps = parse_paramlist;co = opt parse_spec; ss = parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
+    ps = parse_paramlist;co = opt parse_spec;ss=parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
     [<'(_,Ident f);r=parser
       [<'(_, Kwd ";")>]->FieldMember(Field (l,Real,IdentTypeExpr(l,t),f,Instance,vis))
     | [< ps = parse_paramlist;(ss,co)=parser
         [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
-      | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
+      | [<co = opt parse_spec;ss=parse_some_block>] -> (ss,co)
     >] -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
     >] -> r
   | [< ps = parse_paramlist;i=parser
       [<'(_, Kwd ";");co = opt parse_spec>]-> ConsMember(Cons(l,ps,co,None,vis))
-    | [<co = opt parse_spec; ss = parse_block>]-> ConsMember(Cons(l,ps,co,Some ss,vis))
+    | [<co = opt parse_spec; ss=parse_some_block>]-> ConsMember(Cons(l,ps,co,ss,vis))
    >]-> i
  >] -> e
 | [< t=parse_return_type;'(l,Ident f);r=parser
@@ -1011,7 +1008,7 @@ and
       | Some t -> FieldMember(Field (l,Real,t,f,Instance,vis)))
   | [< ps = parse_paramlist;(ss,co)=parser
       [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
-    | [<co = opt parse_spec; ss = parse_block>] -> (Some ss,co)
+    | [<co = opt parse_spec; ss=parse_some_block>] -> (ss,co)
     >] -> 
       MethMember(Meth(l,t,f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
 >] -> r
@@ -1186,7 +1183,7 @@ and
   [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> ss
 and
   parse_some_block = parser
-  [< '(l, Kwd "{"); ss = parse_stmts; '(_, Kwd "}") >] -> Some ss
+  [< '(l, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> Some (ss,closeBraceLoc)
 | [<>] -> None
 and
   parse_stmts = parser
@@ -4681,6 +4678,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                      (wpre, wpost)
                in
+			   let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
                (if n="main" then
                  match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
                    match pre with 
@@ -4690,7 +4688,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                        | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
                    | _ -> static_error lp "The precondition of the main method must be 'true'"
                 );
-               iter ((n, (lm,check_t t, xmap, pre, post, ss,fb,v))::mmap) meths
+               iter ((n, (lm,check_t t, xmap, pre, post, ss',fb,v))::mmap) meths
             )
          in
           begin
@@ -4742,7 +4740,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                      (wpre, wpost)
                in
-               iter ((xmap, (lm,pre,post,ss,v))::cmap) constr
+			   let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
+               iter ((xmap, (lm,pre,post,ss',v))::cmap) constr
                )
          in
          begin
@@ -6130,7 +6129,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> let (((_,p),_,_),((_,_),_,_))=lm in 
               if Filename.check_suffix p ".javaspec" then verify_cons (pn,ilist) cn boxes lems rest
               else static_error lm "Constructor specification is only allowed in javaspec files!"
-          | Some ss ->
+          | Some(Some (ss, closeBraceLoc)) ->
               let _ = push() in
               let env = params xmap in
               let (sizemap, indinfo) = switch_stmt ss env in
@@ -6141,7 +6140,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 (fun h ghostenv env ->
                   let do_body h ghostenv env=
                     let do_return h env_post = assert_pred (pn,ilist) h ghostenv env_post post real_unit 
-                    (fun h ghostenv env size_first ->(check_leaks h env lm "Function leaks heap chunks."))
+                    (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
                     in
                     let return_cont h retval =
                       match retval with None -> do_return h env | Some t -> do_return h (("this", t)::env)
@@ -6182,7 +6181,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> let (((_,p),_,_),((_,_),_,_))=l in 
             if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
             else static_error l "Constructor specification is only allowed in javaspec files!"
-        | Some sts ->(
+        | Some(Some (sts, closeBraceLoc)) ->(
             let ss= if fb=Instance then CallStmt (l, "assume_class_this", [], [],Instance)::sts else sts in
             let _ = push() in
             let env = params ps in (* actual params invullen *)
@@ -6192,7 +6191,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let (_, tenv) = check_pred (pn,ilist) [] tenv pre in
             let _ =
               assume_pred (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
-              let do_return h env_post = assert_pred (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->(check_leaks h env l "Function leaks heap chunks."))
+              let do_return h env_post = assert_pred (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
               in
               let return_cont h retval =
                 match (rt, retval) with
