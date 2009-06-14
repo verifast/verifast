@@ -108,8 +108,8 @@ public class Session implements Runnable{
     //@ assume(memberWriter == writer);
   }
   public void run()
-    //@ requires thread_run_pre(Session.class)(this,?info);
-    //@ ensures thread_run_post(Session.class)(this,info);
+    //@ requires thread_run_pre(this.getClass())(this,?info);
+    //@ ensures thread_run_post(this.getClass())(this,info);
   {
     //@ open thread_run_pre(Session.class)(this,info);
     //@ open session(this);

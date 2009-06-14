@@ -4661,24 +4661,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
                in
                let (pre, post) =
-                 match co with
-                   None -> let rec search_interf i=
-                       match i with
-                         [] -> static_error lm ("Non-fixpoint function must have contract: "^n)
-                         | name::rest -> match try_assoc' (pn,ilist) name interfmap with
-                                           None -> search_interf rest
-                                          |Some(_,meth_specs,_,_) -> match try_assoc n meth_specs with
-                                                                   None -> search_interf rest
-                                                                 | Some(_,_, xmap', pre, post,Instance,v)-> matchargs xmap xmap';(pre,post)
-                           in
-                           search_interf interfs
-                 | Some (pre, post) ->
-                     let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
-                     let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                     let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                     (wpre, wpost)
+                 let rec search_interf i=
+                   match i with
+                    [] -> (match co with
+                      None ->static_error lm ("Non-fixpoint function must have contract: "^n)
+                    | Some (pre, post) -> 
+                       let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
+                       let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                       let (wpost, _) = check_pred (pn,ilist) [] postmap post in
+                       (wpre, wpost)
+                    )
+                  | name::rest -> match try_assoc' (pn,ilist) name interfmap with
+                      None -> search_interf rest
+                    | Some(_,meth_specs,_,_) -> match try_assoc n meth_specs with
+                        None -> search_interf rest
+                      | Some(_,rt', xmap', pre, post,Instance,v) -> match co with
+                          None -> matchargs xmap xmap';(pre,post)
+                        | Some(pre0,post0)->
+                            let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre0 in
+                            let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
+                            let (wpost, _) = check_pred (pn,ilist) [] postmap post0 in
+                            let cenv = List.map (fun (x, t) -> (x, Var (l, x, ref (Some LocalVar)))) xmap in
+                            check_func_header_compat (pn,ilist) l "Method specification check: " (Regular,[],rt', xmap',false, pre, post) (Regular, [], check_t t, xmap, false, cenv, pre0, post0);
+                            (wpre, wpost)
+                 in
+                 search_interf interfs
                in
-			   let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
+               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
                (if n="main" then
                  match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
                    match pre with 
