@@ -94,6 +94,7 @@ public class Session implements Runnable{
         //@ foreach_remove(members, member);
     }
     //@ close room(room);
+    assert(false);
     {
         StringBuffer goodbyeMessage = new StringBuffer();
         goodbyeMessage.append(nick);
