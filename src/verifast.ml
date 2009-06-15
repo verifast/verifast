@@ -398,10 +398,11 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
     | Some c when c < ' ' -> raise Stream.Failure
     | Some c -> Stream.junk strm__; c
     | _ -> raise Stream.Failure
-  and ghost_range_end() =
+  and ghost_range_end_at srcpos =
     match !ghost_range_start with
       None -> ()
-    | Some sp -> reportRange GhostRange (sp, current_srcpos()); ghost_range_start := None
+    | Some sp -> reportRange GhostRange (sp, srcpos); ghost_range_start := None
+  and ghost_range_end () = ghost_range_end_at (current_srcpos())
   and maybe_comment (strm__ : _ Stream.t) =
     match Stream.peek strm__ with
       Some '/' ->
@@ -420,7 +421,7 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
         | _ ->
           if !in_single_line_annotation then (
             in_single_line_annotation := false;
-            ghost_range_end();
+            ghost_range_end_at (path, !line, Stream.count stream - 2 - !linepos + 1);
             single_line_comment strm__;
             Some (Kwd "@*/")
           ) else (

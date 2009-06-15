@@ -48,7 +48,7 @@ int main()
   //@ ensures emp;
 {
   struct C* c = create_C(5);
-  create_counter(c);
+  //@ create_counter(c);
   //@ assert counter(c, 5, ?id, 1, 0);
   bool b = random();
   int n = 0;
@@ -72,7 +72,7 @@ int main()
     n = n - 1;
   }
   //@ open foreach(c, 5, id, 0);
-  dispose_counter(c);
+  //@ dispose_counter(c);
   free(c);
   return 0;
 }

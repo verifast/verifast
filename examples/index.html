@@ -8,48 +8,48 @@ blockquote {margin: 0 10pt; padding: 0}
 </head>
 <body>
 <h1>VeriFast Examples</h1>
-<p><a href="counter.c">counter.c</a> - An introductory example. A simple counter module (without abstraction) and a client program.</p>
-<p><a href="counter_with_pred.c">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
-<p><a href="args.c">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</a></p>
+<p><a href="counter.c.html">counter.c</a> - An introductory example. A simple counter module (without abstraction) and a client program.</p>
+<p><a href="counter_with_pred.c.html">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
+<p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</a></p>
 <p><b>chat</b> - A chat server</p>
 <blockquote>
-<p><a href="chat/chat.c">chat.c</a> - The chat server. Demonstrates the use of threads, locks, sockets, lists.</p>
-<p><a href="chat/lists.h">lists.h</a> - Specification of a list module</p>
+<p><a href="chat/chat.c.html">chat.c</a> - The chat server. Demonstrates the use of threads, locks, sockets, lists.</p>
+<p><a href="chat/lists.h.html">lists.h</a> - Specification of a list module</p>
 <p><a href="chat/lists.vfmanifest">lists.vfmanifest</a> - Manifest file for the list module</p>
-<p><a href="chat/sockets.h">sockets.h</a> - Specification of the sockets module (a wrapper around the Win32/*nix sockets API)</p>
+<p><a href="chat/sockets.h.html">sockets.h</a> - Specification of the sockets module (a wrapper around the Win32/*nix sockets API)</p>
 <p><a href="chat/sockets.vfmanifest">sockets.vfmanifest</a> - Manifest file for the sockets module</p>
-<p><a href="chat/stringBuffers.h">stringBuffers.h</a> - Specification of the string buffers module</p>
-<p><a href="chat/stringBuffers.c">stringBuffers.c</a> - Implementation of the string buffers module. Demonstrates the use of character arrays and strings.</p>
-<p><a href="chat/threading.h">threading.h</a> - A specification of a threading module (a wrapper around the Win32/*nix threading API)</p>
+<p><a href="chat/stringBuffers.h.html">stringBuffers.h</a> - Specification of the string buffers module</p>
+<p><a href="chat/stringBuffers.c.html">stringBuffers.c</a> - Implementation of the string buffers module. Demonstrates the use of character arrays and strings.</p>
+<p><a href="chat/threading.h.html">threading.h</a> - A specification of a threading module (a wrapper around the Win32/*nix threading API)</p>
 <p><a href="chat/threading.vfmanifest">threading.vfmanifest</a> - Manifest file for the threading module</p>
 </blockquote>
 <p><b>chatbot</b> - A chat bot (= an automated client for the above chat server)</p>
 <blockquote>
-<p><a href="chatbot/bot.c">bot.c</a> - The chat bot<p>
+<p><a href="chatbot/bot.c.html">bot.c</a> - The chat bot<p>
 </blockquote>
-<p><a href="composite4.c">composite4.c</a> - Demonstrates an approach for verifying instances of the Composite pattern in VeriFast.
+<p><a href="composite4.c.html">composite4.c</a> - Demonstrates an approach for verifying instances of the Composite pattern in VeriFast.
 See Bart Jacobs, Jan Smans, and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/~bartj/verifast/composite.pdf">Verifying the Composite Pattern using Separation Logic</a>. SAVCBS 2008 Challenge problem track.</p>
-<p><a href="contrib.c">contrib.c</a> - Starts two threads that share a counter and that each increment the counter; then joins both threads and asserts that the counter's value equals 2.
+<p><a href="contrib.c.html">contrib.c</a> - Starts two threads that share a counter and that each increment the counter; then joins both threads and asserts that the counter's value equals 2.
 Demonstrates shared boxes. Note: This program can be verified more simply using ghost fields.
 See Bart Jacobs and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW549.abs.html">Dynamic Owicki-Gries reasoning using ghost fields and fractional permissions</a>.
 Technical Report CW-549, Department of Computer Science, Katholieke Universiteit Leuven, Belgium. June 2009.</p>
-<p><a href="expr.c">expr.c</a> - Builds a simple expression AST, evaluates it, and disposes it.
+<p><a href="expr.c.html">expr.c</a> - Builds a simple expression AST, evaluates it, and disposes it.
 Demonstrates a way to implement inductive datatypes in C and verify them with VeriFast.</p>
-<p><a href="fractions-counting.c">fractions-counting.c</a> - Shows how counting permissions can easily be integrated into VeriFast in the form of a library.</p>
-<p><a href="ghost_field.c">ghost_field.c</a> - Simple ghost fields test.</p>
-<p><a href="goto.c">goto.c</a> - Demonstrates VeriFast's support for goto statements.</p>
-<p><a href="ifs.c">ifs.c</a> -
+<p><a href="fractions-counting.c.html">fractions-counting.c</a> - Shows how counting permissions can easily be integrated into VeriFast in the form of a library.</p>
+<p><a href="ghost_field.c.html">ghost_field.c</a> - Simple ghost fields test.</p>
+<p><a href="goto.c.html">goto.c</a> - Demonstrates VeriFast's support for goto statements.</p>
+<p><a href="ifs.c.html">ifs.c</a> -
 Demonstrates how invariant statements can be used to solve the problem of exponential verification time in the presence of many independent if statements in a function.</p>
 <p><b>incr_box</b> - A program where one thread continually increments a shared counter and another reads the counter twice and asserts that the second value is not less than the first value.
 Demonstrates shared boxes.</p>
 <blockquote>
-<p><a href="incr_box/incr_box.c">incr_box.c</a> - The program</p>
-<p><a href="incr_box/threading.h">threading.h</a> - Specification of the threading module</p>
+<p><a href="incr_box/incr_box.c.html">incr_box.c</a> - The program</p>
+<p><a href="incr_box/threading.h.html">threading.h</a> - Specification of the threading module</p>
 <p><a href="incr_box/threading.vfmanifest">threading.vfmanifest</a> - Manifest file of the threading module</p>
 </blockquote>
-<p><a href="iter.c">iter.c</a> - Linked lists with iterators. There may be many iterators on a given list. Demonstrates fractional permissions and VeriFast's
+<p><a href="iter.c.html">iter.c</a> - Linked lists with iterators. There may be many iterators on a given list. Demonstrates fractional permissions and VeriFast's
 support for merging of fractions of precise predicates.</p>
 <p><b>java</b> - Java examples.
 See Cedric Cuypers, Bart Jacobs, and Frank Piessens.
@@ -58,48 +58,48 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <blockquote>
 <p><b>chat</b> - Java version of the chat server</p>
 <p><b>chatbot</b> - Java version of the chat bot</p>
-<p><a href="java/Contrib.java">Contrib.java</a> - Java version of the contrib.c example</p>
-<p><a href="java/Counter.java">Counter.java</a> - Simple introductory example</p>
-<p><a href="java/hello.scala">hello.scala</a> - A tiny Scala example. Note: VeriFast's support for Scala is currently limited to essentially this example.</p>
+<p><a href="java/Contrib.java.html">Contrib.java</a> - Java version of the contrib.c example</p>
+<p><a href="java/Counter.java.html">Counter.java</a> - Simple introductory example</p>
+<p><a href="java/hello.scala.html">hello.scala</a> - A tiny Scala example. Note: VeriFast's support for Scala is currently limited to essentially this example.</p>
 <p><b>Iterator</b> - A Java program consisting of multiple jar files
 <blockquote>
 <p><a href="java/Iterator/it.jarspec">it.jarspec</a> - Specification of the it module</p>
 <p><a href="java/Iterator/it.jarsrc">it.jarsrc</a> - Implementation of the it module</p>
-<p><a href="java/Iterator/Iterator.java">Iterator.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/Iterator.javaspec">Iterator.javaspec</a> - Source file belonging to the it module specification</p>
-<p><a href="java/Iterator/IteratorUtil.java">IteratorUtil.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/IteratorUtil.javaspec">IteratorUtil.javaspec</a> - Source file belonging to the it module specification</p>
+<p><a href="java/Iterator/Iterator.java.html">Iterator.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/Iterator.javaspec.html">Iterator.javaspec</a> - Source file belonging to the it module specification</p>
+<p><a href="java/Iterator/IteratorUtil.java.html">IteratorUtil.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/IteratorUtil.javaspec.html">IteratorUtil.javaspec</a> - Source file belonging to the it module specification</p>
 <p><a href="java/Iterator/prog.jarsrc">prog.jarsrc</a> - Implementation of the prog module</p>
-<p><a href="java/Iterator/Program.java">Program.java</a> - Source file belonging to the prog module implementation</p>
-<p><a href="java/Iterator/SingletonIterator.java">SingletonIterator.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/SingletonIterator.javaspec">SingletonIterator.javaspec</a> - Source file belonging to the it module specification</p>
+<p><a href="java/Iterator/Program.java.html">Program.java</a> - Source file belonging to the prog module implementation</p>
+<p><a href="java/Iterator/SingletonIterator.java.html">SingletonIterator.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/SingletonIterator.javaspec.html">SingletonIterator.javaspec</a> - Source file belonging to the it module specification</p>
 </blockquote>
-<p><a href="java/Iterator.java">Iterator.java</a> - Demonstrates dynamic binding in Java</p>
-<p><a href="java/map.java">map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
-<p><a href="java/Tree.java">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
+<p><a href="java/Iterator.java.html">Iterator.java</a> - Demonstrates dynamic binding in Java</p>
+<p><a href="java/Map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
+<p><a href="java/Tree.java.html">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
 </blockquote>
-<p><a href="lemmafuncptr.c">lemmafuncptr.c</a> - Simple lemma function pointers test</p>
-<p><a href="linkedlist.c">linkedlist.c</a> - Full functional specification and verification of a linked list implementation</p>
-<p><a href="map.c">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
-<p><a href="odd_even_lemmas.c">odd_even_lemmas.c</a> - Demonstrates how mutual lemma recursion is possible</p>
-<p><a href="polytest.c">polytest.c</a> - Test of VeriFast's support for abstracting inductive datatypes, fixpoint functions, and lemmas over types</a></p>
+<p><a href="lemmafuncptr.c.html">lemmafuncptr.c</a> - Simple lemma function pointers test</p>
+<p><a href="linkedlist.c.html">linkedlist.c</a> - Full functional specification and verification of a linked list implementation</p>
+<p><a href="map.c.html">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
+<p><a href="odd_even_lemmas.c.html">odd_even_lemmas.c</a> - Demonstrates how mutual lemma recursion is possible</p>
+<p><a href="polytest.c.html">polytest.c</a> - Test of VeriFast's support for abstracting inductive datatypes, fixpoint functions, and lemmas over types</a></p>
 <p><b>queue</b> - Full functional specification and verification of a lock-free queue implementation and an example client program.
 See Bart Jacobs and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW551.abs.html">Modular full functional specification and verification of lock-free data structures</a>.
 Technical Report CW-551, Department of Computer Science, Katholieke Universiteit Leuven, Belgium. June 2009.</p>
 <blockquote>
-<p><a href="queue/atomics.h">atomics.h</a> - Specification of the atomic operations library</p>
+<p><a href="queue/atomics.h.html">atomics.h</a> - Specification of the atomic operations library</p>
 <p><a href="queue/atomics.vfmanifest">atomics.vfmanifest</a> - Manifest of the atomic operations library</p>
-<p><a href="queue/ghost_cells.h">ghost_cells.h</a> - Specification of the ghost cells library</p>
+<p><a href="queue/ghost_cells.h.html">ghost_cells.h</a> - Specification of the ghost cells library</p>
 <p><a href="queue/ghost_cells.vfmanifest">ghost_cells.vfmanifest</a> - Manifest of the ghost cells library</p>
-<p><a href="queue/list.h">list.h</a> - Pure lists</p>
-<p><a href="queue/queue.c">queue.c</a> - The queue implementation</p>
-<p><a href="queue/queue.h">queue.h</a> - The queue specification</p>
-<p><a href="queue/queue_client.c">queue_client.c</a> - The example client</p>
-<p><a href="queue/threading.h">threading.h</a> - Specification of the threading library</p>
+<p><a href="queue/list.h.html">list.h</a> - Pure lists</p>
+<p><a href="queue/queue.c.html">queue.c</a> - The queue implementation</p>
+<p><a href="queue/queue.h.html">queue.h</a> - The queue specification</p>
+<p><a href="queue/queue_client.c.html">queue_client.c</a> - The example client</p>
+<p><a href="queue/threading.h.html">threading.h</a> - Specification of the threading library</p>
 <p><a href="queue/threading.vfmanifest">threading.vfmanifest</a> - Manifest of the threading library</p>
 </blockquote>
-<p><a href="sorted_bintree.c">sorted_bintree.c</a> - Full function specification and verification of a binary search tree (not self-balancing)</p>
-<p><a href="swap.c">swap.c</a> - Example demonstrating the support for taking the address of a field</p>
+<p><a href="sorted_bintree.c.html">sorted_bintree.c</a> - Full function specification and verification of a binary search tree (not self-balancing)</p>
+<p><a href="swap.c.html">swap.c</a> - Example demonstrating the support for taking the address of a field</p>
 </body>
 </html>
