@@ -4,41 +4,41 @@
 
 typedef lemma void oddfunc(oddfunc *odd, evenfunc *even, int x);
     requires multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
-    ensures true;
+    ensures multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
 
 typedef lemma void evenfunc(oddfunc *odd, evenfunc *even, int x);
     requires multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
-    ensures true;
+    ensures multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
 
 predicate multi_is_oddfunc(oddfunc *odd, int n) = n <= 0 ? emp : is_oddfunc(odd) &*& multi_is_oddfunc(odd, n - 1);
 predicate multi_is_evenfunc(evenfunc *even, int n) = n <= 0 ? emp : is_evenfunc(even) &*& multi_is_evenfunc(even, n - 1);
 
 lemma void odd_lemma(oddfunc *odd, evenfunc *even, int x) : oddfunc
     requires multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
-    ensures true;
+    ensures multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
 {
     open multi_is_oddfunc(odd, x);
     open multi_is_evenfunc(even, x);
     if (x <= 0) {
     } else {
         even(odd, even, x - 1);
-        leak is_oddfunc(odd);
-        leak is_evenfunc(even);
     }
+    close multi_is_oddfunc(odd, x);
+    close multi_is_evenfunc(even, x);
 }
 
 lemma void even_lemma(oddfunc *odd, evenfunc *even, int x) : evenfunc
     requires multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
-    ensures true;
+    ensures multi_is_oddfunc(odd, x) &*& multi_is_evenfunc(even, x);
 {
     open multi_is_oddfunc(odd, x);
     open multi_is_evenfunc(even, x);
     if (x <= 0) {
     } else {
         odd(odd, even, x - 1);
-        leak is_oddfunc(odd);
-        leak is_evenfunc(even);
     }
+    close multi_is_oddfunc(odd, x);
+    close multi_is_evenfunc(even, x);
 }
 
 inductive nat = zero | succ(nat);
@@ -61,43 +61,35 @@ lemma void int_of_nat_nonneg(nat n)
     }
 }
 
-lemma void produce_multi_is_oddfunc(nat n)
-    requires true;
-    ensures multi_is_oddfunc(odd_lemma, int_of_nat(n));
+lemma void produce_chunks(int m, nat n)
+    requires multi_is_oddfunc(odd_lemma, m - int_of_nat(n)) &*& multi_is_evenfunc(even_lemma, m - int_of_nat(n));
+    ensures multi_is_oddfunc(odd_lemma, m - int_of_nat(n)) &*& multi_is_evenfunc(even_lemma, m - int_of_nat(n));
 {
     switch (n) {
         case zero: 
-            close multi_is_oddfunc(odd_lemma, int_of_nat(n));
-        case succ(m):
-            int_of_nat_nonneg(m);
-            produce_lemma_function_pointer_chunk(odd_lemma);
-            produce_multi_is_oddfunc(m);
-            close multi_is_oddfunc(odd_lemma, int_of_nat(n));
+            odd_lemma(odd_lemma, even_lemma, m);
+        case succ(n0):
+            int_of_nat_nonneg(n0);
+            produce_lemma_function_pointer_chunk(odd_lemma) {
+              produce_lemma_function_pointer_chunk(even_lemma) {
+                close multi_is_oddfunc(odd_lemma, m - int_of_nat(n0));
+                close multi_is_evenfunc(even_lemma, m - int_of_nat(n0));
+                produce_chunks(m, n0);
+                open multi_is_oddfunc(odd_lemma, m - int_of_nat(n0));
+                open multi_is_evenfunc(even_lemma, m - int_of_nat(n0));
+              }
+            }
     }
 }
-
-lemma void produce_multi_is_evenfunc(nat n)
-    requires true;
-    ensures multi_is_evenfunc(even_lemma, int_of_nat(n));
-{
-    switch (n) {
-        case zero: 
-            close multi_is_evenfunc(even_lemma, int_of_nat(n));
-        case succ(m):
-            int_of_nat_nonneg(m);
-            produce_lemma_function_pointer_chunk(even_lemma);
-            produce_multi_is_evenfunc(m);
-            close multi_is_evenfunc(even_lemma, int_of_nat(n));
-    }
-}
-
 lemma void main_lemma(nat n)
     requires true;
     ensures true;
 {
-    produce_multi_is_oddfunc(n);
-    produce_multi_is_evenfunc(n);
-    odd_lemma(odd_lemma, even_lemma, int_of_nat(n));
+    close multi_is_evenfunc(even_lemma, 0);
+    close multi_is_oddfunc(odd_lemma, 0);
+    produce_chunks(int_of_nat(n), n);
+    open multi_is_evenfunc(even_lemma, 0);
+    open multi_is_oddfunc(odd_lemma, 0);
 }
 
 @*/

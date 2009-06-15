@@ -32,10 +32,11 @@ predicate_family queue_enqueue_context_post(void *ctxt)(any info);
 typedef lemma bool queue_enqueue_context(queue_enqueue_operation *op);
     requires
         queue_enqueue_context_pre(this)(?info, ?inv, ?queue, ?value) &*& inv() &*&
-        is_queue_enqueue_operation(op) &*& queue_enqueue_operation_pre(op)(?opInfo, queue, value);
+        is_queue_enqueue_operation(op) &*&
+        queue_enqueue_operation_pre(op)(?opInfo, queue, value);
     ensures
-        queue_enqueue_operation_post(op)(opInfo, result) &*&
-        inv() &*&
+        queue_enqueue_operation_post(op)(opInfo, result) &*& inv() &*&
+        is_queue_enqueue_operation(op) &*&
         result ?
             queue_enqueue_context_post(this)(info)
         :
@@ -50,7 +51,12 @@ void queue_enqueue(struct queue *queue, void *value);
         queue_enqueue_context_pre(?ctxt)(?info, inv, queue, value) &*&
         is_queue_enqueue_context(ctxt);
     @*/
-    //@ ensures [f]atomic_space(inv) &*& queue_enqueue_context_post(ctxt)(info);
+    /*@
+    ensures
+        [f]atomic_space(inv) &*&
+        queue_enqueue_context_post(ctxt)(info) &*&
+        is_queue_enqueue_context(ctxt);
+    @*/
 
 /*@
 
@@ -71,10 +77,11 @@ predicate_family queue_try_dequeue_context_post(void *ctxt)(any info, bool resul
 typedef lemma bool queue_try_dequeue_context(queue_try_dequeue_operation *op);
     requires
         queue_try_dequeue_context_pre(this)(?info, ?inv, ?queue) &*& inv() &*&
-        is_queue_try_dequeue_operation(op) &*& queue_try_dequeue_operation_pre(op)(?opInfo, queue);
+        is_queue_try_dequeue_operation(op) &*&
+        queue_try_dequeue_operation_pre(op)(?opInfo, queue);
     ensures
-        queue_try_dequeue_operation_post(op)(opInfo, result, ?value) &*&
-        inv() &*&
+        queue_try_dequeue_operation_post(op)(opInfo, result, ?value) &*& inv() &*&
+        is_queue_try_dequeue_operation(op) &*&
         queue_try_dequeue_context_post(this)(info, result, value);
 
 @*/
@@ -83,12 +90,15 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue);
     /*@
     requires
         [?f]atomic_space(?inv) &*&
-        queue_try_dequeue_context_pre(?ctxt)(?info, inv, queue) &*& is_queue_try_dequeue_context(ctxt) &*&
+        queue_try_dequeue_context_pre(?ctxt)(?info, inv, queue) &*&
+        is_queue_try_dequeue_context(ctxt) &*&
         queue_consumer(queue) &*& pointer(pvalue, _);
     @*/
     /*@
     ensures
-        [f]atomic_space(inv) &*& queue_try_dequeue_context_post(ctxt)(info, result, ?value0) &*&
+        [f]atomic_space(inv) &*&
+        queue_try_dequeue_context_post(ctxt)(info, result, ?value0) &*&
+        is_queue_try_dequeue_context(ctxt) &*&
         pointer(pvalue, ?value) &*& queue_consumer(queue) &*& result ? value0 == value : true;
     @*/
 

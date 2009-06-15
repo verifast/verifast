@@ -15,8 +15,9 @@ lemma void quux()
     requires true;
     ensures false;
 {
-    produce_lemma_function_pointer_chunk(bar);
-    bar(bar);
+    produce_lemma_function_pointer_chunk(bar) {
+      bar(bar);
+    }
 }
 
 @*/

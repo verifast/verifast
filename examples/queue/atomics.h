@@ -27,7 +27,9 @@ typedef lemma void atomic_load_pointer_context(atomic_load_pointer_operation *op
     requires
         atomic_load_pointer_context_pre(this)(?info, ?inv, ?pp) &*& inv() &*&
         is_atomic_load_pointer_operation(op) &*& atomic_load_pointer_operation_pre(pp);
-    ensures atomic_load_pointer_context_post(this)(info, ?p) &*& inv() &*& atomic_load_pointer_operation_post(p);
+    ensures
+        atomic_load_pointer_context_post(this)(info, ?p) &*& inv() &*&
+        is_atomic_load_pointer_operation(op) &*& atomic_load_pointer_operation_post(p);
 
 predicate atomic_load_pointer_ghost_arg(atomic_load_pointer_context *ctxt) = true;
 
@@ -41,7 +43,12 @@ void *atomic_load_pointer(void **pp);
         is_atomic_load_pointer_context(ctxt) &*&
         atomic_load_pointer_context_pre(ctxt)(?info, inv, pp);
     @*/
-    //@ ensures [f]atomic_space(inv) &*& atomic_load_pointer_context_post(ctxt)(info, result);
+    /*@
+    ensures
+        [f]atomic_space(inv) &*&
+        is_atomic_load_pointer_context(ctxt) &*&
+        atomic_load_pointer_context_post(ctxt)(info, result);
+    @*/
 
 /*@
 
@@ -62,6 +69,7 @@ typedef lemma void atomic_compare_and_store_pointer_context(atomic_compare_and_s
         atomic_compare_and_store_pointer_operation_pre(pp, old, new);
     ensures
         atomic_compare_and_store_pointer_context_post(this)(info, ?result) &*& inv() &*&
+        is_atomic_compare_and_store_pointer_operation(op) &*&
         atomic_compare_and_store_pointer_operation_post(result);
 
 predicate atomic_compare_and_store_pointer_ghost_arg(atomic_compare_and_store_pointer_context *ctxt) = true;
@@ -79,6 +87,7 @@ bool atomic_compare_and_store_pointer(void **pp, void *old, void *new);
     /*@
     ensures
         [f]atomic_space(inv) &*&
+        is_atomic_compare_and_store_pointer_context(ctxt) &*&
         atomic_compare_and_store_pointer_context_post(ctxt)(info, result);
     @*/
 
@@ -106,6 +115,7 @@ void atomic_noop();
     /*@
     ensures
         [f]atomic_space(inv) &*&
+        is_atomic_noop_context(ctxt) &*&
         atomic_noop_context_post(ctxt)(info);
     @*/
 

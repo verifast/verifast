@@ -102,7 +102,10 @@ predicate_family_instance queue_enqueue_operation_post
     (queue_enqueue_atomic_load_pointer_queue_enqueue_operation)
     (queue_enqueue_atomic_load_pointer_queue_enqueue_operation_info info, bool success)
     =
-    atomic_load_pointer_operation_post(_) &*& !success;
+    switch (info) {
+        case queue_enqueue_atomic_load_pointer_queue_enqueue_operation_info(op):
+            return is_atomic_load_pointer_operation(op) &*& atomic_load_pointer_operation_post(_) &*& !success;
+    };
 
 lemma bool queue_enqueue_atomic_load_pointer_queue_enqueue_operation() : queue_enqueue_operation
     requires queue_enqueue_operation_pre(queue_enqueue_atomic_load_pointer_queue_enqueue_operation)(?info, ?queue, ?value) &*& queue_state(queue, ?values);
@@ -114,7 +117,6 @@ lemma bool queue_enqueue_atomic_load_pointer_queue_enqueue_operation() : queue_e
         case queue_enqueue_atomic_load_pointer_queue_enqueue_operation_info(op):
             open queue_last(queue, _);
             op();
-            leak is_atomic_load_pointer_operation(op);
             assert pointer(&queue->last, ?last);
             close queue_last(queue, last);
             close queue_state(queue, values);
@@ -150,6 +152,7 @@ lemma void queue_enqueue_atomic_load_pointer_context(atomic_load_pointer_operati
         atomic_load_pointer_operation_pre(pp);
     ensures
         atomic_load_pointer_context_post(queue_enqueue_atomic_load_pointer_context)(info, ?p) &*& inv() &*&
+        is_atomic_load_pointer_operation(op) &*&
         atomic_load_pointer_operation_post(p);
 {
     open atomic_load_pointer_context_pre(queue_enqueue_atomic_load_pointer_context)(?info_, inv, pp);
@@ -159,8 +162,9 @@ lemma void queue_enqueue_atomic_load_pointer_context(atomic_load_pointer_operati
                 queue_enqueue_operation_pre
                 (queue_enqueue_atomic_load_pointer_queue_enqueue_operation)
                 (queue_enqueue_atomic_load_pointer_queue_enqueue_operation_info(op), queue, value);
-            produce_lemma_function_pointer_chunk(queue_enqueue_atomic_load_pointer_queue_enqueue_operation);
-            ctxt(queue_enqueue_atomic_load_pointer_queue_enqueue_operation);
+            produce_lemma_function_pointer_chunk(queue_enqueue_atomic_load_pointer_queue_enqueue_operation) {
+              ctxt(queue_enqueue_atomic_load_pointer_queue_enqueue_operation);
+            }
             open
                 queue_enqueue_operation_post
                 (queue_enqueue_atomic_load_pointer_queue_enqueue_operation)
@@ -201,6 +205,7 @@ predicate_family_instance queue_enqueue_operation_post
     switch (info) {
         case queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation_info(op, last, n, value):
             return
+                is_atomic_compare_and_store_pointer_operation(op) &*&
                 result ? emp : n->next |-> last &*& n->value |-> value &*& malloc_block_node(n);
     };
 
@@ -214,7 +219,6 @@ lemma bool queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operatio
         case queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation_info(op, last, n, value_):
             open queue_last(queue, _);
             bool result = op();
-            leak is_atomic_compare_and_store_pointer_operation(op);
             assert pointer(&queue->last, ?last2);
             close queue_last(queue, last2);
             if (result) {
@@ -268,6 +272,7 @@ lemma void queue_enqueue_atomic_compare_and_store_pointer_context(atomic_compare
     ensures
         atomic_compare_and_store_pointer_context_post(queue_enqueue_atomic_compare_and_store_pointer_context)(info, ?success) &*&
         inv() &*&
+        is_atomic_compare_and_store_pointer_operation(op) &*&
         atomic_compare_and_store_pointer_operation_post(success);
 {
     open atomic_compare_and_store_pointer_context_pre(queue_enqueue_atomic_compare_and_store_pointer_context)(?info_, inv, pp, old, new);
@@ -277,8 +282,10 @@ lemma void queue_enqueue_atomic_compare_and_store_pointer_context(atomic_compare
                 queue_enqueue_operation_pre
                 (queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation)
                 (queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation_info(op, last, n, value), queue, value);
-            produce_lemma_function_pointer_chunk(queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation);
-            bool success = ctxt(queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation);
+            bool success = false;
+            produce_lemma_function_pointer_chunk(queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation) {
+              success = ctxt(queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation);
+            }
             open
                 queue_enqueue_operation_post
                 (queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation)
@@ -298,7 +305,12 @@ void queue_enqueue(struct queue *queue, void *value)
         queue_enqueue_context_pre(?ctxt)(?info, inv, queue, value) &*&
         is_queue_enqueue_context(ctxt);
     @*/
-    //@ ensures [f]atomic_space(inv) &*& queue_enqueue_context_post(ctxt)(info);
+    /*@
+    ensures
+        [f]atomic_space(inv) &*&
+        queue_enqueue_context_post(ctxt)(info) &*&
+        is_queue_enqueue_context(ctxt);
+    @*/
 {
     struct node *n = malloc(sizeof(struct node));
     if (n == 0) { abort(); }
@@ -316,6 +328,7 @@ void queue_enqueue(struct queue *queue, void *value)
         //@ close atomic_load_pointer_ghost_arg(queue_enqueue_atomic_load_pointer_context);
         //@ produce_lemma_function_pointer_chunk(queue_enqueue_atomic_load_pointer_context);
         struct node *last = atomic_load_pointer(&queue->last);
+        //@ leak is_atomic_load_pointer_context(_);
         //@ open atomic_load_pointer_context_post(queue_enqueue_atomic_load_pointer_context)(_, _);
     
         n->next = last;
@@ -328,9 +341,9 @@ void queue_enqueue(struct queue *queue, void *value)
         //@ close atomic_compare_and_store_pointer_ghost_arg(queue_enqueue_atomic_compare_and_store_pointer_context);
         //@ produce_lemma_function_pointer_chunk(queue_enqueue_atomic_compare_and_store_pointer_context);
         done = atomic_compare_and_store_pointer(&queue->last, last, n);
+        //@ leak is_atomic_compare_and_store_pointer_context(_);
         //@ open atomic_compare_and_store_pointer_context_post(queue_enqueue_atomic_compare_and_store_pointer_context)(_, _);
     }
-    //@ leak is_queue_enqueue_context(ctxt);
 }
 
 /*@
@@ -362,6 +375,7 @@ predicate_family_instance queue_try_dequeue_operation_post
     switch (info) {
         case queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation_info(op, queue, middle):
             return
+                is_atomic_load_pointer_operation(op) &*&
                 atomic_load_pointer_operation_post(?last) &*& [1/2]queue->ghost_middle |-> last &*&
                 success == (middle != last) &*&
                 success ?
@@ -391,7 +405,6 @@ lemma bool queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation() :
         case queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation_info(op, queue_, middle):
             open queue_last(queue, _);
             op();
-            leak is_atomic_load_pointer_operation(op);
             assert atomic_load_pointer_operation_post(?last);
             close queue_last(queue, last);
             merge_fractions queue_ghost_middle(queue, _);
@@ -449,6 +462,7 @@ predicate_family_instance atomic_load_pointer_context_post
     switch (info) {
         case queue_try_dequeue_atomic_load_pointer_context_info(ctxt, ctxtInfo, inv, queue, middle):
             return
+                is_queue_try_dequeue_context(ctxt) &*&
                 [1/2]queue->ghost_middle |-> p &*&
                 p == middle ?
                     queue_try_dequeue_context_post(ctxt)(ctxtInfo, false, _) &*&
@@ -472,6 +486,7 @@ lemma void queue_try_dequeue_atomic_load_pointer_context(atomic_load_pointer_ope
     ensures
         atomic_load_pointer_context_post(queue_try_dequeue_atomic_load_pointer_context)(info, ?p) &*&
         inv() &*&
+        is_atomic_load_pointer_operation(op) &*&
         atomic_load_pointer_operation_post(p);
 {
     open atomic_load_pointer_context_pre(queue_try_dequeue_atomic_load_pointer_context)(?info_, inv, pp);
@@ -481,9 +496,9 @@ lemma void queue_try_dequeue_atomic_load_pointer_context(atomic_load_pointer_ope
                 queue_try_dequeue_operation_pre
                 (queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation)
                 (queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation_info(op, queue, middle), queue);
-            produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation);
-            ctxt(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation);
-            leak is_queue_try_dequeue_context(ctxt);
+            produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation) {
+              ctxt(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation);
+            }
             open
                 queue_try_dequeue_operation_post
                 (queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation)
@@ -550,7 +565,7 @@ predicate_family_instance atomic_noop_context_pre(queue_try_dequeue_atomic_noop_
 predicate_family_instance atomic_noop_context_post(queue_try_dequeue_atomic_noop_context)(queue_try_dequeue_atomic_noop_context_info info) =
     switch (info) {
         case queue_try_dequeue_atomic_noop_context_info(ctxt, ctxtInfo, queue, frontValuesHead, frontValuesTail):
-            return queue_try_dequeue_context_post(ctxt)(ctxtInfo, true, frontValuesHead) &*& [1/2]queue->front_values |-> frontValuesTail;
+            return is_queue_try_dequeue_context(ctxt) &*& queue_try_dequeue_context_post(ctxt)(ctxtInfo, true, frontValuesHead) &*& [1/2]queue->front_values |-> frontValuesTail;
     };
 
 lemma void queue_try_dequeue_atomic_noop_context() : atomic_noop_context
@@ -561,9 +576,9 @@ lemma void queue_try_dequeue_atomic_noop_context() : atomic_noop_context
     switch (info_) {
         case queue_try_dequeue_atomic_noop_context_info(ctxt, ctxtInfo, queue, frontValuesHead, frontValuesTail):
             close queue_try_dequeue_operation_pre(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation)(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation_info(queue, frontValuesHead, frontValuesTail), queue);
-            produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation);
-            ctxt(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation);
-            leak is_queue_try_dequeue_context(ctxt);
+            produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation) {
+              ctxt(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation);
+            }
             open queue_try_dequeue_operation_post(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation)(_, _, _);
             close atomic_noop_context_post(queue_try_dequeue_atomic_noop_context)(info_);
     }
@@ -582,7 +597,8 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
     @*/
     /*@
     ensures
-        [f]atomic_space(inv) &*& queue_try_dequeue_context_post(ctxt)(info, result, ?value0) &*&
+        [f]atomic_space(inv) &*&
+        queue_try_dequeue_context_post(ctxt)(info, result, ?value0) &*& is_queue_try_dequeue_context(ctxt) &*&
         pointer(pvalue, ?value) &*& queue_consumer(queue) &*& result ? value0 == value : true;
     @*/
 {
@@ -602,6 +618,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ close atomic_load_pointer_ghost_arg(queue_try_dequeue_atomic_load_pointer_context);
         //@ produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_load_pointer_context);
         struct node *last = atomic_load_pointer(&queue->last);
+        //@ leak is_atomic_load_pointer_context(_);
         //@ open atomic_load_pointer_context_post(queue_try_dequeue_atomic_load_pointer_context)(_, _);
         
         if (last == middle) {
@@ -650,6 +667,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ close atomic_noop_ghost_arg(queue_try_dequeue_atomic_noop_context);
         //@ produce_lemma_function_pointer_chunk(queue_try_dequeue_atomic_noop_context);
         atomic_noop();
+        //@ leak is_atomic_noop_context(_);
         //@ open atomic_noop_context_post(queue_try_dequeue_atomic_noop_context)(_);
     }
     //@ open lseg2(first, middle, _, _);

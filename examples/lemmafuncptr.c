@@ -24,9 +24,9 @@ lemma void test2()
     requires true;
     ensures bar();
 {
-    produce_lemma_function_pointer_chunk(quux);
-    test(quux);
-    leak is_foo(quux);
+    produce_lemma_function_pointer_chunk(quux) {
+      test(quux);
+    }
 }
 
 @*/

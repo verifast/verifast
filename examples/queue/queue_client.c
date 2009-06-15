@@ -108,7 +108,9 @@ lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue
     requires
         queue_try_dequeue_context_pre(consumer_context)(?info, ?inv, ?queue) &*& inv() &*& queue_try_dequeue_operation_pre(op)(?opInfo, queue) &*&
         is_queue_try_dequeue_operation(op);
-    ensures queue_try_dequeue_context_post(consumer_context)(info, result, ?value) &*& inv() &*& queue_try_dequeue_operation_post(op)(opInfo, result, value);
+    ensures
+        queue_try_dequeue_context_post(consumer_context)(info, result, ?value) &*& inv() &*& queue_try_dequeue_operation_post(op)(opInfo, result, value) &*&
+        is_queue_try_dequeue_operation(op);
 {
     open queue_try_dequeue_context_pre(consumer_context)(?info_, inv, queue);
     switch (info_) {
@@ -118,7 +120,6 @@ lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue
             open ghost_cell_int(minIdCell, _);
             merge_fractions ghost_cell(minIdCell, _);
             op();
-            leak is_queue_try_dequeue_operation(op);
             assert queue_try_dequeue_operation_post(op)(_, ?success, ?value) &*& queue_state(queue, ?newValues);
             if (success) {
                 open messages(_, _);
@@ -163,6 +164,7 @@ void consumer(struct queue *queue) //@ : thread_run
         //@ open dequeue_result_message(result, _);
         //@ produce_lemma_function_pointer_chunk(consumer_context);
         bool success = queue_try_dequeue(queue, &result->message);
+        //@ leak is_queue_try_dequeue_context(_);
         //@ assert pointer(&result->message, ?value);
         //@ close dequeue_result_message(result, value);
         //@ open queue_try_dequeue_context_post(consumer_context)(_, _, _);
@@ -200,6 +202,7 @@ lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
         is_queue_enqueue_operation(op);
     ensures
         queue_enqueue_operation_post(op)(opInfo, result) &*& inv() &*&
+        is_queue_enqueue_operation(op) &*&
         result ?
             queue_enqueue_context_post(main_context)(info)
         :
@@ -213,7 +216,6 @@ lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
             open ghost_cell_int(maxIdCell, _);
             merge_fractions ghost_cell(maxIdCell, _);
             bool success = op();
-            leak is_queue_enqueue_operation(op);
             if (success) {
                 assert messages(?ms1, ?ids1);
                 close messages(nil, nil);
@@ -274,6 +276,7 @@ int main()
         @*/
         //@ produce_lemma_function_pointer_chunk(main_context);
         queue_enqueue(queue, message);
+        //@ leak is_queue_enqueue_context(_);
         //@ assume_is_int(id);
         //@ open queue_enqueue_context_post(main_context)(_);
         if (id == 2147483647) abort();

@@ -630,6 +630,7 @@ and
   | LabelStmt of loc * string
   | GotoStmt of loc * string
   | InvariantStmt of loc * pred (* join point *)
+  | ProduceLemmaFunctionPointerChunkStmt of loc * string * stmt option
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -797,6 +798,7 @@ let stmt_loc s =
   | LabelStmt (l, _) -> l
   | GotoStmt (l, _) -> l
   | InvariantStmt (l, _) -> l
+  | ProduceLemmaFunctionPointerChunkStmt (l, _, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -813,7 +815,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
-  "create_box"; "and_handle"; "create_handle"; "dispose_box";
+  "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
@@ -1233,6 +1235,11 @@ and
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, hpn, args));
      '(_, Kwd ";")
      >] -> CreateBoxStmt (l, x, bcn, args, handleClauses)
+| [< '(l, Kwd "produce_lemma_function_pointer_chunk"); '(_, Kwd "("); '(_, Ident x); '(_, Kwd ")");
+     body = parser
+       [< '(_, Kwd ";") >] -> None
+     | [< s = parse_stmt >] -> Some s
+  >] -> ProduceLemmaFunctionPointerChunkStmt (l, x, body)
 | [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
@@ -4323,6 +4330,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WriteDeref (l, e, e') -> []
     | CallStmt (l, g, targs, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
+    | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
+      begin
+        match body with
+          None -> []
+        | Some s -> assigned_variables s
+      end
     | SwitchStmt (l, e, cs) -> flatmap (fun (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
@@ -5317,27 +5330,58 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallStmt (l, "assume_class_this", [], [],Instance) when file_type path=Java && List.mem_assoc "this" env ->
       let classname= match vartp l "this" with ObjType cn -> cn in
       assume_eq (ctxt#mk_app get_class_symbol [List.assoc "this" env]) (ctxt#mk_app (List.assoc classname class_symbols) [])(fun () ->cont h env)
-    | CallStmt (l, "produce_lemma_function_pointer_chunk", [], [Var (lv, x, _) as e], Static) ->
-      if not pure then static_error l "This function may be called only from a pure context.";
+    | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
+      if not pure then static_error l "This construct is not allowed in a non-pure context.";
       begin
         match try_assoc x funcmap with
-          None -> static_error lv "No such function."
-        | Some (l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v) ->
-          if k <> Lemma then static_error lv "Not a lemma function.";
+          None -> static_error l "No such function."
+        | Some (_, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, _,fb,v) ->
+          if k <> Lemma then static_error l "Not a lemma function.";
           begin
             match leminfo with
               None -> ()
             | Some (lems, g0, indinfo) ->
-              if not (List.mem x lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas."
+              if not (List.mem x lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas.";
+              if body = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body."
           end;
           let ftn =
             match functype_opt with
-              None -> static_error lv "Function does not implement a function type."
+              None -> static_error l "Function does not implement a function type."
             | Some ftn -> ftn
           in
           let (_, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
           let funcsym = List.assoc x funcnameterms in
-          cont (((symb, true), real_unit, [funcsym], None)::h) env
+          let h = ((symb, true), real_unit, [funcsym], None)::h in
+          match body with
+            None -> cont h env
+          | Some s ->
+            let consume_chunk h cont =
+              with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
+              let pats = [LitPat (Var (dummy_loc, "x", ref (Some LocalVar)))] in
+              assert_chunk (pn,ilist) h ghostenv [("x", funcsym)] l (symb, true) real_unit DummyPat pats (fun h coef ts chunk_size ghostenv env ->
+                if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required.";
+                cont h
+              )
+            in
+            let lblenv =
+              List.map
+                begin fun (lbl, cont) ->
+                  (lbl,
+                   fun blocks_done sizemap tenv ghostenv h env ->
+                   consume_chunk h (fun h -> cont blocks_done sizemap tenv ghostenv h env)
+                  )
+                end
+                lblenv
+            in
+            let tcont _ _ _ h env =
+              consume_chunk h (fun h ->
+                tcont sizemap tenv ghostenv h env
+              )
+            in
+            let return_cont h retval =
+              consume_chunk h (fun h -> return_cont h retval)
+            in
+            verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo sizemap tenv ghostenv h env s tcont return_cont
       end
     | CallStmt (l, "free", [], args,Static) ->
       begin
