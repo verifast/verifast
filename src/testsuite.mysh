@@ -3,7 +3,7 @@ verifast -disable_overflow_check counter.c
 verifast -disable_overflow_check counter_with_pred.c
 verifast linkedlist.c
 verifast linkedlist2.c
-verifast composite.c
+verifast Composite.c
 verifast composite4.c
 verifast sorted_bintree.c
 verifast iter.c
@@ -23,7 +23,7 @@ verifast -c lemmafuncptr.c
 verifast -c odd_even_lemmas.c
 cd java
 verifast -c hello.scala
-verifast -disable_overflow_check -c Map.java
+verifast -disable_overflow_check -c map.java
 verifast -disable_overflow_check -c Counter.java
 verifast -disable_overflow_check -c Contrib.java
 verifast -c Tree.java
@@ -50,7 +50,8 @@ verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
 verifast -c -emit_vfmanifest stringBuffers.c
 verifast -c -emit_vfmanifest chat.c
 verifast stringBuffers.o sockets.o threading.o lists.o -allow_assume chat.o
-del stringBuffers.vfmanifest chat.vfmanifest
+del stringBuffers.vfmanifest
+del chat.vfmanifest
 cd ..
 cd chatbot
 verifast -c bot.c
@@ -60,7 +61,9 @@ verifast -c incr_box.c
 cd ..
 verifast -c contrib.c
 verifast reallittest.c
-cd ..\tests\errors
+cd ..
+cd tests
+cd errors
 verifast -c -allow_should_fail basics.c
 verifast -c -allow_should_fail typecheck1.c
 verifast -c -allow_should_fail ghost_field.c

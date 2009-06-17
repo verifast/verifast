@@ -1,3 +1,5 @@
+export PATH=~/verifast/trunk/src:$PATH
+
 export OCAMLLIB=/usr/lib/ocaml/3.10.2
 #set PATH=%PATH%;C:\Ocaml\bin
 

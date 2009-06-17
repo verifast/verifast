@@ -1,15 +1,8 @@
-test: verifastz3.opt vfidez3.opt
-	./verifastz3.opt ../examples/linkedlist.c
-	./verifastz3.opt ../examples/linkedlist2.c
-	./verifastz3.opt ../examples/Composite.c
-	./verifastz3.opt ../examples/composite4.c
-	./verifastz3.opt ../examples/sorted_bintree.c
-	./verifastz3.opt -c ../examples/iter.c
-	./verifastz3.opt -c ../examples/java/Tree.java
-	./verifastz3.opt -c ../examples/java/Tree2/Tree.java
-	./verifastz3.opt -c ../examples/java/Tree3/Tree.java
-	cd ../examples/chat; ../../src/verifastz3.opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
-	./verifastz3.opt -c ../examples/chatbot/bot.c
+test: mysh verifast vfide
+	cd ..; src/mysh < src/testsuite.mysh
+
+mysh: mysh.ml
+	ocamlopt.opt -o mysh mysh.ml
 
 reduxtest: verifastredux.opt
 	cd ../examples
@@ -49,8 +42,8 @@ vfversion_cmx: vfversion.cmi
 verifastRedux: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlc -warn-error F -w p -g -pp camlp4o -o verifastRedux unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlc -custom -warn-error F -g -pp camlp4o -o verifast -I $(Z3)/ocaml unix.cma $(Z3)/ocaml/z3.cma proverapi.cmo nums.cma simplex.cmo redux.cmo z3prover.cmo vfversion.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
+#verifast: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo z3prover.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
+#	ocamlc -custom -warn-error F -g -pp camlp4o -o verifast -I $(Z3)/ocaml unix.cma $(Z3)/ocaml/z3.cma proverapi.cmo nums.cma simplex.cmo redux.cmo z3prover.cmo vfversion.cmo verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
 verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o verifastZ3 -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
@@ -58,8 +51,8 @@ verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPlugin
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
-vfidez3.opt: Printexc_proxy.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
+vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -85,8 +78,8 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifastz3.opt: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifastz3.opt -I $(Z3)/ocaml unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+verifast: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifast -I $(Z3)/ocaml unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
@@ -108,57 +101,14 @@ release: test
 	mkdir verifast-$(VFVERSION)/bin
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h verifast-$(VFVERSION)/bin
-	cp verifastz3.opt verifast-$(VFVERSION)/bin/verifast-core
-	cp vfidez3.opt verifast-$(VFVERSION)/bin/vfide-core
+	cp -R rt verifast-$(VFVERSION)/bin
+	cp verifast verifast-$(VFVERSION)/bin/verifast-core
+	cp vfide verifast-$(VFVERSION)/bin/vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
-	mkdir verifast-$(VFVERSION)/examples
-	cp ../examples/Composite.c verifast-$(VFVERSION)/examples
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/composite4.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/counter.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/counter_with_pred.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/iter.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/linkedlist.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/linkedlist2.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/sorted_bintree.c .
-	cd verifast-$(VFVERSION)/examples; cp ../../../examples/verify.sh .
-	cd verifast-$(VFVERSION)/examples; mkdir chat
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/bool.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/chat.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/helloworld_locking.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/helloworld_threading.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/lists.vfmanifest .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/socketlib.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/socketlib.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/sockets.vfmanifest .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffers.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffers.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/stringBuffersExt.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/threading.c .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/threading.h .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/threading.vfmanifest .
-	cd verifast-$(VFVERSION)/examples/chat; cp ../../../../examples/chat/verify.sh .
-	cd verifast-$(VFVERSION)/examples; mkdir chatbot
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/bool.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/bot.c .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/lists.c .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/lists.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/socketlib.c .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/socketlib.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/sockets.c .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/sockets.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/stringBuffers.c .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/stringBuffers.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/stringBuffersExt.h .
-	cd verifast-$(VFVERSION)/examples/chatbot; cp ../../../../examples/chatbot/verify.sh .
-	cd verifast-$(VFVERSION)/examples; mkdir java
-	cd verifast-$(VFVERSION)/examples/java; cp ../../../../examples/java/Tree.java .
-	cd verifast-$(VFVERSION)/examples/java; cp ../../../../examples/java/Tree2/Tree.java Tree2.java
-	cd verifast-$(VFVERSION)/examples/java; cp ../../../../examples/java/Tree3/Tree.java Tree3.java
-	cd verifast-$(VFVERSION)/examples/java; cp ../../../../examples/java/verify.sh .
-
+	cp -R ../examples verifast-$(VFVERSION)
+	cp -R ../tests verifast-$(VFVERSION)
+	cp testsuite.mysh verifast-$(VFVERSION)
+	cp ../test.sh verifast-$(VFVERSION)
+	cp mysh verifast-$(VFVERSION)/bin
