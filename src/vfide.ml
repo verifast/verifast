@@ -694,7 +694,7 @@ let show_ide initialPath prover =
                 handleStaticError l emsg
             | e ->
               prerr_endline ("VeriFast internal error: " ^ Printexc.to_string e);
-              Printexc.print_backtrace stderr;
+              Printexc_proxy.print_backtrace stderr;
               flush stderr;
               GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
           end

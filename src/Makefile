@@ -42,6 +42,10 @@ reduxtest: verifastredux_opt.exe
 	..\..\src\verifastredux_opt -c bot.c
 	cd ..
 
+Printexc_proxy.cmx:
+	copy Printexc_proxy_311.ml Printexc_proxy.ml
+	ocamlopt.opt -c Printexc_proxy.ml
+
 record_backtrace.cmo: record_backtrace.ml
 	ocamlc.opt -c record_backtrace.ml
 
@@ -78,9 +82,9 @@ vfide.cmx: vfversion.cmi verifast.cmx vfide.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I +lablgtk2 vfide.ml
 	time < nl.txt
 
-vfide.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx
+vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx -cclib "-L "$(GTKLIB)
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
 vfideredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml

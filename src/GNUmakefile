@@ -31,6 +31,10 @@ reduxtest: verifastredux.opt
 	../../src/verifastz3.opt -c bot.c
 	cd ..
 
+Printexc_proxy.cmx:
+	cp Printexc_proxy_310.ml Printexc_proxy.ml
+	ocamlopt -c Printexc_proxy.ml
+
 vfversion.cmi: vfversion.mli
 	ocamlc -c vfversion.mli
 
@@ -54,8 +58,8 @@ verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPlugin
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
-vfidez3.opt: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
+vfidez3.opt: Printexc_proxy.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfidez3.opt -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml

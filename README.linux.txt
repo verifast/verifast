@@ -9,4 +9,5 @@ ocaml-native-compilers
 liblablgtk2-ocaml-dev
 camlidl
 
-Just type 'make' in the 'src' directory.
+1) Copy settings.sh.example to settings.sh; adapt it to your setup; source it.
+2) cd src; make
