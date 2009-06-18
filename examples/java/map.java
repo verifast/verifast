@@ -62,8 +62,8 @@ interface MapFunc {
 predicate_family List(Class c)(List l, list<int> xs);
 
 lemma void list_split_fractions(List l);
-    requires [_]List(l.getClass())(l, ?xs);
-    ensures List(l.getClass())(l, xs) &*& List(l.getClass())(l, xs);
+    requires [_]List(?c)(l, ?xs);
+    ensures List(c)(l, xs) &*& List(c)(l, xs);
 
 @*/
 
@@ -107,6 +107,8 @@ class Nil implements List {
         //@ close List(Nil.class)(this, nil);
     }
     boolean isEmpty()
+        //@ requires List(Nil.class)(this, ?xs);
+        //@ ensures List(Nil.class)(this, xs) &*& result == (xs == nil);
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -114,6 +116,8 @@ class Nil implements List {
     }
     
     int head()
+        //@ requires List(Nil.class)(this, ?xs) &*& xs != nil;
+        //@ ensures List(Nil.class)(this, xs) &*& result == head(xs);
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -121,6 +125,8 @@ class Nil implements List {
     }
     
     List tail()
+        //@ requires List(Nil.class)(this, ?xs) &*& xs != nil;
+        //@ ensures List(Nil.class)(this, xs) &*& List(result.getClass())(result, tail(xs));
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -128,15 +134,20 @@ class Nil implements List {
     }
     
     List map(MapFunc f)
+        //@ requires List(Nil.class)(this, ?xs) &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
+        //@ ensures List(Nil.class)(this, xs) &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
-        //@ list_split_fractions(this);
         //@ append_nil(ys);
+        //@ assume(this.getClass() == Nil.class);
+        //@ list_split_fractions(this);
         return this;
     }
     
     boolean equals(List other)
+        //@ requires List(Nil.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
+        //@ ensures List(Nil.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result == (xs == ys);
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -168,6 +179,8 @@ class Cons implements List {
     }
 
     boolean isEmpty()
+        //@ requires List(Cons.class)(this, ?xs);
+        //@ ensures List(Cons.class)(this, xs) &*& result == (xs == nil);
     {
         //@ open List(Cons.class)(this, ?xs_);
         //@ close List(Cons.class)(this, xs_);
@@ -175,6 +188,8 @@ class Cons implements List {
     }
     
     int head()
+        //@ requires List(Cons.class)(this, ?xs) &*& xs != nil;
+        //@ ensures List(Cons.class)(this, xs) &*& result == head(xs);
     {
         //@ open List(Cons.class)(this, ?xs_);
         int result = this.head;
@@ -183,6 +198,8 @@ class Cons implements List {
     }
     
     List tail()
+        //@ requires List(Cons.class)(this, ?xs) &*& xs != nil;
+        //@ ensures List(Cons.class)(this, xs) &*& List(result.getClass())(result, tail(xs));
     {
         //@ open List(Cons.class)(this, ?xs_);
         List result = this.tail;
@@ -192,6 +209,8 @@ class Cons implements List {
     }
     
     List map(MapFunc f)
+        //@ requires List(Cons.class)(this, ?xs) &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
+        //@ ensures List(Cons.class)(this, xs) &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
     {
         //@ open List(Cons.class)(this, ?xs_);
         int fhead = f.apply(this.head);
@@ -205,6 +224,8 @@ class Cons implements List {
     }
     
     boolean equals(List other)
+        //@ requires List(Cons.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
+        //@ ensures List(Cons.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result == (xs == ys);
     {
         //@ switch (ys) { case nil: case cons(h, t): }
         //@ open List(Cons.class)(this, ?xs_);
@@ -258,6 +279,8 @@ class PlusOne implements MapFunc {
     }
     
     int apply(int x)
+        //@ requires MapFunc(PlusOne.class)(this, ?in, ?out, ?info) &*& switch (in) { case nil: return false; case cons(h, t): return x == h; };
+        //@ ensures MapFunc(PlusOne.class)(this, tail(in), list_add(out, result), info);
     {
         //@ open MapFunc(PlusOne.class)(this, ?in_, ?out_, ?info_);
         //@ append_add(out_, x + 1, plusOne(tail(in_)));
