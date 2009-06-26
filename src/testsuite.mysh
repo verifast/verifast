@@ -21,6 +21,7 @@ verifast map.c
 verifast ghost_field.c
 verifast -c lemmafuncptr.c
 verifast -c odd_even_lemmas.c
+verifast -shared doubly_linked_list.c
 cd java
 verifast -c hello.scala
 verifast -disable_overflow_check -c map.java
