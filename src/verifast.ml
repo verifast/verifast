@@ -505,6 +505,7 @@ type type_ =
     Bool
   | Void
   | IntType
+  | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
   | RealType
   | Char
   | StructType of string
@@ -560,7 +561,7 @@ type
   | PredFamName
 
 type
-  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div
+  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | BitNot | BitAnd | BitXor | BitOr
 and
   expr =
     True of loc
@@ -822,10 +823,11 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions";
+  "&"; "^"; "~"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"
 ]
 let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
 ]
@@ -1139,6 +1141,7 @@ and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
@@ -1365,7 +1368,16 @@ and
   >] -> e
 and
   parse_conj_expr = parser
-  [< e0 = parse_expr_rel; e = parse_expr_conj_rest e0 >] -> e
+  [< e0 = parse_bitor_expr; e = parse_expr_conj_rest e0 >] -> e
+and
+  parse_bitor_expr = parser
+  [< e0 = parse_bitxor_expr; e = parse_bitor_expr_rest e0 >] -> e
+and
+  parse_bitxor_expr = parser
+  [< e0 = parse_bitand_expr; e = parse_bitxor_expr_rest e0 >] -> e
+and
+  parse_bitand_expr = parser
+  [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
 and
   parse_expr_rel = parser
   [< e0 = parse_expr_arith; e = parse_expr_rel_rest e0 >] -> e
@@ -1436,6 +1448,7 @@ and
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
+| [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e], ref None)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -1466,6 +1479,18 @@ and
 | [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e1; e0], ref None)) >] -> e
 | [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e1; e0], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_bitand_expr_rest e0 = parser
+  [< '(l, Kwd "&"); e1 = parse_expr_rel; e = parse_bitand_expr_rest (Operation (l, BitAnd, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_bitxor_expr_rest e0 = parser
+  [< '(l, Kwd "^"); e1 = parse_bitand_expr; e = parse_bitxor_expr_rest (Operation (l, BitXor, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_bitor_expr_rest e0 = parser
+  [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_conj_rest e0 = parser
@@ -1788,6 +1813,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
 
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
+  let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
+  let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
+  let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
+  let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
   
   let boolt = Bool in
   let intt = IntType in
@@ -2289,6 +2318,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       Bool -> "bool"
     | Void -> "void"
     | IntType -> "int"
+    | UintPtrType -> "uintptr_t"
     | RealType -> "real"
     | Char -> "char"
     | InductiveType (i, []) -> i
@@ -2340,6 +2370,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match t with
       Bool -> ProverBool
     | IntType -> ProverInt
+    | UintPtrType -> ProverInt
     | RealType -> ProverReal
     | Char -> ProverInt
     | InductiveType _ -> ProverInductive
@@ -2680,7 +2711,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               let (targs, tpenv) =
                                 if callee_tparams <> [] && targes = [] then
                                   let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
-                                  let Some tpenv = zip tparams targs in
+                                  let Some tpenv = zip callee_tparams targs in
                                   (targs, tpenv)
                                 else
                                   let targs = List.map (check_pure_type (pn,ilist) tparams) targes in
@@ -3124,7 +3155,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let rec check_expr (pn,ilist) tparams tenv e =
     let check e = check_expr (pn,ilist) tparams tenv e in
-    let checkt e t0 = check_expr_t (pn,ilist) tparams tenv e t0 in
+    let checkt e t0 = check_expr_t_core (pn,ilist) tparams tenv e t0 false in
+    let checkt_cast e t0 = check_expr_t_core (pn,ilist) tparams tenv e t0 true in
     let promote_numeric e1 e2 ts =
       let (w1, t1) = check e1 in
       let (w2, t2) = check e2 in
@@ -3203,6 +3235,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Not, [e], ts) -> 
       let w = checkt e boolt in
       (Operation (l, Not, [w], ts), boolt)
+    | Operation (l, (BitAnd | BitXor | BitOr as operator), [e1; e2], ts) ->
+      let w1 = checkt e1 UintPtrType in
+      let w2 = checkt e2 UintPtrType in
+      (Operation (l, operator, [w1; w2], ts), UintPtrType)
+    | Operation (l, BitNot, [e], ts) ->
+      let w = checkt e UintPtrType in
+      (Operation (l, BitNot, [w], ts), UintPtrType)
     | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote l e1 e2 ts in
       (Operation (l, operator, [w1; w2], ts), boolt)
@@ -3235,15 +3274,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StringLit (l, s) -> (match file_type path with
 	    Java-> (e, ObjType "String")
 	  | _ -> (e, PtrType Char))
-    | CastExpr (l, te, e) -> 
+    | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      let w =
-        match (e, t) with
-          (IntLit (_, n, tp), PtrType _) -> tp := Some t; e
-        | _ -> match file_type path with
-            Java -> e
-          | _ -> checkt e t
-      in
+      let w = checkt_cast e t in
       (CastExpr (l, te, w), t)
     | Read (l, e, f) -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
@@ -3352,16 +3385,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> static_error l "Switch expression operand must be inductive value."
       end
     | e -> static_error (expr_loc e) "Expression form not allowed here."
-  and check_expr_t (pn,ilist) tparams tenv e t0 =
+  and check_expr_t (pn,ilist) tparams tenv e t0 = check_expr_t_core (pn, ilist) tparams tenv e t0 false
+  and check_expr_t_core (pn,ilist) tparams tenv e t0 isCast =
     match (e, t0) with
-      (IntLit (l, n, t), PtrType _) when eq_big_int n zero_big_int -> t:=Some IntType; e
+      (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
+    | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), Char) ->
       if not (le_big_int zero_big_int n && le_big_int n (big_int_of_int 127)) then
         static_error l "Integer literal used as char must be between 0 and 127.";
       t:=Some IntType; e
     | _ ->
-      let (w, t) = check_expr (pn,ilist) tparams tenv e in expect_type (pn,ilist) (expr_loc e) t t0; w
+      let (w, t) = check_expr (pn,ilist) tparams tenv e in
+      match (t, t0) with
+        (ObjType _, ObjType _) when isCast -> w
+      | (PtrType _, UintPtrType) when isCast -> w
+      | (UintPtrType, PtrType _) when isCast -> w
+      | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
   and check_deref is_write pure (pn,ilist) l tparams tenv e f =
     let check_ok gh =
       if is_write && pure && gh = Real then static_error l "Cannot write in a pure context."
@@ -3860,20 +3900,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           ctxt#mk_intlit_of_string (string_of_big_int n)
         | _ -> ev e
       end
-    | IntLit (l, n, t) when !t = Some IntType ->
-      if assert_term <> None && not (le_big_int min_int_big_int n && le_big_int n max_int_big_int) then static_error l "Int literal is out of range.";
-      begin
+    | IntLit (l, n, t) ->
+      begin match !t with
+        Some RealType ->
+        if eq_big_int n unit_big_int then real_unit
+        else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
+      | Some t ->
+        if assert_term <> None then
+        begin
+          let (min, max) =
+            match t with
+              IntType -> (min_int_big_int, max_int_big_int)
+            | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
+          in
+          if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range."
+        end;
         try
           let n = int_of_big_int n in ctxt#mk_intlit n
         with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
       end
-    | IntLit (l, n, t) when !t = Some RealType ->
-      if eq_big_int n unit_big_int then real_unit
-      else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
     | ClassLit (l,s) -> List.assoc s classterms
     | StringLit (l, s) -> (match file_type path with
-	    Java -> get_unique_var_symb "stringLiteral" (ObjType "String")
-	  | _ -> get_unique_var_symb "stringLiteral" (PtrType Char))
+        Java -> get_unique_var_symb "stringLiteral" (ObjType "String")
+      | _ -> get_unique_var_symb "stringLiteral" (PtrType Char))
     | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
         match pats with
@@ -3888,6 +3937,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
     | Operation (l, Or, [e1; e2], ts) -> ctxt#mk_or (ev e1) (ev e2)
     | Operation (l, Not, [e], ts) -> ctxt#mk_not (ev e)
+    | Operation (l, BitAnd, [e1; Operation (_, BitNot, [e2], ts2)], ts1) ->
+      ctxt#mk_app bitwise_and_symbol [ev e1; ctxt#mk_app bitwise_not_symbol [ev e2]]
+    | Operation (l, BitNot, _, _) ->
+      static_error l "VeriFast does not currently support a bitwise complement (~) expression except as part of a bitwise AND (x & ~y)."
+    | Operation (l, (BitAnd|BitXor|BitOr as operator), es, ts) ->
+      let symb =
+        match operator with
+          BitAnd -> bitwise_and_symbol
+        | BitXor -> bitwise_xor_symbol
+        | BitOr -> bitwise_or_symbol
+      in
+      ctxt#mk_app symb (List.map ev es)
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
     | Operation (l, Eq, [e1; e2], ts) -> ctxt#mk_eq (ev e1) (ev e2)
     | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))

@@ -15,6 +15,9 @@ verifast -disable_overflow_check expr.c
 cd queue
 verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
 cd ..
+cd mcas
+verifast -c rdcss.c
+cd ..
 verifast -c ifs.c
 verifast -shared goto.c
 verifast map.c
