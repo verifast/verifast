@@ -1289,7 +1289,17 @@ and
      end;
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< e = parse_expr; s = parser
-    [< '(_, Kwd ";") >] -> (match e with CallExpr (l, g, targs, [], es,fb) -> CallStmt (l, g, targs, List.map (function LitPat e -> e) es,fb) | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
+    [< '(_, Kwd ";") >] ->
+      (match e with
+        CallExpr (l, g, targs, [], es,fb) ->
+          let unpack_LitPat x =
+            match x with
+            | LitPat e -> e
+            | VarPat x -> raise (ParseException (expr_loc e, Printf.sprintf "No variable patterns (?%s) allowed in call expression." x))
+            | DummyPat -> raise (ParseException (expr_loc e, "No dummy patterns allowed in call expression."))
+          in
+          CallStmt (l, g, targs, List.map unpack_LitPat es, fb)
+       | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e rhs
   | [< '(l, Kwd "++"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; IntLit (l, unit_big_int, ref None)], ref None))
