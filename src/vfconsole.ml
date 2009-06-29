@@ -111,7 +111,10 @@ let _ =
                 end
                 else
                 begin
-                  output_byte outfile (int_of_char c);
+                  if c = '<' || c = '&' then
+                    output_string outfile (Printf.sprintf "&#%d;" (int_of_char c))
+                  else
+                    output_byte outfile (int_of_char c);
                   emit_postfix (offset + 1) line (col + 1) inside_ranges before_ranges
                 end
         in
