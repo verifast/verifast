@@ -1301,7 +1301,12 @@ and
           CallStmt (l, g, targs, List.map unpack_LitPat es, fb)
        | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
-  | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e rhs
+  | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+    begin match e with
+      Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _) ->
+      DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, rhs)
+    | _ -> assignment_stmt l e rhs
+    end
   | [< '(l, Kwd "++"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; IntLit (l, unit_big_int, ref None)], ref None))
   | [< '(l, Kwd "--"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; IntLit (l, unit_big_int, ref None)], ref None))
   | [< '(l, Kwd "+="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; e'], ref None))
