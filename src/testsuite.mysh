@@ -12,7 +12,7 @@ verifast swap.c
 verifast -disable_overflow_check -c fractions-counting.c
 verifast -shared polytest.c
 verifast -disable_overflow_check expr.c
-verifast -disable_overflow_check stack.c
+verifast -disable_overflow_check -shared stack.c
 cd queue
 verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
 cd ..
