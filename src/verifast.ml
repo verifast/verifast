@@ -1047,23 +1047,25 @@ and
     [< xs = parse_angle_brackets l (rep_comma (parser [< '(_, Ident x) >] -> x)) >] -> xs
   | [< >] -> []
 and
+  parse_pred_body = parser
+    [< '(_, Kwd "requires"); p = parse_pred >] -> p
+  | [< '(_, Kwd "="); p = parse_pred >] -> p
+and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
   | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = rep_comma parse_param;
      (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None));
      '(_, Kwd ")");
-     body = (parser
-       [< '(_, Kwd "requires"); p = parse_pred >] -> Some p
-     | [< '(_, Kwd "="); p = parse_pred >] -> Some p
-     | [< >] -> None); '(_, Kwd ";");
+     body = opt parse_pred_body;
+     '(_, Kwd ";");
   >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps, inputParamCount)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; ps = parse_paramlist; '(_, Kwd ";") >]
   -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps, None)]
   | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
-     _ = (parser [< '(_, Kwd "requires") >] -> () | [< '(_, Kwd "=") >] -> ()); p = parse_pred; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
+     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
-     '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
+     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
