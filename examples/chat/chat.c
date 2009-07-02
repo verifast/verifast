@@ -14,7 +14,7 @@ struct member {
 
 /*@
 predicate member(struct member* member)
-    requires member->nick |-> ?nick &*& member->writer |-> ?writer &*& string_buffer(nick) &*& writer(writer) &*& malloc_block_member(member);
+    requires member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick) &*& writer(writer) &*& malloc_block_member(member);
 
 lemma void member_distinct(struct member *m1, struct member *m2)
     requires member(m1) &*& member(m2);
@@ -178,6 +178,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         }
         member->nick = nickCopy;
         member->writer = writer;
+        //@ split_fraction member_writer(member, _) by 1/2;
         //@ close member(member);
         list_add(room->members, member);
         //@ open foreach(?members, @member);
@@ -250,8 +251,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     
     //@ open member(member);
     string_buffer_dispose(member->nick);
-    //@ assert writer(?memberWriter);
-    //@ assume(memberWriter == writer);
+    //@ merge_fractions member_writer(member, _);
     free(member);
 }
 
