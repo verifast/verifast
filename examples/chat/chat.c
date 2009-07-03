@@ -26,7 +26,7 @@ lemma void member_distinct(struct member *m1, struct member *m2)
     close member(m1);
 }
 
-lemma void foreach_member_not_contains(list<void *> members, struct member *member)
+lemma void foreach_member_not_contains(list<struct member *> members, struct member *member)
     requires foreach(members, @member) &*& member(member);
     ensures foreach(members, @member) &*& member(member) &*& !contains(members, member);
 {
@@ -48,7 +48,7 @@ struct room {
 
 /*@
 predicate room(struct room* room)
-    requires room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*& list(membersList, ?members) &*& ghost_list(id, members) &*& foreach(members, member) &*& malloc_block_room(room);
+    requires room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*& foreach(?members, member) &*& list(membersList, members) &*& ghost_list(id, members) &*& malloc_block_room(room);
 @*/
 
 struct room *create_room()
@@ -63,7 +63,7 @@ struct room *create_room()
     }
     members = create_list();
     room->members = members;
-    //@ close foreach<void *>(nil, member);
+    //@ close foreach(nil, member);
     //@ int i = create_ghost_list();
     //@ room->ghost_list_id = i;
     //@ close room(room);
@@ -75,7 +75,7 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     //@ ensures room(room) &*& string_buffer(nick);
 {
     //@ open room(room);
-    //@ assert foreach<void *>(?members, _);
+    //@ assert foreach(?members, _);
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasMember = false;
@@ -103,7 +103,7 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
     //@ ensures room(room) &*& string_buffer(message);
 {
     //@ open room(room);
-    //@ assert foreach<void *>(?members0, _);
+    //@ assert foreach(?members0, _);
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasNext = iter_has_next(iter);
@@ -181,13 +181,13 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ split_fraction member_writer(member, _) by 1/2;
         //@ close member(member);
         list_add(room->members, member);
-        //@ open foreach<void *>(?members, @member);
+        //@ open foreach(?members, @member);
         //@ close foreach(members, @member);
         //@ foreach_member_not_contains(members, member);
-        //@ close foreach(cons((void *)member, members), @member);
+        //@ close foreach(cons(member, members), @member);
         //@ assert [_]room->ghost_list_id |-> ?id;
         //@ split_fraction room_ghost_list_id(room, id) by 1/2;
-        //@ ghost_list_add<void *>(id, member);
+        //@ ghost_list_add(id, member);
         //@ close room(room);
     }
     
@@ -236,7 +236,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ foreach_remove(members, member);
     }
     //@ assert ghost_list(?id, _);
-    //@ ghost_list_remove<void *>(id, member);
+    //@ ghost_list_remove(id, member);
     //@ close room(room);
     {
         struct string_buffer *goodbyeMessage = create_string_buffer();

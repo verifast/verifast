@@ -2524,13 +2524,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (InferredType t, t0) -> t := Some t0; true
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify args1 args2
+    | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
   in
   
   let rec expect_type_core (pn,ilist) l msg t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
-      (PtrType t, PtrType t0) when compatible_pointees t t0 -> ()
-    | (ObjType "null", ObjType _) -> ()
+      (ObjType "null", ObjType _) -> ()
     | (Char, IntType) -> ()
     | (ObjType x, ObjType y) ->
 	  let x= match search2' x (pn,ilist) classdeclmap classmap0 with 
