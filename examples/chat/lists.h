@@ -5,9 +5,9 @@ struct list;
 struct iter;
 
 /*@
-inductive listval = | nil | cons(void*, listval);
+inductive list<t> = nil | cons(t, list<t>);
 
-fixpoint listval add(listval v, void* e)
+fixpoint list<t> add<t>(list<t> v, t e)
 {
   switch(v) {
     case nil: return cons(e, nil);
@@ -15,7 +15,7 @@ fixpoint listval add(listval v, void* e)
   }
 }
 
-fixpoint listval remove(listval v, void* e)
+fixpoint list<t> remove<t>(list<t> v, t e)
 {
   switch(v) {
     case nil: return nil;
@@ -23,7 +23,7 @@ fixpoint listval remove(listval v, void* e)
   }
 }
 
-fixpoint int length(listval v)
+fixpoint int length<t>(list<t> v)
 {
   switch(v) {
     case nil: return 0;
@@ -31,7 +31,7 @@ fixpoint int length(listval v)
   }
 }
 
-fixpoint listval tail(listval v)
+fixpoint list<t> tail<t>(list<t> v)
 {
   switch(v) {
     case nil: return nil;
@@ -39,16 +39,15 @@ fixpoint listval tail(listval v)
   }
 }
 
-fixpoint void* ith(listval v, int i)
+fixpoint t ith<t>(list<t> v, int i)
 {
   switch(v) {
-    case nil: return 0;
+    case nil: return default<t>;
     case cons(h, t): return i==0 ? h : ith(t, i - 1);
   }
 }
 
-
-fixpoint bool contains(listval v, void* x)
+fixpoint bool contains<t>(list<t> v, t x)
 {
   switch(v) {
     case nil: return false;
@@ -56,7 +55,7 @@ fixpoint bool contains(listval v, void* x)
   }
 }
 
-fixpoint bool uniqueElements(listval v)
+fixpoint bool uniqueElements<t>(list<t> v)
 {
   switch(v) {
     case nil: return true;
@@ -64,7 +63,7 @@ fixpoint bool uniqueElements(listval v)
   }
 }
 
-lemma void lengthPositive(listval v)
+lemma void lengthPositive<t>(list<t> v)
   requires true;
   ensures 0<=length(v);
 {
@@ -74,7 +73,7 @@ lemma void lengthPositive(listval v)
   }
 }
 
-lemma void containsIth(listval v, int i)
+lemma void containsIth<t>(list<t> v, int i)
   requires 0<=i &*& i < length(v);
   ensures contains(v, ith(v, i)) == true;
 {
@@ -88,13 +87,13 @@ lemma void containsIth(listval v, int i)
   }
 }
 
-predicate foreach(listval v, predicate(void *) p)
+predicate foreach<t>(list<t> v, predicate(t) p)
   requires uniqueElements(v)==true &*& switch(v) { 
              case nil: return emp; 
-             case cons(h, t): return p(h) &*& foreach(t, p);
+             case cons(h, t): return p(h) &*& foreach<t>(t, p);
            }; 
 
-lemma void removeContains(listval v, void *x1, void *x2)
+lemma void removeContains<t>(list<t> v, t x1, t x2)
     requires !contains(v, x1);
     ensures  !contains(remove(v, x2), x1);
 {
@@ -108,7 +107,7 @@ lemma void removeContains(listval v, void *x1, void *x2)
     }
 }
 
-lemma void removeUniqueElements(listval v, void *x)
+lemma void removeUniqueElements<t>(list<t> v, t x)
     requires uniqueElements(v) == true;
     ensures uniqueElements(remove(v, x)) == true;
 {
@@ -123,7 +122,7 @@ lemma void removeUniqueElements(listval v, void *x)
     }
 }
 
-lemma void remove_not_contains(listval v, void *mem)
+lemma void remove_not_contains<t>(list<t> v, t mem)
   requires !contains(v, mem);
   ensures remove(v, mem) == v;
 {
@@ -137,47 +136,50 @@ lemma void remove_not_contains(listval v, void *mem)
   }
 }
 
-lemma void foreach_unremove(listval v, void *x)
-  requires foreach(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
-  ensures foreach(v, p);
+lemma void foreach_unremove<t>(list<t> v, t x)
+  requires foreach<t>(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
+  ensures foreach<t>(v, p);
 {
-  
   switch(v) {
-    case nil: open foreach(remove(v, x), p); return;
+    case nil: open foreach<t>(remove(v, x), p); return;
     case cons(h, t):
       if(h==x){
         remove_not_contains(t, x);
-        close foreach(v, p);
+        close foreach<t>(v, p);
       } else {
-        open foreach(remove(v, x), p);
+        open foreach<t>(remove(v, x), p);
+        assert remove(v, x) == cons(h, remove(t, x));
         foreach_unremove(t, x);
-        close foreach(v, p);
+        close foreach<t>(v, p);
       }
   }
 }
 
-lemma void foreach_remove(listval v, void *x)
-    requires foreach(v, ?p) &*& contains(v, x) == true;
-    ensures foreach(remove(v, x), p) &*& p(x) &*& uniqueElements(v) == true;
+lemma void foreach_remove<t>(list<t> v, t x)
+    requires foreach<t>(v, ?p) &*& contains(v, x) == true;
+    ensures foreach<t>(remove(v, x), p) &*& p(x) &*& uniqueElements(v) == true;
 {
     switch (v) {
         case nil:
         case cons(h, t):
-            open foreach(v, p);
+            open foreach<t>(v, p);
             if (h == x) {
             } else {
                 foreach_remove(t, x);
                 removeUniqueElements(v, x);
-                close foreach(remove(v, x), p);
+                close foreach<t>(remove(v, x), p);
             }
     }
 }
 
+@*/
 
+/*@
 
-predicate list(struct list* l, listval v);
+predicate list(struct list* l, list<void *> v);
 
-predicate iter(struct iter* i, struct list* l, listval v, int index);
+predicate iter(struct iter* i, struct list* l, list<void *> v, int index);
+
 @*/
 
 struct list *create_list();

@@ -51,10 +51,10 @@ verifast -disable_overflow_check -c Bot.java
 cd ..
 cd ..
 cd chat
-verifast stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
+verifast stringBuffers.c sockets.o threading.o lists.o ghostlist.o -allow_assume chat.c
 verifast -c -emit_vfmanifest stringBuffers.c
 verifast -c -emit_vfmanifest chat.c
-verifast stringBuffers.o sockets.o threading.o lists.o -allow_assume chat.o
+verifast stringBuffers.o sockets.o threading.o lists.o ghostlist.o -allow_assume chat.o
 del stringBuffers.vfmanifest
 del chat.vfmanifest
 cd ..

@@ -40,6 +40,7 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual pprint: 'termnode -> string
     method virtual push: unit
     method virtual pop: unit
+    method virtual assume_is_inverse: 'symbol -> 'symbol -> unit  (* "assume_is_inverse f1 f2" assumes that forall x, f1(f2(x)) == x *)
     method virtual assume: 'termnode -> assume_result
     method virtual query: 'termnode -> bool
   end

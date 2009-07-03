@@ -1,0 +1,4 @@
+.provides .\ghostlist.h#create_ghost_list
+.provides .\ghostlist.h#ghost_list_add
+.provides .\ghostlist.h#ghost_list_remove
+.provides .\ghostlist.h#ghost_list_member_handle_lemma

@@ -71,6 +71,8 @@ class Session implements Runnable{
   this.lock=l;
   }
   public void run()
+    //@ requires thread_run_pre(Session.class)(this, ?info);
+    //@ ensures thread_run_post(Session.class)(this, info);
   {
   //@ open thread_run_pre(Session.class)(this, _);
   //@ open contribute_pre(this, ?box1, ?box2, ?thisBox, _, _);

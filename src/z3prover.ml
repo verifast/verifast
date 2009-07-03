@@ -68,6 +68,15 @@ class z3_context () =
       end;
       c
           
+    method assume_is_inverse f1 f2 =
+      let f1domain = Z3.get_domain ctxt f2 0 in
+      let name = Z3.mk_int_symbol ctxt 0 in
+      let x = Z3.mk_bound ctxt 0 f1domain in
+      let app1 = Z3.mk_app ctxt f2 [| x |] in
+      let app2 = Z3.mk_app ctxt f1 [| app1 |] in
+      let pat = Z3.mk_pattern ctxt [| app1 |] in
+      Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] [| f1domain |] [| name |] (Z3.mk_eq ctxt app2 x))
+    
     method set_fpclauses fc k cs =
       List.iter
         (fun (csym, fbody) ->

@@ -3,6 +3,8 @@
 
 /*@
 
+fixpoint t default<t>();
+
 inductive unit = unit;
 
 inductive boxed_int = boxed_int(int);

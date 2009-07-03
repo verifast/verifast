@@ -512,7 +512,7 @@ type type_ =
   | PtrType of type_
   | FuncType of string
   | InductiveType of string * type_ list
-  | PredType of type_ list
+  | PredType of string list * type_ list
   | ObjType of string
   | BoxIdType (* box type*)
   | HandleIdType (* handle type *)
@@ -544,6 +544,7 @@ class fieldref (name: string) =
 
 class predref (name: string) =
   object
+    val mutable tparamcount: int option = None
     val mutable domain: type_ list option = None
     val mutable inputParamCount: int option option = None
     method name = name
@@ -582,6 +583,7 @@ and
   | CastExpr of loc * type_expr * expr (* cast *)
   | SizeofExpr of loc * type_expr
   | AddressOf of loc * expr
+  | ProverTypeConversion of prover_type * prover_type * expr
 and
   pat =
     LitPat of expr (* literal pattern *)
@@ -623,14 +625,14 @@ and
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
   | Leak of loc * pred (* expliciet lekken van assertie, nuttig op einde van thread*)
-  | Open of loc * string * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
-  | Close of loc * string * pat list * pat list * pat option
+  | Open of loc * string * type_expr list * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
+  | Close of loc * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
-  | SplitFractionStmt of loc * string * pat list * expr option (* split_fraction ... by ... *)
-  | MergeFractionsStmt of loc * string * pat list (* merge_fraction ...*)
+  | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
+  | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
   | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of loc * string * string * expr
   | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
@@ -644,7 +646,8 @@ and
 and
   pred =
     Access of loc * expr * fieldref * pat (*  toegang tot veld regel-expr-veld-pattern*)
-  | CallPred of loc * predref * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
+  | CallPred of loc * predref * type_expr list * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
+  | WCallPred of loc * predref * type_ list * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
   | ExprPred of loc * expr (*  uitdrukking regel-expr *)
   | Sep of loc * pred * pred (* seperate execution of &*& in de code regel-predicate 1 - predicate 2 *)
   | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
@@ -674,8 +677,8 @@ and
   | Inductive of loc * string * string list * ctor list (* inductief data type regel-naam-type parameters-lijst van constructors*)
   | Class of loc * string * meth list * field list *cons list* string * string list(* laatste 2 strings zijn naam v superklasse en lijst van namen van interfaces*)
   | Interface of loc * string * meth_spec list
-  | PredFamilyDecl of loc * string * int * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
-  | PredFamilyInstanceDecl of loc * string * (loc * string) list * (type_expr * string) list * pred
+  | PredFamilyDecl of loc * string * string list (* type parameters *) * int (* number of indices *) * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
+  | PredFamilyInstanceDecl of loc * string * string list (* type parameters *) * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
   | Func of loc * func_kind * string list * type_expr option * string * (type_expr * string) list * bool (* atomic *) * string option (* function type *)
     * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
@@ -770,7 +773,8 @@ let expr_loc e =
 let pred_loc p =
   match p with
     Access (l, e, f, rhs) -> l
-  | CallPred (l, g, ies, es) -> l
+  | CallPred (l, g, targs, ies, es) -> l
+  | WCallPred (l, g, targs, ies, es) -> l
   | ExprPred (l, e) -> l
   | Sep (l, p1, p2) -> l
   | IfPred (l, e, p1, p2) -> l
@@ -791,14 +795,14 @@ let stmt_loc s =
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
   | Leak (l, _) -> l
-  | Open (l, _, _, _, coef) -> l
-  | Close (l, _, _, _, coef) -> l
+  | Open (l, _, _, _, _, coef) -> l
+  | Close (l, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _, _) -> l
   | BlockStmt (l, ds, ss) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
-  | SplitFractionStmt (l, _, _, _) -> l
-  | MergeFractionsStmt (l, _, _) -> l
+  | SplitFractionStmt (l, _, _, _, _) -> l
+  | MergeFractionsStmt (l, _, _, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l
   | CreateHandleStmt (l, _, _, _) -> l
   | DisposeBoxStmt (l, _, _, _) -> l
@@ -1054,16 +1058,18 @@ and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
-  | [< '(l, Kwd "predicate"); '(_, Ident g); '(_, Kwd "("); ps = rep_comma parse_param;
+  | [< '(l, Kwd "predicate"); '(li, Ident g); tparams = parse_type_params li; '(_, Kwd "("); ps = rep_comma parse_param;
      (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None));
      '(_, Kwd ")");
      body = opt parse_pred_body;
      '(_, Kwd ";");
-  >] -> [PredFamilyDecl (l, g, 0, List.map (fun (t, p) -> t) ps, inputParamCount)] @ (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, [], ps, body)])
+    >] ->
+    [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount)] @
+    (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
   | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; ps = parse_paramlist; '(_, Kwd ";") >]
-  -> [PredFamilyDecl (l, g, List.length is, List.map (fun (t, p) -> t) ps, None)]
+  -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, None)]
   | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
-     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, is, ps, p)]
+     p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
   | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
@@ -1241,16 +1247,17 @@ and
 | [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, [], es1, es2,_) -> Open (l, g, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2,_) -> Open (l, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, [], es1, es2,_) -> Close (l, g, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2,_) -> Close (l, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
-| [< '(l, Kwd "split_fraction"); '(_, Ident p); pats = parse_patlist;
+| [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
-     '(_, Kwd ";") >] -> SplitFractionStmt (l, p, pats, coefopt)
-| [< '(l, Kwd "merge_fractions"); '(_, Ident p); pats = parse_patlist; '(_, Kwd ";") >] -> MergeFractionsStmt (l, p, pats)
+     '(_, Kwd ";") >] -> SplitFractionStmt (l, p, targs, pats, coefopt)
+| [< '(l, Kwd "merge_fractions"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist; '(_, Kwd ";") >]
+  -> MergeFractionsStmt (l, p, targs, pats)
 | [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist;
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
      '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats, handleClauses)
@@ -1361,7 +1368,7 @@ and
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
-     | CallExpr (l, g, [], pats0, pats,_) -> CallPred (l, new predref g, pats0, pats)
+     | CallExpr (l, g, targs, pats0, pats,_) -> CallPred (l, new predref g, targs, pats0, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -1712,7 +1719,8 @@ exception StaticError of loc * string
 let static_error l msg = raise (StaticError (l, msg))
 
 type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
-type 'termnode heap = (('termnode * bool) * 'termnode * 'termnode list * int option) list
+type 'termnode chunk = Chunk of ('termnode * bool) * type_ list * 'termnode * 'termnode list * int option
+type 'termnode heap = 'termnode chunk list
 type 'termnode env = (string * 'termnode) list
 type 'termnode context =
   Assuming of 'termnode
@@ -1733,7 +1741,34 @@ let get_callers ctxts =
 
 let get_root_caller ctxts = match List.rev (get_callers ctxts) with Some l::_ -> Some l | _ -> None
 
-let string_of_chunk ((g, literal), coef, ts, size) = (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ "(" ^ String.concat ", " ts ^ ")"
+let rec string_of_type t =
+  match t with
+    Bool -> "bool"
+  | Void -> "void"
+  | IntType -> "int"
+  | UintPtrType -> "uintptr_t"
+  | RealType -> "real"
+  | Char -> "char"
+  | InductiveType (i, []) -> i
+  | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
+  | ObjType l -> "class " ^ l
+  | StructType sn -> "struct " ^ sn
+  | PtrType t -> string_of_type t ^ " *"
+  | FuncType ft -> ft
+  | PredType (tparams, ts) ->
+    let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
+    Printf.sprintf "predicate%s(%s)" tparamsText (String.concat ", " (List.map string_of_type ts))
+  | BoxIdType -> "box"
+  | HandleIdType -> "handle"
+  | AnyType -> "any"
+  | TypeParam x -> x
+  | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
+
+let string_of_targs targs =
+  if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
+
+let string_of_chunk (Chunk ((g, literal), targs, coef, ts, size)) =
+  (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ string_of_targs targs ^ "(" ^ String.concat ", " ts ^ ")"
 
 let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
 
@@ -1828,12 +1863,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
-
+  
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
+  
+  let boxed_int_symbol = mk_symbol "boxed_int" [ctxt#type_int] ctxt#type_inductive Uninterp in
+  let unboxed_int_symbol = mk_symbol "unboxed_int" [ctxt#type_inductive] ctxt#type_int Uninterp in
+  ctxt#assume_is_inverse unboxed_int_symbol boxed_int_symbol;
+  ctxt#assume_is_inverse boxed_int_symbol unboxed_int_symbol;
+  
+  let boxed_bool_symbol = mk_symbol "boxed_bool" [ctxt#type_bool] ctxt#type_inductive Uninterp in
+  let unboxed_bool_symbol = mk_symbol "unboxed_bool" [ctxt#type_inductive] ctxt#type_bool Uninterp in
+  ctxt#assume_is_inverse unboxed_bool_symbol boxed_bool_symbol;
+  
+  let boxed_real_symbol = mk_symbol "boxed_real" [ctxt#type_real] ctxt#type_inductive Uninterp in
+  let unboxed_real_symbol = mk_symbol "unboxed_real" [ctxt#type_inductive] ctxt#type_real Uninterp in
+  ctxt#assume_is_inverse unboxed_real_symbol boxed_real_symbol;
+  ctxt#assume_is_inverse boxed_real_symbol unboxed_real_symbol;
   
   let boolt = Bool in
   let intt = IntType in
@@ -1850,6 +1899,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
   
   let real_unit_pat = TermPat real_unit in
+  
+  let get_conversion_funcsym proverType proverType0 =
+    match (proverType, proverType0) with
+    | (ProverBool, ProverInductive) -> boxed_bool_symbol
+    | (ProverInt, ProverInductive) -> boxed_int_symbol
+    | (ProverReal, ProverInductive) -> boxed_real_symbol
+    | (ProverInductive, ProverBool) -> unboxed_bool_symbol
+    | (ProverInductive, ProverInt) -> unboxed_int_symbol
+    | (ProverInductive, ProverReal) -> unboxed_real_symbol
+  in
+  
 
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
@@ -2309,7 +2369,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
         StructType sn
     | PtrTypeExpr (l, te) -> PtrType (check_pure_type (pn,ilist) tpenv te)
-    | PredTypeExpr (l, tes) -> PredType (List.map (check_pure_type (pn,ilist) tpenv) tes )
+    | PredTypeExpr (l, tes) -> PredType ([], List.map (check_pure_type (pn,ilist) tpenv) tes )
   and check_type_arg (pn,ilist) tpenv te =
     let t = check_pure_type (pn,ilist) tpenv te in
     t
@@ -2321,35 +2381,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       TypeParam x -> List.assoc x tpenv
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
-    | PredType pts -> PredType (List.map (instantiate_type tpenv) pts)
+    | PredType ([], pts) -> PredType ([], List.map (instantiate_type tpenv) pts)
+    | InferredType t ->
+      begin match !t with
+        None -> assert false
+      | Some t -> instantiate_type tpenv t
+      end
     | _ -> t
+  in
+  
+  let instantiate_types tpenv ts =
+    if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
   in
   
   let classterms =
     let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
     terms_of classdeclmap @ terms_of classmap0
-  in
-  
-  let rec string_of_type t =
-    match t with
-      Bool -> "bool"
-    | Void -> "void"
-    | IntType -> "int"
-    | UintPtrType -> "uintptr_t"
-    | RealType -> "real"
-    | Char -> "char"
-    | InductiveType (i, []) -> i
-    | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
-    | ObjType l -> "class " ^ l
-    | StructType sn -> "struct " ^ sn
-    | PtrType t -> string_of_type t ^ " *"
-    | FuncType ft -> ft
-    | PredType ts -> "predicate(" ^ String.concat ", " (List.map string_of_type ts) ^ ")"
-    | BoxIdType -> "box"
-    | HandleIdType -> "handle"
-    | AnyType -> "any"
-    | TypeParam x -> x
-    | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
   in
   
   let structmap1 =
@@ -2395,7 +2442,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ObjType n -> ProverInt
     | PtrType t -> ProverInt
     | FuncType _ -> ProverInt
-    | PredType t -> ProverInductive
+    | PredType (tparams, ts) -> ProverInductive
     | BoxIdType -> ProverInt
     | HandleIdType -> ProverInt
     | AnyType -> ProverInductive
@@ -2469,22 +2516,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | _ -> t
   in
   
-  let rec unify t1 t2 (pn,ilist)=
+  let rec unify t1 t2 =
     t1 == t2 ||
     match (unfold_inferred_type t1, unfold_inferred_type t2) with
       (InferredType t', InferredType t0') -> if t' = t0' then true else begin t0' := Some t1; true end
     | (t, InferredType t0) -> t0 := Some t; true
     | (InferredType t, t0) -> t := Some t0; true
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
-	  let i1 = match search' i1 (pn,ilist) inductivedeclmap with 
-	    Some s-> s
-	  | None -> i1
-	  in
-	  let i2 = match search' i2 (pn,ilist) inductivedeclmap with 
-	    Some s-> s
-	  | None -> i2 
-	  in
-	  i1=i2 && List.for_all2 (fun a b ->unify a b (pn,ilist)) args1 args2
+      i1=i2 && List.for_all2 unify args1 args2
     | (t1, t2) -> t1 = t2
   in
   
@@ -2508,7 +2547,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	  in
       if y="Object"||y="java.lang.Object"||x=y||(checkinter (pn,ilist) y x)||(checksuper (pn,ilist) x y) then ()
 	  else static_error l (msg ^ "Type mismatch. Actual: " ^ x ^ ". Expected: " ^ y ^ ".")
-    | (PredType ts, PredType ts0) ->
+    | (PredType ([], ts), PredType ([], ts0)) ->
       begin
         match zip ts ts0 with
           None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
@@ -2516,23 +2555,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           List.iter (fun (t, t0) -> expect_type_core (pn,ilist) l msg t t0) tpairs
       end
     | (InductiveType _, AnyType) -> ()
-    | _ -> if unify t t0 (pn,ilist) then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
   let expect_type (pn,ilist) l t t0 = expect_type_core (pn,ilist) l "" t t0 in
   
-  let get_conversion_funcname proverType proverType0 =
-    match (proverType, proverType0) with
-    | (ProverBool, ProverInductive) -> "boxed_bool"
-    | (ProverInt, ProverInductive) -> "boxed_int"
-    | (ProverReal, ProverInductive) -> "boxed_real"
-    | (ProverInductive, ProverBool) -> "unboxed_bool"
-    | (ProverInductive, ProverInt) -> "unboxed_int"
-    | (ProverInductive, ProverReal) -> "unboxed_real"
-  in
-  
   let convert_provertype_expr e proverType proverType0 =
-    if proverType = proverType0 then e else CallExpr (expr_loc e, get_conversion_funcname proverType proverType0, [], [], [LitPat e], Static)
+    if proverType = proverType0 then e else ProverTypeConversion (proverType, proverType0, e)
   in
   
   let box e t t0 =
@@ -2543,19 +2572,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
   in
   
+  let check_tparams l tparams0 tparams =
+    let rec iter tparams =
+      match tparams with
+        [] -> ()
+      | x::xs ->
+        if List.mem x tparams0 then static_error l (Printf.sprintf "Type parameter '%s' hides existing type parameter '%s'." x x);
+        if List.mem x xs then static_error l (Printf.sprintf "Duplicate type parameter '%s'." x);
+        iter xs
+    in
+    iter tparams
+  in
+  
   let (inductivemap1, purefuncmap1, fixpointmap1) =
     let rec iter (pn,ilist) imap pfm fpm ds =
       match ds with
         [] -> (List.rev imap, List.rev pfm, List.rev fpm)
       | Inductive (l, i, tparams, ctors)::ds -> let i=full_name pn i in
-        begin
-          let rec iter tparams' tparams =
-            match tparams with
-              [] -> ()
-            | x::xs -> if List.mem x tparams' then static_error l "Duplicate type parameter."; iter (x::tparams') xs
-          in
-          iter [] tparams
-        end;
+        check_tparams l [] tparams;
         let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> iter (pn,ilist) ((i, (l, tparams, List.rev ctormap))::imap) pfm fpm ds
@@ -2580,7 +2614,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let _ =
           if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g)
         in
-        if not (distinct tparams) then static_error l "Duplicate type parameter names.";
+        check_tparams l [] tparams;
         let rt =
           match rto with
             None -> static_error l "Return type of fixpoint functions cannot be void."
@@ -2604,13 +2638,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           iter [] ps
         in
-        let (index, ctorcount, ls, w, wcs) = 
-          match body_opt with
-            Some ([SwitchStmt (ls, e, cs)], _) -> (
+        begin match body_opt with
+          Some ([SwitchStmt (ls, e, cs)], _) ->
+          let (index, ctorcount, ls, w, wcs) = 
             let ctorcount = List.length cs in
             match e with
-              Var (l, x, _) -> (
-              match try_assoc_i x pmap with
+              Var (l, x, _) ->
+              begin match try_assoc_i x pmap with
                 None -> static_error l "Fixpoint function must switch on a parameter."
               | Some (index, InductiveType (i, targs)) -> (
                 match try_assoc2' (pn,ilist) i imap inductivemap0 with
@@ -2855,19 +2889,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             w
                         in
                         let wbody = checkt_ tenv body rt in
-						let Some cn= search' cn (pn,ilist) ctormap in
+						            let Some cn= search' cn (pn,ilist) ctormap in
                         iter (List.remove_assoc cn ctormap) (SwitchStmtClause (lc, cn, xs, [ReturnStmt (lret, Some wbody)])::wcs) cs
                       )
                   in
                   iter ctormap [] cs
                 )
               | _ -> static_error l "Switch operand is not an inductive value."
-              )
-            )
-          | _ -> static_error l "Body of fixpoint function must be switch statement."
-        in
-        let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
-        iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs,pn,ilist))::fpm) ds
+              end
+            | _ -> static_error l "Fixpoint function must switch on a parameter."
+          in
+          let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, rt, pmap, ls, w, wcs,pn,ilist))::fpm) ds
+        | None ->
+          let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) Proverapi.Uninterp in
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) fpm ds
+        | _ -> static_error l "Body of fixpoint function must be switch statement."
+        end
       | _::ds -> iter (pn,ilist) imap pfm fpm ds
     in
     let rec iter' (imap,pfm,fpm) ps=
@@ -2929,13 +2967,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
   
-  let mk_predfam p l arity ts inputParamCount = (p, (l, arity, ts, get_unique_var_symb p (PredType ts), inputParamCount)) in
+  let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts)), inputParamCount)) in
   
   let is_lemmafunctype_pred_map1 =
     flatmap
       (function
          (g, (l, Ghost)) ->
-         [(g, mk_predfam ("is_" ^ g) l 0 [PtrType (FuncType g)] None)]
+         [(g, mk_predfam ("is_" ^ g) l [] 0 [PtrType (FuncType g)] None)]
        | _ -> []
       )
       functypenames
@@ -2945,11 +2983,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let malloc_block_pred_map1 = 
     match file_type path with
-    Java-> (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc 0 [ObjType cn] (Some 1))] | _ -> []) classdeclmap) @
-           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc 0 [ObjType i] (Some 1))] | _ -> []) interfdeclmap) @
-           (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc 0 [ObjType cn] (Some 1))] | _ -> []) classmap0) @
-           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc 0 [ObjType i] (Some 1))] | _ -> []) interfmap0)
-    | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l 0 
+    Java-> (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc [] 0 [ObjType cn] (Some 1))] | _ -> []) classdeclmap) @
+           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc [] 0 [ObjType i] (Some 1))] | _ -> []) interfdeclmap) @
+           (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc [] 0 [ObjType cn] (Some 1))] | _ -> []) classmap0) @
+           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc [] 0 [ObjType i] (Some 1))] | _ -> []) interfmap0)
+    | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 
             [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap1 
   in
   
@@ -2964,7 +3002,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          | Some fds ->
            List.map
              (fun (fn, (l, t,_)) ->
-              ((cn, fn), mk_predfam (cn ^ "_" ^ fn) l 0 [ObjType cn; t] (Some 1))
+              ((cn, fn), mk_predfam (cn ^ "_" ^ fn) l [] 0 [ObjType cn; t] (Some 1))
              )
              fds
       )
@@ -2977,7 +3015,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          | Some fds ->
            List.map
              (fun (fn, (l, gh, t)) ->
-              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l 0 [PtrType (StructType sn); t] (Some 1))
+              ((sn, fn), mk_predfam (sn ^ "_" ^ fn) l [] 0 [PtrType (StructType sn); t] (Some 1))
              )
              fds
       )
@@ -2991,15 +3029,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
       match ds with
-        PredFamilyDecl (l, p, arity, tes, inputParamCount)::ds -> let p=full_name pn p in
-        let ts = List.map (check_pure_type (pn,ilist) []) tes in
+        PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount)::ds -> let p=full_name pn p in
+        let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
         begin
           match try_assoc2' (pn,ilist) p pm predfammap0 with
-            Some (l0, arity0, ts0, symb0, inputParamCount0) ->
-            if arity <> arity0 || ts <> ts0 || inputParamCount <> inputParamCount0 then static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
+            Some (l0, tparams0, arity0, ts0, symb0, inputParamCount0) ->
+            let tpenv =
+              match zip tparams0 (List.map (fun x -> TypeParam x) tparams) with
+                None -> static_error l "Predicate family redeclarations declares a different number of type parameters."
+              | Some bs -> bs
+            in
+            let ts0' = List.map (instantiate_type tpenv) ts0 in
+            if arity <> arity0 || ts <> ts0' || inputParamCount <> inputParamCount0 then
+              static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
             iter (pn,ilist) pm ds
           | None ->
-            iter (pn,ilist) (mk_predfam p l arity ts inputParamCount::pm) ds
+            iter (pn,ilist) (mk_predfam p l tparams arity ts inputParamCount::pm) ds
         end
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
@@ -3032,8 +3077,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter [] ps
         in
         let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
-        let pfm = mk_predfam bcn l 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
-        let pfm = mk_predfam default_hpn l 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
+        let pfm = mk_predfam bcn l [] 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
+        let pfm = mk_predfam default_hpn l [] 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
         let amap =
           let rec iter amap ads =
             match ads with
@@ -3075,7 +3120,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 in
                 iter [] ps
               in
-              iter (mk_predfam hpn l 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
+              iter (mk_predfam hpn l [] 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
           in
           iter pfm [] hpds
         in
@@ -3136,7 +3181,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter ps1 [] ps2
         in
         let funcsym = mk_symbol p (List.map (fun (x, t) -> typenode_of_type t) ps1) ctxt#type_inductive Proverapi.Uninterp in
-        let pf = (p, (l, [], PredType (List.map (fun (x, t) -> t) ps2), List.map (fun (x, t) -> t) ps1, funcsym)) in
+        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2), List.map (fun (x, t) -> t) ps1, funcsym)) in
         iter (pn,ilist) ((p, (l, ps1, ps2, body, funcsym,pn,ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter (pn,ilist) pcm pfm ds
@@ -3223,10 +3268,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 begin
                   match try_assoc' (pn,ilist) x predfammap with
-                    Some (_, arity, ts, _, _) ->
+                    Some (_, tparams, arity, ts, _, _) ->
                     if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
+                    if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
                     scope := Some PredFamName;
-                    (e, PredType ts)
+                    (e, PredType (tparams, ts))
                   | None ->
                     static_error l ("No such variable, constructor, regular function, or predicate: "^x)
                 end
@@ -3237,9 +3283,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PredNameExpr (l, g) ->
       begin
         match try_assoc' (pn,ilist) g predfammap with
-          Some (_, arity, ts, _, _) ->
+          Some (_, tparams, arity, ts, _, _) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
-          (e, PredType ts)
+          if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
+          (e, PredType (tparams, ts))
         | None -> static_error l "No such predicate."
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
@@ -3478,27 +3525,34 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
       (Access (l, w, f, wv), tenv')
-    | CallPred (l, p, ps0, ps) ->
-      let (arity, xs, inputParamCount) =
+    | CallPred (l, p, targs, ps0, ps) ->
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let (callee_tparams, arity, xs, inputParamCount) =
         match try_assoc' (pn,ilist) p#name predfammap with
-          Some (_, arity, xs, _, inputParamCount) -> (arity, xs, inputParamCount)
+          Some (_, callee_tparams, arity, xs, _, inputParamCount) -> (callee_tparams, arity, xs, inputParamCount)
         | None ->
           begin
             match try_assoc' (pn,ilist) p#name tenv with
               None -> static_error l ("No such predicate: "^p#name)
-            | Some (PredType ts) -> (0, ts, None)
+            | Some (PredType (callee_tparams, ts)) -> (callee_tparams, 0, ts, None)
             | Some _ -> static_error l ("Variable is not of predicate type: "^p#name)
           end
       in
       begin
+        let tpenv =
+          match zip callee_tparams targs with
+            None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams))
+          | Some bs -> bs
+        in
         if List.length ps0 <> arity then static_error l "Incorrect number of indexes.";
         let ts0 = match file_type path with
           Java-> list_make arity (ObjType "Class")
         | _   -> list_make arity (PtrType Void)
         in
         let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
-        let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs ps in
-        p#set_domain (ts0 @ xs); p#set_inputParamCount inputParamCount; (CallPred (l, p, wps0, wps), tenv)
+        let xs' = List.map (instantiate_type tpenv) xs in
+        let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
+        p#set_domain (ts0 @ xs'); p#set_inputParamCount inputParamCount; (WCallPred (l, p, targs, wps0, wps), tenv)
       end
     | ExprPred (l, e) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprPred (l, w), tenv)
@@ -3664,7 +3718,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       Access (l, et, f, pv) ->
       assert_expr_fixed fixed et;
       assume_pat_fixed fixed pv
-    | CallPred (l, g, pats0, pats) ->
+    | WCallPred (l, g, targs, pats0, pats) ->
       begin
         match g#inputParamCount with
           None -> static_error l "Preciseness check failure: callee is not precise."
@@ -3721,11 +3775,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin
                 let predinst p =
                   ((sn ^ "_" ^ f, []),
-                   ([], l, [sn, PtrType (StructType sn); "value", t], Some 1,
+                   ([], l, [], [sn, PtrType (StructType sn); "value", t], Some 1,
                     (let fref = new fieldref f in
                     fref#set_parent sn;
                     fref#set_range t;
-                    CallPred (l, p, [], [LitPat (AddressOf (l, Read (l, Var (l, sn, ref (Some LocalVar)), fref))); LitPat (Var (l, "value", ref (Some LocalVar)))]))
+                    WCallPred (l, p, [], [], [LitPat (AddressOf (l, Read (l, Var (l, sn, ref (Some LocalVar)), fref))); LitPat (Var (l, "value", ref (Some LocalVar)))]))
                    )
                   )
                 in
@@ -3748,11 +3802,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structmap1
   in
   
-  let check_predinst (pn, ilist) tparams tenv env l p fns xs body =
-    let (p, arity, ps, inputParamCount) =
+  let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
+    let (p, predfam_tparams, arity, ps, inputParamCount) =
       match resolve (pn,ilist) l p predfammap with
         None -> static_error l ("No such predicate family: "^p)
-      | Some (p, (_, arity, ps, _, inputParamCount)) -> (p, arity, ps, inputParamCount)
+      | Some (p, (_, predfam_tparams, arity, ps, _, inputParamCount)) -> (p, predfam_tparams, arity, ps, inputParamCount)
+    in
+    check_tparams l tparams predinst_tparams;
+    let tpenv =
+      match zip predfam_tparams (List.map (fun x -> TypeParam x) predinst_tparams) with
+        None -> static_error l "Number of type parameters does not match predicate family."
+      | Some bs -> bs
     in
     if List.length fns <> arity then static_error l "Incorrect number of indexes.";
     let pxs =
@@ -3760,22 +3820,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l "Incorrect number of parameters."
       | Some pxs -> pxs
     in
+    let tparams' = predinst_tparams @ tparams in
     let xs =
       let rec iter2 xm pxs =
         match pxs with
           [] -> List.rev xm
         | (t0, (te, x))::xs -> 
-          let t = check_pure_type (pn,ilist) [] te in
-          let _ =
-          expect_type (pn,ilist) l t t0
-          in
+          let t = check_pure_type (pn,ilist) tparams' te in
+          expect_type (pn,ilist) l t (instantiate_type tpenv t0);
           if List.mem_assoc x tenv then static_error l ("Parameter '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
           if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
           iter2 ((x, t)::xm) xs
       in
       iter2 [] pxs
     in
-    let (wbody, _) = check_pred (pn,ilist) tparams (xs @ tenv) body in
+    let (wbody, _) = check_pred (pn,ilist) tparams' (xs @ tenv) body in
     begin
       match inputParamCount with
         None -> ()
@@ -3789,18 +3848,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'."))
           outps
     end;
-    ((p, fns), (env, l, xs, inputParamCount, wbody))
+    ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))
   in
   
   let predinstmap1 = 
     let rec iter (pn,ilist) pm ds =
       match ds with
-        PredFamilyInstanceDecl (l, p, is, xs, body)::ds ->
+        PredFamilyInstanceDecl (l, p, tparams, is, xs, body)::ds ->
         let fns = match file_type path with
           Java-> check_classnamelist (pn,ilist) is
         | _ -> check_funcnamelist is 
         in
-        let (pfns, info) as entry = check_predinst (pn, ilist) [] [] [] l p fns xs body in
+        let (pfns, info) as entry = check_predinst (pn, ilist) [] [] [] l p tparams fns xs body in
         let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." in
         iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
@@ -3871,14 +3930,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_offset f = (List.assoc (f#parent, f#name) field_offsets) in
   let field_address t f = ctxt#mk_add t (field_offset f) in
   
-  let pure_func_symb g (pn,ilist)= let Some(_, _, _, _, symb) = try_assoc' (pn,ilist) g purefuncmap in symb in
-  
-  let convert_provertype term proverType proverType0 (pn,ilist)= (* TODO: Cache these pure function symbols as soon as there is support for a Java prelude. *)
-    if proverType = proverType0 then term else ctxt#mk_app (pure_func_symb (get_conversion_funcname proverType proverType0) (pn,ilist)) [term]
+  let convert_provertype term proverType proverType0 =
+    if proverType = proverType0 then term else ctxt#mk_app (get_conversion_funcsym proverType proverType0) [term]
   in
   
-  let prover_convert_term term t t0 (pn,ilist)=
-    if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0) (pn,ilist)
+  let prover_convert_term term t t0 =
+    if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
 
   let rec eval_core (pn,ilist) assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
@@ -3905,9 +3962,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           LocalVar -> (try(List.assoc x env)with Not_found -> static_error l ("Local var wasn't found: "^x))
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in ctxt#mk_app s []
         | FuncName -> (List.assoc x funcnameterms)
-        | PredFamName -> let Some (_, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
+        | PredFamName -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
       end
-    | PredNameExpr (l, g) -> let Some (_, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
+    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) [] te in
       begin
@@ -4054,7 +4111,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  List.map
                    (fun ((pat, term), typ) ->
                     match typ with
-                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)) (pn,ilist))
+                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
                     | _ -> (pat, term)
                    )
                    penv
@@ -4068,6 +4125,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       ctxt#set_fpclauses symbol 0 fpclauses;
       ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env)
+    | ProverTypeConversion (tfrom, tto, e) -> convert_provertype (ev e) tfrom tto
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
   
@@ -4100,7 +4158,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     (fun ((x, term), typ) ->
                      let term =
                      match typ with
-                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))(pn,ilist)
+                       TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
                      | _ -> term
                      in
                      (x, term)
@@ -4153,7 +4211,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (function
          Assuming t -> Assuming (ctxt#pprint t)
        | Executing (h, env, l, msg) ->
-         let h' = List.map (fun ((g, literal), coef, ts, size) -> ((ctxt#pprint g, literal), ctxt#pprint coef, List.map (fun t -> ctxt#pprint t) ts, size)) h in
+         let h' =
+           List.map
+             begin fun (Chunk ((g, literal), targs, coef, ts, size)) ->
+               Chunk ((ctxt#pprint g, literal), targs, ctxt#pprint coef, List.map (fun t -> ctxt#pprint t) ts, size)
+             end
+             h
+         in
          let env' = List.map (fun (x, t) -> (x, ctxt#pprint t)) env in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
@@ -4180,17 +4244,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in_temporary_context (fun _ -> cont2())
   in
   
-  let evalpat (pn,ilist) ghostenv env pat tp cont =
+  let evalpat (pn,ilist) ghostenv env pat tp0 tp cont =
     match pat with
-      LitPat e -> cont ghostenv env (eval (pn,ilist) None env e)
-    | VarPat x -> let t = get_unique_var_symb x tp in cont (x::ghostenv) (update env x t) t
+      LitPat e -> cont ghostenv env (prover_convert_term (eval (pn,ilist) None env e) tp0 tp)
+    | VarPat x -> let t = get_unique_var_symb x tp in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | DummyPat -> let t = get_unique_var_symb "dummy" tp in cont ghostenv env t
   in
   
-  let rec evalpats (pn,ilist) ghostenv env pats tps cont =
-    match (pats, tps) with
-      ([], []) -> cont ghostenv env []
-    | (pat::pats, tp::tps) -> evalpat (pn,ilist) ghostenv env pat tp (fun ghostenv env t -> evalpats (pn,ilist) ghostenv env pats tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
+  let rec evalpats (pn,ilist) ghostenv env pats tps0 tps cont =
+    match (pats, tps0, tps) with
+      ([], [], []) -> cont ghostenv env []
+    | (pat::pats, tp0::tps0, tp::tps) -> evalpat (pn,ilist) ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats (pn,ilist) ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
   in
 
   let real_mul l t1 t2 =
@@ -4202,17 +4266,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let assume_field h0 f tp tv tcoef cont =
-    let (_, (_, _, _, symb, _)) =(List.assoc (f#parent, f#name) field_pred_map)in
+    let (_, (_, _, _, _, symb, _)) =(List.assoc (f#parent, f#name) field_pred_map)in
     let rec iter h =
       match h with
-        [] -> cont (((symb, true), tcoef, [tp; tv], None)::h0)
-      | ((g, true), tcoef', [tp'; _], _)::h when g == symb && tcoef' == real_unit -> assume_neq tp tp' (fun _ -> iter h)
+        [] -> cont (Chunk ((symb, true), [], tcoef, [tp; tv], None)::h0)
+      | Chunk ((g, true), targs', tcoef', [tp'; _], _)::h when g == symb && tcoef' == real_unit -> assume_neq tp tp' (fun _ -> iter h)
       | _::h -> iter h
     in
     iter h0
   in
   
-  let rec assume_pred (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
+  let rec assume_pred tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -4222,19 +4286,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let ev = eval (pn,ilist) None env in
     match p with
     | Access (l, e, f, rhs) ->
-      let te = ev e in evalpat (pn,ilist) ghostenv env rhs f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
-    | CallPred (l, g, pats0, pats) ->
+      let te = ev e in
+      evalpat (pn,ilist) ghostenv env rhs f#range f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
+    | WCallPred (l, g, targs, pats0, pats) ->
       let g_symb =
         match try_assoc' (pn,ilist) g#name predfammap with
-          Some (_, _, _, symb, _) -> (symb, true)
+          Some (_, _, _, _, symb, _) -> (symb, true)
         | None -> (List.assoc g#name env, false)
       in
-      evalpats (pn,ilist) ghostenv env (pats0 @ pats) g#domain (fun ghostenv env ts -> cont ((g_symb, coef, ts, size_first)::h) ghostenv env)
+      let targs = instantiate_types tpenv targs in
+      let domain = instantiate_types tpenv g#domain in
+      evalpats (pn,ilist) ghostenv env (pats0 @ pats) g#domain domain (fun ghostenv env ts ->
+        cont (Chunk (g_symb, targs, coef, ts, size_first)::h) ghostenv env
+      )
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
-    | Sep (l, p1, p2) -> assume_pred (pn,ilist) h ghostenv env p1 coef size_first size_all (fun h ghostenv env -> assume_pred (pn,ilist) h ghostenv env p2 coef size_all size_all cont)
+    | Sep (l, p1, p2) -> assume_pred tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all (fun h ghostenv env -> assume_pred tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all cont)
     | IfPred (l, e, p1, p2) ->
       let cont h _ _ = cont h ghostenv env in
-      branch (fun _ -> assume (ev e) (fun _ -> assume_pred (pn,ilist) h ghostenv env p1 coef size_all size_all cont)) (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred (pn,ilist) h ghostenv env p2 coef size_all size_all cont))
+      branch
+        (fun _ -> assume (ev e) (fun _ -> assume_pred tpenv (pn,ilist) h ghostenv env p1 coef size_all size_all cont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all cont))
     | SwitchPred (l, e, cs) ->
       let cont h _ _ = cont h ghostenv env in
       let t = ev e in
@@ -4257,20 +4328,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         None -> let term = get_unique_var_symb x tp in (x, term, term)
                       | Some proverType ->
                         let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
-                        let term' = convert_provertype term proverType ProverInductive (pn,ilist) in
+                        let term' = convert_provertype term proverType ProverInductive in
                         (x, term', term)
                      )
                      pts
                in
                let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
-               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all cont))
+               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpPred l -> cont h ghostenv env
     | CoefPred (l, coef', body) ->
-      evalpat (pn,ilist) ghostenv env coef' RealType (fun ghostenv env coef' -> assume_pred (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all cont)
+      evalpat (pn,ilist) ghostenv env coef' RealType RealType (fun ghostenv env coef' -> assume_pred tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all cont)
     )
   in
   
@@ -4285,30 +4356,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   in
   
-  let match_chunk (pn,ilist) ghostenv env l g coef coefpat pats (g', coef0, ts0, size0) =
-    let match_pat ghostenv env pat t cont =
+  let match_chunk (pn,ilist) ghostenv env l g targs coef coefpat pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0)) =
+    let match_pat ghostenv env pat tp0 tp t cont =
       match (pat, t) with
-        (SrcPat (LitPat e), t) -> if definitely_equal (eval (pn,ilist) None env e) t then cont ghostenv env else None
+        (SrcPat (LitPat e), t) ->
+        if definitely_equal (prover_convert_term (eval (pn,ilist) None env e) tp0 tp) t then cont ghostenv env else None
       | (TermPat t0, t) -> if definitely_equal t0 t then cont ghostenv env else None
-      | (SrcPat (VarPat x), t) -> cont (x::ghostenv) (update env x t)
+      | (SrcPat (VarPat x), t) -> cont (x::ghostenv) (update env x (prover_convert_term t tp tp0))
       | (SrcPat DummyPat, t) -> cont ghostenv env
     in
-    let rec iter ghostenv env pats ts =
-      match (pats, ts) with
-        (pat::pats, t::ts) -> match_pat ghostenv env pat t (fun ghostenv env -> iter ghostenv env pats ts)
-      | ([], []) -> Some (coef0, ts0, size0, ghostenv, env)
+    let rec iter ghostenv env pats tps0 tps ts =
+      match (pats, tps0, tps, ts) with
+        (pat::pats, tp0::tps0, tp::tps, t::ts) -> match_pat ghostenv env pat tp0 tp t (fun ghostenv env -> iter ghostenv env pats tps0 tps ts)
+      | ([], [], [], []) -> Some (coef0, ts0, size0, ghostenv, env)
     in
-      if predname_eq g g' then
+      if predname_eq g g' && List.for_all2 unify targs targs0 then
         begin
-          if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then iter ghostenv env pats ts0 else
+          if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then iter ghostenv env pats tps0 tps ts0 else
           let match_term_coefpat t =
-            if definitely_equal (real_mul l coef t) coef0 then iter ghostenv env pats ts0 else None
+            if definitely_equal (real_mul l coef t) coef0 then iter ghostenv env pats tps0 tps ts0 else None
           in
           match coefpat with
             SrcPat (LitPat e) -> match_term_coefpat (eval (pn,ilist) None env e)
           | TermPat t -> match_term_coefpat t
-          | SrcPat (VarPat x) -> iter (x::ghostenv) (update env x (real_div l coef0 coef)) pats ts0
-          | SrcPat DummyPat -> iter ghostenv env pats ts0
+          | SrcPat (VarPat x) -> iter (x::ghostenv) (update env x (real_div l coef0 coef)) pats tps0 tps ts0
+          | SrcPat DummyPat -> iter ghostenv env pats tps0 tps ts0
         end
       else
         None
@@ -4318,14 +4390,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter h =
       match h with
         [] -> assert_false h0 env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
-      | ((g, true), coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> v
+      | Chunk ((g, true), targs, coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> v
       | _::h -> iter h
     in
     iter h0
   in
 
   let read_field h env l t f =
-    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
   in
   
@@ -4333,8 +4405,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match file_type path with
       Java -> (real_unit, real_unit) (* Anything, doesn't matter. *)
     | _ ->
-      let (_, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
-      let (_, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
+      let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
+      let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
       (pointer_pred_symb, int_pred_symb)
   in
   
@@ -4349,13 +4421,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     lookup_points_to_chunk h env l (pointee_pred_symb l pointeeType) pointerTerm
   in
 
-  let assert_chunk (pn,ilist) h ghostenv env l g coef coefpat pats cont =
+  let assert_chunk_core (pn,ilist) h ghostenv env l g targs coef coefpat pats tps0 tps cont =
     let rec iter hprefix h =
       match h with
         [] -> []
       | chunk::h ->
         let matches =
-          match match_chunk (pn,ilist) ghostenv env l g coef coefpat pats chunk with
+          match match_chunk (pn,ilist) ghostenv env l g targs coef coefpat pats tps0 tps chunk with
             None -> []
           | Some (coef, ts, size, ghostenv, env) -> [(hprefix @ h, coef, ts, size, ghostenv, env)]
         in
@@ -4370,10 +4442,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (h, coef, ts, size, ghostenv, env)::_ -> cont h coef ts size ghostenv env
   in
   
+  let assert_chunk (pn,ilist) h ghostenv env l g targs coef coefpat pats cont =
+    let tps = List.map (fun _ -> IntType) pats in (* dummies *)
+    assert_chunk_core (pn,ilist) h ghostenv env l g targs coef coefpat pats tps tps cont
+  in
+  
   let srcpat pat = SrcPat pat in
   let srcpats pats = List.map srcpat pats in
   
-  let rec assert_pred (pn,ilist) h ghostenv env p coef (cont: 'termnode heap -> string list -> 'termnode env -> int option -> unit) =
+  let rec assert_pred tpenv (pn,ilist) h ghostenv env p coef (cont: 'termnode heap -> string list -> 'termnode env -> int option -> unit) =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -4382,33 +4459,42 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     with_context_helper (fun _ ->
     let ev = eval (pn,ilist) None env in
     let access l coefpat e f rhs =
-      let (_, (_, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-      assert_chunk (pn,ilist) h ghostenv env l (symb, true) coef coefpat [SrcPat (LitPat e); rhs] (fun h coef ts size ghostenv env -> cont h ghostenv env size)
+      let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+      assert_chunk (pn,ilist) h ghostenv env l (symb, true) [] coef coefpat [SrcPat (LitPat e); rhs]
+        (fun h coef ts size ghostenv env -> cont h ghostenv env size)
     in
-    let callpred l coefpat g pats0 pats =
+    let callpred l coefpat g targs pats0 pats =
       let g_symb =
         match try_assoc' (pn,ilist) g#name predfammap with
-          Some (_, _, _, symb, _) -> (symb, true)
+          Some (_, _, _, _, symb, _) -> (symb, true)
         | None -> (List.assoc (g#name) env, false)
       in
-      assert_chunk (pn,ilist) h ghostenv env l g_symb coef coefpat (pats0 @ pats) (fun h coef ts size ghostenv env -> cont h ghostenv env size)
+      let targs = instantiate_types tpenv targs in
+      let domain = instantiate_types tpenv g#domain in
+      assert_chunk_core (pn,ilist) h ghostenv env l g_symb targs coef coefpat (pats0 @ pats) g#domain domain (fun h coef ts size ghostenv env ->
+        cont h ghostenv env size
+      )
     in
     match p with
     | Access (l, e, f, rhs) -> access l real_unit_pat e f (SrcPat rhs)
-    | CallPred (l, g, pats0, pats) -> callpred l real_unit_pat g (srcpats pats0) (srcpats pats)
+    | WCallPred (l, g, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
     | ExprPred (l, e) ->
       assert_expr (pn,ilist) env e h env l "Cannot prove condition."; cont h ghostenv env None
     | Sep (l, p1, p2) ->
-      assert_pred (pn,ilist) h ghostenv env p1 coef (fun h ghostenv env size -> assert_pred (pn,ilist) h ghostenv env p2 coef (fun h ghostenv env _ -> cont h ghostenv env size))
+      assert_pred tpenv (pn,ilist) h ghostenv env p1 coef (fun h ghostenv env size ->
+        assert_pred tpenv (pn,ilist) h ghostenv env p2 coef (fun h ghostenv env _ ->
+          cont h ghostenv env size
+        )
+      )
     | IfPred (l, e, p1, p2) ->
       let cont h _ _ _ = cont h ghostenv env None in
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
-             assert_pred (pn,ilist) h ghostenv env p1 coef cont))
+             assert_pred tpenv (pn,ilist) h ghostenv env p1 coef cont))
         (fun _ ->
            assume (ctxt#mk_not (ev e)) (fun _ ->
-             assert_pred (pn,ilist) h ghostenv env p2 coef cont))
+             assert_pred tpenv (pn,ilist) h ghostenv env p2 coef cont))
     | SwitchPred (l, e, cs) ->
       let cont h _ _ _ = cont h ghostenv env None in
       let t = ev e in
@@ -4432,7 +4518,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      None -> let term = get_unique_var_symb x tp in (x, term, term)
                    | Some proverType ->
                      let term = ctxt#mk_app (mk_symbol x [] (typenode_of_provertype proverType) Uninterp) [] in
-                     let term' = convert_provertype term proverType ProverInductive (pn,ilist)in
+                     let term' = convert_provertype term proverType ProverInductive in
                      (x, term', term)
                   )
                   pts
@@ -4442,14 +4528,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (xs, xenv)
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xs) (fun _ -> assert_pred (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef cont))
+            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xs) (fun _ -> assert_pred tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpPred l -> cont h ghostenv env None
     | CoefPred (l, coefpat, Access (_, e, f, rhs)) -> access l (SrcPat coefpat) e f (SrcPat rhs)
-    | CoefPred (l, coefpat, CallPred (_, g, pat0, pats)) -> callpred l (SrcPat coefpat) g (srcpats pat0) (srcpats pats)
+    | CoefPred (l, coefpat, WCallPred (_, g, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     )
   in
 
@@ -4476,15 +4562,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | SwitchStmt (l, e, cs) -> flatmap (fun (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
-    | Open (l, g, ps0, ps1, coef) -> []
-    | Close (l, g, ps0, ps1, coef) -> []
+    | Open (l, g, targs, ps0, ps1, coef) -> []
+    | Close (l, g, targs, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
     | BlockStmt (l, ds, ss) -> block_assigned_variables ss
     | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
-    | SplitFractionStmt (l, p, pats, coefopt) -> []
-    | MergeFractionsStmt (l, p, pats) -> []
+    | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
+    | MergeFractionsStmt (l, p, targs, pats) -> []
     | CreateBoxStmt (l, x, bcn, es, handleClauses) -> []
     | CreateHandleStmt (l, x, hpn, e) -> []
     | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
@@ -4496,12 +4582,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let dummypat = SrcPat DummyPat in
   
   let get_points_to (pn,ilist) h p predSymb l cont =
-    assert_chunk (pn,ilist) h [] [] l (predSymb, true) real_unit dummypat [TermPat p; dummypat] (fun h coef [_; t] size ghostenv env ->
+    assert_chunk (pn,ilist) h [] [] l (predSymb, true) [] real_unit dummypat [TermPat p; dummypat] (fun h coef [_; t] size ghostenv env ->
       cont h coef t)
   in
     
   let get_field (pn,ilist) h t f l cont =
-    let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     get_points_to (pn,ilist) h t f_symb l cont
   in
   
@@ -4568,17 +4654,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     push();
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let env0 = env0_0 @ cenv0 in
-    assume_pred (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+    assume_pred [] (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
       let (Some bs) = zip xmap env0_0 in
       let env = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
-      assert_pred (pn,ilist) h [] env pre real_unit (fun h _ env _ ->
+      assert_pred tpenv (pn,ilist) h [] env pre real_unit (fun h _ env _ ->
         let (env, env0) =
           match rt with
             None -> (env, env0)
           | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
         in
-        assume_pred (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
-          assert_pred (pn,ilist) h [] env0 post0 real_unit (fun h _ env0 _ ->
+        assume_pred tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
+          assert_pred [] (pn,ilist) h [] env0 post0 real_unit (fun h _ env0 _ ->
             with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l (msg ^ "Implementation leaks heap chunks."))
           )
         )
@@ -4594,6 +4680,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs atomic functype_opt contract_opt body =
     if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported.";
+    check_tparams l tparams0 tparams;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
     let xmap =
       let rec iter xm xs =
@@ -4715,16 +4802,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  iter [] ps
                in
-               let (pre, post) =
+               let (pre, pre_tenv, post) =
                  match co with
                    None -> static_error lm ("Non-fixpoint function must have contract: "^n)
                  | Some (pre, post) ->
                    let (pre, tenv) = check_pred (pn,ilist) [] xmap pre in
                    let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                    let (post, _) = check_pred (pn,ilist) [] postmap post in
-                   (pre, post)
+                   (pre, tenv, post)
                in
-               iter ((n, (lm,check_t t, xmap, pre, post,fb,v))::mmap) meths
+               iter ((n, (lm,check_t t, xmap, pre, pre_tenv, post,fb,v))::mmap) meths
              )
          in
           begin
@@ -4746,10 +4833,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (mn, (lm0,rt0,xmap0,pre0,post0,fb0,v0)) as elem::rest ->
+              | (mn, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,fb0,v0)) as elem::rest ->
                 match try_assoc mn meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,post1,fb1,v1) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,fb1,v1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
                   iter rest meths1
             in
@@ -4788,7 +4875,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let rec search_equal x c=
                  match c with
                  [] -> false
-                 | (g,(_,_,c,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
+                 | (g,(_,_,c,_,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
              in
              if List.mem_assoc n mmap && search_equal xmap mmap then
                static_error lm "Duplicate method."
@@ -4820,7 +4907,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               |(an',x')::xs' when an=an'-> expect_type (pn,ilist) lm x x';matchargs xs xs'
                               | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
                in
-               let (pre, post) =
+               let (pre, pre_tenv, post) =
                  let rec search_interf i=
                    match i with
                     [] ->
@@ -4830,15 +4917,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                        let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                        let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                       (wpre, wpost)
+                       (wpre, tenv, wpost)
                     )
                   | name::rest ->
                     match try_assoc' (pn,ilist) name interfmap with
                       None -> search_interf rest
                     | Some(_,meth_specs,_,_) -> match try_assoc n meth_specs with
                         None -> search_interf rest
-                      | Some(_,rt', xmap', pre, post,Instance,v) -> match co with
-                          None -> matchargs xmap xmap';(pre,post)
+                      | Some(_,rt', xmap', pre, pre_tenv, post,Instance,v) -> match co with
+                          None -> matchargs xmap xmap';(pre,pre_tenv,post)
                         | Some(pre0,post0)->
                             let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre0 in
                             let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
@@ -4853,7 +4940,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                 (Regular, [], rt', xmap', false, [("this", thisTerm)], pre, post)
                             );
                             pop();
-                            (wpre, wpost)
+                            (wpre, tenv, wpost)
                  in
                  search_interf interfs
                in
@@ -4867,7 +4954,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                        | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
                    | _ -> static_error lp "The precondition of the main method must be 'true'"
                 );
-               iter ((n, (lm,check_t t, xmap, pre, post, ss',fb,v))::mmap) meths
+               iter ((n, (lm,check_t t, xmap, pre, pre_tenv, post, ss',fb,v))::mmap) meths
             )
          in
           begin
@@ -4910,17 +4997,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                if search_equal xmap cmap then
                static_error lm "Duplicate constructor"
                else (
-               let (pre, post) =
+               let (pre, pre_tenv, post) =
                  match co with
                    None -> static_error lm "Constructor must have contract: "
                  | Some (pre, post) ->
                      let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
                      let postmap = ("result", ObjType(cn))::tenv in
                      let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                     (wpre, wpost)
+                     (wpre, tenv, wpost)
                in
 			   let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
-               iter ((xmap, (lm,pre,post,ss',v))::cmap) constr
+               iter ((xmap, (lm,pre,pre_tenv,post,ss',v))::cmap) constr
                )
          in
          begin
@@ -4958,10 +5045,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (n, (lm0,rt0,xmap0,pre0,post0,ss0,fb0,v0)) as elem::rest ->
+              | (n, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,ss0,fb0,v0)) as elem::rest ->
                 match try_assoc n meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,post1,ss1,fb1,v1) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,ss1,fb1,v1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
                   if ss0=None then meths_impl:=(n,lm0)::!meths_impl;
                   iter rest meths1
@@ -4974,10 +5061,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter constr0 constr1=
               match constr0 with
                 [] -> constr1
-              | (xmap0, (lm0,pre0,post0,ss0,v0)) as elem::rest ->
+              | (xmap0, (lm0,pre0,pre_tenv0,post0,ss0,v0)) as elem::rest ->
                 match try_assoc xmap0 constr1 with
                   None-> iter rest (elem::constr1)
-                | Some(lm1,pre1,post1,ss1,v1) ->
+                | Some(lm1,pre1,pre_tenv1,post1,ss1,v1) ->
                   let rt= Some (ObjType(cn)) in
                   check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, xmap0,false, pre1, post1) (Regular, [], rt, xmap0, false, [], pre0, post0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
@@ -5057,7 +5144,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ()
   in
   
-  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, symb, _))) -> symb) field_pred_map in
+  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
   let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
     match breakpoint with
@@ -5070,13 +5157,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let check_leaks h env l msg =
     match file_type path with
     Java -> check_breakpoint h env l
-    | _ -> let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
-    let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
+    | _ ->
+    let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+    let (_, _, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
     let (stringlitchunks, otherchunks) =
       let rec iter stringlitchunks otherchunks h =
         match h with
           [] -> (stringlitchunks, otherchunks)
-        | (((g, true), coef, ts, _) as chunk)::h when g == string_literal_symb && (file_type path) <> Java -> iter (chunk::stringlitchunks) otherchunks h
+        | (Chunk ((g, true), _, coef, ts, _) as chunk)::h when g == string_literal_symb && (file_type path) <> Java -> iter (chunk::stringlitchunks) otherchunks h
         | chunk::h -> iter stringlitchunks (chunk::otherchunks) h
       in
       iter [] [] h
@@ -5090,11 +5178,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           else
             assert_false otherchunks env l msg
         )
-      | (_, coef, [arr; cs], _)::stringlitchunks ->
+      | Chunk (_, _, coef, [arr; cs], _)::stringlitchunks ->
         let rec consume_chars_chunk otherchunks h =
           match h with
             [] -> assert_false h env l "At function exit: string_literal chunk without matching chars chunk."
-          | ((g, true), coef', [arr'; cs'], _)::h when g == chars_symb && (file_type path) <> Java && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
+          | Chunk ((g, true), targs, coef', [arr'; cs'], _)::h when g == chars_symb && (file_type path) <> Java && definitely_equal coef coef' && definitely_equal arr arr' && definitely_equal cs cs' -> iter stringlitchunks (otherchunks @ h)
           | chunk::h -> consume_chars_chunk (chunk::otherchunks) h
         in
         consume_chars_chunk [] otherchunks
@@ -5114,15 +5202,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assume_neq value (ctxt#mk_intlit 0) 
           (fun()-> cont h value)
       | _ ->
-          let (_, _, _, chars_symb, _) = List.assoc "chars" predfammap in
-          let (_, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
+          let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+          let (_, _, _, _, string_literal_symb, _) = List.assoc "string_literal" predfammap in
           let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
           let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
           let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
           let coef = get_unique_var_symb "stringLiteralCoef" RealType in
             assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () -> (* chars_contains(cs, 0) == true *)
               assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
-                cont (((chars_symb, true), coef, [value; cs], None)::((string_literal_symb, true), coef, [value; cs], None)::h) value
+                cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::Chunk ((string_literal_symb, true), [], coef, [value; cs], None)::h) value
               )
             )
 	  )
@@ -5183,7 +5271,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let Some env' = zip ys ts in
     let cenv = env' @ funenv in
     with_context PushSubcontext (fun () ->
-      assert_pred (pn,ilist) h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
+      assert_pred tpenv (pn,ilist) h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
         let _ =
           match leminfo with
             None -> ()
@@ -5195,7 +5283,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let rec nonempty h =
                       match h with
                         [] -> false
-                      | ((p, true), coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
+                      | Chunk ((p, true), _, coef, ts, _)::_ when List.memq p nonempty_pred_symbs && coef == real_unit -> true
                       | _::h -> nonempty h
                     in
                     if nonempty h then
@@ -5235,7 +5323,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Some (get_unique_var_symb symbol_name t, t)
         in
         let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
-        assume_pred (pn,ilist) h ghostenv' env'' post real_unit None None (fun h _ _ ->
+        assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None (fun h _ _ ->
           let env =
             match xo with
               None -> env
@@ -5320,7 +5408,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let rec search_meth mmap=
                match mmap with
                  [] -> static_error l ("Method "^g^" not found!")
-               | (n,(lm,rt, xmap, pre, post, body,fbm,v))::rest when n=g-> 
+               | (n,(lm,rt, xmap, pre, pre_tenv, post, body,fbm,v))::rest when n=g-> 
                  let match_args xmap pats =
                    match zip pats xmap with
                      None -> false
@@ -5338,7 +5426,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let rec search_cons clist=
                match clist with
                 [] -> static_error l ("Constructor "^g^" not found!")
-              | (xmap,(lm,pre,post,ss,v))::rest->
+              | (xmap,(lm,pre,pre_tenv,post,ss,v))::rest->
                 let match_args xmap pats =
                   match zip pats xmap with
                     None -> false
@@ -5359,7 +5447,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            (match try_assoc' (pn,ilist) class_name interfmap with
               Some(_,methmap,pn,ilist) -> 
                 (match try_assoc g methmap with
-                   Some(lm,rt, xmap, pre, post,fbm,v) ->
+                   Some(lm,rt, xmap, pre, pre_tenv, post,fbm,v) ->
                     if fb <>fbm 
                       then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
                       let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
@@ -5410,11 +5498,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
             check_call h cont
           | Ghost ->
-            let (_, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
-            assert_chunk (pn,ilist) h [] [] l (predsymb, true) real_unit dummypat [TermPat fterm] $. fun h coef _ _ _ _ ->
+            let (_, _, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
+            assert_chunk (pn,ilist) h [] [] l (predsymb, true) [] real_unit dummypat [TermPat fterm] $. fun h coef _ _ _ _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required.";
             check_call h $. fun h env ->
-            cont (((predsymb, true), real_unit, [fterm], None)::h) env
+            cont (Chunk ((predsymb, true), [], real_unit, [fterm], None)::h) env
         end
       | _ ->
       match try_assoc' (pn,ilist) g funcmap with
@@ -5474,8 +5562,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  let rec iter h fds =
                    match fds with
                      [] ->
-                     let (_, (_, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-                     cont (h @ [((malloc_block_symb, true), real_unit, [result], None)]) (update env x result)
+                     let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
+                     cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)]) (update env x result)
                    | (f, (lf, gh, t))::fds ->
                      let fref = new fieldref f in
                      fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
@@ -5509,15 +5597,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               None -> static_error l "Function does not implement a function type."
             | Some ftn -> ftn
           in
-          let (_, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
+          let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
           let Some funcsym = fterm in
-          let h = ((symb, true), real_unit, [funcsym], None)::h in
+          let h = Chunk ((symb, true), [], real_unit, [funcsym], None)::h in
           match body with
             None -> cont h env
           | Some s ->
             let consume_chunk h cont =
               with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
-              assert_chunk (pn,ilist) h ghostenv [] l (symb, true) real_unit dummypat [TermPat funcsym] (fun h coef ts chunk_size ghostenv env ->
+              assert_chunk (pn,ilist) h ghostenv [] l (symb, true) [] real_unit dummypat [TermPat funcsym] (fun h coef ts chunk_size ghostenv env ->
                 if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required.";
                 cont h
               )
@@ -5562,8 +5650,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               fref#set_parent tn;
               get_field (pn,ilist) h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
-          let (_, (_, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-          assert_chunk (pn,ilist)  h [] [] l (malloc_block_symb, true) real_unit dummypat [TermPat arg] (fun h coef _ _ _ _ ->
+          let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
+          assert_chunk (pn,ilist)  h [] [] l (malloc_block_symb, true) [] real_unit dummypat [TermPat arg] (fun h coef _ _ _ _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full malloc_block permission.";
             iter h fds
           )
@@ -5586,10 +5674,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
       eval_h h env w (fun h t ->
-        let (_, (_, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+        let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         get_field (pn,ilist) h t f l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-          cont (((f_symb, true), real_unit, [t; ev wrhs], None)::h) env)
+          cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
       )
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
@@ -5604,7 +5692,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let predSymb = pointee_pred_symb l pointeeType in
         get_points_to (pn,ilist) h t predSymb l (fun h coef _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
-          cont (((predSymb, true), real_unit, [t; ev wrhs], None)::h) env)
+          cont (Chunk ((predSymb, true), [], real_unit, [t; ev wrhs], None)::h) env)
       )
     | CallStmt (l, g, targs, es,fb) ->
       call_stmt l None g targs (List.map (fun e -> LitPat e) es) fb
@@ -5651,7 +5739,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let term = get_unique_var_symb pat tp' in
                 let term' =
                   match tp with
-                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive (pn,ilist)
+                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                   | _ -> term
                 in
                 iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
@@ -5673,18 +5761,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Assert (l, p) ->
       let (wp, tenv) = check_pred (pn,ilist) tparams tenv p in
-      assert_pred (pn,ilist) h ghostenv env wp real_unit (fun _ ghostenv env _ ->
+      assert_pred [] (pn,ilist) h ghostenv env wp real_unit (fun _ ghostenv env _ ->
         tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
       let (wp, tenv) = check_pred (pn,ilist) tparams tenv p in
-      assert_pred (pn,ilist) h ghostenv env wp real_unit (fun h ghostenv env size ->
+      assert_pred [] (pn,ilist) h ghostenv env wp real_unit (fun h ghostenv env size ->
         tcont sizemap tenv ghostenv h env
       )
-    | Open (l, g, pats0, pats, coefpat) ->
-      let (g_symb, pats0, dropcount, ps, env0, p) =
+    | Open (l, g, targs, pats0, pats, coefpat) ->
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let (tpenv, g_symb, pats0, dropcount, ps, env0, p) =
         match resolve (pn,ilist) l g predfammap with
-          Some (g, (_, _, _, g_symb, _)) ->
+          Some (g, (_, _, _, _, g_symb, _)) ->
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
           | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names.") pats0
@@ -5696,8 +5785,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | _ -> funcnameterm_of funcmap fn
             in
             match try_assoc (g, fns) predinstmap with
-              Some (predenv, _, ps, _, p) ->
-              ((g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p)
+              Some (predenv, _, predinst_tparams, ps, _, p) ->
+              let tpenv =
+                match zip predinst_tparams targs with
+                  None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams))
+                | Some bs -> bs
+              in
+              let ps = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps in
+              (tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p)
             | None -> static_error l "No such predicate instance."
           end
         | None ->
@@ -5705,6 +5800,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match try_assoc' (pn,ilist) g predctormap with
             None -> static_error l "No such predicate or predicate constructor."
           | Some (_, ps1, ps2, body, funcsym) ->
+            if targs <> [] then static_error l "Predicate constructor expects 0 type arguments.";
             let bs0 =
               match zip pats0 ps1 with
                 None -> static_error l "Incorrect number of predicate constructor arguments."
@@ -5712,7 +5808,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
             in
             let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
-            ((g_symb, false), [], 0, ps2, bs0, body)
+            let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
+            ([], (g_symb, false), [], 0, ps2, bs0, body)
           end
       in
       let (coefpat, tenv) =
@@ -5720,27 +5817,38 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> (DummyPat, tenv)
         | Some coefpat -> check_pat (pn,ilist) l tparams tenv RealType coefpat
       in
-      let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t) -> t) ps) pats in
-      let pats = pats0 @ (srcpats wpats) in
-      assert_chunk (pn,ilist) h ghostenv env l g_symb real_unit (SrcPat coefpat) pats (fun h coef ts chunk_size ghostenv env ->
+      let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
+      let pats = pats0 @ srcpats wpats in
+      assert_chunk (pn,ilist) h ghostenv env l g_symb targs real_unit (SrcPat coefpat) pats (fun h coef ts chunk_size ghostenv env ->
         let ts = drop dropcount ts in
-        let ys = List.map (function (p, t) -> p) ps in
-        let Some env' = zip ys ts in
+        let env' =
+          List.map
+            begin fun ((p, tp0, tp), t) ->
+             (p, prover_convert_term t tp tp0)
+            end
+            (let Some bs = zip ps ts in bs)
+        in
         let env' = env0 @ env' in
         let body_size = match chunk_size with None -> None | Some k -> Some (k - 1) in
         with_context PushSubcontext (fun () ->
-          assume_pred (pn,ilist) h ghostenv env' p coef body_size body_size (fun h _ _ ->
+          assume_pred tpenv (pn,ilist) h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
           )
         )
       )
-    | SplitFractionStmt (l, p, pats, coefopt) ->
+    | SplitFractionStmt (l, p, targs, pats, coefopt) ->
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (g_symb, pts) =
         match try_assoc' (pn,ilist) p predfammap with
           None -> static_error l "No such predicate."
-        | Some (_, arity, pts, g_symb, _) ->
+        | Some (_, predfam_tparams, arity, pts, g_symb, _) ->
+          let tpenv =
+            match zip predfam_tparams targs with
+              None -> static_error l "Incorrect number of type arguments."
+            | Some bs -> bs
+          in
           if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements.";
-          ((g_symb, true), pts)
+          ((g_symb, true), instantiate_types tpenv pts)
       in
       let splitcoef =
         match coefopt with
@@ -5753,17 +5861,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           coef
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
-      assert_chunk (pn,ilist) h ghostenv env l g_symb real_unit dummypat (srcpats wpats) (fun h coef ts chunk_size ghostenv env ->
+      assert_chunk (pn,ilist) h ghostenv env l g_symb targs real_unit dummypat (srcpats wpats) (fun h coef ts chunk_size ghostenv env ->
         let coef1 = ctxt#mk_real_mul splitcoef coef in
         let coef2 = ctxt#mk_real_mul (ctxt#mk_real_sub real_unit splitcoef) coef in
-        let h = (g_symb, coef1, ts, None)::(g_symb, coef2, ts, None)::h in
+        let h = Chunk (g_symb, targs, coef1, ts, None)::Chunk (g_symb, targs, coef2, ts, None)::h in
         tcont sizemap tenv' ghostenv h env
       )
-    | MergeFractionsStmt (l, p, pats) ->
+    | MergeFractionsStmt (l, p, targs, pats) ->
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (g_symb, pts, inputParamCount) =
         match try_assoc' (pn,ilist) p predfammap with
           None -> static_error l "No such predicate."
-        | Some (_, arity, pts, g_symb, inputParamCount) ->
+        | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
+          let tpenv =
+            match zip predfam_tparams targs with
+              None -> static_error l "Incorrect number of type arguments."
+            | Some bs -> bs
+          in
           if arity <> 0 then static_error l "Predicate families are not supported in merge_fractions statements.";
           begin
             match inputParamCount with
@@ -5772,18 +5886,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 ("Cannot merge this predicate: it is not declared precise. "
                  ^ "To declare a predicate precise, separate the input parameters "
                  ^ "from the output parameters using a semicolon in the predicate declaration.");
-            | Some n -> ((g_symb, true), pts, n)
+            | Some n -> ((g_symb, true), instantiate_types tpenv pts, n)
           end
       in
       let (pats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
       let (inpats, outpats) = take_drop inputParamCount pats in
       List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
       let pats = srcpats pats in
-      assert_chunk (pn,ilist) h ghostenv env l g_symb real_unit dummypat pats (fun h coef1 ts1 _ ghostenv env ->
-        assert_chunk (pn,ilist) h ghostenv env l g_symb real_unit dummypat pats (fun h coef2 ts2 _ _ _ ->
+      assert_chunk (pn,ilist) h ghostenv env l g_symb targs real_unit dummypat pats (fun h coef1 ts1 _ ghostenv env ->
+        assert_chunk (pn,ilist) h ghostenv env l g_symb targs real_unit dummypat pats (fun h coef2 ts2 _ _ _ ->
           let (Some tpairs) = zip ts1 ts2 in
           let (ints, outts) = take_drop inputParamCount tpairs in
-          let merged_chunk = (g_symb, ctxt#mk_real_add coef1 coef2, ts1, None) in
+          let merged_chunk = Chunk (g_symb, targs, ctxt#mk_real_add coef1 coef2, ts1, None) in
           let h = merged_chunk::h in
           let rec iter outts =
             match outts with
@@ -5800,15 +5914,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such box class."
         | Some boxinfo -> boxinfo
       in
-      let Some (_, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
+      let Some (_, _, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
-      assert_chunk (pn,ilist) h ghostenv env l (g_symb, true) real_unit dummypat (srcpats pats) $. fun h coef ts _ ghostenv env ->
+      assert_chunk (pn,ilist) h ghostenv env l (g_symb, true) [] real_unit dummypat (srcpats pats) $. fun h coef ts _ ghostenv env ->
       if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
       let boxId::argts = ts in
       let Some boxArgMap = zip boxpmap argts in
       let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
       with_context PushSubcontext $. fun () ->
-      assume_pred (pn,ilist) h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
+      assume_pred [] (pn,ilist) h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
       let rec dispose_handles tenv ghostenv h env handleClauses cont =
         match handleClauses with
           [] -> cont tenv ghostenv h env
@@ -5820,10 +5934,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
               let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (HandleIdType::hpParamTypes) pats in
               let wpats = srcpats wpats in
-              let Some (_, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
+              let Some (_, _, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
               let handlePat::argPats = wpats in
               let pats = handlePat::TermPat boxId::argPats in
-              assert_chunk (pn,ilist) h ghostenv env l (hpn_symb, true) real_unit dummypat pats $. fun h coef ts _ ghostenv env ->
+              assert_chunk (pn,ilist) h ghostenv env l (hpn_symb, true) [] real_unit dummypat pats $. fun h coef ts _ ghostenv env ->
               if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission.";
               let env = List.filter (fun (x, t) -> x <> "#boxId") env in
               let handleId::_::hpArgs = ts in
@@ -5836,22 +5950,28 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       dispose_handles tenv ghostenv h env handleClauses $. fun tenv ghostenv h env ->
       with_context PopSubcontext $. fun () ->
       tcont sizemap tenv ghostenv h env
-    | Close (l, g, pats0, pats, coef) ->  
-      let (ps, bs0, g_symb, p, ts0) =
+    | Close (l, g, targs, pats0, pats, coef) ->
+      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let (tpenv, ps, bs0, g_symb, p, ts0) =
         match resolve (pn,ilist) l g predfammap with
-          Some (g, (_, _, _, g_symb, inputParamCount)) ->
+          Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
           | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names.") pats0
           in
           begin
           match try_assoc (g, fns) predinstmap with
-            Some (predenv, l, ps, inputParamCount, body) ->
+            Some (predenv, l, predinst_tparams, ps, inputParamCount, body) ->
+            let tpenv =
+              match zip predinst_tparams targs with
+                None -> static_error l "Incorrect number of type arguments."
+              | Some bs -> bs
+            in
             let ts0 = match file_type path with
               Java -> List.map (fun cn -> List.assoc cn classterms) fns
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
-            (ps, predenv, (g_symb, true), body, ts0)
+            (tpenv, ps, predenv, (g_symb, true), body, ts0)
           | None -> static_error l "No such predicate instance."
           end
         | None ->
@@ -5866,28 +5986,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
               in
               let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
-              (ps2, bs0, (g_symb, false), body, [])
+              if targs <> [] then static_error l "Incorrect number of type arguments.";
+              ([], ps2, bs0, (g_symb, false), body, [])
           end
       in
-      let ws =
+      let ps =
         match zip pats ps with
           None -> static_error l "Wrong number of arguments."
         | Some bs ->
-          List.map (function (LitPat e, (_, tp)) -> check_expr_t (pn,ilist) tparams tenv e tp | pat -> static_error l "Close statement arguments cannot be patterns.") bs
+          List.map
+            begin function
+              (LitPat e, (p, tp0)) ->
+              let tp = instantiate_type tpenv tp0 in
+              (p, tp0, tp, ev (check_expr_t (pn,ilist) tparams tenv e tp))
+            | pat -> static_error l "Close statement arguments cannot be patterns."
+            end
+            bs
       in
-      let ts = List.map ev ws in
       let coef =
         match coef with
           None -> real_unit
         | Some (LitPat coef) -> let coef = check_expr_t (pn,ilist) tparams tenv coef RealType in ev coef
         | _ -> static_error l "Coefficient in close statement must be expression."
       in
-      let ys = List.map (function (p, t) -> p) ps in
-      let Some env' = zip ys ts in
+      let env' = List.map (function (p, tp0, tp, t) -> (p, prover_convert_term t tp tp0)) ps in
+      let ts = List.map (fun (p, tp0, tp, t) -> t) ps in
       let env' = bs0 @ env' in
       with_context PushSubcontext (fun () ->
-        assert_pred (pn,ilist) h ghostenv env' p coef (fun h _ _ _ ->
-          with_context PopSubcontext (fun () -> cont ((g_symb, coef, ts0 @ ts, None)::h) env)
+        assert_pred tpenv (pn,ilist) h ghostenv env' p coef (fun h _ _ _ ->
+          with_context PopSubcontext (fun () -> cont (Chunk (g_symb, targs, coef, ts0 @ ts, None)::h) env)
         )
       )
     | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
@@ -5922,7 +6049,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
       with_context PushSubcontext $. fun () ->
-      assert_pred (pn,ilist) h ghostenv boxArgMap inv real_unit $. fun h _ boxVarMap _ ->
+      assert_pred [] (pn,ilist) h ghostenv boxArgMap inv real_unit $. fun h _ boxVarMap _ ->
       let boxIdTerm = get_unique_var_symb x BoxIdType in
       begin fun cont ->
         let rec iter handleChunks handleClauses =
@@ -5947,22 +6074,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant.";
-              let (_, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
+              let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
 			    None-> static_error l ("No such predicate family: "^hpn)
 			  | Some x -> x
 			  in
-              iter (((hpn_symb, true), real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::handleChunks) handleClauses
+              iter (Chunk ((hpn_symb, true), [], real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::handleChunks) handleClauses
             end
           | [] -> cont handleChunks
         in
         iter [] handleClauses
       end $. fun handleChunks ->
-      let (_, _, _, bcn_symb, _) = match try_assoc' (pn,ilist) bcn predfammap with
+      let (_, _, _, _, bcn_symb, _) = match try_assoc' (pn,ilist) bcn predfammap with
 	    None -> static_error l ("No such predicate family: "^bcn)
 	  | Some x-> x
 	  in
       with_context PopSubcontext $. fun () ->
-      tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (((bcn_symb, true), real_unit, boxIdTerm::boxArgs, None)::(handleChunks@h)) ((x, boxIdTerm)::env)
+      tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (Chunk ((bcn_symb, true), [], real_unit, boxIdTerm::boxArgs, None)::(handleChunks@h)) ((x, boxIdTerm)::env)
     | CreateHandleStmt (l, x, hpn, arg) ->
       if not pure then static_error l "Handle creation statements are allowed only in a pure context.";
       if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
@@ -5976,11 +6103,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w = check_expr_t (pn,ilist) tparams tenv arg BoxIdType in
       let boxIdTerm = ev w in
       let handleTerm = get_unique_var_symb x HandleIdType in
-      let (_, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with
+      let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with
 	    None -> static_error l ("No such predicate family: "^hpn)
 	  | Some x-> x
 	  in
-      tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (((hpn_symb, true), real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
+      tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, Some e) ->
       let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " | Some tp -> tp in
       let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
@@ -5994,12 +6121,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
-      assert_pred (pn,ilist) h ghostenv env p real_unit (fun h _ _ _ ->
+      assert_pred [] (pn,ilist) h ghostenv env p real_unit (fun h _ _ _ ->
         let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
         let env = bs @ env in
         branch
           (fun _ ->
-             assume_pred (pn,ilist) [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
+             assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
                assume (eval_non_pure (pn,ilist) false h' env e) (fun _ ->
                  let lblenv =
                    List.map
@@ -6010,7 +6137,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                    let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                   assert_pred (pn,ilist) h'' ghostenv env p real_unit (fun h''' _ _ _ ->
+                   assert_pred [] (pn,ilist) h'' ghostenv env p real_unit (fun h''' _ _ _ ->
                      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
                    )
                  ) (fun h'' retval -> return_cont (h'' @ h) retval)
@@ -6018,7 +6145,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
           )
           (fun _ ->
-             assume_pred (pn,ilist) h ghostenv env p real_unit None None (fun h ghostenv' env' ->
+             assume_pred [] (pn,ilist) h ghostenv env p real_unit None None (fun h ghostenv' env' ->
                assume (ctxt#mk_not (eval_non_pure (pn,ilist) false h env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
@@ -6036,11 +6163,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared.";
       let (pre_bcp_pats, tenv) = check_pats (pn,ilist) lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let pre_bcp_pats = srcpats pre_bcp_pats in
-      let (_, _, _, boxpred_symb, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
+      let (_, _, _, _, boxpred_symb, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
 	    Some x->x
 	  | None -> static_error lcb ("Box predicate not found: "^pre_bcn)
 	  in
-      assert_chunk (pn,ilist) h ghostenv env lcb (boxpred_symb, true) real_unit dummypat pre_bcp_pats (fun h box_coef ts chunk_size ghostenv env ->
+      assert_chunk (pn,ilist) h ghostenv env lcb (boxpred_symb, true) [] real_unit dummypat pre_bcp_pats (fun h box_coef ts chunk_size ghostenv env ->
         if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement.";
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
@@ -6052,13 +6179,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some (_, hppmap, inv, _) ->
               (hppmap, inv)
         in
-        let (_, _, _, pre_handlepred_symb, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
+        let (_, _, _, _, pre_handlepred_symb, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
 	      Some x->x
 	    | None -> static_error lcb ("Box predicate not found: "^pre_bcn)
 	    in
         let (pre_hp_pats, tenv) = check_pats (pn,ilist) lch tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = srcpats pre_hp_pats in
-        assert_chunk (pn,ilist) h ghostenv (("#boxId", boxId)::env) lch (pre_handlepred_symb, true) real_unit dummypat (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
+        assert_chunk (pn,ilist) h ghostenv (("#boxId", boxId)::env) lch (pre_handlepred_symb, true) [] real_unit dummypat (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env ->
              if not (coef == real_unit) then assert_false h env lch "Handle predicate coefficient must be 1.";
              let (handleId::_::pre_handlePredArgs) = ts in
@@ -6078,7 +6205,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
              with_context PushSubcontext $. fun () ->
-             assume_pred (pn,ilist) h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
+             assume_pred [] (pn,ilist) h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
              with_context PopSubcontext $. fun () ->
              assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxVarMap) pre_handlePred_inv) (fun () ->
                let nonpureStmtCount = ref 0 in
@@ -6123,7 +6250,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                          List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
                      end
                  in
-                 assert_pred (pn,ilist) h ghostenv post_boxArgMap inv real_unit $. fun h _ post_boxVarMap _ ->
+                 assert_pred [] (pn,ilist) h ghostenv post_boxArgMap inv real_unit $. fun h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure.";
@@ -6136,7 +6263,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      | Some (_, hppmap, inv, _) ->
                        (hppmap, inv)
                  in
-                 let (_, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
+                 let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
 				   None-> static_error lph ("No such predicate family: "^post_hpn)
 				 | Some x-> x
 				 in
@@ -6149,8 +6276,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
                  with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
                  assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure.";
-                 let boxChunk = ((boxpred_symb, true), box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
-                 let hpChunk = ((post_handlePred_symb, true), real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
+                 let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
+                 let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
                  let h = boxChunk::hpChunk::h in
                  with_context PopSubcontext $. fun () ->
                  tcont sizemap tenv ghostenv h env
@@ -6163,10 +6290,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         List.fold_left
           begin fun (lems, predinsts) decl ->
             match decl with
-            | PredFamilyInstanceDecl (l, p, is, xs, body) ->
+            | PredFamilyInstanceDecl (l, p, predinst_tparams, is, xs, body) ->
               let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." in
               if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance.";
-              (lems, ((p, i), (l, xs, body))::predinsts)
+              (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts)
             | Func (l, Lemma, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name.";
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name.";
@@ -6180,9 +6307,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (lems, predinsts) = (List.rev lems, List.rev predinsts) in
       let predinstmap' =
         List.map
-          begin fun ((p, (li, i)), (l, xs, body)) ->
+          begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
             if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block.";
-            check_predinst (pn, ilist) tparams tenv env l p [i] xs body
+            check_predinst (pn, ilist) tparams tenv env l p predinst_tparams [i] xs body
           end
           predinsts
       in
@@ -6269,7 +6396,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (true, _) when pure -> assert_false h env (l()) "Loops are not allowed in a pure context."
       | (true, None) -> assert_false h env (l()) "Loop invariant required."
       | (_, Some (l, inv, tenv)) ->
-        assert_pred (pn,ilist) h ghostenv env inv real_unit (fun h _ _ _ ->
+        assert_pred [] (pn,ilist) h ghostenv env inv real_unit (fun h _ _ _ ->
           check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->
@@ -6383,7 +6510,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 end
                 env
             in
-            assume_pred (pn,ilist) [] ghostenv env inv real_unit None None (fun h ghostenv env ->
+            assume_pred [] (pn,ilist) [] ghostenv env inv real_unit None None (fun h ghostenv env ->
               let blocks_done = block::blocks_done in
               verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
             )
@@ -6417,9 +6544,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let env = penv @ env in
     let _ =
       check_should_fail () $. fun _ ->
-      assume_pred (pn, ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+      assume_pred [] (pn, ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
         let do_return h env_post =
-          assert_pred (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
+          assert_pred [] (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
           )
         in
@@ -6457,7 +6584,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec verify_cons (pn,ilist) cn boxes lems cons=
       match cons with
      [] -> ()
-      | (xmap, (lm,pre,post,ss,v))::rest ->
+      | (xmap, (lm,pre,pre_tenv,post,ss,v))::rest ->
           match ss with
             None -> let (((_,p),_,_),((_,_),_,_))=lm in 
               if Filename.check_suffix p ".javaspec" then verify_cons (pn,ilist) cn boxes lems rest
@@ -6467,17 +6594,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let env = get_unique_var_symbs xmap in
               let (sizemap, indinfo) = switch_stmt ss env in
               let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
-              let (_, tenv) = check_pred (pn,ilist) [] (("this", ObjType(cn))::xmap) pre in
               let _ =
-                assume_pred (pn,ilist) [] ghostenv env pre real_unit (Some 0) None
+                assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None
                 (fun h ghostenv env ->
                   let do_body h ghostenv env=
-                    let do_return h env_post = assert_pred (pn,ilist) h ghostenv env_post post real_unit 
+                    let do_return h env_post = assert_pred [] (pn,ilist) h ghostenv env_post post real_unit 
                     (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
                     in
                     let return_cont h retval =
                       match retval with None -> do_return h env | Some t -> do_return h (("this", t)::env)
                     in
+                    let tenv = ("this", ObjType cn)::pre_tenv in
                     verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss 
                     (fun _ _ _ h _ -> return_cont h None ) return_cont
                   in
@@ -6509,7 +6636,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec verify_meths (pn,ilist) boxes lems meths=
       match meths with
         [] -> ()
-      | (g, (l,rt, ps,pre,post,sts,fb,v))::meths ->
+      | (g, (l,rt, ps,pre,pre_tenv,post,sts,fb,v))::meths ->
         match sts with
           None -> let (((_,p),_,_),((_,_),_,_))=l in 
             if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
@@ -6523,16 +6650,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let ("this", thisTerm)::_ = env in
                 let ("this", ObjType cn)::_ = ps in
                 (* CAVEAT: Remove this assumption once we allow subclassing. *)
-                assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont
-              end else cont ()
-            end $. fun () ->
+                assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun () ->
+                  cont (("this", ObjType cn)::pre_tenv)
+                )
+              end else cont pre_tenv
+            end $. fun tenv ->
             let (sizemap, indinfo) = switch_stmt ss env in
-            let tenv = match rt with None ->ps | Some rt -> ("#result", rt)::ps in
+            let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
             let (in_pure_context, leminfo, lems', ghostenv) =(false, None, lems, []) in
-            let (_, tenv) = check_pred (pn,ilist) [] tenv pre in
             let _ =
-              assume_pred (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
-              let do_return h env_post = assert_pred (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
+              assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+              let do_return h env_post = assert_pred [] (pn,ilist) h ghostenv env_post post real_unit (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
               in
               let return_cont h retval =
                 match (rt, retval) with
@@ -6616,10 +6744,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
                     with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
                     with_context PushSubcontext $. fun () ->
-                    assume_pred (pn,ilist) [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
+                    assume_pred [] (pn,ilist) [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
                     let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
                     let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
-                    assume_pred (pn,ilist) [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
+                    assume_pred [] (pn,ilist) [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
                     with_context PopSubcontext $. fun () ->
                     let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
                     let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in

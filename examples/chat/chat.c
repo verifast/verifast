@@ -26,17 +26,17 @@ lemma void member_distinct(struct member *m1, struct member *m2)
     close member(m1);
 }
 
-lemma void foreach_member_not_contains(listval members, struct member *member)
-    requires foreach(members, @member) &*& member(member);
-    ensures foreach(members, @member) &*& member(member) &*& !contains(members, member);
+lemma void foreach_member_not_contains(list<void *> members, struct member *member)
+    requires foreach<void *>(members, @member) &*& member(member);
+    ensures foreach<void *>(members, @member) &*& member(member) &*& !contains(members, member);
 {
     switch (members) {
         case nil:
         case cons(member0, members0):
-            open foreach(members, @member);
+            open foreach<void *>(members, @member);
             member_distinct(member0, member);
             foreach_member_not_contains(members0, member);
-            close foreach(members, @member);
+            close foreach<void *>(members, @member);
     }
 }
 @*/
@@ -48,7 +48,7 @@ struct room {
 
 /*@
 predicate room(struct room* room)
-    requires room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*& list(membersList, ?members) &*& ghost_list(id, members) &*& foreach(members, member) &*& malloc_block_room(room);
+    requires room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*& list(membersList, ?members) &*& ghost_list<void *>(id, members) &*& foreach<void *>(members, member) &*& malloc_block_room(room);
 @*/
 
 struct room *create_room()
@@ -63,7 +63,7 @@ struct room *create_room()
     }
     members = create_list();
     room->members = members;
-    //@ close foreach(nil, member);
+    //@ close foreach<void *>(nil, member);
     //@ int i = create_ghost_list();
     //@ room->ghost_list_id = i;
     //@ close room(room);
@@ -75,14 +75,14 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     //@ ensures room(room) &*& string_buffer(nick);
 {
     //@ open room(room);
-    //@ assert foreach(?members, _);
+    //@ assert foreach<void *>(?members, _);
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasMember = false;
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(members);
     while (hasNext && !hasMember)
-        //@ invariant string_buffer(nick) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
+        //@ invariant string_buffer(nick) &*& iter(iter, membersList, members, ?i) &*& foreach<void *>(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(members, i);
@@ -103,13 +103,13 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
     //@ ensures room(room) &*& string_buffer(message);
 {
     //@ open room(room);
-    //@ assert foreach(?members0, _);
+    //@ assert foreach<void *>(?members0, _);
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasNext = iter_has_next(iter);
     //@ lengthPositive(members0);
     while (hasNext)
-        //@ invariant iter(iter, membersList, members0, ?i) &*& foreach(members0, @member) &*& string_buffer(message) &*& hasNext == (i < length(members0)) &*& 0 <= i &*& i <= length(members0);
+        //@ invariant iter(iter, membersList, members0, ?i) &*& foreach<void *>(members0, @member) &*& string_buffer(message) &*& hasNext == (i < length(members0)) &*& 0 <= i &*& i <= length(members0);
     {
         struct member *member = iter_next(iter);
         //@ containsIth(members0, i);
@@ -181,13 +181,13 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ split_fraction member_writer(member, _) by 1/2;
         //@ close member(member);
         list_add(room->members, member);
-        //@ open foreach(?members, @member);
-        //@ close foreach(members, @member);
+        //@ open foreach<void *>(?members, @member);
+        //@ close foreach<void *>(members, @member);
         //@ foreach_member_not_contains(members, member);
-        //@ close foreach(cons(member, members), @member);
+        //@ close foreach<void *>(cons((void *)member, members), @member);
         //@ assert [_]room->ghost_list_id |-> ?id;
         //@ split_fraction room_ghost_list_id(room, id) by 1/2;
-        //@ ghost_list_add(id, member);
+        //@ ghost_list_add<void *>(id, member);
         //@ close room(room);
     }
     
@@ -235,8 +235,8 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         list_remove(membersList, member);
         //@ foreach_remove(members, member);
     }
-    //@ assert ghost_list(?id, _);
-    //@ ghost_list_remove(id, member);
+    //@ assert ghost_list<void *>(?id, _);
+    //@ ghost_list_remove<void *>(id, member);
     //@ close room(room);
     {
         struct string_buffer *goodbyeMessage = create_string_buffer();
@@ -290,7 +290,7 @@ void session_run(void *data) //@ : thread_run
         bool hasNext = iter_has_next(iter);
         //@ lengthPositive(members);
         while (hasNext)
-            //@ invariant writer(writer) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
+            //@ invariant writer(writer) &*& iter(iter, membersList, members, ?i) &*& foreach<void *>(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
         {
             struct member *member = iter_next(iter);
             //@ containsIth(members, i);
