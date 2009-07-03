@@ -15,12 +15,12 @@ predicate_ctor counter_ctor(struct counter* c)()
   requires counter(c, _); 
   
 predicate session(struct session* s)
-  requires [1/2]s->isFirst |-> ?b &*& s->lock |-> ?l &*& [1/2]s->counter |-> ?c &*& malloc_block_session(s) &*&
-           lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 0 : [1/2] c->contrib2 |-> 0;
+  requires [1/2]s->isFirst |-> ?b &*& [1/2]s->lock |-> ?l &*& [1/2]s->counter |-> ?c &*& malloc_block_session(s) &*&
+           [1/4]lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 0 : [1/2] c->contrib2 |-> 0;
 
 predicate session_done(struct session* s)
-  requires [1/2]s->isFirst |-> ?b &*& s->lock |-> ?l &*& [1/2]s->counter |-> ?c &*& malloc_block_session(s) &*&
-           lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 1 : [1/2] c->contrib2 |-> 1;
+  requires [1/2]s->isFirst |-> ?b &*& [1/2]s->lock |-> ?l &*& [1/2]s->counter |-> ?c &*& malloc_block_session(s) &*&
+           [1/4]lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 1 : [1/2] c->contrib2 |-> 1;
 
 predicate_family_instance thread_run_data(inc)(void* data)
   requires session(data);
@@ -37,8 +37,8 @@ struct session {
 };
 
 struct session* create_session(struct lock* l, struct counter* c, bool b)
-  //@ requires lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 0 : [1/2]c->contrib2 |-> 0;
-  //@ ensures session(result) &*& [1/2]result->isFirst |->b &*& [1/2]result->counter |->c;
+  //@ requires [1/4]lock_permission(l, counter_ctor(c)) &*& b == true ? [1/2] c->contrib1 |-> 0 : [1/2]c->contrib2 |-> 0;
+  //@ ensures session(result) &*& [1/2]result->isFirst |->b &*& [1/2]result->counter |->c &*& [1/2]result->lock |->l;
 {
   struct session* s = malloc(sizeof(struct session));
   if(s == 0) { abort(); }
@@ -47,6 +47,7 @@ struct session* create_session(struct lock* l, struct counter* c, bool b)
   s->counter = c;
   //@ split_fraction session_isFirst(s, b);
   //@ split_fraction session_counter(s, c);
+  //@ split_fraction session_lock(s, l);
   //@ close session(s);  
   return s;
 }
@@ -116,14 +117,18 @@ int main()
   //@ open session_done(s1);
   //@ merge_fractions session_isFirst(s1, _);
   //@ merge_fractions session_counter(s1, _);
+  //@ merge_fractions session_lock(s1, _);
   
   thread_join(t2);
   //@ open thread_run_post(inc)(s2);
   //@ open session_done(s2);
   //@ merge_fractions session_isFirst(s2, _);
   //@ merge_fractions session_counter(s2, _);
+  //@ merge_fractions session_lock(s2, _);
 
-  lock_acquire(l);
+  //@ merge_lock_permission(l);
+  //@ merge_lock_permission(l);
+  lock_dispose(l);
   //@ open_lock_invariant();
   //@ open counter_ctor(c)();
   //@ open counter(c, _);
@@ -131,8 +136,10 @@ int main()
   //@ merge_fractions counter_contrib2(c, _);
   
   int tmp = c->x;
-  assert tmp == 2; // this assertion succeeds!
+  assert tmp == 2; 
   
-  abort(); // todo: empty the heap!
+  free(s1);
+  free(s2);
+  free(c);
   return 0;
 }
