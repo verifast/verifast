@@ -2565,11 +2565,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let box e t t0 =
-    match t0 with TypeParam _ -> convert_provertype_expr e (provertype_of_type t) ProverInductive | _ -> e
+    match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e (provertype_of_type t) ProverInductive | _ -> e
   in
   
   let unbox e t0 t =
-    match t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
+    match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
   in
   
   let check_tparams l tparams0 tparams =
@@ -3519,12 +3519,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (_, []) -> static_error l "Too few patterns"
   in
 
-  let rec check_pred (pn,ilist) tparams tenv p =
+  let rec check_pred_core (pn,ilist) tparams tenv p =
+    let check_pred = check_pred_core in
     match p with
       Access (l, e, f, v) ->
       let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
-      (Access (l, w, f, wv), tenv')
+      (Access (l, w, f, wv), tenv', [])
     | CallPred (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (callee_tparams, arity, xs, inputParamCount) =
@@ -3539,10 +3540,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
       in
       begin
-        let tpenv =
-          match zip callee_tparams targs with
-            None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams))
-          | Some bs -> bs
+        let (targs, tpenv, inferredTypes) =
+          if targs = [] then
+            let tpenv = List.map (fun x -> (x, ref None)) callee_tparams in
+            (List.map (fun (x, r) -> InferredType r) tpenv,
+             List.map (fun (x, r) -> (x, InferredType r)) tpenv,
+             List.map (fun (x, r) -> r) tpenv)
+          else
+            match zip callee_tparams targs with
+              None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams))
+            | Some bs -> (targs, bs, [])
         in
         if List.length ps0 <> arity then static_error l "Incorrect number of indexes.";
         let ts0 = match file_type path with
@@ -3552,19 +3559,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
         let xs' = List.map (instantiate_type tpenv) xs in
         let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
-        p#set_domain (ts0 @ xs'); p#set_inputParamCount inputParamCount; (WCallPred (l, p, targs, wps0, wps), tenv)
+        p#set_domain (ts0 @ xs'); p#set_inputParamCount inputParamCount;
+        (WCallPred (l, p, targs, wps0, wps), tenv, inferredTypes)
       end
     | ExprPred (l, e) ->
-      let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprPred (l, w), tenv)
+      let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprPred (l, w), tenv, [])
     | Sep (l, p1, p2) ->
-      let (p1, tenv) = check_pred (pn,ilist) tparams tenv p1 in
-      let (p2, tenv) = check_pred (pn,ilist) tparams tenv p2 in
-      (Sep (l, p1, p2), tenv)
+      let (p1, tenv, infTps1) = check_pred (pn,ilist) tparams tenv p1 in
+      let (p2, tenv, infTps2) = check_pred (pn,ilist) tparams tenv p2 in
+      (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
     | IfPred (l, e, p1, p2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
-      let (wp1, _) = check_pred (pn,ilist) tparams tenv p1 in
-      let (wp2, _) = check_pred (pn,ilist) tparams tenv p2 in
-      (IfPred (l, w, wp1, wp2), tenv)
+      let (wp1, _, infTps1) = check_pred (pn,ilist) tparams tenv p1 in
+      let (wp2, _, infTps2) = check_pred (pn,ilist) tparams tenv p2 in
+      (IfPred (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
     | SwitchPred (l, e, cs) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       begin
@@ -3575,7 +3583,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "Switch operand is not an inductive value."
         | Some (_, inductive_tparams, ctormap) ->
           let (Some tpenv) = zip inductive_tparams targs in
-          let rec iter wcs ctormap cs =
+          let rec iter wcs ctormap cs infTps =
             match cs with
               [] ->
               let _ = 
@@ -3583,7 +3591,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   [] -> ()
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.")
-              in (SwitchPred (l, w, wcs), tenv)
+              in (SwitchPred (l, w, wcs), tenv, infTps)
             | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
               match try_assoc' (pn,ilist) cn ctormap with
@@ -3596,7 +3604,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     | (t::ts, x::xs) ->
                       if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
                       let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
-                      let xInfo = match t with TypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
+                      let xInfo = match unfold_inferred_type t with TypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
                       iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
                     | ([], _) -> static_error lc "Too many pattern variables."
                     | _ -> static_error lc "Too few pattern variables."
@@ -3605,20 +3613,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 in
                 ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
-                let (wbody, _) = check_pred (pn,ilist)  tparams tenv body in
-				let Some cn= search' cn (pn,ilist) ctormap in
-                iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs
+                let (wbody, _, clauseInfTps) = check_pred (pn,ilist)  tparams tenv body in
+                let Some cn = search' cn (pn,ilist) ctormap in
+                iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
               end
           in
-          iter [] ctormap cs
+          iter [] ctormap cs []
         end
       | _ -> static_error l "Switch operand is not an inductive value."
       end
-    | EmpPred l -> (p, tenv)
+    | EmpPred l -> (p, tenv, [])
     | CoefPred (l, coef, body) ->
       let (wcoef, tenv) = check_pat (pn,ilist) l tparams tenv RealType coef in
-      let (wbody, tenv) = check_pred (pn,ilist) tparams tenv body in
-      (CoefPred (l, wcoef, wbody), tenv)
+      let (wbody, tenv, infTps) = check_pred (pn,ilist) tparams tenv body in
+      (CoefPred (l, wcoef, wbody), tenv, infTps)
+  in
+  
+  let rec fix_inferred_type r =
+    match !r with
+      None -> r := Some Bool (* any type will do *)
+    | Some (InferredType r) -> fix_inferred_type r
+    | _ -> ()
+  in
+  
+  let fix_inferred_types rs = List.map fix_inferred_type rs in
+  
+  let check_pred (pn,ilist) tparams tenv p =
+    let (wpred, tenv, infTypes) = check_pred_core (pn,ilist) tparams tenv p in
+    fix_inferred_types infTypes;
+    (wpred, tenv)
   in
   
   let boxmap =
@@ -4110,7 +4133,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  let Some tpenv = zip tparams targs in
                  List.map
                    (fun ((pat, term), typ) ->
-                    match typ with
+                    match unfold_inferred_type typ with
                       TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
                     | _ -> (pat, term)
                    )
@@ -4157,7 +4180,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   List.map
                     (fun ((x, term), typ) ->
                      let term =
-                     match typ with
+                     match unfold_inferred_type typ with
                        TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))
                      | _ -> term
                      in
@@ -5738,7 +5761,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let tp' = instantiate_type tpenv tp in
                 let term = get_unique_var_symb pat tp' in
                 let term' =
-                  match tp with
+                  match unfold_inferred_type tp with
                     TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
                   | _ -> term
                 in
@@ -5760,18 +5783,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter (List.map (function (cn, _) -> cn) ctormap) cs
     | Assert (l, p) ->
-      let (wp, tenv) = check_pred (pn,ilist) tparams tenv p in
+      let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
       assert_pred [] (pn,ilist) h ghostenv env wp real_unit (fun _ ghostenv env _ ->
         tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
-      let (wp, tenv) = check_pred (pn,ilist) tparams tenv p in
+      let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
       assert_pred [] (pn,ilist) h ghostenv env wp real_unit (fun h ghostenv env size ->
         tcont sizemap tenv ghostenv h env
       )
     | Open (l, g, targs, pats0, pats, coefpat) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (tpenv, g_symb, pats0, dropcount, ps, env0, p) =
+      let (targs, tpenv, g_symb, pats0, dropcount, ps, env0, p) =
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, _, _, _, g_symb, _)) ->
           let fns = match file_type path with
@@ -5786,13 +5809,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             match try_assoc (g, fns) predinstmap with
               Some (predenv, _, predinst_tparams, ps, _, p) ->
-              let tpenv =
+              let (targs, tpenv) =
+                let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
                 match zip predinst_tparams targs with
                   None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams))
-                | Some bs -> bs
+                | Some bs -> (targs, bs)
               in
               let ps = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps in
-              (tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p)
+              (targs, tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p)
             | None -> static_error l "No such predicate instance."
           end
         | None ->
@@ -5809,7 +5833,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
-            ([], (g_symb, false), [], 0, ps2, bs0, body)
+            ([], [], (g_symb, false), [], 0, ps2, bs0, body)
           end
       in
       let (coefpat, tenv) =
@@ -5838,17 +5862,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     | SplitFractionStmt (l, p, targs, pats, coefopt) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (g_symb, pts) =
+      let (targs, g_symb, pts) =
         match try_assoc' (pn,ilist) p predfammap with
           None -> static_error l "No such predicate."
         | Some (_, predfam_tparams, arity, pts, g_symb, _) ->
+          let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
               None -> static_error l "Incorrect number of type arguments."
             | Some bs -> bs
           in
           if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements.";
-          ((g_symb, true), instantiate_types tpenv pts)
+          (targs, (g_symb, true), instantiate_types tpenv pts)
       in
       let splitcoef =
         match coefopt with
@@ -5869,10 +5894,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     | MergeFractionsStmt (l, p, targs, pats) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (g_symb, pts, inputParamCount) =
+      let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' (pn,ilist) p predfammap with
           None -> static_error l "No such predicate."
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
+          let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
               None -> static_error l "Incorrect number of type arguments."
@@ -5886,7 +5912,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 ("Cannot merge this predicate: it is not declared precise. "
                  ^ "To declare a predicate precise, separate the input parameters "
                  ^ "from the output parameters using a semicolon in the predicate declaration.");
-            | Some n -> ((g_symb, true), instantiate_types tpenv pts, n)
+            | Some n -> (targs, (g_symb, true), instantiate_types tpenv pts, n)
           end
       in
       let (pats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
@@ -5952,7 +5978,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       tcont sizemap tenv ghostenv h env
     | Close (l, g, targs, pats0, pats, coef) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (tpenv, ps, bs0, g_symb, p, ts0) =
+      let (targs, tpenv, ps, bs0, g_symb, p, ts0) =
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with
@@ -5962,6 +5988,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin
           match try_assoc (g, fns) predinstmap with
             Some (predenv, l, predinst_tparams, ps, inputParamCount, body) ->
+            let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
                 None -> static_error l "Incorrect number of type arguments."
@@ -5971,7 +5998,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               Java -> List.map (fun cn -> List.assoc cn classterms) fns
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
-            (tpenv, ps, predenv, (g_symb, true), body, ts0)
+            (targs, tpenv, ps, predenv, (g_symb, true), body, ts0)
           | None -> static_error l "No such predicate instance."
           end
         | None ->
@@ -5987,7 +6014,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               if targs <> [] then static_error l "Incorrect number of type arguments.";
-              ([], ps2, bs0, (g_symb, false), body, [])
+              ([], [], ps2, bs0, (g_symb, false), body, [])
           end
       in
       let ps =

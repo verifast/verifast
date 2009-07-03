@@ -90,7 +90,7 @@ lemma void containsIth<t>(list<t> v, int i)
 predicate foreach<t>(list<t> v, predicate(t) p)
   requires uniqueElements(v)==true &*& switch(v) { 
              case nil: return emp; 
-             case cons(h, t): return p(h) &*& foreach<t>(t, p);
+             case cons(h, t): return p(h) &*& foreach(t, p);
            }; 
 
 lemma void removeContains<t>(list<t> v, t x1, t x2)
@@ -137,8 +137,8 @@ lemma void remove_not_contains<t>(list<t> v, t mem)
 }
 
 lemma void foreach_unremove<t>(list<t> v, t x)
-  requires foreach<t>(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
-  ensures foreach<t>(v, p);
+  requires foreach(remove(v, x), ?p) &*& contains(v, x)==true &*& p(x) &*& uniqueElements(v) == true;
+  ensures foreach(v, p);
 {
   switch(v) {
     case nil: open foreach<t>(remove(v, x), p); return;
