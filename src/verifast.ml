@@ -2643,13 +2643,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (index, ctorcount, ls, w, wcs) = 
             let ctorcount = List.length cs in
             match e with
-              Var (l, x, _) ->
+              Var (lx, x, _) ->
               begin match try_assoc_i x pmap with
-                None -> static_error l "Fixpoint function must switch on a parameter."
+                None -> static_error lx "Fixpoint function must switch on a parameter."
               | Some (index, InductiveType (i, targs)) -> (
                 match try_assoc2' (pn,ilist) i imap inductivemap0 with
                   None -> static_error ls "Switch statement cannot precede inductive declaration."
-                | Some (l, inductive_tparams, ctormap) ->
+                | Some (_, inductive_tparams, ctormap) ->
                   let (Some tpenv) = zip inductive_tparams targs in
                   let rec iter ctormap wcs cs =
                     match cs with
@@ -2748,11 +2748,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             let w2 = checkt e2 RealType in
                             (Operation (l, operator, [w1; w2], ts), RealType)
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
-                          | StringLit (l, s) ->(
-						    match file_type path with
-						      Java-> (e, ObjType "String")
-							| _ -> (e, PtrType Char)
-							)
+                          | StringLit (l, s) ->
+                            begin match file_type path with
+                              Java-> (e, ObjType "String")
+                            | _ -> (e, PtrType Char)
+                            end
                           | CallExpr (l', g', targes, [], pats, info) -> (
                             match (match try_assoc' (pn,ilist) g' pfm with
                               None -> try_assoc' (pn,ilist) g' purefuncmap0
@@ -2823,7 +2823,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                   let rt' = instantiate_type tpenv rt in
                                   (unbox (CallExpr (l, g', targes, [], wpats, info)) rt rt', rt')
                               else
-                                static_error l ("No such pure function: " ^ g')
+                                static_error l' ("No such pure function: " ^ g')
                             )
                           | IfExpr (l, e1, e2, e3) ->
                             let w1 = checkt e1 boolt in
@@ -3701,6 +3701,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | FuncNameExpr _ -> []
     | CastExpr (_, _, e) -> vars_used e
     | SizeofExpr (_, _) -> []
+    | ProverTypeConversion (_, _, e) -> vars_used e
   in
   
   let assert_expr_fixed fixed e =
@@ -3924,11 +3925,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
+  let struct_sizes = List.map (fun (sn, _) -> (sn, get_unique_var_symb ("struct_" ^ sn ^ "_size") IntType)) structmap in
+  
   let sizeof l t =
     match t with
-      Void | Char -> 1
-    | IntType -> 4
-    | PtrType _ -> 4
+      Void | Char -> ctxt#mk_intlit 1
+    | IntType -> ctxt#mk_intlit 4
+    | PtrType _ -> ctxt#mk_intlit 4
+    | StructType sn -> List.assoc sn struct_sizes
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.")
   in
   
@@ -4056,7 +4060,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l min_int_term (ctxt#mk_add (ev e1) (ev e2)) max_int_term
         | Some [PtrType t; IntType] ->
           let n = sizeof l t in
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ctxt#mk_mul (ctxt#mk_intlit n) (ev e2))) max_ptr_term
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_add (ev e1) (ev e2)
         | _ -> static_error l "Internal error in eval."
@@ -4068,7 +4072,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
         | Some [PtrType t; IntType] ->
           let n = sizeof l t in
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul (ctxt#mk_intlit n) (ev e2))) max_ptr_term
+          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
       end
