@@ -31,6 +31,10 @@ struct thread* thread_start(void *run, void *data);
 void thread_join(struct thread *t);
     //@ requires thread(t, ?run, ?data);
     //@ ensures thread_run_post(run)(data);
+    
+void dispose_thread_token(struct thread *t);
+    //@ requires thread(t, ?run, ?data);
+    //@ ensures true;
 
 struct lock *create_lock();
     //@ requires create_lock_ghost_argument(?p) &*& p();
