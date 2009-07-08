@@ -1,0 +1,47 @@
+#ifndef GHOST_CELLS_H
+#define GHOST_CELLS_H
+
+/*@
+
+predicate ghost_cell3(int id; int v1, int v2, int v3);
+
+lemma int create_ghost_cell3(int v1, int v2, int v3);
+    requires true;
+    ensures ghost_cell3(result, v1, v2, v3);
+
+predicate ghost_cell6(int id; int v1, int v2, int v3, void *v4, void *v5, any v6);
+
+lemma int create_ghost_cell6(int v1, int v2, int v3, void *v4, void *v5, any v6);
+    requires true;
+    ensures ghost_cell6(result, v1, v2, v3, v4, v5, v6);
+
+lemma void ghost_cell6_update(int id, int v1, int v2, int v3, void *v4, void *v5, any v6);
+    requires ghost_cell6(id, _, _, _, _, _, _);
+    ensures ghost_cell6(id, v1, v2, v3, v4, v5, v6);
+
+predicate counted_ghost_cell<t>(int id, t value, int count);
+predicate counted_ghost_cell_ticket<t>(int id, t value);
+
+lemma int create_counted_ghost_cell<t>(t value);
+    requires true;
+    ensures counted_ghost_cell<t>(result, value, 0);
+
+lemma void create_counted_ghost_cell_ticket<t>(int id);
+    requires counted_ghost_cell<t>(id, ?value, ?count);
+    ensures counted_ghost_cell<t>(id, value, count + 1) &*& counted_ghost_cell_ticket(id, value);
+
+lemma void counted_ghost_cell_dispose_ticket<t>(int id);
+    requires counted_ghost_cell<t>(id, ?value, ?count) &*& counted_ghost_cell_ticket<t>(id, ?value0);
+    ensures counted_ghost_cell<t>(id, value, count - 1) &*& value0 == value;
+
+lemma void counted_ghost_cell_match_ticket<t>(int id);
+    requires counted_ghost_cell<t>(id, ?value, ?count) &*& counted_ghost_cell_ticket<t>(id, ?value0);
+    ensures counted_ghost_cell<t>(id, value, count) &*& counted_ghost_cell_ticket<t>(id, value) &*& value0 == value;    
+
+lemma void counted_ghost_cell_update<t>(int id, t x);
+    requires counted_ghost_cell<t>(id, _, 0);
+    ensures counted_ghost_cell<t>(id, x, 0);
+
+@*/
+
+#endif

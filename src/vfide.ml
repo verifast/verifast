@@ -669,7 +669,13 @@ let show_ide initialPath prover =
                 None
             in
             try
-              let options = {option_verbose = false; option_disable_overflow_check = !disableOverflowCheck; option_allow_should_fail = true; option_emit_manifest = false} in
+              let options = {
+                option_verbose = false;
+                option_disable_overflow_check = !disableOverflowCheck;
+                option_allow_should_fail = true;
+                option_emit_manifest = false
+              }
+              in
               verify_program None false options path reportRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()

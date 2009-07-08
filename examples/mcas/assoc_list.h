@@ -1,0 +1,253 @@
+#ifndef ASSOC_LIST_H
+#define ASSOC_LIST_H
+
+#include "pair.h"
+#include "list.h"
+
+/*@
+
+fixpoint list<pair<a, b> > zip<a, b>(list<a> xs, list<b> ys) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return
+            switch (ys) {
+                case nil: return cons(pair(x, default<b>), zip(xs0, nil));
+                case cons(y, ys0): return cons(pair(x, y), zip(xs0, ys0));
+            };
+    }
+}
+
+fixpoint bool mem_assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+        case nil: return false;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x0, y0): return x0 == x || mem_assoc(x, xys0);
+            };
+    }
+}
+
+fixpoint b assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+        case nil: return default;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x0, y0): return x0 == x ? y0 : assoc(x, xys0);
+            };
+    }
+}
+
+fixpoint list<pair<a, b> > update<a, b>(list<pair<a, b> > xys, a x, b y) {
+    switch (xys) {
+        case nil: return nil;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x0, y0): return x0 == x ? cons(pair(x0, y), xys0) : cons(pair(x0, y0), update(xys0, x, y));
+            };
+    }
+}
+
+fixpoint list<pair<a, b> > before_assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+        case nil: return nil;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x0, y0): return x0 == x ? nil : cons(pair(x0, y0), before_assoc(x, xys0));
+            };
+    }
+}
+
+fixpoint list<b> before2<a, b>(a x, list<a> xs, list<b> ys);
+fixpoint list<b> after2<a, b>(a x, list<a> xs, list<b> ys);
+fixpoint list<b> update2<a, b>(list<a> xs, list<b> ys, a x, b y);
+fixpoint int index_of_assoc<a, b>(a x, list<pair<a, b> > xys);
+
+fixpoint list<pair<a, b> > after_assoc<a, b>(a x, list<pair<a, b> > xys) {
+    switch (xys) {
+        case nil: return nil;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x0, y0): return x0 == x ? xys0 : after_assoc(x, xys0);
+            };
+    }
+}
+
+lemma void mem_zip_mem_assoc_lemma(void *x, list<void *> xs, list<void *> ys);
+    requires mem(x, xs) == true;
+    ensures mem_assoc(x, zip(xs, ys)) == true;
+
+predicate foreach_assoc<a, b>(list<pair<a, b> > xys, predicate(a, b) p) =
+    switch (xys) {
+        case nil: return true;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x, y): return p(x, y) &*& foreach_assoc(xys0, p);
+            };
+    };
+
+lemma void foreach_assoc_separate(list<pair<void *, void *> > xys, void **x);
+    requires foreach_assoc(xys, ?p) &*& mem_assoc(x, xys) == true;
+    ensures foreach_assoc(before_assoc(x, xys), p) &*& p(x, assoc(x, xys)) &*& foreach_assoc(after_assoc(x, xys), p);
+
+lemma void foreach_assoc_unseparate(list<pair<void *, void *> > xys, void **x);
+    requires mem_assoc(x, xys) == true &*& foreach_assoc(before_assoc(x, xys), ?p) &*& p(x, ?y) &*& foreach_assoc(after_assoc(x, xys), p);
+    ensures foreach_assoc(update(xys, x, y), p);
+
+lemma void foreach_assoc_unseparate_nochange(list<pair<void *, void *> > xys, void **x);
+    requires mem_assoc(x, xys) == true &*& foreach_assoc(before_assoc(x, xys), ?p) &*& p(x, assoc(x, xys)) &*& foreach_assoc(after_assoc(x, xys), p);
+    ensures foreach_assoc(xys, p);
+
+lemma void foreach_assoc_zip_pointer_distinct(list<void *> xs, list<void *> ys);
+    requires foreach_assoc(zip(xs, ys), pointer) &*& length(ys) == length(xs);
+    ensures foreach_assoc(zip(xs, ys), pointer) &*& distinct(xs) == true;
+
+predicate foreach_assoc2(list<pair<void *, void *> > xys, list<pair<void *, void *> > xzs, predicate(void *, void *, void *) p) =
+    switch (xys) {
+        case nil: return xzs == nil;
+        case cons(xy, xys0): return
+            switch (xy) {
+                case pair(x, y): return
+                    switch (xzs) {
+                        case nil: return false;
+                        case cons(xz, xzs0): return
+                            switch (xz) {
+                                case pair(x0, z): return
+                                    x0 == x &*& p(?x_, ?y_, ?z_) &*& x_ == x &*& y_ == y &*& z_ == z &*& foreach_assoc2(xys0, xzs0, p);
+                            };
+                    };
+            };
+    };
+
+fixpoint list<a> mapfst<a, b>(list<pair<a, b> > xys) {
+    switch (xys) {
+        case nil: return nil;
+        case cons(xy, xys0): return cons(fst(xy), mapfst(xys0));
+    }
+}
+
+lemma void foreach_assoc2_separate(void *x);
+    requires foreach_assoc2(?xs, ?ys, ?p) &*& mem_assoc(x, xs) || mem_assoc(x, ys);
+    ensures
+        foreach_assoc2(before_assoc(x, xs), before_assoc(x, ys), p) &*&
+        p(x, assoc(x, xs), assoc(x, ys)) &*&
+        foreach_assoc2(after_assoc(x, xs), after_assoc(x, ys), p) &*&
+        mem_assoc(x, xs) == true &*& mem_assoc(x, ys) == true &*&
+        mapfst(ys) == mapfst(xs);
+
+lemma void foreach_assoc2_unseparate_nochange(list<pair<void *, void *> > xs, list<pair<void *, void *> > ys, void *x);
+    requires
+        mapfst(ys) == mapfst(xs) &*&
+        mem_assoc(x, xs) == true &*&
+        foreach_assoc2(before_assoc(x, xs), before_assoc(x, ys), ?p) &*&
+        p(x, assoc(x, xs), assoc(x, ys)) &*&
+        foreach_assoc2(after_assoc(x, xs), after_assoc(x, ys), p);
+    ensures foreach_assoc2(xs, ys, p);
+
+lemma void foreach_assoc2_unseparate(list<pair<void *, void *> > xys, list<pair<void *, void *> > xzs, void *x);
+    requires
+        mapfst(xys) == mapfst(xzs) &*&
+        mem_assoc(x, xys) == true &*&
+        foreach_assoc2(before_assoc(x, xys), before_assoc(x, xzs), ?p) &*&
+        p(x, ?y, ?z) &*&
+        foreach_assoc2(after_assoc(x, xys), after_assoc(x, xzs), p);
+    ensures foreach_assoc2(update(xys, x, y), update(xzs, x, z), p);
+
+lemma void foreach_assoc2_unseparate_1changed(list<pair<void *, void *> > xys, list<pair<void *, void *> > xzs, void *x);
+    requires
+        mapfst(xys) == mapfst(xzs) &*&
+        mem_assoc(x, xys) == true &*&
+        foreach_assoc2(before_assoc(x, xys), before_assoc(x, xzs), ?p) &*&
+        p(x, ?y, assoc(x, xzs)) &*&
+        foreach_assoc2(after_assoc(x, xys), after_assoc(x, xzs), p);
+    ensures foreach_assoc2(update(xys, x, y), xzs, p);
+
+fixpoint list<pair<a, b> > map_assoc<a, b>(list<pair<a, b> > xys, list<a> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return cons(pair(x, assoc(x, xys)), map_assoc(xys, xs0));
+    }
+}
+
+lemma void lt_drop_take<a>(int k, int i, list<a> xs);
+    requires 0 <= k &*& k < i &*& i <= length(xs);
+    ensures drop(k, take(i, xs)) == cons(ith(k, xs), drop(k + 1, take(i, xs)));
+
+lemma void lt_drop_take_map_assoc_mapfst<a, b, c>(int k, int i, list<pair<a, b> > rcs, list<pair<a, c> > es);
+    requires 0 <= k &*& k < i &*& i <= length(es);
+    ensures
+        drop(k, take(i, map_assoc(rcs, mapfst(es)))) ==
+        cons(pair(fst(ith(k, es)), assoc(fst(ith(k, es)), rcs)), drop(k + 1, take(i, map_assoc(rcs, mapfst(es)))));
+
+lemma void update_same<a, b>(list<pair<a, b> > xys, a x);
+    requires mem_assoc(x, xys) == true;
+    ensures update(xys, x, assoc(x, xys)) == xys;
+
+lemma void foreach3_separate(void *x);
+    requires foreach3(?xs, ?ys, ?zs, ?p) &*& mem(x, xs) == true;
+    ensures
+        foreach3(before(x, xs), before2(x, xs, ys), before2(x, xs, zs), p) &*&
+        p(x, assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*&
+        foreach3(after(x, xs), after2(x, xs, ys), after2(x, xs, zs), p) &*&
+        length(ys) == length(xs) &*&
+        length(zs) == length(xs);
+
+lemma void foreach3_unseparate_nochange(list<void *> xs, list<void *> ys, list<void *> zs, void *x);
+    requires
+        foreach3(before(x, xs), before2(x, xs, ys), before2(x, xs, zs), ?p) &*&
+        p(x, assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*&
+        foreach3(after(x, xs), after2(x, xs, ys), after2(x, xs, zs), p) &*&
+        length(ys) == length(xs) &*&
+        length(zs) == length(xs) &*&
+        mem(x, xs) == true;
+    ensures foreach3(xs, ys, zs, p);
+
+lemma void foreach3_mem_x_mem_assoc_x_ys(void *x);
+    requires foreach3(?xs, ?ys, ?zs, ?p) &*& mem(x, xs) == true;
+    ensures foreach3(xs, ys, zs, p) &*& mem(assoc(x, zip(xs, ys)), ys) == true;
+    
+lemma void foreach3_length();
+    requires foreach3(?xs, ?ys, ?zs, ?p);
+    ensures foreach3(xs, ys, zs, p) &*& length(ys) == length(xs) &*& length(zs) == length(xs);
+
+lemma void distinct_assoc_yzs<a, b, c>(list<a> xs, list<b> ys, list<c> zs, a x);
+    requires distinct(ys) == true &*& length(ys) == length(xs) &*& length(zs) == length(xs) &*& mem(x, xs) == true;
+    ensures assoc(x, zip(xs, zs)) == assoc(assoc(x, zip(xs, ys)), zip(ys, zs));
+
+lemma void index_of_assoc_fst_ith<a, b>(list<pair<a, b> > xys, int i);
+    requires distinct(mapfst(xys)) == true &*& 0 <= i &*& i < length(xys);
+    ensures index_of_assoc(fst(ith(i, xys)), xys) == i;
+
+lemma void assoc_fst_ith_snd_ith<a, b>(list<pair<a, b> > xys, int i);
+    requires distinct(mapfst(xys)) == true &*& 0 <= i &*& i < length(xys);
+    ensures assoc(fst(ith(i, xys)), xys) == snd(ith(i, xys));
+
+lemma void foreach3_foreach_assoc_separate(void *x);
+    requires foreach3(?xs, ?ys, ?zs, ?p) &*& foreach_assoc(zip(ys, zs), ?q) &*& mem(x, xs) == true;
+    ensures
+        foreach3(before(x, xs), before2(x, xs, ys), before2(x, xs, zs), p) &*& foreach_assoc(zip(before2(x, xs, ys), before2(x, xs, zs)), q) &*&
+        p(x, assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*& q(assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*&
+        foreach3(after(x, xs), after2(x, xs, ys), after2(x, xs, zs), p) &*& foreach_assoc(zip(after2(x, xs, ys), after2(x, xs, zs)), q);
+
+lemma void foreach3_foreach_assoc_unseparate(list<void *> xs, list<void *> ys, list<void *> zs, void *x);
+    requires
+        foreach3(before(x, xs), before2(x, xs, ys), before2(x, xs, zs), ?p) &*& foreach_assoc(zip(before2(x, xs, ys), before2(x, xs, zs)), ?q) &*&
+        p(x, assoc(x, zip(xs, ys)), ?z) &*& q(assoc(x, zip(xs, ys)), z) &*&
+        foreach3(after(x, xs), after2(x, xs, ys), after2(x, xs, zs), p) &*& foreach_assoc(zip(after2(x, xs, ys), after2(x, xs, zs)), q) &*&
+        mem(x, xs) == true;
+    ensures foreach3(xs, ys, update2(xs, zs, x, z), p) &*& foreach_assoc(zip(ys, update2(xs, zs, x, z)), q);
+
+lemma void foreach3_foreach_assoc_unseparate_nochange(list<void *> xs, list<void *> ys, list<void *> zs, void *x);
+    requires
+        foreach3(before(x, xs), before2(x, xs, ys), before2(x, xs, zs), ?p) &*& foreach_assoc(zip(before2(x, xs, ys), before2(x, xs, zs)), ?q) &*&
+        p(x, assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*& q(assoc(x, zip(xs, ys)), assoc(x, zip(xs, zs))) &*&
+        foreach3(after(x, xs), after2(x, xs, ys), after2(x, xs, zs), p) &*& foreach_assoc(zip(after2(x, xs, ys), after2(x, xs, zs)), q) &*&
+        mem(x, xs) == true;
+    ensures foreach3(xs, ys, zs, p) &*& foreach_assoc(zip(ys, zs), q);
+
+lemma void length_mapfst<a, b>(list<pair<a, b> > xys);
+    requires true;
+    ensures length(mapfst(xys)) == length(xys);
+
+@*/
+
+#endif

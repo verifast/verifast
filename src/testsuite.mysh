@@ -17,7 +17,7 @@ cd queue
 verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
 cd ..
 cd mcas
-verifast -c rdcss.c
+verifast -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..
 verifast -c ifs.c
 verifast -shared goto.c

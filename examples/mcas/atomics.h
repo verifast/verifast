@@ -150,7 +150,14 @@ predicate_family tracked_cas_post(void *op)();
 typedef lemma void tracked_cas_operation(int n, void *new0);
     requires
         tracked_cas_pre(this)(?tracker, ?pp, ?old, ?new, ?prophecy) &*&
-        [?f]pointer(pp, ?p0) &*& p0 == old ? f == 1 &*& cas_tracker(tracker, n) &*& [_]tracked_cas_prediction(tracker, n, new0) : true;
+        [?f]pointer(pp, ?p0) &*&
+        p0 == prophecy ?
+            p0 == old ?
+                f == 1 &*& cas_tracker(tracker, n) &*& [_]tracked_cas_prediction(tracker, n, new0)
+            :
+                true
+        :
+            true;
     ensures
         tracked_cas_post(this)() &*&
         [f]pointer(pp, ?p1) &*& p0 == prophecy &*&

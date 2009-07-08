@@ -1,0 +1,27 @@
+#ifndef GHOST_COUNTERS_H
+#define GHOST_COUNTERS_H
+
+/*@
+
+predicate ghost_counter(int id, int count);
+predicate ghost_counter_snapshot(int id, int snapshot);
+
+lemma int create_ghost_counter(int count0);
+    requires true;
+    ensures ghost_counter(result, count0);
+
+lemma void ghost_counter_add(int delta);
+    requires ghost_counter(?id, ?count) &*& 0 <= delta;
+    ensures ghost_counter(id, count + delta);
+
+lemma void create_ghost_counter_snapshot(int snapshot);
+    requires ghost_counter(?id, ?count) &*& snapshot <= count;
+    ensures ghost_counter(id, count) &*& ghost_counter_snapshot(id, snapshot);
+
+lemma void match_ghost_counter_snapshot();
+    requires ghost_counter(?id, ?count) &*& ghost_counter_snapshot(id, ?snapshot);
+    ensures ghost_counter(id, count) &*& ghost_counter_snapshot(id, snapshot) &*& snapshot <= count;
+
+@*/
+
+#endif

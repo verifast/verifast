@@ -2124,8 +2124,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Struct (l, sn, fds_opt)::ds ->
         begin
           match try_assoc sn structmap0 with
-            Some (_, Some _) -> static_error l "Duplicate struct name."
-          | Some (_, None) | None -> ()
+            Some (_, Some _, _) -> static_error l "Duplicate struct name."
+          | Some (_, None, _) | None -> ()
         end;
         begin
           match try_assoc sn sdm with
@@ -2291,6 +2291,40 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter' ([],[]) ps
   in
   
+  let typenode_of_provertype t =
+    match t with
+      ProverInt -> ctxt#type_int
+    | ProverBool -> ctxt#type_bool
+    | ProverReal -> ctxt#type_real
+    | ProverInductive -> ctxt#type_inductive
+  in
+  
+  let rec provertype_of_type t =
+    match t with
+      Bool -> ProverBool
+    | IntType -> ProverInt
+    | UintPtrType -> ProverInt
+    | RealType -> ProverReal
+    | Char -> ProverInt
+    | InductiveType _ -> ProverInductive
+    | StructType sn -> assert false
+    | ObjType n -> ProverInt
+    | PtrType t -> ProverInt
+    | FuncType _ -> ProverInt
+    | PredType (tparams, ts) -> ProverInductive
+    | BoxIdType -> ProverInt
+    | HandleIdType -> ProverInt
+    | AnyType -> ProverInductive
+    | TypeParam _ -> ProverInductive
+    | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
+  in
+  
+  let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
+  
+  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
+  
+  let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
+  
   let classfmap =
     List.map
       (fun (sn, (l,meths, fds_opt,constr,super,interfs,pn,ilist)) ->
@@ -2402,55 +2436,34 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let structmap1 =
     List.map
       (fun (sn, (l, fds_opt)) ->
-         let rec iter fmap fds =
+         let rec iter fmap fds has_ghost_fields =
            match fds with
-             [] -> (sn, (l, Some (List.rev fmap)))
+             [] ->
+             (sn,
+              (l,
+               Some (List.rev fmap),
+               if has_ghost_fields then
+                 None
+               else
+                 Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)])))
+              )
+             )
            | Field (lf, gh, t, f,Instance,Public)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else
-               iter ((f, (lf, gh, check_pure_type ("", []) [] t))::fmap) fds
+               iter ((f, (lf, gh, check_pure_type ("", []) [] t))::fmap) fds (has_ghost_fields || gh = Ghost)
          in
          begin
            match fds_opt with
-             Some fds -> iter [] fds
-           | None -> (sn, (l, None))
+             Some fds -> iter [] fds false
+           | None -> (sn, (l, None, None))
          end
       )
       structdeclmap
   in
   
   let structmap = structmap1 @ structmap0 in
-  
-  let typenode_of_provertype t =
-    match t with
-      ProverInt -> ctxt#type_int
-    | ProverBool -> ctxt#type_bool
-    | ProverReal -> ctxt#type_real
-    | ProverInductive -> ctxt#type_inductive
-  in
-  
-  let rec provertype_of_type t =
-    match t with
-      Bool -> ProverBool
-    | IntType -> ProverInt
-    | UintPtrType -> ProverInt
-    | RealType -> ProverReal
-    | Char -> ProverInt
-    | InductiveType _ -> ProverInductive
-    | StructType sn -> assert false
-    | ObjType n -> ProverInt
-    | PtrType t -> ProverInt
-    | FuncType _ -> ProverInt
-    | PredType (tparams, ts) -> ProverInductive
-    | BoxIdType -> ProverInt
-    | HandleIdType -> ProverInt
-    | AnyType -> ProverInductive
-    | TypeParam _ -> ProverInductive
-    | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
-  in
-  
-  let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
   
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh)) ->
@@ -2740,13 +2753,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | Operation (l, ((Le | Lt) as operator), [e1; e2], ts) ->
                             let (w1, w2, t) = promote l e1 e2 ts in
                             (Operation (l, operator, [w1; w2], ts), boolt)
-                          | Operation (l, ((Add | Sub) as operator), [e1; e2], ts) ->
+                          | Operation (l, ((Add | Sub | Mul) as operator), [e1; e2], ts) ->
                             let (w1, w2, t) = promote l e1 e2 ts in
+                            begin match t with PtrType _ -> static_error l "This operation is not supported on pointers." | _ -> () end;
                             (Operation (l, operator, [w1; w2], ts), t)
-                          | Operation (l, ((Mul | Div) as operator), [e1; e2], ts) ->
+                          | Operation (l, Div, [e1; e2], ts) ->
                             let w1 = checkt e1 RealType in
                             let w2 = checkt e2 RealType in
-                            (Operation (l, operator, [w1; w2], ts), RealType)
+                            (Operation (l, Div, [w1; w2], ts), RealType)
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
                           | StringLit (l, s) ->
                             begin match file_type path with
@@ -2963,11 +2977,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
   in
   
-  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
-  
-  let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
-  
   let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts)), inputParamCount)) in
+
+  let struct_padding_predfams1 =
+    flatmap
+      (function
+         (sn, (l, fds, Some padding_predsymb)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1))]
+       | _ -> [])
+      structmap1
+  in
   
   let is_lemmafunctype_pred_map1 =
     flatmap
@@ -2983,11 +3001,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let malloc_block_pred_map1 = 
     match file_type path with
-    Java-> (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc [] 0 [ObjType cn] (Some 1))] | _ -> []) classdeclmap) @
-           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc [] 0 [ObjType i] (Some 1))] | _ -> []) interfdeclmap) @
-           (flatmap (function (cn, (_)) -> [(cn, mk_predfam ("malloc_block_" ^ cn) dummy_loc [] 0 [ObjType cn] (Some 1))] | _ -> []) classmap0) @
-           (flatmap (function (i, (_)) -> [(i, mk_predfam ("malloc_block_" ^ i) dummy_loc [] 0 [ObjType i] (Some 1))] | _ -> []) interfmap0)
-    | _ -> flatmap (function (sn, (l, Some _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 
+    Java-> []
+    | _ -> flatmap (function (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 
             [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap1 
   in
   
@@ -3009,7 +3024,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       classfmap
     | _ ->
     flatmap
-      (fun (sn, (_, fds_opt)) ->
+      (fun (sn, (_, fds_opt, _)) ->
          match fds_opt with
            None -> []
          | Some fds ->
@@ -3024,7 +3039,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let field_pred_map = field_pred_map1 @ field_pred_map0 in
   
-  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 in
+  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1 in
   
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
@@ -3054,7 +3069,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter (pn,il) pm ds) rest
       | [] -> pm
     in
-    iter' islemmafunctypepreds1 ps
+    iter' (islemmafunctypepreds1 @ structpreds1) ps
   in
   
   let (boxmap, predfammap1) =
@@ -3135,7 +3150,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter' ([],predfammap1) ps
   in
   
-  let predfammap = predfammap1 @ islemmafunctypepreds1 @ structpreds1 @ predfammap0 in (* TODO: Check for name clashes here. *)
+  let predfammap = predfammap1 @ predfammap0 in (* TODO: Check for name clashes here. *)
+  
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
       match ds with
@@ -3311,7 +3327,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (Operation (l, operator, [w1; w2], ts), boolt)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
       let (w1, t1) = check e1 in
-	  let (w2, t2) = check e2 in
+      let (w2, t2) = check e2 in
       begin
         match t1 with
           PtrType _ ->
@@ -3321,16 +3337,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | IntType | RealType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
-		| ObjType "String" as t->
-		  let w2 = checkt e2 t in
-		  ts:=Some [t1; ObjType "String"];
-		  (Operation (l, operator, [w1; w2], ts), t1)
+        | ObjType "String" as t->
+          let w2 = checkt e2 t in
+          ts:=Some [t1; ObjType "String"];
+          (Operation (l, operator, [w1; w2], ts), t1)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
       end
-    | Operation (l, (Mul | Div as operator), [e1; e2], ts) ->
+    | Operation (l, Mul, [e1; e2], ts) ->
+      let (w1, w2, t) = promote l e1 e2 ts in
+      begin match t with PtrType _ -> static_error l "Cannot multiply pointers." | _ -> () end;
+      (Operation (l, Mul, [w1; w2], ts), t)
+    | Operation (l, Div, [e1; e2], ts) ->
       let w1 = checkt e1 RealType in
       let w2 = checkt e2 RealType in
-      (Operation (l, operator, [w1; w2], ts), RealType)
+      (Operation (l, Div, [w1; w2], ts), RealType)
     | IntLit (l, n, t) -> t := Some intt; (e, intt)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
@@ -3448,6 +3468,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
         | _ -> static_error l "Switch expression operand must be inductive value."
       end
+    | SizeofExpr(l, te) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      (e, IntType)
     | e -> static_error (expr_loc e) "Expression form not allowed here."
   and check_expr_t (pn,ilist) tparams tenv e t0 = check_expr_t_core (pn, ilist) tparams tenv e t0 false
   and check_expr_t_core (pn,ilist) tparams tenv e t0 isCast =
@@ -3476,13 +3499,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType (StructType sn) ->
       begin
       match List.assoc sn structmap with
-        (_, Some fds) ->
+        (_, Some fds, _) ->
         begin
           match try_assoc' (pn,ilist) f#name fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
           | Some (_, gh, t) -> check_ok gh; f#set_parent sn; f#set_range t; (w, t)
         end
-      | (_, None) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
+      | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
     | ObjType sn ->
       begin
@@ -3791,7 +3814,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     flatmap
       begin
         function
-          (sn, (_, Some fmap)) ->
+          (sn, (_, Some fmap, _)) ->
           flatmap
             begin
               function
@@ -3925,7 +3948,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
   in
   
-  let struct_sizes = List.map (fun (sn, _) -> (sn, get_unique_var_symb ("struct_" ^ sn ^ "_size") IntType)) structmap in
+  let struct_sizes =
+    List.map
+      begin fun (sn, _) ->
+        let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") IntType in
+        ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+        (sn, s)
+      end
+      structmap
+  in
   
   let sizeof l t =
     match t with
@@ -3940,7 +3971,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     flatmap
       begin
         function
-          (sn, (_, Some fmap)) ->
+          (sn, (_, Some fmap, _)) ->
           let offsets = flatmap (fun (f, (_, gh, _)) -> if gh = Ghost then [] else [((sn, f), get_unique_var_symb (sn ^ "_" ^ f ^ "_offset") IntType)]) fmap in
           begin
             match offsets with
@@ -4076,7 +4107,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
       end
-    | Operation (l, Mul, [e1; e2], ts) -> ctxt#mk_real_mul (ev e1) (ev e2)
+    | Operation (l, Mul, [e1; e2], ts) ->
+      begin match !ts with
+        Some [IntType; IntType] ->
+        check_overflow l min_int_term (ctxt#mk_mul (ev e1) (ev e2)) max_int_term
+      | Some [RealType; RealType] ->
+        ctxt#mk_real_mul (ev e1) (ev e2)
+      end
     | Operation (l, Div, [e1; e2], ts) ->
       let rec eval_reallit e =
         match e with
@@ -4153,6 +4190,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ctxt#set_fpclauses symbol 0 fpclauses;
       ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env)
     | ProverTypeConversion (tfrom, tto, e) -> convert_provertype (ev e) tfrom tto
+    | SizeofExpr (l, te) ->
+      let t = check_pure_type (pn,ilist) [] te in
+      sizeof l t
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
   
@@ -5566,7 +5606,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
           let tpx = vartp l x in
           let _ = check_assign l x in
-          let (_, fds_opt) = List.assoc tn structmap in
+          let (_, fds_opt, _) = List.assoc tn structmap in
           let fds =
             match fds_opt with
               Some fds -> fds
@@ -5657,6 +5697,61 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
       end
+    | CallStmt (l, "close_struct", targs, args, Static) when language = CLang ->
+      let e = match (targs, args) with ([], [e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." in
+      let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
+      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot close a struct that does not declare a body." in
+      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." in
+      eval_h h env e $. fun h pointerTerm ->
+      with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
+      let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
+      assert_chunk (pn,ilist) h ghostenv [] l (chars_symb, true) [] real_unit dummypat [TermPat pointerTerm; SrcPat DummyPat] $. fun h coef ts _ _ _ ->
+      if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array.";
+      let [_; cs] = ts in
+      with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
+      let Some (_, _, _, _, chars_length_symb) = try_assoc' (pn,ilist) "chars_length" purefuncmap in
+      if not (definitely_equal (ctxt#mk_app chars_length_symb [cs]) (List.assoc sn struct_sizes)) then
+        assert_false h env l "Could not prove that length of character array equals size of struct.";
+      let rec iter h fds =
+        match fds with
+          [] ->
+          cont (h @ [Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)]) env
+        | (f, (lf, gh, t))::fds ->
+          let fref = new fieldref f in
+          fref#set_parent sn; fref#set_range t; assume_field h fref pointerTerm (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+      in
+      iter h fds
+    | CallStmt (l, "open_struct", targs, args, Static) when language = CLang ->
+      let e = match (targs, args) with ([], [e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." in
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." in
+      let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
+      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." in
+      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." in
+      eval_h h env e $. fun h pointerTerm ->
+      begin fun cont ->
+        let rec iter h fds =
+          match fds with
+            [] -> cont h
+          | (f, (_, gh, t))::fds ->
+            let fref = new fieldref f in
+            fref#set_parent sn;
+            get_field (pn,ilist) h pointerTerm fref l $. fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full field chunk permissions.";
+            iter h fds
+        in
+        iter h fds
+      end $. fun h ->
+      with_context (Executing (h, env, l, "Consuming struct padding chunk")) $. fun () ->
+      assert_chunk (pn,ilist) h ghostenv [] l (padding_predsymb, true) [] real_unit dummypat [TermPat pointerTerm] $. fun h coef _ _ _ _ ->
+      if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk.";
+      let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
+      let cs = get_unique_var_symb "cs" (InductiveType ("chars", [])) in
+      let Some (_, _, _, _, chars_length_symb) = try_assoc' (pn,ilist) "chars_length" purefuncmap in
+      assume (ctxt#mk_eq (ctxt#mk_app chars_length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
+      cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
     | CallStmt (l, "free", [], args,Static) ->
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
