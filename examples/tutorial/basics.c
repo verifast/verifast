@@ -5,7 +5,7 @@ int main()
   int i = 10;
   i = i + 1;
   
-  //@ assert i == 11;
+  assert(i == 11);
   
   return 0;
 }
