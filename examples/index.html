@@ -87,6 +87,28 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="lemmafuncptr.c.html">lemmafuncptr.c</a> - Simple lemma function pointers test</p>
 <p><a href="linkedlist.c.html">linkedlist.c</a> - Full functional specification and verification of a linked list implementation</p>
 <p><a href="map.c.html">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
+<p><b>mcas</b> - Full functional specification and verification of a challenging lock-free algorithm from the literature: Harris et al.'s
+multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspired by the one in Vafeiadis' PhD, but uses the approach described in
+<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW551.abs.html">CW-551</a> instead of rely-guarantee. (TODO: Verification of the many
+"trivial" lemmas used in the proof that have not yet been verified.)</p>
+<blockquote>
+<p><a href="mcas/bitops.h.html">bitops.h</a> - A few lemmas about bitwise operations</p>
+<p><a href="mcas/atomics.h.html">atomics.h</a> - Specification of atomic machine instructions (atomic loads and atomic (single) compare-and-swaps).
+You can create a "prophecy" [Abadi and Lamport] to know the value that will be read in advance. You can use a "tracked CAS" in order to predict
+the value that will be written by a successful CAS operation.</p>
+<p><a href="mcas/list.h.html">list.h</a> - Mathematical lists and "iterated star" (foreach) predicates over lists</p>
+<p><a href="mcas/pair.h.html">pair.h</a> - Pairs</p>
+<p><a href="mcas/assoc_list.h.html">assoc_list.h</a> - Association lists and foreach predicates over association lists</p>
+<p><a href="mcas/ghost_cells.h.html">ghost_cells.h</a> - Dynamically allocated auxiliary variables, including ones that use counting permissions</p>
+<p><a href="mcas/ghost_counters.h.html">ghost_counters.h</a> - An auxiliary object that holds a monotonically increasing integer</p>
+<p><a href="mcas/ghost_lists.h.html">ghost_lists.h</a> - Auxiliary objects holding lists</p>
+<p><a href="mcas/rdcss.h.html">rdcss.h</a> - Specification of a module that implements Harris et al.'s Restricted Double Compare Single Swap algorithm, which is
+part of the MCAS algorithm</p>
+<p><a href="mcas/rdcss.c.html">rdcss.c</a> - Implementation and proof of the RDCSS algorithm</p>
+<p><a href="mcas/mcas.h">mcas.h</a> - Specification of the MCAS module</p>
+<p><a href="mcas/mcas.c">mcas.c</a> - Implementation and proof of the MCAS module</p>
+<p><a href="mcas/mcas_client.c">mcas_client.c</a> - An minimal example client program, that uses MCAS to increment a pair of integers atomically</p>
+</blockquote>
 <p><a href="odd_even_lemmas.c.html">odd_even_lemmas.c</a> - Demonstrates how mutual lemma recursion is possible</p>
 <p><a href="polytest.c.html">polytest.c</a> - Test of VeriFast's support for abstracting inductive datatypes, fixpoint functions, and lemmas over types</a></p>
 <p><b>queue</b> - Full functional specification and verification of a lock-free queue implementation and an example client program.
