@@ -284,11 +284,12 @@ let show_ide initialPath prover =
         if result = 0 then [] else (String.sub buf 0 result)::iter()
       in
       let chunks = iter() in
+      let text = String.concat "" chunks in
       let _ = close_in chan in
       ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
-      List.iter (fun chunk -> (buffer: GText.buffer)#insert ~iter:gIter chunk) chunks;
+      (buffer: GText.buffer)#insert ~iter:gIter text;
       ignore_text_changes := false;
       undoList := [];
       redoList := [];
