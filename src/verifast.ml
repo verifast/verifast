@@ -2316,6 +2316,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | HandleIdType -> ProverInt
     | AnyType -> ProverInductive
     | TypeParam _ -> ProverInductive
+    | Void -> ProverInductive
     | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
   in
   
