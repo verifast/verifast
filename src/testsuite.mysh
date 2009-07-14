@@ -9,6 +9,7 @@ verifast sorted_bintree.c
 verifast iter.c
 verifast -c args.c
 verifast swap.c
+verifast -c limits.c
 verifast -disable_overflow_check -c fractions-counting.c
 verifast -shared polytest.c
 verifast -disable_overflow_check expr.c

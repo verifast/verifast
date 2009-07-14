@@ -831,7 +831,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "&"; "^"; "~"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "MIN_INT"; "MAX_INT"
 ]
 let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
 ]
@@ -1448,6 +1448,8 @@ and
     | [< >] -> if targs = [] then Var (l, x, ref None) else CallExpr (l, x, targs, [], [], Static)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
+| [< '(l, Kwd "MIN_INT") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
+| [< '(l, Kwd "MAX_INT") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "(");
      e = parser
