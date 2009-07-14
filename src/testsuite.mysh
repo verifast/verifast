@@ -17,6 +17,9 @@ verifast -disable_overflow_check -shared stack.c
 cd queue
 verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
 cd ..
+cd lcset
+verifast -c locks.c lcset.c lcset_client.c
+cd ..
 cd mcas
 verifast -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..

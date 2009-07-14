@@ -6434,14 +6434,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           ds
       in
       let (lems, predinsts) = (List.rev lems, List.rev predinsts) in
-      let predinstmap' =
-        List.map
-          begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
-            if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block.";
-            check_predinst (pn, ilist) tparams tenv env l p predinst_tparams [i] xs body
-          end
-          predinsts
-      in
       let funcnameterms' =
         List.map
           (fun (fn, (fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
@@ -6450,6 +6442,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let env = funcnameterms' @ env in
       let ghostenv = List.map (fun (fn, _) -> fn) funcnameterms' @ ghostenv in
       let tenv = List.map (fun (fn, _) -> (fn, PtrType Void)) funcnameterms' @ tenv in
+      let predinstmap' =
+        List.map
+          begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
+            if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block.";
+            check_predinst (pn, ilist) tparams tenv env l p predinst_tparams [i] xs body
+          end
+          predinsts
+      in
       let funcmap' =
         List.map
           begin fun (fn, (fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
