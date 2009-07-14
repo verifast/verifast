@@ -8,7 +8,7 @@ struct set;
 
 /*@
 
-predicate set(struct set *set);
+predicate set(struct set *set;);
 predicate set_atomic(struct set *set, list<int> values);
 
 @*/

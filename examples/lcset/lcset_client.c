@@ -3,16 +3,25 @@
 /*@
 
 predicate_family thread_run_pre(void *run)(void *data);
+predicate_family thread_run_post(void *run)(void *data);
+
+predicate thread(struct thread *thread, thread_run *run, void *data);
 
 @*/
 
 typedef void thread_run(void *data);
     //@ requires thread_run_pre(this)(data);
-    //@ ensures true;
+    //@ ensures thread_run_post(this)(data);
 
-void thread_start(thread_run *run, void *data);
+struct thread;
+
+struct thread *thread_start(thread_run *run, void *data);
     //@ requires is_thread_run(run) == true &*& thread_run_pre(run)(data);
-    //@ ensures true;
+    //@ ensures thread(result, run, data);
+
+void thread_join(struct thread *thread);
+    //@ requires thread(thread, ?run, ?data);
+    //@ ensures thread_run_post(run)(data);
 
 int readNumber();
     //@ requires true;
@@ -24,12 +33,14 @@ inductive set_info = set_info(struct set *);
 predicate_ctor set_ctor(struct set *set)() = set_atomic(set, _);
 
 predicate_family_instance thread_run_pre(session)(struct set *set) =
-    [_]set(set) &*& [_]atomic_space(set_ctor(set));
+    [1/2]set(set) &*& [1/2]atomic_space(set_ctor(set));
+predicate_family_instance thread_run_post(session)(struct set *set) =
+    [1/2]set(set) &*& [1/2]atomic_space(set_ctor(set));
 @*/
 
 void session(struct set *set) //@ : thread_run
     //@ requires thread_run_pre(session)(set);
-    //@ ensures true;
+    //@ ensures thread_run_post(session)(set);
 {
     //@ open thread_run_pre(session)(set);
     
@@ -66,7 +77,7 @@ void session(struct set *set) //@ : thread_run
     loop:
         /*@
         invariant
-            is_set_sep(sep) &*& is_set_unsep(unsep) &*& [_]set(set) &*& [_]atomic_space(set_ctor(set));
+            is_set_sep(sep) &*& is_set_unsep(unsep) &*& [1/2]set(set) &*& [1/2]atomic_space(set_ctor(set));
         @*/
         {
             /*@
@@ -121,9 +132,8 @@ void session(struct set *set) //@ : thread_run
         }
         //@ leak is_set_sep(sep);
         //@ leak is_set_unsep(unsep);
-        //@ leak [_]set(set);
-        //@ leak [_]atomic_space(set_ctor(set));
     }
+    //@ close thread_run_post(session)(set);
 }
 
 int main()
@@ -136,8 +146,17 @@ int main()
     //@ split_fraction set(set);
     //@ split_fraction atomic_space(set_ctor(set));
     //@ close thread_run_pre(session)(set);
-    thread_start(session, set);
+    struct thread *thread1 = thread_start(session, set);
     //@ close thread_run_pre(session)(set);
-    thread_start(session, set);
+    struct thread *thread2 = thread_start(session, set);
+    thread_join(thread1);
+    //@ open thread_run_post(session)(set);
+    thread_join(thread2);
+    //@ open thread_run_post(session)(set);
+    //@ merge_fractions set(set);
+    //@ merge_fractions atomic_space(set_ctor(set));
+    //@ dispose_atomic_space(set_ctor(set));
+    //@ open set_ctor(set)();
+    dispose_set(set);
     return 0;
 }

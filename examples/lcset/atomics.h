@@ -6,7 +6,7 @@
 
 /*@
 
-predicate atomic_space(predicate() inv);
+predicate atomic_space(predicate() inv;);
 
 lemma void create_atomic_space(predicate() inv);
     requires inv();
