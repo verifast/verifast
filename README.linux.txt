@@ -9,5 +9,7 @@ ocaml-native-compilers
 liblablgtk2-ocaml-dev
 camlidl
 
-1) Copy settings.sh.example to settings.sh; adapt it to your setup; source it.
-2) cd src; make
+
+1) Download Z3.tar.tgz from https://aramis.cs.kuleuven.be/verifast; extract it; run ./build-lib.sh `ocamlc -where`
+2) Copy settings.sh.example to settings.sh; adapt it to your setup; source it.
+3) cd src; make
