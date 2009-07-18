@@ -27,11 +27,36 @@ class z3_context () =
     Z3.pop ctxt 1;
     result
   in
+  let assume_is_inverse f1 f2 dom2 =
+    let name = Z3.mk_int_symbol ctxt 0 in
+    let x = Z3.mk_bound ctxt 0 dom2 in
+    let app1 = Z3.mk_app ctxt f2 [| x |] in
+    let app2 = Z3.mk_app ctxt f1 [| app1 |] in
+    let pat = Z3.mk_pattern ctxt [| app1 |] in
+    Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] [| dom2 |] [| name |] (Z3.mk_eq ctxt app2 x))
+  in
+  let boxed_int = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(intbox)") [| int_type |] inductive_type in
+  let unboxed_int = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(int)") [| inductive_type |] int_type in
+  let () = assume_is_inverse unboxed_int boxed_int int_type in
+  let () = assume_is_inverse boxed_int unboxed_int inductive_type in
+  let boxed_bool = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(boolbox)") [| bool_type |] inductive_type in
+  let unboxed_bool = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(bool)") [| inductive_type |] bool_type in
+  let () = assume_is_inverse unboxed_bool boxed_bool bool_type in
+  let boxed_real = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(realbox)") [| real_type |] inductive_type in
+  let unboxed_real = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(real)") [| inductive_type |] real_type in
+  let () = assume_is_inverse unboxed_real boxed_real real_type in
+  let () = assume_is_inverse boxed_real unboxed_real inductive_type in  
   object
     method type_bool = bool_type
     method type_int = int_type
     method type_real = real_type
     method type_inductive = inductive_type
+    method mk_boxed_int t = Z3.mk_app ctxt boxed_int [| t |]
+    method mk_unboxed_int t = Z3.mk_app ctxt unboxed_int [| t |]
+    method mk_boxed_bool t = Z3.mk_app ctxt boxed_bool [| t |]
+    method mk_unboxed_bool t = Z3.mk_app ctxt unboxed_bool [| t |]
+    method mk_boxed_real t = Z3.mk_app ctxt boxed_real [| t |]
+    method mk_unboxed_real t = Z3.mk_app ctxt unboxed_real [| t |]
     method mk_symbol name domain range kind =
       let tps = Array.of_list domain in
       let c = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt name) tps range in
@@ -68,15 +93,6 @@ class z3_context () =
       end;
       c
           
-    method assume_is_inverse f1 f2 =
-      let f1domain = Z3.get_domain ctxt f2 0 in
-      let name = Z3.mk_int_symbol ctxt 0 in
-      let x = Z3.mk_bound ctxt 0 f1domain in
-      let app1 = Z3.mk_app ctxt f2 [| x |] in
-      let app2 = Z3.mk_app ctxt f1 [| app1 |] in
-      let pat = Z3.mk_pattern ctxt [| app1 |] in
-      Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] [| f1domain |] [| name |] (Z3.mk_eq ctxt app2 x))
-    
     method set_fpclauses fc k cs =
       List.iter
         (fun (csym, fbody) ->

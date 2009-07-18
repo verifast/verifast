@@ -12,6 +12,12 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual type_int: 'typenode
     method virtual type_real: 'typenode
     method virtual type_inductive: 'typenode
+    method virtual mk_boxed_int: 'termnode -> 'termnode
+    method virtual mk_unboxed_int: 'termnode -> 'termnode
+    method virtual mk_boxed_real: 'termnode -> 'termnode
+    method virtual mk_unboxed_real: 'termnode -> 'termnode
+    method virtual mk_boxed_bool: 'termnode -> 'termnode
+    method virtual mk_unboxed_bool: 'termnode -> 'termnode
     method virtual mk_symbol: string -> 'typenode list -> 'typenode -> symbol_kind -> 'symbol
     method virtual set_fpclauses: 'symbol -> int -> ('symbol * ('termnode list -> 'termnode list -> 'termnode)) list -> unit
     method virtual mk_app: 'symbol -> 'termnode list -> 'termnode
@@ -40,7 +46,6 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual pprint: 'termnode -> string
     method virtual push: unit
     method virtual pop: unit
-    method virtual assume_is_inverse: 'symbol -> 'symbol -> unit  (* "assume_is_inverse f1 f2" assumes that forall x, f1(f2(x)) == x *)
     method virtual assume: 'termnode -> assume_result
     method virtual query: 'termnode -> bool
   end

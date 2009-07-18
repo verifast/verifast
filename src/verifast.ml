@@ -1872,20 +1872,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
   
-  let boxed_int_symbol = mk_symbol "boxed_int" [ctxt#type_int] ctxt#type_inductive Uninterp in
-  let unboxed_int_symbol = mk_symbol "unboxed_int" [ctxt#type_inductive] ctxt#type_int Uninterp in
-  ctxt#assume_is_inverse unboxed_int_symbol boxed_int_symbol;
-  ctxt#assume_is_inverse boxed_int_symbol unboxed_int_symbol;
-  
-  let boxed_bool_symbol = mk_symbol "boxed_bool" [ctxt#type_bool] ctxt#type_inductive Uninterp in
-  let unboxed_bool_symbol = mk_symbol "unboxed_bool" [ctxt#type_inductive] ctxt#type_bool Uninterp in
-  ctxt#assume_is_inverse unboxed_bool_symbol boxed_bool_symbol;
-  
-  let boxed_real_symbol = mk_symbol "boxed_real" [ctxt#type_real] ctxt#type_inductive Uninterp in
-  let unboxed_real_symbol = mk_symbol "unboxed_real" [ctxt#type_inductive] ctxt#type_real Uninterp in
-  ctxt#assume_is_inverse unboxed_real_symbol boxed_real_symbol;
-  ctxt#assume_is_inverse boxed_real_symbol unboxed_real_symbol;
-  
   let boolt = Bool in
   let intt = IntType in
 
@@ -1902,16 +1888,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let real_unit_pat = TermPat real_unit in
   
-  let get_conversion_funcsym proverType proverType0 =
+  let apply_conversion proverType proverType0 t =
     match (proverType, proverType0) with
-    | (ProverBool, ProverInductive) -> boxed_bool_symbol
-    | (ProverInt, ProverInductive) -> boxed_int_symbol
-    | (ProverReal, ProverInductive) -> boxed_real_symbol
-    | (ProverInductive, ProverBool) -> unboxed_bool_symbol
-    | (ProverInductive, ProverInt) -> unboxed_int_symbol
-    | (ProverInductive, ProverReal) -> unboxed_real_symbol
+    | (ProverBool, ProverInductive) -> ctxt#mk_boxed_bool t
+    | (ProverInt, ProverInductive) -> ctxt#mk_boxed_int t
+    | (ProverReal, ProverInductive) -> ctxt#mk_boxed_real t
+    | (ProverInductive, ProverBool) -> ctxt#mk_unboxed_bool t
+    | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
+    | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
   in
-  
 
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
@@ -3992,7 +3977,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_address t f = ctxt#mk_add t (field_offset f) in
   
   let convert_provertype term proverType proverType0 =
-    if proverType = proverType0 then term else ctxt#mk_app (get_conversion_funcsym proverType proverType0) [term]
+    if proverType = proverType0 then term else apply_conversion proverType proverType0 term
   in
   
   let prover_convert_term term t t0 =

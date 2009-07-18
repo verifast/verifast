@@ -24,18 +24,33 @@ refman:
 
 reduxtest: verifastredux_opt.exe
 	cd ..\examples
+#	..\src\verifastredux_opt args.c
+#	..\src\verifastredux_opt composite.c
+#	..\src\verifastredux_opt contrib.c
+	..\src\verifastredux_opt -disable_overflow_check counter.c
+	..\src\verifastredux_opt -disable_overflow_check counter_with_pred.c
+	..\src\verifastredux_opt -shared doubly_linked_list.c
+	..\src\verifastredux_opt -disable_overflow_check expr.c
+	..\src\verifastredux_opt -c -disable_overflow_check fractions-counting.c
+	..\src\verifastredux_opt ghost_field.c
+	..\src\verifastredux_opt -shared goto.c
+	..\src\verifastredux_opt -c ifs.c
+#	..\src\verifastredux_opt map.c
+	..\src\verifastredux_opt -shared odd_even_lemmas.c
+#	..\src\verifastredux_opt polytest.c
+	..\src\verifastredux_opt -disable_overflow_check -shared stack.c
+	..\src\verifastredux_opt swap.c
 	..\src\verifastredux_opt linkedlist.c
 	..\src\verifastredux_opt linkedlist2.c
-#	..\src\verifastredux_opt composite.c
 	..\src\verifastredux_opt composite4.c
 #	..\src\verifastredux_opt sorted_bintree.c
-	..\src\verifastredux_opt -c iter.c
+#	..\src\verifastredux_opt -c iter.c
 	cd java
 #	..\..\src\verifastredux_opt -c Tree.java
 #	..\..\src\verifastredux_opt -c Tree2.java
 	cd ..
 	cd chat
-	..\..\src\verifastredux_opt -c stringBuffers.c
+#	..\..\src\verifastredux_opt -c stringBuffers.c
 #	..\..\src\verifastredux_opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
 	cd ..
 	cd chatbot
@@ -132,8 +147,8 @@ redux.cmx: proverapi.cmx simplex.cmx redux.ml
 z3prover.cmx: proverapi.cmx z3prover.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I $(Z3)\ocaml z3.cmxa proverapi.cmx z3prover.ml
 
-verifastRedux_opt.exe: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
+verifastredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe record_backtrace.cmx unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 
 release: test refman
 	mkdir verifast-$(VFVERSION)

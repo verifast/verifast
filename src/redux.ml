@@ -22,10 +22,12 @@ type ('symbol, 'termnode) term =
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | IntLit of int
 | IntLitOfString of string
+| RealLit of Num.num
 | App of 'symbol * ('symbol, 'termnode) term list
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| RealMul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 
 module BigIntMap = Map.Make (struct type t = big_int let compare a b = compare_big_int a b end)
 
@@ -536,6 +538,12 @@ and context =
     method type_int = ()
     method type_real = ()
     method type_inductive = ()
+    method mk_boxed_int (t: (symbol, termnode) term) = t
+    method mk_unboxed_int (t: (symbol, termnode) term) = t
+    method mk_boxed_real (t: (symbol, termnode) term) = t
+    method mk_unboxed_real (t: (symbol, termnode) term) = t
+    method mk_boxed_bool (t: (symbol, termnode) term) = t
+    method mk_unboxed_bool (t: (symbol, termnode) term) = t
     method mk_true: (symbol, termnode) term = let Some ttrue = ttrue in TermNode ttrue
     method mk_false: (symbol, termnode) term = let Some tfalse = tfalse in TermNode tfalse
     method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = And (t1, t2)
@@ -552,10 +560,10 @@ and context =
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method mk_reallit (n: int): (symbol, termnode) term = IntLit n
-    method mk_reallit_of_num (n: Num.num): (symbol, termnode) term = failwith "Redux does not yet support general real number literals."
+    method mk_reallit_of_num (n: Num.num): (symbol, termnode) term = RealLit n
     method mk_real_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_real_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
-    method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = failwith "Redux does not yet support multiplication."
+    method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealMul (t1, t2)
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     method assume (t: (symbol, termnode) term): assume_result =
@@ -627,6 +635,9 @@ and context =
         ignore (simplex#assert_eq zero_big_int [neg_unit_big_int, utn; unit_big_int, uv1; big_int_of_int sign, uv2]);
         tn
       in
+      let real_mul n t =
+        failwith "Redux does not yet support multiplication."
+      in
       let termnode_of_big_int n =
         let tn = self#get_intlitnode n in
         let v = tn#value in
@@ -654,6 +665,9 @@ and context =
       | Lt (t1, t2) -> get_node int_lt_symbol [t1; t2]
       | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
       | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
+      | RealMul (RealLit n1, RealLit n2) -> self#termnode_of_term (RealLit (Num.mult_num n1 n2))
+      | RealMul (t, RealLit n) -> real_mul n t
+      | RealMul (RealLit n, t) -> real_mul n t
       | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
 
     method pushdepth = pushdepth
@@ -738,6 +752,8 @@ and context =
       | App (s, ts) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
       | IntLit n -> string_of_int n
       | IntLitOfString s -> "#\"" ^ s ^ "\""
+      | RealLit n -> Num.string_of_num n
+      | RealMul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
     
     method get_node s vs =
