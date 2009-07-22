@@ -1,3 +1,4 @@
+open Num
 open Big_int
 open Proverapi
 
@@ -29,7 +30,11 @@ type ('symbol, 'termnode) term =
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealMul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 
-module BigIntMap = Map.Make (struct type t = big_int let compare a b = compare_big_int a b end)
+module NumMap = Map.Make (struct type t = num let compare a b = compare_num a b end)
+
+let zero_num = num_of_int 0
+let unit_num = num_of_int 1
+let neg_unit_num = num_of_int (-1)
 
 let neg_unit_big_int = minus_big_int unit_big_int
 
@@ -203,16 +208,16 @@ and termnode (ctxt: context) s initial_children =
       | ("<=", [v1; v2]) ->
         begin
           if value = ctxt#true_node#value then
-            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_big_int v2#initial_child)
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child zero_num v2#initial_child)
           else
-            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child unit_big_int v1#initial_child)
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child unit_num v1#initial_child)
         end
       | ("<", [v1; v2]) ->
         begin
           if value = ctxt#true_node#value then
-            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child unit_big_int v2#initial_child)
+            ctxt#add_redex (fun () -> ctxt#assert_le v1#initial_child unit_num v2#initial_child)
           else
-            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_big_int v1#initial_child)
+            ctxt#add_redex (fun () -> ctxt#assert_le v2#initial_child zero_num v1#initial_child)
         end
       | ("&&", [v1; v2]) ->
         if value = ctxt#true_node#value then
@@ -431,7 +436,7 @@ and valuenode (ctxt: context) =
         | (Some u1, Some u2) ->
           begin
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
-            match ctxt#simplex#assert_eq zero_big_int [unit_big_int, u1; neg_unit_big_int, u2] with
+            match ctxt#simplex#assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
               Simplex.Unsat -> Unsat
             | Simplex.Sat -> process_ctorchildren()
           end
@@ -482,12 +487,13 @@ and context =
     val not_symbol = new symbol Uninterp "!"
     val add_symbol = new symbol Uninterp "+"
     val sub_symbol = new symbol Uninterp "-"
+    val mul_symbol = new symbol Uninterp "*"
     val int_le_symbol = new symbol Uninterp "<="
     val int_lt_symbol = new symbol Uninterp "<"
     val real_le_symbol = new symbol Uninterp "<=/"
     val real_lt_symbol = new symbol Uninterp "</"
     
-    val mutable intlitnodes: termnode BigIntMap.t = BigIntMap.empty (* Sorted *)
+    val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
     val simplex = new Simplex.simplex
@@ -511,14 +517,14 @@ and context =
     method register_valuenode v =
       values <- v::values
     
-    method get_intlitnode n =
+    method get_numnode n =
       try
-        BigIntMap.find n intlitnodes
+        NumMap.find n numnodes
       with
         Not_found ->
         (* print_endline_disabled ("Creating intlit node for " ^ string_of_int n); *)
-        let node = self#get_node (new symbol (Ctor (NumberCtor n)) (string_of_big_int n)) [] in
-        intlitnodes <- BigIntMap.add n node intlitnodes;
+        let node = self#get_node (new symbol (Ctor (NumberCtor n)) (string_of_num n)) [] in
+        numnodes <- NumMap.add n node numnodes;
         node
 
     method get_ifthenelsenode t1 t2 t3 =
@@ -572,9 +578,9 @@ and context =
         match t with
           TermNode t -> self#assume_eq t self#true_node
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#assume_le t1 zero_big_int t2
-        | Lt (t1, t2) -> self#assume_le t1 unit_big_int t2
-        | RealLe (t1, t2) -> self#assume_le t1 zero_big_int t2
+        | Le (t1, t2) -> self#assume_le t1 zero_num t2
+        | Lt (t1, t2) -> self#assume_le t1 unit_num t2
+        | RealLe (t1, t2) -> self#assume_le t1 zero_num t2
         | RealLt (t1, t2) -> self#assume (And (Not (Eq (t1, t2)), (RealLe (t1, t2))))
         | And (t1, t2) ->
           begin
@@ -588,8 +594,8 @@ and context =
         match t with
           TermNode t -> self#assume_eq t self#false_node
         | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#assume_le t2 unit_big_int t1
-        | Lt (t1, t2) -> self#assume_le t2 zero_big_int t1
+        | Le (t1, t2) -> self#assume_le t2 unit_num t1
+        | Lt (t1, t2) -> self#assume_le t2 zero_num t1
         | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
         | RealLt (t1, t2) -> assume_true (RealLe (t2, t1))
         | Not t -> assume_true t
@@ -602,8 +608,8 @@ and context =
         match t with
           TermNode t -> self#query_eq t self#true_node
         | Eq (t1, t2) -> self#query_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t1 zero_big_int t2
-        | Lt (t1, t2) -> self#query_le t1 unit_big_int t2
+        | Le (t1, t2) -> self#query_le t1 zero_num t2
+        | Lt (t1, t2) -> self#query_le t1 unit_num t2
         | RealLe (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
         | RealLt (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
         | Not t -> query_false t
@@ -612,8 +618,8 @@ and context =
         match t with
           TermNode t -> assert false
         | Eq (t1, t2) -> self#query_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t2 unit_big_int t1
-        | Lt (t1, t2) -> self#query_le t2 zero_big_int t1
+        | Le (t1, t2) -> self#query_le t2 unit_num t1
+        | Lt (t1, t2) -> self#query_le t2 zero_num t1
         | RealLe (t1, t2) -> self#as_query (fun () -> self#assume t)
         | RealLt (t1, t2) -> self#as_query (fun () -> self#assume t)
         | Not t -> query_true t
@@ -632,19 +638,27 @@ and context =
         let uv2 = v2#mk_unknown in
         let utn = tn#value#mk_unknown in
         print_endline_disabled ("Exporting addition to Simplex: " ^ utn#name ^ " = " ^ uv1#name ^ " + " ^ uv2#name);
-        ignore (simplex#assert_eq zero_big_int [neg_unit_big_int, utn; unit_big_int, uv1; big_int_of_int sign, uv2]);
+        ignore (simplex#assert_eq zero_num [neg_unit_num, utn; unit_num, uv1; num_of_int sign, uv2]);
+        tn
+      in
+      let termnode_of_num n =
+        let tn = self#get_numnode n in
+        let v = tn#value in
+        let u = v#mk_unknown in
+        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_num n);
+        ignore (simplex#assert_eq n [neg_unit_num, u]);
         tn
       in
       let real_mul n t =
-        failwith "Redux does not yet support multiplication."
-      in
-      let termnode_of_big_int n =
-        let tn = self#get_intlitnode n in
-        let v = tn#value in
-        let u = v#mk_unknown in
-        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_big_int n);
-        ignore (simplex#assert_eq n [neg_unit_big_int, u]);
-        tn
+        if eq_num n unit_num then t else
+        let tn = termnode_of_num n in
+        let v1 = tn#value in
+        let v2 = t#value in
+        let tmul = self#get_node mul_symbol [v1; v2] in
+        let uv2 = v2#mk_unknown in
+        let utmul = tmul#value#mk_unknown in
+        ignore (simplex#assert_eq zero_num [neg_unit_num, utmul; n, uv2]);
+        tmul
       in
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
@@ -653,8 +667,9 @@ and context =
       | Add (t1, IntLit 0) -> self#termnode_of_term t1
       | Add (t1, t2) -> addition add_symbol 1 t1 t2
       | Sub (t1, t2) -> addition sub_symbol (-1) t1 t2
-      | IntLit n -> termnode_of_big_int (big_int_of_int n)
-      | IntLitOfString s -> termnode_of_big_int (big_int_of_string s)
+      | IntLit n -> termnode_of_num (num_of_int n)
+      | RealLit n -> termnode_of_num n
+      | IntLitOfString s -> termnode_of_num (num_of_string s)
       | App (s, ts) -> get_node s ts
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
@@ -665,9 +680,16 @@ and context =
       | Lt (t1, t2) -> get_node int_lt_symbol [t1; t2]
       | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
       | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
-      | RealMul (RealLit n1, RealLit n2) -> self#termnode_of_term (RealLit (Num.mult_num n1 n2))
-      | RealMul (t, RealLit n) -> real_mul n t
-      | RealMul (RealLit n, t) -> real_mul n t
+      | RealMul (t1, t2) ->
+        let rec iter n t =
+          match t with
+            RealMul (RealLit n1, t) -> iter (mult_num n1 n) t
+          | RealMul (t, RealLit n2) -> iter (mult_num n2 n) t
+          | RealLit n0 -> termnode_of_num (mult_num n0 n)
+          | RealMul (t1, t2) -> real_mul n (get_node mul_symbol [t1; t2])
+          | t -> real_mul n (self#termnode_of_term t)
+        in
+        iter unit_num t
       | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
 
     method pushdepth = pushdepth
@@ -732,7 +754,7 @@ and context =
       self#as_query (fun _ -> self#assume_eq t1 t2)
 
     method query_le t1 offset t2 =
-      self#as_query (fun _ -> self#assume_le t2 (sub_big_int unit_big_int offset) t1)
+      self#as_query (fun _ -> self#assume_le t2 (sub_num unit_num offset) t1)
     
     method mk_app (s: symbol) (ts: (symbol, termnode) term list): (symbol, termnode) term = App (s, ts)
     
@@ -805,7 +827,7 @@ and context =
     method assert_le t1 offset t2 =
       let u1 = t1#value#mk_unknown in
       let u2 = t2#value#mk_unknown in
-      match simplex#assert_ge (minus_big_int offset) [neg_unit_big_int, u1; unit_big_int, u2] with
+      match simplex#assert_ge (minus_num offset) [neg_unit_num, u1; unit_num, u2] with
         Simplex.Unsat -> Unsat
       | Simplex.Sat -> Unknown
 
@@ -855,8 +877,8 @@ and context =
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = u#tag in
-              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_big_int c);
-              match self#assert_eq tn#value (self#get_intlitnode c)#value with
+              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c);
+              match self#assert_eq tn#value (self#get_numnode c)#value with
                 Unsat -> Unsat
               | Unknown -> iter()
           end

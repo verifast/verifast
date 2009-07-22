@@ -26,7 +26,7 @@ reduxtest: verifastredux_opt.exe
 	cd ..\examples
 #	..\src\verifastredux_opt args.c
 #	..\src\verifastredux_opt composite.c
-#	..\src\verifastredux_opt contrib.c
+	..\src\verifastredux_opt -c contrib.c
 	..\src\verifastredux_opt -disable_overflow_check counter.c
 	..\src\verifastredux_opt -disable_overflow_check counter_with_pred.c
 	..\src\verifastredux_opt -shared doubly_linked_list.c
@@ -44,7 +44,7 @@ reduxtest: verifastredux_opt.exe
 	..\src\verifastredux_opt linkedlist2.c
 	..\src\verifastredux_opt composite4.c
 #	..\src\verifastredux_opt sorted_bintree.c
-#	..\src\verifastredux_opt -c iter.c
+	..\src\verifastredux_opt -c iter.c
 	cd java
 #	..\..\src\verifastredux_opt -c Tree.java
 #	..\..\src\verifastredux_opt -c Tree2.java
@@ -102,8 +102,8 @@ vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
-vfideredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfideredux_opt.exe -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml -ccopt "/link /LIBPATH:$(GTKLIB)"
+vfideredux_opt.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.cmx
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfideredux_opt.exe -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa Printexc_proxy.cmx proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.cmx -cclib "-L "$(GTKLIB)
 
 verifast.cmx: vfversion.cmi proverapi.cmx verifast.ml 
 	time < nl.txt

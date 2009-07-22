@@ -3,7 +3,7 @@ open Num
 
 type assume_result = Unknown | Unsat
 
-type ctor_symbol = CtorByOrdinal of int | NumberCtor of big_int
+type ctor_symbol = CtorByOrdinal of int | NumberCtor of num
 type symbol_kind = Ctor of ctor_symbol | Fixpoint of int | Uninterp
 
 class virtual ['typenode, 'symbol, 'termnode] context =
