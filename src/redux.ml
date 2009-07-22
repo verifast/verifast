@@ -21,14 +21,12 @@ type ('symbol, 'termnode) term =
 | Or of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
-| IntLit of int
-| IntLitOfString of string
-| RealLit of Num.num
+| Mul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| NumLit of Num.num
 | App of 'symbol * ('symbol, 'termnode) term list
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
-| RealMul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 
 module NumMap = Map.Make (struct type t = num let compare a b = compare_num a b end)
 
@@ -558,18 +556,18 @@ and context =
     method mk_ifthenelse (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) (t3: (symbol, termnode) term): (symbol, termnode) term =
       IfThenElse (t1, t2, t3)
     method mk_eq (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Eq (t1, t2)
-    method mk_intlit (n: int): (symbol, termnode) term = IntLit n
-    method mk_intlit_of_string (s: string): (symbol, termnode) term = IntLitOfString s
+    method mk_intlit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
+    method mk_intlit_of_string (s: string): (symbol, termnode) term = NumLit (num_of_string s)
     method mk_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
-    method mk_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = failwith "Redux does not yet support integer multiplication."
+    method mk_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
-    method mk_reallit (n: int): (symbol, termnode) term = IntLit n
-    method mk_reallit_of_num (n: Num.num): (symbol, termnode) term = RealLit n
+    method mk_reallit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
+    method mk_reallit_of_num (n: Num.num): (symbol, termnode) term = NumLit n
     method mk_real_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_real_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
-    method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealMul (t1, t2)
+    method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
     method assume (t: (symbol, termnode) term): assume_result =
@@ -649,7 +647,7 @@ and context =
         ignore (simplex#assert_eq n [neg_unit_num, u]);
         tn
       in
-      let real_mul n t =
+      let linear_mul n t =
         if eq_num n unit_num then t else
         let tn = termnode_of_num n in
         let v1 = tn#value in
@@ -663,13 +661,11 @@ and context =
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
         TermNode t -> t
-      | Add (IntLit 0, t2) -> self#termnode_of_term t2
-      | Add (t1, IntLit 0) -> self#termnode_of_term t1
+      | Add (NumLit n, t2) when eq_num n zero_num -> self#termnode_of_term t2
+      | Add (t1, NumLit n) when eq_num n zero_num -> self#termnode_of_term t1
       | Add (t1, t2) -> addition add_symbol 1 t1 t2
       | Sub (t1, t2) -> addition sub_symbol (-1) t1 t2
-      | IntLit n -> termnode_of_num (num_of_int n)
-      | RealLit n -> termnode_of_num n
-      | IntLitOfString s -> termnode_of_num (num_of_string s)
+      | NumLit n -> termnode_of_num n
       | App (s, ts) -> get_node s ts
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
@@ -680,14 +676,14 @@ and context =
       | Lt (t1, t2) -> get_node int_lt_symbol [t1; t2]
       | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
       | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
-      | RealMul (t1, t2) ->
+      | Mul (t1, t2) ->
         let rec iter n t =
           match t with
-            RealMul (RealLit n1, t) -> iter (mult_num n1 n) t
-          | RealMul (t, RealLit n2) -> iter (mult_num n2 n) t
-          | RealLit n0 -> termnode_of_num (mult_num n0 n)
-          | RealMul (t1, t2) -> real_mul n (get_node mul_symbol [t1; t2])
-          | t -> real_mul n (self#termnode_of_term t)
+            Mul (NumLit n1, t) -> iter (mult_num n1 n) t
+          | Mul (t, NumLit n2) -> iter (mult_num n2 n) t
+          | NumLit n0 -> termnode_of_num (mult_num n0 n)
+          | Mul (t1, t2) -> linear_mul n (get_node mul_symbol [t1; t2])
+          | t -> linear_mul n (self#termnode_of_term t)
         in
         iter unit_num t
       | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
@@ -772,10 +768,8 @@ and context =
       | Add (t1, t2) -> "(" ^ self#pprint t1 ^ " + " ^ self#pprint t2 ^ ")"
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"
       | App (s, ts) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
-      | IntLit n -> string_of_int n
-      | IntLitOfString s -> "#\"" ^ s ^ "\""
-      | RealLit n -> Num.string_of_num n
-      | RealMul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
+      | NumLit n -> Num.string_of_num n
+      | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
     
     method get_node s vs =

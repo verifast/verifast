@@ -24,7 +24,7 @@ refman:
 
 reduxtest: verifastredux_opt.exe
 	cd ..\examples
-#	..\src\verifastredux_opt args.c
+	..\src\verifastredux_opt -c args.c
 #	..\src\verifastredux_opt composite.c
 	..\src\verifastredux_opt -c contrib.c
 	..\src\verifastredux_opt -disable_overflow_check counter.c
@@ -50,7 +50,7 @@ reduxtest: verifastredux_opt.exe
 #	..\..\src\verifastredux_opt -c Tree2.java
 	cd ..
 	cd chat
-#	..\..\src\verifastredux_opt -c stringBuffers.c
+	..\..\src\verifastredux_opt -c stringBuffers.c
 #	..\..\src\verifastredux_opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
 	cd ..
 	cd chatbot
