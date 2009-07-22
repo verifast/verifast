@@ -35,7 +35,7 @@ reduxtest: verifastredux_opt.exe
 	..\src\verifastredux_opt ghost_field.c
 	..\src\verifastredux_opt -shared goto.c
 	..\src\verifastredux_opt -c ifs.c
-#	..\src\verifastredux_opt map.c
+	..\src\verifastredux_opt map.c
 	..\src\verifastredux_opt -shared odd_even_lemmas.c
 #	..\src\verifastredux_opt polytest.c
 	..\src\verifastredux_opt -disable_overflow_check -shared stack.c

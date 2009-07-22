@@ -77,7 +77,7 @@ struct node *cons(int value, struct node *next)
 
 bool equals(struct node *n1, struct node *n2)
     //@ requires list(n1, ?xs1) &*& list(n2, ?xs2);
-    //@ ensures list(n1, xs1) &*& list(n2, xs2) &*& result == (xs1 == xs2);
+    //@ ensures list(n1, xs1) &*& list(n2, xs2) &*& result ? xs1 == xs2 : xs1 != xs2;
 {
     //@ open list(n1, xs1);
     //@ open list(n2, xs2);
