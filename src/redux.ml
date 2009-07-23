@@ -13,6 +13,7 @@ let flatmap f xs = List.concat (List.map f xs)
 
 type ('symbol, 'termnode) term =
   TermNode of 'termnode
+| Iff of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Eq of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Le of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Lt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
@@ -108,7 +109,7 @@ and termnode (ctxt: context) s initial_children =
         print_endline_disabled ("Created uninterpreted termnode " ^ symbol#name);
         begin
           match (symbol#name, children) with
-            ("==", [v1; v2]) ->
+            (("=="|"<==>"), [v1; v2]) ->
             begin
                 if v1 = v2 then
                 begin
@@ -169,14 +170,14 @@ and termnode (ctxt: context) s initial_children =
       in
       self#push;
       children <- replace 0 children;
-      if symbol#kind = Uninterp && symbol#name = "==" then
+      if symbol#kind = Uninterp && (symbol#name = "==" || symbol#name = "<==>") then
         match children with [v1; v2] when v1 = v2 -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#true_node#value) | _ -> ()
     method child_ctorchild_added k =
       if symbol#kind = Fixpoint k then
         ctxt#add_redex (fun () -> self#reduce)
       else if symbol#kind = Uninterp then
         match (symbol#name, children, k) with
-          ("==", [v1; v2], _) ->
+          (("=="|"<==>"), [v1; v2], _) ->
           begin
           match (v1#ctorchild, v2#ctorchild) with
             (Some t1, Some t2) when t1#symbol <> t2#symbol -> ctxt#add_redex (fun () -> ctxt#assert_eq value ctxt#false_node#value)
@@ -197,11 +198,17 @@ and termnode (ctxt: context) s initial_children =
         | _ -> ()
     method parent_ctorchild_added =
       match (symbol#name, children) with
-        ("==", [v1; v2]) ->
+        (("=="|"<==>"), [v1; v2]) ->
           begin
-            match value#ctorchild with
-              Some t when t = ctxt#true_node -> ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value v2#initial_child#value)
-            | Some t when t = ctxt#false_node -> ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value)
+            if value = ctxt#true_node#value then
+              ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value v2#initial_child#value)
+            else
+              ctxt#add_redex (fun () -> ctxt#assert_neq v1#initial_child#value v2#initial_child#value);
+            if symbol#name = "<==>" then
+              if value = ctxt#true_node#value then
+                ctxt#add_pending_split (TermNode (v1#initial_child)) (Not (TermNode (v1#initial_child)))
+              else
+                ctxt#add_pending_split (And (TermNode (v1#initial_child), Not (TermNode (v2#initial_child)))) (And (TermNode (v2#initial_child), Not (TermNode (v1#initial_child))))
           end
       | ("<=", [v1; v2]) ->
         begin
@@ -241,9 +248,9 @@ and termnode (ctxt: context) s initial_children =
         end
       | _ -> ()
     method matches s vs =
-      symbol = s && children = vs
+      List.mem symbol s && children = vs
     method lookup_equivalent_parent_of v =
-      v#lookup_parent symbol children
+      v#lookup_parent [symbol] children
     method reduce =
       if not reduced then
       begin
@@ -279,7 +286,7 @@ and termnode (ctxt: context) s initial_children =
     method toString =
       if children = [] then symbol#name else
         match (symbol#name, children) with
-          (("&&"|"||"|"+"|"-"|"=="|"<"|"<="|"</"|"<=/"), [v1; v2]) ->
+          (("&&"|"||"|"+"|"-"|"=="|"<==>"|"<"|"<="|"</"|"<=/"), [v1; v2]) ->
           "(" ^ v1#representativeString ^ " " ^ symbol#name ^ " " ^ v2#representativeString ^ ")"
         | _ ->
           symbol#name ^ "(" ^ String.concat ", " (List.map (fun v -> v#representativeString) children) ^ ")"
@@ -356,7 +363,7 @@ and valuenode (ctxt: context) =
     method add_neq v =
       self#push;
       neqs <- v::neqs;
-      match self#lookup_parent ctxt#eq_symbol [(self :> valuenode); v] with
+      match self#lookup_parent [ctxt#eq_symbol; ctxt#iff_symbol] [(self :> valuenode); v] with
         Some tn -> ctxt#add_redex (fun () -> ctxt#assert_eq tn#value ctxt#false_node#value)
       | None -> ()
     method neq_merging_into vold vnew =
@@ -495,6 +502,7 @@ and valuenode (ctxt: context) =
 and context =
   object (self)
     val eq_symbol = new symbol Uninterp "=="
+    val iff_symbol = new symbol Uninterp "<==>"
     val and_symbol = new symbol Uninterp "&&"
     val or_symbol = new symbol Uninterp "||"
     val not_symbol = new symbol Uninterp "!"
@@ -527,6 +535,7 @@ and context =
     
     method simplex = simplex
     method eq_symbol = eq_symbol
+    method iff_symbol = iff_symbol
     
     method register_valuenode v =
       values <- v::values
@@ -574,6 +583,7 @@ and context =
     method mk_not (t: (symbol, termnode) term): (symbol, termnode) term = Not t
     method mk_ifthenelse (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) (t3: (symbol, termnode) term): (symbol, termnode) term =
       IfThenElse (t1, t2, t3)
+    method mk_iff (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Iff (t1, t2)
     method mk_eq (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Eq (t1, t2)
     method mk_intlit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
     method mk_intlit_of_string (s: string): (symbol, termnode) term = NumLit (num_of_string s)
@@ -619,6 +629,7 @@ and context =
         | t -> self#assume_eq (self#termnode_of_term t) self#false_node
       in
       assume_true t
+
     method query (t: (symbol, termnode) term): bool =
       (* Printf.printf "Query: %s\n" (self#pprint t); *)
       self#push;
@@ -671,6 +682,7 @@ and context =
       | NumLit n -> termnode_of_num n
       | App (s, ts) -> get_node s ts
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
+      | Iff (t1, t2) -> get_node iff_symbol [t1; t2]
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
       | Not t -> self#termnode_of_term (Eq (t, self#mk_false))
       | And (t1, t2) -> get_node and_symbol [t1; t2]
@@ -752,7 +764,38 @@ and context =
     method add_pending_split branch1 branch2 =
       (* Printf.printf "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
       pending_splits <- (branch1, branch2)::pending_splits
-    
+(*    
+    method prune_pending_splits =
+      let rec iter () =
+        let rec iter0 badSplits splits =
+          match splits with
+            [] -> Unknown
+          | ((branch1, branch2) as split)::splits ->
+            let is_unsat t =
+              self#push;
+              let result = self#assume t in
+              self#pop;
+              result = Unsat
+            in
+            if is_unsat branch1 then
+            begin
+              pending_splits <- splits @ badSplits;
+              let result = self#assume branch2 in
+              if result = Unsat then Unsat else iter ()
+            end
+            else if is_unsat branch2 then
+            begin
+              pending_splits <- splits @ badSplits;
+              let result = self#assume branch1 in
+              if result = Unsat then Unsat else iter ()
+            end
+            else
+              iter0 (split::badSplits) splits
+        in
+        iter0 [] pending_splits
+      in
+      iter ()
+*)
     method perform_pending_splits cont =
       let rec iter0 assumptions =
         if pending_splits = [] then cont assumptions else
@@ -796,6 +839,7 @@ and context =
     method pprint (t: (symbol, termnode) term): string =
       match t with
         TermNode t -> t#pprint
+      | Iff (t1, t2) -> self#pprint t1 ^ " <==> " ^ self#pprint t2
       | Eq (t1, t2) -> self#pprint t1 ^ " = " ^ self#pprint t2
       | Le (t1, t2) -> self#pprint t1 ^ " <= " ^ self#pprint t2
       | Lt (t1, t2) -> self#pprint t1 ^ " < " ^ self#pprint t2
@@ -825,7 +869,7 @@ and context =
         end
       | v::_ ->
         begin
-        match v#lookup_parent s vs with
+        match v#lookup_parent [s] vs with
           None ->
           let node = new termnode (self :> context) s vs in
           node

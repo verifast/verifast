@@ -125,6 +125,7 @@ class z3_context () =
     method mk_or t1 t2 = Z3.mk_or ctxt [| t1; t2 |]
     method mk_not t = Z3.mk_not ctxt t
     method mk_ifthenelse t1 t2 t3 = Z3.mk_ite ctxt t1 t2 t3
+    method mk_iff t1 t2 = Z3.mk_eq ctxt t1 t2
     method mk_eq t1 t2 = Z3.mk_eq ctxt t1 t2
     method mk_intlit n = Z3.mk_int ctxt n int_type
     method mk_intlit_of_string s = Z3.mk_numeral ctxt s int_type

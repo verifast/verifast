@@ -4070,7 +4070,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       ctxt#mk_app symb (List.map ev es)
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
-    | Operation (l, Eq, [e1; e2], ts) -> ctxt#mk_eq (ev e1) (ev e2)
+    | Operation (l, Eq, [e1; e2], ts) ->
+      if !ts = Some [Bool; Bool] then
+        ctxt#mk_iff (ev e1) (ev e2)
+      else
+        ctxt#mk_eq (ev e1) (ev e2)
     | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
     | Operation (l, Add, [e1; e2], ts) ->
       begin
