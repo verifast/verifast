@@ -47,5 +47,6 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual push: unit
     method virtual pop: unit
     method virtual assume: 'termnode -> assume_result
+    method virtual perform_pending_splits: ('termnode list -> bool) -> bool
     method virtual query: 'termnode -> bool
   end

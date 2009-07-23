@@ -223,11 +223,21 @@ and termnode (ctxt: context) s initial_children =
           ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#true_node#value);
           ctxt#add_redex (fun () -> ctxt#assert_eq v2#initial_child#value ctxt#true_node#value)
         end
+        else
+        begin
+          (* Printf.printf "Adding split for negative conjunction...\n"; *)
+          ctxt#add_pending_split (Not (TermNode (v1#initial_child))) (Not (TermNode (v2#initial_child)))
+        end
       | ("||", [v1; v2]) ->
         if value = ctxt#false_node#value then
         begin
           ctxt#add_redex (fun () -> ctxt#assert_eq v1#initial_child#value ctxt#false_node#value);
           ctxt#add_redex (fun () -> ctxt#assert_eq v2#initial_child#value ctxt#false_node#value)
+        end
+        else
+        begin
+          (* Printf.printf "Adding split for positive disjunction...\n"; *)
+          ctxt#add_pending_split (TermNode (v1#initial_child)) (TermNode (v2#initial_child))
         end
       | _ -> ()
     method matches s vs =
@@ -360,10 +370,15 @@ and valuenode (ctxt: context) =
         | (n, _)::ns -> if n#matches s vs then Some n else iter ns
       in
       iter parents
-    method ctorchild_added =
-      List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
-      List.iter (fun n -> n#parent_ctorchild_added) children
+    method parents = parents
+    method children = children
     method merge_into v =
+      let ctorchild_added parents children =
+        List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
+        List.iter (fun n -> n#parent_ctorchild_added) children
+      in
+      let vParents = v#parents in
+      let vChildren = v#children in
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
@@ -373,9 +388,9 @@ and valuenode (ctxt: context) =
       begin
         match (ctorchild, v#ctorchild) with
           (None, Some _) ->
-          self#ctorchild_added
+          ctorchild_added parents children
         | (Some n, None) ->
-          v#set_ctorchild n; assert (n#value = v); v#ctorchild_added (* TODO: Eliminate the redundancy caused by processing the newly acquired parents and children of v! *)
+          v#set_ctorchild n; assert (n#value = v); ctorchild_added vParents vChildren
         | _ -> ()
       end;
       let redundant_parents =
@@ -501,6 +516,7 @@ and context =
     val mutable simplex_eqs = []
     val mutable simplex_consts = []
     val mutable redexes = []
+    val mutable pending_splits = []
     (* For diagnostics only. *)
     val mutable values = []
     
@@ -533,7 +549,10 @@ and context =
         (self#true_node#symbol, (fun _ _ -> t2));
         (self#false_node#symbol, (fun _ _ -> t3))
       ];
-      new termnode (self :> context) s [(self#termnode_of_term t1)#value]
+      let tnode = self#termnode_of_term t1 in
+      (* Printf.printf "Adding split for if-then-else term...\n"; *)
+      self#add_pending_split (TermNode tnode) (Not (TermNode tnode));
+      new termnode (self :> context) s [tnode#value]
 
     method true_node = let Some ttrue = ttrue in ttrue
     method false_node = let Some tfalse = tfalse in tfalse
@@ -601,29 +620,13 @@ and context =
       in
       assume_true t
     method query (t: (symbol, termnode) term): bool =
-      (* print_endline ("Query: " ^ self#pprint t); *)
-      let rec query_true t =
-        match t with
-          TermNode t -> self#query_eq t self#true_node
-        | Eq (t1, t2) -> self#query_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t1 zero_num t2
-        | Lt (t1, t2) -> self#query_le t1 unit_num t2
-        | RealLe (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
-        | RealLt (t1, t2) -> self#as_query (fun () -> self#assume (Not t))
-        | Not t -> query_false t
-        | t -> self#query_eq (self#termnode_of_term t) self#true_node
-      and query_false t =
-        match t with
-          TermNode t -> assert false
-        | Eq (t1, t2) -> self#query_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-        | Le (t1, t2) -> self#query_le t2 unit_num t1
-        | Lt (t1, t2) -> self#query_le t2 zero_num t1
-        | RealLe (t1, t2) -> self#as_query (fun () -> self#assume t)
-        | RealLt (t1, t2) -> self#as_query (fun () -> self#assume t)
-        | Not t -> query_true t
-        | t -> self#query_eq (self#termnode_of_term t) self#false_node
-      in
-      query_true t
+      (* Printf.printf "Query: %s\n" (self#pprint t); *)
+      self#push;
+      let result = self#assume (Not t) in
+      let result = result = Unsat || self#perform_pending_splits (fun _ -> false) in
+      self#pop;
+      (* Printf.printf "Query result of %s: %B\n" (self#pprint t) result; flush stdout; *)
+      result
     
     method get_type (term: (symbol, termnode) term) = ()
     
@@ -677,6 +680,28 @@ and context =
       | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
       | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
       | Mul (t1, t2) ->
+        let rec compute t =
+        match t with
+          Add (t1, t2) ->
+          begin
+            match (compute t1, compute t2) with
+              (NumLit n1, NumLit n2) -> NumLit (add_num n1 n2)
+            | (t1, t2) -> Add (t1, t2)
+          end
+        | Sub (t1, t2) ->
+          begin
+            match (compute t1, compute t2) with
+              (NumLit n1, NumLit n2) -> NumLit (sub_num n1 n2)
+            | (t1, t2) -> Sub (t1, t2)
+          end
+        | Mul (t1, t2) ->
+          begin
+            match (compute t1, compute t2) with
+              (NumLit n1, NumLit n2) -> NumLit (mult_num n1 n2)
+            | (t1, t2) -> Mul (t1, t2)
+          end
+        | t -> t
+        in
         let rec iter n t =
           match t with
             Mul (NumLit n1, t) -> iter (mult_num n1 n) t
@@ -685,7 +710,7 @@ and context =
           | Mul (t1, t2) -> linear_mul n (get_node mul_symbol [t1; t2])
           | t -> linear_mul n (self#termnode_of_term t)
         in
-        iter unit_num t
+        iter unit_num (compute t)
       | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
 
     method pushdepth = pushdepth
@@ -696,7 +721,7 @@ and context =
       assert (redexes = []);
       assert (simplex_eqs = []);
       assert (simplex_consts = []);
-      popstack <- (pushdepth, popactionlist, values)::popstack;
+      popstack <- (pushdepth, popactionlist, pending_splits, values)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- [];
       simplex#push
@@ -712,46 +737,60 @@ and context =
       simplex_consts <- [];
       simplex#pop;
       match popstack with
-        (pushdepth0, popactionlist0, values0)::popstack0 ->
+        (pushdepth0, popactionlist0, pending_splits0, values0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
+        pending_splits <- pending_splits0;
         values <- values0;
         popstack <- popstack0
       | [] -> failwith "Popstack is empty"
 
     method add_redex n =
       redexes <- n::redexes
-      
+    
+    method add_pending_split branch1 branch2 =
+      (* Printf.printf "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
+      pending_splits <- (branch1, branch2)::pending_splits
+    
+    method perform_pending_splits cont =
+      let rec iter0 assumptions =
+        if pending_splits = [] then cont assumptions else
+        let pendingSplits = List.rev pending_splits in
+        pending_splits <- [];
+        let rec iter assumptions pendingSplits =
+          match pendingSplits with
+            [] -> iter0 assumptions
+          | (branch1, branch2)::pendingSplits ->
+            (* Printf.printf "Splitting on (%s, %s) (further pending splits: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length pendingSplits); *)
+            self#push;
+            (* Printf.printf "  Branch %s\n" (self#pprint branch1); *)
+            let result = self#assume branch1 in
+            let continue = result = Unsat || iter (branch1::assumptions) pendingSplits in
+            self#pop;
+            let continue = continue &&
+              begin
+                self#push;
+                (* Printf.printf "  Branch %s\n" (self#pprint branch2); *)
+                let result = self#assume branch2 in
+                let continue = result = Unsat || iter (branch2::assumptions) pendingSplits in
+                self#pop;
+                continue
+              end
+            in
+            (* Printf.printf "Done splitting\n"; *)
+            continue
+        in
+        iter assumptions pendingSplits
+      in
+      iter0 []
+    
     method mk_symbol name (domain: unit list) (range: unit) kind =
       let s = new symbol kind name in if List.length domain = 0 then ignore (self#get_node s []); s
     
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * ((symbol, termnode) term list -> (symbol, termnode) term list -> (symbol, termnode) term)) list) =
       s#set_fpclauses cs
 
-    method query_eq (t1: termnode) (t2: termnode) =
-      self#reduce;
-      let result = t1#value = t2#value in
-      print_endline_disabled ("Equality query: " ^ t1#pprint ^ " = " ^ t2#pprint ^ ": " ^ (if result then "true" else "false"));
-      if not result then self#dump_state;
-      result
-    
-    method as_query f =
-      self#reduce;
-      self#push;
-      let result = f() in
-      if result = Unknown then self#dump_state;
-      self#pop;
-      match result with
-        Unsat -> true
-      | Unknown -> false
-    
-    method query_neq (t1: termnode) (t2: termnode) =
-      self#as_query (fun _ -> self#assume_eq t1 t2)
-
-    method query_le t1 offset t2 =
-      self#as_query (fun _ -> self#assume_le t2 (sub_num unit_num offset) t1)
-    
     method mk_app (s: symbol) (ts: (symbol, termnode) term list): (symbol, termnode) term = App (s, ts)
     
     method pprint (t: (symbol, termnode) term): string =

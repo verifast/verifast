@@ -22,41 +22,6 @@ refman:
 	pdflatex refman.tex
 	cd ..\..\src
 
-reduxtest: verifastredux_opt.exe
-	cd ..\examples
-	..\src\verifastredux_opt -c args.c
-#	..\src\verifastredux_opt composite.c
-	..\src\verifastredux_opt -c contrib.c
-	..\src\verifastredux_opt -disable_overflow_check counter.c
-	..\src\verifastredux_opt -disable_overflow_check counter_with_pred.c
-	..\src\verifastredux_opt -shared doubly_linked_list.c
-	..\src\verifastredux_opt -disable_overflow_check expr.c
-	..\src\verifastredux_opt -c -disable_overflow_check fractions-counting.c
-	..\src\verifastredux_opt ghost_field.c
-	..\src\verifastredux_opt -shared goto.c
-	..\src\verifastredux_opt -c ifs.c
-	..\src\verifastredux_opt map.c
-	..\src\verifastredux_opt -shared odd_even_lemmas.c
-#	..\src\verifastredux_opt polytest.c
-	..\src\verifastredux_opt -disable_overflow_check -shared stack.c
-	..\src\verifastredux_opt swap.c
-	..\src\verifastredux_opt linkedlist.c
-	..\src\verifastredux_opt linkedlist2.c
-	..\src\verifastredux_opt composite4.c
-#	..\src\verifastredux_opt sorted_bintree.c
-	..\src\verifastredux_opt -c iter.c
-	cd java
-#	..\..\src\verifastredux_opt -c Tree.java
-#	..\..\src\verifastredux_opt -c Tree2.java
-	cd ..
-	cd chat
-	..\..\src\verifastredux_opt -c stringBuffers.c
-#	..\..\src\verifastredux_opt stringBuffers.c sockets.o threading.o lists.o -allow_assume chat.c
-	cd ..
-	cd chatbot
-	..\..\src\verifastredux_opt -c bot.c
-	cd ..
-
 Printexc_proxy.cmx:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml
 	ocamlopt.opt -c Printexc_proxy.ml
@@ -130,9 +95,9 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastz3redux_opt.exe -I $(Z3)\ocaml record_backtrace.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
+verifast.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifast.exe -I $(Z3)\ocaml record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifast.exe -I $(Z3)\ocaml record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
 	time < nl.txt
 
 proverapi.cmx: proverapi.ml

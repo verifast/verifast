@@ -146,4 +146,5 @@ class z3_context () =
     method assume t = assert_term t
     method push = Z3.push ctxt
     method pop = Z3.pop ctxt 1
+    method perform_pending_splits (cont: Z3.ast list -> bool) = cont []
   end

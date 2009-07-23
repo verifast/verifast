@@ -1115,13 +1115,14 @@ start:
                     } else {
                         if (casProphecy == 0) {
                             void *prediction = create_tracked_cas_prediction(tracker, 0);
-                            split_fraction tracked_cas_prediction(tracker, 0, _);
-                            aop(0, prediction);
                             assert [_]cd->done |-> ?done;
-                            cd->committed = true;
                             if (done) {
                                 merge_fractions tracked_cas_prediction(tracker, 0, _);
-                            } else {
+                            }
+                            split_fraction tracked_cas_prediction(tracker, 0, _);
+                            aop(0, prediction);
+                            cd->committed = true;
+                            if (!done) {
                                 op();
                                 cd->done = true;
                                 cd->success2 = true;

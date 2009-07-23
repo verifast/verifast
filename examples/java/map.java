@@ -147,7 +147,7 @@ class Nil implements List {
     
     boolean equals(List other)
         //@ requires List(Nil.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
-        //@ ensures List(Nil.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result == (xs == ys);
+        //@ ensures List(Nil.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result ? xs == ys : xs != ys;
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -225,7 +225,7 @@ class Cons implements List {
     
     boolean equals(List other)
         //@ requires List(Cons.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
-        //@ ensures List(Cons.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result == (xs == ys);
+        //@ ensures List(Cons.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result ? xs == ys : xs != ys;
     {
         //@ switch (ys) { case nil: case cons(h, t): }
         //@ open List(Cons.class)(this, ?xs_);

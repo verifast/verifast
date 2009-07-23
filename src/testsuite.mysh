@@ -1,80 +1,84 @@
+let verifast_both
+verifast
+verifast -prover redux
+in
 cd examples
-verifast -disable_overflow_check counter.c
-verifast -disable_overflow_check counter_with_pred.c
-verifast linkedlist.c
-verifast linkedlist2.c
-verifast Composite.c
-verifast composite4.c
-verifast sorted_bintree.c
-verifast iter.c
-verifast -c args.c
-verifast swap.c
-verifast -c limits.c
-verifast -disable_overflow_check -c fractions-counting.c
-verifast -shared polytest.c
-verifast -disable_overflow_check expr.c
-verifast -disable_overflow_check -shared stack.c
+verifast_both -disable_overflow_check counter.c
+verifast_both -disable_overflow_check counter_with_pred.c
+verifast_both linkedlist.c
+verifast_both linkedlist2.c
+verifast_both Composite.c
+verifast_both composite4.c
+verifast_both sorted_bintree.c
+verifast_both iter.c
+verifast_both -c args.c
+verifast_both swap.c
+verifast_both -c limits.c
+verifast_both -disable_overflow_check -c fractions-counting.c
+verifast_both -shared polytest.c
+verifast_both -disable_overflow_check expr.c
+verifast_both -disable_overflow_check -shared stack.c
 cd queue
-verifast atomics.o ghost_cells.o threading.o queue.c queue_client.c
+verifast_both atomics.o ghost_cells.o threading.o queue.c queue_client.c
 cd ..
 cd lcset
 verifast -c locks.c lcset.c lcset_client.c
 cd ..
 cd mcas
-verifast -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
+verifast_both -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..
-verifast -c ifs.c
-verifast -shared goto.c
-verifast map.c
-verifast ghost_field.c
-verifast -c lemmafuncptr.c
-verifast -c odd_even_lemmas.c
-verifast -shared doubly_linked_list.c
+verifast_both -c ifs.c
+verifast_both -shared goto.c
+verifast_both map.c
+verifast_both ghost_field.c
+verifast_both -c lemmafuncptr.c
+verifast_both -c odd_even_lemmas.c
+verifast_both -shared doubly_linked_list.c
 cd java
-verifast -c hello.scala
-verifast -disable_overflow_check -c map.java
-verifast -disable_overflow_check -c Counter.java
-verifast -disable_overflow_check -c Contrib.java
-verifast -c Tree.java
+verifast_both -c hello.scala
+verifast_both -disable_overflow_check -c map.java
+verifast_both -disable_overflow_check -c Counter.java
+verifast_both -disable_overflow_check -c Contrib.java
+verifast_both -c Tree.java
 cd Tree2
-verifast -c Tree.java
+verifast_both -c Tree.java
 cd ..
 cd Tree3
-verifast -c Tree.java
+verifast_both -c Tree.java
 cd ..
-verifast -c Iterator.java
+verifast_both -c Iterator.java
 cd Iterator
-verifast -c it.jarsrc
-verifast -c prog.jarsrc
+verifast_both -c it.jarsrc
+verifast_both -c prog.jarsrc
 cd ..
 cd chat
-verifast -c chat.jarsrc
+verifast_both -c chat.jarsrc
 cd ..
 cd chatbot
-verifast -disable_overflow_check -c Bot.java
+verifast_both -disable_overflow_check -c Bot.java
 cd ..
 cd ..
 cd chat
-verifast stringBuffers.c sockets.o threading.o lists.o ghostlist.o chat.c
-verifast -c -emit_vfmanifest stringBuffers.c
-verifast -c -emit_vfmanifest chat.c
-verifast stringBuffers.o sockets.o threading.o lists.o ghostlist.o chat.o
+verifast_both stringBuffers.c sockets.o threading.o lists.o ghostlist.o chat.c
+verifast_both -c -emit_vfmanifest stringBuffers.c
+verifast_both -c -emit_vfmanifest chat.c
+verifast_both stringBuffers.o sockets.o threading.o lists.o ghostlist.o chat.o
 del stringBuffers.vfmanifest
 del chat.vfmanifest
 cd ..
 cd chatbot
-verifast -c bot.c
+verifast_both -c bot.c
 cd ..
 cd incr_box
-verifast -c incr_box.c
+verifast_both -c incr_box.c
 cd ..
-verifast -c contrib.c
-verifast reallittest.c
+verifast_both -c contrib.c
+verifast_both reallittest.c
 cd ..
 cd tests
 cd errors
-verifast -c -allow_should_fail basics.c
-verifast -c -allow_should_fail typecheck1.c
-verifast -c -allow_should_fail ghost_field.c
-verifast -c -allow_should_fail inhabited.c
-verifast -c -allow_should_fail lemmafuncptr.c
+verifast_both -c -allow_should_fail basics.c
+verifast_both -c -allow_should_fail typecheck1.c
+verifast_both -c -allow_should_fail ghost_field.c
+verifast_both -c -allow_should_fail inhabited.c
+verifast_both -c -allow_should_fail lemmafuncptr.c

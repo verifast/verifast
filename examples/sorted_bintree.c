@@ -20,7 +20,7 @@ inductive bintree = |nil |cons(int,bintree,bintree);
 fixpoint bool t_contains(bintree b, int v) {
   switch (b) {
     case nil: return false;
-    case cons(a,l,r): return (a==v ? true: (v < a? t_contains(l,v):t_contains(r,v)));
+    case cons(a,l,r): return a==v || (v < a? t_contains(l,v):t_contains(r,v));
   }
 }
 fixpoint bintree tree_add(bintree b, int x) {
@@ -44,11 +44,14 @@ fixpoint int min(bintree b){
 }
 fixpoint bintree tree_rem(bintree b, int x) {
   switch (b) {
-    case cons(v,l,r): return l==nil&&r==nil&&x==v? nil:
-			(x==v&&l==nil? r:
-			(x==v&&r==nil? l:
-			(x==v? cons(max(l),tree_rem(l,max(l)),r):
-			x < v? cons(v,tree_rem(l,x),r):cons(v,l,tree_rem(r,x)) ))) ;
+    case cons(v,l,r): return
+      x == v ?
+        l == nil ? r : r == nil ? l : cons(max(l), tree_rem(l, max(l)), r)
+      :
+        x < v ?
+          cons(v,tree_rem(l,x),r)
+        :
+          cons(v,l,tree_rem(r,x));
     case nil: return nil;
   }
 }
@@ -435,41 +438,40 @@ struct tree* remove(struct tree *t, int x)
       //@ close tree(t,cons(v,tree_rem(bl,x),br));
       return t;
     }
-  }
-  if(v < x){
+  } else if(v < x){
     if(r!=0){
       struct tree *temp=remove(r,x);
       t->right=temp;
       //@ close tree(t,cons(v,bl,tree_rem(br,x)));
       return t;
     }
-  }
-  if(v==x){
-    if(l!=0&&r==0){
-      //@ open tree(r,nil);
-      free(t);
-      return l;
-    }
-    if(l==0&&r==0){
-      //@ close tree(t,b);
-      free_tree(t);
-      //@ close tree(0,nil);
-      return 0;
-    }
-    if(l==0&&r!=0){
-      //@ open tree(l,nil);
-      free(t);
-      return r;
-    }
-    if(l!=0&&r!=0){
-      struct tree *temp=0;
-      int m=maximum(l);
-      t->value=m;
-      //@ contains_max(bl);
-      temp=remove(l,m);
-      t->left=temp;
-      //@ close tree(t,cons(m,tree_rem(bl,m),br));
-      return t;
+  } else {
+    if (l == 0) {
+      if (r == 0) {
+        //@ close tree(t,b);
+        free_tree(t);
+        //@ close tree(0,nil);
+        return 0;
+      } else {
+        //@ open tree(l,nil);
+        free(t);
+        return r;
+      }
+    } else {
+      if(r==0){
+        //@ open tree(r,nil);
+        free(t);
+        return l;
+      } else {
+        struct tree *temp=0;
+        int m=maximum(l);
+        t->value=m;
+        //@ contains_max(bl);
+        temp=remove(l,m);
+        t->left=temp;
+        //@ close tree(t,cons(m,tree_rem(bl,m),br));
+        return t;
+      }
     }
   }
 }
