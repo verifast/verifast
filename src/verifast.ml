@@ -90,11 +90,6 @@ let assoc2 x xys1 xys2 =
 let bindir = Filename.dirname Sys.executable_name
 let rtdir= Filename.concat bindir "rt"
 
-let banner =
-  "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
-  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans\n" ^
-  "Powered by the excellent SMT solver Z3 <http://research.microsoft.com/projects/z3> by Leonardo de Maura and Nikolaj Bjorner. The Z3 license applies. See Z3.LICENSE.txt."
-
 class stats =
   object (self)
     val mutable stmtsParsedCount = 0
@@ -7019,10 +7014,17 @@ class virtual prover_client =
     method virtual run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit
   end
 
-let prover_table: (string * (prover_client -> unit)) list ref = ref []
+let prover_table: (string * (string * (prover_client -> unit))) list ref = ref []
 
-let register_prover name f =
-  prover_table := (name, f)::!prover_table
+let register_prover name banner f =
+  prover_table := (name, (banner, f))::!prover_table
+
+let prover_banners = String.concat "" (List.map (fun (_, (banner, _)) -> banner) !prover_table)
+
+let banner =
+  "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
+  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans" ^
+  prover_banners
 
 let lookup_prover prover =
   match prover with
@@ -7030,13 +7032,13 @@ let lookup_prover prover =
     begin
       match !prover_table with
         [] -> assert false
-      | (_, f)::_ -> f
+      | (_, (_, f))::_ -> f
     end
   | Some name ->
     begin
       match try_assoc name !prover_table with
         None -> failwith ("No such prover: " ^ name)
-      | Some f -> f
+      | Some (banner, f) -> f
     end
       
 let verify_program prover print_stats options path reportRange breakpoint =

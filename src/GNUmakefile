@@ -1,3 +1,11 @@
+ifdef Z3
+  Z3DEPS = z3prover.cmx verifastPluginZ3.ml
+  Z3ARGS = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+else
+  Z3DEPS =
+  Z3ARGS =
+endif
+
 test: mysh verifast vfide
 	cd ..; src/mysh < src/testsuite.mysh
 
@@ -28,6 +36,16 @@ Printexc_proxy.cmx:
 	cp Printexc_proxy_310.ml Printexc_proxy.ml
 	ocamlopt -c Printexc_proxy.ml
 
+ifdef MAC
+Fonts.cmx: Fonts_mac.ml
+	cp Fonts_mac.ml Fonts.ml
+	ocamlopt -c Fonts.ml
+else
+Fonts.cmx: Fonts_default.ml
+	cp Fonts_default.ml Fonts.ml
+	ocamlopt -c Fonts.ml
+endif
+
 vfversion.cmi: vfversion.mli
 	ocamlc -c vfversion.mli
 
@@ -51,8 +69,8 @@ verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPlugin
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
-vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cmxa gtkInit.cmx $(OCAMLLIB)/libcamlidl.a unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.ml -ccopt "-L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs
+vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3MODS) Fonts.cmx vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -78,8 +96,8 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast: vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifast -I $(Z3)/ocaml unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfconsole.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3MODS) vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifast unix.cmxa nums.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
@@ -99,14 +117,19 @@ verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml
 release: test
 	mkdir verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/bin
-	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
-	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h verifast-$(VFVERSION)/bin
-	cp -R rt verifast-$(VFVERSION)/bin
+ifdef Z3
 	cp verifast verifast-$(VFVERSION)/bin/verifast-core
 	cp vfide verifast-$(VFVERSION)/bin/vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
+	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
+else
+	cp verifast verifast-$(VFVERSION)/bin
+	cp vfide verifast-$(VFVERSION)/bin
+endif
+	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h verifast-$(VFVERSION)/bin
+	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
 	cp testsuite.mysh verifast-$(VFVERSION)

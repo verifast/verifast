@@ -189,8 +189,8 @@ let show_ide initialPath prover =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
     let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
-    let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name "Courier 10" in
-    let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name "Courier 10" in
+    let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name Fonts.code_font in
+    let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name Fonts.code_font in
     srcText#set_pixels_above_lines 1;
     srcText#set_pixels_below_lines 1;
     subText#set_pixels_above_lines 1;
@@ -344,7 +344,7 @@ let show_ide initialPath prover =
     let store = GTree.tree_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name "Sans 8";
+    lb#coerce#misc#modify_font_by_name Fonts.trace_font;
     let col = GTree.view_column ~title:"Steps" ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
@@ -356,7 +356,7 @@ let show_ide initialPath prover =
     let store = GTree.list_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name "Sans 8";
+    lb#coerce#misc#modify_font_by_name Fonts.trace_font;
     let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
