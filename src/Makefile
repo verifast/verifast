@@ -22,6 +22,10 @@ refman:
 	pdflatex refman.tex
 	cd ..\..\src
 
+Fonts.cmx:
+	copy Fonts_default.ml Fonts.ml
+	ocamlopt.opt -c Fonts.ml
+
 Printexc_proxy.cmx:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml
 	ocamlopt.opt -c Printexc_proxy.ml
@@ -57,14 +61,14 @@ vfideZ3.exe: record_backtrace.cmo vfversion_cmo proverapi.cmo z3prover.cmo verif
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmo lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)\ocaml\z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)\ocaml\z3_stubs.obj $(Z3)\bin\z3.lib $(OCAMLLIB)\libcamlidl.lib ole32.lib -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
-vfide.cmx: vfversion.cmi verifast.cmx vfide.ml
+vfide.cmx: vfversion.cmi verifast.cmx Fonts.cmx vfide.ml
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I +lablgtk2 vfide.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I +lablgtk2 Fonts.cmx vfide.ml
 	time < nl.txt
 
-vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx
+vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml vfide.cmx -cclib "-L "$(GTKLIB)
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
 vfideredux_opt.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.cmx
