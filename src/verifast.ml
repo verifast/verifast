@@ -4251,7 +4251,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin
       match ctxt#assume t with
         Unknown ->
-        if ctxt#query ctxt#mk_false then () else
         ignore ((fun cont -> cont []) (* ctxt#perform_pending_splits *) (fun assumptions ->
           let assumptions = List.rev assumptions in
           let rec iter assumptions =

@@ -599,7 +599,7 @@ and context =
     method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
-    method assume (t: (symbol, termnode) term): assume_result =
+    method assume_core (t: (symbol, termnode) term): assume_result =
       (* print_endline ("Assume: " ^ self#pprint t); *)
       let rec assume_true t =
         match t with
@@ -608,12 +608,12 @@ and context =
         | Le (t1, t2) -> self#assume_le t1 zero_num t2
         | Lt (t1, t2) -> self#assume_le t1 unit_num t2
         | RealLe (t1, t2) -> self#assume_le t1 zero_num t2
-        | RealLt (t1, t2) -> self#assume (And (Not (Eq (t1, t2)), (RealLe (t1, t2))))
+        | RealLt (t1, t2) -> self#assume_core (And (Not (Eq (t1, t2)), (RealLe (t1, t2))))
         | And (t1, t2) ->
           begin
-            match self#assume t1 with
+            match self#assume_core t1 with
               Unsat -> Unsat
-            | Unknown -> self#assume t2
+            | Unknown -> self#assume_core t2
           end
         | Not t -> assume_false t
         | t -> self#assume_eq (self#termnode_of_term t) self#true_node
@@ -630,14 +630,18 @@ and context =
       in
       assume_true t
 
+    method assume t =
+      let result = self#assume_core t in
+      if result = Unsat then Unsat else
+        if self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
+
     method query (t: (symbol, termnode) term): bool =
       (* Printf.printf "Query: %s\n" (self#pprint t); *)
       self#push;
       let result = self#assume (Not t) in
-      let result = result = Unsat || self#perform_pending_splits (fun _ -> false) in
       self#pop;
       (* Printf.printf "Query result of %s: %B\n" (self#pprint t) result; flush stdout; *)
-      result
+      result = Unsat
     
     method get_type (term: (symbol, termnode) term) = ()
     
@@ -773,20 +777,20 @@ and context =
           | ((branch1, branch2) as split)::splits ->
             let is_unsat t =
               self#push;
-              let result = self#assume t in
+              let result = self#assume_core t in
               self#pop;
               result = Unsat
             in
             if is_unsat branch1 then
             begin
               pending_splits <- splits @ badSplits;
-              let result = self#assume branch2 in
+              let result = self#assume_core branch2 in
               if result = Unsat then Unsat else iter ()
             end
             else if is_unsat branch2 then
             begin
               pending_splits <- splits @ badSplits;
-              let result = self#assume branch1 in
+              let result = self#assume_core branch1 in
               if result = Unsat then Unsat else iter ()
             end
             else
@@ -799,7 +803,7 @@ and context =
     method perform_pending_splits cont =
       let rec iter0 assumptions =
         if pending_splits = [] then cont assumptions else
-        let pendingSplits = List.rev pending_splits in
+        let pendingSplits = pending_splits in
         pending_splits <- [];
         let rec iter assumptions pendingSplits =
           match pendingSplits with
@@ -808,14 +812,14 @@ and context =
             (* Printf.printf "Splitting on (%s, %s) (further pending splits: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length pendingSplits); *)
             self#push;
             (* Printf.printf "  Branch %s\n" (self#pprint branch1); *)
-            let result = self#assume branch1 in
+            let result = self#assume_core branch1 in
             let continue = result = Unsat || iter (branch1::assumptions) pendingSplits in
             self#pop;
             let continue = continue &&
               begin
                 self#push;
                 (* Printf.printf "  Branch %s\n" (self#pprint branch2); *)
-                let result = self#assume branch2 in
+                let result = self#assume_core branch2 in
                 let continue = result = Unsat || iter (branch2::assumptions) pendingSplits in
                 self#pop;
                 continue
@@ -824,7 +828,9 @@ and context =
             (* Printf.printf "Done splitting\n"; *)
             continue
         in
-        iter assumptions pendingSplits
+        let result = iter assumptions (List.rev pendingSplits) in
+        pending_splits <- pendingSplits;
+        result
       in
       iter0 []
     
