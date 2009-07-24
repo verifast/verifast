@@ -640,8 +640,15 @@ bool mcas(int n, struct mcas_entry *aes)
     return success;
 }
 
-//@ predicate done_copy(bool done) = true;
-//@ predicate committed_copy(bool committed) = true;
+/*@
+
+predicate committed_copy(bool committedCopy, struct cd *cd, int counter, int i) =
+    committedCopy ?
+        [_]cd->committed |-> true
+    :
+        ghost_counter_snapshot(counter, i);
+
+@*/
 
 bool mcas_impl(struct cd *cd)
     /*@
@@ -689,7 +696,7 @@ start:
             is_mcas_sep(sep) &*& is_mcas_unsep(unsep) &*& mcas_sep(sep)(mcasInfo, id, inv, unsep) &*&
             [_]ghost_list_member_handle(dsList, cd) &*&
             statusProphecy == 0 ?
-                ghost_counter_snapshot(counter, 0) &*& committed_copy(false)
+                committed_copy(false, cd, counter, 0)
             :
                 [_]cd->committed |-> true &*& [_]cd->success2 |-> (statusProphecy == (void *)1);
         lemma void context(atomic_load_pointer_operation *aop) : atomic_load_pointer_context
@@ -712,7 +719,7 @@ start:
             merge_fractions cd(cd, _, _, _, _, _);
             if (statusProphecy == 0) {
                 create_ghost_counter_snapshot(0);
-                close committed_copy(false);
+                close committed_copy(false, cd, counter, 0);
             } else {
                 split_fraction cd_committed(cd, true);
                 split_fraction cd_success2(cd, _);
@@ -747,11 +754,7 @@ start:
                 [fcd]cd->tracker |-> tracker &*& [fcd]cd->counter |-> counter &*& [fcd]cd->statusCell |-> statusCell &*& [fcd]cd->op |-> op &*&
                 s == 1 &*&
                 0 <= i &*& i <= length(es) &*&
-                committed_copy(?committedCopy) &*&
-                committedCopy ?
-                    [_]cd->committed |-> true
-                :
-                    ghost_counter_snapshot(counter, i);
+                committed_copy(?committedCopy, cd, counter, i);
             @*/
         {
             //@ entries_length_lemma();
@@ -826,11 +829,7 @@ start:
                     [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*&
                     [_]cd(cd, es, tracker, counter, statusCell, op) &*&
-                    committed_copy(?committedCopy1) &*&
-                    committedCopy1 ?
-                        [_]cd->committed |-> true
-                    :
-                        ghost_counter_snapshot(counter, i);
+                    committed_copy(?committedCopy1, cd, counter, i);
                 predicate_family_instance rdcss_operation_post(rop)(void *result) =
                     [_]ghost_list_member_handle(dsList, cd) &*&
                     true == (((uintptr_t)result & 2) == 2) ?
@@ -838,11 +837,7 @@ start:
                             [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)result & ~2)) &*&
                             [_]cd((void *)((uintptr_t)result & ~2), _, _, _, _, _)
                         :
-                            committed_copy(?committedCopy1) &*&
-                            committedCopy1 ?
-                                [_]cd->committed |-> true
-                            :
-                                ghost_counter_snapshot(counter, i + 1)
+                            committed_copy(?committedCopy1, cd, counter, i + 1)
                     :
                         result != fst(snd(ith(i, es))) ?
                             [_]tracked_cas_prediction(tracker, 0, ?prediction) &*&
@@ -851,11 +846,7 @@ start:
                             :
                                 true
                         :
-                            committed_copy(?committedCopy1) &*&
-                            committedCopy1 ?
-                                [_]cd->committed |-> true
-                            :
-                                ghost_counter_snapshot(counter, i + 1);
+                            committed_copy(?committedCopy1, cd, counter, i + 1);
                 lemma void *rop() : rdcss_operation_lemma
                     requires
                         rdcss_operation_pre(rop)(?rdcssUnsep, ?info, ?a1, ?o1, ?a2, ?o2, ?n2) &*&
@@ -870,7 +861,6 @@ start:
                 {
                     open rdcss_operation_pre(rop)(_, _, _, _, _, _, _);
                     open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-                    open committed_copy(?committedCopy1);
                     void *result = assoc(a2, bs);
                     merge_fractions ghost_cell6(id, _, _, _, _, _, _);
                     ghost_list_member_handle_lemma();
@@ -882,6 +872,7 @@ start:
                     open cdext(rcsList, unsep_, mcasInfo)(cd, _, ?status_);
                     merge_fractions cd(cd, _, _, _, _, _);
                     assoc_fst_ith_snd_ith(es, i);
+                    open committed_copy(?committedCopy1, _, _, _);
                     if (committedCopy1) {
                         merge_fractions cd_committed(cd, _);
                     } else {
@@ -904,13 +895,13 @@ start:
                         } else {
                             merge_fractions cd(cd, _, _, _, _, _);
                             if (committedCopy1) {
-                                close committed_copy(true);
                                 split_fraction cd_committed(cd, _);
+                                close committed_copy(true, cd, counter, i + 1);
                             } else {
-                                close committed_copy(false);
                                 match_ghost_counter_snapshot();
                                 index_of_assoc_fst_ith(es, i);
                                 create_ghost_counter_snapshot(i + 1);
+                                close committed_copy(false, cd, counter, i + 1);
                             }
                             split_fraction cd(cd, _, _, _, _, _);
                         }
@@ -970,13 +961,13 @@ start:
                                 split_fraction strong_ghost_assoc_list_member_handle(rcsList, a2, _);
                                 split_fraction ghost_list_member_handle(dsList, cd);
                                 split_fraction cd(cd, _, _, _, _, _);
-                                close committed_copy(false);
                                 create_ghost_counter_snapshot(i + 1);
                                 create_counted_ghost_cell_ticket(statusCell);
                                 index_of_assoc_fst_ith(es, i);
                                 close mcas_cell(rcsList, dsList)(a2, n2, abstractCellValue);
                                 foreach_assoc2_unseparate_1changed(rcs, cs, a2);
                                 create_ghost_counter_snapshot(i + 1);
+                                close committed_copy(false, cd, counter, i + 1);
                                 close entry_attached(rcsList, cd)(ith(i, es));
                                 foreach_take_plus_one_unseparate(i, es);
                                 close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
@@ -984,8 +975,8 @@ start:
                                 foreach3_mem_x_mem_assoc_x_ys(cd);
                                 close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update(bs, a2, n2));
                             } else {
-                                close committed_copy(true);
                                 split_fraction cd_committed(cd, _);
+                                close committed_copy(true, cd, counter, i + 1);
                                 close mcas_cell(rcsList, dsList)(a2, realCellValue, abstractCellValue);
                                 foreach_assoc2_unseparate_nochange(rcs, cs, a2);
                                 close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
@@ -1069,11 +1060,7 @@ start:
                 [_]ghost_list_member_handle<void *>(dsList, cd) &*&
                 [_]cd(cd, es, tracker, counter, statusCell, op) &*&
                 s == 1 ?
-                    committed_copy(?committedCopy1) &*&
-                    committedCopy1 ?
-                        [_]cd->committed |-> true
-                    :
-                        ghost_counter_snapshot(counter, length(es))
+                    committed_copy(?committedCopy1, cd, counter, length(es))
                 :
                     [_]tracked_cas_prediction(tracker, 0, ?prediction) &*&
                     prediction == (void *)2 ?
@@ -1106,7 +1093,7 @@ start:
                 open cdext(rcsList, unsep, mcasInfo)(cd, _, ?status_);
                 merge_fractions cd(cd, _, _, _, _, _);
                 if (s == 1) {
-                    open committed_copy(?committedCopy1);
+                    open committed_copy(?committedCopy1, _, _, _);
                     if (committedCopy1) {
                         merge_fractions cd_committed(cd, _);
                         aop(0, 0);
