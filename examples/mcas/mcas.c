@@ -91,6 +91,17 @@ predicate_ctor entry_mem(int rcsList)(pair<void *, pair<void *, void *> > e) =
 predicate_ctor entry_attached(int rcsList, void *cd)(pair<void *, pair<void *, void *> > e) =
     [1/2]strong_ghost_assoc_list_member_handle(rcsList, fst(e), (void *)((uintptr_t)cd | 2));
 
+predicate disposed_info(struct cd *cd, bool done, mcas_op *op, bool success2) =
+    [1/2]cd->disposed |-> ?disposed &*&
+    (disposed ? done : true) &*&
+    done ?
+        disposed ?
+            true
+        :
+            is_mcas_op(op) &*& mcas_post(op)(success2)
+    :
+        true;
+
 predicate_ctor cdext(int rcsList, mcas_unsep *unsep, any mcasInfo)(struct cd *cd, void **pstatus, void *status) =
     true == (((uintptr_t)cd & 1) == 0) &*&
     true == (((uintptr_t)cd & 2) == 0) &*&
@@ -117,14 +128,9 @@ predicate_ctor cdext(int rcsList, mcas_unsep *unsep, any mcasInfo)(struct cd *cd
         :
             cas_tracker(tracker, 0)
     ) &*&
-    [1/2]cd->disposed |-> ?disposed &*&
-    (disposed ? done : true) &*&
+    disposed_info(cd, done, op, success2) &*&
     done ?
-        [_]tracked_cas_prediction(tracker, 0, success2 ? (void *)1 : (void *)2) &*&
-        disposed ?
-            true
-        :
-            is_mcas_op(op) &*& mcas_post(op)(success2)
+        [_]tracked_cas_prediction(tracker, 0, success2 ? (void *)1 : (void *)2)
     :
         fDone == 1 &*& fSuccess2 == 1 &*& !success2 &*&
         is_mcas_op(op) &*& mcas_pre(op)(unsep, mcasInfo, es);
@@ -570,6 +576,7 @@ bool mcas(int n, struct mcas_entry *aes)
             split_fraction ghost_cell6(id, _, _, _, _, _, _);
             split_fraction cd(cd, _, _, _, _, _);
             split_fraction cd_disposed(cd, false);
+            close disposed_info(cd, false, op, false);
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, 0);
             close foreach3(cons(cd, ds), cons(&cd->status, sas), cons((void *)0, svs), cdext(rcsList, unsep, mcasInfo));
             close mcas(id, sep, unsep, mcasInfo, cs);
@@ -614,6 +621,7 @@ bool mcas(int n, struct mcas_entry *aes)
             assert foreach3(?ds, ?sas, ?svs, _);
             foreach3_separate(cd);
             open cdext(rcsList, unsep, mcasInfo)(cd, _, ?status_);
+            open disposed_info(_, _, _, ?success2);
             merge_fractions cd(cd, _, _, _, _, _);
             merge_fractions cd_committed(cd, _);
             merge_fractions cd_success2(cd, _);
@@ -621,6 +629,7 @@ bool mcas(int n, struct mcas_entry *aes)
             cd->disposed = true;
             split_fraction cd_disposed(cd, _);
             leak [1/2]cd_disposed(cd, _);
+            close disposed_info(cd, true, op, success2);
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, status_);
             foreach3_unseparate_nochange(ds, sas, svs, cd);
             close mcas(id, sep, unsep, mcasInfo, cs);
@@ -929,6 +938,8 @@ start:
                                     split_fraction tracked_cas_prediction(tracker, 0, _);
                                     split_fraction cd_done(cd, true);
                                     split_fraction cd_success2(cd, false);
+                                    open disposed_info(_, _, _, _);
+                                    close disposed_info(cd, true, op, false);
                                 }
                             } else {
                             }
@@ -1175,6 +1186,8 @@ start:
                                     leak [_]ghost_counter_snapshot(counter, _);
                                     update_status_cell(0);
                                 }
+                                open disposed_info(cd, false, op, false);
+                                close disposed_info(cd, true, op, true);
                             }
                             es_apply_lemma2(es, cs);
                             length_mapfst(es);
