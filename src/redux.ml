@@ -642,6 +642,18 @@ and context =
       let rec assume_true t =
         match t with
           TermNode t -> self#assume_eq t self#true_node
+        | Eq (t1, t2) when self#is_poly t1 || self#is_poly t2 ->
+          let (n, ts) = self#to_poly (Sub (t2, t1)) in
+          begin match ts with
+            [] -> if sign_num n = 0 then Unknown else Unsat
+          | [(t, scale)] -> self#assume_eq t (self#get_numnode (minus_num n // scale))
+          | _ ->
+            self#do_and_reduce (fun () ->
+              match simplex#assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts) with
+                Simplex.Unsat -> Unsat
+              | Simplex.Sat -> Unknown
+            )
+          end
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Iff (True, t2) -> assume_true t2
         | Iff (t1, True) -> assume_true t1
