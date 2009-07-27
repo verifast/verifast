@@ -17,13 +17,14 @@ type ('a, 'b) unknown_pos =
   
 type result = Sat | Unsat
 
-class ['tag] unknown (context: 'tag simplex) (name: string) (restricted: bool) (tag: 'tag option) =
+class ['tag] unknown (context: 'tag simplex) (name: string) (restricted: bool) (tag: 'tag option) (nonzero: bool) =
   object (self)
     val mutable pos: ('tag row, 'tag column) unknown_pos option = None
     
     method name = name
     method tag = tag
     method restricted = restricted
+    method nonzero = nonzero
     method set_pos p =
       let oldpos = pos in
       context#register_popaction (fun () -> pos <- oldpos);
@@ -100,10 +101,10 @@ and ['tag] row context own c =
         match live_terms with
           [(col, coef)] ->
           if col#owner#tag <> None && sign_num constant = 0 && coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
-        | [] -> context#propagate_eq_constant owner constant
+        | [] -> if owner#tag <> None then context#propagate_eq_constant owner constant else if owner#nonzero && sign_num constant = 0 then context#set_unsat
         | _ -> ()
       end;
-      begin
+      if owner#tag <> None && not context#unsat then begin
         match live_terms with
           [] -> ()
         | (col0, coef0)::_ ->
@@ -158,9 +159,12 @@ and ['tag] column context own =
       assert (not dead);
       context#register_popaction (fun () -> dead <- false);
       dead <- true;
+      if owner#nonzero then context#set_unsat else
+      begin
       if owner#tag <> None then
         context#propagate_eq_constant owner (num_of_int 0);
-      List.iter (fun (row, coef) -> if row#owner#tag <> None && sign_num coef#value <> 0 then row#propagate_eq) terms
+      List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms
+      end
   end
 and ['tag] simplex =
   object (self)
@@ -173,20 +177,24 @@ and ['tag] simplex =
     val mutable popactions: (unit -> unit) list = []
     val mutable popstack = []
     
+    method unsat = unsat
+    method set_unsat = unsat <- true
+    
     method register_listeners feqs fconsts =
       eq_listener <- feqs;
       const_listener <- fconsts
 
     method register_popaction f = popactions <- f::popactions
     method push =
-      popstack <- (unsat, rows, columns, popactions)::popstack;
+      assert (not unsat);
+      popstack <- (rows, columns, popactions)::popstack;
       popactions <- []
     method pop =
       List.iter (fun f -> f()) popactions;
       match popstack with
         [] -> assert false
-      | (oldunsat, oldrows, oldcolumns, oldpopactions)::oldpopstack ->
-        unsat <- oldunsat;
+      | (oldrows, oldcolumns, oldpopactions)::oldpopstack ->
+        unsat <- false;
         rows <- oldrows;
         columns <- oldcolumns;
         popactions <- oldpopactions;
@@ -220,7 +228,7 @@ and ['tag] simplex =
         col#terms
 
     method alloc_unknown name tag =
-      let u = new unknown (self :> 'tag simplex) name false tag in
+      let u = new unknown (self :> 'tag simplex) name false tag false in
       let col = new column (self :> 'tag simplex) u in
       u#set_pos (Column col);
       columns <- col::columns;
@@ -302,7 +310,7 @@ and ['tag] simplex =
       const_listener u n
       
     method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
-      let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None in
+      let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None false in
       let row = new row (self :> 'tag simplex) y c in
       rows <- row::rows;
       y#set_pos (Row row);
@@ -325,4 +333,11 @@ and ['tag] simplex =
       match self#assert_ge c ts with
         Unsat -> Unsat
       | Sat -> self#assert_ge (minus_num c) (List.map (fun (a, u) -> (minus_num a, u)) ts)
+    
+    method assert_neq (c: num) (ts: (num * 'tag unknown) list) =
+      let u = new unknown (self :> 'tag simplex) ("nz" ^ string_of_int (self#get_unique_index())) false None true in
+      let col = new column (self :> 'tag simplex) u in
+      u#set_pos (Column col);
+      columns <- col::columns;
+      self#assert_eq c ((num_of_int (-1), u)::ts)
   end

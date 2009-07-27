@@ -40,6 +40,8 @@ type ('symbol, 'termnode) term =
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| True
+| False
 
 module NumMap = Map.Make (struct type t = num let compare a b = compare_num a b end)
 
@@ -97,6 +99,10 @@ and termnode (ctxt: context) s initial_children =
         popstack <- popstack0
       | [] -> assert false
     method value = value
+    method to_poly =
+      match value#as_number with
+        None -> (zero_num, [((self :> termnode), unit_num)])
+      | Some n -> (n, [])
     method is_ctor = match symbol#kind with Ctor _ -> true | _ -> false
     initializer begin
       let rec iter k (vs: valuenode list) =
@@ -348,6 +354,13 @@ and valuenode (ctxt: context) =
       | [] -> assert(false)
     method ctorchild = ctorchild
     method unknown = unknown
+    method as_number =
+      match ctorchild with
+        None -> None
+      | Some n ->
+        match n#symbol#kind with
+          Ctor (NumberCtor n) -> Some n
+        | _ -> None
     method mk_unknown =
       match unknown with
         None ->
@@ -405,10 +418,23 @@ and valuenode (ctxt: context) =
       (* At this point self is referenced nowhere. *)
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
       begin
+        let check_export_constant u t =
+          match u with
+            None -> ()
+          | Some u ->
+            let Ctor (NumberCtor n) = t#symbol#kind in
+            context#add_redex (fun () ->
+              match context#simplex#assert_eq n [(neg_unit_num, u)] with
+                Simplex.Unsat -> Unsat
+              | Simplex.Sat -> Unknown
+            )
+        in
         match (ctorchild, v#ctorchild) with
-          (None, Some _) ->
+          (None, Some t) ->
+          check_export_constant unknown t;
           ctorchild_added parents children
         | (Some n, None) ->
+          check_export_constant v#unknown n;
           v#set_ctorchild n; assert (n#value = v); ctorchild_added vParents vChildren
         | _ -> ()
       end;
@@ -588,8 +614,8 @@ and context =
     method mk_unboxed_real (t: (symbol, termnode) term) = t
     method mk_boxed_bool (t: (symbol, termnode) term) = t
     method mk_unboxed_bool (t: (symbol, termnode) term) = t
-    method mk_true: (symbol, termnode) term = let Some ttrue = ttrue in TermNode ttrue
-    method mk_false: (symbol, termnode) term = let Some tfalse = tfalse in TermNode tfalse
+    method mk_true: (symbol, termnode) term = True
+    method mk_false: (symbol, termnode) term = False
     method mk_and (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = And (t1, t2)
     method mk_or (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Or (t1, t2)
     method mk_not (t: (symbol, termnode) term): (symbol, termnode) term = Not t
@@ -617,6 +643,10 @@ and context =
         match t with
           TermNode t -> self#assume_eq t self#true_node
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
+        | Iff (True, t2) -> assume_true t2
+        | Iff (t1, True) -> assume_true t1
+        | Iff (False, t2) -> assume_false t2
+        | Iff (t1, False) -> assume_false t1
         | Le (t1, t2) -> self#assume_le t1 zero_num t2
         | Lt (t1, t2) -> self#assume_le t1 unit_num t2
         | RealLe (t1, t2) -> self#assume_le t1 zero_num t2
@@ -632,59 +662,23 @@ and context =
       and assume_false t =
         match t with
           TermNode t -> self#assume_eq t self#false_node
-        | Eq (t1, t2) ->
-          (* let time0 = Sys.time() in *)
-          (* let termnoderesolvecount = ref 0 in *)
-          let rec normalize t =
-            match t with
-              Mul (t1, t2) ->
-              begin
-              match (normalize t1, normalize t2) with
-                (NumLit n1, NumLit n2) -> NumLit (mult_num n1 n2)
-              | (t1, t2) -> Mul (t1, t2)
-              end
-            | Add (t1, t2) ->
-              begin
-              match (normalize t1, normalize t2) with
-                (NumLit n1, NumLit n2) -> NumLit (add_num n1 n2)
-              | (t1, t2) -> Add (t1, t2)
-              end
-            | Sub (t1, t2) ->
-              begin
-              match (normalize t1, normalize t2) with
-                (NumLit n1, NumLit n2) -> NumLit (sub_num n1 n2)
-              | (t1, t2) -> Sub (t1, t2)
-              end
-            | NumLit n -> t
-            | t ->
-              (* incr termnoderesolvecount; *)
-              let t = self#termnode_of_term t in
-              begin match t#value#ctorchild with
-                Some t ->
-                begin match t#symbol#kind with
-                  Ctor (NumberCtor n) -> NumLit n
-                | _ -> TermNode t
-                end
-              | None -> TermNode t
-              end
-          in
-          (* let litcomp = ref false in *)
-          let result =
-          let rec assume_neq t1 t2 =
-            match (t1, t2) with
-              (Mul (x1, NumLit y1), Mul (x2, NumLit y2)) when eq_num y1 y2 ->
-              if sign_num y1 = 0 then Unsat else assume_neq x1 x2
-            | (NumLit n1, NumLit n2) -> (* litcomp := true; *) (* printff "assume_false(Eq): literal comparison\n"; *) if eq_num n1 n2 then Unsat else Unknown
-            | (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-          in
-          assume_neq (normalize t1) (normalize t2)
-          in
-          (* let delta = Sys.time() -. time0 in
-          if 0.001 < delta then
-          begin
-            printff "assume_false(Eq): %s: %f seconds (litcomp: %B; termnoderesolvecount: %d)\n" (self#pprint t) delta !litcomp !termnoderesolvecount
-          end; *)
-          result
+        | Iff (t1, True) -> assume_false t1
+        | Iff (t1, False) -> assume_true t1
+        | Iff (True, t2) -> assume_false t2
+        | Iff (False, t2) -> assume_true t2
+        | Eq (t1, t2) when self#is_poly t1 || self#is_poly t2 ->
+          let (offset, terms) = self#to_poly (Sub (t2, t1)) in
+          (* printff "assume_false(Eq): poly: %s\n" (self#pprint_poly (offset, terms)); *)
+          begin match terms with
+            [] -> if sign_num offset = 0 then Unsat else Unknown
+          | [(t, n)] -> self#assume_neq t (self#get_numnode (minus_num offset // n))
+          | terms ->
+            self#do_and_reduce $. fun () ->
+            match simplex#assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
+              Simplex.Unsat -> Unsat
+            | Simplex.Sat -> Unknown
+          end
+        | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#assume_le t2 unit_num t1
         | Lt (t1, t2) -> self#assume_le t2 zero_num t1
         | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
@@ -695,6 +689,7 @@ and context =
       assume_true t
 
     method assume t =
+      (* printff "assume %s\n" (self#pprint t); *)
       let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
       if result = Unsat then Unsat else
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
@@ -724,10 +719,12 @@ and context =
       in
       let termnode_of_num n =
         let tn = self#get_numnode n in
+        (*
         let v = tn#value in
         let u = v#mk_unknown in
         print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_num n);
         ignore (simplex#assert_eq n [neg_unit_num, u]);
+        *)
         tn
       in
       let linear_mul n t =
@@ -743,7 +740,21 @@ and context =
       in
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
-        TermNode t -> t
+        t when self#is_poly t ->
+        let (n, ts) = self#to_poly t in
+        begin match ts with
+          [] -> self#get_numnode n
+        | [(t, scale)] when sign_num n = 0 && scale =/ num_of_int 1 -> t
+        | _ ->
+          let s = "{" ^ self#pprint_poly (n, ts) ^ "}" in
+          let tnode = self#get_node (new symbol Uninterp s) [] in
+          let u = tnode#value#mk_unknown in
+          simplex#assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts);
+          tnode
+        end
+      | TermNode t -> t
+      | True -> self#true_node
+      | False -> self#false_node
       | Add (NumLit n, t2) when eq_num n zero_num -> self#termnode_of_term t2
       | Add (t1, NumLit n) when eq_num n zero_num -> self#termnode_of_term t1
       | Add (t1, t2) -> addition add_symbol 1 t1 t2
@@ -910,6 +921,8 @@ and context =
     method pprint (t: (symbol, termnode) term): string =
       match t with
         TermNode t -> t#pprint
+      | True -> "true"
+      | False -> "false"
       | Iff (t1, t2) -> self#pprint t1 ^ " <==> " ^ self#pprint t2
       | Eq (t1, t2) -> self#pprint t1 ^ " = " ^ self#pprint t2
       | Le (t1, t2) -> self#pprint t1 ^ " <= " ^ self#pprint t2
@@ -948,6 +961,7 @@ and context =
         end
     
     method assert_neq (v1: valuenode) (v2: valuenode) =
+      (* printff "assert_neq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
         Unsat
       else if v1#neq v2 then
@@ -973,17 +987,95 @@ and context =
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
     method assert_le t1 offset t2 =
-      let u1 = t1#value#mk_unknown in
-      let u2 = t2#value#mk_unknown in
-      match simplex#assert_ge (minus_num offset) [neg_unit_num, u1; unit_num, u2] with
+      let (n1, ts1) = t1#to_poly in
+      let (n2, ts2) = t2#to_poly in
+      let offset = n2 -/ n1 -/ offset in
+      let ts1 = List.map (fun (t, scale) -> (minus_num scale, t#value#mk_unknown)) ts1 in
+      let ts2 = List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts2 in
+      match simplex#assert_ge offset (ts1 @ ts2) with
         Simplex.Unsat -> Unsat
       | Simplex.Sat -> Unknown
 
+    method is_poly t =
+      match t with
+        NumLit _ -> true
+      | Add (_, _) -> true
+      | Sub (_, _) -> true
+      | Mul (_, _) -> true
+      | _ -> false
+    
+    method pprint_poly (offset, terms) =
+      String.concat " + " (string_of_num offset::List.map (fun (t, scale) -> Printf.sprintf "%s*%s" (string_of_num scale) (t#pprint)) terms)
+
+    method to_poly t =
+      let merge_term t scale ts =
+        let rec iter ts =
+          match ts with
+            [] -> [(t, scale)]
+          | ((t', scale') as term)::ts ->
+            if t#value = t'#value then
+              let scale'' = add_num scale scale' in
+              if sign_num scale'' = 0 then ts else (t, scale'')::ts
+            else
+              term::iter ts
+        in
+        iter ts
+      in
+      let rec merge_terms ts1 ts2 =
+        match ts1 with
+          [] -> ts2
+        | (t, scale)::ts1 -> merge_terms ts1 (merge_term t scale ts2)
+      in
+      let rec iter scale t =
+        match t with
+          NumLit n -> (mult_num scale n, [])
+        | Add (t1, t2) ->
+          let (n1, ts1) = iter scale t1 in
+          let (n2, ts2) = iter scale t2 in
+          (add_num n1 n2, merge_terms ts1 ts2)
+        | Sub (t1, t2) ->
+          let (n1, ts1) = iter scale t1 in
+          let (n2, ts2) = iter (minus_num scale) t2 in
+          (add_num n1 n2, merge_terms ts1 ts2)
+        | Mul (t1, t2) ->
+          let (n1, ts1) = iter scale t1 in
+          let (n2, ts2) = iter unit_num t2 in
+          let (n3, ts3) = (mult_num n1 n2, if sign_num n2 = 0 then [] else List.map (fun (v, scale) -> (v, mult_num n2 scale)) ts1) in
+          let rec iter ts3 ts2 =
+            match ts2 with
+              [] -> ts3
+            | (t, scale)::ts2 ->
+              let mult_values v v' =
+                let args = if Oo.id v' < Oo.id v then [v'; v] else [v; v'] in
+                self#get_node mul_symbol args
+              in
+              let ts4 = if sign_num n1 = 0 then [] else [(t, mult_num scale n1)] in
+              let ts4 = ts4 @ List.map (fun (t', scale') -> (mult_values t#value t'#value, mult_num scale scale')) ts1 in
+              iter (ts4 @ ts3) ts2
+          in
+          let ts3 = iter ts3 ts2 in
+          (* Printf.printf "Mul %s %s %s = %s\n" (string_of_num scale) (self#pprint t1) (self#pprint t2) (self#pprint_poly (n3, ts3)); *)
+          (n3, ts3)
+        | _ ->
+          let t = self#termnode_of_term t in
+          begin match t#value#as_number with
+            None -> (zero_num, [(t, scale)])
+          | Some n -> (mult_num scale n, [])
+          end
+      in
+      iter unit_num t
+    
     method assume_le t1 offset t2 =   (* t1 + offset <= t2 *)
-      self#reduce;
+      let (offset', terms) = self#to_poly (Sub (t2, t1)) in
+      let offset = sub_num offset' offset in
+      if terms = [] then if sign_num offset < 0 then Unsat else Unknown else
+      begin
       self#do_and_reduce (fun () ->
-        self#assert_le (self#termnode_of_term t1) offset (self#termnode_of_term t2)
+        match simplex#assert_ge offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
+          Simplex.Unsat -> Unsat
+        | Simplex.Sat -> Unknown
       )
+      end
     
     method assert_neq_and_reduce v1 v2 =
       self#do_and_reduce (fun () -> self#assert_neq v1 v2)
@@ -991,6 +1083,7 @@ and context =
     method assume_neq (t1: termnode) (t2: termnode) = self#reduce; self#assert_neq_and_reduce t1#value t2#value
 
     method assert_eq v1 v2 =
+      (* printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
       begin
         (* print_endline_disabled "assert_eq: values already the same"; *)
@@ -1025,7 +1118,7 @@ and context =
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = u#tag in
-              print_endline_disabled ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c);
+              (* print_endline ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c); *)
               match self#assert_eq tn#value (self#get_numnode c)#value with
                 Unsat -> Unsat
               | Unknown -> iter()
