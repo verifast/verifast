@@ -1,5 +1,12 @@
 open Proverapi
 open Big_int
+open Printf
+open Num
+
+let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
+
+let fprintff format = kfprintf (fun chan -> flush chan) format
+let printff format = fprintff stdout format
 
 let manifest_map: (string * string list) list ref = ref []
 let jardeps_map: (string * string list) list ref = ref []
@@ -1872,7 +1879,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let real_zero = ctxt#mk_reallit 0 in
   let real_unit = ctxt#mk_reallit 1 in
-  let real_half = ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (Num.num_of_int 2)) in
+  let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
   
   let min_int_big_int = big_int_of_string "-2147483648" in
   let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
@@ -3505,15 +3512,28 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end
   in
 
-  let check_pat (pn,ilist) l tparams tenv t p =
+  let check_pat_core (pn,ilist) l tparams tenv t p =
     match p with
-      LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, tenv)
+      LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
     | VarPat x ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
-      (p, (x, t)::tenv)
-    | DummyPat -> (p, tenv)
+      (p, [(x, t)])
+    | DummyPat -> (p, [])
   in
   
+  let check_pat (pn,ilist) l tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) l tparams tenv t p in (w, tenv' @ tenv) in
+
+  let merge_tenvs l tenv1 tenv2 =
+    let rec iter tenv1 tenv3 =
+      match tenv1 with
+        [] -> tenv3
+      | ((x, t) as xt)::tenv1 ->
+        if List.mem_assoc x tenv2 then static_error l (Printf.sprintf "Variable name clash: '%s'" x);
+        iter tenv1 (xt::tenv3)
+    in
+    iter tenv1 tenv2
+  in
+
   let rec check_pats (pn,ilist) l tparams tenv ts ps =
     match (ts, ps) with
       ([], []) -> ([], tenv)
@@ -3630,9 +3650,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | EmpPred l -> (p, tenv, [])
     | CoefPred (l, coef, body) ->
-      let (wcoef, tenv) = check_pat (pn,ilist) l tparams tenv RealType coef in
+      let (wcoef, tenv') = check_pat_core (pn,ilist) l tparams tenv RealType coef in
       let (wbody, tenv, infTps) = check_pred (pn,ilist) tparams tenv body in
-      (CoefPred (l, wcoef, wbody), tenv, infTps)
+      (CoefPred (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
   in
   
   let rec fix_inferred_type r =
@@ -4019,7 +4039,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin match !t with
         Some RealType ->
         if eq_big_int n unit_big_int then real_unit
-        else ctxt#mk_reallit_of_num (Num.num_of_big_int n)
+        else ctxt#mk_reallit_of_num (num_of_big_int n)
       | Some t ->
         if assert_term <> None then
         begin
@@ -4104,10 +4124,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Div, [e1; e2], ts) ->
       let rec eval_reallit e =
         match e with
-          IntLit (l, n, t) -> Num.num_of_big_int n
+          IntLit (l, n, t) -> num_of_big_int n
         | _ -> static_error (expr_loc e) "The denominator of a division must be a literal."
       in
-      ctxt#mk_real_mul (ev e1) (ctxt#mk_reallit_of_num (Num.div_num (Num.num_of_int 1) (eval_reallit e2)))
+      ctxt#mk_real_mul (ev e1) (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->
@@ -4432,25 +4452,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (SrcPat (VarPat x), t) -> cont (x::ghostenv) (update env x (prover_convert_term t tp tp0))
       | (SrcPat DummyPat, t) -> cont ghostenv env
     in
-    let rec iter ghostenv env pats tps0 tps ts =
+    let rec match_pats ghostenv env pats tps0 tps ts cont =
       match (pats, tps0, tps, ts) with
-        (pat::pats, tp0::tps0, tp::tps, t::ts) -> match_pat ghostenv env pat tp0 tp t (fun ghostenv env -> iter ghostenv env pats tps0 tps ts)
-      | ([], [], [], []) -> Some (coef0, ts0, size0, ghostenv, env)
+        (pat::pats, tp0::tps0, tp::tps, t::ts) -> match_pat ghostenv env pat tp0 tp t (fun ghostenv env -> match_pats ghostenv env pats tps0 tps ts cont)
+      | ([], [], [], []) -> cont ghostenv env
     in
-      if predname_eq g g' && List.for_all2 unify targs targs0 then
-        begin
-          if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then iter ghostenv env pats tps0 tps ts0 else
-          let match_term_coefpat t =
-            if definitely_equal (real_mul l coef t) coef0 then iter ghostenv env pats tps0 tps ts0 else None
-          in
-          match coefpat with
-            SrcPat (LitPat e) -> match_term_coefpat (eval (pn,ilist) None env e)
-          | TermPat t -> match_term_coefpat t
-          | SrcPat (VarPat x) -> iter (x::ghostenv) (update env x (real_div l coef0 coef)) pats tps0 tps ts0
-          | SrcPat DummyPat -> iter ghostenv env pats tps0 tps ts0
-        end
-      else
-        None
+    let match_coef ghostenv env cont =
+      if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then cont ghostenv env else
+      let match_term_coefpat t =
+        if definitely_equal (real_mul l coef t) coef0 then cont ghostenv env else None
+      in
+      match coefpat with
+        SrcPat (LitPat e) -> match_term_coefpat (eval (pn,ilist) None env e)
+      | TermPat t -> match_term_coefpat t
+      | SrcPat (VarPat x) -> cont (x::ghostenv) (update env x (real_div l coef0 coef))
+      | SrcPat DummyPat -> cont ghostenv env
+    in
+    if not (predname_eq g g' && List.for_all2 unify targs targs0) then None else
+    match_pats ghostenv env pats tps0 tps ts0 $. fun ghostenv env ->
+    match_coef ghostenv env $. fun ghostenv env ->
+    Some (coef0, ts0, size0, ghostenv, env)
   in
   
   let lookup_points_to_chunk h0 env l f_symb t =
@@ -4523,6 +4544,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         Sep (_, _, _) -> cont()
       | _ -> with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
     in
+    (*
+    let time0 = Sys.time() in
+    printff "%s: Consuming assertion (timestamp: %f)\n" (string_of_loc (pred_loc p)) time0;
+    let cont h ghostenv env size =
+      printff "%s: Done consuming assertion (%f seconds)\n" (string_of_loc (pred_loc p)) (Sys.time() -. time0); 
+      cont h ghostenv env size
+    in
+    *)
     with_context_helper (fun _ ->
     let ev = eval (pn,ilist) None env in
     let access l coefpat e f rhs =
@@ -5426,7 +5455,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
     let l = stmt_loc s in
-    if verbose then print_endline (string_of_loc l ^ ": Executing statement");
+    if verbose then printff "%s: Executing statement (timestamp: %f)\n" (string_of_loc l) (Sys.time ());
     check_breakpoint h env l;
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
@@ -6504,7 +6533,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
+        let time0 = Sys.time() in
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
+          if verbose then printff "%s: %f seconds\n" (string_of_loc (stmt_loc s)) (Sys.time() -. time0);
           verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         ) return_cont
       )

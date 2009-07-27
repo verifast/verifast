@@ -31,7 +31,10 @@ let rec exec_lines lineno =
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
+        let time0 = Unix.gettimeofday() in
         let status = Sys.command line in
+        let time1 = Unix.gettimeofday() in
+        Printf.printf "%f seconds\n" (time1 -. time0);
         print_newline ();
         if status <> 0 then
           failwith ("mysh: line " ^ string_of_int lineno ^ ": exit code " ^ string_of_int status)

@@ -1,8 +1,20 @@
 open Num
 open Big_int
 open Proverapi
+open Printf
 
 let print_endline_disabled msg = ()
+
+let printff format = kfprintf (fun _ -> flush stdout) stdout format
+
+let ($.) f x = f x
+
+let with_timing msg f =
+  printff "%s: begin\n" msg;
+  let time0 = Sys.time() in
+  let result = f() in
+  printff "%s: end. Time: %f seconds\n" msg (Sys.time() -. time0);
+  result
 
 let rec try_assoc key al =
   match al with
@@ -23,7 +35,7 @@ type ('symbol, 'termnode) term =
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Mul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
-| NumLit of Num.num
+| NumLit of num
 | App of 'symbol * ('symbol, 'termnode) term list
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
@@ -232,7 +244,7 @@ and termnode (ctxt: context) s initial_children =
         end
         else
         begin
-          (* Printf.printf "Adding split for negative conjunction...\n"; *)
+          (* printff "Adding split for negative conjunction...\n"; *)
           ctxt#add_pending_split (Not (TermNode (v1#initial_child))) (Not (TermNode (v2#initial_child)))
         end
       | ("||", [v1; v2]) ->
@@ -243,7 +255,7 @@ and termnode (ctxt: context) s initial_children =
         end
         else
         begin
-          (* Printf.printf "Adding split for positive disjunction...\n"; *)
+          (* printff "Adding split for positive disjunction...\n"; *)
           ctxt#add_pending_split (TermNode (v1#initial_child)) (TermNode (v2#initial_child))
         end
       | _ -> ()
@@ -559,7 +571,7 @@ and context =
         (self#false_node#symbol, (fun _ _ -> t3))
       ];
       let tnode = self#termnode_of_term t1 in
-      (* Printf.printf "Adding split for if-then-else term...\n"; *)
+      (* printff "Adding split for if-then-else term...\n"; *)
       self#add_pending_split (TermNode tnode) (Not (TermNode tnode));
       new termnode (self :> context) s [tnode#value]
 
@@ -593,7 +605,7 @@ and context =
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method mk_reallit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
-    method mk_reallit_of_num (n: Num.num): (symbol, termnode) term = NumLit n
+    method mk_reallit_of_num (n: num): (symbol, termnode) term = NumLit n
     method mk_real_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_real_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
@@ -620,7 +632,42 @@ and context =
       and assume_false t =
         match t with
           TermNode t -> self#assume_eq t self#false_node
-        | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
+        | Eq (t1, t2) ->
+          let rec normalize t =
+            match t with
+              Mul (t1, t2) ->
+              begin
+              match (normalize t1, normalize t2) with
+                (NumLit n1, NumLit n2) -> NumLit (mult_num n1 n2)
+              | (t1, t2) -> Mul (t1, t2)
+              end
+            | Add (t1, t2) ->
+              begin
+              match (normalize t1, normalize t2) with
+                (NumLit n1, NumLit n2) -> NumLit (add_num n1 n2)
+              | (t1, t2) -> Add (t1, t2)
+              end
+            | Sub (t1, t2) ->
+              begin
+              match (normalize t1, normalize t2) with
+                (NumLit n1, NumLit n2) -> NumLit (sub_num n1 n2)
+              | (t1, t2) -> Sub (t1, t2)
+              end
+            | t ->
+              let t = self#termnode_of_term t in
+              begin match t#value#ctorchild with
+                Some t ->
+                begin match t#symbol#kind with
+                  Ctor (NumberCtor n) -> NumLit n
+                | _ -> TermNode t
+                end
+              | None -> TermNode t
+              end
+          in
+          begin match (normalize t1, normalize t2) with
+            (NumLit n1, NumLit n2) -> (* printff "assume_false(Eq): literal comparison\n"; *) if eq_num n1 n2 then Unsat else Unknown
+          | (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
+          end
         | Le (t1, t2) -> self#assume_le t2 unit_num t1
         | Lt (t1, t2) -> self#assume_le t2 zero_num t1
         | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
@@ -631,16 +678,17 @@ and context =
       assume_true t
 
     method assume t =
-      let result = self#assume_core t in
+      let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
       if result = Unsat then Unsat else
-        if self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
+        if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
 
     method query (t: (symbol, termnode) term): bool =
-      (* Printf.printf "Query: %s\n" (self#pprint t); *)
+      (* printff "Query: %s\n" (self#pprint t); *)
+      (* let time0 = Sys.time() in *)
       self#push;
       let result = self#assume (Not t) in
       self#pop;
-      (* Printf.printf "Query result of %s: %B\n" (self#pprint t) result; flush stdout; *)
+      (* printff "Query result of %s: %B (%f seconds)\n" (self#pprint t) (result = Unsat) (Sys.time() -. time0); *)
       result = Unsat
     
     method get_type (term: (symbol, termnode) term) = ()
@@ -766,7 +814,7 @@ and context =
       redexes <- n::redexes
     
     method add_pending_split branch1 branch2 =
-      (* Printf.printf "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
+      (* printff "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
       pending_splits <- (branch1, branch2)::pending_splits
 (*    
     method prune_pending_splits =
@@ -809,23 +857,23 @@ and context =
           match pendingSplits with
             [] -> iter0 assumptions
           | (branch1, branch2)::pendingSplits ->
-            (* Printf.printf "Splitting on (%s, %s) (further pending splits: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length pendingSplits); *)
+            (* printff "Splitting on (%s, %s) (further pending splits: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length pendingSplits); *)
             self#push;
-            (* Printf.printf "  Branch %s\n" (self#pprint branch1); *)
+            (* printff "  Branch %s\n" (self#pprint branch1); *)
             let result = self#assume_core branch1 in
             let continue = result = Unsat || iter (branch1::assumptions) pendingSplits in
             self#pop;
             let continue = continue &&
               begin
                 self#push;
-                (* Printf.printf "  Branch %s\n" (self#pprint branch2); *)
+                (* printff "  Branch %s\n" (self#pprint branch2); *)
                 let result = self#assume_core branch2 in
                 let continue = result = Unsat || iter (branch2::assumptions) pendingSplits in
                 self#pop;
                 continue
               end
             in
-            (* Printf.printf "Done splitting\n"; *)
+            (* printff "Done splitting\n"; *)
             continue
         in
         let result = iter assumptions (List.rev pendingSplits) in
@@ -857,7 +905,7 @@ and context =
       | Add (t1, t2) -> "(" ^ self#pprint t1 ^ " + " ^ self#pprint t2 ^ ")"
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"
       | App (s, ts) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
-      | NumLit n -> Num.string_of_num n
+      | NumLit n -> string_of_num n
       | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
     

@@ -10,7 +10,7 @@ test: mysh verifast vfide
 	cd ..; src/mysh < src/testsuite.mysh
 
 mysh: mysh.ml
-	ocamlopt.opt -o mysh mysh.ml
+	ocamlopt.opt -o mysh unix.cmxa mysh.ml
 
 reduxtest: verifastredux.opt
 	cd ../examples
@@ -68,6 +68,9 @@ verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPlugin
 
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
 	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
+
+mynum.cmx: mynum.ml
+	ocamlopt.opt -c nums.cmxa mynum.ml
 
 vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3MODS) Fonts.cmx vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
