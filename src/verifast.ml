@@ -4514,12 +4514,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match h with
         [] -> []
       | chunk::h ->
-        let matches =
           match match_chunk (pn,ilist) ghostenv env l g targs coef coefpat pats tps0 tps chunk with
-            None -> []
+            None -> iter (chunk::hprefix) h
           | Some (coef, ts, size, ghostenv, env) -> [(hprefix @ h, coef, ts, size, ghostenv, env)]
-        in
-          matches @ iter (chunk::hprefix) h
     in
     match iter [] h with
       [] -> assert_false h env l ("No matching heap chunks: " ^ (match g with (g, _) -> ctxt#pprint g))

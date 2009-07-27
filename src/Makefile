@@ -10,7 +10,7 @@ test: verifast.exe vfide.exe mysh.exe
 	time < nl.txt
 
 mysh.exe: mysh.ml
-	ocamlopt.opt -o mysh.exe mysh.ml
+	ocamlopt.opt -o mysh.exe unix.cmxa mysh.ml
 
 clean:
 	del *.cm* *.obj *.exe
