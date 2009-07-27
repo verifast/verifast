@@ -108,7 +108,7 @@ proverapi.cmx: proverapi.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c proverapi.ml
 
 simplex.cmx: simplex.ml
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c simplex.cmx simplex.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c simplex.ml
 
 redux.cmx: proverapi.cmx simplex.cmx redux.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c redux.ml

@@ -404,7 +404,7 @@ and valuenode (ctxt: context) =
       iter parents
     method parents = parents
     method children = children
-    method merge_into v =
+    method merge_into fromSimplex v =
       let ctorchild_added parents children =
         List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
         List.iter (fun n -> n#parent_ctorchild_added) children
@@ -419,6 +419,7 @@ and valuenode (ctxt: context) =
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
       begin
         let check_export_constant u t =
+          if not fromSimplex then
           match u with
             None -> ()
           | Some u ->
@@ -491,7 +492,7 @@ and valuenode (ctxt: context) =
       begin
         match (unknown, v#unknown) with
           (Some u, None) -> v#set_unknown u; process_ctorchildren()
-        | (Some u1, Some u2) ->
+        | (Some u1, Some u2) when not fromSimplex ->
           begin
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
             match ctxt#simplex#assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
@@ -1094,7 +1095,9 @@ and context =
       
     method assume_neq (t1: termnode) (t2: termnode) = self#reduce; self#assert_neq_and_reduce t1#value t2#value
 
-    method assert_eq v1 v2 =
+    method assert_eq v1 v2 = self#assert_eq_core false v1 v2
+    
+    method assert_eq_core fromSimplex v1 v2 =
       (* printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
       begin
@@ -1108,7 +1111,7 @@ and context =
       else
       begin
         (* print_endline_disabled "assert_eq: merging v1 into v2"; *)
-        v1#merge_into v2
+        v1#merge_into fromSimplex v2
       end
     
     method reduce0 =
@@ -1131,7 +1134,7 @@ and context =
               simplex_consts <- consts;
               let Some tn = u#tag in
               (* print_endline ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c); *)
-              match self#assert_eq tn#value (self#get_numnode c)#value with
+              match self#assert_eq_core true tn#value (self#get_numnode c)#value with
                 Unsat -> Unsat
               | Unknown -> iter()
           end
@@ -1140,7 +1143,7 @@ and context =
           let Some tn1 = u1#tag in
           let Some tn2 = u2#tag in
           print_endline_disabled ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")");
-          match self#assert_eq tn1#value tn2#value with
+          match self#assert_eq_core true tn1#value tn2#value with
             Unsat -> Unsat
           | Unknown -> iter()
       in
