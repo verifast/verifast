@@ -633,6 +633,8 @@ and context =
         match t with
           TermNode t -> self#assume_eq t self#false_node
         | Eq (t1, t2) ->
+          (* let time0 = Sys.time() in *)
+          (* let termnoderesolvecount = ref 0 in *)
           let rec normalize t =
             match t with
               Mul (t1, t2) ->
@@ -653,7 +655,9 @@ and context =
                 (NumLit n1, NumLit n2) -> NumLit (sub_num n1 n2)
               | (t1, t2) -> Sub (t1, t2)
               end
+            | NumLit n -> t
             | t ->
+              (* incr termnoderesolvecount; *)
               let t = self#termnode_of_term t in
               begin match t#value#ctorchild with
                 Some t ->
@@ -664,10 +668,23 @@ and context =
               | None -> TermNode t
               end
           in
-          begin match (normalize t1, normalize t2) with
-            (NumLit n1, NumLit n2) -> (* printff "assume_false(Eq): literal comparison\n"; *) if eq_num n1 n2 then Unsat else Unknown
-          | (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
-          end
+          (* let litcomp = ref false in *)
+          let result =
+          let rec assume_neq t1 t2 =
+            match (t1, t2) with
+              (Mul (x1, NumLit y1), Mul (x2, NumLit y2)) when eq_num y1 y2 ->
+              if sign_num y1 = 0 then Unsat else assume_neq x1 x2
+            | (NumLit n1, NumLit n2) -> (* litcomp := true; *) (* printff "assume_false(Eq): literal comparison\n"; *) if eq_num n1 n2 then Unsat else Unknown
+            | (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
+          in
+          assume_neq (normalize t1) (normalize t2)
+          in
+          (* let delta = Sys.time() -. time0 in
+          if 0.001 < delta then
+          begin
+            printff "assume_false(Eq): %s: %f seconds (litcomp: %B; termnoderesolvecount: %d)\n" (self#pprint t) delta !litcomp !termnoderesolvecount
+          end; *)
+          result
         | Le (t1, t2) -> self#assume_le t2 unit_num t1
         | Lt (t1, t2) -> self#assume_le t2 zero_num t1
         | RealLe (t1, t2) -> assume_true (RealLt (t2, t1))
