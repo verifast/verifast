@@ -539,6 +539,7 @@ and valuenode (ctxt: context) =
       end
   end
 and context =
+  let initialPendingSplitsFrontNode = ref None in
   object (self)
     val eq_symbol = new symbol Uninterp "=="
     val iff_symbol = new symbol Uninterp "<==>"
@@ -563,7 +564,8 @@ and context =
     val mutable simplex_eqs = []
     val mutable simplex_consts = []
     val mutable redexes = []
-    val mutable pending_splits = []
+    val mutable pending_splits_front = initialPendingSplitsFrontNode
+    val mutable pending_splits_back = initialPendingSplitsFrontNode
     (* For diagnostics only. *)
     val mutable values = []
     
@@ -708,6 +710,7 @@ and context =
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
 
     method query (t: (symbol, termnode) term): bool =
+      self#prune_pending_splits;
       (* printff "Query: %s\n" (self#pprint t); *)
       (* let time0 = Sys.time() in *)
       self#push;
@@ -826,7 +829,7 @@ and context =
       assert (redexes = []);
       assert (simplex_eqs = []);
       assert (simplex_consts = []);
-      popstack <- (pushdepth, popactionlist, pending_splits, values)::popstack;
+      popstack <- (pushdepth, popactionlist, values)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- [];
       simplex#push
@@ -842,11 +845,10 @@ and context =
       simplex_consts <- [];
       simplex#pop;
       match popstack with
-        (pushdepth0, popactionlist0, pending_splits0, values0)::popstack0 ->
+        (pushdepth0, popactionlist0, values0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
-        pending_splits <- pending_splits0;
         values <- values0;
         popstack <- popstack0
       | [] -> failwith "Popstack is empty"
@@ -856,7 +858,10 @@ and context =
     
     method add_pending_split branch1 branch2 =
       (* printff "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
-      pending_splits <- (branch1, branch2)::pending_splits
+      let back = pending_splits_back in
+      self#register_popaction (fun () -> pending_splits_back <- back; back := None);
+      pending_splits_back <- ref None;
+      back := Some (`SplitNode (branch1, branch2, pending_splits_back))
 (*    
     method prune_pending_splits =
       let rec iter () =
@@ -890,38 +895,60 @@ and context =
       iter ()
 *)
     method perform_pending_splits cont =
-      let rec iter0 assumptions =
-        if pending_splits = [] then cont assumptions else
-        let pendingSplits = pending_splits in
-        pending_splits <- [];
-        let rec iter assumptions pendingSplits =
-          match pendingSplits with
-            [] -> iter0 assumptions
-          | (branch1, branch2)::pendingSplits ->
-            (* printff "Splitting on (%s, %s) (further pending splits: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length pendingSplits); *)
-            self#push;
-            (* printff "  Branch %s\n" (self#pprint branch1); *)
-            let result = self#assume_core branch1 in
-            let continue = result = Unsat || iter (branch1::assumptions) pendingSplits in
-            self#pop;
-            let continue = continue &&
-              begin
-                self#push;
-                (* printff "  Branch %s\n" (self#pprint branch2); *)
-                let result = self#assume_core branch2 in
-                let continue = result = Unsat || iter (branch2::assumptions) pendingSplits in
-                self#pop;
-                continue
-              end
-            in
-            (* printff "Done splitting\n"; *)
+      let rec iter assumptions currentNode =
+        match !currentNode with
+          None -> cont assumptions
+        | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
+          (* printff "Splitting on (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
+          self#push;
+          (* printff "  First branch: %s\n" (self#pprint branch1); *)
+          let result = self#assume_core branch1 in
+          (* printff "    %s\n" (match result with Unsat -> "Unsat" | Unknown -> "Unknown"); *)
+          let continue = result = Unsat || iter (branch1::assumptions) nextNode in
+          self#pop;
+          if assumptions = [] && result = Unsat then
+          begin
+            (* printff "Pruning branch\n"; *)
+            self#register_popaction (fun () -> pending_splits_front <- currentNode);
+            pending_splits_front <- nextNode;
+            let result = self#assume_core branch2 in
+            let continue = result = Unsat || iter [] nextNode in
             continue
-        in
-        let result = iter assumptions (List.rev pendingSplits) in
-        pending_splits <- pendingSplits;
-        result
+          end
+          else
+          let continue = continue &&
+            begin
+              self#push;
+              (* printff "  Second branch %s\n" (self#pprint branch2); *)
+              let result = self#assume_core branch2 in
+              (* printff "    %s\n" (match result with Unsat -> "Unsat" | Unknown -> "Unknown"); *)
+              let continue = result = Unsat || iter (branch2::assumptions) nextNode in
+              self#pop;
+              if assumptions = [] && result = Unsat then
+              begin
+                (* Next time, immediately assume the first branch. *)
+                self#register_popaction (fun () -> currentNode := currentNodeValue);
+                currentNode := Some (`SplitNode (False, branch1, nextNode))
+              end;
+              continue
+            end
+          in
+          (* printff "Done splitting\n"; *)
+          continue
       in
-      iter0 []
+      iter [] pending_splits_front
+    
+    method prune_pending_splits =
+      let rec iter () =
+        let pendingSplitsFront = pending_splits_front in
+        match !pendingSplitsFront with
+          Some (`SplitNode (False, branch2, nextNode)) ->
+          self#register_popaction (fun () -> pending_splits_front <- pendingSplitsFront);
+          pending_splits_front <- nextNode;
+          self#assume_core branch2 = Unsat || iter ()
+        | _ -> false
+      in
+      iter ()
     
     method mk_symbol name (domain: unit list) (range: unit) kind =
       let s = new symbol kind name in if List.length domain = 0 then ignore (self#get_node s []); s
