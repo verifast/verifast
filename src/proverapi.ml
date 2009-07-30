@@ -43,11 +43,9 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual mk_real_mul: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_lt: 'termnode -> 'termnode -> 'termnode
     method virtual mk_real_le: 'termnode -> 'termnode -> 'termnode
-    method virtual get_type: 'termnode -> 'typenode
     method virtual pprint: 'termnode -> string
     method virtual push: unit
     method virtual pop: unit
     method virtual assume: 'termnode -> assume_result
-    method virtual perform_pending_splits: ('termnode list -> bool) -> bool
     method virtual query: 'termnode -> bool
   end

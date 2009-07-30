@@ -538,7 +538,7 @@ and valuenode (ctxt: context) =
         print_newline()
       end
   end
-and context =
+and context () =
   let initialPendingSplitsFrontNode = ref None in
   object (self)
     val eq_symbol = new symbol Uninterp "=="
@@ -557,7 +557,7 @@ and context =
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
-    val simplex = new Simplex.simplex
+    val simplex = new Simplex.simplex ()
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
@@ -710,7 +710,7 @@ and context =
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
 
     method query (t: (symbol, termnode) term): bool =
-      self#prune_pending_splits;
+      assert (not self#prune_pending_splits);
       (* printff "Query: %s\n" (self#pprint t); *)
       (* let time0 = Sys.time() in *)
       self#push;
@@ -859,7 +859,8 @@ and context =
     method add_pending_split branch1 branch2 =
       (* printff "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
       let back = pending_splits_back in
-      self#register_popaction (fun () -> pending_splits_back <- back; back := None);
+      assert (!back = None);
+      self#register_popaction (fun () -> back := None; pending_splits_back <- back);
       pending_splits_back <- ref None;
       back := Some (`SplitNode (branch1, branch2, pending_splits_back))
 (*    
@@ -913,6 +914,7 @@ and context =
             pending_splits_front <- nextNode;
             let result = self#assume_core branch2 in
             let continue = result = Unsat || iter [] nextNode in
+            (* printff "Done splitting\n"; *)
             continue
           end
           else

@@ -579,7 +579,7 @@ and
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
   | CallExpr of loc * string * type_expr list * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
-  | SwitchExpr of loc * expr * switch_expr_clause list * (type_ list * type_) option ref
+  | SwitchExpr of loc * expr * switch_expr_clause list * (type_ * (string * type_) list * type_ list * type_) option ref
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
   | FuncNameExpr of string (*function name *)
   | CastExpr of loc * type_expr * expr (* cast *)
@@ -2849,7 +2849,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                       begin
                                         match t0 with
                                           None -> static_error l "Switch expressions with zero cases are not yet supported."
-                                        | Some t0 -> tref := Some (targs, t0); (SwitchExpr (l, w, List.rev wcs, tref), t0)
+                                        | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, List.rev wcs, tref), t0)
                                       end
                                     | SwitchExprClause (lc, cn, xs, e)::cs ->
                                       begin
@@ -3422,7 +3422,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported."
-                  | Some t0 -> tref := Some (targs, t0); (SwitchExpr (l, w, wcs, tref), t0)
+                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, tref), t0)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -4166,8 +4166,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         iter [] env
       in
-      let (Some (targs, tp)) = !tref in
-      let symbol = ctxt#mk_symbol g (ctxt#get_type t :: List.map (fun (x, t) -> ctxt#get_type t) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
+      let (Some (tt, tenv, targs, tp)) = !tref in
+      let symbol = ctxt#mk_symbol g (typenode_of_type tt :: List.map (fun (x, _) -> typenode_of_type (List.assoc x tenv)) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
@@ -4270,20 +4270,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ctxt#push;
     begin
       match ctxt#assume t with
-        Unknown ->
-        ignore ((fun cont -> cont []) (* ctxt#perform_pending_splits *) (fun assumptions ->
-          let assumptions = List.rev assumptions in
-          let rec iter assumptions =
-            match assumptions with
-              [] -> cont()
-            | asn::asns ->
-              push_context (Assuming asn);
-              iter asns;
-              pop_context()
-          in
-          iter assumptions;
-          true
-        ))
+        Unknown -> cont()
       | Unsat -> ()
     end;
     pop_context();

@@ -166,7 +166,7 @@ and ['tag] column context own =
       List.iter (fun (row, coef) -> if (row#owner#tag <> None || row#owner#nonzero) && sign_num coef#value <> 0 then row#propagate_eq) terms
       end
   end
-and ['tag] simplex =
+and ['tag] simplex () =
   object (self)
     val mutable eq_listener = (fun _ _ -> ())
     val mutable const_listener = (fun _ _ -> ())
