@@ -881,30 +881,31 @@ and context () =
         match !currentNode with
           None -> cont assumptions
         | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
-          (* printff "Splitting on (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
+          let verbose = false in
+          if verbose then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
           self#push;
-          (* printff "  First branch: %s\n" (self#pprint branch1); *)
+          if verbose then printff "  First branch: %s\n" (self#pprint branch1);
           let result = self#assume_core branch1 in
-          (* printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid"); *)
-          let continue = result = Unsat3 || iter (branch1::assumptions) nextNode in
+          if verbose then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
+          let continue = result = Unsat3 || result = Valid3 && assumptions = [] || iter (branch1::assumptions) nextNode in
           self#pop;
           if assumptions = [] && result <> Unknown3 then
           begin
-            (* printff "Pruning branch\n"; *)
+            if verbose then printff "Pruning split\n";
             self#register_popaction (fun () -> pending_splits_front <- currentNode);
             pending_splits_front <- nextNode;
             let result = if result = Unsat3 then self#assume_core branch2 else Valid3 in
             let continue = result = Unsat3 || iter [] nextNode in
-            (* printff "Done splitting\n"; *)
+            if verbose then printff "Done splitting\n";
             continue
           end
           else
-          let continue = continue &&
+          let continue = continue && (result = Valid3 ||
             begin
               self#push;
-              (* printff "  Second branch %s\n" (self#pprint branch2); *)
+              if verbose then printff "  Second branch %s\n" (self#pprint branch2);
               let result = self#assume_core branch2 in
-              (* printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid"); *)
+              if verbose then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
               let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
               self#pop;
               if assumptions = [] && not continue then
@@ -921,8 +922,9 @@ and context () =
               end;
               continue
             end
+            )
           in
-          (* printff "Done splitting\n"; *)
+          if verbose then printff "Done splitting\n";
           continue
       in
       iter [] pending_splits_front
