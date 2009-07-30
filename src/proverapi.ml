@@ -48,4 +48,5 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual pop: unit
     method virtual assume: 'termnode -> assume_result
     method virtual query: 'termnode -> bool
+    method virtual stats: string
   end

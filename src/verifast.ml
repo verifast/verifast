@@ -103,23 +103,33 @@ class stats =
     val mutable stmtExecCount = 0
     val mutable execStepCount = 0
     val mutable branchCount = 0
-    val mutable proverCmdCount = 0
-    val mutable proverQueryCount = 0
+    val mutable proverAssumeCount = 0
+    val mutable definitelyEqualSameTermCount = 0
+    val mutable definitelyEqualQueryCount = 0
+    val mutable proverOtherQueryCount = 0
+    val mutable proverStats = ""
     
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method stmtExec = stmtExecCount <- stmtExecCount + 1
     method execStep = execStepCount <- execStepCount + 1
     method branch = branchCount <- branchCount + 1
-    method proverCmd = proverCmdCount <- proverCmdCount + 1
-    method proverQuery = proverQueryCount <- proverQueryCount + 1
+    method proverAssume = proverAssumeCount <- proverAssumeCount + 1
+    method definitelyEqualSameTerm = definitelyEqualSameTermCount <- definitelyEqualSameTermCount + 1
+    method definitelyEqualQuery = definitelyEqualQueryCount <- definitelyEqualQueryCount + 1
+    method proverOtherQuery = proverOtherQueryCount <- proverOtherQueryCount + 1
+    method appendProverStats s = proverStats <- proverStats ^ s
     
     method printStats =
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
       print_endline ("Statement executions: " ^ string_of_int stmtExecCount);
       print_endline ("Execution steps (including assertion production/consumption steps): " ^ string_of_int execStepCount);
-      print_endline ("Branches: " ^ string_of_int branchCount);
-      print_endline ("Prover commands: " ^ string_of_int proverCmdCount);
-      print_endline ("Prover queries: " ^ string_of_int proverQueryCount)
+      print_endline ("Symbolic execution forks: " ^ string_of_int branchCount);
+      print_endline ("Prover assumes: " ^ string_of_int proverAssumeCount);
+      print_endline ("Term equality tests -- same term: " ^ string_of_int definitelyEqualSameTermCount);
+      print_endline ("Term equality tests -- prover query: " ^ string_of_int definitelyEqualQueryCount);
+      print_endline ("Term equality tests -- total: " ^ string_of_int (definitelyEqualSameTermCount + definitelyEqualQueryCount));
+      print_endline ("Other prover queries: " ^ string_of_int proverOtherQueryCount);
+      print_endline ("Prover statistics:\n" ^ proverStats)
   end
 
 let stats = new stats
@@ -4266,6 +4276,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
   let assume t cont =
+    stats#proverAssume;
     push_context (Assuming t);
     ctxt#push;
     begin
@@ -4300,6 +4311,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let assert_term t h env l msg =
+    stats#proverOtherQuery;
     if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg))
   in
@@ -4420,7 +4432,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let definitely_equal t1 t2 =
-    let result = t1 == t2 || (ctxt#query (ctxt#mk_eq t1 t2)) in
+    let result = if t1 == t2 then (stats#definitelyEqualSameTerm; true) else (stats#definitelyEqualQuery; ctxt#query (ctxt#mk_eq t1 t2)) in
     (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
     result
   in
@@ -6970,6 +6982,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end;
     result
   in
+  
+  stats#appendProverStats ctxt#stats;
 
   let _=
     let rec iter (file,l) mainlist=
@@ -6993,6 +7007,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     else
       jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
   in
+  
   
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in

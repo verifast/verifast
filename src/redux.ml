@@ -3,6 +3,8 @@ open Big_int
 open Proverapi
 open Printf
 
+type assume_result3 = Unsat3 | Unknown3 | Valid3
+
 let print_endline_disabled msg = ()
 
 let printff format = kfprintf (fun _ -> flush stdout) stdout format
@@ -294,7 +296,7 @@ and termnode (ctxt: context) s initial_children =
         | _ -> assert false
       end
       else
-        Unknown
+        Valid3
     method pprint =
       (* "[" ^ string_of_int (Oo.id self) ^ "=" ^ string_of_int (Oo.id value) ^ "]" ^ *)
       begin
@@ -405,6 +407,7 @@ and valuenode (ctxt: context) =
     method parents = parents
     method children = children
     method merge_into fromSimplex v =
+      if (self :> valuenode) = ctxt#true_node#value || (self :> valuenode) = ctxt#false_node#value then v#merge_into fromSimplex (self :> valuenode) else
       let ctorchild_added parents children =
         List.iter (fun (n, k) -> n#child_ctorchild_added k) parents;
         List.iter (fun n -> n#parent_ctorchild_added) children
@@ -417,6 +420,8 @@ and valuenode (ctxt: context) =
       List.iter (fun (n, k) -> n#set_child k v) parents;
       (* At this point self is referenced nowhere. *)
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
+      if v == ctxt#true_node#value then ctxt#report_truenode_childcount (List.length v#children);
+      if v == ctxt#false_node#value then ctxt#report_falsenode_childcount (List.length v#children);
       begin
         let check_export_constant u t =
           if not fromSimplex then
@@ -425,9 +430,10 @@ and valuenode (ctxt: context) =
           | Some u ->
             let Ctor (NumberCtor n) = t#symbol#kind in
             context#add_redex (fun () ->
+              ctxt#reportExportingConstant;
               match context#simplex#assert_eq n [(neg_unit_num, u)] with
-                Simplex.Unsat -> Unsat
-              | Simplex.Sat -> Unknown
+                Simplex.Unsat -> Unsat3
+              | Simplex.Sat -> Unknown3
             )
         in
         match (ctorchild, v#ctorchild) with
@@ -464,8 +470,8 @@ and valuenode (ctxt: context) =
               let result = context#assert_eq n#value n'#value in
               (* print_endline_disabled "Returned from recursive assert_eq"; *)
               match result with
-                Unsat -> Unsat
-              | Unknown -> iter rps
+                Unsat3 -> Unsat
+              | Unknown3|Valid3 -> iter rps
             end
         in
         iter redundant_parents
@@ -483,8 +489,8 @@ and valuenode (ctxt: context) =
               begin
               print_endline_disabled ("Adding injectiveness edge: " ^ v#pprint ^ " = " ^ v'#pprint);
               match context#assert_eq v#initial_child#value v'#initial_child#value with
-                Unsat -> Unsat
-              | Unknown -> iter vs
+                Unsat3 -> Unsat
+              | Unknown3|Valid3 -> iter vs
               end
           in
           iter (List.combine n#children n'#children)
@@ -495,6 +501,7 @@ and valuenode (ctxt: context) =
         | (Some u1, Some u2) when not fromSimplex ->
           begin
             (* print_endline ("Exporting equality to Simplex: " ^ u1#name ^ " = " ^ u2#name); *)
+            ctxt#reportExportingEquality;
             match ctxt#simplex#assert_eq zero_num [unit_num, u1; neg_unit_num, u2] with
               Simplex.Unsat -> Unsat
             | Simplex.Sat -> process_ctorchildren()
@@ -569,6 +576,39 @@ and context () =
     (* For diagnostics only. *)
     val mutable values = []
     
+    (* Statistics *)
+    val mutable max_truenode_childcount = 0
+    val mutable max_falsenode_childcount = 0
+    val mutable assume_core_count = 0
+    val mutable simplex_assert_ge_count = 0
+    val mutable simplex_assert_eq_count = 0
+    val mutable simplex_assert_neq_count = 0
+    
+    method report_truenode_childcount n =
+      if n > max_truenode_childcount then max_truenode_childcount <- n
+    method report_falsenode_childcount n =
+      if n > max_falsenode_childcount then max_falsenode_childcount <- n
+    method reportExportingEquality =
+      simplex_assert_eq_count <- simplex_assert_eq_count + 1
+    method reportExportingConstant =
+      simplex_assert_eq_count <- simplex_assert_eq_count + 1
+    method stats =
+      Printf.sprintf
+        "\
+          assume_core_count = %d\n\
+          simplex_assert_ge_count = %d\n\
+          simplex_assert_eq_count = %d\n\
+          simplex_assert_neq_count = %d\n\
+          max_truenode_childcount = %d\n\
+          max_falsenode_childcount = %d\n\
+        "
+        assume_core_count
+        simplex_assert_ge_count
+        simplex_assert_eq_count
+        simplex_assert_neq_count
+        max_truenode_childcount
+        max_falsenode_childcount
+    
     initializer
       simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
       ttrue <- Some (self#get_node (self#mk_symbol "true" [] () (Ctor (CtorByOrdinal 0))) []);
@@ -640,7 +680,8 @@ and context () =
     method mk_real_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
     method mk_real_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLt (t1, t2)
     method mk_real_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = RealLe (t1, t2)
-    method assume_core (t: (symbol, termnode) term): assume_result =
+    method assume_core (t: (symbol, termnode) term): assume_result3 =
+      assume_core_count <- assume_core_count + 1;
       (* print_endline ("Assume: " ^ self#pprint t); *)
       let rec assume_true t =
         match t with
@@ -648,13 +689,14 @@ and context () =
         | Eq (t1, t2) when self#is_poly t1 || self#is_poly t2 ->
           let (n, ts) = self#to_poly (Sub (t2, t1)) in
           begin match ts with
-            [] -> if sign_num n = 0 then Unknown else Unsat
+            [] -> if sign_num n = 0 then Valid3 else Unsat3
           | [(t, scale)] -> self#assume_eq t (self#get_numnode (minus_num n // scale))
           | _ ->
             self#do_and_reduce (fun () ->
+              simplex_assert_eq_count <- simplex_assert_eq_count + 1;
               match simplex#assert_eq n (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts) with
-                Simplex.Unsat -> Unsat
-              | Simplex.Sat -> Unknown
+                Simplex.Unsat -> Unsat3
+              | Simplex.Sat -> Unknown3
             )
           end
         | Eq (t1, t2) -> self#assume_eq (self#termnode_of_term t1) (self#termnode_of_term t2)
@@ -669,8 +711,12 @@ and context () =
         | And (t1, t2) ->
           begin
             match self#assume_core t1 with
-              Unsat -> Unsat
-            | Unknown -> self#assume_core t2
+              Unsat3 -> Unsat3
+            | r ->
+              match (r, self#assume_core t2) with
+                (Valid3, Valid3) -> Valid3
+              | (_, Unsat3) -> Unsat3
+              | _ -> Unknown3
           end
         | Not t -> assume_false t
         | t -> self#assume_eq (self#termnode_of_term t) self#true_node
@@ -685,13 +731,14 @@ and context () =
           let (offset, terms) = self#to_poly (Sub (t2, t1)) in
           (* printff "assume_false(Eq): poly: %s\n" (self#pprint_poly (offset, terms)); *)
           begin match terms with
-            [] -> if sign_num offset = 0 then Unsat else Unknown
+            [] -> if sign_num offset = 0 then Unsat3 else Valid3
           | [(t, n)] -> self#assume_neq t (self#get_numnode (minus_num offset // n))
           | terms ->
             self#do_and_reduce $. fun () ->
+            simplex_assert_neq_count <- simplex_assert_neq_count + 1;
             match simplex#assert_neq offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
-              Simplex.Unsat -> Unsat
-            | Simplex.Sat -> Unknown
+              Simplex.Unsat -> Unsat3
+            | Simplex.Sat -> Unknown3
           end
         | Eq (t1, t2) -> self#assume_neq (self#termnode_of_term t1) (self#termnode_of_term t2)
         | Le (t1, t2) -> self#assume_le t2 unit_num t1
@@ -706,7 +753,10 @@ and context () =
     method assume t =
       (* printff "assume %s\n" (self#pprint t); *)
       let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
-      if result = Unsat then Unsat else
+      match result with
+        Unsat3 -> Unsat
+      | Valid3 -> Unknown
+      | Unknown3 ->
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
 
     method query (t: (symbol, termnode) term): bool =
@@ -722,38 +772,6 @@ and context () =
     method get_type (term: (symbol, termnode) term) = ()
     
     method termnode_of_term t =
-      let addition sym sign t1 t2 =
-        let v1 = (self#termnode_of_term t1)#value in
-        let v2 = (self#termnode_of_term t2)#value in
-        let tn = self#get_node sym [v1; v2] in
-        let uv1 = v1#mk_unknown in
-        let uv2 = v2#mk_unknown in
-        let utn = tn#value#mk_unknown in
-        print_endline_disabled ("Exporting addition to Simplex: " ^ utn#name ^ " = " ^ uv1#name ^ " + " ^ uv2#name);
-        ignore (simplex#assert_eq zero_num [neg_unit_num, utn; unit_num, uv1; num_of_int sign, uv2]);
-        tn
-      in
-      let termnode_of_num n =
-        let tn = self#get_numnode n in
-        (*
-        let v = tn#value in
-        let u = v#mk_unknown in
-        print_endline_disabled ("Exporting constant to Simplex: " ^ u#name ^ " = " ^ string_of_num n);
-        ignore (simplex#assert_eq n [neg_unit_num, u]);
-        *)
-        tn
-      in
-      let linear_mul n t =
-        if eq_num n unit_num then t else
-        let tn = termnode_of_num n in
-        let v1 = tn#value in
-        let v2 = t#value in
-        let tmul = self#get_node mul_symbol [v1; v2] in
-        let uv2 = v2#mk_unknown in
-        let utmul = tmul#value#mk_unknown in
-        ignore (simplex#assert_eq zero_num [neg_unit_num, utmul; n, uv2]);
-        tmul
-      in
       let get_node s ts = self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts) in
       match t with
         t when self#is_poly t ->
@@ -771,11 +789,6 @@ and context () =
       | TermNode t -> t
       | True -> self#true_node
       | False -> self#false_node
-      | Add (NumLit n, t2) when eq_num n zero_num -> self#termnode_of_term t2
-      | Add (t1, NumLit n) when eq_num n zero_num -> self#termnode_of_term t1
-      | Add (t1, t2) -> addition add_symbol 1 t1 t2
-      | Sub (t1, t2) -> addition sub_symbol (-1) t1 t2
-      | NumLit n -> termnode_of_num n
       | App (s, ts) -> get_node s ts
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Iff (t1, t2) -> get_node iff_symbol [t1; t2]
@@ -787,38 +800,6 @@ and context () =
       | Lt (t1, t2) -> get_node int_lt_symbol [t1; t2]
       | RealLe (t1, t2) -> get_node real_le_symbol [t1; t2]
       | RealLt (t1, t2) -> get_node real_lt_symbol [t1; t2]
-      | Mul (t1, t2) ->
-        let rec compute t =
-        match t with
-          Add (t1, t2) ->
-          begin
-            match (compute t1, compute t2) with
-              (NumLit n1, NumLit n2) -> NumLit (add_num n1 n2)
-            | (t1, t2) -> Add (t1, t2)
-          end
-        | Sub (t1, t2) ->
-          begin
-            match (compute t1, compute t2) with
-              (NumLit n1, NumLit n2) -> NumLit (sub_num n1 n2)
-            | (t1, t2) -> Sub (t1, t2)
-          end
-        | Mul (t1, t2) ->
-          begin
-            match (compute t1, compute t2) with
-              (NumLit n1, NumLit n2) -> NumLit (mult_num n1 n2)
-            | (t1, t2) -> Mul (t1, t2)
-          end
-        | t -> t
-        in
-        let rec iter n t =
-          match t with
-            Mul (NumLit n1, t) -> iter (mult_num n1 n) t
-          | Mul (t, NumLit n2) -> iter (mult_num n2 n) t
-          | NumLit n0 -> termnode_of_num (mult_num n0 n)
-          | Mul (t1, t2) -> linear_mul n (get_node mul_symbol [t1; t2])
-          | t -> linear_mul n (self#termnode_of_term t)
-        in
-        iter unit_num (compute t)
       | _ -> failwith ("Redux does not yet support this term: " ^ self#pprint t)
 
     method pushdepth = pushdepth
@@ -904,16 +885,16 @@ and context () =
           self#push;
           (* printff "  First branch: %s\n" (self#pprint branch1); *)
           let result = self#assume_core branch1 in
-          (* printff "    %s\n" (match result with Unsat -> "Unsat" | Unknown -> "Unknown"); *)
-          let continue = result = Unsat || iter (branch1::assumptions) nextNode in
+          (* printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid"); *)
+          let continue = result = Unsat3 || iter (branch1::assumptions) nextNode in
           self#pop;
-          if assumptions = [] && result = Unsat then
+          if assumptions = [] && result <> Unknown3 then
           begin
             (* printff "Pruning branch\n"; *)
             self#register_popaction (fun () -> pending_splits_front <- currentNode);
             pending_splits_front <- nextNode;
-            let result = self#assume_core branch2 in
-            let continue = result = Unsat || iter [] nextNode in
+            let result = if result = Unsat3 then self#assume_core branch2 else Valid3 in
+            let continue = result = Unsat3 || iter [] nextNode in
             (* printff "Done splitting\n"; *)
             continue
           end
@@ -923,14 +904,20 @@ and context () =
               self#push;
               (* printff "  Second branch %s\n" (self#pprint branch2); *)
               let result = self#assume_core branch2 in
-              (* printff "    %s\n" (match result with Unsat -> "Unsat" | Unknown -> "Unknown"); *)
-              let continue = result = Unsat || iter (branch2::assumptions) nextNode in
+              (* printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid"); *)
+              let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
               self#pop;
-              if assumptions = [] && result = Unsat then
+              if assumptions = [] && not continue then
               begin
-                (* Next time, immediately assume the first branch. *)
-                self#register_popaction (fun () -> currentNode := currentNodeValue);
-                currentNode := Some (`SplitNode (False, branch1, nextNode))
+                match result with
+                  Unsat3 ->
+                  (* Next time, immediately assume the first branch. *)
+                  self#register_popaction (fun () -> currentNode := currentNodeValue);
+                  currentNode := Some (`SplitNode (False, branch1, nextNode))
+                | Valid3 ->
+                  self#register_popaction (fun () -> pending_splits_front <- currentNode);
+                  pending_splits_front <- nextNode
+                | Unknown3 -> ()
               end;
               continue
             end
@@ -947,7 +934,7 @@ and context () =
           Some (`SplitNode (False, branch2, nextNode)) ->
           self#register_popaction (fun () -> pending_splits_front <- pendingSplitsFront);
           pending_splits_front <- nextNode;
-          self#assume_core branch2 = Unsat || iter ()
+          self#assume_core branch2 = Unsat3 || iter ()
         | _ -> false
       in
       iter ()
@@ -1005,9 +992,9 @@ and context () =
     method assert_neq (v1: valuenode) (v2: valuenode) =
       (* printff "assert_neq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
-        Unsat
+        Unsat3
       else if v1#neq v2 then
-        Unknown
+        Valid3
       else if v1 = self#true_node#value then
         self#assert_eq v2 self#false_node#value
       else if v1 = self#false_node#value then
@@ -1020,7 +1007,7 @@ and context () =
       begin
         v1#add_neq v2;
         v2#add_neq v1;
-        Unknown
+        Unknown3
       end
 
     method assert_eq_and_reduce v1 v2 =
@@ -1034,9 +1021,10 @@ and context () =
       let offset = n2 -/ n1 -/ offset in
       let ts1 = List.map (fun (t, scale) -> (minus_num scale, t#value#mk_unknown)) ts1 in
       let ts2 = List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts2 in
+      simplex_assert_ge_count <- simplex_assert_ge_count + 1;
       match simplex#assert_ge offset (ts1 @ ts2) with
-        Simplex.Unsat -> Unsat
-      | Simplex.Sat -> Unknown
+        Simplex.Unsat -> Unsat3
+      | Simplex.Sat -> Unknown3
 
     method is_poly t =
       match t with
@@ -1110,12 +1098,13 @@ and context () =
     method assume_le t1 offset t2 =   (* t1 + offset <= t2 *)
       let (offset', terms) = self#to_poly (Sub (t2, t1)) in
       let offset = sub_num offset' offset in
-      if terms = [] then if sign_num offset < 0 then Unsat else Unknown else
+      if terms = [] then if sign_num offset < 0 then Unsat3 else Valid3 else
       begin
       self#do_and_reduce (fun () ->
+        simplex_assert_ge_count <- simplex_assert_ge_count + 1;
         match simplex#assert_ge offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
-          Simplex.Unsat -> Unsat
-        | Simplex.Sat -> Unknown
+          Simplex.Unsat -> Unsat3
+        | Simplex.Sat -> Unknown3
       )
       end
     
@@ -1131,20 +1120,20 @@ and context () =
       if v1 = v2 then
       begin
         (* print_endline_disabled "assert_eq: values already the same"; *)
-        Unknown
+        Valid3
       end
       else if v1#neq v2 then
       begin
-        Unsat
+        Unsat3
       end
       else
       begin
         (* print_endline_disabled "assert_eq: merging v1 into v2"; *)
-        v1#merge_into fromSimplex v2
+        if v1#merge_into fromSimplex v2 = Unsat then Unsat3 else Unknown3
       end
     
     method reduce0 =
-      let rec iter () =
+      let rec iter result =
         match simplex_eqs with
           [] ->
           begin
@@ -1152,39 +1141,46 @@ and context () =
               [] ->
               begin
                 match redexes with
-                  [] -> Unknown
+                  [] -> result
                 | f::redexes0 ->
                   redexes <- redexes0;
-                  match f() with
-                    Unsat -> Unsat
-                  | Unknown -> iter ()
+                  match (f(), result) with
+                    (Unsat3, _) -> Unsat3
+                  | (r, Valid3) -> iter r
+                  | _ -> iter Unknown3
               end
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = u#tag in
               (* print_endline ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c); *)
-              match self#assert_eq_core true tn#value (self#get_numnode c)#value with
-                Unsat -> Unsat
-              | Unknown -> iter()
+              match (self#assert_eq_core true tn#value (self#get_numnode c)#value, result) with
+                (Unsat3, _) -> Unsat3
+              | (r, Valid3) -> iter r
+              | _ -> iter Unknown3
           end
         | (u1, u2)::eqs ->
           simplex_eqs <- eqs;
           let Some tn1 = u1#tag in
           let Some tn2 = u2#tag in
           print_endline_disabled ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")");
-          match self#assert_eq_core true tn1#value tn2#value with
-            Unsat -> Unsat
-          | Unknown -> iter()
+          match (self#assert_eq_core true tn1#value tn2#value, result) with
+            (Unsat3, _) -> Unsat3
+          | (r, Valid3) -> iter r
+          | _ -> iter Unknown3
       in
-      iter()
+      iter Valid3
     
     method reduce =
-      assert (self#reduce0 = Unknown)
+      assert (self#reduce0 <> Unsat3)
 
     method do_and_reduce action =
       match action() with
-        Unsat -> Unsat
-      | Unknown -> self#reduce0
+        Unsat3 -> Unsat3
+      | r ->
+        match (r, self#reduce0) with
+          (_, Unsat3) -> Unsat3
+        | (Valid3, r) -> r
+        | _ -> Unknown3
     
     method dump_state =
       (* print_endline ("==== Redux query failed: State report ====");
