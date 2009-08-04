@@ -840,7 +840,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "&"; "^"; "~"
+  "&"; "^"; "~"; "currentThread"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "MIN_INT"; "MAX_INT"
@@ -1435,6 +1435,7 @@ and
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
 | [< '(l, Kwd "null") >] -> Null l
+| [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
 | [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],[],args0,Static)
 | [<
     '(l, Ident x);
@@ -4719,6 +4720,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let functypemap = functypemap1 @ functypemap0 in
   
+  let current_thread_name = "currentThread" in
+  let current_thread_type = IntType in
+  
   let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
     let tpenv =
@@ -4745,10 +4749,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.");
     push();
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
-    let env0 = env0_0 @ cenv0 in
+    let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
+    let env0 = currentThreadEnv @ env0_0 @ cenv0 in
     assume_pred [] (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
       let (Some bs) = zip xmap env0_0 in
-      let env = List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
+      let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       assert_pred tpenv (pn,ilist) h [] env pre real_unit (fun h _ env _ ->
         let (env, env0) =
           match rt with
@@ -4786,7 +4791,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter [] xs
     in
-    let tenv = xmap @ tenv0 in
+    let tenv = [(current_thread_name, current_thread_type)] @ xmap @ tenv0 in
     let (pre, pre_tenv, post) =
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract."
@@ -4898,7 +4903,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  match co with
                    None -> static_error lm ("Non-fixpoint function must have contract: "^n)
                  | Some (pre, post) ->
-                   let (pre, tenv) = check_pred (pn,ilist) [] xmap pre in
+                   let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                    let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                    let (post, _) = check_pred (pn,ilist) [] postmap post in
                    (pre, tenv, post)
@@ -5006,7 +5011,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     (match co with
                        None ->static_error lm ("Non-fixpoint function must have contract: "^n)
                      | Some (pre, post) -> 
-                       let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
+                       let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                        let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                        let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                        (wpre, tenv, wpost)
@@ -5019,7 +5024,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       | Some(_,rt', xmap', pre, pre_tenv, post,Instance,v) -> match co with
                           None -> matchargs xmap xmap';(pre,pre_tenv,post)
                         | Some(pre0,post0)->
-                            let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre0 in
+                            let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre0 in
                             let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
                             let (wpost, _) = check_pred (pn,ilist) [] postmap post0 in
                             push();
@@ -5361,7 +5366,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     evhs h env ws (fun h ts ->
     let Some env' = zip ys ts in
-    let cenv = env' @ funenv in
+    let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
     with_context PushSubcontext (fun () ->
       assert_pred tpenv (pn,ilist) h ghostenv cenv pre real_unit (fun h ghostenv' env' chunk_size ->
         let _ =
@@ -6694,7 +6699,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
         (false, None, lems, [])
     in
-    let env = penv @ env in
+    let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
       check_should_fail () $. fun _ ->
       assume_pred [] (pn, ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
@@ -6744,7 +6749,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else static_error lm "Constructor specification is only allowed in javaspec files!"
           | Some(Some (ss, closeBraceLoc)) ->
               let _ = push() in
-              let env = get_unique_var_symbs xmap in
+              let env = get_unique_var_symbs ([(current_thread_name, current_thread_type)] @ xmap) in
               let (sizemap, indinfo) = switch_stmt ss env in
               let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
               let _ =
@@ -6796,7 +6801,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             else static_error l "Constructor specification is only allowed in javaspec files!"
         | Some(Some (ss, closeBraceLoc)) ->(
             let _ = push() in
-            let env = get_unique_var_symbs ps in (* actual params invullen *)
+            let env = get_unique_var_symbs (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
             begin fun cont ->
               if fb = Instance then
               begin

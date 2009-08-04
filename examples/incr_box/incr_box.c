@@ -31,7 +31,7 @@ lemma real counter_lock_split_fractions(struct counter *counter);
     ensures [result]counter->lock |-> lock &*& [f - result]counter->lock |-> lock;
 
 predicate incrementor_session(struct counter *counter, box boxId)
-    requires [?f]counter->lock |-> ?lock &*& lock_permission(lock, counter(counter, boxId));
+    requires [_]counter->lock |-> ?lock &*& [_]lock(lock, counter(counter, boxId));
 
 predicate_family_instance thread_run_data(incrementor)(void *data)
     requires incrementor_session(data, _);
@@ -47,7 +47,6 @@ void incrementor(void *data) //@ : thread_run
     //@ open incrementor_session(counter, ?boxId);
     struct lock *lock = counter->lock;
     lock_acquire(lock);
-    //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
     //@ handle h = create_handle counter_box_handle(boxId);
     int count0 = 0;
@@ -71,9 +70,8 @@ void incrementor(void *data) //@ : thread_run
     @*/
     //@ leak counter_box_handle(h, boxId);
     //@ close counter(counter, boxId)();
-    //@ close_lock_invariant(counter(counter, boxId));
     lock_release(lock);
-    //@ leak lock_permission(lock, _) &*& [_]counter->lock |-> _;
+    //@ leak [_]lock(lock, _) &*& [_]counter->lock |-> _;
 }
 
 int main()
@@ -87,17 +85,16 @@ int main()
     counter->count = 0;
     //@ create_box boxId = counter_box(counter, 0);
     //@ close counter(counter, boxId)();
-    //@ close_lock_invariant(counter(counter, boxId));
+    //@ close create_lock_ghost_arg(counter(counter, boxId));
     struct lock *lock = create_lock();
-    //@ split_lock_permission(lock);
+    //@ split_fraction lock(lock, _);
     counter->lock = lock;
-    //@ real f = counter_lock_split_fractions(counter);
+    //@ split_fraction counter_lock(counter, _);
     //@ close incrementor_session(counter, boxId);
     //@ close thread_run_data(incrementor)(counter);
     thread_start(incrementor, counter);
     
     lock_acquire(lock);
-    //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
     //@ handle h = create_handle counter_box_handle(boxId);
     /*@
@@ -110,11 +107,9 @@ int main()
     producing_handle_predicate count_handle(count0);
     @*/
     //@ close counter(counter, boxId)();
-    //@ close_lock_invariant(counter(counter, boxId));
     lock_release(lock);
     
     lock_acquire(lock);
-    //@ open_lock_invariant();
     //@ open counter(counter, boxId)();
     /*@
     consuming_box_predicate counter_box(boxId, _, _)
@@ -127,11 +122,10 @@ int main()
     @*/
     //@ leak counter_box_handle(h, boxId);
     //@ close counter(counter, boxId)();
-    //@ close_lock_invariant(counter(counter, boxId));
     lock_release(lock);
     
     assert(count0 <= count1);
     
-    //@ leak lock_permission(lock, _) &*& [_]counter->lock |-> _ &*& malloc_block_counter(counter);
+    //@ leak [_]lock(lock, _) &*& [_]counter->lock |-> _ &*& malloc_block_counter(counter);
     return 0;
 }

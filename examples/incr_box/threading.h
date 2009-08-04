@@ -7,25 +7,11 @@ struct lock;
 
 predicate_family thread_run_data(void *run)(void *data);
 
-predicate lock_invariant(predicate() p);
+predicate lock(struct lock *lock; predicate() p);
 
-lemma void open_lock_invariant();
-    requires lock_invariant(?p);
-    ensures p();
+predicate locked(struct lock *lock, predicate() p, int threadId, real frac);
 
-lemma void close_lock_invariant(predicate() p);
-    requires p();
-    ensures lock_invariant(p);
-
-predicate lock_permission(struct lock *lock, predicate() p);
-
-lemma void split_lock_permission(struct lock *lock);
-    requires lock_permission(lock, ?p);
-    ensures lock_permission(lock, p) &*& lock_permission(lock, p);
-
-lemma void remove_lock_permission(struct lock *lock);
-    requires lock_permission(lock, _);
-    ensures emp;
+predicate create_lock_ghost_arg(predicate() p) = true;
 
 @*/
 
@@ -38,15 +24,15 @@ void thread_start(void *run, void *data);
     //@ ensures emp;
 
 struct lock *create_lock();
-    //@ requires lock_invariant(?p);
-    //@ ensures lock_permission(result, p);
+    //@ requires create_lock_ghost_arg(?p) &*& p();
+    //@ ensures lock(result, p);
 
-void lock_acquire(struct lock *lock);   // TODO: Make the lock implementation non-reentrant; otherwise, this contract is unsound.
-    //@ requires lock_permission(lock, ?p);
-    //@ ensures lock_permission(lock, p) &*& lock_invariant(p);
+void lock_acquire(struct lock *lock); // Assumes that locks are non-reentrant.
+    //@ requires [?f]lock(lock, ?p);
+    //@ ensures locked(lock, p, currentThread, f) &*& p();
 
 void lock_release(struct lock *lock);
-    //@ requires lock_permission(lock, ?p) &*& lock_invariant(p);
-    //@ ensures lock_permission(lock, p);
+    //@ requires locked(lock, ?p, currentThread, ?f) &*& p();
+    //@ ensures [f]lock(lock, p);
 
 #endif

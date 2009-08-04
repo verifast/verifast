@@ -35,7 +35,7 @@ public class Session implements Runnable{
     //@ close session(this);
   }
   public void run_with_nick(Room room,Semaphore_ roomLock,InputStreamReader_ reader,OutputStreamWriter_ writer, StringBuffer nick)
-    //@ requires [?f]lock(roomLock, room_ctor(room)) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    //@ requires locked(roomLock, room_ctor(room), ?f) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
     //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
   {
     Member member=null;

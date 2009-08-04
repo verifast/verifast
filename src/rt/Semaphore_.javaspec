@@ -3,23 +3,25 @@ package wrapper.util.concurrent;
 /*@
 predicate lock(Semaphore_ l; predicate() inv);
 
-predicate create_lock_ghost_arg(predicate() inv)
-    requires inv();
+predicate locked(Semaphore_ l, predicate() inv, real frac);
 
-lemma void lock_dispose(Semaphore_ lock);
-    requires lock(lock, ?a);
+predicate create_lock_ghost_arg(predicate() inv) = true;
+
+lemma void lock_dispose(Semaphore_ l);
+    requires lock(l, ?a);
     ensures a();
 @*/
+
 public class Semaphore_{
   Semaphore_(int n);
-    //@ requires n==1 &*& create_lock_ghost_arg(?a);
+    //@ requires n==1 &*& create_lock_ghost_arg(?a) &*& a();
     //@ ensures lock(result, a);
 
   void acquire();
     //@ requires [?f]lock(this, ?a);
-    //@ ensures [f]lock(this, a) &*& a();
+    //@ ensures locked(this, a, f) &*& a();
 
   void release();
-    //@ requires [?f]lock(this, ?a) &*& a();
+    //@ requires locked(this, ?a, ?f) &*& a();
     //@ ensures [f]lock(this, a);
 }

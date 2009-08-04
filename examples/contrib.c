@@ -3,31 +3,24 @@
 struct lock;
 
 /*@
-predicate lock(struct lock *lock, predicate() inv);
+predicate lock(struct lock *lock; predicate() inv);
 
-lemma void lock_fractions_split(struct lock *lock, real coef);
-    requires [?f]lock(lock, ?a) &*& 0 < coef &*& coef < 1;
-    ensures [coef * f]lock(lock, a) &*& [(1 - coef) * f]lock(lock, a);
+predicate locked(struct lock *lock, predicate() inv, int threadId, real frac);
 
-lemma void lock_fractions_merge(struct lock *lock);
-    requires [?f1]lock(lock, ?a1) &*& [?f2]lock(lock, ?a2);
-    ensures [f1 + f2]lock(lock, a1) &*& a2 == a1;
-
-predicate create_lock_ghost_arg(predicate() inv)
-    requires inv();
+predicate create_lock_ghost_arg(predicate() inv) = true;
 
 @*/
 
 struct lock *create_lock();
-    //@ requires create_lock_ghost_arg(?a);
+    //@ requires create_lock_ghost_arg(?a) &*& a();
     //@ ensures lock(result, a);
 
 void lock_acquire(struct lock *lock);
     //@ requires [?f]lock(lock, ?a);
-    //@ ensures [f]lock(lock, a) &*& a();
+    //@ ensures locked(lock, a, currentThread, f) &*& a();
 
 void lock_release(struct lock *lock);
-    //@ requires [?f]lock(lock, ?a) &*& a();
+    //@ requires locked(lock, ?a, currentThread, ?f) &*& a();
     //@ ensures [f]lock(lock, a);
 
 void lock_dispose(struct lock *lock);
@@ -166,7 +159,7 @@ int main()
     //@ close sum(sumObject, box1, box2)();
     //@ close create_lock_ghost_arg(sum(sumObject, box1, box2));
     struct lock *lock = create_lock();
-    //@ lock_fractions_split(lock, 1/2);
+    //@ split_fraction lock(lock, _);
     
     struct session *session1 = malloc(sizeof(struct session));
     if (session1 == 0) {
@@ -194,7 +187,7 @@ int main()
     thread_join(thread2);
     //@ open thread_run_post(contribute)(session2, contribute_info(box1, box2, box2, sumObject, lock));
     
-    //@ lock_fractions_merge(lock);
+    //@ merge_fractions lock(lock, _);
     lock_dispose(lock);
     //@ open sum(sumObject, box1, box2)();
     
