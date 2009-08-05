@@ -5,7 +5,18 @@ type undo_action =
   Insert of int * string
 | Delete of int * string
 
+let index_of_byref x xs =
+  let rec iter k xs =
+    match xs with
+      [] -> raise Not_found
+    | x0::xs -> if x0 == x then k else iter (k + 1) xs
+  in
+  iter 0 xs
+
 let show_ide initialPath prover =
+  let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
+  let tab_buffer (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = buffer in
+  let tab_srcText (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let appTitle = "Verifast " ^ Vfversion.version ^ " IDE" in
@@ -24,6 +35,8 @@ let show_ide initialPath prover =
       a "Edit" ~label:"_Edit";
       a "Undo" ~stock:`UNDO ~accel:"<Ctrl>Z";
       a "Redo" ~stock:`REDO ~accel:"<Ctrl>Y";
+      a "View" ~label:"Vie_w";
+      a "ClearTrace" ~label:"_Clear trace" ~accel:"<Ctrl>L";
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
@@ -48,6 +61,9 @@ let show_ide initialPath prover =
         <menu action='Edit'>
           <menuitem action='Undo' />
           <menuitem action='Redo' />
+        </menu>
+        <menu action='View'>
+          <menuitem action='ClearTrace' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -371,8 +387,43 @@ let show_ide initialPath prover =
   let _ = srcPaned#pack2 ~resize:true ~shrink:true (srcEnvFrame#coerce) in
   let (subEnvFrame, subEnvList, subEnvKCol, subEnvCol, _, subEnvStore) = create_listbox "Locals" in
   let _ = subPaned#pack2 ~resize:true ~shrink:true (subEnvFrame#coerce) in
+  let get_tab_for_path path0 =
+    (* This function is called only at a time when no buffers are modified. *)
+    let rec iter k tabs =
+      match tabs with
+        tab::tabs ->
+        if !(tab_path tab) = Some path0 then (k, tab) else iter (k + 1) tabs
+      | [] ->
+        let tab = add_buffer() in load tab path0; (k, tab)
+    in
+    iter 0 !buffers
+  in
+  let create_marks_of_loc ((p1, p2): loc) =
+    let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
+    let (path2, line2, col2) = p2 in
+    assert (path1 = path2);
+    let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
+    let buffer = tab_buffer tab in
+    let mark1 = buffer#create_mark (srcpos_iter buffer (line1, col1)) in
+    let mark2 = buffer#create_mark (srcpos_iter buffer (line2, col2)) in
+    (tab, mark1, mark2)
+  in
   let stepItems = ref None in
+  let clearStepItems() =
+    match !stepItems with
+      None -> ()
+    | Some items ->
+      List.iter
+        begin fun (ass, h, env, (tab, mark1, mark2), msg, locstack) ->
+          let buffer = tab_buffer tab in
+          buffer#delete_mark (`MARK mark1);
+          buffer#delete_mark (`MARK mark2)
+        end
+        items;
+      stepItems := None
+  in
   let updateStepItems() =
+    clearStepItems();
     let ctxts_fifo = List.rev (match !ctxts_lifo with Some l -> l) in
     let rec iter k itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
@@ -382,6 +433,7 @@ let show_ide initialPath prover =
         let it = stepStore#append ?parent:(match itstack with [] -> None | it::_ -> Some it) () in
         stepStore#set ~row:it ~column:stepKCol k;
         stepStore#set ~row:it ~column:stepCol msg;
+        let l = create_marks_of_loc l in
         (ass, h, env, l, msg, locstack)::iter (k + 1) itstack (Some it) ass locstack (Some l) (Some env) cs
       | PushSubcontext::cs ->
         (match (last_it, last_loc, last_env) with (Some it, Some l, Some env) -> iter k (it::itstack) None ass ((l, env)::locstack) None None cs)
@@ -412,19 +464,9 @@ let show_ide initialPath prover =
     srcEnvStore#clear();
     subEnvStore#clear()
   in
-  let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
-  let tab_buffer (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = buffer in
-  let tab_srcText (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
-  let get_tab_for_path path0 =
-    (* This function is called only at a time when no buffers are modified. *)
-    let rec iter k tabs =
-      match tabs with
-        tab::tabs ->
-        if !(tab_path tab) = Some path0 then (k, tab) else iter (k + 1) tabs
-      | [] ->
-        let tab = add_buffer() in load tab path0; (k, tab)
-    in
-    iter 0 !buffers
+  let apply_tag_at_marks name (tab, mark1, mark2) =
+    let buffer = tab_buffer tab in
+    buffer#apply_tag_by_name name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
     let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
@@ -451,31 +493,34 @@ let show_ide initialPath prover =
           [] ->
           if textPaned#max_position - textPaned#position < 10 then
             textPaned#set_position 0;
-          apply_tag_by_loc "currentLine" l;
-          let ((path, line, col), _) = l in
-          let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+          apply_tag_at_marks "currentLine" l;
+          let (tab, mark1, _) = l in
+          let k = index_of_byref tab !buffers in
+          let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
           textNotebook#goto_page k;
-          buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
+          buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
           Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
           append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
         | (caller_loc, caller_env)::_ ->
           if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
             textPaned#set_position 150;
           begin
-            apply_tag_by_loc "currentLine" l;
-            let ((path, line, col), _) = l in
-            let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+            apply_tag_at_marks "currentLine" l;
+            let (tab, mark1, _) = l in
+            let k = index_of_byref tab !buffers in
+            let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
             subNotebook#goto_page k;
-            buffer#move_mark (`MARK currentStepMark) ~where:(srcpos_iter buffer (line, col));
+            buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
             append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
           end;
           begin
-            apply_tag_by_loc "currentCaller" caller_loc;
-            let ((path, line, col), _) = caller_loc in
-            let (k, (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) = get_tab_for_path (string_of_path path) in
+            apply_tag_at_marks "currentCaller" caller_loc;
+            let (tab, mark1, _) = caller_loc in
+            let k = index_of_byref tab !buffers in
+            let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
             textNotebook#goto_page k;
-            buffer#move_mark (`MARK currentCallerMark) ~where:(srcpos_iter buffer (line, col));
+            buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
             append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups caller_env))
           end
@@ -509,21 +554,21 @@ let show_ide initialPath prover =
   in
   let _ = root#connect#destroy ~callback:GMain.Main.quit in
   let clearTrace() =
-    clearStepInfo();
-    stepStore#clear();
-    List.iter (fun tab ->
-      let buffer = tab_buffer tab in
-      buffer#remove_tag_by_name "error" ~start:buffer#start_iter ~stop:buffer#end_iter
-    ) !buffers
-  in
-  bufferChangeListener := (fun tab ->
     if !msg <> None then
     begin
       msg := None;
-      stepItems := None;
+      clearStepItems();
       updateMessageEntry();
-      clearTrace()
+      clearStepInfo();
+      stepStore#clear();
+      List.iter (fun tab ->
+        let buffer = tab_buffer tab in
+        buffer#remove_tag_by_name "error" ~start:buffer#start_iter ~stop:buffer#end_iter
+      ) !buffers
     end
+  in
+  bufferChangeListener := (fun tab ->
+    ()
   );
   let _ = root#event#connect#delete ~callback:(fun _ ->
     let rec iter tabs =
@@ -551,6 +596,7 @@ let show_ide initialPath prover =
   let close ((_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
     if not (ensureSaved tab) then
     begin
+      clearTrace();
       textNotebook#remove textScroll#coerce;
       subNotebook#remove subScroll#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
@@ -571,7 +617,7 @@ let show_ide initialPath prover =
     let buffer = tab_buffer tab in
     let it = srcpos_iter buffer (line, col) in
     buffer#place_cursor ~where:it;
-    Glib.Idle.add (fun () -> (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scoll_to_iter returns a boolean *) false);
+    Glib.Idle.add (fun () -> (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
     ()
   in
   let loc_path ((path, _, _), _) = path in
@@ -690,15 +736,15 @@ let show_ide initialPath prover =
               updateStepItems();
               updateStepListView();
               stepSelected();
-              let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in
-              if l = steploc then
-              begin
+              (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
+              begin match ctxts with
+                Executing (_, _, steploc, _)::_ when l = steploc ->
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
                 updateMessageEntry()
-              end
-              else
+              | _ ->
                 handleStaticError l emsg
+              end
             | e ->
               prerr_endline ("VeriFast internal error: " ^ Printexc.to_string e);
               Printexc_proxy.print_backtrace stderr;
@@ -707,6 +753,7 @@ let show_ide initialPath prover =
           end
       end
   in
+  (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
   (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
   undoAction#connect#activate undo;
