@@ -120,6 +120,7 @@ verifastredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe record_backtrace.cmx unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 
 release: test refman
+	-rmdir verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)
 	cd verifast-$(VFVERSION)
 	copy $(Z3)\LICENSE.txt z3.LICENSE.txt
