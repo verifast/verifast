@@ -3,6 +3,7 @@
 
 #include "pair.h"
 #include "list.h"
+#include "listex.h"
 
 /*@
 
@@ -170,13 +171,13 @@ fixpoint list<pair<a, b> > map_assoc<a, b>(list<pair<a, b> > xys, list<a> xs) {
 
 lemma void lt_drop_take<a>(int k, int i, list<a> xs);
     requires 0 <= k &*& k < i &*& i <= length(xs);
-    ensures drop(k, take(i, xs)) == cons(ith(k, xs), drop(k + 1, take(i, xs)));
+    ensures drop(k, take(i, xs)) == cons(nth(k, xs), drop(k + 1, take(i, xs)));
 
 lemma void lt_drop_take_map_assoc_mapfst<a, b, c>(int k, int i, list<pair<a, b> > rcs, list<pair<a, c> > es);
     requires 0 <= k &*& k < i &*& i <= length(es);
     ensures
         drop(k, take(i, map_assoc(rcs, mapfst(es)))) ==
-        cons(pair(fst(ith(k, es)), assoc(fst(ith(k, es)), rcs)), drop(k + 1, take(i, map_assoc(rcs, mapfst(es)))));
+        cons(pair(fst(nth(k, es)), assoc(fst(nth(k, es)), rcs)), drop(k + 1, take(i, map_assoc(rcs, mapfst(es)))));
 
 lemma void update_same<a, b>(list<pair<a, b> > xys, a x);
     requires mem_assoc(x, xys) == true;
@@ -215,11 +216,11 @@ lemma void distinct_assoc_yzs<a, b, c>(list<a> xs, list<b> ys, list<c> zs, a x);
 
 lemma void index_of_assoc_fst_ith<a, b>(list<pair<a, b> > xys, int i);
     requires distinct(mapfst(xys)) == true &*& 0 <= i &*& i < length(xys);
-    ensures index_of_assoc(fst(ith(i, xys)), xys) == i;
+    ensures index_of_assoc(fst(nth(i, xys)), xys) == i;
 
 lemma void assoc_fst_ith_snd_ith<a, b>(list<pair<a, b> > xys, int i);
     requires distinct(mapfst(xys)) == true &*& 0 <= i &*& i < length(xys);
-    ensures assoc(fst(ith(i, xys)), xys) == snd(ith(i, xys));
+    ensures assoc(fst(nth(i, xys)), xys) == snd(nth(i, xys));
 
 lemma void foreach3_foreach_assoc_separate(void *x);
     requires foreach3(?xs, ?ys, ?zs, ?p) &*& foreach_assoc(zip(ys, zs), ?q) &*& mem(x, xs) == true;

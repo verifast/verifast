@@ -86,7 +86,6 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 </blockquote>
 <p><b>lcset</b> - A concurrent set data structure implemented as a sorted linked list with hand-over-hand locking</p>
 <blockquote>
-<p><a href="lcset/list.h.html">list.h</a> - Mathematical lists</p>
 <p><a href="lcset/ghost_lists.h.html">ghost_lists.h</a> - Auxiliary objects that track a list</p>
 <p><a href="lcset/atomics.h.html">atomics.h</a> - Specification of atomic machine instructions</p>
 <p><a href="lcset/locks.h.html">locks.h</a> - Specification of the spinlocks module. A thin layer over the atomic instructions</p>
@@ -96,7 +95,6 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="lcset/lcset_client.c.html">lcset_client.c</a> - A trivial client program. TODO: Write one that relies on functional properties</p>
 </blockquote>
 <p><a href="lemmafuncptr.c.html">lemmafuncptr.c</a> - Simple lemma function pointers test</p>
-<p><a href="linkedlist.c.html">linkedlist.c</a> - Full functional specification and verification of a linked list implementation</p>
 <p><a href="map.c.html">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
 <p><b>mcas</b> - Full functional specification and verification of a challenging lock-free algorithm from the literature: Harris et al.'s
 multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspired by the one in Vafeiadis' PhD, but uses the approach described in
@@ -107,7 +105,7 @@ multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspi
 <p><a href="mcas/atomics.h.html">atomics.h</a> - Specification of atomic machine instructions (atomic loads and atomic (single) compare-and-swaps).
 You can create a "prophecy" [Abadi and Lamport] to know the value that will be read in advance. You can use a "tracked CAS" in order to predict
 the value that will be written by a successful CAS operation.</p>
-<p><a href="mcas/list.h.html">list.h</a> - Mathematical lists and "iterated star" (foreach) predicates over lists</p>
+<p><a href="mcas/listex.h.html">list.h</a> - Mathematical lists and "iterated star" (foreach) predicates over lists</p>
 <p><a href="mcas/pair.h.html">pair.h</a> - Pairs</p>
 <p><a href="mcas/assoc_list.h.html">assoc_list.h</a> - Association lists and foreach predicates over association lists</p>
 <p><a href="mcas/ghost_cells.h.html">ghost_cells.h</a> - Dynamically allocated auxiliary variables, including ones that use counting permissions</p>
@@ -131,7 +129,7 @@ Technical Report CW-551, Department of Computer Science, Katholieke Universiteit
 <p><a href="queue/atomics.vfmanifest">atomics.vfmanifest</a> - Manifest of the atomic operations library</p>
 <p><a href="queue/ghost_cells.h.html">ghost_cells.h</a> - Specification of the ghost cells library</p>
 <p><a href="queue/ghost_cells.vfmanifest">ghost_cells.vfmanifest</a> - Manifest of the ghost cells library</p>
-<p><a href="queue/list.h.html">list.h</a> - Pure lists</p>
+<p><a href="queue/listex.h.html">list.h</a> - Pure lists</p>
 <p><a href="queue/queue.c.html">queue.c</a> - The queue implementation</p>
 <p><a href="queue/queue.h.html">queue.h</a> - The queue specification</p>
 <p><a href="queue/queue_client.c.html">queue_client.c</a> - The example client</p>

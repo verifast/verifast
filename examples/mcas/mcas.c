@@ -28,26 +28,26 @@ lemma void entries_separate_ith(int i);
     requires [?f]entries(?n, ?aes, ?es) &*& 0 <= i &*& i < n;
     ensures
         [f]entries(i, aes, take(i, es)) &*&
-        [f]mcas_entry_a(aes + i, fst(ith(i, es))) &*&
-        [f]mcas_entry_o(aes + i, fst(snd(ith(i, es)))) &*&
-        [f]mcas_entry_n(aes + i, snd(snd(ith(i, es)))) &*&
-        true == (((uintptr_t)fst<void *, void *>(snd(ith(i, es))) & 1) == 0) &*&
-        true == (((uintptr_t)fst<void *, void *>(snd(ith(i, es))) & 2) == 0) &*&
-        true == (((uintptr_t)snd<void *, void *>(snd(ith(i, es))) & 1) == 0) &*&
-        true == (((uintptr_t)snd<void *, void *>(snd(ith(i, es))) & 2) == 0) &*&
+        [f]mcas_entry_a(aes + i, fst(nth(i, es))) &*&
+        [f]mcas_entry_o(aes + i, fst(snd(nth(i, es)))) &*&
+        [f]mcas_entry_n(aes + i, snd(snd(nth(i, es)))) &*&
+        true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
+        true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
+        true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
+        true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         [f]entries(n - i - 1, aes + i + 1, drop(i + 1, es));
 
 lemma void entries_unseparate_ith(int i, list<pair<void *, pair<void *, void *> > > es);
     requires
         0 <= i &*& i < length(es) &*&
         [?f]entries(i, ?aes, take(i, es)) &*&
-        [f]mcas_entry_a(aes + i, fst(ith(i, es))) &*&
-        [f]mcas_entry_o(aes + i, fst(snd(ith(i, es)))) &*&
-        [f]mcas_entry_n(aes + i, snd(snd(ith(i, es)))) &*&
-        true == (((uintptr_t)fst<void *, void *>(snd(ith(i, es))) & 1) == 0) &*&
-        true == (((uintptr_t)fst<void *, void *>(snd(ith(i, es))) & 2) == 0) &*&
-        true == (((uintptr_t)snd<void *, void *>(snd(ith(i, es))) & 1) == 0) &*&
-        true == (((uintptr_t)snd<void *, void *>(snd(ith(i, es))) & 2) == 0) &*&
+        [f]mcas_entry_a(aes + i, fst(nth(i, es))) &*&
+        [f]mcas_entry_o(aes + i, fst(snd(nth(i, es)))) &*&
+        [f]mcas_entry_n(aes + i, snd(snd(nth(i, es)))) &*&
+        true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
+        true == (((uintptr_t)fst<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
+        true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 1) == 0) &*&
+        true == (((uintptr_t)snd<void *, void *>(snd(nth(i, es))) & 2) == 0) &*&
         [f]entries(length(es) - i - 1, aes + i + 1, drop(i + 1, es));
     ensures [f]entries(length(es), aes, es);
 
@@ -148,7 +148,7 @@ lemma void mem_es_lemma(int k, list<pair<void *, pair<void *, void *> > > es, li
     requires
         foreach_assoc2(?rcs, cs, ?p) &*& mem_es(es, cs) == true &*& 0 <= k &*& k < length(es);
     ensures 
-        foreach_assoc2(rcs, cs, p) &*& mem_assoc(fst(ith(k, es)), rcs) == true;
+        foreach_assoc2(rcs, cs, p) &*& mem_assoc(fst(nth(k, es)), rcs) == true;
 
 fixpoint list<pair<a, b> > fold_remove_assoc<a, b>(list<a> xs, list<pair<a, b> > xys);
 
@@ -189,14 +189,14 @@ lemma void foreach_assoc2_subset_unseparate(list<pair<void *, void *> > cs, int 
         foreach(es, entry_mem(rcsList));
 
 lemma void ith_neq_es_success(int i, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
-    requires 0 <= i &*& i < length(es) &*& assoc(fst(ith(i, es)), cs) != fst(snd(ith(i, es)));
+    requires 0 <= i &*& i < length(es) &*& assoc(fst(nth(i, es)), cs) != fst(snd(nth(i, es)));
     ensures !es_success(es, cs);
 
 lemma void es_apply_lemma(int k, list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
     requires distinct(mapfst(es)) == true &*& 0 <= k &*& k < length(es) &*& mem_es(es, cs) == true;
     ensures
-        ith(k, map_assoc(es_apply(es, cs), mapfst(es))) == pair(fst(ith(k, es)), snd(snd(ith(k, es)))) &*&
-        assoc(fst(ith(k, es)), es_apply(es, cs)) == snd(snd(ith(k, es)));
+        nth(k, map_assoc(es_apply(es, cs), mapfst(es))) == pair(fst(nth(k, es)), snd(snd(nth(k, es)))) &*&
+        assoc(fst(nth(k, es)), es_apply(es, cs)) == snd(snd(nth(k, es)));
 
 lemma void es_apply_lemma2(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs);
     requires true;
@@ -560,7 +560,7 @@ bool mcas(int n, struct mcas_entry *aes)
                             drop_k_plus_one_alt(k, es);
                             close_foreach_entry_mem(es10, k + 1);
                             mem_es_lemma(k, es, cs);
-                            create_strong_ghost_assoc_list_key_handle(fst(ith(k, es)));
+                            create_strong_ghost_assoc_list_key_handle(fst(nth(k, es)));
                             entries_length_lemma();
                             entries_separate_ith(k);
                             entries_unseparate_ith(k, es);
@@ -797,7 +797,7 @@ start:
                 }
                 predicate_family_instance rdcss_bs_membership_lemma(bsMem)(rdcss_unseparate_lemma *unsep_, boxed_int info, void *a) =
                     unsep_ == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
-                    a == fst(ith(i, es)) &*& 0 <= i &*& i < length(es) &*&
+                    a == fst(nth(i, es)) &*& 0 <= i &*& i < length(es) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*& [_]ghost_cell6(unboxed_int(info), rdcssId, rcsList, dsList, _, _, mcasInfo) &*&
                     [_]cd(cd, es, tracker, counter, statusCell, op);
                 lemma void bsMem() : rdcss_bs_membership_lemma
@@ -820,9 +820,9 @@ start:
                     merge_fractions cd(cd, _, _, _, _, _);
                     split_fraction cd(cd, _, _, _, _, _);
                     foreach_separate_ith(i, es);
-                    open entry_mem(rcsList)(ith(i, es));
+                    open entry_mem(rcsList)(nth(i, es));
                     strong_ghost_assoc_list_key_handle_lemma();
-                    close entry_mem(rcsList)(ith(i, es));
+                    close entry_mem(rcsList)(nth(i, es));
                     foreach_unseparate_ith_nochange(i, es);
                     close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                     foreach3_unseparate_nochange(ds, sas, svs, cd);
@@ -833,7 +833,7 @@ start:
                 predicate_family_instance rdcss_operation_pre(rop)
                     (rdcss_unseparate_lemma *rdcssUnsep, boxed_int info, void *a1, void *o1, void *a2, void *o2, void *n2) =
                     rdcssUnsep == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
-                    a1 == &cd->status &*& o1 == 0 &*& a2 == fst(ith(i, es)) &*& o2 == fst(snd(ith(i, es))) &*&
+                    a1 == &cd->status &*& o1 == 0 &*& a2 == fst(nth(i, es)) &*& o2 == fst(snd(nth(i, es))) &*&
                     n2 == (void *)((uintptr_t)cd | 2) &*&
                     [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*&
@@ -848,7 +848,7 @@ start:
                         :
                             committed_copy(?committedCopy1, cd, counter, i + 1)
                     :
-                        result != fst(snd(ith(i, es))) ?
+                        result != fst(snd(nth(i, es))) ?
                             [_]tracked_cas_prediction(tracker, 0, ?prediction) &*&
                             true == ((uintptr_t)prediction == 2) ?
                                 [_]cd->done |-> true &*& [_]cd->success2 |-> false
@@ -889,9 +889,9 @@ start:
                         leak ghost_counter_snapshot(counter, _);
                     }
                     foreach_separate_ith(i, es);
-                    open entry_mem(rcsList)(ith(i, es));
+                    open entry_mem(rcsList)(nth(i, es));
                     strong_ghost_assoc_list_key_handle_lemma();
-                    close entry_mem(rcsList)(ith(i, es));
+                    close entry_mem(rcsList)(nth(i, es));
                     foreach_unseparate_ith_nochange(i, es);
                     assert foreach_assoc2(?rcs, ?cs, _);
                     foreach_assoc2_separate(a2);
@@ -922,7 +922,7 @@ start:
                         close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, bs);
                     } else {
                         assert realCellValue == abstractCellValue;
-                        if (result != fst(snd(ith(i, es)))) {
+                        if (result != fst(snd(nth(i, es)))) {
                             ith_neq_es_success(i, es, cs);
                             void *prediction = create_tracked_cas_prediction(tracker, 0);
                             if (prediction == (void *)2) {
@@ -964,7 +964,7 @@ start:
                                 if (count > i) {
                                     length_take(count, es);
                                     foreach_separate_ith(i, take(count, es));
-                                    ith_take(i, count, es);
+                                    nth_take(i, count, es);
                                     open entry_attached(rcsList, cd)(_);
                                     merge_fractions strong_ghost_assoc_list_member_handle(rcsList, a2, _);
                                 }
@@ -979,7 +979,7 @@ start:
                                 foreach_assoc2_unseparate_1changed(rcs, cs, a2);
                                 create_ghost_counter_snapshot(i + 1);
                                 close committed_copy(false, cd, counter, i + 1);
-                                close entry_attached(rcsList, cd)(ith(i, es));
+                                close entry_attached(rcsList, cd)(nth(i, es));
                                 foreach_take_plus_one_unseparate(i, es);
                                 close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                                 foreach3_unseparate_nochange(ds, sas, svs, cd);
@@ -1006,7 +1006,7 @@ start:
                 //@ split_fraction cd(cd, _, _, _, _, _);
                 /*@
                 close rdcss_operation_pre(rop)
-                    (mcas_rdcss_unsep, boxed_int(id), &cd->status, 0, fst(ith(i, es)), fst(snd(ith(i, es))), (void *)((uintptr_t)cd | 2));
+                    (mcas_rdcss_unsep, boxed_int(id), &cd->status, 0, fst(nth(i, es)), fst(snd(nth(i, es))), (void *)((uintptr_t)cd | 2));
                 @*/
                 //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
                 //@ split_fraction ghost_list_member_handle(dsList, cd);
@@ -1016,7 +1016,7 @@ start:
                 //@ split_fraction ghost_list_member_handle(dsList, cd);
                 //@ close rdcss_as_membership_lemma(asMem)(mcas_rdcss_unsep, boxed_int(id), &cd->status);
                 //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(ith(i, es)));
+                //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)));
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_sep);
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(asMem);
@@ -1163,7 +1163,7 @@ start:
                                             open foreach(_, _);
                                             open mcas_cell(rcsList, dsList)(_, _, _);
                                             open entry_attached(rcsList, cd)(_);
-                                            merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(ith(k, es)), _);
+                                            merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(nth(k, es)), _);
                                             bitand_bitor_lemma((uintptr_t)cd, 2);
                                             merge_fractions cd(cd, _, _, _, _, _);
                                             split_fraction cd(cd, _, _, _, _, _);
@@ -1171,9 +1171,9 @@ start:
                                             update_status_cell(k + 1);
                                             create_counted_ghost_cell_ticket(statusCell);
                                             assoc_fst_ith_snd_ith(es, k);
-                                            close mcas_cell(rcsList, dsList)(fst(ith(k, es)), (void *)((uintptr_t)cd | 2), snd(snd(ith(k, es))));
+                                            close mcas_cell(rcsList, dsList)(fst(nth(k, es)), (void *)((uintptr_t)cd | 2), snd(snd(nth(k, es))));
                                             es_apply_lemma(k, es, cs);
-                                            drop_k_plus_one(k, es);
+                                            drop_n_plus_one(k, es);
                                         }
                                         close foreach_assoc2(
                                             drop(k, take(i, map_assoc(rcs, mapfst(es)))),
@@ -1243,16 +1243,16 @@ start:
                                     lt_drop_take_map_assoc_mapfst(k, count, rcs, es);
                                     lt_drop_take_map_assoc_mapfst(k, count, cs, es);
                                     open foreach_assoc2(_, _, _);
-                                    open entry_attached(rcsList, cd)(ith(k, es));
-                                    open mcas_cell(rcsList, dsList)(fst(ith(k, es)), ?realCellValue, ?abstractCellValue);
-                                    merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(ith(k, es)), _);
+                                    open entry_attached(rcsList, cd)(nth(k, es));
+                                    open mcas_cell(rcsList, dsList)(fst(nth(k, es)), ?realCellValue, ?abstractCellValue);
+                                    merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(nth(k, es)), _);
                                     bitand_bitor_lemma((uintptr_t)cd, 2);
                                     merge_fractions cd(cd, _, _, _, _, _);
                                     split_fraction cd(cd, _, _, _, _, _);
                                     counted_ghost_cell_dispose_ticket(statusCell);
                                     detach(k + 1);
                                     create_counted_ghost_cell_ticket(statusCell);
-                                    close mcas_cell(rcsList, dsList)(fst(ith(k, es)), realCellValue, abstractCellValue);
+                                    close mcas_cell(rcsList, dsList)(fst(nth(k, es)), realCellValue, abstractCellValue);
                                     close foreach_assoc2(
                                         drop(k, take(count, map_assoc(rcs, mapfst(es)))),
                                         drop(k, take(count, map_assoc(cs, mapfst(es)))),
@@ -1334,7 +1334,7 @@ start:
                 /*@
                 predicate_family_instance rdcss_bs_membership_lemma(bsMem)(rdcss_unseparate_lemma *unsep_, boxed_int info, void *a) =
                     unsep_ == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
-                    a == fst(ith(i, es)) &*& 0 <= i &*& i < length(es) &*&
+                    a == fst(nth(i, es)) &*& 0 <= i &*& i < length(es) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*& [_]ghost_cell6(unboxed_int(info), rdcssId, rcsList, dsList, _, _, mcasInfo) &*&
                     [_]cd(cd, es, tracker, counter, statusCell, op);
                 lemma void bsMem() : rdcss_bs_membership_lemma
@@ -1357,9 +1357,9 @@ start:
                     merge_fractions cd(cd, _, _, _, _, _);
                     split_fraction cd(cd, _, _, _, _, _);
                     foreach_separate_ith(i, es);
-                    open entry_mem(rcsList)(ith(i, es));
+                    open entry_mem(rcsList)(nth(i, es));
                     strong_ghost_assoc_list_key_handle_lemma();
-                    close entry_mem(rcsList)(ith(i, es));
+                    close entry_mem(rcsList)(nth(i, es));
                     foreach_unseparate_ith_nochange(i, es);
                     close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                     foreach3_unseparate_nochange(ds, sas, svs, cd);
@@ -1369,8 +1369,8 @@ start:
                 }
                 predicate_family_instance rdcss_cas_pre(casOp)(rdcss_unseparate_lemma *rdcssUnsep, boxed_int info, void **a2, void *o2, void *n2) =
                     rdcssUnsep == mcas_rdcss_unsep &*& info == boxed_int(id) &*&
-                    a2 == fst(ith(i, es)) &*& o2 == (void *)((uintptr_t)cd | 2) &*&
-                    n2 == (success ? snd(snd(ith(i, es))) : fst(snd(ith(i, es)))) &*&
+                    a2 == fst(nth(i, es)) &*& o2 == (void *)((uintptr_t)cd | 2) &*&
+                    n2 == (success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es)))) &*&
                     true == (((uintptr_t)n2 & 2) == 0) &*&
                     [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                     [_]ghost_list_member_handle(dsList, cd) &*&
@@ -1434,9 +1434,9 @@ start:
                 //@ split_fraction ghost_list_member_handle(dsList, cd);
                 //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
                 //@ split_fraction cd(cd, _, _, _, _, _);
-                //@ close rdcss_cas_pre(casOp)(mcas_rdcss_unsep, boxed_int(id), fst(ith(i, es)), (void *)((uintptr_t)cd | 2), success ? snd(snd(ith(i, es))) : fst(snd(ith(i, es))));
+                //@ close rdcss_cas_pre(casOp)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)), (void *)((uintptr_t)cd | 2), success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es))));
                 //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(ith(i, es)));
+                //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)));
                 //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(casOp);
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_sep);

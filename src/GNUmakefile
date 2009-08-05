@@ -131,7 +131,7 @@ else
 	cp verifast verifast-$(VFVERSION)/bin
 	cp vfide verifast-$(VFVERSION)/bin
 endif
-	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h verifast-$(VFVERSION)/bin
+	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h list.h verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)

@@ -627,9 +627,9 @@ bool add(struct set *set, int e)
             if (zValue != e) {
                 x->oldNext = y;
                 split_fraction node_value(y, _);
-                append_assoc_lemma(nodes0, cons(x, nil), tail(nodes1));
+                append_assoc(nodes0, cons(x, nil), tail(nodes1));
                 ghost_list_insert(nodesList, append(nodes0, cons(x, nil)), tail(nodes1), y);
-                append_assoc_lemma(nodes0, cons(x, nil), cons(y, tail(nodes1)));
+                append_assoc(nodes0, cons(x, nil), cons(y, tail(nodes1)));
                 close lseg(nodesList, y, e, last, MAX_INT, cons(y, tail(nodes1)), cons(e, tail(values1)), lockCount2);
                 close lseg(nodesList, x, xValue, last, MAX_INT, cons(x, cons(y, tail(nodes1))), cons(xValue, cons(e, tail(values1))), lockCount2);
                 lseg_merge2(x, e, values1);
@@ -751,9 +751,9 @@ bool remove(struct set *set, int e)
                     split_fraction node_value(z, _);
                     close lseg(nodesList, x, xValue, last, MAX_INT, cons(x, tail(nodes2)), cons(xValue, tail(values2)), lockCount1);
                     lseg_merge3(x, e, values1);
-                    append_assoc_lemma(nodes0, cons(x, nil), nodes2);
+                    append_assoc(nodes0, cons(x, nil), nodes2);
                     ghost_list_remove(nodesList, append(nodes0, cons(x, nil)), tail(nodes2), y);
-                    append_assoc_lemma(nodes0, cons(x, nil), tail(nodes2));
+                    append_assoc(nodes0, cons(x, nil), tail(nodes2));
                     close set_atomic(set, remove_sorted(e, values));
                     op();
                     unsep();

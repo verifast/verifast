@@ -1,5 +1,6 @@
 #include "bool.h"
 #include "malloc.h"
+#include "list.h"
 #include "lists.h"
 #include "stringBuffers.h"
 #include "sockets.h"
@@ -15,30 +16,6 @@ struct member {
 /*@
 predicate member(struct member* member)
     requires member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick) &*& writer(writer) &*& malloc_block_member(member);
-
-lemma void member_distinct(struct member *m1, struct member *m2)
-    requires member(m1) &*& member(m2);
-    ensures member(m1) &*& member(m2) &*& m1 != m2;
-{
-    open member(m1);
-    open member(m2);
-    close member(m2);
-    close member(m1);
-}
-
-lemma void foreach_member_not_contains(list<struct member *> members, struct member *member)
-    requires foreach(members, @member) &*& member(member);
-    ensures foreach(members, @member) &*& member(member) &*& !contains(members, member);
-{
-    switch (members) {
-        case nil:
-        case cons(member0, members0):
-            open foreach(members, @member);
-            member_distinct(member0, member);
-            foreach_member_not_contains(members0, member);
-            close foreach(members, @member);
-    }
-}
 @*/
 
 struct room {
@@ -80,17 +57,17 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     struct iter *iter = list_create_iter(membersList);
     bool hasMember = false;
     bool hasNext = iter_has_next(iter);
-    //@ lengthPositive(members);
+    //@ length_nonnegative(members);
     while (hasNext && !hasMember)
         //@ invariant string_buffer(nick) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
     {
         struct member *member = iter_next(iter);
-        //@ containsIth(members, i);
-        //@ foreach_remove(members, member);
+        //@ mem_nth(i, members);
+        //@ foreach_remove(member, members);
         //@ open member(member);
         hasMember = string_buffer_equals(member->nick, nick);
         //@ close member(member);
-        //@ foreach_unremove(members, member);
+        //@ foreach_unremove(member, members);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
@@ -107,18 +84,18 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
     struct list *membersList = room->members;
     struct iter *iter = list_create_iter(membersList);
     bool hasNext = iter_has_next(iter);
-    //@ lengthPositive(members0);
+    //@ length_nonnegative(members0);
     while (hasNext)
         //@ invariant iter(iter, membersList, members0, ?i) &*& foreach(members0, @member) &*& string_buffer(message) &*& hasNext == (i < length(members0)) &*& 0 <= i &*& i <= length(members0);
     {
         struct member *member = iter_next(iter);
-        //@ containsIth(members0, i);
-        //@ foreach_remove(members0, member);
+        //@ mem_nth(i, members0);
+        //@ foreach_remove(member, members0);
         //@ open member(member);
         writer_write_string_buffer(member->writer, message);
         writer_write_string(member->writer, "\r\n");
         //@ close member(member);
-        //@ foreach_unremove(members0, member);
+        //@ foreach_unremove(member, members0);
         hasNext = iter_has_next(iter);
     }
     iter_dispose(iter);
@@ -181,12 +158,10 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ split_fraction member_writer(member, _) by 1/2;
         //@ close member(member);
         list_add(room->members, member);
-        //@ open foreach(?members, @member);
-        //@ close foreach(members, @member);
-        //@ foreach_member_not_contains(members, member);
+        //@ assert foreach(?members, @member);
         //@ close foreach(cons(member, members), @member);
         //@ assert [_]room->ghost_list_id |-> ?id;
-        //@ split_fraction room_ghost_list_id(room, id) by 1/2;
+        //@ split_fraction room_ghost_list_id(room, id);
         //@ ghost_list_add(id, member);
         //@ close room(room);
     }
@@ -229,7 +204,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ merge_fractions room_ghost_list_id(room, _);
         //@ ghost_list_member_handle_lemma();
         list_remove(membersList, member);
-        //@ foreach_remove(members, member);
+        //@ foreach_remove(member, members);
     }
     //@ assert ghost_list(?id, _);
     //@ ghost_list_remove(id, member);
@@ -282,18 +257,18 @@ void session_run(void *data) //@ : thread_run
         //@ assert list(membersList, ?members);
         struct iter *iter = list_create_iter(membersList);
         bool hasNext = iter_has_next(iter);
-        //@ lengthPositive(members);
+        //@ length_nonnegative(members);
         while (hasNext)
             //@ invariant writer(writer) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
         {
             struct member *member = iter_next(iter);
-            //@ containsIth(members, i);
-            //@ foreach_remove(members, member);
+            //@ mem_nth(i, members);
+            //@ foreach_remove(member, members);
             //@ open member(member);
             writer_write_string_buffer(writer, member->nick);
             writer_write_string(writer, "\r\n");
             //@ close member(member);
-            //@ foreach_unremove(members, member);
+            //@ foreach_unremove(member, members);
             hasNext = iter_has_next(iter);
         }
         iter_dispose(iter);

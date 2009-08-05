@@ -132,6 +132,7 @@ release: test refman
 	copy ..\..\stdlib.h
 	copy ..\..\malloc.h
 	copy ..\..\string.h
+	copy ..\..\list.h
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
 	copy ..\..\mysh.exe mysh.exe

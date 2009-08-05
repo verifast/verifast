@@ -1,6 +1,7 @@
 #include "stdlib.h"
 #include "atomics.h"
 #include "list.h"
+#include "listex.h"
 #include "queue.h"
 
 /* A lock-free queue. Multiple enqueueers, single dequeueer.
@@ -133,7 +134,7 @@ lemma bool queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operatio
                 assert lseg(last, ?middle, ?backValues);
                 close lseg(n, middle, cons(value, backValues));
                 assert [_]queue_front_values(queue, ?frontValues);
-                append_assoc_lemma(frontValues, reverse(backValues), cons(value, nil));
+                append_assoc(frontValues, reverse(backValues), cons(value, nil));
             }
             close queue_state(queue, result ? append(values, cons(value, nil)) : values);
             close queue_enqueue_operation_post(queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operation)(info_, result);
@@ -378,7 +379,7 @@ lemma bool queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation() :
                 close lseg(last, last, nil);
                 queue->front_values = reverseTail(lastValue, backValuesTail);
                 split_fraction queue_front_values(queue, _);
-                append_nil_lemma(reverseTail(lastValue, backValuesTail));
+                append_nil(reverseTail(lastValue, backValuesTail));
                 close queue_state(queue, reverseTail(lastValue, backValuesTail));
                 close queue_try_dequeue_operation_post(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation)(info_, true, reverseHead(lastValue, backValuesTail));
                 reverse_head_tail_lemma(lastValue, backValuesTail);
@@ -591,7 +592,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ close lseg2(node, last, lastValue, nil);
         //@ assert [1/2]queue->front_values |-> ?backValuesReverseTail;
         //@ assert lseg(prev, middle, ?backValuesTail);
-        //@ append_nil_lemma(backValuesReverseTail);
+        //@ append_nil(backValuesReverseTail);
         //@ reverse_head_tail_lemma(lastValue, backValuesTail);
         while (prev != middle)
             //@ invariant lseg(prev, middle, ?frontBackValues) &*& lseg2(node, last, ?backBackValuesReverseHead, ?backBackValuesReverseTail) &*& cons(lastValue, backValuesTail) == append(reverse(backBackValuesReverseTail), cons(backBackValuesReverseHead, frontBackValues));
@@ -606,7 +607,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
             prev = prevPrev;
             //@ split_fraction node_next(node, _);
             //@ close lseg2(node, last, prevValue, cons(backBackValuesReverseHead, backBackValuesReverseTail));
-            //@ append_assoc_lemma(reverse(backBackValuesReverseTail), cons(backBackValuesReverseHead, nil), frontBackValues);
+            //@ append_assoc(reverse(backBackValuesReverseTail), cons(backBackValuesReverseHead, nil), frontBackValues);
         }
         //@ open lseg(prev, middle, _);
         //@ merge_fractions node_next(first, _);
@@ -614,9 +615,9 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ split_fraction node_next(first, _);
         middle = last;
         queue->middle = middle;
-        //@ append_nil_lemma(reverse(cons(backBackValuesReverseHead, backBackValuesReverseTail)));
+        //@ append_nil(reverse(cons(backBackValuesReverseHead, backBackValuesReverseTail)));
         //@ assert cons(lastValue, backValuesTail) == reverse(cons(backBackValuesReverseHead, backBackValuesReverseTail));
-        //@ reverse_reverse_lemma(cons(backBackValuesReverseHead, backBackValuesReverseTail));
+        //@ reverse_reverse(cons(backBackValuesReverseHead, backBackValuesReverseTail));
         //@ close lseg2(first, last, firstValue, reverse(cons(lastValue, backValuesTail)));
     } else {
         //@ open lseg2(first, middle, _, _);

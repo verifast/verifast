@@ -5,8 +5,6 @@ in
 cd examples
 verifast_both -disable_overflow_check counter.c
 verifast_both -disable_overflow_check counter_with_pred.c
-verifast_both linkedlist.c
-verifast_both linkedlist2.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c

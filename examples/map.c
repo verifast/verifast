@@ -1,4 +1,5 @@
 #include "stdlib.h"
+#include "list.h"
 
 struct node {
     struct node *next;
@@ -6,57 +7,6 @@ struct node {
 };
 
 /*@
-
-inductive list<t> = nil | cons(t, list<t>);
-
-fixpoint list<t> list_add<t>(list<t> xs, t x) {
-    switch (xs) {
-        case nil: return cons(x, nil);
-        case cons(h, t): return cons(h, list_add(t, x));
-    }
-}
-
-fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
-    switch (xs) {
-        case nil: return ys;
-        case cons(h, t): return cons(h, append(t, ys));
-    }
-}
-
-lemma void append_nil<t>(list<t> xs)
-    requires true;
-    ensures append(xs, nil) == xs;
-{
-    switch (xs) {
-        case nil:
-        case cons(h, t): append_nil(t);
-    }
-}
-
-lemma void append_add<t>(list<t> xs, t y, list<t> ys)
-    requires true;
-    ensures append(list_add(xs, y), ys) == append(xs, cons(y, ys));
-{
-    switch (xs) {
-        case nil:
-        case cons(h, t):
-            append_add(t, y, ys);
-    }
-}
-
-fixpoint list<t> tail<t>(list<t> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(h, t): return t;
-    }
-}
-
-fixpoint int head(list<int> xs) {
-    switch (xs) {
-        case nil: return 0;
-        case cons(h, t): return h;
-    }
-}
 
 predicate list(struct node *l, list<int> xs) =
     l == 0 ? xs == nil : l->value |-> ?value &*& l->next |-> ?next &*& malloc_block_node(l) &*& list(next, ?tail) &*& xs == cons(value, tail);
@@ -117,7 +67,7 @@ predicate_family mapfunc(void *mapfunc)(void *data, list<int> in, list<int> out,
 
 typedef int mapfunc(void *data, int x);
     //@ requires mapfunc(this)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
-    //@ ensures mapfunc(this)(data, tail(in), list_add(out, result), info);
+    //@ ensures mapfunc(this)(data, tail(in), append(out, cons(result, nil)), info);
 
 struct node *map(struct node *list, mapfunc *f, void *data)
     //@ requires list(list, ?xs) &*& is_mapfunc(f) == true &*& mapfunc(f)(data, xs, ?out, ?info);
@@ -135,7 +85,7 @@ struct node *map(struct node *list, mapfunc *f, void *data)
         //@ assert list(fnext, ?ftail);
         //@ close list(list, xs);
         struct node *result = cons(fvalue, fnext);
-        //@ append_add(out, fvalue, ftail);
+        //@ append_assoc(out, cons(fvalue, nil), ftail);
         return result;
     }
 }
@@ -156,14 +106,14 @@ predicate_family_instance mapfunc(plusOne)(void *data, list<int> in, list<int> o
 
 int plusOne(void *data, int x) //@ : mapfunc
     //@ requires mapfunc(plusOne)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
-    //@ ensures mapfunc(plusOne)(data, tail(in), list_add(out, result), info);
+    //@ ensures mapfunc(plusOne)(data, tail(in), append(out, cons(result, nil)), info);
 {
     //@ assume_is_int(x);
     if (x == 2147483647) abort();
     //@ open mapfunc(plusOne)(data, in, out, ?info_);
-    //@ append_add(out, x + 1, plusOne(tail(in)));
+    //@ append_assoc(out, cons(x + 1, nil), plusOne(tail(in)));
     //@ switch (in) { case nil: case cons(h, t): }
-    //@ close mapfunc(plusOne)(data, tail(in), list_add(out, x + 1), info_);
+    //@ close mapfunc(plusOne)(data, tail(in), append(out, cons(x + 1, nil)), info_);
     return x + 1;
 }
 
