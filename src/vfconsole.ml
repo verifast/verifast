@@ -131,7 +131,7 @@ let _ =
   let n = Array.length Sys.argv in
   if n = 1 then
   begin
-    print_endline Verifast.banner;
+    print_endline (Verifast.banner ());
     print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] [-emit_vfmanifest] [-emit_highlighted_source_files] {sourcefile|objectfile}"
   end
   else

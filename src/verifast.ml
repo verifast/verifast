@@ -7053,12 +7053,12 @@ let prover_table: (string * (string * (prover_client -> unit))) list ref = ref [
 let register_prover name banner f =
   prover_table := (name, (banner, f))::!prover_table
 
-let prover_banners = String.concat "" (List.map (fun (_, (banner, _)) -> banner) !prover_table)
+let prover_banners () = String.concat "" (List.map (fun (_, (banner, _)) -> banner) !prover_table)
 
-let banner =
+let banner () =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
   "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans" ^
-  prover_banners
+  prover_banners ()
 
 let lookup_prover prover =
   match prover with
