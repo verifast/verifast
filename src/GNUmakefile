@@ -7,7 +7,7 @@ else
 endif
 
 test: mysh verifast vfide
-	cd ..; src/mysh < src/testsuite.mysh
+	export PATH=`pwd`:$PATH; cd ..; src/mysh < src/testsuite.mysh
 
 mysh: mysh.ml
 	ocamlopt.opt -o mysh unix.cmxa mysh.ml

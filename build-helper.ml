@@ -1,14 +1,22 @@
+#load "unix.cma";;
+
+open Unix;;
+
 let releases = [ (* Add new releases to the front *)
   "8.1.1", 275
 ]
 
-#load "unix.cma"
+let string_of_process_status s =
+  match s with
+    WEXITED n -> Printf.sprintf "WEXITED %d" n
+  | WSIGNALED n -> Printf.sprintf "WSIGNALED %d" n
+  | WSTOPPED n -> Printf.sprintf "WSTOPPED %d" n
 
 let sys cmd =
   let chan = Unix.open_process_in cmd in
   let line = input_line chan in
   let exitStatus = Unix.close_process_in chan in
-  if exitStatus <> 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %d" cmd exitStatus);
+  if exitStatus <> Unix.WEXITED 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %s" cmd (string_of_process_status exitStatus));
   line
 
 let is_macos = Sys.os_type = "Unix" && sys "uname" = "Darwin"
