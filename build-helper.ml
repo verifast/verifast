@@ -2,7 +2,16 @@ let releases = [ (* Add new releases to the front *)
   "8.1.1", 275
 ]
 
-let is_macos = try ignore (Sys.getenv "MACHTYPE"); true with Not_found -> false
+#load "unix.cma"
+
+let sys cmd =
+  let chan = Unix.open_process_in cmd in
+  let line = input_line chan in
+  let exitStatus = Unix.close_process_in chan in
+  if exitStatus <> 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %d" cmd exitStatus);
+  line
+
+let is_macos = Sys.os_type = "Unix" && sys "uname" = "Darwin"
 
 let sh cmd =
   print_endline cmd;
