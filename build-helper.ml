@@ -55,8 +55,8 @@ let () =
   Sys.chdir "src";
   let mac_flag = if is_macos then "MAC=yes" else "" in
   sh (Printf.sprintf "%s %s VFVERSION=%s release" make_cmd mac_flag release);
-  let releasename = Printf.sprintf "verifast-%s%s" release os_suffix in
-  let zipname = releasename ^ zipext in
+  let releasename = Printf.sprintf "verifast-%s" release in
+  let zipname = releasename ^ os_suffix ^ zipext in
   let zippath = ".." // ".." // zipname in
   if Sys.file_exists zippath then Sys.remove zippath;
   create_zip zippath releasename
