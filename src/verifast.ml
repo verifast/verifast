@@ -4684,6 +4684,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     get_points_to (pn,ilist) h t f_symb l cont
   in
   
+  let current_thread_name = "currentThread" in
+  let current_thread_type = IntType in
+  
   let functypemap1 =
     let rec iter functypemap ds =
       match ds with
@@ -4704,7 +4707,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter [] xs
         in
         let (pre, post) =
-          let (wpre, tenv) = check_pred (pn,ilist) [] (xmap @ [("this", PtrType Void)]) pre in
+          let (wpre, tenv) = check_pred (pn,ilist) [] (xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
           let (wpost, tenv) = check_pred (pn,ilist) [] postmap post in
           (wpre, wpost)
@@ -4719,9 +4722,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let functypemap = functypemap1 @ functypemap0 in
-  
-  let current_thread_name = "currentThread" in
-  let current_thread_type = IntType in
   
   let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");

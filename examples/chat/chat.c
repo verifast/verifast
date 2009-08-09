@@ -115,12 +115,12 @@ predicate_ctor room_ctor(struct room *room)()
 
 predicate session(struct session *session)
     requires session->room |-> ?room &*& session->room_lock |-> ?roomLock &*& session->socket |-> ?socket &*& malloc_block_session(session)
-        &*& [_]lock(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+        &*& [_]lock(roomLock, _, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
 
 @*/
 
 struct session *create_session(struct room *room, struct lock *roomLock, struct socket *socket)
-    //@ requires [_]lock(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+    //@ requires [_]lock(roomLock, _, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
     //@ ensures session(result);
 {
     struct session *session = malloc(sizeof(struct session));
@@ -135,8 +135,16 @@ struct session *create_session(struct room *room, struct lock *roomLock, struct 
 }
 
 void session_run_with_nick(struct room *room, struct lock *roomLock, struct reader *reader, struct writer *writer, struct string_buffer *nick)
-    //@ requires locked(roomLock, room_ctor(room), currentThread, _) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
-    //@ ensures [_]lock(roomLock, room_ctor(room)) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    /*@
+    requires
+        locked(roomLock, ?roomLockId, room_ctor(room), currentThread, _) &*& lockset(currentThread, cons(roomLockId, nil)) &*&
+        room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    @*/
+    /*@
+    ensures
+        [_]lock(roomLock, roomLockId, room_ctor(room)) &*& lockset(currentThread, nil) &*&
+        reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    @*/
 {
     struct member *member = 0;
 
@@ -173,7 +181,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         bool eof = false;
         struct string_buffer *message = create_string_buffer();
         while (!eof)
-            //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& [_]lock(roomLock, room_ctor(room));
+            //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& [_]lock(roomLock, roomLockId, room_ctor(room)) &*& lockset(currentThread, nil);
         {
             eof = reader_read_line(reader, message);
             if (eof) {
@@ -233,8 +241,8 @@ predicate_family_instance thread_run_data(session_run)(void *data)
 @*/
 
 void session_run(void *data) //@ : thread_run
-    //@ requires thread_run_data(session_run)(data);
-    //@ ensures true;
+    //@ requires thread_run_data(session_run)(data) &*& lockset(currentThread, nil);
+    //@ ensures lockset(currentThread, nil);
 {
     //@ open thread_run_data(session_run)(data);
     struct session *session = data;
@@ -281,7 +289,7 @@ void session_run(void *data) //@ : thread_run
         struct string_buffer *nick = create_string_buffer();
         bool done = false;
         while (!done)
-          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& [_]lock(roomLock, room_ctor(room));
+          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& [_]lock(roomLock, _, room_ctor(room)) &*& lockset(currentThread, nil);
         {
             writer_write_string(writer, "Please enter your nick: ");
             {
@@ -309,7 +317,7 @@ void session_run(void *data) //@ : thread_run
     }
 
     socket_close(socket);
-    //@ leak [_]lock(roomLock, _);
+    //@ leak [_]lock(roomLock, _, _);
 }
 
 int main()
@@ -318,15 +326,15 @@ int main()
 {
     struct room *room = create_room();
     //@ close room_ctor(room)();
-    //@ close create_lock_ghost_arg(room_ctor(room));
+    //@ close create_lock_ghost_args(room_ctor(room), nil, nil);
     struct lock *roomLock = create_lock();
     struct server_socket *serverSocket = create_server_socket(12345);
 
     while (true)
-        //@ invariant [_]lock(roomLock, room_ctor(room)) &*& server_socket(serverSocket);
+        //@ invariant [_]lock(roomLock, _, room_ctor(room)) &*& server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        //@ split_fraction lock(roomLock, _);
+        //@ split_fraction lock(roomLock, _, _);
         struct session *session = create_session(room, roomLock, socket);
         //@ close thread_run_data(session_run)(session);
         thread_start(session_run, session);
