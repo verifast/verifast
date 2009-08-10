@@ -3,39 +3,30 @@
 
 #include "list.h"
 
-struct list;
-struct iter;
-
 /*@
 
-predicate list(struct list* l, list<void *> v);
-predicate iter(struct iter* i, struct list* l, list<void *> v, int index);
+predicate lseg(void *first, void *last, list<void *> xs, predicate(void *) p) =
+    first == last ?
+        xs == nil
+    :
+        pointer(first, ?next) &*& lseg(next, last, ?xs0, p) &*& xs == cons(first, xs0) &*& p(first);
+
+lemma void lseg_append(void *n1);
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& lseg(n2, ?n3, ?xs1, p) &*& lseg(n3, 0, ?xs2, p);
+    ensures lseg(n1, n3, append(xs0, xs1), p) &*& lseg(n3, 0, xs2, p);
+
+lemma void lseg_append_final(void *n1);
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& lseg(n2, 0, ?xs1, p);
+    ensures lseg(n1, 0, append(xs0, xs1), p);
+
+lemma void lseg_add(void *n1);
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& pointer(n2, ?n3) &*& p(n2) &*& lseg(n3, 0, ?xs1, p);
+    ensures lseg(n1, n3, append(xs0, cons(n2, nil)), p) &*& lseg(n3, 0, xs1, p) &*& append(xs0, cons(n2, xs1)) == append(append(xs0, cons(n2, nil)), xs1);
 
 @*/
 
-struct list *create_list();
-  //@ requires emp;
-  //@ ensures list(result, nil);
-struct iter *list_create_iter(struct list *list);
-  //@ requires list(list, ?xs);
-  //@ ensures iter(result, list, xs, 0);
-bool iter_has_next(struct iter *iter);
-  //@ requires iter(iter, ?l, ?xs, ?i);
-  //@ ensures iter(iter, l, xs, i) &*& result == (i < length(xs));
-void *iter_next(struct iter *iter);
-  //@ requires iter(iter, ?l, ?xs, ?i) &*& i < length(xs);
-  //@ ensures iter(iter, l, xs, i + 1) &*& result == nth(i, xs);
-void iter_dispose(struct iter *iter);
-  //@ requires iter(iter, ?l, ?xs, ?i);
-  //@ ensures list(l, xs);
-void list_add(struct list *list, void *element);
-  //@ requires list(list, ?xs);
-  //@ ensures list(list, cons(element, xs));
-void list_remove(struct list *list, void *element);
-  //@ requires list(list, ?xs) &*& mem(element, xs) == true;
-  //@ ensures list(list, remove(element, xs));
-void list_dispose(struct list *list);
-  //@ requires list(list, _);
-  //@ ensures emp;
+void remove(void *phead, void *element);
+    //@ requires pointer(phead, ?head) &*& lseg(head, 0, ?xs, ?p) &*& mem(element, xs) == true;
+    //@ ensures pointer(phead, ?head1) &*& lseg(head1, 0, remove(element, xs), p) &*& pointer(element, _) &*& p(element);
 
 #endif

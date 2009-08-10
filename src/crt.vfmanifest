@@ -11,6 +11,8 @@
 .provides prelude.h#chars_length_nonnegative
 .provides prelude.h#chars_nil
 .provides prelude.h#chars_split
+.provides prelude.h#pointer_nonzero
+.provides prelude.h#pointer_distinct
 .provides list.h#append_assoc
 .provides list.h#append_nil
 .provides list.h#drop_0

@@ -80,6 +80,10 @@ lemma void open_chars_nil(char *array);
     requires chars(array, chars_nil);
     ensures emp;
 
+lemma void chars_zero(); // There is nothing at address 0.
+    requires chars(0, ?cs);
+    ensures cs == chars_nil;
+
 lemma void chars_split(char *array, int offset);
    requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= chars_length(cs);
    ensures
@@ -110,6 +114,14 @@ lemma void integer_to_chars(void *p);
     ensures chars(p, ?cs) &*& chars_length(cs) == 4;
 
 predicate pointer(void **pp; void *p);
+
+lemma void pointer_distinct(void *pp1, void *pp2);
+    requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
+    ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
+
+lemma void pointer_nonzero(void *pp);
+    requires pointer(pp, ?p);
+    ensures pointer(pp, p) &*& pp != 0;
 
 lemma void chars_to_pointer(void *p);
     requires chars(p, ?cs) &*& chars_length(cs) == 4;

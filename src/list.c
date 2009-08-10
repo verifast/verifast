@@ -215,4 +215,17 @@ lemma void foreach_unremove<t>(t x, list<t> xs)
     }
 }
 
+lemma void foreach_append<t>(list<t> xs, list<t> ys)
+    requires foreach(xs, ?p) &*& foreach(ys, p);
+    ensures foreach(append(xs, ys), p);
+{
+    open foreach(xs, p);
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            foreach_append(xs0, ys);
+            close foreach(append(xs, ys), p);
+    }
+}
+
 @*/

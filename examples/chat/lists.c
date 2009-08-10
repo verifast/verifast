@@ -1,63 +1,103 @@
-#include <malloc.h>
+#include "stdlib.h"
 #include "bool.h"
 #include "lists.h"
 
-struct node {
-    void *value;
-    struct node *next;
-};
+/*@
 
-struct list {
-    struct node *head;
-};
-
-struct list *create_list()
+lemma void lseg_append(void *n1)
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& lseg(n2, ?n3, ?xs1, p) &*& lseg(n3, 0, ?xs2, p);
+    ensures lseg(n1, n3, append(xs0, xs1), p) &*& lseg(n3, 0, xs2, p);
 {
-    struct list *list = malloc(sizeof(list));
-    list->head = 0;
-    return list;
+    open lseg(n1, n2, xs0, p);
+    if (n1 == n2) {
+    } else {
+        assert pointer(n1, ?n1Next);
+        lseg_append(n1Next);
+        pointer_nonzero(n1);
+        if (n3 != 0) {
+            open lseg(n3, 0, xs2, p);
+            pointer_distinct(n1, n3);
+            close lseg(n3, 0, xs2, p);
+        }
+        close lseg(n1, n3, append(xs0, xs1), p);
+    }
 }
 
-struct iter {
-    struct node *next;
-};
-
-struct iter *list_create_iter(struct list *list)
+lemma void lseg_append_final(void *n1)
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& lseg(n2, 0, ?xs1, p);
+    ensures lseg(n1, 0, append(xs0, xs1), p);
 {
-    struct iter *iter = malloc(sizeof(struct iter));
-    iter->next = list->head;
-    return iter;
+    close lseg(0, 0, nil, p);
+    lseg_append(n1);
+    open lseg(0, 0, nil, p);
 }
 
-bool iter_has_next(struct iter *iter)
+lemma void lseg_add(void *n1)
+    requires lseg(n1, ?n2, ?xs0, ?p) &*& pointer(n2, ?n3) &*& p(n2) &*& lseg(n3, 0, ?xs1, p);
+    ensures lseg(n1, n3, append(xs0, cons(n2, nil)), p) &*& lseg(n3, 0, xs1, p) &*& append(xs0, cons(n2, xs1)) == append(append(xs0, cons(n2, nil)), xs1);
 {
-    return iter->next != 0;
+    open lseg(n3, 0, xs1, p);
+    close lseg(n3, n3, nil, p);
+    pointer_nonzero(n2);
+    if (n3 != 0) pointer_distinct(n2, n3);
+    close lseg(n2, n3, cons(n2, nil), p);
+    close lseg(n3, 0, xs1, p);
+    lseg_append(n1);
+    append_assoc(xs0, cons(n2, nil), xs1);
 }
 
-void *iter_next(struct iter *iter)
-{
-    struct node *node = iter->next;
-    iter->next = node->next;
-    return node->value;
-}
+@*/
 
-void iter_dispose(struct iter *iter)
+void remove(void *phead, void *element)
+    //@ requires pointer(phead, ?head) &*& lseg(head, 0, ?xs, ?p) &*& mem(element, xs) == true;
+    //@ ensures pointer(phead, ?head1) &*& lseg(head1, 0, remove(element, xs), p) &*& pointer(element, _) &*& p(element);
 {
-    free(iter);
-}
-
-void list_add(struct list *list, void *element)
-{
-    struct node *node = malloc(sizeof(struct node));
-    node->value = element;
-    node->next = list->head;
-    list->head = node;
-}
-
-void list_remove(struct list *list, void *element)
-{
-    struct node **next = &(list->head);
-    while ((*next)->value != element)
-        next = &((*next)->next);
-    *next = (*next)->next;
+    void **pnext = phead;
+    while (*pnext != element)
+        /*@
+        invariant
+            pointer(phead, head) &*&
+            pnext == phead ?
+                lseg(head, 0, xs, p)
+            :
+                lseg(head, pnext, ?xs0, p) &*& pointer(pnext, ?next) &*& p(pnext) &*& lseg(next, 0, ?xs1, p) &*&
+                append(xs0, cons(pnext, xs1)) == xs &*&
+                mem(element, xs1) == true &*&
+                remove(element, xs) == append(xs0, cons(pnext, remove(element, xs1)));
+        @*/
+    {
+        void **next = *pnext;
+        /*@
+        if (pnext == phead) {
+            open lseg(head, 0, xs, p);
+            pointer_distinct(phead, head);
+            close lseg(head, head, nil, p);
+        } else {
+            assert lseg(head, pnext, ?xs0, p);
+            close lseg(next, next, nil, p);
+            open lseg(next, 0, ?xs1, p);
+            pointer_distinct(pnext, next);
+            close lseg(next, 0, xs1, p);
+            close lseg(pnext, next, cons(pnext, nil), p);
+            lseg_append(head);
+            open lseg(next, 0, xs1, p);
+            pointer_distinct(phead, next);
+            append_assoc(xs0, cons(pnext, nil), xs1);
+            append_assoc(xs0, cons(pnext, nil), remove(element, xs1));
+        }
+        @*/
+        pnext = next;
+    }
+    //@ void *next = *pnext;
+    //@ open lseg(next, 0, _, p);
+    void *nextNext = *((void **)*pnext);
+    //@ assert lseg(nextNext, 0, ?xs2, p);
+    *pnext = nextNext;
+    /*@
+    if (pnext != phead) {
+        pointer_nonzero(pnext);
+        close lseg(pnext, 0, cons(pnext, xs2), p);
+        lseg_append_final(head);
+    }
+    @*/
 }

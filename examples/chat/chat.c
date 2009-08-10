@@ -9,6 +9,7 @@
 #include "ghostlist.h"
 
 struct member {
+    struct member *next;
     struct string_buffer *nick;
     struct writer *writer;
 };
@@ -19,13 +20,15 @@ predicate member(struct member* member)
 @*/
 
 struct room {
-    struct list *members;
+    struct member *members;
     //@ int ghost_list_id;
 };
 
 /*@
-predicate room(struct room* room)
-    requires room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*& foreach(?members, member) &*& list(membersList, members) &*& ghost_list(id, members) &*& malloc_block_room(room);
+predicate room(struct room* room) =
+    room->members |-> ?membersList &*& [?f]room->ghost_list_id |-> ?id &*&
+    lseg(membersList, 0, ?members, member) &*&
+    ghost_list(id, members) &*& malloc_block_room(room);
 @*/
 
 struct room *create_room()
@@ -33,14 +36,12 @@ struct room *create_room()
     //@ ensures room(result);
 {
     struct room *room = 0;
-    struct list *members = 0;
     room = malloc(sizeof(struct room));
     if (room == 0) {
         abort();
     }
-    members = create_list();
-    room->members = members;
-    //@ close foreach(nil, member);
+    room->members = 0;
+    //@ close lseg(0, 0, nil, member);
     //@ int i = create_ghost_list();
     //@ room->ghost_list_id = i;
     //@ close room(room);
@@ -52,25 +53,26 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     //@ ensures room(room) &*& string_buffer(nick);
 {
     //@ open room(room);
-    //@ assert foreach(?members, _);
-    struct list *membersList = room->members;
-    struct iter *iter = list_create_iter(membersList);
+    //@ struct member *membersList = room->members;
+    //@ assert lseg(membersList, 0, ?members, member);
+    struct member *iter = room->members;
     bool hasMember = false;
-    bool hasNext = iter_has_next(iter);
-    //@ length_nonnegative(members);
-    while (hasNext && !hasMember)
-        //@ invariant string_buffer(nick) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
+    //@ close lseg(membersList, membersList, nil, member);
+    while (iter != 0 && !hasMember)
+        /*@
+        invariant
+            string_buffer(nick) &*&
+            lseg(membersList, iter, ?members0, member) &*& lseg(iter, 0, ?members1, member) &*& members == append(members0, members1);
+        @*/
     {
-        struct member *member = iter_next(iter);
-        //@ mem_nth(i, members);
-        //@ foreach_remove(member, members);
-        //@ open member(member);
-        hasMember = string_buffer_equals(member->nick, nick);
-        //@ close member(member);
-        //@ foreach_unremove(member, members);
-        hasNext = iter_has_next(iter);
+        //@ open lseg(iter, 0, members1, member);
+        //@ open member(iter);
+        hasMember = string_buffer_equals(iter->nick, nick);
+        //@ close member(iter);
+        iter = *(void **)(void *)iter;
+        //@ lseg_add(membersList);
     }
-    iter_dispose(iter);
+    //@ lseg_append_final(membersList);
     //@ close room(room);
     return hasMember;
 }
@@ -80,25 +82,21 @@ void room_broadcast_message(struct room *room, struct string_buffer *message)
     //@ ensures room(room) &*& string_buffer(message);
 {
     //@ open room(room);
-    //@ assert foreach(?members0, _);
-    struct list *membersList = room->members;
-    struct iter *iter = list_create_iter(membersList);
-    bool hasNext = iter_has_next(iter);
-    //@ length_nonnegative(members0);
-    while (hasNext)
-        //@ invariant iter(iter, membersList, members0, ?i) &*& foreach(members0, @member) &*& string_buffer(message) &*& hasNext == (i < length(members0)) &*& 0 <= i &*& i <= length(members0);
+    struct member *iter = room->members;
+    //@ assert lseg(?list, 0, ?ms, member);
+    //@ close lseg(list, list, nil, member);
+    while (iter != 0)
+        //@ invariant string_buffer(message) &*& lseg(list, iter, ?ms0, member) &*& lseg(iter, 0, ?ms1, member) &*& ms == append(ms0, ms1);
     {
-        struct member *member = iter_next(iter);
-        //@ mem_nth(i, members0);
-        //@ foreach_remove(member, members0);
-        //@ open member(member);
-        writer_write_string_buffer(member->writer, message);
-        writer_write_string(member->writer, "\r\n");
-        //@ close member(member);
-        //@ foreach_unremove(member, members0);
-        hasNext = iter_has_next(iter);
+        //@ open lseg(iter, 0, ms1, member);
+        //@ open member(iter);
+        writer_write_string_buffer(iter->writer, message);
+        writer_write_string(iter->writer, "\r\n");
+        //@ close member(iter);
+        iter = *(void **)(void *)iter;
+        //@ lseg_add(list);
     }
-    iter_dispose(iter);
+    //@ lseg_append_final(list);
     //@ close room(room);
 }
 
@@ -165,9 +163,11 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         member->writer = writer;
         //@ split_fraction member_writer(member, _) by 1/2;
         //@ close member(member);
-        list_add(room->members, member);
-        //@ assert foreach(?members, @member);
-        //@ close foreach(cons(member, members), @member);
+        //@ assert room->members |-> ?list &*& lseg(list, 0, ?members, @member);
+        member->next = room->members;
+        room->members = member;
+        //@ open member_next(member, _);
+        //@ close lseg(member, 0, cons(member, members), @member);
         //@ assert [_]room->ghost_list_id |-> ?id;
         //@ split_fraction room_ghost_list_id(room, id);
         //@ ghost_list_add(id, member);
@@ -207,12 +207,16 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     //@ open room_ctor(room)();
     //@ open room(room);
     {
-        struct list *membersList = room->members;
-        //@ assert list(membersList, ?members);
+        struct member *membersList = room->members;
+        //@ open room_members(room, _);
+        //@ assert lseg(membersList, 0, ?members, @member);
         //@ merge_fractions room_ghost_list_id(room, _);
         //@ ghost_list_member_handle_lemma();
-        list_remove(membersList, member);
-        //@ foreach_remove(member, members);
+        remove(&room->members, member);
+        //@ assert pointer(&room->members, ?list);
+        //@ close room_members(room, list);
+        //@ assert pointer((void *)member, ?memberNext);
+        //@ close member_next(member, memberNext);
     }
     //@ assert ghost_list(?id, _);
     //@ ghost_list_remove(id, member);
@@ -261,25 +265,21 @@ void session_run(void *data) //@ : thread_run
     //@ open room_ctor(room)();
     //@ open room(room);
     {
-        struct list *membersList = room->members;
-        //@ assert list(membersList, ?members);
-        struct iter *iter = list_create_iter(membersList);
-        bool hasNext = iter_has_next(iter);
-        //@ length_nonnegative(members);
-        while (hasNext)
-            //@ invariant writer(writer) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
+        struct member *iter = room->members;
+        //@ assert lseg(?membersList, 0, ?ms, member);
+        //@ close lseg(membersList, membersList, nil, member);
+        while (iter != 0)
+            //@ invariant writer(writer) &*& lseg(membersList, iter, ?ms0, member) &*& lseg(iter, 0, ?ms1, member) &*& ms == append(ms0, ms1);
         {
-            struct member *member = iter_next(iter);
-            //@ mem_nth(i, members);
-            //@ foreach_remove(member, members);
-            //@ open member(member);
-            writer_write_string_buffer(writer, member->nick);
+            //@ open lseg(iter, 0, ms1, member);
+            //@ open member(iter);
+            writer_write_string_buffer(writer, iter->nick);
             writer_write_string(writer, "\r\n");
-            //@ close member(member);
-            //@ foreach_unremove(member, members);
-            hasNext = iter_has_next(iter);
+            //@ close member(iter);
+            iter = *(void **)(void *)iter;
+            //@ lseg_add(membersList);
         }
-        iter_dispose(iter);
+        //@ lseg_append_final(membersList);
     }
     //@ close room(room);
     //@ close room_ctor(room)();

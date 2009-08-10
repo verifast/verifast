@@ -156,6 +156,10 @@ lemma void foreach_unremove<t>(t x, list<t> xs);
     requires foreach(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
     ensures foreach(xs, p);
 
+lemma void foreach_append<t>(list<t> xs, list<t> ys);
+    requires foreach(xs, ?p) &*& foreach(ys, p);
+    ensures foreach(append(xs, ys), p);
+
 @*/
 
 #endif
