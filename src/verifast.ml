@@ -250,86 +250,86 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
     tokenpos := Stream.count stream;
     token_srcpos := current_srcpos()
   in
-  let new_loc_line strm__ =
+  let new_loc_line () =
       line := !line + 1;
-      linepos := Stream.count strm__
+      linepos := Stream.count stream
   in
-  let rec next_token (strm__ : _ Stream.t) =
+  let rec next_token () =
     if !in_comment then
     begin
       in_comment := false;
-      multiline_comment strm__
+      multiline_comment ()
     end
     else
-    let new_line strm__ =
-      new_loc_line strm__;
+    let new_line () =
+      new_loc_line ();
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
         ghost_range_end();
         Some (Kwd "@*/")
       ) else if !ignore_eol then
-        next_token strm__
+        next_token ()
       else
         Some Eol
     in
-    match Stream.peek strm__ with
+    match Stream.peek stream with
       Some (' ' | '\009' | '\026' | '\012') ->
-        Stream.junk strm__; next_token strm__
+        Stream.junk stream; next_token ()
     | Some '\010' ->
-        Stream.junk strm__; new_line strm__
+        Stream.junk stream; new_line ()
     | Some '\013' ->
-        Stream.junk strm__;
-        if Stream.peek strm__ = Some '\010' then Stream.junk strm__;
-        new_line strm__
+        Stream.junk stream;
+        if Stream.peek stream = Some '\010' then Stream.junk stream;
+        new_line ()
     | Some ('A'..'Z' | 'a'..'z' | '_' | '\192'..'\255' as c) ->
         start_token();
-        Stream.junk strm__;
-        let s = strm__ in reset_buffer (); store c; ident s
-    | Some '(' -> Stream.junk strm__; Some(ident_or_keyword "(" false)
+        Stream.junk stream;
+        reset_buffer (); store c; ident ()
+    | Some '(' -> Stream.junk stream; Some(ident_or_keyword "(" false)
     | Some
         ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
          '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
-        Stream.junk strm__;
-        let s = strm__ in reset_buffer (); store c; ident2 s
+        Stream.junk stream;
+        reset_buffer (); store c; ident2 ()
     | Some ('0'..'9' as c) ->
         start_token();
-        Stream.junk strm__;
-        let s = strm__ in reset_buffer (); store c; number s
+        Stream.junk stream;
+        reset_buffer (); store c; number ()
     | Some '\'' ->
         start_token();
-        Stream.junk strm__;
+        Stream.junk stream;
         let c =
-          try char strm__ with
+          try char () with
             Stream.Failure -> error "Bad character literal."
         in
-        begin match Stream.peek strm__ with
-          Some '\'' -> Stream.junk strm__; Some (Char c)
+        begin match Stream.peek stream with
+          Some '\'' -> Stream.junk stream; Some (Char c)
         | _ -> error "Single quote expected."
         end
     | Some '"' ->
         start_token();
-        Stream.junk strm__;
-        let s = strm__ in reset_buffer (); Some (String (string s))
-    | Some '-' -> start_token(); Stream.junk strm__; neg_number strm__
-    | Some '/' -> start_token(); Stream.junk strm__; maybe_comment strm__
-    | Some c -> start_token(); Stream.junk strm__; Some (keyword_or_error c)
+        Stream.junk stream;
+        reset_buffer (); Some (String (string ()))
+    | Some '-' -> start_token(); Stream.junk stream; neg_number ()
+    | Some '/' -> start_token(); Stream.junk stream; maybe_comment ()
+    | Some c -> start_token(); Stream.junk stream; Some (keyword_or_error c)
     | _ ->
       in_ghost_range := !ghost_range_start <> None;
       ghost_range_end();
       None
-  and ident (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and ident () =
+    match Stream.peek stream with
       Some
         ('A'..'Z' | 'a'..'z' | '\192'..'\255' | '0'..'9' | '_' | '\'' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; ident s
+        Stream.junk stream; store c; ident ()
     | _ -> Some (ident_or_keyword (get_string ()) true)
-  and ident2 (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and ident2 () =
+    match Stream.peek stream with
       Some
         ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
          '>' | '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; ident2 s
+        Stream.junk stream; store c; ident2 ()
     | _ ->
       let s = get_string() in
       if s = "@*/" then
@@ -338,74 +338,74 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
         reportRange GhostRangeDelimiter (current_loc())
       end;
       Some (ident_or_keyword s false)
-  and neg_number (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and neg_number () =
+    match Stream.peek stream with
       Some ('0'..'9' as c) ->
-        Stream.junk strm__;
-        let s = strm__ in reset_buffer (); store '-'; store c; number s
-    | _ -> let s = strm__ in reset_buffer (); store '-'; ident2 s
-  and number (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+        Stream.junk stream;
+        reset_buffer (); store '-'; store c; number ()
+    | _ -> reset_buffer (); store '-'; ident2 ()
+  and number () =
+    match Stream.peek stream with
       Some ('0'..'9' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; number s
+        Stream.junk stream; store c; number ()
     | Some '.' ->
-        Stream.junk strm__; let s = strm__ in store '.'; decimal_part s
+        Stream.junk stream; store '.'; decimal_part ()
     | Some ('e' | 'E') ->
-        Stream.junk strm__; let s = strm__ in store 'E'; exponent_part s
+        Stream.junk stream; store 'E'; exponent_part ()
     | _ -> Some (Int (big_int_of_string (get_string ())))
-  and decimal_part (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and decimal_part () =
+    match Stream.peek stream with
       Some ('0'..'9' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; decimal_part s
+        Stream.junk stream; store c; decimal_part ()
     | Some ('e' | 'E') ->
-        Stream.junk strm__; let s = strm__ in store 'E'; exponent_part s
+        Stream.junk stream; store 'E'; exponent_part ()
     | _ -> Some (Float (float_of_string (get_string ())))
-  and exponent_part (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and exponent_part () =
+    match Stream.peek stream with
       Some ('+' | '-' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; end_exponent_part s
-    | _ -> end_exponent_part strm__
-  and end_exponent_part (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+        Stream.junk stream; store c; end_exponent_part ()
+    | _ -> end_exponent_part ()
+  and end_exponent_part () =
+    match Stream.peek stream with
       Some ('0'..'9' as c) ->
-        Stream.junk strm__; let s = strm__ in store c; end_exponent_part s
+        Stream.junk stream; store c; end_exponent_part ()
     | _ -> Some (Float (float_of_string (get_string ())))
-  and string (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
-      Some '"' -> Stream.junk strm__; get_string ()
+  and string () =
+    match Stream.peek stream with
+      Some '"' -> Stream.junk stream; get_string ()
     | Some '\\' ->
-        Stream.junk strm__;
+        Stream.junk stream;
         let c =
-          try escape strm__ with
+          try escape () with
             Stream.Failure -> error "Bad string literal."
         in
-        let s = strm__ in store c; string s
+        store c; string ()
     | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> Stream.junk strm__; let s = strm__ in store c; string s
+    | Some c -> Stream.junk stream; store c; string ()
     | _ -> raise Stream.Failure
-  and char (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and char () =
+    match Stream.peek stream with
       Some '\\' ->
-        Stream.junk strm__;
-        begin try escape strm__ with
+        Stream.junk stream;
+        begin try escape () with
           Stream.Failure -> error "Bad character literal."
         end
     | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> Stream.junk strm__; c
+    | Some c -> Stream.junk stream; c
     | _ -> raise Stream.Failure
-  and escape (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
-      Some 'n' -> Stream.junk strm__; '\n'
-    | Some 'r' -> Stream.junk strm__; '\r'
-    | Some 't' -> Stream.junk strm__; '\t'
+  and escape () =
+    match Stream.peek stream with
+      Some 'n' -> Stream.junk stream; '\n'
+    | Some 'r' -> Stream.junk stream; '\r'
+    | Some 't' -> Stream.junk stream; '\t'
     | Some ('0'..'9' as c1) ->
-        Stream.junk strm__;
-        begin match Stream.peek strm__ with
+        Stream.junk stream;
+        begin match Stream.peek stream with
           Some ('0'..'9' as c2) ->
-            Stream.junk strm__;
-            begin match Stream.peek strm__ with
+            Stream.junk stream;
+            begin match Stream.peek stream with
               Some ('0'..'9' as c3) ->
-                Stream.junk strm__;
+                Stream.junk stream;
                 Char.chr
                   ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
                      (Char.code c3 - 48))
@@ -414,22 +414,22 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
         | _ -> error "Bad escape sequence."
         end
     | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> Stream.junk strm__; c
+    | Some c -> Stream.junk stream; c
     | _ -> raise Stream.Failure
   and ghost_range_end_at srcpos =
     match !ghost_range_start with
       None -> ()
     | Some sp -> reportRange GhostRange (sp, srcpos); ghost_range_start := None
   and ghost_range_end () = ghost_range_end_at (current_srcpos())
-  and maybe_comment (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and maybe_comment () =
+    match Stream.peek stream with
       Some '/' ->
-      Stream.junk strm__;
+      Stream.junk stream;
       (
-        match Stream.peek strm__ with
+        match Stream.peek stream with
           Some '@' ->
           begin
-            Stream.junk strm__;
+            Stream.junk stream;
             if !ghost_range_start <> None then raise Stream.Failure;
             in_single_line_annotation := true;
             ghost_range_start := Some !token_srcpos;
@@ -440,66 +440,66 @@ let make_lexer_core keywords path stream reportRange inComment inGhostRange exce
           if !in_single_line_annotation then (
             in_single_line_annotation := false;
             ghost_range_end_at (path, !line, Stream.count stream - 2 - !linepos + 1);
-            single_line_comment strm__;
+            single_line_comment ();
             Some (Kwd "@*/")
           ) else (
-            single_line_comment strm__; next_token strm__
+            single_line_comment (); next_token ()
           )
       )
     | Some '*' ->
-      Stream.junk strm__;
+      Stream.junk stream;
       (
-        match Stream.peek strm__ with
+        match Stream.peek stream with
           Some '@' ->
-          Stream.junk strm__;
+          Stream.junk stream;
           if !ghost_range_start <> None then raise Stream.Failure;
           ghost_range_start := Some !token_srcpos;
           reportRange GhostRangeDelimiter (current_loc());
           Some (Kwd "/*@")
-        | _ -> multiline_comment strm__
+        | _ -> multiline_comment ()
       )
     | _ -> Some (keyword_or_error '/')
-  and single_line_comment (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
-      Some '~' -> Stream.junk strm__; reportShouldFail (current_loc()); single_line_comment_rest strm__
-    | _ -> single_line_comment_rest strm__
-  and single_line_comment_rest (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and single_line_comment () =
+    match Stream.peek stream with
+      Some '~' -> Stream.junk stream; reportShouldFail (current_loc()); single_line_comment_rest ()
+    | _ -> single_line_comment_rest ()
+  and single_line_comment_rest () =
+    match Stream.peek stream with
       Some '\010' | Some '\013' | None -> reportRange CommentRange (current_loc())
-    | Some c -> Stream.junk strm__; single_line_comment_rest strm__
+    | Some c -> Stream.junk stream; single_line_comment_rest ()
     | _ -> raise Stream.Failure
-  and multiline_comment (strm__ : _ Stream.t) =
-    match Stream.peek strm__ with
+  and multiline_comment () =
+    match Stream.peek stream with
       Some '*' ->
       (
-        Stream.junk strm__;
+        Stream.junk stream;
         (
-          match Stream.peek strm__ with
-            Some '/' -> (Stream.junk strm__; reportRange CommentRange (current_loc()); next_token strm__)
-          | _ -> multiline_comment strm__
+          match Stream.peek stream with
+            Some '/' -> (Stream.junk stream; reportRange CommentRange (current_loc()); next_token ())
+          | _ -> multiline_comment ()
         )
       )
-    | Some '\010' -> (Stream.junk strm__; new_loc_line strm__; multiline_comment strm__)
+    | Some '\010' -> (Stream.junk stream; new_loc_line (); multiline_comment ())
     | Some '\013' ->
-      (Stream.junk strm__;
-       (match Stream.peek strm__ with
-        | Some '\010' -> Stream.junk strm__
+      (Stream.junk stream;
+       (match Stream.peek stream with
+        | Some '\010' -> Stream.junk stream
         | _ -> ());
-       new_loc_line strm__;
-       multiline_comment strm__
+       new_loc_line ();
+       multiline_comment ()
       )
     | None when not exceptionOnError ->
       in_ghost_range := !ghost_range_start <> None;
       in_comment := true;
       reportRange CommentRange (current_loc());
       None
-    | _ -> (Stream.junk strm__; multiline_comment strm__)
+    | _ -> (Stream.junk stream; multiline_comment ())
   in
   (current_loc,
    ignore_eol,
    Stream.from (fun count ->
      (try
-        match next_token stream with
+        match next_token () with
           Some t -> Some (current_loc(), t)
         | None -> None
       with
