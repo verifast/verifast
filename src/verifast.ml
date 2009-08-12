@@ -185,7 +185,7 @@ type range_kind =
 let make_lexer_core keywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail =
   let textlength = String.length text in
   let textpos = ref 0 in
-  let text_peek () = if !textpos = textlength then None else Some (text.[!textpos]) in
+  let text_peek () = if !textpos = textlength then '\000' else text.[!textpos] in
   let text_junk () = incr textpos in
   
   let in_comment = ref inComment in
@@ -278,30 +278,29 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
         Some Eol
     in
     match text_peek () with
-      Some (' ' | '\009' | '\026' | '\012') ->
+      (' ' | '\009' | '\026' | '\012') ->
         text_junk (); next_token ()
-    | Some '\010' ->
+    | '\010' ->
         text_junk (); new_line ()
-    | Some '\013' ->
+    | '\013' ->
         text_junk ();
-        if text_peek () = Some '\010' then text_junk ();
+        if text_peek () = '\010' then text_junk ();
         new_line ()
-    | Some ('A'..'Z' | 'a'..'z' | '_' | '\192'..'\255' as c) ->
+    |('A'..'Z' | 'a'..'z' | '_' | '\192'..'\255' as c) ->
         start_token();
         text_junk ();
-        reset_buffer (); store c; ident ()
-    | Some '(' -> text_junk (); Some(ident_or_keyword "(" false)
-    | Some
-        ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
-         '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
+        ident ()
+    | '(' -> text_junk (); Some(ident_or_keyword "(" false)
+    | ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
+       '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();
         reset_buffer (); store c; ident2 ()
-    | Some ('0'..'9' as c) ->
+    | ('0'..'9' as c) ->
         start_token();
         text_junk ();
         reset_buffer (); store c; number ()
-    | Some '\'' ->
+    | '\'' ->
         start_token();
         text_junk ();
         let c =
@@ -309,31 +308,29 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
             Stream.Failure -> error "Bad character literal."
         in
         begin match text_peek () with
-          Some '\'' -> text_junk (); Some (Char c)
+          '\'' -> text_junk (); Some (Char c)
         | _ -> error "Single quote expected."
         end
-    | Some '"' ->
+    | '"' ->
         start_token();
         text_junk ();
         reset_buffer (); Some (String (string ()))
-    | Some '-' -> start_token(); text_junk (); neg_number ()
-    | Some '/' -> start_token(); text_junk (); maybe_comment ()
-    | Some c -> start_token(); text_junk (); Some (keyword_or_error c)
-    | _ ->
+    | '-' -> start_token(); text_junk (); neg_number ()
+    | '/' -> start_token(); text_junk (); maybe_comment ()
+    | '\000' ->
       in_ghost_range := !ghost_range_start <> None;
       ghost_range_end();
       None
+    | c -> start_token(); text_junk (); Some (keyword_or_error c)
   and ident () =
     match text_peek () with
-      Some
-        ('A'..'Z' | 'a'..'z' | '\192'..'\255' | '0'..'9' | '_' | '\'' as c) ->
-        text_junk (); store c; ident ()
-    | _ -> Some (ident_or_keyword (get_string ()) true)
+      ('A'..'Z' | 'a'..'z' | '\192'..'\255' | '0'..'9' | '_' | '\'' as c) ->
+      text_junk (); ident ()
+    | _ -> Some (ident_or_keyword (String.sub text !tokenpos (!textpos - !tokenpos)) true)
   and ident2 () =
     match text_peek () with
-      Some
-        ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
-         '>' | '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
+      ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
+       '>' | '?' | '@' | '\\' | '~' | '^' | '|' | '*' as c) ->
         text_junk (); store c; ident2 ()
     | _ ->
       let s = get_string() in
@@ -345,71 +342,71 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
       Some (ident_or_keyword s false)
   and neg_number () =
     match text_peek () with
-      Some ('0'..'9' as c) ->
+      ('0'..'9' as c) ->
         text_junk ();
         reset_buffer (); store '-'; store c; number ()
     | _ -> reset_buffer (); store '-'; ident2 ()
   and number () =
     match text_peek () with
-      Some ('0'..'9' as c) ->
+      ('0'..'9' as c) ->
         text_junk (); store c; number ()
-    | Some '.' ->
+    | '.' ->
         text_junk (); store '.'; decimal_part ()
-    | Some ('e' | 'E') ->
+    | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
     | _ -> Some (Int (big_int_of_string (get_string ())))
   and decimal_part () =
     match text_peek () with
-      Some ('0'..'9' as c) ->
+      ('0'..'9' as c) ->
         text_junk (); store c; decimal_part ()
-    | Some ('e' | 'E') ->
+    | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
     | _ -> Some (Float (float_of_string (get_string ())))
   and exponent_part () =
     match text_peek () with
-      Some ('+' | '-' as c) ->
+      ('+' | '-' as c) ->
         text_junk (); store c; end_exponent_part ()
     | _ -> end_exponent_part ()
   and end_exponent_part () =
     match text_peek () with
-      Some ('0'..'9' as c) ->
+      ('0'..'9' as c) ->
         text_junk (); store c; end_exponent_part ()
     | _ -> Some (Float (float_of_string (get_string ())))
   and string () =
     match text_peek () with
-      Some '"' -> text_junk (); get_string ()
-    | Some '\\' ->
+      '"' -> text_junk (); get_string ()
+    | '\\' ->
         text_junk ();
         let c =
           try escape () with
             Stream.Failure -> error "Bad string literal."
         in
         store c; string ()
-    | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> text_junk (); store c; string ()
+    | c when c < ' ' -> raise Stream.Failure
+    | c -> text_junk (); store c; string ()
     | _ -> raise Stream.Failure
   and char () =
     match text_peek () with
-      Some '\\' ->
+      '\\' ->
         text_junk ();
         begin try escape () with
           Stream.Failure -> error "Bad character literal."
         end
-    | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> text_junk (); c
+    | c when c < ' ' -> raise Stream.Failure
+    | c -> text_junk (); c
     | _ -> raise Stream.Failure
   and escape () =
     match text_peek () with
-      Some 'n' -> text_junk (); '\n'
-    | Some 'r' -> text_junk (); '\r'
-    | Some 't' -> text_junk (); '\t'
-    | Some ('0'..'9' as c1) ->
+      'n' -> text_junk (); '\n'
+    | 'r' -> text_junk (); '\r'
+    | 't' -> text_junk (); '\t'
+    | ('0'..'9' as c1) ->
         text_junk ();
         begin match text_peek () with
-          Some ('0'..'9' as c2) ->
+          ('0'..'9' as c2) ->
             text_junk ();
             begin match text_peek () with
-              Some ('0'..'9' as c3) ->
+              ('0'..'9' as c3) ->
                 text_junk ();
                 Char.chr
                   ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
@@ -418,8 +415,8 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
             end
         | _ -> error "Bad escape sequence."
         end
-    | Some c when c < ' ' -> raise Stream.Failure
-    | Some c -> text_junk (); c
+    | c when c < ' ' -> raise Stream.Failure
+    | c -> text_junk (); c
     | _ -> raise Stream.Failure
   and ghost_range_end_at srcpos =
     match !ghost_range_start with
@@ -428,11 +425,11 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
   and ghost_range_end () = ghost_range_end_at (current_srcpos())
   and maybe_comment () =
     match text_peek () with
-      Some '/' ->
+      '/' ->
       text_junk ();
       (
         match text_peek () with
-          Some '@' ->
+          '@' ->
           begin
             text_junk ();
             if !ghost_range_start <> None then raise Stream.Failure;
@@ -451,11 +448,11 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
             single_line_comment (); next_token ()
           )
       )
-    | Some '*' ->
+    | '*' ->
       text_junk ();
       (
         match text_peek () with
-          Some '@' ->
+          '@' ->
           text_junk ();
           if !ghost_range_start <> None then raise Stream.Failure;
           ghost_range_start := Some !token_srcpos;
@@ -466,34 +463,34 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
     | _ -> Some (keyword_or_error '/')
   and single_line_comment () =
     match text_peek () with
-      Some '~' -> text_junk (); reportShouldFail (current_loc()); single_line_comment_rest ()
+      '~' -> text_junk (); reportShouldFail (current_loc()); single_line_comment_rest ()
     | _ -> single_line_comment_rest ()
   and single_line_comment_rest () =
     match text_peek () with
-      Some '\010' | Some '\013' | None -> reportRange CommentRange (current_loc())
-    | Some c -> text_junk (); single_line_comment_rest ()
+      '\010' | '\013' | '\000' -> reportRange CommentRange (current_loc())
+    | c -> text_junk (); single_line_comment_rest ()
     | _ -> raise Stream.Failure
   and multiline_comment () =
     match text_peek () with
-      Some '*' ->
+      '*' ->
       (
         text_junk ();
         (
           match text_peek () with
-            Some '/' -> (text_junk (); reportRange CommentRange (current_loc()); next_token ())
+            '/' -> (text_junk (); reportRange CommentRange (current_loc()); next_token ())
           | _ -> multiline_comment ()
         )
       )
-    | Some '\010' -> (text_junk (); new_loc_line (); multiline_comment ())
-    | Some '\013' ->
+    | '\010' -> (text_junk (); new_loc_line (); multiline_comment ())
+    | '\013' ->
       (text_junk ();
        (match text_peek () with
-        | Some '\010' -> text_junk ()
+        | '\010' -> text_junk ()
         | _ -> ());
        new_loc_line ();
        multiline_comment ()
       )
-    | None when not exceptionOnError ->
+    | '\000' when not exceptionOnError ->
       in_ghost_range := !ghost_range_start <> None;
       in_comment := true;
       reportRange CommentRange (current_loc());
