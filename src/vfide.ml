@@ -160,16 +160,10 @@ let show_ide initialPath prover =
     let reportRange kind ((_, line1, col1), (_, line2, col2)) =
       buffer#apply_tag_by_name (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
     in
-    let charStream =
-      let iter = start#copy in
-      let noCopyIter = iter#nocopy in
-      Stream.from (fun offset ->
-        if iter#equal stop then None else let c = char_of_int iter#char in noCopyIter#forward_char; Some c
-      )
-    in
+    let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_core keywords ("<bufferBase>", "<buffer>") charStream reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
+        make_lexer_core keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
       Stream.iter (fun _ -> ()) tokenStream;
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter
