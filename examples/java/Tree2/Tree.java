@@ -1,5 +1,4 @@
 package tree;
-/*@@*/
 
 /*@
 predicate tree(Tree t,bintree b)

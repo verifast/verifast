@@ -1,5 +1,5 @@
 package iterator;
-/*@@*/
+
 /*@
 
 inductive objects = nil | cons(Object, objects);

@@ -172,6 +172,49 @@ type loc = (srcpos * srcpos)
 
 exception ParseException of loc * string
 
+module Stream = struct
+  type 'a t = (int -> 'a option) * (int ref) * ('a option list ref)
+  let from f = (f, ref 0, ref [])
+  let peek (f, counter, buffer) =
+    match !buffer with
+      tok::_ -> tok
+    | [] ->
+      let tok = f !counter in
+      incr counter;
+      buffer := [tok];
+      tok
+  let junk (f, counter, buffer) =
+    buffer := List.tl !buffer
+  let push tok (f, counter, buffer) =
+    buffer := tok::!buffer
+  let empty stream = peek stream = None
+  let npeek n ((f, counter, buffer): 'a t): 'a list =
+    let rec iter n buffer =
+      if n = 0 then [] else
+      match buffer with
+        [None] -> []
+      | tok::toks -> tok::iter (n - 1) toks
+      | [] ->
+        let tok = f !counter in
+        incr counter;
+        if tok = None then [None] else tok::iter (n - 1) []
+    in
+    buffer := iter n !buffer;
+    List.flatten (List.map (function None -> [] | Some tok -> [tok]) !buffer)
+  let iter (g: 'a -> unit) (stream: 'a t): unit =
+    let rec iter () =
+      match peek stream with
+        None -> ()
+      | Some tok ->
+        g tok;
+        junk stream;
+        iter ()
+    in
+    iter ()
+  exception Failure
+  exception Error of string
+end
+
 (* The lexer *)
 
 type range_kind =
@@ -867,6 +910,18 @@ let rep_comma p = parser [< v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
 let rec rep p = parser [< v = p; vs = rep p >] -> v::vs | [< >] -> []
 let parse_angle_brackets (_, sp) p =
   parser [< '((sp', _), Kwd "<") when sp = sp'; v = p; '(_, Kwd ">") >] -> v
+
+let peek_in_ghost_range p stream =
+  match Stream.peek stream with
+    Some (_, Kwd "/*@") as tok ->
+    Stream.junk stream;
+    begin
+      try
+        p stream
+      with
+        Stream.Failure as e -> Stream.push tok stream; raise e
+    end
+  | _ -> raise Stream.Failure
 
 type spec_clause =
   AtomicClause
@@ -1577,20 +1632,15 @@ let rec parse_import_names= parser
 let parse_import_name= parser
   [<'(_, Ident n);(n',el)=parse_import_names>] -> (n^n',el)
   
-let rec parse_imports= parser
-  [<'(l, Kwd "import");n= parse_import_name;rest=parse_imports>] -> let (pn,el)=n in Import(l,pn,el)::rest
-| [<>]-> []
+let parse_import0= parser
+  [<'(l, Kwd "import");n= parse_import_name>] -> let (pn,el)=n in Import(l,pn,el)
 
-let parse_ghost_import_list= parser
-  [< '(_, Kwd "/*@"); is=parse_imports; '(_, Kwd "@*/")>] -> is
-| [<>]->[]
-
-let rec parse_non_ghost_import_list= parser
-  [< is=parse_imports>]->is
-| [<>]-> []
+let parse_import = parser
+  [< i = parse_import0 >] -> i
+| [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] -> i
 
 let parse_package_decl= parser
-  [< (l,p) = parse_package; i=parse_ghost_import_list;i'=parse_non_ghost_import_list; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::(i@i'),ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is,ds)
 
 let parse_scala_file path reportRange =
   let lexer = make_lexer (veri_keywords@Scala.keywords) in
@@ -1621,7 +1671,8 @@ let parse_include_directives ignore_eol =
   | [< >] -> []
   and
   parse_include_directive = parser
-  [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] -> ignore_eol := true; (l, header)
+    [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] -> ignore_eol := true; (l, header)
+  | [< d = peek_in_ghost_range (parser [< '(_, Kwd "#"); '(_, Kwd "include"); '(l, String header); '(_, Kwd "@*/") >] -> (l, header)) >] -> d
 in
   parse_include_directives
 

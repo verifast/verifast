@@ -1,5 +1,5 @@
 package wrapper.io;
-/*@ @*/
+
 /*@
 predicate reader(InputStreamReader_ reader);
 predicate writer(OutputStreamWriter_ writer);

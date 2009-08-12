@@ -1,7 +1,7 @@
 package wrapper.net;
 
 import wrapper.io.*;
-/*@ @*/
+
 /*@
 predicate server_socket(ServerSocket_ serverSocket);
 predicate socket(Socket_ socket, InputStreamReader_ reader, OutputStreamWriter_ writer);

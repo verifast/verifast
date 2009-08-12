@@ -1,7 +1,7 @@
 #ifndef THREADING_H
 #define THREADING_H
 
-#include "list.h"
+//@ #include "list.h"
 
 // Lock ordering for re-entry and deadlock prevention.
 // Note: we use lock IDs instead of struct lock pointers because

@@ -1,4 +1,3 @@
-class Foo {}
 /*@
 
 inductive list<t> = nil | cons(t, list<t>);
