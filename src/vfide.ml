@@ -475,6 +475,12 @@ let show_ide initialPath prover =
     let k = let gIter = stepStore#get_iter selpath in stepStore#get ~row:gIter ~column:stepKCol in
     List.nth stepItems k
   in
+  let strings_of_env env =
+    let env = remove_dups env in
+    let compare_bindings (x1, v1) (x2, v2) = compare x1 x2 in
+    let env = List.sort compare_bindings env in
+    List.map (fun (x, v) -> Printf.sprintf "%s=%s" x v) env
+  in
   let stepSelected _ =
     match !stepItems with
       None -> ()
@@ -494,7 +500,7 @@ let show_ide initialPath prover =
           textNotebook#goto_page k;
           buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
           Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
-          append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
+          append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
         | (caller_loc, caller_env)::_ ->
           if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
             textPaned#set_position 150;
@@ -506,7 +512,7 @@ let show_ide initialPath prover =
             subNotebook#goto_page k;
             buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
-            append_items subEnvStore subEnvKCol subEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups env))
+            append_items subEnvStore subEnvKCol subEnvCol (strings_of_env env)
           end;
           begin
             apply_tag_at_marks "currentCaller" caller_loc;
@@ -516,12 +522,14 @@ let show_ide initialPath prover =
             textNotebook#goto_page k;
             buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
-            append_items srcEnvStore srcEnvKCol srcEnvCol (List.map (fun (x, t) -> x ^ "=" ^ t) (remove_dups caller_env))
+            append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
           end
       end;
-      let _ = append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass) in
-      let _ = append_items chunksStore chunksKCol chunksCol (List.map Verifast.string_of_chunk h) in
-      ()
+      append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass);
+      let compare_chunks (Chunk ((g, literal), targs, coef, ts, size)) (Chunk ((g', literal'), targs', coef', ts', size')) =
+        compare g g'
+      in
+      append_items chunksStore chunksKCol chunksCol (List.map Verifast.string_of_chunk (List.sort compare_chunks h))
   in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in
