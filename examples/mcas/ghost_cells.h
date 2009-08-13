@@ -19,7 +19,7 @@ lemma void ghost_cell6_update(int id, int v1, int v2, int v3, void *v4, void *v5
     requires ghost_cell6(id, _, _, _, _, _, _);
     ensures ghost_cell6(id, v1, v2, v3, v4, v5, v6);
 
-predicate counted_ghost_cell<t>(int id, t value, int count);
+predicate counted_ghost_cell<t>(int id; t value, int count);
 predicate counted_ghost_cell_ticket<t>(int id, t value);
 
 lemma int create_counted_ghost_cell<t>(t value);

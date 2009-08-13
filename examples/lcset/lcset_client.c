@@ -153,8 +153,6 @@ int main()
     //@ open thread_run_post(session)(set);
     thread_join(thread2);
     //@ open thread_run_post(session)(set);
-    //@ merge_fractions set(set);
-    //@ merge_fractions atomic_space(set_ctor(set));
     //@ dispose_atomic_space(set_ctor(set));
     //@ open set_ctor(set)();
     dispose_set(set);

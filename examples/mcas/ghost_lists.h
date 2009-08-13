@@ -16,10 +16,10 @@ lemma int create_ghost_list<t>();
 
 lemma void ghost_list_add<t>(int id, t x);
     requires ghost_list<t>(id, ?xs);
-    ensures ghost_list(id, cons(x, xs)) &*& ghost_list_member_handle(id, x);
+    ensures ghost_list(id, cons(x, xs)) &*& [_]ghost_list_member_handle(id, x);
 
-lemma void ghost_list_member_handle_lemma<t>();
-    requires [?f1]ghost_list<t>(?id, ?xs) &*& [?f2]ghost_list_member_handle<t>(id, ?x);
+lemma void ghost_list_member_handle_lemma<t>(int id);
+    requires [?f1]ghost_list<t>(id, ?xs) &*& [?f2]ghost_list_member_handle<t>(id, ?x);
     ensures [f1]ghost_list(id, xs) &*& [f2]ghost_list_member_handle(id, x) &*& mem(x, xs) == true;
 
 lemma void ghost_list_create_member_handle<t>(int id, t x);

@@ -70,8 +70,6 @@ lemma void chars_contains_chars_index_of(chars cs, char c);
 
 predicate chars(char *array, chars cs);
 
-predicate string_literal(char *array, chars cs);
-
 lemma void chars_nil(char *array);
     requires emp;
     ensures chars(array, chars_nil);

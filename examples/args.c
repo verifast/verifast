@@ -24,7 +24,6 @@ int main0(int argc, char **argv)
         //@ open argv(argv + i, argc - i);
         //@ pointer_is_in_range(argv + i);
         puts(*(argv + i));
-        //@ leak [_]pointer(argv + i, ?arg) &*& [_]chars(arg, _);
         i = i + 1;
     }
     //@ open argv(_, 0);

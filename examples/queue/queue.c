@@ -43,8 +43,9 @@ lemma void lseg2_distinct(struct node *first, struct node *middle, struct node *
 {
     open lseg2(first, middle, value0, values);
     if (first != middle) {
-        assert [_]first->next |-> ?next;
+        assert [1/2]first->next |-> ?next;
         lseg2_distinct(next, middle, n);
+        split_fraction node_next(first, _);
     }
     close lseg2(first, middle, value0, values);
 }
@@ -133,7 +134,7 @@ lemma bool queue_enqueue_atomic_compare_and_store_pointer_queue_enqueue_operatio
             if (result) {
                 assert lseg(last, ?middle, ?backValues);
                 close lseg(n, middle, cons(value, backValues));
-                assert [_]queue_front_values(queue, ?frontValues);
+                assert [1/2]queue_front_values(queue, ?frontValues);
                 append_assoc(frontValues, reverse(backValues), cons(value, nil));
             }
             close queue_state(queue, result ? append(values, cons(value, nil)) : values);
@@ -360,21 +361,19 @@ lemma bool queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation() :
 {
     open queue_try_dequeue_operation_pre(queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation)(?info_, queue);
     open queue_state(queue, values);
-    merge_fractions queue_front_values(queue, _);
     switch (info_) {
         case queue_try_dequeue_atomic_load_pointer_queue_try_dequeue_operation_info(op, queue_, middle):
             open queue_last(queue, _);
             op();
             assert atomic_load_pointer_operation_post(?last);
             close queue_last(queue, last);
-            merge_fractions queue_ghost_middle(queue, _);
             queue->ghost_middle = last;
             split_fraction queue_ghost_middle(queue, _);
             if (middle != last) {
                 open lseg(last, middle, ?backValues);
                 split_fraction node_next(last, _);
                 assert node_value(last, ?lastValue);
-                assert [_]node_next(last, ?lastNext);
+                assert [1/2]node_next(last, ?lastNext);
                 assert lseg(lastNext, middle, ?backValuesTail);
                 close lseg(last, last, nil);
                 queue->front_values = reverseTail(lastValue, backValuesTail);
@@ -501,7 +500,7 @@ lemma bool queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation() :
 {
     open queue_try_dequeue_operation_pre(queue_try_dequeue_atomic_noop_context_queue_try_dequeue_operation)(?info_, queue);
     open queue_state(queue, values);
-    merge_fractions queue_front_values(queue, ?frontValues);
+    assert queue_front_values(queue, ?frontValues);
     assert lseg(_, _, ?backValues);
     switch (frontValues) {
         case nil:
@@ -610,7 +609,6 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
             //@ append_assoc(reverse(backBackValuesReverseTail), cons(backBackValuesReverseHead, nil), frontBackValues);
         }
         //@ open lseg(prev, middle, _);
-        //@ merge_fractions node_next(first, _);
         first->next = node;
         //@ split_fraction node_next(first, _);
         middle = last;
@@ -621,7 +619,7 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ close lseg2(first, last, firstValue, reverse(cons(lastValue, backValuesTail)));
     } else {
         //@ open lseg2(first, middle, _, _);
-        //@ assert [_]first->next |-> ?firstNext &*& lseg2(firstNext, middle, ?frontValuesHead, ?frontValuesTail);
+        //@ assert [1/2]first->next |-> ?firstNext &*& lseg2(firstNext, middle, ?frontValuesHead, ?frontValuesTail);
         //@ close lseg2(first, middle, firstValue, frontValues);
         //@ close atomic_noop_context_pre(queue_try_dequeue_atomic_noop_context)(queue_try_dequeue_atomic_noop_context_info(ctxt, info, queue, frontValuesHead, frontValuesTail), inv);
         //@ close atomic_noop_ghost_arg(queue_try_dequeue_atomic_noop_context);
@@ -631,7 +629,6 @@ bool queue_try_dequeue(struct queue *queue, void **pvalue)
         //@ open atomic_noop_context_post(queue_try_dequeue_atomic_noop_context)(_);
     }
     //@ open lseg2(first, middle, _, _);
-    //@ merge_fractions node_next(first, _);
     struct node *firstNext = first->next;
     //@ open lseg2(firstNext, middle, ?firstNextValue, ?firstNextTail);
     *pvalue = firstNext->value;
@@ -648,8 +645,6 @@ void queue_dispose(struct queue *queue)
 {
     //@ open queue_consumer(queue);
     //@ open queue_state(queue, _);
-    //@ merge_fractions queue_ghost_middle(queue, _);
-    //@ merge_fractions queue_front_values(queue, _);
     struct node *first = queue->first;
     struct node *middle = queue->middle;
     struct node *last = queue->last;
@@ -657,7 +652,6 @@ void queue_dispose(struct queue *queue)
         //@ invariant lseg2(first, middle, _, _);
     {
         //@ open lseg2(first, middle, _, _);
-        //@ merge_fractions node_next(first, _);
         struct node *next = first->next;
         free(first);
         first = next;
@@ -672,7 +666,6 @@ void queue_dispose(struct queue *queue)
     }
     //@ open lseg(last, middle, _);
     //@ open lseg2(middle, middle, _, _);
-    //@ merge_fractions node_next(middle, _);
     free(middle);
     free(queue);
 }

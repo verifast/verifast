@@ -76,12 +76,15 @@ predicate_ctor mcas_cell(int rcsList, int dsList)(void **a, void *vr, void *va) 
         f == 1 &*& va == vr
     :
         true == (((uintptr_t)vr & 2) == 2) &*&
-        [_]ghost_list_member_handle(dsList, (void *)((uintptr_t)vr & ~2)) &*&
-        [_]cd((void *)((uintptr_t)vr & ~2), ?es, ?tracker, ?counter, ?statusCell, ?op) &*&
-        ghost_counter_snapshot(counter, index_of_assoc(a, es) + 1) &*&
-        counted_ghost_cell_ticket<pair<int, void *> >(statusCell, ?status) &*&
-        va == (fst(status) == 1 ? snd(assoc(a, es)) : fst(assoc(a, es))) &*&
-        snd(status) == (void *)0 ? f == 1/2 : f == 1;
+        mcas_cell_attached(dsList, (void *)((uintptr_t)vr & ~2), a, va, f);
+
+predicate mcas_cell_attached(int dsList, struct cd *cd, void **a, void *va, real f) =
+    [_]ghost_list_member_handle(dsList, cd) &*&
+    [_]cd(cd, ?es, ?tracker, ?counter, ?statusCell, ?op) &*&
+    [_]ghost_counter_snapshot(counter, index_of_assoc(a, es) + 1) &*&
+    counted_ghost_cell_ticket<pair<int, void *> >(statusCell, ?status) &*&
+    va == (fst(status) == 1 ? snd(assoc(a, es)) : fst(assoc(a, es))) &*&
+    snd(status) == (void *)0 ? f == 1/2 : f == 1;
 
 predicate_ctor entry_mem(int rcsList)(pair<void *, pair<void *, void *> > e) =
     [_]strong_ghost_assoc_list_key_handle(rcsList, fst(e)) &*&
@@ -102,23 +105,25 @@ predicate disposed_info(struct cd *cd, bool done, mcas_op *op, bool success2) =
     :
         true;
 
+predicate success2_copy(struct cd *cd, bool success2) = true;
+predicate done_copy(struct cd *cd, bool done) = true;
+
 predicate_ctor cdext(int rcsList, mcas_unsep *unsep, any mcasInfo)(struct cd *cd, void **pstatus, void *status) =
     true == (((uintptr_t)cd & 1) == 0) &*&
     true == (((uintptr_t)cd & 2) == 0) &*&
     pstatus == &cd->status &*&
     [_]cd(cd, ?es, ?tracker, ?counter, ?statusCell, ?op) &*&
     distinct(mapfst(es)) == true &*&
-    [?fDone]cd->done |-> ?done &*&
-    [?fSuccess2]cd->success2 |-> ?success2 &*&
-    [?fCommitted]cd->committed |-> (status != 0) &*&
+    done_copy(cd, ?done) &*&
+    success2_copy(cd, ?success2) &*&
     ghost_counter(counter, ?count) &*& 0 <= count &*& count <= length(es) &*&
     (
         status == 0 ?
-            fCommitted == 1 &*&
+            cd->committed |-> false &*&
             foreach(take(count, es), entry_attached(rcsList, cd)) &*&
             !success2
         :
-            true
+            [_]cd->committed |-> true
     ) &*&
     foreach(es, entry_mem(rcsList)) &*&
     counted_ghost_cell<pair<int, void *> >(statusCell, pair(success2 ? 1 : 0, status), count) &*&
@@ -130,9 +135,11 @@ predicate_ctor cdext(int rcsList, mcas_unsep *unsep, any mcasInfo)(struct cd *cd
     ) &*&
     disposed_info(cd, done, op, success2) &*&
     done ?
-        [_]tracked_cas_prediction(tracker, 0, success2 ? (void *)1 : (void *)2)
+        [_]cd->done |-> true &*&
+        [_]tracked_cas_prediction(tracker, 0, success2 ? (void *)1 : (void *)2) &*&
+        [_]cd->success2 |-> success2
     :
-        fDone == 1 &*& fSuccess2 == 1 &*& !success2 &*&
+        cd->done |-> false &*& cd->success2 |-> success2 &*& !success2 &*&
         is_mcas_op(op) &*& mcas_pre(op)(unsep, mcasInfo, es);
 
 predicate mcas(int id, mcas_sep *sep, mcas_unsep *unsep, any mcasInfo, list<pair<void *, void *> > cs) =
@@ -234,7 +241,7 @@ lemma void mcas_rdcss_sep() : rdcss_separate_lemma
     assert is_mcas_unsep(?unsep);
     sep();
     open mcas(id, sep, unsep, _, ?cs);
-    merge_fractions ghost_cell6(id, _, _, ?dsList, _, _, _);
+    assert [_]ghost_cell6(id, _, _, ?dsList, _, _, _);
     assert rdcss(rdcssId, _, _, ?aas, ?bs);
     assert foreach3(?ds, aas, ?avs, _);
     foreach3_length();
@@ -256,7 +263,6 @@ lemma void mcas_rdcss_unsep() : rdcss_unseparate_lemma
     assert is_mcas_sep(?sep);
     assert is_mcas_unsep(?unsep);
     assert mcas_unsep(unsep)(?mcasInfo, _, _, _, _);
-    split_fraction ghost_cell6(id, _, _, _, _, _, _);
     close mcas(id, sep, unsep, mcasInfo, cs);
     unsep();
     close rdcss_separate_lemma(mcas_rdcss_sep)(info_, rdcssId, inv, mcas_rdcss_unsep);
@@ -274,6 +280,7 @@ lemma int create_mcas(mcas_sep *sep, mcas_unsep *unsep, any mcasInfo)
     close foreach_assoc(nil, pointer);
     close foreach_assoc2(nil, nil, mcas_cell(rcsList, dsList));
     ghost_cell6_update(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo);
+    leak ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo);
     close mcas(id, sep, unsep, mcasInfo, nil);
     return id;
 }
@@ -332,7 +339,6 @@ void *mcas_read(void *a)
             sep();
             csMem();
             open mcas(id, sep, unsep, mcasInfo, ?cs);
-            split_fraction ghost_cell6(id, _, _, _, _, _, _);
             assert foreach_assoc2(?rcs, cs, _);
             foreach_assoc2_separate(a);
             foreach_assoc2_unseparate_nochange(rcs, cs, a);
@@ -375,8 +381,6 @@ start:
         {
             open rdcss_bs_membership_lemma(bsMem)(_, _, _);
             open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-            merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-            split_fraction ghost_cell6(id, _, _, _, _, _, _);
             strong_ghost_assoc_list_key_handle_lemma();
             close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId, inv_, rdcssSep, aas, avs, bs);
             close rdcss_bs_membership_lemma(bsMem)(rdcssUnsep, boxed_int(id), a2);
@@ -405,8 +409,6 @@ start:
         {
             open rdcss_read_operation_pre(rdcssRop)(_, _, _);
             open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-            merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-            split_fraction ghost_cell6(id, _, _, _, _, _, _);
             strong_ghost_assoc_list_key_handle_lemma();
             assert foreach_assoc2(?rcs, ?cs, _);
             foreach_assoc2_separate(a);
@@ -414,8 +416,8 @@ start:
             if (((uintptr_t)realValue & 2) == 0) {
                 rop();
             } else {
-                split_fraction ghost_list_member_handle(dsList, _);
-                split_fraction cd(_, _, _, _, _, _);
+                open mcas_cell_attached(dsList, ?cd, a, abstractValue, ?ff);
+                close mcas_cell_attached(dsList, cd, a, abstractValue, ff);
             }
             close mcas_cell(rcsList, dsList)(a, realValue, abstractValue);
             foreach_assoc2_unseparate_nochange(rcs, cs, a);
@@ -424,12 +426,8 @@ start:
             return realValue;
         }
         @*/
-        //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-        //@ split_fraction strong_ghost_assoc_list_key_handle(rcsList, a);
         //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), a);
-        //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
         //@ close rdcss_read_operation_pre(rdcssRop)(mcas_rdcss_unsep, boxed_int(id), a);
-        //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
         //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
         //@ produce_lemma_function_pointer_chunk(bsMem);
         //@ produce_lemma_function_pointer_chunk(rdcssRop);
@@ -441,20 +439,12 @@ start:
         //@ leak is_rdcss_read_operation_lemma(rdcssRop);
         //@ leak is_rdcss_bs_membership_lemma(bsMem);
         //@ open rdcss_separate_lemma(mcas_rdcss_sep)(_, _, _, _);
-        //@ merge_fractions ghost_cell6(id, _, _, _, _, _, _);
         //@ open rdcss_read_operation_post(rdcssRop)(_);
-        //@ merge_fractions ghost_cell6(id, _, _, _, _, _, _);
         //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
         if (((uintptr_t)r & 2) != 0) {
             mcas_impl((struct cd *)((uintptr_t)r & ~2));
-            //@ leak [_]ghost_list_member_handle(_, _);
-            //@ leak [_]cd(_, _, _, _, _, _);
-            //@ leak [_]cd_committed(_, _);
-            //@ leak [_]cd_success2(_, _);
             goto start;
         }
-        //@ leak [_]ghost_cell6(id, _, _, _, _, _, _);
-        //@ leak [_]strong_ghost_assoc_list_key_handle(_, _);
         return r;
     }
 }
@@ -496,13 +486,14 @@ bool mcas(int n, struct mcas_entry *aes)
     //@ cd->committed = false;
     //@ cd->disposed = false;
     //@ close cd(cd, es, tracker, counter, statusCell, op);
+    //@ leak cd(cd, es, tracker, counter, statusCell, op);
     
     // Install the descriptor in the atomic space.
     {
         /*@
         predicate_family_instance atomic_noop_context_pre(context)(predicate() inv_) =
             inv_ == inv &*&
-            cd(cd, es, tracker, counter, statusCell, op) &*&
+            [_]cd(cd, es, tracker, counter, statusCell, op) &*&
             cas_tracker(tracker, 0) &*&
             ghost_counter(counter, 0) &*&
             counted_ghost_cell(statusCell, pair(0, (void *)0), 0) &*&
@@ -569,14 +560,12 @@ bool mcas(int n, struct mcas_entry *aes)
                     }
                 }
                 drop_0(es);
-                open [?fcd]cd(cd, _, _, _, _, _);
+                open cd(cd, _, _, _, _, _);
                 close_foreach_entry_mem(es, 0);
-                close [fcd]cd(cd, es, tracker, counter, statusCell, op);
             }
-            split_fraction ghost_cell6(id, _, _, _, _, _, _);
-            split_fraction cd(cd, _, _, _, _, _);
-            split_fraction cd_disposed(cd, false);
             close disposed_info(cd, false, op, false);
+            close success2_copy(cd, false);
+            close done_copy(cd, false);
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, 0);
             close foreach3(cons(cd, ds), cons(&cd->status, sas), cons((void *)0, svs), cdext(rcsList, unsep, mcasInfo));
             close mcas(id, sep, unsep, mcasInfo, cs);
@@ -615,21 +604,16 @@ bool mcas(int n, struct mcas_entry *aes)
             open atomic_noop_context_pre(context)(_);
             sep();
             open mcas(id, _, _, _, ?cs);
-            merge_fractions ghost_cell6(id, ?rdcssId, ?rcsList, ?dsList, _, _, _);
-            ghost_list_member_handle_lemma();
+            assert [_]ghost_cell6(id, ?rdcssId, ?rcsList, ?dsList, _, _, _);
+            ghost_list_member_handle_lemma(dsList);
             leak [_]ghost_list_member_handle(dsList, cd);
             assert foreach3(?ds, ?sas, ?svs, _);
             foreach3_separate(cd);
             open cdext(rcsList, unsep, mcasInfo)(cd, _, ?status_);
             open disposed_info(_, _, _, ?success2);
-            merge_fractions cd(cd, _, _, _, _, _);
-            merge_fractions cd_committed(cd, _);
-            merge_fractions cd_success2(cd, _);
-            merge_fractions cd_disposed(cd, _);
             cd->disposed = true;
-            split_fraction cd_disposed(cd, _);
-            leak [1/2]cd_disposed(cd, _);
             close disposed_info(cd, true, op, success2);
+            leak [1/2]cd->disposed |-> true;
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, status_);
             foreach3_unseparate_nochange(ds, sas, svs, cd);
             close mcas(id, sep, unsep, mcasInfo, cs);
@@ -655,7 +639,7 @@ predicate committed_copy(bool committedCopy, struct cd *cd, int counter, int i) 
     committedCopy ?
         [_]cd->committed |-> true
     :
-        ghost_counter_snapshot(counter, i);
+        [_]ghost_counter_snapshot(counter, i);
 
 @*/
 
@@ -691,8 +675,6 @@ start:
     //@ length_nonnegative(es);
     void *status = 0;
     //@ void *statusProphecy = create_prophecy_pointer();
-    //@ split_fraction ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo);
-    //@ split_fraction cd(cd, es, tracker, counter, statusCell, op);
     {
         /*@
         predicate_family_instance atomic_load_pointer_context_pre(context)(predicate() inv_, void *pp, void *prophecy) =
@@ -719,19 +701,14 @@ start:
             open atomic_load_pointer_context_pre(context)(_, _, _);
             sep();
             open mcas(id, sep, unsep, mcasInfo, ?cs);
-            merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-            ghost_list_member_handle_lemma();
+            ghost_list_member_handle_lemma(dsList);
             assert foreach3(?ds, ?sas, ?svs, _);
             foreach3_foreach_assoc_separate(cd);
             open cdext(rcsList, unsep, mcasInfo)(cd, _, _);
             aop();
-            merge_fractions cd(cd, _, _, _, _, _);
             if (statusProphecy == 0) {
                 create_ghost_counter_snapshot(0);
                 close committed_copy(false, cd, counter, 0);
-            } else {
-                split_fraction cd_committed(cd, true);
-                split_fraction cd_success2(cd, _);
             }
             close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, statusProphecy);
             foreach3_foreach_assoc_unseparate_nochange(ds, sas, svs, cd);
@@ -746,7 +723,6 @@ start:
         //@ leak is_atomic_load_pointer_context(context);
         //@ open atomic_load_pointer_context_post(context)();
     }
-    //@ split_fraction cd(cd, es, tracker, counter, statusCell, op);
     //@ open cd(cd, es, tracker, counter, statusCell, op);
     if (status == 0) {
         uintptr_t s = 1;
@@ -759,8 +735,8 @@ start:
                 [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                 [_]ghost_list_member_handle(dsList, cd) &*&
                 [_]cd(cd, es, tracker, counter, statusCell, op) &*&
-                [?fcd]cd->n |-> ?n &*& [fcd]cd->es |-> ?entries &*& [fcd]entries(n, entries, es) &*&
-                [fcd]cd->tracker |-> tracker &*& [fcd]cd->counter |-> counter &*& [fcd]cd->statusCell |-> statusCell &*& [fcd]cd->op |-> op &*&
+                [_]cd->n |-> ?n &*& [_]cd->es |-> ?entries &*& [_]entries(n, entries, es) &*&
+                [_]cd->tracker |-> tracker &*& [_]cd->counter |-> counter &*& [_]cd->statusCell |-> statusCell &*& [_]cd->op |-> op &*&
                 s == 1 &*&
                 0 <= i &*& i <= length(es) &*&
                 committed_copy(?committedCopy, cd, counter, i);
@@ -782,8 +758,7 @@ start:
                 {
                     open rdcss_as_membership_lemma(asMem)(_, _, _);
                     open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-                    merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                    ghost_list_member_handle_lemma();
+                    ghost_list_member_handle_lemma(dsList);
                     assert foreach3(?ds, ?sas, ?svs, _);
                     foreach3_separate(cd);
                     assert is_mcas_unsep(?unsep_);
@@ -791,7 +766,6 @@ start:
                     close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                     foreach3_unseparate_nochange(ds, sas, svs, cd);
                     foreach3_mem_x_mem_assoc_x_ys(cd);
-                    split_fraction ghost_cell6(id, _, _, _, _, _, _);
                     close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, rdcssSep, aas, avs, bs);
                     close rdcss_as_membership_lemma(asMem)(rdcssUnsep, boxed_int(id), a);
                 }
@@ -811,14 +785,11 @@ start:
                 {
                     open rdcss_bs_membership_lemma(bsMem)(_, _, _);
                     open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-                    merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                    ghost_list_member_handle_lemma();
+                    ghost_list_member_handle_lemma(dsList);
                     assert foreach3(?ds, ?sas, ?svs, _);
                     foreach3_separate(cd);
                     assert is_mcas_unsep(?unsep_);
                     open cdext(rcsList, unsep_, mcasInfo)(cd, _, ?status_);
-                    merge_fractions cd(cd, _, _, _, _, _);
-                    split_fraction cd(cd, _, _, _, _, _);
                     foreach_separate_ith(i, es);
                     open entry_mem(rcsList)(nth(i, es));
                     strong_ghost_assoc_list_key_handle_lemma();
@@ -826,7 +797,6 @@ start:
                     foreach_unseparate_ith_nochange(i, es);
                     close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                     foreach3_unseparate_nochange(ds, sas, svs, cd);
-                    split_fraction ghost_cell6(id, _, _, _, _, _, _);
                     close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, rdcssSep, aas, avs, bs);
                     close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), a);
                 }
@@ -871,22 +841,18 @@ start:
                     open rdcss_operation_pre(rop)(_, _, _, _, _, _, _);
                     open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
                     void *result = assoc(a2, bs);
-                    merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                    ghost_list_member_handle_lemma();
+                    ghost_list_member_handle_lemma(dsList);
                     assert foreach3(?ds, ?sas, ?svs, _);
                     foreach3_length();
                     distinct_assoc_yzs(ds, sas, svs, cd);
                     foreach3_separate(cd);
                     assert is_mcas_unsep(?unsep_);
                     open cdext(rcsList, unsep_, mcasInfo)(cd, _, ?status_);
-                    merge_fractions cd(cd, _, _, _, _, _);
                     assoc_fst_ith_snd_ith(es, i);
                     open committed_copy(?committedCopy1, _, _, _);
                     if (committedCopy1) {
-                        merge_fractions cd_committed(cd, _);
                     } else {
-                        match_ghost_counter_snapshot();
-                        leak ghost_counter_snapshot(counter, _);
+                        match_ghost_counter_snapshot(i);
                     }
                     foreach_separate_ith(i, es);
                     open entry_mem(rcsList)(nth(i, es));
@@ -899,20 +865,19 @@ start:
                     if (((uintptr_t)result & 2) == 2) {
                         if (((uintptr_t)result & ~2) != (uintptr_t)cd) {
                             void *cd1 = (void *)((uintptr_t)result & ~2);
-                            split_fraction ghost_list_member_handle(dsList, cd1);
-                            split_fraction cd(cd1, _, _, _, _, _);
+                            open mcas_cell_attached(dsList, cd1, a2, abstractCellValue, ?ff);
+                            close mcas_cell_attached(dsList, cd1, a2, abstractCellValue, ff);
                         } else {
-                            merge_fractions cd(cd, _, _, _, _, _);
                             if (committedCopy1) {
-                                split_fraction cd_committed(cd, _);
                                 close committed_copy(true, cd, counter, i + 1);
                             } else {
-                                match_ghost_counter_snapshot();
+                                open mcas_cell_attached(dsList, cd, a2, abstractCellValue, ?ff);
+                                match_ghost_counter_snapshot(index_of_assoc(a2, es) + 1);
                                 index_of_assoc_fst_ith(es, i);
                                 create_ghost_counter_snapshot(i + 1);
                                 close committed_copy(false, cd, counter, i + 1);
+                                close mcas_cell_attached(dsList, cd, a2, abstractCellValue, ff);
                             }
-                            split_fraction cd(cd, _, _, _, _, _);
                         }
                         close mcas_cell(rcsList, dsList)(a2, realCellValue, abstractCellValue);
                         foreach_assoc2_unseparate_nochange(rcs, cs, a2);
@@ -928,20 +893,17 @@ start:
                             if (prediction == (void *)2) {
                                 assert [_]cd->done |-> ?done;
                                 if (done) {
-                                    merge_fractions tracked_cas_prediction(tracker, 0, _);
-                                    split_fraction tracked_cas_prediction(tracker, 0, _);
-                                    split_fraction cd_done(cd, _);
-                                    split_fraction cd_success2(cd, _);
                                 } else {
                                     op();
                                     cd->done = true;
-                                    split_fraction tracked_cas_prediction(tracker, 0, _);
-                                    split_fraction cd_done(cd, true);
-                                    split_fraction cd_success2(cd, false);
+                                    open done_copy(cd, false);
+                                    close done_copy(cd, true);
+                                    leak cd->done |-> true;
+                                    assert cd->success2 |-> ?success2;
+                                    leak cd->success2 |-> success2;
                                     open disposed_info(_, _, _, _);
                                     close disposed_info(cd, true, op, false);
                                 }
-                            } else {
                             }
                             close mcas_cell(rcsList, dsList)(a2, realCellValue, abstractCellValue);
                             foreach_assoc2_unseparate_nochange(rcs, cs, a2);
@@ -970,11 +932,10 @@ start:
                                 }
                                 strong_ghost_assoc_list_update(rcsList, a2, n2);
                                 split_fraction strong_ghost_assoc_list_member_handle(rcsList, a2, _);
-                                split_fraction ghost_list_member_handle(dsList, cd);
-                                split_fraction cd(cd, _, _, _, _, _);
                                 create_ghost_counter_snapshot(i + 1);
                                 create_counted_ghost_cell_ticket(statusCell);
                                 index_of_assoc_fst_ith(es, i);
+                                close mcas_cell_attached(dsList, cd, a2, abstractCellValue, 1/2);
                                 close mcas_cell(rcsList, dsList)(a2, n2, abstractCellValue);
                                 foreach_assoc2_unseparate_1changed(rcs, cs, a2);
                                 create_ghost_counter_snapshot(i + 1);
@@ -986,7 +947,6 @@ start:
                                 foreach3_mem_x_mem_assoc_x_ys(cd);
                                 close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update(bs, a2, n2));
                             } else {
-                                split_fraction cd_committed(cd, _);
                                 close committed_copy(true, cd, counter, i + 1);
                                 close mcas_cell(rcsList, dsList)(a2, realCellValue, abstractCellValue);
                                 foreach_assoc2_unseparate_nochange(rcs, cs, a2);
@@ -1001,21 +961,12 @@ start:
                     return result;
                 }
                 @*/
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ split_fraction ghost_list_member_handle(dsList, cd);
-                //@ split_fraction cd(cd, _, _, _, _, _);
                 /*@
                 close rdcss_operation_pre(rop)
                     (mcas_rdcss_unsep, boxed_int(id), &cd->status, 0, fst(nth(i, es)), fst(snd(nth(i, es))), (void *)((uintptr_t)cd | 2));
                 @*/
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ split_fraction ghost_list_member_handle(dsList, cd);
-                //@ split_fraction cd(cd, _, _, _, _, _);
                 //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ split_fraction ghost_list_member_handle(dsList, cd);
                 //@ close rdcss_as_membership_lemma(asMem)(mcas_rdcss_unsep, boxed_int(id), &cd->status);
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
                 //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)));
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_sep);
                 //@ produce_lemma_function_pointer_chunk(mcas_rdcss_unsep);
@@ -1034,20 +985,12 @@ start:
                 //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
                 //@ open rdcss_separate_lemma(mcas_rdcss_sep)(_, _, _, _);
                 //@ open rdcss_operation_post(rop)(_);
-                //@ merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                //@ leak [_]ghost_list_member_handle(dsList, cd);
             }
             if (((uintptr_t)r & 2) == 2) {
                 struct cd *cd1 = (void *)((uintptr_t)r & ~2);
                 if (cd1 != cd) {
                     mcas_impl(cd1);
-                    //@ leak [_]cd(cd1, _, _, _, _, _);
-                    //@ leak [_]cd(cd, _, _, _, _, _);
-                    //@ leak [_]cd1->committed |-> _;
-                    //@ leak [_]cd1->success2 |-> _;
-                    //@ leak [_]ghost_list_member_handle(dsList, cd1);
                     //@ entries_unseparate_ith(i, es);
-                    //@ close [fcd]cd(cd, es, tracker, counter, statusCell, op);
                     goto start;
                 }
             } else if (r != (cd->es + i)->o) {
@@ -1097,33 +1040,31 @@ start:
                 open tracked_cas_ctxt_pre(context)(_, _, _, _, _, _);
                 sep();
                 open mcas(_, _, _, _, ?cs);
-                merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                ghost_list_member_handle_lemma<void *>();
+                ghost_list_member_handle_lemma<void *>(dsList);
                 assert foreach3(?ds, ?sas, ?svs, _);
                 foreach3_foreach_assoc_separate(cd);
                 open cdext(rcsList, unsep, mcasInfo)(cd, _, ?status_);
-                merge_fractions cd(cd, _, _, _, _, _);
                 if (s == 1) {
                     open committed_copy(?committedCopy1, _, _, _);
                     if (committedCopy1) {
-                        merge_fractions cd_committed(cd, _);
                         aop(0, 0);
-                        split_fraction cd_committed(cd, _);
-                        split_fraction cd_success2(cd, _);
                     } else {
                         if (casProphecy == 0) {
                             void *prediction = create_tracked_cas_prediction(tracker, 0);
                             assert [_]cd->done |-> ?done;
-                            if (done) {
-                                merge_fractions tracked_cas_prediction(tracker, 0, _);
-                            }
-                            split_fraction tracked_cas_prediction(tracker, 0, _);
                             aop(0, prediction);
                             cd->committed = true;
+                            leak cd->committed |-> true;
                             if (!done) {
                                 op();
                                 cd->done = true;
+                                open done_copy(cd, false);
+                                close done_copy(cd, true);
+                                leak cd->done |-> true;
                                 cd->success2 = true;
+                                leak cd->success2 |-> true;
+                                open success2_copy(cd, false);
+                                close success2_copy(cd, true);
                                 assert foreach_assoc2(?rcs, _, _);
                                 assert i == length(es);
                                 foreach_assoc2_subset_separate(i);
@@ -1163,14 +1104,13 @@ start:
                                             open foreach(_, _);
                                             open mcas_cell(rcsList, dsList)(_, _, _);
                                             open entry_attached(rcsList, cd)(_);
-                                            merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(nth(k, es)), _);
                                             bitand_bitor_lemma((uintptr_t)cd, 2);
-                                            merge_fractions cd(cd, _, _, _, _, _);
-                                            split_fraction cd(cd, _, _, _, _, _);
+                                            open mcas_cell_attached(dsList, cd, _, _, _);
                                             counted_ghost_cell_dispose_ticket(statusCell);
                                             update_status_cell(k + 1);
                                             create_counted_ghost_cell_ticket(statusCell);
                                             assoc_fst_ith_snd_ith(es, k);
+                                            close mcas_cell_attached(dsList, cd, fst(nth(k, es)), snd(snd(nth(k, es))), 1);
                                             close mcas_cell(rcsList, dsList)(fst(nth(k, es)), (void *)((uintptr_t)cd | 2), snd(snd(nth(k, es))));
                                             es_apply_lemma(k, es, cs);
                                             drop_n_plus_one(k, es);
@@ -1182,8 +1122,7 @@ start:
                                     }
                                     take_length(es);
                                     drop_0(take(i, es));
-                                    match_ghost_counter_snapshot();
-                                    leak [_]ghost_counter_snapshot(counter, _);
+                                    match_ghost_counter_snapshot(i);
                                     update_status_cell(0);
                                 }
                                 open disposed_info(cd, false, op, false);
@@ -1194,25 +1133,20 @@ start:
                             take_length(mapfst(es));
                             foreach_assoc2_subset_unseparate(es_apply(es, cs), i);
                             cs = es_apply(es, cs);
-                            split_fraction cd_committed(cd, _);
-                            split_fraction cd_success2(cd, _);
                         } else {
                             aop(0, 0);
-                            leak ghost_counter_snapshot(counter, _);
-                            split_fraction cd_committed(cd, _);
-                            split_fraction cd_success2(cd, _);
                         }
                     }
                 } else {
+                    assert [_]cd->done |-> ?done;
                     if (casProphecy == 0) {
                         assert [_]tracked_cas_prediction(tracker, 0, ?prediction);
                         if (status_ != 0)
                             aop(0, prediction);
                         else
                             aop(0, prediction);
-                        merge_fractions cd_done(cd, _);
-                        merge_fractions cd_success2(cd, _);
                         cd->committed = true;
+                        leak cd->committed |-> true;
                         assert counted_ghost_cell(statusCell, _, ?count);
                         assert foreach_assoc2(?rcs, cs, _);
                         {
@@ -1245,13 +1179,12 @@ start:
                                     open foreach_assoc2(_, _, _);
                                     open entry_attached(rcsList, cd)(nth(k, es));
                                     open mcas_cell(rcsList, dsList)(fst(nth(k, es)), ?realCellValue, ?abstractCellValue);
-                                    merge_fractions strong_ghost_assoc_list_member_handle(rcsList, fst(nth(k, es)), _);
                                     bitand_bitor_lemma((uintptr_t)cd, 2);
-                                    merge_fractions cd(cd, _, _, _, _, _);
-                                    split_fraction cd(cd, _, _, _, _, _);
+                                    open mcas_cell_attached(dsList, cd, fst(nth(k, es)), abstractCellValue, ?fpointer);
                                     counted_ghost_cell_dispose_ticket(statusCell);
                                     detach(k + 1);
                                     create_counted_ghost_cell_ticket(statusCell);
+                                    close mcas_cell_attached(dsList, cd, fst(nth(k, es)), abstractCellValue, 1);
                                     close mcas_cell(rcsList, dsList)(fst(nth(k, es)), realCellValue, abstractCellValue);
                                     close foreach_assoc2(
                                         drop(k, take(count, map_assoc(rcs, mapfst(es)))),
@@ -1264,28 +1197,17 @@ start:
                             detach(0);
                             foreach_assoc2_subset_unseparate(cs, count);
                         }
-                        split_fraction cd_committed(cd, _);
-                        split_fraction cd_success2(cd, _);
                     } else {
                         if (status_ != 0) {
-                            leak [_]tracked_cas_prediction(tracker, 0, ?prediction);
-                            if (prediction == (void *)2) {
-                                merge_fractions cd_done(cd, _);
-                                merge_fractions cd_success2(cd, _);
-                            }
                             aop(0, 0);
-                            split_fraction cd_committed(cd, _);
-                            split_fraction cd_success2(cd, _);
                         } else {
                             aop(0, 0);
                         }
                     }
                 }
                 assert pointer(&cd->status, ?newStatus);
-                split_fraction cd(cd, _, _, _, _, _);
                 close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, newStatus);
                 foreach3_foreach_assoc_unseparate(ds, sas, svs, cd);
-                split_fraction ghost_cell6(id, _, _, _, _, _, _);
                 close mcas(id, sep, unsep, mcasInfo, cs);
                 unsep();
                 close tracked_cas_ctxt_post(context)();
@@ -1307,8 +1229,8 @@ start:
         [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
         [_]ghost_list_member_handle(dsList, cd) &*&
         [_]cd(cd, es, tracker, counter, statusCell, op) &*&
-        [?fcd]cd->n |-> ?n &*& [fcd]cd->es |-> ?entries &*& [fcd]entries(n, entries, es) &*&
-        [fcd]cd->tracker |-> tracker &*& [fcd]cd->counter |-> counter &*& [fcd]cd->statusCell |-> statusCell &*& [fcd]cd->op |-> op &*&
+        [_]cd->n |-> ?n &*& [_]cd->es |-> ?entries &*& [_]entries(n, entries, es) &*&
+        [_]cd->tracker |-> tracker &*& [_]cd->counter |-> counter &*& [_]cd->statusCell |-> statusCell &*& [_]cd->op |-> op &*&
         true == (((uintptr_t)cd & 1) == 0) &*&
         true == (((uintptr_t)cd & 2) == 0) &*&
         [_]cd->committed |-> true &*& [_]cd->success2 |-> success;
@@ -1324,8 +1246,8 @@ start:
                 [_]ghost_cell6(id, rdcssId, rcsList, dsList, sep, unsep, mcasInfo) &*&
                 [_]ghost_list_member_handle(dsList, cd) &*&
                 [_]cd(cd, es, tracker, counter, statusCell, op) &*&
-                [fcd]cd->n |-> n &*& [fcd]cd->es |-> entries &*& [fcd]entries(n, entries, es) &*&
-                [fcd]cd->tracker |-> tracker &*& [fcd]cd->counter |-> counter &*& [fcd]cd->statusCell |-> statusCell &*& [fcd]cd->op |-> op &*&
+                [_]cd->n |-> n &*& [_]cd->es |-> entries &*& [_]entries(n, entries, es) &*&
+                [_]cd->tracker |-> tracker &*& [_]cd->counter |-> counter &*& [_]cd->statusCell |-> statusCell &*& [_]cd->op |-> op &*&
                 [_]cd->committed |-> true &*& [_]cd->success2 |-> success;
             @*/
         {
@@ -1348,14 +1270,11 @@ start:
                 {
                     open rdcss_bs_membership_lemma(bsMem)(_, _, _);
                     open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-                    merge_fractions ghost_cell6(id, _, _, _, _, _, _);
-                    ghost_list_member_handle_lemma();
+                    ghost_list_member_handle_lemma(dsList);
                     assert foreach3(?ds, ?sas, ?svs, _);
                     foreach3_separate(cd);
                     assert is_mcas_unsep(?unsep_);
                     open cdext(rcsList, unsep_, mcasInfo)(cd, _, ?status_);
-                    merge_fractions cd(cd, _, _, _, _, _);
-                    split_fraction cd(cd, _, _, _, _, _);
                     foreach_separate_ith(i, es);
                     open entry_mem(rcsList)(nth(i, es));
                     strong_ghost_assoc_list_key_handle_lemma();
@@ -1363,7 +1282,6 @@ start:
                     foreach_unseparate_ith_nochange(i, es);
                     close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                     foreach3_unseparate_nochange(ds, sas, svs, cd);
-                    split_fraction ghost_cell6(id, _, _, _, _, _, _);
                     close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, rdcssSep, aas, avs, bs);
                     close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), a);
                 }
@@ -1398,44 +1316,31 @@ start:
                     open rdcss_cas_pre(casOp)(_, _, _, _, _);
                     if (casSuccess) {
                         open rdcss_unseparate_lemma(mcas_rdcss_unsep)(_, _, _, _, _, _, _);
-                        merge_fractions ghost_cell6(id, _, _, _, _, _, _);
                         assert foreach_assoc2(?rcs, ?cs, _);
                         foreach_assoc2_separate(a2);
-                        ghost_list_member_handle_lemma();
+                        ghost_list_member_handle_lemma(dsList);
                         assert foreach3(?ds, ?sas, ?svs, _);
                         foreach3_separate(cd);
                         open cdext(rcsList, unsep, mcasInfo)(cd, _, ?status_);
-                        merge_fractions cd(cd, _, _, _, _, _);
-                        merge_fractions cd_committed(cd, _);
-                        merge_fractions cd_success2(cd, ?success2);
+                        assert [_]cd_success2(cd, ?success2);
                         bitand_bitor_lemma((uintptr_t)cd, 2);
                         open mcas_cell(rcsList, dsList)(a2, o2, assoc(a2, cs));
-                        merge_fractions cd(cd, _, _, _, _, _);
+                        open mcas_cell_attached(dsList, cd, a2, assoc(a2, cs), ?ff);
                         counted_ghost_cell_match_ticket(statusCell);
+                        leak counted_ghost_cell_ticket(statusCell, _);
                         strong_ghost_assoc_list_update(rcsList, a2, n2);
                         assoc_fst_ith_snd_ith(es, i);
                         close mcas_cell(rcsList, dsList)(a2, n2, n2);
                         foreach_assoc2_unseparate_1changed(rcs, cs, a2);
-                        split_fraction cd(cd, _, _, _, _, _);
-                        split_fraction cd_committed(cd, _);
-                        split_fraction cd_success2(cd, _);
                         close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, status_);
                         foreach3_unseparate_nochange(ds, sas, svs, cd);
-                        split_fraction ghost_cell6(id, _, _, _, _, _, _);
                         close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update(bs, a2, n2));
-                        leak [_]ghost_list_member_handle(dsList, cd);
-                        leak [_]ghost_counter_snapshot(counter, _);
-                        leak [_]counted_ghost_cell_ticket(statusCell, _);
                     }
                     close rdcss_cas_post(casOp)(casSuccess);
                 }
                 @*/
                 //@ entries_separate_ith(i);
-                //@ split_fraction ghost_list_member_handle(dsList, cd);
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
-                //@ split_fraction cd(cd, _, _, _, _, _);
                 //@ close rdcss_cas_pre(casOp)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)), (void *)((uintptr_t)cd | 2), success ? snd(snd(nth(i, es))) : fst(snd(nth(i, es))));
-                //@ split_fraction ghost_cell6(id, _, _, _, _, _, _);
                 //@ close rdcss_bs_membership_lemma(bsMem)(mcas_rdcss_unsep, boxed_int(id), fst(nth(i, es)));
                 //@ close rdcss_separate_lemma(mcas_rdcss_sep)(boxed_int(id), rdcssId, inv, mcas_rdcss_unsep);
                 //@ produce_lemma_function_pointer_chunk(casOp);
@@ -1451,13 +1356,10 @@ start:
                 //@ open rdcss_separate_lemma(mcas_rdcss_sep)(_, _, _, _);
                 //@ leak rdcss_bs_membership_lemma(_)(_, _, _);
                 //@ open rdcss_cas_post(casOp)(_);
-                //@ merge_fractions ghost_cell6(id, _, _, _, _, _, _);
                 //@ entries_unseparate_ith(i, es);
             }
             i++;
         }
-        //@ close [fcd]cd(cd, es, tracker, counter, statusCell, op);
-        //@ leak [fcd]cd(cd, _, _, _, _, _);
     }
     return success;
 }

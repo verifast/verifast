@@ -39,6 +39,8 @@ lemma void match_fractions_set_lockCounter(struct set *set);
 
 /*@
 
+predicate node_frac(struct node *node, real frac) = true;
+
 predicate lseg(
         int nodesList,
         struct node *first,
@@ -53,7 +55,8 @@ predicate lseg(
         case cons(value, values0): return
             firstValue == value &*&
             malloc_block_node(first) &*&
-            [?f]first->oldNext |-> ?oldNext &*&
+            node_frac(first, ?f) &*&
+            [f]first->oldNext |-> ?oldNext &*&
             [f/2]first->value |-> firstValue &*&
             [f]first->lock |-> ?lock &*&
             [f/2]oldNext->value |-> ?nextValue &*&
@@ -86,8 +89,8 @@ lemma void lseg_split(struct node *node)
     } else {
         open lseg(_, _, _, _, _, _, _, _);
         lseg_split(node);
-        assert [_]first->oldNext |-> ?oldNext;
-        assert [_]first->lock |-> ?lock;
+        assert [1/2]first->oldNext |-> ?oldNext;
+        assert [1/2]first->lock |-> ?lock;
         assert lseg(nodesList, oldNext, ?nextValue, node, ?nodeValue, ?nodes0, ?values0, ?lockCount0);
         close lseg(nodesList, first, firstValue, node, nodeValue, cons(first, nodes0), cons(firstValue, values0), lockCount0 + (lock == 0 ? 0 : 1));
     }
@@ -201,6 +204,7 @@ struct set *create_set()
     //@ split_fraction node_value(last, _);
     //@ close set(set);
     //@ close lseg(nodesList, last, MAX_INT, last, MAX_INT, nil, nil, 0);
+    //@ close node_frac(first, 1);
     //@ close lseg(nodesList, first, MIN_INT, last, MAX_INT, cons(first, nil), cons(MIN_INT, nil), 0);
     //@ close set_atomic(set, nil);
     return set;
@@ -212,25 +216,24 @@ void dispose_set(struct set *set)
 {
     //@ open set(set);
     //@ open set_atomic(set, values);
-    //@ merge_fractions set_head(set, _);
-    //@ merge_fractions set_nodesList(set, ?nodesList);
-    //@ merge_fractions set_lockCounter(set, ?lockCounter);
+    //@ assert set_nodesList(set, ?nodesList);
+    //@ assert set_lockCounter(set, ?lockCounter);
     //@ ghost_counter_match_zero_contrib();
     //@ assert lseg(_, _, _, ?last, _, _, _, _);
     struct node *x = set->head;
     while (x->value < MAX_INT)
         /*@
         invariant
-            lseg(nodesList, x, _, last, MAX_INT, _, _, 0) &*&
+            lseg(nodesList, x, _, last, MAX_INT, _, _, 0) &*& (x == last ? true : true) &*&
             [1/2]x->value |-> ?xValue &*& [1/2]last->value |-> MAX_INT;
         @*/
     {
         //@ open lseg(_, _, _, _, _, _, _, _);
-        //@ merge_fractions node_value(x, _);
-        //@ assert [_]node_lock(x, ?lockValue);
+        //@ assert [1/2]node_lock(x, ?lockValue);
         struct node *y = x->next;
         free(x);
         //@ leak ghost_list_member_handle(nodesList, x);
+        //@ open node_frac(x, _);
         x = y;
     }
     {
@@ -243,8 +246,7 @@ void dispose_set(struct set *set)
             if (values_ == nil) {
                 merge_fractions node_value(z, _);
             } else {
-                merge_fractions node_value(z, _);
-                assert [_]node_lock(z, ?lockValue);
+                assert [1/2]node_lock(z, ?lockValue);
                 iter();
             }
         }
@@ -320,20 +322,15 @@ struct node *locate(struct set *set, int e)
             open lock_context_pre(context)(_, _);
             sep();
             open set_atomic(set, ?values);
-            match_fractions_set_head(set);
-            match_fractions_set_nodesList(set);
-            match_fractions_set_lockCounter(set);
             open lseg(nodesList, head, MIN_INT, ?last, MAX_INT, ?nodes, ?values_, ?lockCount);
             open [?fPointer]node_lock(head, _);
             op();
-            assert [_]pointer(&head->lock, ?lockValue);
+            assert [1/2]pointer(&head->lock, ?lockValue);
             close [fPointer]node_lock(head, lockValue);
             assert lock_operation_post(op)(?success);
             if (success) {
-                split_fraction node_oldNext(head, ?oldNext);
-                split_fraction node_value(head, _);
-                split_fraction node_lock(head, _);
-                split_fraction node_value(oldNext, _);
+                open node_frac(head, 1);
+                close node_frac(head, 1/2);
                 close lseg(nodesList, head, MIN_INT, last, MAX_INT, nodes, values_, lockCount + 1);
                 ghost_counter_start_contrib();
                 ghost_counter_increment();
@@ -418,16 +415,9 @@ loop:
                 open lock_context_pre(context)(_, _);
                 sep();
                 open set_atomic(set, ?values);
-                match_fractions_set_head(set);
-                match_fractions_set_nodesList(set);
-                match_fractions_set_lockCounter(set);
                 ghost_list_member_handle_lemma();
                 lseg_split(p);
                 open lseg(nodesList, p, ?pValue0, ?last, MAX_INT, ?nodes1, ?values1, ?lockCount1);
-                merge_fractions node_oldNext(p, _);
-                split_fraction node_oldNext(p, _);
-                merge_fractions node_value(c, _);
-                split_fraction node_value(c, _);
                 open lseg(nodesList, c, ?cValue, last, MAX_INT, ?nodes2, ?values2, ?lockCount2);
                 open node_lock(c, _);
                 op();
@@ -435,18 +425,14 @@ loop:
                 close [fPointer]node_lock(c, lockValue);
                 assert lock_operation_post(op)(?success);
                 if (success) {
-                    split_fraction node_lock(c, _);
-                    split_fraction node_oldNext(c, ?cNext);
-                    split_fraction node_value(c, _);
-                    split_fraction node_value(cNext, _);
+                    open node_frac(c, 1);
+                    close node_frac(c, 1/2);
                     close lseg(nodesList, c, cValue, last, MAX_INT, nodes2, values2, lockCount2 + 1);
                     close lseg(nodesList, p, pValue0, last, MAX_INT, nodes1, values1, lockCount1 + 1);
                     lseg_merge(p);
                     ghost_counter_increment();
                     close set_atomic(set, values);
                     unsep();
-                    merge_fractions node_value(c, _);
-                    split_fraction node_value(c, _);
                     close lock_context_post(context)();
                 } else {
                     close lseg(nodesList, c, cValue, last, MAX_INT, nodes2, values2, lockCount2);
@@ -496,19 +482,14 @@ loop:
                 open atomic_store_pointer_context_pre(context)(_, _, _);
                 sep();
                 open set_atomic(set, ?values);
-                match_fractions_set_head(set);
-                match_fractions_set_nodesList(set);
-                match_fractions_set_lockCounter(set);
                 ghost_list_member_handle_lemma();
                 lseg_split(p);
                 open lseg(nodesList, p, _, ?last, MAX_INT, ?nodes1, ?values1, ?lockCount1);
-                merge_fractions node_lock(p, _);
-                merge_fractions node_value(p, _);
-                merge_fractions node_oldNext(p, _);
-                merge_fractions node_value(c, _);
                 open node_lock(p, _);
                 op();
                 close node_lock(p, 0);
+                open node_frac(p, 1/2);
+                close node_frac(p, 1);
                 close lseg(nodesList, p, pValue, last, MAX_INT, nodes1, values1, lockCount1 - 1);
                 lseg_merge(p);
                 ghost_counter_decrement();
@@ -547,15 +528,15 @@ bool add(struct set *set, int e)
     @*/
 {
     //@ open set(set);
-    //@ assert [_]set->nodesList |-> ?nodesList;
-    //@ assert [_]set->lockCounter |-> ?lockCounter;
+    //@ assert [fSet/2]set->nodesList |-> ?nodesList;
+    //@ assert [fSet/2]set->lockCounter |-> ?lockCounter;
     struct node *head = set->head;
     struct node *x = locate(set, e);
     struct node *z = x->next;
     bool result = false;
     struct node *y = 0;
-    //@ assert [_]x->value |-> ?xValue;
-    //@ assert [_]z->value |-> ?zValue;
+    //@ assert [1/4]x->value |-> ?xValue;
+    //@ assert [1/4]z->value |-> ?zValue;
     if (z->value != e) {
         y = malloc(sizeof(struct node));
         if (y == 0) abort();
@@ -608,17 +589,10 @@ bool add(struct set *set, int e)
             open atomic_store_pointer_context_pre(context)(_, _, _);
             sep();
             open set_atomic(set, ?values);
-            match_fractions_set_head(set);
-            match_fractions_set_nodesList(set);
-            match_fractions_set_lockCounter(set);
             ghost_list_member_handle_lemma();
             lseg_split(x);
             assert lseg(nodesList, head, _, x, _, ?nodes0, ?values0, ?lockCount0);
             open lseg(nodesList, x, _, ?last, MAX_INT, ?nodes1, ?values1, ?lockCount1);
-            merge_fractions node_lock(x, _);
-            merge_fractions node_oldNext(x, _);
-            merge_fractions node_value(x, _);
-            merge_fractions node_value(z, _);
             open node_lock(x, _);
             sop();
             close node_lock(x, 0);
@@ -630,10 +604,15 @@ bool add(struct set *set, int e)
                 append_assoc(nodes0, cons(x, nil), tail(nodes1));
                 ghost_list_insert(nodesList, append(nodes0, cons(x, nil)), tail(nodes1), y);
                 append_assoc(nodes0, cons(x, nil), cons(y, tail(nodes1)));
+                close node_frac(y, 1);
                 close lseg(nodesList, y, e, last, MAX_INT, cons(y, tail(nodes1)), cons(e, tail(values1)), lockCount2);
+                open node_frac(x, 1/2);
+                close node_frac(x, 1);
                 close lseg(nodesList, x, xValue, last, MAX_INT, cons(x, cons(y, tail(nodes1))), cons(xValue, cons(e, tail(values1))), lockCount2);
                 lseg_merge2(x, e, values1);
             } else {
+                open node_frac(x, 1/2);
+                close node_frac(x, 1);
                 close lseg(nodesList, x, xValue, last, MAX_INT, nodes1, values1, lockCount2);
                 lseg_merge2(x, e, values1);
             }
@@ -674,12 +653,12 @@ bool remove(struct set *set, int e)
 {
     //@ open [fSet]set(set);
     //@ assert [fSet/2]set->nodesList |-> ?nodesList;
-    //@ assert [_]set->lockCounter |-> ?lockCounter;
+    //@ assert [fSet/2]set->lockCounter |-> ?lockCounter;
     struct node *head = set->head;
     struct node *x = locate(set, e);
-    //@ assert [_]x->value |-> ?xValue;
+    //@ assert [1/4]x->value |-> ?xValue;
     struct node *y = x->next;
-    //@ assert [_]y->value |-> ?yValue;
+    //@ assert [1/4]y->value |-> ?yValue;
     bool result = y->value == e;
     if (result) {
         {
@@ -725,19 +704,10 @@ bool remove(struct set *set, int e)
                 open lock_context_pre(context)(_, _);
                 sep();
                 open set_atomic(set, ?values);
-                match_fractions_set_head(set);
-                match_fractions_set_nodesList(set);
-                match_fractions_set_lockCounter(set);
                 ghost_list_member_handle_lemma();
                 lseg_split(x);
                 open lseg(nodesList, x, _, ?last, MAX_INT, ?nodes1, ?values1, ?lockCount1);
                 assert lseg(nodesList, _, _, x, _, ?nodes0, ?values0, ?lockCount0);
-                merge_fractions node_lock(x, _);
-                split_fraction node_lock(x, _);
-                merge_fractions node_value(x, _);
-                split_fraction node_value(x, _);
-                merge_fractions node_oldNext(x, _);
-                merge_fractions node_value(y, _);
                 open lseg(nodesList, y, _, last, MAX_INT, ?nodes2, ?values2, ?lockCount2);
                 open node_lock(y, _);
                 lop();
@@ -745,6 +715,7 @@ bool remove(struct set *set, int e)
                 close [fPointer]node_lock(y, lockValue);
                 assert lock_operation_post(lop)(?success);
                 if (success) {
+                    open node_frac(y, _);
                     struct node *z = y->oldNext;
                     x->oldNext = z;
                     split_fraction node_oldNext(x, _);
@@ -757,7 +728,6 @@ bool remove(struct set *set, int e)
                     close set_atomic(set, remove_sorted(e, values));
                     op();
                     unsep();
-                    merge_fractions node_value(y, _);
                     close lock_context_post(context)();
                 } else {
                     close lseg(nodesList, y, yValue, last, MAX_INT, nodes2, values2, lockCount2);
@@ -818,21 +788,18 @@ bool remove(struct set *set, int e)
             open atomic_store_pointer_context_pre(context)(_, _, _);
             sep();
             open set_atomic(set, ?values);
-            match_fractions_set_head(set);
-            match_fractions_set_nodesList(set);
-            match_fractions_set_lockCounter(set);
             ghost_list_member_handle_lemma();
             lseg_split(x);
             open lseg(nodesList, x, _, ?last, MAX_INT, ?nodes1, ?values1, ?lockCount1);
-            merge_fractions node_lock(x, _);
-            merge_fractions node_value(x, _);
-            merge_fractions node_oldNext(x, ?next);
-            merge_fractions node_value(next, ?nextValue);
+            assert [_]node_oldNext(x, ?next);
+            assert [_]node_value(next, ?nextValue);
             open node_lock(x, _);
             sop();
             close node_lock(x, 0);
             open lseg(nodesList, next, nextValue, last, MAX_INT, ?nodes2, ?values2, ?lockCount2);
             close lseg(nodesList, next, nextValue, last, MAX_INT, nodes2, values2, lockCount2);
+            open node_frac(x, 1/2);
+            close node_frac(x, 1);
             close lseg(nodesList, x, xValue, last, MAX_INT, nodes1, values1, lockCount1 - 1);
             if (result)
                 lseg_merge(x);

@@ -176,6 +176,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     
     //@ close room_ctor(room)();
     lock_release(roomLock);
+    //@ leak [_]lock(roomLock, roomLockId, room_ctor(room));
     
     {
         bool eof = false;
@@ -210,7 +211,6 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         struct member *membersList = room->members;
         //@ open room_members(room, _);
         //@ assert lseg(membersList, 0, ?members, @member);
-        //@ merge_fractions room_ghost_list_id(room, _);
         //@ ghost_list_member_handle_lemma();
         remove(&room->members, member);
         //@ assert pointer(&room->members, ?list);
@@ -233,7 +233,6 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     
     //@ open member(member);
     string_buffer_dispose(member->nick);
-    //@ merge_fractions member_writer(member, _);
     free(member);
 }
 
@@ -328,13 +327,13 @@ int main()
     //@ close room_ctor(room)();
     //@ close create_lock_ghost_args(room_ctor(room), nil, nil);
     struct lock *roomLock = create_lock();
+    //@ leak lock(roomLock, _, room_ctor(room));
     struct server_socket *serverSocket = create_server_socket(12345);
 
     while (true)
         //@ invariant [_]lock(roomLock, _, room_ctor(room)) &*& server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);
-        //@ split_fraction lock(roomLock, _, _);
         struct session *session = create_session(room, roomLock, socket);
         //@ close thread_run_data(session_run)(session);
         thread_start(session_run, session);

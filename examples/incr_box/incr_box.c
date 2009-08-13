@@ -87,9 +87,9 @@ int main()
     //@ close counter(counter, boxId)();
     //@ close create_lock_ghost_arg(counter(counter, boxId));
     struct lock *lock = create_lock();
-    //@ split_fraction lock(lock, _);
+    //@ leak lock(lock, counter(counter, boxId));
     counter->lock = lock;
-    //@ split_fraction counter_lock(counter, _);
+    //@ leak counter_lock(counter, lock);
     //@ close incrementor_session(counter, boxId);
     //@ close thread_run_data(incrementor)(counter);
     thread_start(incrementor, counter);

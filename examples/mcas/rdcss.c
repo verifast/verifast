@@ -29,29 +29,40 @@ struct rdcss_descriptor {
 
 /*@
 
+predicate rdcss_cell_frac(void **a, real frac) = true;
+
 predicate_ctor rdcss_cell(int dsList)(void **a, void *v) requires
-    [?f]pointer(a, ?w) &*&
+    rdcss_cell_frac(a, ?f) &*&
+    [f]pointer(a, ?w) &*&
     true == (((uintptr_t)w & 1) == 0) ?
         f == 1 &*& w == v
     :
         f == 1/2 &*&
-        [_]ghost_list_member_handle(dsList, (struct rdcss_descriptor *)((uintptr_t)w & ~1)) &*&
-        [1/2]rdcss_descriptor_detached((struct rdcss_descriptor *)((uintptr_t)w & ~1), false) &*&
-        [_]descr((struct rdcss_descriptor *)((uintptr_t)w & ~1), _, _, a, ?o2, ?n2, _, _) &*&
-        [1/2]rdcss_descriptor_success((struct rdcss_descriptor *)((uintptr_t)w & ~1), ?success) &*&
-        v == (success ? n2 : o2);
+        rdcss_cell_attached(dsList, (struct rdcss_descriptor *)((uintptr_t)w & ~1), a, v);
+
+predicate rdcss_cell_attached(int dsList, struct rdcss_descriptor *d, void **a, void *v) =
+    [_]ghost_list_member_handle(dsList, d) &*&
+    [1/2]rdcss_descriptor_detached(d, false) &*&
+    [_]descr(d, _, _, a, ?o2, ?n2, _, _) &*&
+    [1/2]rdcss_descriptor_success(d, ?success) &*&
+    v == (success ? n2 : o2);
 
 predicate descr(struct rdcss_descriptor *d; void **a1, void *o1, void **a2, void *o2, void *n2, struct cas_tracker *tracker, rdcss_operation_lemma *op) =
     d->a1 |-> a1 &*& d->o1 |-> o1 &*& d->a2 |-> a2 &*& d->o2 |-> o2 &*& d->n2 |-> n2 &*& d->tracker |-> tracker &*& d->op |-> op;
+
+predicate done_copy(struct rdcss_descriptor *d, bool done) = true;
+predicate detached_copy(struct rdcss_descriptor *d, bool detached) = true;
 
 predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *unsep, any info)(struct rdcss_descriptor *d) requires
     true == (((uintptr_t)d & 1) == 0) &*&
     [_]descr(d, ?a1, ?o1, ?a2, ?o2, ?n2, ?tracker, ?op) &*&
     true == (((uintptr_t)o2 & 1) == 0) &*&
     true == (((uintptr_t)n2 & 1) == 0) &*&
-    [?f]d->done |-> ?done &*&
+    done_copy(d, ?done) &*&
+    (done ? [_]d->done |-> true : d->done |-> false) &*&
     [?fSuccess]d->success |-> ?success &*&
-    [?fDetached]d->detached |-> ?detached &*&
+    detached_copy(d, ?detached) &*&
+    (detached ? [_]d->detached |-> true : [1/2]d->detached |-> false) &*&
     [1/2]d->disposed |-> ?disposed &*&
     [_]ghost_list_member_handle(asList, a1) &*&
     [_]ghost_assoc_list_member_handle(bsList, a2) &*&
@@ -60,7 +71,6 @@ predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *
             done
         :
             cas_tracker(tracker, 0) &*&
-            fDetached == 1/2 &*&
             !disposed &*& [1/2]pointer(a2, (void *)((uintptr_t)d | 1))
     ) &*&
     done ?
@@ -70,7 +80,7 @@ predicate_ctor rdcss_descriptor(int asList, int bsList, rdcss_unseparate_lemma *
         :
             is_rdcss_operation_lemma(op) &*& rdcss_operation_post(op)(o2)
     :
-        f == 1 &*& fSuccess == 1/2 &*&
+        fSuccess == 1/2 &*&
         !success &*& is_rdcss_operation_lemma(op) &*& rdcss_operation_pre(op)(unsep, info, a1, o1, a2, o2, n2);
 
 predicate rdcss(int id, rdcss_unseparate_lemma *unsep, any info, list<void *> aas, list<pair<void *, void *> > bs) =
@@ -94,6 +104,7 @@ lemma int create_rdcss(rdcss_unseparate_lemma *unsep, any info)
     int id = create_ghost_cell3(asList, bsList, dsList);
     close foreach_assoc(nil, rdcss_cell(dsList));
     close foreach(nil, rdcss_descriptor(asList, bsList, unsep, info));
+    leak ghost_cell3(id, asList, bsList, dsList);
     close rdcss(id, unsep, info, nil, nil);
     return id;
 }
@@ -105,7 +116,6 @@ lemma void rdcss_add_a(void *aa)
     open rdcss(id, unsep, info, aas, bs);
     assert [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
     ghost_list_add(asList, aa);
-    leak ghost_list_member_handle(asList, aa);
     close rdcss(id, unsep, info, cons(aa, aas), bs);
 }
 
@@ -116,6 +126,7 @@ lemma void rdcss_add_b(void *ba)
     open rdcss(id, unsep, info, aas, bs);
     assert [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
     ghost_assoc_list_add(bsList, ba, bv);
+    close rdcss_cell_frac(ba, 1);
     close rdcss_cell(dsList)(ba, bv);
     close foreach_assoc(cons(pair(ba, bv), bs), rdcss_cell(dsList));
     close rdcss(id, unsep, info, aas, cons(pair(ba, bv), bs));
@@ -144,8 +155,6 @@ void rdcss_complete(struct rdcss_descriptor *d)
         [_]d->detached |-> true;
     @*/
 {
-    //@ split_fraction descr(d, _, _, _, _, _, _, _);
-    //@ open [?fDescr]descr(d, _, _, _, _, _, _, _);
     //@ void *a1Prophecy = create_prophecy_pointer();
     //@ void *a2Prophecy = create_prophecy_pointer();
     void *r = 0;
@@ -182,15 +191,11 @@ void rdcss_complete(struct rdcss_descriptor *d)
             sep();
             assert rdcss_unseparate_lemma(unsep)(info, id, inv, sep, ?aas, ?avs, ?bs);
             open rdcss(id, unsep, info, aas, bs);
-            merge_fractions ghost_cell3(id, _, _, _);
-            split_fraction ghost_cell3(id, _, _, _);
             assert ghost_list(dsList, ?ds);
-            ghost_list_member_handle_lemma();
+            ghost_list_member_handle_lemma(dsList);
             foreach_separate(ds, d);
             open rdcss_descriptor(asList, bsList, unsep, info)(d);
-            merge_fractions descr(d, _, _, _, _, _, _, _);
-            split_fraction descr(d, _, _, _, _, _, _, _);
-            ghost_list_member_handle_lemma();
+            ghost_list_member_handle_lemma(asList);
             mem_zip_mem_assoc_lemma(a1, aas, avs);
             foreach_assoc_separate(zip(aas, avs), a1);
             aop();
@@ -203,31 +208,26 @@ void rdcss_complete(struct rdcss_descriptor *d)
                     if (!done) {
                         op();
                         d->done = true;
+                        leak d->done |-> true;
+                        open done_copy(d, false);
+                        close done_copy(d, true);
                         ghost_assoc_list_member_handle_lemma(bsList, a2);
                         foreach_assoc_separate(bs, a2);
-                        open rdcss_cell(dsList)(a2, _);
-                        merge_fractions pointer(a2, _);
-                        split_fraction pointer(a2, _);
                         bitand_bitor_lemma((uintptr_t)d, 1);
-                        merge_fractions descr(d, _, _, _, _, _, _, _);
-                        merge_fractions descr(d, _, _, _, _, _, _, _);
-                        split_fraction descr(d, _, _, _, _, _, _, _);
-                        split_fraction descr(d, _, _, _, _, _, _, _);
-                        merge_fractions rdcss_descriptor_success(d, _);
+                        open rdcss_cell(dsList)(a2, _);
+                        open rdcss_cell_attached(dsList, d, _, _);
                         if (a1Prophecy == o1) {
                             d->success = true;
                             ghost_assoc_list_update(bsList, a2, n2);
-                            split_fraction rdcss_descriptor_success(d, _);
+                            close rdcss_cell_attached(dsList, d, a2, n2);
                             close rdcss_cell(dsList)(a2, n2);
                             foreach_assoc_unseparate(bs, a2);
                         } else {
-                            split_fraction rdcss_descriptor_success(d, _);
+                            close rdcss_cell_attached(dsList, d, a2, o2);
                             close rdcss_cell(dsList)(a2, o2);
                             foreach_assoc_unseparate_nochange(bs, a2);
                         }
-                        split_fraction tracked_cas_prediction(tracker, 0, _);
                     }
-                    split_fraction rdcss_descriptor_done(d, true);
                 }
             }
             close rdcss_descriptor(asList, bsList, unsep, info)(d);
@@ -240,6 +240,7 @@ void rdcss_complete(struct rdcss_descriptor *d)
         @*/
         //@ close atomic_load_pointer_context_pre(context1)(inv, a1, a1Prophecy);
         //@ produce_lemma_function_pointer_chunk(context1);
+        //@ open descr(d, _, _, _, _, _, _, _);
         r = atomic_load_pointer(d->a1);
         //@ leak is_atomic_load_pointer_context(context1);
         //@ open atomic_load_pointer_context_post(context1)();
@@ -279,34 +280,29 @@ void rdcss_complete(struct rdcss_descriptor *d)
             open tracked_cas_ctxt_pre(context2)(_, _, _, _, _, _);
             sep();
             open rdcss(id, unsep, info, ?as, ?bs);
-            merge_fractions ghost_cell3(id, _, _, _);
-            split_fraction ghost_cell3(id, _, _, _);
-            ghost_list_member_handle_lemma();
+            ghost_list_member_handle_lemma(dsList);
             assert ghost_list(dsList, ?ds);
             foreach_separate(ds, d);
             open rdcss_descriptor(asList, bsList, unsep, info)(d);
-            merge_fractions descr(d, _, _, _, _, _, _, _);
             ghost_assoc_list_member_handle_lemma(bsList, a2);
             foreach_assoc_separate(bs, a2);
+            bitand_bitor_lemma((uintptr_t)d, 1);
             open rdcss_cell(dsList)(a2, ?abstractValue);
             assert [_]pointer(a2, ?w);
             if (w == (void *)((uintptr_t)d | 1)) {
-                bitand_bitor_lemma((uintptr_t)d, 1);
-                merge_fractions rdcss_descriptor_detached(d, _);
-                merge_fractions descr(d, _, _, _, _, _, _, _);
-                merge_fractions pointer(a2, _);
-                merge_fractions rdcss_descriptor_success(d, ?success);
+                open rdcss_cell_attached(dsList, d, a2, abstractValue);
                 if (a2Prophecy == w) {
                     open prediction(?w0);
                     if (w0 == (a1Prophecy == o1 ? n2 : o2)) {
-                        merge_fractions rdcss_descriptor_done(d, _);
-                        merge_fractions tracked_cas_prediction(tracker, 0, _);
-                        split_fraction tracked_cas_prediction(tracker, 0, _);
                         aop(0, w0);
                         d->detached = true;
-                        split_fraction rdcss_descriptor_detached(d, true);
+                        leak d->detached |-> true;
+                        open detached_copy(d, false);
+                        close detached_copy(d, true);
+                        open rdcss_cell_frac(a2, 1/2);
+                        close rdcss_cell_frac(a2, 1);
+                        assert [_]d->success |-> ?success;
                         w = success ? n2 : o2;
-                        leak [_]ghost_list_member_handle(dsList, d);
                         leak cas_tracker(tracker, 1);
                     } else {
                         aop(0, w0);
@@ -317,16 +313,9 @@ void rdcss_complete(struct rdcss_descriptor *d)
                 }
             } else {
                 aop(0, 0);
-                assert [_]d->detached |-> ?detached;
-                if (detached) {
-                    split_fraction rdcss_descriptor_detached(d, _);
-                } else {
-                    merge_fractions pointer(a2, _); 
-                }
             }
             close rdcss_cell(dsList)(a2, abstractValue);
             foreach_assoc_unseparate_nochange(bs, a2);
-            split_fraction descr(d, _, _, _, _, _, _, _);
             close rdcss_descriptor(asList, bsList, unsep, info)(d);
             foreach_unseparate(ds, d);
             close rdcss(id, unsep, info, as, bs);
@@ -340,8 +329,6 @@ void rdcss_complete(struct rdcss_descriptor *d)
         //@ leak is_tracked_cas_ctxt(context2);
         //@ open tracked_cas_ctxt_post(context2)();
     }
-    //@ close [fDescr]descr(d, a1, o1, a2, o2, n2, tracker, op);
-    //@ merge_fractions descr(d, _, _, _, _, _, _, _);
 }
 
 void *rdcss(void **a1, void *o1, void **a2, void *o2, void *n2)
@@ -380,6 +367,7 @@ void *rdcss(void **a1, void *o1, void **a2, void *o2, void *n2)
     //@ d->detached = false;
     //@ d->disposed = false;
     //@ close descr(d, a1, o1, a2, o2, n2, tracker, op);
+    //@ leak descr(d, a1, o1, a2, o2, n2, tracker, op);
 loop:
     /*@
     invariant
@@ -442,26 +430,24 @@ loop:
             asMem();
             bsMem();
             open rdcss(_, _, _, ?as, ?bs);
-            split_fraction ghost_cell3(id, ?asList, ?bsList, ?dsList);
+            assert [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
             assert ghost_list(dsList, ?ds);
             foreach_assoc_separate(bs, a2);
             open rdcss_cell(dsList)(a2, ?abstractValue);
             aop();
             if (prophecy == o2) {
                 // We install the descriptor.
-                split_fraction rdcss_descriptor_detached(d, false);
                 ghost_list_add(dsList, d);
-                split_fraction ghost_list_member_handle(dsList, d);
                 bitand_bitor_lemma((uintptr_t)d, 1);
-                split_fraction pointer(a2, _);
-                split_fraction rdcss_descriptor_success(d, _);
-                split_fraction descr(d, _, _, _, _, _, _, _);
+                open rdcss_cell_frac(a2, 1);
+                close rdcss_cell_frac(a2, 1/2);
+                close rdcss_cell_attached(dsList, d, a2, o2);
                 close rdcss_cell(dsList)(a2, o2);
                 foreach_assoc_unseparate_nochange(bs, a2);
-                split_fraction descr(d, _, _, _, _, _, _, _);
-                split_fraction rdcss_descriptor_disposed(d, false);
                 ghost_list_create_member_handle(asList, a1);
                 ghost_assoc_list_create_member_handle(bsList, a2);
+                close done_copy(d, false);
+                close detached_copy(d, false);
                 close rdcss_descriptor(asList, bsList, unsep, info)(d);
                 close foreach(cons((void *)d, ds), rdcss_descriptor(asList, bsList, unsep, info));
                 close rdcss(id, unsep, info, as, bs);
@@ -471,17 +457,15 @@ loop:
                 foreach_assoc_unseparate_nochange(bs, a2);
                 close rdcss(id, unsep, info, as, bs);
                 op();
+                leak d->disposed |-> false;
+                leak d->detached |-> false;
+                leak d->success |-> false;
+                leak d->done |-> false;
                 leak cas_tracker(tracker, 0);
-                leak [_]d->done |-> _;
-                leak [_]d->success |-> _;
-                leak [_]d->detached |-> _;
-                leak [_]d->disposed |-> _;
-                leak [_]ghost_cell3(id, _, _, _);
-                leak [_]descr(d, _, _, _, _, _, _, _);
             } else {
                 // We bumped into another descriptor. Extract a chunk saying that it's in the atomic space.
-                split_fraction ghost_list_member_handle(dsList, (void *)((uintptr_t)prophecy & ~1));
-                split_fraction descr((void *)((uintptr_t)prophecy & ~1), _, _, _, _, _, _, _);
+                open rdcss_cell_attached(dsList, ?d0, ?a20, ?abstractValue0);
+                close rdcss_cell_attached(dsList, d0, a20, abstractValue0);
                 close rdcss_cell(dsList)(a2, abstractValue);
                 foreach_assoc_unseparate_nochange(bs, a2);
                 close rdcss(id, unsep, info, as, bs);
@@ -526,14 +510,11 @@ loop:
                 open atomic_noop_context_pre(context)(_);
                 sep();
                 open rdcss(id, unsep, info, ?as, ?bs);
-                merge_fractions ghost_cell3(id, ?asList, ?bsList, ?dsList);
-                ghost_list_member_handle_lemma();
+                assert [_]ghost_cell3(id, ?asList, ?bsList, ?dsList);
+                ghost_list_member_handle_lemma(dsList);
                 assert ghost_list(dsList, ?ds);
                 foreach_separate(ds, d);
                 open rdcss_descriptor(asList, bsList, unsep, info)(d);
-                merge_fractions descr(d, _, _, _, _, _, _, _);
-                merge_fractions rdcss_descriptor_disposed(d, _);
-                merge_fractions rdcss_descriptor_detached(d, _);
                 d->disposed = true;
                 split_fraction rdcss_descriptor_disposed(d, _);
                 close rdcss_descriptor(asList, bsList, unsep, info)(d);
@@ -624,9 +605,8 @@ loop:
             if (((uintptr_t)prophecy & 1) == 0) {
                 op();
             } else {
-                split_fraction ghost_cell3(id, asList, bsList, dsList);
-                split_fraction ghost_list_member_handle(dsList, (void *)((uintptr_t)prophecy & ~1));
-                split_fraction descr((void *)((uintptr_t)prophecy & ~1), _, _, _, _, _, _, _);
+                open rdcss_cell_attached(dsList, ?d, a2, abstractValue);
+                close rdcss_cell_attached(dsList, d, a2, abstractValue);
             }
             close rdcss_cell(dsList)(a2, abstractValue);
             foreach_assoc_unseparate_nochange(bs, a2);

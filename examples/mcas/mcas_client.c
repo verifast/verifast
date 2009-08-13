@@ -146,6 +146,12 @@ void shift_interval(struct interval *interval) //@ : thread_run
             //@ open mcas_cs_mem(csMem)(_, _, _);
             //@ open mcas_read_post(rop)(_);
         }
+        /*@
+        invariant
+            [_]atomic_space(interval_ctor(id, interval)) &*&
+            true == (((uintptr_t)a0 & 1) == 0) &*&
+            true == (((uintptr_t)a0 & 2) == 0);
+        @*/
         { 
             /*@
             predicate_family_instance mcas_cs_mem(csMem)(mcas_unsep *unsep, any mcasInfo, void *a) =
@@ -315,8 +321,8 @@ int main()
     //@ mcas_add_cell(id, &interval->a);
     //@ close interval_ctor(id, interval)();
     //@ create_atomic_space(interval_ctor(id, interval));
-    //@ split_fraction atomic_space(_);
-    //@ split_fraction interval_id(_, _);
+    //@ leak atomic_space(interval_ctor(id, interval));
+    //@ leak interval->id |-> id;
     //@ close thread_run_pre(shift_interval)(interval);
     thread_start(shift_interval, interval);
     //@ close thread_run_pre(shift_interval)(interval);
