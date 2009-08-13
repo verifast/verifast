@@ -522,12 +522,25 @@ let show_ide initialPath prover =
             textNotebook#goto_page k;
             buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
-            append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
+            append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env caller_env)
           end
       end;
       append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass);
-      let compare_chunks (Chunk ((g, literal), targs, coef, ts, size)) (Chunk ((g', literal'), targs', coef', ts', size')) =
-        compare g g'
+      let compare_chunks (Chunk ((g, literal), targs, coef, ts, size) as ch1) (Chunk ((g', literal'), targs', coef', ts', size') as ch2) =
+        let r = compare g g' in
+        if r <> 0 then r else
+        let rec compare_list xs ys =
+          match (xs, ys) with
+            ([], []) -> 0
+          | (x::xs, y::ys) ->
+            let r = compare x y in
+            if r <> 0 then r else compare_list xs ys
+        in
+        let r = compare_list targs targs' in
+        if r <> 0 then r else
+        let r = compare_list ts ts' in
+        if r <> 0 then r else
+        compare coef coef'
       in
       append_items chunksStore chunksKCol chunksCol (List.map Verifast.string_of_chunk (List.sort compare_chunks h))
   in
