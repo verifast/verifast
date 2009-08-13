@@ -7113,8 +7113,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 ([],ds)
             else
               ([],[parse_java_file path reportRange])
-      | _-> 
-        parse_c_file path reportRange reportShouldFail
+      | _->
+        if Filename.check_suffix (Filename.basename path) ".h" then
+          parse_header_file "" path reportRange reportShouldFail
+        else
+          parse_c_file path reportRange reportShouldFail
     in
     let result =
       check_should_fail ([], []) $. fun () ->
