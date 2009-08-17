@@ -90,14 +90,16 @@ void remove(void *phead, void *element)
     }
     //@ void *next = *pnext;
     //@ open lseg(next, 0, _, p);
-    void *nextNext = *((void **)*pnext);
-    //@ assert lseg(nextNext, 0, ?xs2, p);
-    *pnext = nextNext;
-    /*@
-    if (pnext != phead) {
-        pointer_nonzero(pnext);
-        close lseg(pnext, 0, cons(pnext, xs2), p);
-        lseg_append_final(head);
+    {
+        void *nextNext = *((void **)*pnext);
+        //@ assert lseg(nextNext, 0, ?xs2, p);
+        *pnext = nextNext;
+        /*@
+        if (pnext != phead) {
+            pointer_nonzero(pnext);
+            close lseg(pnext, 0, cons(pnext, xs2), p);
+            lseg_append_final(head);
+        }
+        @*/
     }
-    @*/
 }

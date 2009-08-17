@@ -1,7 +1,7 @@
-.requires .\stringBuffersExt.h#string_buffer_append_chars
-.requires .\stringBuffersExt.h#string_buffer_clear
-.requires .\stringBuffersExt.h#string_buffer_get_chars
-.requires .\stringBuffersExt.h#string_buffer_get_length
+.requires .\stringBuffers.h#string_buffer_append_chars
+.requires .\stringBuffers.h#string_buffer_clear
+.requires .\stringBuffers.h#string_buffer_get_chars
+.requires .\stringBuffers.h#string_buffer_get_length
 .provides .\sockets.h#create_server_socket
 .provides .\sockets.h#reader_read_line
 .provides .\sockets.h#server_socket_accept
