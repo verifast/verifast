@@ -95,6 +95,40 @@ SOCKET socket_accept(SOCKET serverSocket)
     return slaveSocket;
 }
 
+SOCKET socket_create(int port)
+{
+    SOCKET lsocket;
+    SOCKADDR_IN lSockAddr;
+    SOCKET serverSocket = 0;
+    int status = 0;
+
+#ifdef WIN32
+    {
+        WSADATA windowsSocketsApiData;
+        WSAStartup(MAKEWORD(2, 0), &windowsSocketsApiData);
+    }
+#endif
+
+    lsocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (INVALID_SOCKET == lsocket)
+    {
+        print_socket_error_message("socket()");
+        abort();
+    }
+
+    memset(&lSockAddr,0, sizeof(lSockAddr));
+    lSockAddr.sin_family = AF_INET;
+    lSockAddr.sin_port = htons(port);
+    lSockAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    status = connect(lsocket,(SOCKADDR *)&lSockAddr,sizeof(SOCKADDR_IN));
+    if(status != 0)
+    {
+        print_socket_error_message("connect()");
+        abort();
+    }
+    return lsocket;
+}
+
 struct server_socket {
     int handle;
 };
@@ -170,6 +204,20 @@ struct socket {
 struct socket *server_socket_accept(struct server_socket *serverSocket)
 {
     int handle = socket_accept(serverSocket->handle);
+    struct reader *reader = malloc(sizeof(struct reader));
+    struct writer *writer = malloc(sizeof(struct writer));
+    struct socket *socket = malloc(sizeof(struct socket));
+    reader->handle = handle;
+    writer->handle = handle;
+    socket->handle = handle;
+    socket->reader = reader;
+    socket->writer = writer;
+    return socket;
+}
+
+struct socket *create_client_socket(int port)
+{
+    int handle = socket_create(port);
     struct reader *reader = malloc(sizeof(struct reader));
     struct writer *writer = malloc(sizeof(struct writer));
     struct socket *socket = malloc(sizeof(struct socket));

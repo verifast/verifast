@@ -11,9 +11,9 @@ struct string_buffer {
 };
 
 /*@
-predicate string_buffer(struct string_buffer *buffer)
-    requires buffer->length |-> ?length &*& buffer->capacity |-> ?capacity &*& buffer->chars |-> ?charsArray &*& malloc_block_string_buffer(buffer) &*& chars(charsArray, ?cs) &*&
-        malloc_block(charsArray, capacity) &*& 0 <= length &*& length <= capacity &*& chars_length(cs) == capacity;
+predicate string_buffer(struct string_buffer *buffer) =
+    buffer->length |-> ?length &*& buffer->capacity |-> ?capacity &*& buffer->chars |-> ?charsArray &*& malloc_block_string_buffer(buffer) &*&
+    chars(charsArray, ?cs) &*& malloc_block(charsArray, capacity) &*& 0 <= length &*& length <= capacity &*& chars_length(cs) == capacity;
 @*/
 
 struct string_buffer *create_string_buffer()
@@ -70,16 +70,12 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     //@ assume_is_int(count);
     int length = buffer->length;
     //@ assume_is_int(length);
-    if (2147483647 - buffer->length < count) {
-        abort();
-    }
+    if (MAX_INT - buffer->length < count) abort();
     newLength = buffer->length + count;
     if (buffer->capacity < newLength) {
         char *bufferChars = 0;
         char *newChars = malloc(newLength);
-        if (newChars == 0) {
-            abort();
-        }
+        if (newChars == 0) abort();
         buffer->capacity = newLength;
         bufferChars = buffer->chars;
         //@ chars_split(buffer->chars, buffer->length);
@@ -129,9 +125,7 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
     //@ open string_buffer(buffer);
     struct string_buffer *copy = malloc(sizeof(struct string_buffer));
     char *chars = malloc(buffer->length);
-    if (copy == 0 || chars == 0) {
-        abort();
-    }
+    if (copy == 0 || chars == 0) abort();
     copy->length = buffer->length;
     copy->capacity = buffer->length;
     //@ chars_split(buffer->chars, buffer->length);

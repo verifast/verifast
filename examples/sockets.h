@@ -22,6 +22,9 @@ struct server_socket *create_server_socket(int port);
 struct socket *server_socket_accept(struct server_socket *serverSocket);
     //@ requires server_socket(serverSocket);
     //@ ensures server_socket(serverSocket) &*& socket(result, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+struct socket *create_client_socket(int port);
+    //@ requires emp;
+    //@ ensures socket(result, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
 
 struct reader *socket_get_reader(struct socket *socket);
     //@ requires socket(socket, ?reader, ?writer);
