@@ -33,10 +33,10 @@ struct llist *create_llist()
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) abort();
   //@ close node(n, n->next, n->value);
-  //@ close lseg(n, n, nil);
+  //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
-  //@ close llist(l, nil);
+  //@ close llist(l, _);
   return l;
 }
 
@@ -47,8 +47,8 @@ lemma void distinct_nodes(struct node *n1, struct node *n2)
 {
   open node(n1, _, _);
   open node(n2, _, _);
-  close node(n1, n1n, n1v);
-  close node(n2, n2n, n2v);
+  close node(n1, _, _);
+  close node(n2, _, _);
 }
 
 lemma void lseg_add(struct node *n2)
@@ -58,15 +58,15 @@ lemma void lseg_add(struct node *n2)
   distinct_nodes(n2, n3);
   open lseg(n1, n2, _v);
   if (n1 == n2) {
-    close lseg(n3, n3, nil);
+    close lseg(n3, n3, _);
   } else {
     distinct_nodes(n1, n3);
-    open node(n1, ?next, ?value);
+    open node(n1, _, _);
     lseg_add(n2);
-    close node(n1, next, value);
+    close node(n1, _, _);
   }
   
-  close lseg(n1, n3, append(_v, cons(_x, nil)));
+  close lseg(n1, n3, _);
 }
 @*/
 
@@ -80,15 +80,15 @@ void add(struct llist *list, int x)
   if (n == 0) {
     abort();
   }
-  //@ close node(n, n->next, n->value);
+  //@ close node(n, _, _);
   l = list->last;
   //@ open node(l, _, _);
   l->next = n;
   l->value = x;
-  //@ close node(l, n, x);
+  //@ close node(l, _, _);
   list->last = n;
   //@ lseg_add(l);
-  //@ close llist(list, append(_v, cons(x, nil)));
+  //@ close llist(list, _);
 }
 
 /*@
@@ -103,8 +103,8 @@ lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
       distinct_nodes(n1, n3);
       open node(n1, _, _);
       lseg_append(n1->next, n2, n3);
-      close node(n1, n1->next, n1->value);
-      close lseg(n1, n3, append(_v1, _v2));
+      close node(n1, _, _);
+      close lseg(n1, n3, _);
   }
 }
 @*/
