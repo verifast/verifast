@@ -19,11 +19,7 @@ void point_mirror(struct point *p)
     //@ requires p->x |-> ?x &*& p->y |-> ?y;
     //@ ensures p->x |-> y &*& p->y |-> x;
 {
-    //@ open point_x(p, x);
-    //@ open point_y(p, y);
     swap(&p->x, &p->y);
-    //@ close point_x(p, y);
-    //@ close point_y(p, x);
 }
 
 int main()

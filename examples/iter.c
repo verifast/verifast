@@ -32,7 +32,6 @@ struct llist *create_llist()
   if (l == 0) abort();
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) abort();
-  //@ close node(n, n->next, n->value);
   //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
@@ -158,7 +157,6 @@ void dispose(struct llist *list)
     n = next;
   }
   //@ open lseg(n, n, _);  // Clean up empty lseg.
-  //@ open node(l, _, _);
   free(l);
   free(list);
 }
@@ -273,10 +271,8 @@ int lookup(struct llist *list, int index)
   //@ open lseg(n, l, _ls2);
   //@ open node(n, ?nnext, _);
   int value = n->value;
-  //@ close node(n, nnext, value);
   //@ close lseg(n, l, _ls2);
   //@ lseg_append(f, n, l);
-  //@ close llist(list, _v);
   //@ drop_n_plus_one(index, _v);
   return value;
 }
