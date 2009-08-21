@@ -3,15 +3,15 @@
 
 /*@
 
-predicate ghost_cell(int id; any value);
+predicate ghost_cell<t>(int id; t value);
 
-lemma int create_ghost_cell(any value);
+lemma int create_ghost_cell<t>(t value);
     requires emp;
-    ensures ghost_cell(result, value);
+    ensures ghost_cell<t>(result, value);
 
-lemma void ghost_cell_set_value(int id, any value);
-    requires ghost_cell(id, _);
-    ensures ghost_cell(id, value);
+lemma void ghost_cell_set_value<t>(int id, t value);
+    requires ghost_cell<t>(id, _);
+    ensures ghost_cell<t>(id, value);
 
 @*/
 

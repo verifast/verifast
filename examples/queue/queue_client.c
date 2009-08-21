@@ -43,9 +43,6 @@ lemma void messages_append_lemma(list<void *> ms1)
     }
 }
 
-predicate ghost_cell_int(int id, int value) =
-    ghost_cell(id, boxed_int(value));
-
 fixpoint bool ids_ok(int minId, int maxId, list<int> ids) {
     switch (ids) {
         case nil: return true;
@@ -78,20 +75,20 @@ lemma void ids_ok_append_lemma(int minId1, int maxId1, list<int> ids1, int minId
 
 predicate_ctor message_queue(struct queue *queue, int minIdCell, int maxIdCell)() requires
     queue_state(queue, ?values) &*& messages(values, ?ids) &*&
-    [1/2]ghost_cell_int(minIdCell, ?minId) &*& [1/2]ghost_cell_int(maxIdCell, ?maxId) &*&
+    [1/2]ghost_cell<int>(minIdCell, ?minId) &*& [1/2]ghost_cell<int>(maxIdCell, ?maxId) &*&
     ids_ok(minId, maxId, ids) == true &*& minId <= maxId + 1;
 
 predicate cell_ids(int minIdCell, int maxIdCell) = true;
 
 predicate_family_instance thread_run_pre(consumer)(struct queue *queue, any info) =
-    queue_consumer(queue) &*& cell_ids(?minIdCell, ?maxIdCell) &*& [1/2]ghost_cell_int(minIdCell, 0) &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
+    queue_consumer(queue) &*& cell_ids(?minIdCell, ?maxIdCell) &*& [1/2]ghost_cell<int>(minIdCell, 0) &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
 
 inductive consumer_context_info = consumer_context_info(struct queue *queue, int minIdCell, int maxIdCell, int minId);
 
 predicate_family_instance queue_try_dequeue_context_pre(consumer_context)(consumer_context_info info, predicate() inv, struct queue *queue) =
     switch (info) {
         case consumer_context_info(queue_, minIdCell, maxIdCell, minId):
-            return queue_ == queue &*& inv == message_queue(queue, minIdCell, maxIdCell) &*& [1/2]ghost_cell_int(minIdCell, minId);
+            return queue_ == queue &*& inv == message_queue(queue, minIdCell, maxIdCell) &*& [1/2]ghost_cell<int>(minIdCell, minId);
     };
 
 predicate_family_instance queue_try_dequeue_context_post(consumer_context)(consumer_context_info info, bool result, void *value) =
@@ -99,9 +96,9 @@ predicate_family_instance queue_try_dequeue_context_post(consumer_context)(consu
         case consumer_context_info(queue, minIdCell, maxIdCell, minId):
             return
                 result ?
-                    message_id(value, ?id) &*& malloc_block_message(value) &*& minId <= id &*& [1/2]ghost_cell_int(minIdCell, ?minId1) &*& id < minId1
+                    message_id(value, ?id) &*& malloc_block_message(value) &*& minId <= id &*& [1/2]ghost_cell<int>(minIdCell, ?minId1) &*& id < minId1
                 :
-                    [1/2]ghost_cell_int(minIdCell, minId);
+                    [1/2]ghost_cell<int>(minIdCell, minId);
     };
 
 lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue_context
@@ -116,21 +113,12 @@ lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue
     switch (info_) {
         case consumer_context_info(queue_, minIdCell, maxIdCell, minId):
             open message_queue(queue, minIdCell, maxIdCell)();
-            open ghost_cell_int(minIdCell, _);
-            open ghost_cell_int(minIdCell, _);
             op();
             assert queue_try_dequeue_operation_post(op)(_, ?success, ?value) &*& queue_state(queue, ?newValues);
             if (success) {
                 open messages(_, _);
                 assert message_id(value, ?id);
-                ghost_cell_set_value(minIdCell, boxed_int(id + 1));
-                split_fraction ghost_cell(minIdCell, _);
-                close [1/2]ghost_cell_int(minIdCell, id + 1);
-                close [1/2]ghost_cell_int(minIdCell, id + 1);
-            } else {
-                split_fraction ghost_cell(minIdCell, _);
-                close [1/2]ghost_cell_int(minIdCell, minId);
-                close [1/2]ghost_cell_int(minIdCell, minId);
+                ghost_cell_set_value(minIdCell, id + 1);
             }
             close queue_try_dequeue_context_post(consumer_context)(info_, success, value);
             close message_queue(queue, minIdCell, maxIdCell)();
@@ -155,7 +143,7 @@ void consumer(struct queue *queue) //@ : thread_run
     
     int lastId = -1;
     while (true)
-        //@ invariant dequeue_result_message(result, _) &*& queue_consumer(queue) &*& [1/2]ghost_cell_int(minIdCell, ?minId) &*& lastId < minId &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
+        //@ invariant dequeue_result_message(result, _) &*& queue_consumer(queue) &*& [1/2]ghost_cell<int>(minIdCell, ?minId) &*& lastId < minId &*& [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell));
     {
         /*@
         close queue_try_dequeue_context_pre(consumer_context)(consumer_context_info(queue, minIdCell, maxIdCell, minId), message_queue(queue, minIdCell, maxIdCell), queue);
@@ -186,13 +174,13 @@ predicate_family_instance queue_enqueue_context_pre(main_context)(main_context_i
             queue_ == queue &*&
             inv == message_queue(queue, minIdCell, maxIdCell) &*&
             message_id(value, id) &*& malloc_block_message(value) &*&
-            [1/2]ghost_cell_int(maxIdCell, id - 1);
+            [1/2]ghost_cell<int>(maxIdCell, id - 1);
     };
 
 predicate_family_instance queue_enqueue_context_post(main_context)(main_context_info info) =
     switch (info) {
         case main_context_info(queue, minIdCell, maxIdCell, id):
-            return [1/2]ghost_cell_int(maxIdCell, id);
+            return [1/2]ghost_cell<int>(maxIdCell, id);
     };
 
 lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
@@ -211,26 +199,21 @@ lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
     switch (info_) {
         case main_context_info(queue_, minIdCell, maxIdCell, id):
             open message_queue(queue, minIdCell, maxIdCell)();
-            open ghost_cell_int(maxIdCell, ?maxId);
-            open ghost_cell_int(maxIdCell, _);
+            assert ghost_cell<int>(maxIdCell, ?maxId);
             bool success = op();
             if (success) {
                 assert messages(?ms1, ?ids1);
                 close messages(nil, nil);
                 close messages(cons(value, nil), cons(id, nil));
                 messages_append_lemma(ms1);
-                assert [1/2]ghost_cell_int(minIdCell, ?minId);
+                assert [1/2]ghost_cell<int>(minIdCell, ?minId);
                 ids_ok_append_lemma(minId, maxId, ids1, id, id, cons(id, nil));
-                ghost_cell_set_value(maxIdCell, boxed_int(id));
+                ghost_cell_set_value(maxIdCell, id);
                 split_fraction ghost_cell(maxIdCell, _);
-                close [1/2]ghost_cell_int(maxIdCell, id);
-                close [1/2]ghost_cell_int(maxIdCell, id);
                 close message_queue(queue, minIdCell, maxIdCell)();
                 close queue_enqueue_context_post(main_context)(info_);
             } else {
                 split_fraction ghost_cell(maxIdCell, _);
-                close [1/2]ghost_cell_int(maxIdCell, maxId);
-                close [1/2]ghost_cell_int(maxIdCell, maxId);
                 close message_queue(queue, minIdCell, maxIdCell)();
                 close queue_enqueue_context_pre(main_context)(info_, inv, queue, value);
             }
@@ -246,17 +229,10 @@ int main()
 {
     struct queue *queue = create_queue();
     //@ close messages(nil, nil);
-    //@ int minIdCell = create_ghost_cell(boxed_int(0));
-    //@ split_fraction ghost_cell(minIdCell, _);
-    //@ close [1/2]ghost_cell_int(minIdCell, 0);
-    //@ close [1/2]ghost_cell_int(minIdCell, 0);
-    //@ int maxIdCell = create_ghost_cell(boxed_int(-1));
-    //@ split_fraction ghost_cell(maxIdCell, _);
-    //@ close [1/2]ghost_cell_int(maxIdCell, -1);
-    //@ close [1/2]ghost_cell_int(maxIdCell, -1);
+    //@ int minIdCell = create_ghost_cell(0);
+    //@ int maxIdCell = create_ghost_cell(-1);
     //@ close message_queue(queue, minIdCell, maxIdCell)();
     //@ create_atomic_space(message_queue(queue, minIdCell, maxIdCell));
-    //@ split_fraction atomic_space(_);
     
     //@ close cell_ids(minIdCell, maxIdCell);
     //@ close thread_run_pre(consumer)(queue, unit);
@@ -264,7 +240,7 @@ int main()
     //@ leak thread(_, _, _, _);
     int id = 0;
     while (true)
-        //@ invariant [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell)) &*& [1/2]ghost_cell_int(maxIdCell, id - 1);
+        //@ invariant [1/2]atomic_space(message_queue(queue, minIdCell, maxIdCell)) &*& [1/2]ghost_cell<int>(maxIdCell, id - 1);
     {
         struct message *message = create_message(id);
         /*@
