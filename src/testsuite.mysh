@@ -58,17 +58,15 @@ verifast_both -disable_overflow_check -c Bot.java
 cd ..
 cd ..
 verifast_both threading.o philosophers.c
-verifast_both stringBuffers.c sockets.o threading.o lists.c ghostlist.o chat.c
-verifast_both -c -emit_vfmanifest stringBuffers.c
+verifast stringBuffers.c sockets.o threading.o lists.c ghostlist.o chat.c
+verifast -c -emit_vfmanifest stringBuffers.c
 verifast_both -c -emit_vfmanifest lists.c
 verifast_both -c -emit_vfmanifest chat.c
 verifast_both stringBuffers.o sockets.o threading.o lists.o ghostlist.o chat.o
 del stringBuffers.vfmanifest
 del chat.vfmanifest
 del lists.vfmanifest
-cd chatbot
-verifast_both -c bot.c
-cd ..
+verifast stringBuffers.c sockets.o bot.c
 cd incr_box
 verifast_both -c incr_box.c
 cd ..

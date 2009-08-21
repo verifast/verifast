@@ -5,12 +5,15 @@
 .provides stdlib.h#abort
 .provides string.h#memcmp
 .provides string.h#memcpy
+.provides string.h#memchr
 .provides string.h#strlen
 .provides prelude.h#chars_contains_chars_index_of
 .provides prelude.h#chars_join
 .provides prelude.h#chars_length_nonnegative
 .provides prelude.h#chars_nil
 .provides prelude.h#chars_split
+.provides prelude.h#chars_limits
+.provides prelude.h#chars_take_0
 .provides prelude.h#pointer_nonzero
 .provides prelude.h#pointer_distinct
 .provides list.h#append_assoc

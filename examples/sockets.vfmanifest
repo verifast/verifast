@@ -3,6 +3,7 @@
 .requires .\stringBuffers.h#string_buffer_get_chars
 .requires .\stringBuffers.h#string_buffer_get_length
 .provides .\sockets.h#create_server_socket
+.provides .\sockets.h#create_client_socket
 .provides .\sockets.h#reader_read_line
 .provides .\sockets.h#server_socket_accept
 .provides .\sockets.h#socket_close

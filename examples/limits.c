@@ -2,7 +2,7 @@ void foo(int x)
     //@ requires true;
     //@ ensures true;
 {
-    //@ assume_is_int(x);
-    assert(MIN_INT <= x);
-    assert(x <= MAX_INT);
+    //@ produce_limits(x);
+    assert(INT_MIN <= x);
+    assert(x <= INT_MAX);
 }

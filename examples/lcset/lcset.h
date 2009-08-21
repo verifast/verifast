@@ -64,7 +64,7 @@ typedef lemma void set_add();
 bool add(struct set *set, int e);
     /*@
     requires
-        MIN_INT < e &*& e < MAX_INT &*&
+        INT_MIN < e &*& e < INT_MAX &*&
         [?f]atomic_space(?inv) &*&
         [?fSet]set(set) &*&
         is_set_sep(?sep) &*& is_set_unsep(?unsep) &*& set_sep(sep)(?info, set, inv, unsep) &*&
@@ -99,7 +99,7 @@ typedef lemma void set_remove();
 bool remove(struct set *set, int e);
     /*@
     requires
-        MIN_INT < e &*& e < MAX_INT &*&
+        INT_MIN < e &*& e < INT_MAX &*&
         [?f]atomic_space(?inv) &*&
         [?fSet]set(set) &*&
         is_set_sep(?sep) &*& is_set_unsep(?unsep) &*& set_sep(sep)(?info, set, inv, unsep) &*&

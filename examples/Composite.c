@@ -200,7 +200,7 @@ void fix(struct Node* node)
   /*@ ensures context(node, value, c + 1) &*& node->count |-> c + 1; @*/
 {
   int tmp = node->count;
-  //@ assume_is_int(tmp);
+  //@ produce_limits(tmp);
   if (tmp == 2147483647) {
     abort();
   }

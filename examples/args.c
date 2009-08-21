@@ -17,7 +17,7 @@ int main0(int argc, char **argv)
     //@ ensures true;
 {
     int i = 0;
-    //@ assume_is_int(argc);
+    //@ produce_limits(argc);
     while (i < argc)
         //@ invariant 0 <= i &*& i <= argc &*& argv(argv + i, argc - i);
     {

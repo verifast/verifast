@@ -68,7 +68,17 @@ lemma void chars_contains_chars_index_of(chars cs, char c);
     requires true;
     ensures chars_contains(cs, c) == (0 <= chars_index_of(cs, c) && chars_index_of(cs, c) <= chars_length(cs));
 
-predicate chars(char *array, chars cs);
+lemma void chars_take_0(chars cs);
+    requires true;
+    ensures chars_take(cs, 0) == chars_nil;
+
+predicate character(char *p; char c);
+
+predicate chars(char *array, chars cs) =
+    switch (cs) {
+        case chars_nil: return true;
+        case chars_cons(c, cs0): return character(array, c) &*& chars(array + 1, cs0);
+    };
 
 lemma void chars_nil(char *array);
     requires emp;
@@ -81,6 +91,10 @@ lemma void open_chars_nil(char *array);
 lemma void chars_zero(); // There is nothing at address 0.
     requires chars(0, ?cs);
     ensures cs == chars_nil;
+
+lemma void chars_limits(char *array);
+    requires [?f]chars(array, ?cs);
+    ensures [f]chars(array, cs) &*& cs == chars_nil ? true : true == ((char *)0 <= array) &*& array + chars_length(cs) <= (char *)4294967295;
 
 lemma void chars_split(char *array, int offset);
    requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= chars_length(cs);

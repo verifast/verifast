@@ -251,7 +251,7 @@ int main()
         //@ produce_lemma_function_pointer_chunk(main_context);
         queue_enqueue(queue, message);
         //@ leak is_queue_enqueue_context(_);
-        //@ assume_is_int(id);
+        //@ produce_limits(id);
         //@ open queue_enqueue_context_post(main_context)(_);
         if (id == 2147483647) abort();
         id++;

@@ -25,7 +25,7 @@ void thread_join(struct thread *thread);
 
 int readNumber();
     //@ requires true;
-    //@ ensures MIN_INT < result &*& result < MAX_INT;
+    //@ ensures INT_MIN < result &*& result < INT_MAX;
 
 /*@
 inductive set_info = set_info(struct set *);

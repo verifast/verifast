@@ -898,7 +898,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "&"; "^"; "~"; "currentThread"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "MIN_INT"; "MAX_INT"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"
 ]
 let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
 ]
@@ -1528,8 +1528,9 @@ and
     | [< >] -> if targs = [] then Var (l, x, ref None) else CallExpr (l, x, targs, [], [], Static)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
-| [< '(l, Kwd "MIN_INT") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
-| [< '(l, Kwd "MAX_INT") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
+| [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
+| [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
+| [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
 | [< '(l, String s) >] -> StringLit (l, s)
 | [< '(l, Kwd "(");
      e = parser
@@ -3398,10 +3399,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w2, t2) = check e2 in
       begin
         match t1 with
-          PtrType _ ->
-          let w2 = checkt e2 intt in
-          ts:=Some [t1; IntType];
-          (Operation (l, operator, [w1; w2], ts), t1)
+          PtrType pt1 ->
+          begin match t2 with
+            PtrType pt2 when operator = Sub ->
+            if pt1 <> pt2 then static_error l "Pointers must be of same type";
+            if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported";
+            ts:=Some [t1; t2];
+            (Operation (l, operator, [w1; w2], ts), IntType)
+          | _ ->
+            let w2 = checkt e2 intt in
+            ts:=Some [t1; IntType];
+            (Operation (l, operator, [w1; w2], ts), t1)
+          end
         | IntType | RealType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
@@ -4252,6 +4261,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
+        | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
+          check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
       end
     | Operation (l, Mul, [e1; e2], ts) ->
       begin match !ts with
@@ -4655,19 +4666,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     lookup_points_to_chunk h env l f_symb t
   in
   
-  let (pointer_pred_symb, int_pred_symb) =
+  let (pointer_pred_symb, int_pred_symb, char_pred_symb) =
     match file_type path with
-      Java -> (real_unit, real_unit) (* Anything, doesn't matter. *)
+      Java -> (real_unit, real_unit, real_unit) (* Anything, doesn't matter. *)
     | _ ->
       let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
       let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
-      (pointer_pred_symb, int_pred_symb)
+      let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
+      (pointer_pred_symb, int_pred_symb, char_pred_symb)
   in
   
   let pointee_pred_symb l pointeeType =
     match pointeeType with
       PtrType _ -> pointer_pred_symb
     | IntType -> int_pred_symb
+    | Char -> char_pred_symb
     | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
   in
   
@@ -5666,10 +5679,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       prototypes_used := (g, l)::!prototypes_used
   in
   
-  let assume_is_of_type t tp cont =
+  let assume_is_of_type l t tp cont =
     match tp with
       IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
-    | _ -> cont()
+    | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp))
   in
   
   let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, body,v) pure leminfo sizemap h tparams tenv ghostenv env cont =
@@ -6015,11 +6029,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
         | _ -> call_stmt l (Some x) "malloc" [] args Static
       end
-    | CallStmt (l, "assume_is_int", [], [Var (lv, x, _) as e],Static) ->
+    | CallStmt (l, "produce_limits", [], [Var (lv, x, _) as e],Static) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      assume_is_of_type (ev w) tp (fun () -> cont h env)
+      assume_is_of_type l (ev w) tp (fun () -> cont h env)
     | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
       if not pure then static_error l "This construct is not allowed in a non-pure context.";
       begin
