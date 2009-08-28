@@ -16,6 +16,8 @@ public class SingletonIterator implements Iterator {
       //@ close iterator(SingletonIterator.class)(this, cons(value, nil));
   }
   public boolean hasNext()
+      //@ requires iterator(SingletonIterator.class)(this, ?ys);
+      //@ ensures iterator(SingletonIterator.class)(this, ys) &*& result == (ys != nil);
   {
       //@ open iterator(SingletonIterator.class)(this, ys);
       boolean result = !this.done;
@@ -23,8 +25,10 @@ public class SingletonIterator implements Iterator {
       return result;
   }
   public Object next()
+      //@ requires iterator(SingletonIterator.class)(this, ?ys) &*& ys != nil;
+      //@ ensures iterator(SingletonIterator.class)(this, tail(ys)) &*& result == head(ys) &*& result != null;
   {
-      //@ open iterator(SingletonIterator.class)(this, xs);
+      //@ open iterator(SingletonIterator.class)(this, ys);
       this.done = true;
       Object result = this.value;
       //@ close iterator(SingletonIterator.class)(this, nil);

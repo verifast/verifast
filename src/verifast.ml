@@ -7199,9 +7199,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let ("this", thisTerm)::_ = env in
                 let ("this", ObjType cn)::_ = ps in
                 (* CAVEAT: Remove this assumption once we allow subclassing. *)
-                assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun () ->
-                  cont (("this", ObjType cn)::pre_tenv)
-                )
+                (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
+                cont (("this", ObjType cn)::pre_tenv)
               end else cont pre_tenv
             end $. fun tenv ->
             let (sizemap, indinfo) = switch_stmt ss env in

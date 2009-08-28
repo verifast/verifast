@@ -4,6 +4,20 @@ package iterator;
 
 inductive objects = nil | cons(Object, objects);
 
+fixpoint Object head(objects os) {
+    switch (os) {
+        case nil: return null;
+        case cons(o, os0): return o;
+    }
+}
+
+fixpoint objects tail(objects os) {
+    switch (os) {
+        case nil: return nil;
+        case cons(o, os0): return os0;
+    }
+}
+
 predicate_family iterator(Class c)(Iterator i, objects xs);
 
 @*/
@@ -11,11 +25,11 @@ predicate_family iterator(Class c)(Iterator i, objects xs);
 interface Iterator {
   boolean hasNext();
       //@ requires iterator(this.getClass())(this, ?xs);
-      //@ ensures iterator(this.getClass())(this, xs) &*& result==(xs!=nil);
+      //@ ensures iterator(this.getClass())(this, xs) &*& result == (xs != nil);
 
   Object next();
-      //@ requires iterator(this.getClass())(this, ?xs) &*& xs!=nil;
-      //@ ensures switch (xs) { case nil: return false; case cons(x, xs0): return iterator(this.getClass())(this, xs0) &*& result == x &*& x!=null; };
+      //@ requires iterator(this.getClass())(this, ?xs) &*& xs != nil;
+      //@ ensures iterator(this.getClass())(this, tail(xs)) &*& result == head(xs) &*& result != null;
 }
 
 /*@
@@ -42,6 +56,8 @@ class SingletonIterator implements Iterator {
       //@ close iterator(SingletonIterator.class)(this, cons(value, nil));
   }
   public boolean hasNext()
+      //@ requires iterator(SingletonIterator.class)(this, ?xs);
+      //@ ensures iterator(SingletonIterator.class)(this, xs) &*& result == (xs != nil);
   {
       //@ open iterator(SingletonIterator.class)(this, xs);
       boolean result = !this.done;
@@ -49,6 +65,8 @@ class SingletonIterator implements Iterator {
       return result;
   }
   public Object next()
+      //@ requires iterator(SingletonIterator.class)(this, ?xs) &*& xs != nil;
+      //@ ensures iterator(SingletonIterator.class)(this, tail(xs)) &*& result == head(xs) &*& result != null;
   {
       //@ open iterator(SingletonIterator.class)(this, xs);
       this.done = true;
@@ -65,8 +83,9 @@ class IteratorUtil {
       Object value = null;
       boolean more = iterator.hasNext();
       while (more)
-          //@ invariant iterator(iterator.getClass())(iterator, ?ys)&*& more == (ys != nil)&*& objects_last(cons(value,ys)) == objects_last(xs);
+          //@ invariant iterator(iterator.getClass())(iterator, ?ys) &*& more == (ys != nil) &*& objects_last(cons(value, ys)) == objects_last(xs);
       {
+          //@ switch (ys) { case nil: case cons(y, ys0): }
           value = iterator.next();
           more = iterator.hasNext();
       }

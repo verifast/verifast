@@ -6,6 +6,20 @@ import iterator.itutil.*;
 
 inductive objects = nil | cons(Object, objects);
 
+fixpoint Object head(objects os) {
+    switch (os) {
+        case nil: return null;
+        case cons(o, os0): return o;
+    }
+}
+
+fixpoint objects tail(objects os) {
+    switch (os) {
+        case nil: return nil;
+        case cons(o, os0): return os0;
+    }
+}
+
 predicate_family iterator(Class c)(Iterator i, objects xs);
 
 @*/
