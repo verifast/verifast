@@ -35,20 +35,16 @@ public class Session implements Runnable {
         //@ close session(this);
     }
     
-    public void run_with_nick(Room room, Semaphore_ roomLock, InputStreamReader_ reader, OutputStreamWriter_ writer, StringBuffer nick)
-        //@ requires locked(roomLock, room_ctor(room), ?f) &*& room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
-        //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+    public void run_with_nick(Room room, Semaphore_ roomLock, InputStreamReader_ reader, OutputStreamWriter_ writer, String nick)
+        //@ requires locked(roomLock, room_ctor(room), ?f) &*& room(room) &*& reader(reader) &*& writer(writer);
+        //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer);
     {
         Member member = null;
-        StringBuffer joinMessage = new StringBuffer();
-        joinMessage.append(nick);
-        joinMessage.append(" has joined the room.");
+        String joinMessage = nick + " has joined the room.";
         room.broadcast_message(joinMessage);
         {
-            StringBuffer nickCopy = new StringBuffer();
-            nickCopy.append(nick);
             //@ open room(room);
-            member = new Member(nickCopy,writer);
+            member = new Member(nick, writer);
             List list = room.members;
             list.add(member);
             //@ open foreach(?members, @member);
@@ -61,26 +57,16 @@ public class Session implements Runnable {
         roomLock.release();
         
         {
-            boolean eof = false;
-            StringBuffer message = new StringBuffer();
-            while (!eof)
-                //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& [f]lock(roomLock, room_ctor(room));
+            String message = reader.readLine();
+            while (message != null)
+                //@ invariant reader(reader) &*& [f]lock(roomLock, room_ctor(room));
             {
-                eof = reader.readLine(message);
-                if (eof) {
-                } else {
-                    roomLock.acquire();
-                    //@ open room_ctor(room)();
-                    {
-                        StringBuffer fullMessage = new StringBuffer();
-                        fullMessage.append(nick);
-                        fullMessage.append(" says: ");
-                        fullMessage.append(message);
-                        room.broadcast_message(fullMessage);
-                    }
-                    //@ close room_ctor(room)();
-                    roomLock.release();
-                }
+                roomLock.acquire();
+                //@ open room_ctor(room)();
+                room.broadcast_message(nick + " says: " + message);
+                //@ close room_ctor(room)();
+                roomLock.release();
+                message = reader.readLine();
             }
         }
         
@@ -96,10 +82,7 @@ public class Session implements Runnable {
         }
         //@ close room(room);
         {
-            StringBuffer goodbyeMessage = new StringBuffer();
-            goodbyeMessage.append(nick);
-            goodbyeMessage.append(" left the room.");
-            room.broadcast_message(goodbyeMessage);
+            room.broadcast_message(nick + " left the room.");
         }
         //@ close room_ctor(room)();
         roomLock.release();
@@ -159,15 +142,14 @@ public class Session implements Runnable {
         roomLock.release();
 
         {
-            StringBuffer nick = new StringBuffer();
             boolean done = false;
             while (!done)
-                //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& [?f]lock(roomLock, room_ctor(room));
+                //@ invariant writer(writer) &*& reader(reader) &*& [?f]lock(roomLock, room_ctor(room));
             {
                 writer.write("Please enter your nick: \r\n");
                 {
-                    boolean eof = reader.readLine(nick);
-                    if (eof) {
+                    String nick = reader.readLine();
+                    if (nick == null) {
                         done = true;
                     } else {
                         roomLock.acquire();

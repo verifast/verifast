@@ -11,7 +11,7 @@ public class StringBuffer{
     //@ requires string_buffer(this) &*& [?f]string_buffer(b);
     //@ ensures string_buffer(this) &*& [f]string_buffer(b)  &*& result==this;
   StringBuffer append(String string);
-    //@ requires string_buffer(this) &*& string!=null;
+    //@ requires string_buffer(this);
     //@ ensures string_buffer(this)&*& result==this;
   String toString();
     //@ requires [?f]string_buffer(this);

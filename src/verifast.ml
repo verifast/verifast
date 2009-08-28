@@ -2833,7 +2833,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | IntLit (l, n, t) -> t := Some intt; (e, intt)
                           | StringLit (l, s) ->
                             begin match file_type path with
-                              Java-> (e, ObjType "String")
+                              Java-> (e, ObjType "java.lang.String")
                             | _ -> (e, PtrType Char)
                             end
                           | CallExpr (l', g', targes, [], pats, info) -> (
@@ -3414,9 +3414,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | IntType | RealType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
-        | ObjType "String" as t->
+        | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
-          ts:=Some [t1; ObjType "String"];
+          ts:=Some [t1; ObjType "java.lang.String"];
           (Operation (l, operator, [w1; w2], ts), t1)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
       end
@@ -3433,7 +3433,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType "Class")
     | StringLit (l, s) -> (match file_type path with
-	    Java-> (e, ObjType "String")
+	    Java-> (e, ObjType "java.lang.String")
 	  | _ -> (e, PtrType Char))
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
@@ -4204,7 +4204,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | ClassLit (l,s) -> List.assoc s classterms
     | StringLit (l, s) -> (match file_type path with
-        Java -> get_unique_var_symb "stringLiteral" (ObjType "String")
+        Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
       | _ -> get_unique_var_symb "stringLiteral" (PtrType Char))
     | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
@@ -5642,7 +5642,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       StringLit (l, s)->
       begin match file_type path with
         Java ->
-        let value = get_unique_var_symb "stringLiteral" (ObjType "String") in
+        let value = get_unique_var_symb "stringLiteral" (ObjType "java.lang.String") in
         assume_neq value (ctxt#mk_intlit 0) (fun () ->
           cont h value
         )
@@ -5658,6 +5658,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         )
       end
+    | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
+      (* Note: we don't even have to evaluate the arguments. *)
+      let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
+      assume_neq value (ctxt#mk_intlit 0) $. fun () ->
+      cont h value
     | Read (l, e, f) ->
       iter h e $. fun h t ->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in

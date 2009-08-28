@@ -24,9 +24,9 @@ public class Room {
         //@ close room(this);
     }
     
-    public boolean has_member(StringBuffer nick)
-        //@ requires room(this) &*& string_buffer(nick);
-        //@ ensures room(this) &*& string_buffer(nick);
+    public boolean has_member(String nick)
+        //@ requires room(this);
+        //@ ensures room(this);
     {
         //@ open room(this);
         //@ assert foreach(?members, _);
@@ -38,7 +38,7 @@ public class Room {
         while (hasNext && !hasMember)
             /*@
             invariant
-                string_buffer(nick) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member)
+                iter(iter, membersList, members, ?i) &*& foreach(members, @member)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -47,10 +47,7 @@ public class Room {
             //@ containsIth(members, i);
             //@ foreach_remove(members, member);
             //@ open member(member);
-            String n1 = nick.toString();
-            StringBuffer b = member.nick;
-            String n2 = b.toString();
-            hasMember = n1.equals(n2);
+            hasMember = nick.equals(member.nick);
             //@ close member(member);
             //@ foreach_unremove(members, member);
             hasNext = iter.hasNext();
@@ -60,9 +57,9 @@ public class Room {
         return hasMember;
     }
     
-    public void broadcast_message(StringBuffer message)
-        //@ requires room(this) &*& string_buffer(message);
-        //@ ensures room(this) &*& string_buffer(message);
+    public void broadcast_message(String message)
+        //@ requires room(this);
+        //@ ensures room(this);
     {
         //@ open room(this);
         //@ assert foreach(?members0, _);
@@ -73,7 +70,7 @@ public class Room {
         while (hasNext)
             /*@
             invariant
-                iter(iter, membersList, ?members, ?i) &*& foreach(members, @member) &*& string_buffer(message)
+                iter(iter, membersList, ?members, ?i) &*& foreach(members, @member)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
