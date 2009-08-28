@@ -228,7 +228,7 @@ and ['tag] simplex () =
         col#terms
 
     method alloc_unknown name tag =
-      let u = new unknown (self :> 'tag simplex) name false tag false in
+      let u = new unknown (self :> 'tag simplex) name false (Some tag) false in
       let col = new column (self :> 'tag simplex) u in
       u#set_pos (Column col);
       columns <- col::columns;

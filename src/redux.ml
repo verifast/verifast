@@ -3,6 +3,8 @@ open Big_int
 open Proverapi
 open Printf
 
+let the x = match x with Some x -> x
+
 type assume_result3 = Unsat3 | Unknown3 | Valid3
 
 let print_endline_disabled msg = ()
@@ -366,7 +368,7 @@ and valuenode (ctxt: context) =
     method mk_unknown =
       match unknown with
         None ->
-        let u = ctxt#simplex#alloc_unknown ("u" ^ string_of_int (Oo.id self)) initial_child in
+        let u = ctxt#simplex#alloc_unknown ("u" ^ string_of_int (Oo.id self)) self#initial_child in
         self#push;
         unknown <- Some u;
         u
@@ -1017,6 +1019,11 @@ and context () =
     
     method assume_eq (t1: termnode) (t2: termnode) = self#reduce; self#assert_eq_and_reduce t1#value t2#value
     
+    method assert_ge c ts =
+      (* let the x = match x with Some x -> x in *)
+      (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the u#tag)#pprint u#name) ts)); *)
+      simplex#assert_ge c ts
+    
     method assert_le t1 offset t2 =
       let (n1, ts1) = t1#to_poly in
       let (n2, ts2) = t2#to_poly in
@@ -1024,7 +1031,7 @@ and context () =
       let ts1 = List.map (fun (t, scale) -> (minus_num scale, t#value#mk_unknown)) ts1 in
       let ts2 = List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts2 in
       simplex_assert_ge_count <- simplex_assert_ge_count + 1;
-      match simplex#assert_ge offset (ts1 @ ts2) with
+      match self#assert_ge offset (ts1 @ ts2) with
         Simplex.Unsat -> Unsat3
       | Simplex.Sat -> Unknown3
 
@@ -1104,7 +1111,7 @@ and context () =
       begin
       self#do_and_reduce (fun () ->
         simplex_assert_ge_count <- simplex_assert_ge_count + 1;
-        match simplex#assert_ge offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
+        match self#assert_ge offset (List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) terms) with
           Simplex.Unsat -> Unsat3
         | Simplex.Sat -> Unknown3
       )
