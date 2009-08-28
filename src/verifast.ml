@@ -183,6 +183,8 @@ type loc = (srcpos * srcpos)
 exception ParseException of loc * string
 
 module Stream = struct
+  exception Failure
+  exception Error of string
   type 'a t = (int -> 'a option) * (int ref) * ('a option list ref)
   let from f = (f, ref 0, ref [])
   let peek (f, counter, buffer) =
@@ -197,7 +199,7 @@ module Stream = struct
     buffer := List.tl !buffer
   let push tok (f, counter, buffer) =
     buffer := tok::!buffer
-  let empty stream = peek stream = None
+  let empty stream = if peek stream = None then () else raise Failure
   let npeek n ((f, counter, buffer): 'a t): 'a list =
     let rec iter n buffer =
       if n = 0 then [] else
@@ -221,8 +223,6 @@ module Stream = struct
         iter ()
     in
     iter ()
-  exception Failure
-  exception Error of string
 end
 
 (* The lexer *)
