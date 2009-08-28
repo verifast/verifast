@@ -3,6 +3,15 @@ open Big_int
 open Printf
 open Num
 
+(* You can get an outline of this file in Notepad++ by copying the text
+ * "Region:" to the clipboard and choosing
+ * TextFX->Viz->Hide Lines without (clipboard) text
+ * Get all lines back by choosing
+ * TextFX->Viz->Show Between-Selected or All-Reset Lines
+ *)
+
+(* Region: General-purpose utility functions *)
+
 let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 
 let fprintff format = kfprintf (fun chan -> flush chan) format
@@ -107,6 +116,8 @@ let assoc2 x xys1 xys2 =
 let bindir = Filename.dirname Sys.executable_name
 let rtdir= Filename.concat bindir "rt"
 
+(* Region: Statistics *)
+
 class stats =
   object (self)
     val mutable stmtsParsedCount = 0
@@ -143,6 +154,8 @@ class stats =
   end
 
 let stats = new stats
+
+(* Region: lexical analysis *)
 
 let readFile path =
   let chan = open_in path in
@@ -568,6 +581,8 @@ let make_lexer keywords path text reportRange reportShouldFail =
   let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords path text reportRange false false true reportShouldFail in
   (loc, ignore_eol, token_stream)
 
+(* Region: ASTs *)
+
 type type_ =
     Bool
   | Void
@@ -773,6 +788,8 @@ and
 and
   member = FieldMember of field | MethMember of meth | ConsMember of cons
 
+(* Region: some AST inspector functions *)
+
 (*
 Visual Studio format:
 C:\ddd\sss.xyz(123): error VF0001: blah
@@ -887,7 +904,9 @@ let type_expr_loc t =
   | PtrTypeExpr (l, te) -> l
   | ArrayTypeExpr(l,te) -> l
   | PredTypeExpr(l,te) ->l
-  
+
+(* Region: the parser *)
+
 let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint"; "switch"; "case"; ":";"return";
   "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
@@ -1782,7 +1801,9 @@ let rec parse_jarsrc_file basePath relPath reportRange =
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
-  
+
+(* Region: some auxiliary types and functions *)
+
 let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t) env)
@@ -1887,6 +1908,8 @@ let do_finally tryBlock finallyBlock =
   result
 
 type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool}
+
+(* Region: verify_program_core: the toplevel function *)
 
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
@@ -2025,6 +2048,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter' ([],[]) ps
   in
+  
+  (* Region: check_file *)
   
   let rec check_file include_prelude basedir headers ps =
   let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
@@ -2177,6 +2202,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
   in
 
+  (* Region: structdeclmap, inductivedeclmap *)
+  
   let structdeclmap =
     let rec iter sdm ds =
       match ds with
@@ -2225,6 +2252,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter' [] ps
   in
+  
+  (* Region: Java name resolution functions *)
   
   let rec try_assoc' (pn,imports) name map=
     match imports with
@@ -2307,6 +2336,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | result -> result
   in
   
+  (* Region: interfdeclmap, classdeclmap *)
+  
   let (interfdeclmap,classdeclmap)=
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
@@ -2350,6 +2381,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter' ([],[]) ps
   in
+  
+  (* Region: boxing and unboxing *)
   
   let typenode_of_provertype t =
     match t with
@@ -2434,6 +2467,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     @ List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivemap0
   in
   
+  (* Region: check_pure_type: checks validity of type expressions *)
+  
   let rec check_pure_type (pn,ilist) tpenv te=
     match te with
       ManifestTypeExpr (l, t) -> t
@@ -2501,6 +2536,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
     terms_of classdeclmap @ terms_of classmap0
   in
+  
+  (* Region: structmap1 *)
   
   let structmap1 =
     List.map
@@ -2579,6 +2616,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter s
   in
 
+  (* Region: type compatibility checker *)
+  
   let rec compatible_pointees t t0 =
     match (t, t0) with
       (_, Void) -> true
@@ -2653,6 +2692,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let unbox e t0 t =
     match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
   in
+  
+  (* Region: type-checking of inductive datatypes and fixpoint functions *)
   
   let check_tparams l tparams0 tparams =
     let rec iter tparams =
@@ -3046,6 +3087,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
   in
   
+  (* Region: predicate families *)
+  
   let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts)), inputParamCount)) in
 
   let struct_padding_predfams1 =
@@ -3280,6 +3323,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   let purefuncmap = purefuncmap1 @ purefuncmap0 in
   let predctormap = predctormap1 @ predctormap0 in
+  
+  (* Region: The type checker *)
   
   let funcnames = if file_type path=Java then [] else
   let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
@@ -3599,6 +3644,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end
   in
 
+  (* Region: type checking of assertions *)
+  
   let check_pat_core (pn,ilist) l tparams tenv t p =
     match p with
       LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
@@ -3785,6 +3832,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       boxmap
   in
   
+  (* Region: predicate preciseness check *)
+  
   let rec vars_used e =
     match e with
       True l -> []
@@ -3899,6 +3948,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end;
       check_pred_precise fixed p
   in
+  
+  (* Region: Predicate instances *)
   
   let predinstmap1 =
     flatmap
@@ -4024,6 +4075,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       predctormap
   in
 
+  (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
+  
   let check_ghost ghostenv l e =
     let rec iter e =
       match e with
@@ -4147,6 +4200,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg))
   in
 
+  (* Region: evaluation *)
+  
   let rec eval_core (pn,ilist) assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
     let ev = eval_core (pn,ilist) assert_term read_field env in
     let check_overflow l min t max =
@@ -4400,6 +4455,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     fixpointmap1
   in
   
+  (* Region: production of assertions *)
+  
   let assert_expr (pn,ilist) env e h env l msg = assert_term (eval (pn,ilist) None env e) h env l msg in
   
   let success() = () in
@@ -4585,6 +4642,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume_pred tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all cont
     )
   in
+  
+  (* Region: consumption of assertions *)
   
   (* env' contains the bindings of unbound variables, as when closing a predicate chunk without specifying all arguments *)
   let match_chunk (pn,ilist) ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0)) =
@@ -5056,6 +5115,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let current_thread_name = "currentThread" in
   let current_thread_type = IntType in
+  
+  (* Region: function contracts *)
   
   let functypemap1 =
     let rec iter functypemap ds =
@@ -5611,6 +5672,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ()
   in
   
+  (* Region: symbolic execution helpers *)
+  
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
   let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
@@ -5690,6 +5753,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp))
   in
+  
+  (* Region: verification of calls *)
   
   let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, body,v) pure leminfo sizemap h tparams tenv ghostenv env cont =
     let eval0 = eval (pn,ilist) in
@@ -5816,6 +5881,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let funcnameterm_of funcmap fn =
     let (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
+  
+  (* Region: verification of statements *)
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont =
     stats#stmtExec;
@@ -6937,6 +7004,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         ) return_cont
       )
   and
+  
+  (* Region: verification of blocks *)
+  
     goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont block =
     let `Block (inv, ss, cont) = block in
     let l() =
@@ -7071,6 +7141,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
         blocks
     end
+  
+  (* Region: verification of function bodies *)
+  
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
     let _ = push() in
@@ -7348,6 +7421,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
+  (* Region: top-level stuff *)
+  
   let main_file= ref ("",dummy_loc) in
   let jardeps= ref [] in
   let basepath=(Filename.basename path) in
@@ -7436,6 +7511,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   else
     if Filename.check_suffix path ".jarsrc" then create_jardeps_file()
 
+(* Region: prover selection *)
+
 let verify_program_with_stats ctxt print_stats verbose path reportRange breakpoint =
   do_finally
     (fun () -> verify_program_core ctxt verbose path reportRange breakpoint)
@@ -7479,6 +7556,8 @@ let verify_program prover print_stats options path reportRange breakpoint =
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
          fun ctxt -> verify_program_with_stats ctxt print_stats options path reportRange breakpoint
      end)
+
+(* Region: linker *)
 
 let remove_dups bs =
   let rec iter bs0 bs =
