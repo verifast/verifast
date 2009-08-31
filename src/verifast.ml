@@ -2070,7 +2070,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (* Region: check_file *)
   
   let rec check_file include_prelude basedir headers ps =
-  let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     if include_prelude then
       if file_type path =Java then
       begin
@@ -2078,25 +2078,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> 
           let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
           let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
-          let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-          headermap := (rtpath, ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-          (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+          let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
+          headermap := (rtpath, ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
+          (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+      | Some ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
+        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       end
       else
       begin
       match try_assoc preludePath !headermap with
         None ->
         let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
-        let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
+        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+      | Some ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
+        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       end
       else
-      ([], [], [], [], [], [], [], [], [], [], [], [],[],[])
+      ([], [], [], [], [], [], [], [], [], [], [], [], [],[],[])
   in
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
@@ -2111,15 +2111,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let id x = x in
   
-  let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     let headers_included = ref [] in
-    let rec iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
+    let rec iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
       match headers with
-        [] -> (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        [] -> (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
       | (l, header_path)::headers ->
     if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+          iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -2135,23 +2135,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l "No such file."
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
+            let (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
-                headermap := (path, (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
-                (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
-              | Some (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
-                (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+                let (structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
+                headermap := (path, (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+                (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+              | Some (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
+                (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
             in
-            let (structmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
+            let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
             iter
               (append_nodups structmap structmap0 id l "struct")
+              (append_nodups enummap enummap0 id l "enum")
               (append_nodups inductivemap inductivemap0 id l "inductive datatype")
               (append_nodups purefuncmap purefuncmap0 id l "pure function")
 			  (append_nodups predctormap predctormap0 id l "predicate constructor")
@@ -2182,12 +2183,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l ("No such file: "^systempath)
           in
           if List.mem path !headers_included then
-            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
           else
           if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
             begin
             headers_included := path::!headers_included;
-            iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
             end
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
           begin
@@ -2196,11 +2197,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let allspecs= remove (fun x -> List.mem x !headers_included)(list_remove_dups allspecs) in
             let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
             let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
-            let (structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir [] ds in
-            headermap := (path, (headers', structmap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+            let (structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir [] ds in
+            headermap := (path, (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
             spec_classes:=classes;
             spec_lemmas:=lemmas;
             ((append_nodups structmap structmap0 id l "struct"),
+            (append_nodups enummap enummap0 id l "enum"),
             (append_nodups inductivemap inductivemap0 id l "inductive datatype"),
             (append_nodups purefuncmap purefuncmap0 id l "pure function"),
 			(append_nodups predctormap predctormap0 id l "predicate constructor"),
@@ -2217,10 +2219,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
         end
     in
-    iter structmap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+    iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
   in
 
-  (* Region: structdeclmap, inductivedeclmap *)
+  (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
   
   let structdeclmap =
     let rec iter sdm ds =
@@ -2253,12 +2255,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match try_assoc en edm with
         | Some((l', elems')) -> static_error l "Duplicate enum name."
         | None -> iter ((en, (l, elems)) :: edm) ds
-        end;
-        begin
-          (List.iter (fun (en', (l', elems')) -> 
-            if(List.nodups (List.concat))
-          ))
-          
         end
       | _ :: ds -> iter edm ds
     in
@@ -2611,6 +2607,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let structmap = structmap1 @ structmap0 in
+  
+  let enummap1 = enumdeclmap in
+  
+  let enummap = enummap1 @ enummap0 in
   
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh)) ->
@@ -3458,7 +3458,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           else
                             iter eds
                       in
-                        iter enumdeclmap
+                        iter enummap
                     end
                 end
             end
@@ -7473,7 +7473,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  (structmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap1,interfmap1)
+  (structmap1, enummap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap1,interfmap1)
   
   in
   
@@ -7506,7 +7506,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (_, _, _, _, _, _, _,_,_, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file true programDir headers ds in
+      let (_, _,  _, _, _, _, _, _,_,_, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file true programDir headers ds in
       (prototypes_used, prototypes_implemented)
     in
     begin
