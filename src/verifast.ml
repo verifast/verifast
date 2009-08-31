@@ -53,6 +53,12 @@ let rec distinct xs =
   match xs with
     [] -> true
   | x::xs -> not (List.mem x xs) && distinct xs
+  
+let rec index_of x xs i =
+  match xs with
+    [] -> None
+  | y :: ys when x = y -> Some(i)
+  | _ :: ys -> index_of x ys (i + 1)
 
 let rec try_assoc x xys =
   match xys with
@@ -112,6 +118,13 @@ let try_assoc2 x xys1 xys2 =
 
 let assoc2 x xys1 xys2 =
   let (Some y) = try_assoc2 x xys1 xys2 in y
+
+exception IsNone;;
+
+let get x = 
+  match x with
+    None -> raise IsNone
+  | Some(x) -> x
 
 let bindir = Filename.dirname Sys.executable_name
 let rtdir= Filename.concat bindir "rt"
@@ -642,6 +655,7 @@ type
   | PureCtor
   | FuncName
   | PredFamName
+  | EnumElemName of int
 
 type
   operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | BitNot | BitAnd | BitXor | BitOr
@@ -768,6 +782,8 @@ and
   | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (pred * pred)
   (* typedef met regel-return type-naam-parameter lijst - contract *)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
+  (* enum def met line - name - elements *)
+  | EnumDecl of loc * string * (string list)
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl =
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
@@ -917,7 +933,7 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
   "&"; "^"; "~"; "currentThread"
 ]
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"
 ]
 let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
 ]
@@ -1133,6 +1149,7 @@ and
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
   [FuncTypeDecl (l, Real, rt, g, ps, c)]
+| [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -1246,6 +1263,7 @@ and
 and
   parse_primary_type = parser
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
+| [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
@@ -2225,7 +2243,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
   in
-    
+  
+  let enumdeclmap = 
+    let rec iter edm ds = 
+      match ds with
+        [] -> edm
+      | EnumDecl(l, en, elems) :: ds ->
+        begin 
+          match try_assoc en edm with
+        | Some((l', elems')) -> static_error l "Duplicate enum name."
+        | None -> iter ((en, (l, elems)) :: edm) ds
+        end;
+        begin
+          (List.iter (fun (en', (l', elems')) -> 
+            if(List.nodups (List.concat))
+          ))
+          
+        end
+      | _ :: ds -> iter edm ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> []
+  in
+   
   let functypenames = 
     let ds=match ps with
         [PackageDecl(_,"",[],ds)] -> ds
@@ -3404,7 +3445,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     scope := Some PredFamName;
                     (e, PredType (tparams, ts))
                   | None ->
-                    static_error l ("No such variable, constructor, regular function, or predicate: "^x)
+                    begin
+                      let rec iter eds = 
+                        match eds with
+                          [] -> static_error l ("No such variable, constructor, regular function, predicate, enum element: "^x)
+                        | (name, (l, elems)) :: eds ->
+                          if(List.mem x elems) then
+                            begin
+                              scope := Some (EnumElemName (get (index_of x elems 0)));
+                              (e, IntType)
+                            end
+                          else
+                            iter eds
+                      in
+                        iter enumdeclmap
+                    end
                 end
             end
         end
@@ -4227,9 +4282,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in ctxt#mk_app s []
         | FuncName -> (List.assoc x funcnameterms)
         | PredFamName -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
+        | EnumElemName(n) -> ctxt#mk_intlit n
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
-    | CastExpr (l, te, e) ->
+    | CastExpr (l, te, e) -> 
       let t = check_pure_type (pn,ilist) [] te in
       begin
         match (e, t) with
