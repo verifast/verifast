@@ -1,10 +1,10 @@
 package chat;
 
 import java.util.*;
-import wrapper.net.*;
-import wrapper.util.concurrent.*;
+import java.util.concurrent.*;
 import wrapper.io.*;
 import wrapper.lang.*;
+import wrapper.net.*;
 
 /*@
 
@@ -22,10 +22,10 @@ predicate_family_instance thread_run_post(Session.class)(Session session, any in
 
 public class Session implements Runnable {
     Room room;
-    Semaphore_ room_lock;
+    Semaphore room_lock;
     Socket_ socket;
     
-    public Session(Room room, Semaphore_ roomLock, Socket_ socket)
+    public Session(Room room, Semaphore roomLock, Socket_ socket)
         //@ requires [?f]lock(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
         //@ ensures session(result);
     {
@@ -35,7 +35,7 @@ public class Session implements Runnable {
         //@ close session(this);
     }
     
-    public void run_with_nick(Room room, Semaphore_ roomLock, InputStreamReader_ reader, OutputStreamWriter_ writer, String nick)
+    public void run_with_nick(Room room, Semaphore roomLock, InputStreamReader_ reader, OutputStreamWriter_ writer, String nick) throws InterruptedException
         //@ requires locked(roomLock, room_ctor(room), ?f) &*& room(room) &*& reader(reader) &*& writer(writer);
         //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer);
     {
@@ -96,10 +96,22 @@ public class Session implements Runnable {
         //@ requires thread_run_pre(Session.class)(this, ?info);
         //@ ensures thread_run_post(Session.class)(this, info);
     {
+        try {
+            this.runCore();
+        } catch (InterruptedException e) {
+            RuntimeException e0 = new RuntimeException(e);
+            throw e0;
+        }
+    }
+    
+    public void runCore() throws InterruptedException
+        //@ requires thread_run_pre(Session.class)(this, ?info);
+        //@ ensures thread_run_post(Session.class)(this, info);
+    {
         //@ open thread_run_pre(Session.class)(this,info);
         //@ open session(this);
         Room room = this.room;
-        Semaphore_ roomLock = this.room_lock;
+        Semaphore roomLock = this.room_lock;
         Socket_ socket = this.socket;
         OutputStreamWriter_ writer = socket.getWriter();
         InputStreamReader_ reader = socket.getReader();

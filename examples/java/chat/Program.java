@@ -1,10 +1,10 @@
 package chat;
 
-import wrapper.util.concurrent.*;
-import wrapper.net.*;
+import java.util.*;
+import java.util.concurrent.*;
 import wrapper.io.*;
 import wrapper.lang.*;
-import java.util.*;
+import wrapper.net.*;
 
 public class Program {
     public static void main(String[] args)
@@ -14,7 +14,7 @@ public class Program {
         Room room = new Room();
         //@ close room_ctor(room)();
         //@ close create_lock_ghost_arg(room_ctor(room));
-        Semaphore_ roomLock = new Semaphore_(1);
+        Semaphore roomLock = new Semaphore(1);
         ServerSocket_ serverSocket = new ServerSocket_(12345);
 
         while (true)

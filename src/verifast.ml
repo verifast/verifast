@@ -736,6 +736,9 @@ and
   | GotoStmt of loc * string
   | InvariantStmt of loc * pred (* join point *)
   | ProduceLemmaFunctionPointerChunkStmt of loc * string * stmt option
+  | Throw of loc * expr
+  | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
+  | TryFinally of loc * stmt list * loc * stmt list
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
@@ -899,6 +902,9 @@ let stmt_loc s =
   | Close (l, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _, _) -> l
+  | Throw (l, _) -> l
+  | TryCatch (l, _, _) -> l
+  | TryFinally (l, _, _, _) -> l
   | BlockStmt (l, ds, ss) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
@@ -935,7 +941,8 @@ let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint";
 let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"
 ]
-let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*"
+let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";
+  "throw"; "try"; "catch"; "throws"
 ]
 
 let file_type path=
@@ -1113,18 +1120,30 @@ and
   [<'(_, Kwd "}")>] -> []
 | [<v=parse_visibility;m=parse_java_member v cn;mr=parse_java_members cn>] -> m::mr
 and
+  parse_qualified_identifier = parser
+  [< '(l, Ident x); xs = rep (parser [< '(_, Kwd "."); '(l, Ident x) >] -> (l, x)) >] -> (l, x)::xs
+and
+  parse_throws_clause = parser
+  [< '(l, Kwd "throws"); _ = rep_comma parse_qualified_identifier >] -> ()
+and
   parse_java_member vis cn= parser
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
-    ps = parse_paramlist;co = opt parse_spec;ss=parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
+    ps = parse_paramlist;
+    _ = opt parse_throws_clause;
+    co = opt parse_spec;ss=parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
     [<'(_,Ident f);r=parser
       [<'(_, Kwd ";")>]->FieldMember(Field (l,Real,IdentTypeExpr(l,t),f,Instance,vis))
-    | [< ps = parse_paramlist;(ss,co)=parser
+    | [< ps = parse_paramlist;
+         _ = opt parse_throws_clause;
+         (ss,co)=parser
         [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
       | [<co = opt parse_spec;ss=parse_some_block>] -> (ss,co)
     >] -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
     >] -> r
-  | [< ps = parse_paramlist;i=parser
+  | [< ps = parse_paramlist;
+       _ = opt parse_throws_clause;
+       i=parser
       [<'(_, Kwd ";");co = opt parse_spec>]-> ConsMember(Cons(l,ps,co,None,vis))
     | [<co = opt parse_spec; ss=parse_some_block>]-> ConsMember(Cons(l,ps,co,ss,vis))
    >]-> i
@@ -1134,7 +1153,9 @@ and
       (match t with 
         None -> raise (ParseException (l, "Invalid type of field")) 
       | Some t -> FieldMember(Field (l,Real,t,f,Instance,vis)))
-  | [< ps = parse_paramlist;(ss,co)=parser
+  | [< ps = parse_paramlist;
+       _ = opt parse_throws_clause;
+      (ss,co)=parser
       [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
     | [<co = opt parse_spec; ss=parse_some_block>] -> (ss,co)
     >] -> 
@@ -1392,6 +1413,17 @@ and
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
      '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, p, b, closeBraceLoc)
+| [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
+| [< '(l, Kwd "try");
+     body = parse_block;
+     catches = rep (parser [< '(l, Kwd "catch"); '(_, Kwd "("); t = parse_type; '(_, Ident x); '(_, Kwd ")"); body = parse_block >] -> (l, t, x, body));
+     finally = opt (parser [< '(l, Kwd "finally"); body = parse_block >] -> (l, body))
+  >] ->
+  begin match (catches, finally) with
+    ([], Some (lf, finally)) -> TryFinally (l, body, lf, finally)
+  | (catches, None) -> TryCatch (l, body, catches)
+  | (catches, Some (lf, finally)) -> TryFinally (l, [TryCatch (l, body, catches)], lf, finally)
+  end
 | [< s = parse_block_stmt >] -> s
 | [< '(lcb, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
      '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
@@ -5144,6 +5176,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Close (l, g, targs, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> []
     | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
+    | Throw (l, e) -> []
+    | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
+    | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
     | BlockStmt (l, ds, ss) -> block_assigned_variables ss
     | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
@@ -6824,6 +6859,79 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                assume (ctxt#mk_not (eval_non_pure (pn,ilist) false h env e)) (fun _ ->
                  tcont sizemap tenv' ghostenv' h env')))
       )
+    | Throw (l, e) ->
+      if pure then static_error l "Throw statements are not allowed in a pure context.";
+      let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
+      check_ghost ghostenv l e;
+      ()
+    | TryCatch (l, body, catches) ->
+      if pure then static_error l "Try-catch statements are not allowed in a pure context.";
+      let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+      branch
+        begin fun () ->
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+        end
+        begin fun () ->
+          (* Havoc the variables that are assigned by the try block. *)
+          let xs = block_assigned_variables body in
+          let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+          let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
+          let env = bs @ env in
+          let h = [] in
+          let rec iter catches =
+            match catches with
+              [] -> ()
+            | (l, te, x, body)::catches ->
+              branch
+                begin fun () ->
+                  if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
+                  let t = check_pure_type (pn,ilist) tparams te in
+                  let xterm = get_unique_var_symb x t in
+                  let tenv = (x, t)::tenv in
+                  let env = (x, xterm)::env in
+                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+                end
+                begin fun () ->
+                  iter catches
+                end
+          in
+          iter catches
+        end
+    | TryFinally (l, body, lf, finally) ->
+      if pure then static_error l "Try-finally statements are not allowed in a pure context.";
+      let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+      (* Tricky stuff; I hope this is correct... *)
+      branch
+        begin fun () ->
+          let lblenv =
+            List.map
+              begin fun (lbl, cont) ->
+                let cont blocks_done sizemap tenv ghostenv h env =
+                  let tcont _ _ _ h env = cont blocks_done sizemap tenv ghostenv h env in
+                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+                in
+                (lbl, cont)
+              end
+              lblenv
+          in
+          let tcont _ _ _ h env =
+            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+          in
+          let return_cont h retval =
+            let tcont _ _ _ h _ = return_cont h retval in
+            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+          in
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+        end
+        begin fun () ->
+          let xs = block_assigned_variables body in
+          let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+          let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
+          let env = bs @ env in
+          let h = [] in
+          let tcont _ _ _ _ _ = () in
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+        end
     | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
@@ -7588,7 +7696,7 @@ let prover_banners () = String.concat "" (List.map (fun (_, (banner, _)) -> bann
 
 let banner () =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
-  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/> and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, and Jan Smans" ^
+  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, Jan Smans <http://www.cs.kuleuven.be/~jans/>, and Frank Piessens, with contributions by Cedric Cuypers, Frederic Vogels, and Lieven Desmet" ^
   prover_banners ()
 
 let lookup_prover prover =

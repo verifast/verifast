@@ -1,0 +1,29 @@
+package java.util.concurrent;
+
+/*@
+
+predicate lock(Semaphore l; predicate() inv);
+
+predicate locked(Semaphore l, predicate() inv, real frac);
+
+predicate create_lock_ghost_arg(predicate() inv) = true;
+
+lemma void lock_dispose(Semaphore l);
+    requires lock(l, ?a);
+    ensures a();
+
+@*/
+
+public class Semaphore {
+    Semaphore(int n);
+        //@ requires n == 1 &*& create_lock_ghost_arg(?a) &*& a();
+        //@ ensures lock(result, a);
+
+    void acquire();
+        //@ requires [?f]lock(this, ?a);
+        //@ ensures locked(this, a, f) &*& a();
+
+    void release();
+        //@ requires locked(this, ?a, ?f) &*& a();
+        //@ ensures [f]lock(this, a);
+}

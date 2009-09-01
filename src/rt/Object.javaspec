@@ -15,10 +15,22 @@ lemma void assume(boolean b);
     ensures b;
 
 @*/
-public class Object{
-  public Object()
-  //@ requires true;
-  //@ ensures  true;
-  {
-  }
+
+public class Object {
+    public Object();
+        //@ requires true;
+        //@ ensures true;
+}
+
+public class InterruptedException {
+}
+
+public class RuntimeException {
+    public RuntimeException();
+        //@ requires true;
+        //@ ensures true;
+
+    public RuntimeException(Object innerException);
+        //@ requires true;
+        //@ ensures true;
 }
