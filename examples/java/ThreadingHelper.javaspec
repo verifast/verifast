@@ -1,0 +1,28 @@
+package verifast;
+
+/*@
+
+predicate joinable_runnable_open(JoinableRunnable r, Runnable r0);
+predicate joinable_runnable_closed(JoinableRunnable r, Runnable r0);
+
+lemma void close_joinable_runnable(JoinableRunnable r);
+    requires joinable_runnable_open(r, ?r0) &*& thread_run_pre(r0.getClass())(r0, ?info);
+    ensures joinable_runnable_closed(r, r0) &*& thread_run_pre(r.getClass())(r, info);
+
+@*/
+
+public class JoinableRunnable implements Runnable {
+    public void run();
+        //@ requires thread_run_pre(this.getClass())(this, ?info);
+        //@ ensures thread_run_post(this.getClass())(this, info);
+}
+
+public class ThreadingHelper {
+    public static JoinableRunnable createJoinableRunnable(Runnable r);
+        //@ requires true;
+        //@ ensures joinable_runnable_open(result, r);
+    
+    public static void join(Thread t, JoinableRunnable r);
+        //@ requires thread_started(t, r, ?info) &*& joinable_runnable_closed(r, ?r0);
+        //@ ensures thread_run_post(r0.getClass())(r0, info);
+}

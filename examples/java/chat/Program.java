@@ -3,7 +3,6 @@ package chat;
 import java.util.*;
 import java.util.concurrent.*;
 import wrapper.io.*;
-import wrapper.lang.*;
 import wrapper.net.*;
 
 public class Program {
@@ -24,7 +23,7 @@ public class Program {
             //@ split_fraction lock(roomLock, _);
             Session session = new Session(room, roomLock, socket);
             //@ close thread_run_pre(Session.class)(session,unit);
-            Thread_ t = new Thread_(session);
+            Thread t = new Thread(session);
             t.start();
         }
     }

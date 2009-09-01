@@ -3,7 +3,6 @@ package chat;
 import java.util.*;
 import java.util.concurrent.*;
 import wrapper.io.*;
-import wrapper.lang.*;
 import wrapper.net.*;
 
 /*@

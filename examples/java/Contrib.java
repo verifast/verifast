@@ -1,5 +1,5 @@
 import java.util.concurrent.*;
-import wrapper.lang.*;
+import verifast.*;
 
 class Counter {
     int value;
@@ -143,17 +143,21 @@ class Program {
         Session session1 = new Session(c, lock);
         //@ close contribute_pre(session1, box1, handle1, box2, handle2, box1, c, lock);
         //@ close thread_run_pre(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock));
-        Thread_ thread1 = new Thread_(session1);
+        JoinableRunnable session1Joinable = ThreadingHelper.createJoinableRunnable(session1);
+        //@ close_joinable_runnable(session1Joinable);
+        Thread thread1 = new Thread(session1Joinable);
         thread1.start();
         Session session2 = new Session(c, lock);
         //@ close contribute_pre(session2, box1, handle1, box2, handle2, box2, c, lock);
         //@ close thread_run_pre(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock));
-        Thread_ thread2 = new Thread_(session2);
+        JoinableRunnable session2Joinable = ThreadingHelper.createJoinableRunnable(session2);
+        //@ close_joinable_runnable(session2Joinable);
+        Thread thread2 = new Thread(session2Joinable);
         thread2.start();
-        thread1.join();
+        ThreadingHelper.join(thread1, session1Joinable);
         //@ open thread_run_post(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock));
         
-        thread2.join();
+        ThreadingHelper.join(thread2, session2Joinable);
         //@ open thread_run_post(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock));
         
         //@ lock_dispose(lock);

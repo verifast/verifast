@@ -38,7 +38,7 @@ cd java
 verifast_both -c hello.scala
 verifast_both -disable_overflow_check -c map.java
 verifast_both -disable_overflow_check -c Counter.java
-verifast_both -disable_overflow_check -c Contrib.java
+verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -c Tree.java
 cd Tree2
 verifast_both -c Tree.java

@@ -1130,7 +1130,10 @@ and
   [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
     ps = parse_paramlist;
     _ = opt parse_throws_clause;
-    co = opt parse_spec;ss=parse_some_block>] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
+    (ss, co) = parser
+      [< '(_, Kwd ";"); co = opt parse_spec >] -> (None, co)
+    | [< co = opt parse_spec; ss = parse_some_block >] -> (ss, co)
+    >] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
 | [<'(l,Ident t);e=parser
     [<'(_,Ident f);r=parser
       [<'(_, Kwd ";")>]->FieldMember(Field (l,Real,IdentTypeExpr(l,t),f,Instance,vis))
@@ -7481,10 +7484,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
-     [] -> (match file_type path with
-              Java -> verify_classes boxes lems classmap;
-            | _ -> () 
-            )
+     [] -> (boxes, lems)
     | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds -> let g=full_name pn g in
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
@@ -7574,8 +7574,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   let rec verify_funcs' boxes lems ps=
     match ps with
-      PackageDecl(l,pn,il,ds)::rest-> verify_funcs (pn,il)  boxes lems ds;verify_funcs' boxes lems rest
-    | [] -> ()
+      PackageDecl(l,pn,il,ds)::rest-> let (boxes, lems) = verify_funcs (pn,il) boxes lems ds in verify_funcs' boxes lems rest
+    | [] -> verify_classes boxes lems classmap
   in
   verify_funcs' [] lems0 ps
   

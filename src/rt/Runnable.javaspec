@@ -1,4 +1,4 @@
-package wrapper.lang;
+package java.lang;
 
 /*@
 
@@ -6,26 +6,26 @@ predicate_family thread_run_pre(Class c)(Runnable run, any info);
 predicate_family thread_run_post(Class c)(Runnable run, any info);
 
 @*/
-public interface Runnable{ 
-  public void run();
-  //@ requires thread_run_pre(this.getClass())(this, ?info);
-  //@ ensures thread_run_post(this.getClass())(this, info);
+
+public interface Runnable {
+    public void run();
+        //@ requires thread_run_pre(this.getClass())(this, ?info);
+        //@ ensures thread_run_post(this.getClass())(this, info);
 }
 
 /*@
-predicate thread(Thread_ thread, Runnable run);
-predicate thread_started(Thread_ thread,Runnable run, any info);
+
+predicate thread(Thread thread, Runnable run);
+predicate thread_started(Thread thread, Runnable run, any info);
+
 @*/
 
-
-public class Thread_{
-  public Thread_(Runnable run);
-    //@ requires true;
-    //@ ensures thread(result,run);
-  void start();
-    //@ requires thread(this,?run) &*& thread_run_pre(run.getClass())(run, ?info);
-    //@ ensures thread_started(this,run,info) ;
-  void join();
-    //@ requires thread_started(this,?run,?info);
-    //@ ensures thread_run_post(run.getClass())(run, info);
+public class Thread {
+    public Thread(Runnable run);
+        //@ requires true;
+        //@ ensures thread(result, run);
+    
+    void start();
+        //@ requires thread(this, ?run) &*& thread_run_pre(run.getClass())(run, ?info);
+        //@ ensures thread_started(this, run, info);
 }
