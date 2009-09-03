@@ -163,7 +163,7 @@ let show_ide initialPath prover =
     let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_core keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
+        make_lexer_core keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
       Stream.iter (fun _ -> ()) tokenStream;
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter
@@ -171,9 +171,9 @@ let show_ide initialPath prover =
     match !path with
       None -> ()
     | Some path ->
-      if Filename.check_suffix path ".c" then highlight (veri_keywords @ c_keywords)
-      else if Filename.check_suffix path ".h" then highlight (veri_keywords @ c_keywords)
-      else if Filename.check_suffix path ".java" then highlight (veri_keywords @ java_keywords)
+      if Filename.check_suffix path ".c" then highlight (common_keywords @ c_keywords)
+      else if Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
+      else if Filename.check_suffix path ".java" then highlight (common_keywords @ java_keywords)
       else ()
   in
   let add_buffer() =

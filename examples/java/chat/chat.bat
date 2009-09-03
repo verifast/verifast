@@ -1,4 +1,4 @@
-javac -classpath .;..\..\..\src\rt\wrappers *.java
+javac *.java
 if errorlevel 1 goto end
-java -cp ..\;..\..\..\src\rt\wrappers chat.Program
+java -cp .. chat.Program
 :end

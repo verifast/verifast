@@ -1,17 +1,17 @@
 package chat;
 
+import java.io.*;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import wrapper.io.*;
-import wrapper.net.*;
 
 /*@
 
 predicate_ctor room_ctor(Room room)() = room(room);
 
 predicate session(Session session) =
-    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket(socket, ?reader, ?writer)
-    &*& [?f]lock(roomLock, room_ctor(room)) &*& reader(reader) &*& writer(writer);
+    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo)
+    &*& [?f]lock(roomLock, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
 
 predicate_family_instance thread_run_pre(Session.class)(Session session, any info) = session(session);
 
@@ -22,10 +22,14 @@ predicate_family_instance thread_run_post(Session.class)(Session session, any in
 public class Session implements Runnable {
     Room room;
     Semaphore room_lock;
-    Socket_ socket;
+    Socket socket;
     
-    public Session(Room room, Semaphore roomLock, Socket_ socket)
-        //@ requires [?f]lock(roomLock, room_ctor(room)) &*& socket(socket, ?reader, ?writer) &*& reader(reader) &*& writer(writer);
+    public Session(Room room, Semaphore roomLock, Socket socket)
+        /*@
+        requires
+            [?f]lock(roomLock, room_ctor(room)) &*&
+            Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        @*/
         //@ ensures session(result);
     {
         this.room = room;
@@ -34,9 +38,14 @@ public class Session implements Runnable {
         //@ close session(this);
     }
     
-    public void run_with_nick(Room room, Semaphore roomLock, InputStreamReader_ reader, OutputStreamWriter_ writer, String nick) throws InterruptedException
-        //@ requires locked(roomLock, room_ctor(room), ?f) &*& room(room) &*& reader(reader) &*& writer(writer);
-        //@ ensures [f]lock(roomLock, room_ctor(room))&*& reader(reader) &*& writer(writer);
+    public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException, IOException
+        /*@
+        requires
+            locked(roomLock, room_ctor(room), ?f) &*& room(room) &*&
+            BufferedReader(reader, ?reader0, ?reader0Info) &*&
+            Writer(writer.getClass())(writer, ?writerInfo);
+        @*/
+        //@ ensures [f]lock(roomLock, room_ctor(room)) &*& BufferedReader(reader, reader0, reader0Info) &*& Writer(writer.getClass())(writer, writerInfo);
     {
         Member member = null;
         String joinMessage = nick + " has joined the room.";
@@ -58,7 +67,7 @@ public class Session implements Runnable {
         {
             String message = reader.readLine();
             while (message != null)
-                //@ invariant reader(reader) &*& [f]lock(roomLock, room_ctor(room));
+                //@ invariant BufferedReader(reader, reader0, reader0Info) &*& [f]lock(roomLock, room_ctor(room));
             {
                 roomLock.acquire();
                 //@ open room_ctor(room)();
@@ -87,8 +96,8 @@ public class Session implements Runnable {
         roomLock.release();
         
         //@ open member(member);
-        //@ assert writer(?memberWriter);
-        //@ assume(memberWriter == writer);
+        //@ assert Writer(?memberWriterClass)(?memberWriter, ?memberWriterInfo);
+        //@ assume(memberWriterClass == memberWriter.getClass() && memberWriter == writer && memberWriterInfo == writerInfo);
     }
     
     public void run()
@@ -100,10 +109,13 @@ public class Session implements Runnable {
         } catch (InterruptedException e) {
             RuntimeException e0 = new RuntimeException(e);
             throw e0;
+        } catch (IOException e) {
+            RuntimeException e0 = new RuntimeException(e);
+            throw e0;
         }
     }
     
-    public void runCore() throws InterruptedException
+    public void runCore() throws InterruptedException, IOException
         //@ requires thread_run_pre(Session.class)(this, ?info);
         //@ ensures thread_run_post(Session.class)(this, info);
     {
@@ -111,9 +123,21 @@ public class Session implements Runnable {
         //@ open session(this);
         Room room = this.room;
         Semaphore roomLock = this.room_lock;
-        Socket_ socket = this.socket;
-        OutputStreamWriter_ writer = socket.getWriter();
-        InputStreamReader_ reader = socket.getReader();
+        Socket socket = this.socket;
+        InputStream in = socket.getInputStream();
+        //@ assert InputStream(in.getClass())(in, ?inInfo);
+        InputStreamReader reader0 = new InputStreamReader(in);
+        //@ InputStreamReader_upcast(reader0);
+        BufferedReader reader = new BufferedReader(reader0);
+        //@ assert BufferedReader(reader, reader0, ?readerInfo);
+        OutputStream out = socket.getOutputStream();
+        //@ assert OutputStream(out.getClass())(out, ?outInfo);
+        OutputStreamWriter writer0 = new OutputStreamWriter(out);
+        //@ OutputStreamWriter_upcast(writer0);
+        BufferedWriter writer1 = new BufferedWriter(writer0);
+        //@ BufferedWriter_upcast(writer1);
+        Writer writer = writer1;
+        //@ assert Writer(writer.getClass())(writer, ?writerInfo);
         
         writer.write("Welcome to the chat room.\r\n");
         writer.write("The following members are present: ");
@@ -130,7 +154,8 @@ public class Session implements Runnable {
             while (hasNext)
                 /*@
                 invariant
-                    writer(writer) &*& iter(iter, membersList, members, ?i) &*& foreach(members, @member)
+                    Writer(writer.getClass())(writer, writerInfo) &*&
+                    iter(iter, membersList, members, ?i) &*& foreach(members, @member)
                     &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
                 @*/
             {
@@ -146,6 +171,7 @@ public class Session implements Runnable {
                 hasNext = iter.hasNext();
             }
             writer.write("\r\n");
+            writer.flush();
             //@ iter_dispose(iter);
         }
         //@ close room(room);
@@ -155,9 +181,10 @@ public class Session implements Runnable {
         {
             boolean done = false;
             while (!done)
-                //@ invariant writer(writer) &*& reader(reader) &*& [?f]lock(roomLock, room_ctor(room));
+                //@ invariant Writer(writer.getClass())(writer, writerInfo) &*& BufferedReader(reader, reader0, readerInfo) &*& [?f]lock(roomLock, room_ctor(room));
             {
                 writer.write("Please enter your nick: \r\n");
+                writer.flush();
                 {
                     String nick = reader.readLine();
                     if (nick == null) {
@@ -171,6 +198,7 @@ public class Session implements Runnable {
                                 //@ close room_ctor(room)();
                                 roomLock.release();
                                 writer.write("Error: This nick is already in use.\r\n");
+                                writer.flush();
                             } else {
                                 this.run_with_nick(room, roomLock, reader, writer, nick);
                                 done = true;
@@ -180,7 +208,15 @@ public class Session implements Runnable {
                 }
             }
         }
-        socket.close_();
+        
+        //@ BufferedReader_dispose(reader);
+        //@ InputStreamReader_downcast(reader0, in, inInfo);
+        //@ InputStreamReader_dispose(reader0);
+        //@ BufferedWriter_downcast(writer1, writer0, OutputStreamWriter_info(out, outInfo));
+        //@ BufferedWriter_dispose(writer1);
+        //@ OutputStreamWriter_downcast(writer0, out, outInfo);
+        //@ OutputStreamWriter_dispose(writer0);
+        socket.close();
         //@ close thread_run_post(Session.class)(this,info);
     }
 }

@@ -167,8 +167,8 @@ struct Node {
 };
 
 struct Node* internalCreate(struct Node* parent)
-  requires emp;
-  ensures result!=0 &*& tree(result, tree(result, Nil, Nil)) &*& result->parent |-> parent;
+  //@ requires emp;
+  //@ ensures result!=0 &*& tree(result, tree(result, Nil, Nil)) &*& result->parent |-> parent;
 {
   struct Node* n = malloc(sizeof(struct Node));
   if(n==0) {
@@ -215,8 +215,8 @@ void fix(struct Node* node)
 }
 
 void abort()
-  requires emp;
-  ensures false; 
+  //@ requires emp;
+  //@ ensures false; 
 {
   while(true)
    //@ invariant emp; 
@@ -225,8 +225,8 @@ void abort()
 }
 
 int internalGetNbOfNodes(struct Node* n)
-  requires tree(n, ?value);
-  ensures tree(n, value) &*& result == size(value);
+  //@ requires tree(n, ?value);
+  //@ ensures tree(n, value) &*& result == size(value);
 {
   //@ open tree(n, value);
   int c = n->count;

@@ -261,7 +261,7 @@ type range_kind =
   | CommentRange
   | ErrorRange
 
-let make_lexer_core keywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail =
+let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail =
   let textlength = String.length text in
   let textpos = ref 0 in
   let text_peek () = if !textpos = textlength then '\000' else text.[!textpos] in
@@ -315,9 +315,12 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
   
   let kwd_table = Hashtbl.create 17 in
   List.iter (fun s -> Hashtbl.add kwd_table s (Kwd s)) keywords;
+  let ghost_kwd_table = Hashtbl.create 17 in
+  List.iter (fun s -> Hashtbl.add ghost_kwd_table s (Kwd s)) (keywords @ ghostKeywords);
+  let get_kwd_table() = if !ghost_range_start = None then kwd_table else ghost_kwd_table in
   let ident_or_keyword id isAlpha =
     try
-      let t = Hashtbl.find kwd_table id in
+      let t = Hashtbl.find (get_kwd_table()) id in
       if isAlpha then
         reportRange (if !ghost_range_start = None then KeywordRange else GhostKeywordRange) (current_loc());
       t
@@ -327,7 +330,7 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
       if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
   and keyword_or_error c =
     let s = String.make 1 c in
-    try Hashtbl.find kwd_table s with
+    try Hashtbl.find (get_kwd_table()) s with
       Not_found -> error "Illegal character"
   in
   let start_token() =
@@ -416,9 +419,11 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
       if s = "@*/" then
       begin
         ghost_range_end();
-        reportRange GhostRangeDelimiter (current_loc())
-      end;
-      Some (ident_or_keyword s false)
+        reportRange GhostRangeDelimiter (current_loc());
+        Some (Kwd "@*/")
+      end
+      else
+        Some (ident_or_keyword s false)
   and neg_number () =
     match text_peek () with
       ('0'..'9' as c) ->
@@ -590,8 +595,8 @@ let make_lexer_core keywords path text reportRange inComment inGhostRange except
    in_comment,
    in_ghost_range)
 
-let make_lexer keywords path text reportRange reportShouldFail =
-  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords path text reportRange false false true reportShouldFail in
+let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail in
   (loc, ignore_eol, token_stream)
 
 (* Region: ASTs *)
@@ -929,19 +934,31 @@ let type_expr_loc t =
 
 (* Region: the parser *)
 
-let veri_keywords= ["predicate";"requires";"|->"; "&*&"; "inductive";"fixpoint"; "switch"; "case"; ":";"return";
-  "ensures";"close";"void"; "lemma";"open"; "if"; "else"; "emp"; "while"; "!="; "invariant"; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
-  "||"; "forall"; "_"; "@*/"; "!";"predicate_family"; "predicate_family_instance";"predicate_ctor";"assert";"leak"; "@"; "["; "]";"{";
-  "}";";"; "int";"true"; "false";"("; ")"; ",";"="; "|";"+"; "-"; "=="; "?";
+let common_keywords = [
+  "switch"; "case"; ":"; "return";
+  "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
+  "||"; "!"; "["; "]"; "{";
+  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?";
+  "*"; "/"; "&"; "^"; "~"; "assert"
+]
+
+let ghost_keywords = [
+  "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
+  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant";
+  "forall"; "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "*"; "/"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "&"; "^"; "~"; "currentThread"
+  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
+  "currentThread"
 ]
-let c_keywords= ["struct"; "bool"; "char";"->";"sizeof";"typedef"; "#"; "include"; "ifndef";
+
+let c_keywords = [
+  "struct"; "bool"; "char"; "->"; "sizeof"; "typedef"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"
 ]
-let java_keywords= ["public";"char";"private";"protected" ;"class" ; "." ; "static" ; "boolean";"new";"null";"interface";"implements";"package";"import";"*";
+
+let java_keywords = [
+  "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import"; "*";
   "throw"; "try"; "catch"; "throws"
 ]
 
@@ -1726,7 +1743,7 @@ let parse_package_decl= parser
   [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is,ds)
 
 let parse_scala_file path reportRange =
-  let lexer = make_lexer (veri_keywords@Scala.keywords) in
+  let lexer = make_lexer (common_keywords @ Scala.keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,"java.lang",None)],ds) in
   try
@@ -1739,7 +1756,7 @@ let parse_java_file path reportRange=
   if Filename.check_suffix (Filename.basename path) ".scala" then
     parse_scala_file path reportRange
   else
-  let lexer = make_lexer (veri_keywords@java_keywords) in
+  let lexer = make_lexer (common_keywords @ java_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< p = parse_package_decl; _ = Stream.empty >] -> p in
   try
@@ -1760,7 +1777,7 @@ in
   parse_include_directives
 
 let parse_c_file path reportRange reportShouldFail =
-  let lexer = make_lexer (veri_keywords@c_keywords) in
+  let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
   let parse_c_file =
     parser
@@ -1774,7 +1791,7 @@ let parse_c_file path reportRange reportShouldFail =
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
 let parse_header_file basePath relPath reportRange reportShouldFail =
-  let lexer = make_lexer (veri_keywords@c_keywords) in
+  let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange reportShouldFail in
   let parse_header_file =
     parser
@@ -1793,7 +1810,7 @@ let parse_header_file basePath relPath reportRange reportShouldFail =
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
 let rec parse_jarspec_file basePath relPath reportRange =
-  let lexer = make_lexer ["."] in
+  let lexer = make_lexer ["."] [] in
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
   let rec parse_file=
     parser
@@ -1821,7 +1838,7 @@ let rec parse_main_class= parser
   >] -> e
   
 let rec parse_jarsrc_file basePath relPath reportRange =
-  let lexer = make_lexer [".";"-"] in
+  let lexer = make_lexer [".";"-"] [] in
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
   let main=ref ("",dummy_loc) in
   let rec parse_file =
@@ -3778,15 +3795,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (Access (l, w, f, wv), tenv', [])
     | CallPred (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (callee_tparams, arity, xs, inputParamCount) =
-        match try_assoc' (pn,ilist) p#name predfammap with
-          Some (_, callee_tparams, arity, xs, _, inputParamCount) -> (callee_tparams, arity, xs, inputParamCount)
+      let (p, callee_tparams, arity, xs, inputParamCount) =
+        match resolve (pn,ilist) l p#name predfammap with
+          Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) -> (new predref pname, callee_tparams, arity, xs, inputParamCount)
         | None ->
           begin
-            match try_assoc' (pn,ilist) p#name tenv with
-              None -> static_error l ("No such predicate: "^p#name)
-            | Some (PredType (callee_tparams, ts)) -> (callee_tparams, 0, ts, None)
-            | Some _ -> static_error l ("Variable is not of predicate type: "^p#name)
+            match try_assoc p#name tenv with
+              None -> static_error l ("No such predicate: " ^ p#name)
+            | Some (PredType (callee_tparams, ts)) -> (new predref (p#name), callee_tparams, 0, ts, None)
+            | Some _ -> static_error l ("Variable is not of predicate type: " ^ p#name)
           end
       in
       begin
@@ -4676,7 +4693,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       evalpat (pn,ilist) ghostenv env rhs f#range f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
     | WCallPred (l, g, targs, pats0, pats) ->
       let g_symb =
-        match try_assoc' (pn,ilist) g#name predfammap with
+        match try_assoc g#name predfammap with
           Some (_, _, _, _, symb, _) -> (symb, true)
         | None -> (List.assoc g#name env, false)
       in

@@ -1,7 +1,7 @@
 package chat;
 
+import java.io.*;
 import java.util.*;
-import wrapper.io.*;
 
 /*@
 
@@ -56,7 +56,7 @@ public class Room {
         return hasMember;
     }
     
-    public void broadcast_message(String message)
+    public void broadcast_message(String message) throws IOException
         //@ requires room(this);
         //@ ensures room(this);
     {
@@ -78,9 +78,10 @@ public class Room {
             //@ containsIth(members, i);
             //@ foreach_remove(members, member);
             //@ open member(member);
-            OutputStreamWriter_ writer = member.writer;
+            Writer writer = member.writer;
             writer.write(message);
             writer.write("\r\n");
+            writer.flush();
             //@ close member(member);
             //@ foreach_unremove(members, member);
             hasNext = iter.hasNext();

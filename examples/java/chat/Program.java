@@ -1,12 +1,12 @@
 package chat;
 
+import java.io.*;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import wrapper.io.*;
-import wrapper.net.*;
 
 public class Program {
-    public static void main(String[] args)
+    public static void main(String[] args) throws IOException
         //@ requires true;
         //@ ensures true;
     {
@@ -14,15 +14,15 @@ public class Program {
         //@ close room_ctor(room)();
         //@ close create_lock_ghost_arg(room_ctor(room));
         Semaphore roomLock = new Semaphore(1);
-        ServerSocket_ serverSocket = new ServerSocket_(12345);
+        ServerSocket serverSocket = new ServerSocket(12345);
 
         while (true)
-            //@ invariant [_]lock(roomLock, room_ctor(room)) &*& server_socket(serverSocket);
+            //@ invariant [_]lock(roomLock, room_ctor(room)) &*& ServerSocket(serverSocket);
         {
-            Socket_ socket = serverSocket.accept();
+            Socket socket = serverSocket.accept();
             //@ split_fraction lock(roomLock, _);
             Session session = new Session(room, roomLock, socket);
-            //@ close thread_run_pre(Session.class)(session,unit);
+            //@ close thread_run_pre(Session.class)(session, unit);
             Thread t = new Thread(session);
             t.start();
         }

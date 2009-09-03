@@ -1,13 +1,13 @@
 package chat;
 
+import java.io.*;
+import java.net.*;
 import java.util.*;
-import wrapper.io.*;
-import wrapper.net.*;
 
 /*@
 
 predicate member(Member member) =
-    member.nick |-> ?nick &*& member.writer |-> ?writer &*& writer(writer);
+    member.nick |-> ?nick &*& member.writer |-> ?writer &*& Writer(writer.getClass())(writer, _);
 
 lemma void member_distinct(Member m1,Member m2)
     requires member(m1) &*& member(m2);
@@ -27,10 +27,10 @@ lemma void foreach_member_not_contains(listval members, Member member);
 
 class Member {
     String nick;
-    OutputStreamWriter_ writer;
+    Writer writer;
     
-    public Member(String nick, OutputStreamWriter_ writer)
-        //@ requires writer(writer);
+    public Member(String nick, Writer writer)
+        //@ requires Writer(writer.getClass())(writer, _);
         //@ ensures member(result);
     {
         this.nick = nick;

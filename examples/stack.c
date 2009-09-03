@@ -11,8 +11,8 @@ predicate_family Ownership(void* destructor)(void* data, any info);
 @*/
 
 typedef void destructor(void* data);
-  requires Ownership(this)(data, _);
-  ensures emp;
+  //@ requires Ownership(this)(data, _);
+  //@ ensures emp;
   
 
 /*
@@ -221,8 +221,8 @@ void destroy_stack(struct stack* stack)
 }
 
 void push(struct stack* stack, void* data)
-  requires Stack(stack, ?destructor, ?Stack) &*& Ownership(destructor)(data, ?info);
-  ensures Stack(stack, destructor, Push(data, info, Stack));
+  //@ requires Stack(stack, ?destructor, ?Stack) &*& Ownership(destructor)(data, ?info);
+  //@ ensures Stack(stack, destructor, Push(data, info, Stack));
 {
   //@ open Stack(stack, destructor, Stack);
   struct node* node = malloc( sizeof( struct node ) );
@@ -240,11 +240,15 @@ void push(struct stack* stack, void* data)
 }
 
 void* pop(struct stack* stack)
+  /*@
   requires Stack(stack, ?destructor, ?Stack) &*&
            Stack != Nil;
+  @*/
+  /*@
   ensures Stack(stack, destructor, Pop(Stack)) &*&
           Ownership(destructor)(result, ?info) &*&
           Stack == Cons(result, info, Pop(Stack));
+  @*/
 {
   //@ open Stack(stack, destructor, Stack);
   struct node* first = stack->first;
@@ -260,10 +264,12 @@ void* pop(struct stack* stack)
 }
 
 destructor* get_destructor(struct stack* stack)
-  requires Stack(stack, ?destructor, ?Stack);
+  //@ requires Stack(stack, ?destructor, ?Stack);
+  /*@
   ensures Stack(stack, destructor, Stack) &*&
           is_destructor(result) == true &*&
           result == destructor;
+  @*/
 {
   //@ open Stack(stack, destructor, Stack);
   destructor* d = stack->destructor;
@@ -272,8 +278,8 @@ destructor* get_destructor(struct stack* stack)
 }
 
 void pop_destroy(struct stack* stack)
-  requires Stack(stack, ?destructor, ?Stack) &*& Stack != Nil;
-  ensures Stack(stack, destructor, Pop(Stack));
+  //@ requires Stack(stack, ?destructor, ?Stack) &*& Stack != Nil;
+  //@ ensures Stack(stack, destructor, Pop(Stack));
 {
   void* data = pop(stack);
   destructor* d = get_destructor(stack);
@@ -281,8 +287,8 @@ void pop_destroy(struct stack* stack)
 }
 
 bool is_empty(struct stack* stack)
-  requires Stack(stack, ?destructor, ?Stack);
-  ensures Stack(stack, destructor, Stack) &*& result == IsEmpty(Stack);
+  //@ requires Stack(stack, ?destructor, ?Stack);
+  //@ ensures Stack(stack, destructor, Stack) &*& result == IsEmpty(Stack);
 {
   //@ open Stack(stack, destructor, Stack);
   struct node* first = stack->first;
@@ -293,8 +299,8 @@ bool is_empty(struct stack* stack)
 }
 
 int size(struct stack* stack)
-  requires Stack(stack, ?destructor, ?Stack);
-  ensures Stack(stack, destructor, Stack) &*& result == Size(Stack);
+  //@ requires Stack(stack, ?destructor, ?Stack);
+  //@ ensures Stack(stack, destructor, Stack) &*& result == Size(Stack);
 {
   //@ open Stack(stack, destructor, Stack);
   int size = stack->size;
@@ -324,8 +330,8 @@ predicate Data(struct data* data, int foo, int bar)
 @*/
 
 struct data* create_data(int foo, int bar)
-  requires emp;
-  ensures Ownership(destroy_data)(result, DataCarrier(foo, bar));
+  //@ requires emp;
+  //@ ensures Ownership(destroy_data)(result, DataCarrier(foo, bar));
 {
   struct data* data = malloc( sizeof( struct data ) );
   if ( data == 0 ) abort();
@@ -374,8 +380,8 @@ predicate_family_instance Ownership(destroy_data)(struct data* data, DataCarrier
 @*/
 
 void destroy_data(struct data* data) //@ : destructor
-  requires Ownership(destroy_data)(data, _);
-  ensures emp;
+  //@ requires Ownership(destroy_data)(data, _);
+  //@ ensures emp;
 {
   //@ open Ownership(destroy_data)(data, _);
   //@ open Data(data, _, _);
@@ -383,8 +389,8 @@ void destroy_data(struct data* data) //@ : destructor
 }
 
 void check()
-  requires emp;
-  ensures emp;
+  //@ requires emp;
+  //@ ensures emp;
 {
   struct stack* stack = create_empty_stack(destroy_data);
   //@ assert Stack(stack, _, ?S0);
@@ -415,8 +421,8 @@ void check()
 }
 
 void check2()
-  requires emp;
-  ensures emp;
+  //@ requires emp;
+  //@ ensures emp;
 {
   struct stack* stack = create_empty_stack(destroy_data);
   //@ assert Stack(stack, _, ?InitStack);

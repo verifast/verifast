@@ -25,6 +25,9 @@ public class Object {
 public class InterruptedException {
 }
 
+public class IOException {
+}
+
 public class RuntimeException {
     public RuntimeException();
         //@ requires true;
