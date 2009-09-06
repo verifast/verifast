@@ -17,11 +17,14 @@ let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 let fprintff format = kfprintf (fun chan -> flush chan) format
 let printff format = fprintff stdout format
 
+(** Keeps manifests produced by the compilation phase, for use during the linking phase. Avoids writing manifest files to disk. *)
 let manifest_map: (string * string list) list ref = ref []
 let jardeps_map: (string * string list) list ref = ref []
 
+(** Facilitates continuation-passing-style programming. *)
 let ($.) f x = f x
 
+(** Same as [List.for_all2 f (take n xs) (take n ys)] *)
 let for_all_take2 f n xs ys =
   let rec iter n xs ys =
     if n <= 0 then true else
@@ -34,6 +37,7 @@ let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
 let flatmap f xs = List.concat (List.map f xs)
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
 let rec take n xs = if n = 0 then [] else match xs with x::xs -> x::take (n - 1) xs
+(* Same as [(take n xs, drop n xs)] *)
 let take_drop n xs =
   let rec iter left right k =
     if k = 0 then
@@ -60,6 +64,7 @@ let rec index_of x xs i =
   | y :: ys when x = y -> Some(i)
   | _ :: ys -> index_of x ys (i + 1)
 
+(** Same as [List.assoc x xys], except returns [Some y] if [xys] binds [x] to [y], or [None] if [xys] does not contain a binding for [x]. *)
 let rec try_assoc x xys =
   match xys with
     [] -> None
@@ -72,12 +77,14 @@ let rec try_assoc0 x xys =
   | ((x', y) as xy)::xys when x' = x -> Some xy
   | _::xys -> try_assoc0 x xys
 
+(** Same as [try_assoc], except performs reference comparison instead of structural comparison. *)
 let rec try_assq x xys =
   match xys with
     [] -> None
   | (x', y)::xys when x' == x -> Some y
   | _::xys -> try_assq x xys
 
+(** Same as [try_assoc], except also returns the index of the binding. *)
 let try_assoc_i x xys =
   let rec iter k xys =
     match xys with
@@ -111,6 +118,7 @@ let chop_suffix s s0 =
   let n = String.length s in
   if n0 <= n && String.sub s (n - n0) n0 = s0 then Some (String.sub s 0 (n - n0)) else None
 
+(** Same as [try_assoc x (xys1 @ xys2)] *)
 let try_assoc2 x xys1 xys2 =
   match try_assoc x xys1 with
     None -> try_assoc x xys2
@@ -119,15 +127,15 @@ let try_assoc2 x xys1 xys2 =
 let assoc2 x xys1 xys2 =
   let (Some y) = try_assoc2 x xys1 xys2 in y
 
-exception IsNone;;
+exception IsNone
 
 let get x = 
   match x with
     None -> raise IsNone
-  | Some(x) -> x
+  | Some x -> x
 
 let bindir = Filename.dirname Sys.executable_name
-let rtdir= Filename.concat bindir "rt"
+let rtdir = Filename.concat bindir "rt"
 
 (* Region: Statistics *)
 
@@ -203,11 +211,15 @@ type token =
   | Eol
   | ErrorToken
 
+(** Base path, relative path, line (1-based), column (1-based) *)
 type srcpos = ((string * string) * int * int)
+(** A range of source code: start position, end position *)
 type loc = (srcpos * srcpos)
 
 exception ParseException of loc * string
 
+(** Like the Stream module of the O'Caml library, except that it supports a limited form of backtracking using [push].
+    Used implicitly by the parser. *)
 module Stream = struct
   exception Failure
   exception Error of string
@@ -253,6 +265,7 @@ end
 
 (* The lexer *)
 
+(** For syntax highlighting. *)
 type range_kind =
     KeywordRange
   | GhostKeywordRange
@@ -261,6 +274,10 @@ type range_kind =
   | CommentRange
   | ErrorRange
 
+(** The lexer.
+    @param reportShouldFail Function that will be called whenever a should-fail directive is found in the source code.
+      Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.
+  *)
 let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail =
   let textlength = String.length text in
   let textpos = ref 0 in
@@ -610,31 +627,34 @@ type type_ =
   | Char
   | StructType of string
   | PtrType of type_
-  | FuncType of string
+  | FuncType of string   (* The name of a typedef whose body is a C function type. *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list
   | ObjType of string
-  | BoxIdType (* box type*)
-  | HandleIdType (* handle type *)
-  | AnyType (* any type, kan aan alle inductieve datatypes toegekend worden*)
-  | TypeParam of string (* type param, tussen <>*)
-  | InferredType of type_ option ref (* inferred type *)
+  | BoxIdType (* box type, for shared boxes *)
+  | HandleIdType (* handle type, for shared boxes *)
+  | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
+  | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
+  | InferredType of type_ option ref (* inferred type, is unified during type checking *)
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
 
+(** Types as they appear in source code, before validity checking and resolution. *)
 type type_expr =
     StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
-  | ManifestTypeExpr of loc * type_
+  | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
   | IdentTypeExpr of loc * string
-  | ConstructedTypeExpr of loc * string * type_expr list
+  | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list
 
+(** An object used in field read expression ASTs and points-to assertion ASTs. Created by the parser and filled in by the type checker.
+    TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
 class fieldref (name: string) =
   object
-    val mutable parent: string option = None
-    val mutable range: type_ option = None
+    val mutable parent: string option = None  (* Name of the struct that declares this field. *)
+    val mutable range: type_ option = None  (* Declared type of the field. *)
     method name = name
     method parent = match parent with None -> assert false | Some s -> s
     method range = match range with None -> assert false | Some r -> r
@@ -642,11 +662,13 @@ class fieldref (name: string) =
     method set_range r = range <- Some r
   end
 
+(** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
+    TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
 class predref (name: string) =
   object
-    val mutable tparamcount: int option = None
-    val mutable domain: type_ list option = None
-    val mutable inputParamCount: int option option = None
+    val mutable tparamcount: int option = None  (* Number of type parameters. *)
+    val mutable domain: type_ list option = None  (* Parameter types. *)
+    val mutable inputParamCount: int option option = None  (* Number of input parameters, or None if the predicate is not precise. *)
     method name = name
     method domain = match domain with None -> assert false | Some d -> d
     method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
@@ -669,22 +691,32 @@ and
     True of loc
   | False of loc
   | Null of loc
-  | Var of loc * string * ident_scope option ref
+  | Var of loc * string * ident_scope option ref  (* An identifier. *)
   | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
-  | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field acces *)
+  | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field access *)
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
-  | CallExpr of loc * string * type_expr list * pat list * pat list * func_binding(* oproep van functie/methode/lemma/fixpoint *)
+  | CallExpr of
+      loc *
+      string *
+      type_expr list (* type arguments *) *
+      pat list (* indices, in case this is really a predicate assertion *) *
+      pat list (* arguments *) *
+      func_binding
+      (* oproep van functie/methode/lemma/fixpoint *)
   | IfExpr of loc * expr * expr * expr
-  | SwitchExpr of loc * expr * switch_expr_clause list * (type_ * (string * type_) list * type_ list * type_) option ref
+  | SwitchExpr of
+      loc *
+      expr *
+      switch_expr_clause list *
+      (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
-  | FuncNameExpr of string (*function name *)
   | CastExpr of loc * type_expr * expr (* cast *)
   | SizeofExpr of loc * type_expr
   | AddressOf of loc * expr
-  | ProverTypeConversion of prover_type * prover_type * expr
+  | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
 and
   pat =
     LitPat of expr (* literal pattern *)
@@ -709,24 +741,30 @@ and
   | Package
 and
   package =
-    PackageDecl of loc * string * import list* decl list
+    PackageDecl of loc * string * import list * decl list
 and
   import =
-    Import of loc * string * string option (* None betekent heel package, Some string betekent 1 ding eruit*)
+    Import of loc * string * string option (* None betekent heel package, Some string betekent 1 ding eruit *)
 and
   stmt =
-    PureStmt of loc * stmt (* oproep van pure function in ghost range*)
-  | NonpureStmt of loc * bool (* allowed *) * stmt
+    PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
+  | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
   | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
-  | CallStmt of loc * string * type_expr list * expr list * func_binding(* oproep regel-naam-argumenten*)
+  | CallStmt of loc * string * type_expr list * expr list * func_binding (* oproep: regel - naam - type-argumenten - argumenten *)
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
   | Leak of loc * pred (* expliciet lekken van assertie, nuttig op einde van thread*)
-  | Open of loc * string * type_expr list * pat list * pat list * pat option (* open van predicate regel-pred fam-pred naam-pattern list- ...*)
+  | Open of
+      loc *
+      string *
+      type_expr list *  (* Type arguments *)
+      pat list *  (* Indices for predicate family instance, or constructor arguments for predicate constructor *)
+      pat list *  (* Arguments *)
+      pat option  (* Coefficient for fractional permission *)
   | Close of loc * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
@@ -748,19 +786,19 @@ and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
 and
-  pred =
+  pred = (* A separation logic assertion *)
     Access of loc * expr * fieldref * pat (*  toegang tot veld regel-expr-veld-pattern*)
-  | CallPred of loc * predref * type_expr list * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
-  | WCallPred of loc * predref * type_ list * pat list * pat list (* predicate oproep regel-predicate referentie -args*)
+  | CallPred of loc * predref * type_expr list * pat list (* indices of predicate family instance *) * pat list  (* Predicate assertion, before type checking *)
+  | WCallPred of loc * predref * type_ list * pat list * pat list  (* Predicate assertion, after type checking. (W is for well-formed) *)
   | ExprPred of loc * expr (*  uitdrukking regel-expr *)
-  | Sep of loc * pred * pred (* seperate execution of &*& in de code regel-predicate 1 - predicate 2 *)
+  | Sep of loc * pred * pred  (* separate conjunction *)
   | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
   | SwitchPred of loc * expr * switch_pred_clause list (* switch over cons van inductive type regel-expr-clauses*)
   | EmpPred of loc (* als "emp" bij requires/ensures staat -regel-*)
   | CoefPred of loc * pat * pred (* fractional permission met coeff-predicate*)
 and
   switch_pred_clause =
-  | SwitchPredClause of loc * string * string list * prover_type option list option ref * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
+  | SwitchPredClause of loc * string * string list * prover_type option list option ref (* Boxing info *) * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
 and
   func_kind =
   | Regular
@@ -784,11 +822,20 @@ and
   | PredFamilyDecl of loc * string * string list (* type parameters *) * int (* number of indices *) * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * string list (* type parameters *) * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
-  | Func of loc * func_kind * string list * type_expr option * string * (type_expr * string) list * bool (* atomic *) * string option (* function type *)
-    * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
-  (* functie met regel-soort-return type-naam- lijst van parameters - contract - body*)
+  | Func of
+      loc *
+      func_kind *
+      string list *  (* type parameters *)
+      type_expr option *  (* return type *)
+      string *  (* name *)
+      (type_expr * string) list *  (* parameters *)
+      bool (* atomic *) *
+      string option (* implemented function type *) *
+      (pred * pred) option *  (* contract *)
+      (stmt list * loc (* Close brace *)) option *  (* body *)
+      func_binding *  (* static or instance *)
+      visibility
   | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (pred * pred)
-  (* typedef met regel-return type-naam-parameter lijst - contract *)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
@@ -805,7 +852,7 @@ and
   ghostness = Ghost | Real
 and
   field =
-  | Field of loc * ghostness * type_expr * string * func_binding* visibility(* veld met regel-type-naam*)
+  | Field of loc * ghostness * type_expr * string * func_binding * visibility  (* veld met regel-type-naam*)
 and
   ctor =
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
@@ -980,6 +1027,10 @@ let rec rep p = parser [< v = p; vs = rep p >] -> v::vs | [< >] -> []
 let parse_angle_brackets (_, sp) p =
   parser [< '((sp', _), Kwd "<") when sp = sp'; v = p; '(_, Kwd ">") >] -> v
 
+(* Does a two-token lookahead.
+   Succeeds if it sees a /*@ followed by something that matches [p].
+   Fails if it does not see /*@ or if [p] fails.
+   Throws Stream.Error if [p] does. *)
 let peek_in_ghost_range p stream =
   match Stream.peek stream with
     Some (_, Kwd "/*@") as tok ->
@@ -997,81 +1048,89 @@ type spec_clause =
 | FuncTypeClause of string
 | RequiresClause of pred
 | EnsuresClause of pred
-  
+
+(* A toy Scala parser. *)
 module Scala = struct
 
-let keywords = ["def"; "var"; "class"; "object"; "."; "new"; "null"; "package"; "import"]
+  let keywords = [
+    "def"; "var"; "class"; "object"; "."; "new"; "null"; "package"; "import";
+    "+"; "="; "("; ")"; ":"; "{"; "}"; "["; "]"; "/*@"; "@*/"; "=="; "="; ";"; "true"; "false"; "assert"
+  ]
 
-let rec
-  parse_decl = parser
-    [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-    Class (l, cn, ms, [], [], "Object", [])
-and
-  parse_method = parser
-    [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
-    let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-    Meth (l, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public)
-and
-  parse_paramlist = parser
-    [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
-and
-  parse_param = parser
-    [< '(_, Ident x); t = parse_type_ann >] -> (t, x)
-and
-  parse_type_ann: (loc * token) Stream.t -> type_expr = parser
-    [< '(_, Kwd ":"); t = parse_type >] -> t
-and
-  parse_type = parser
-    [< '(l, Ident tn); targs = parse_targlist >] ->
-    begin
-      match (tn, targs) with
-        ("Unit", []) -> ManifestTypeExpr (l, Void)
-      | ("Int", []) -> ManifestTypeExpr (l, IntType)
-      | ("Array", [t]) -> ArrayTypeExpr (l, t)
-      | (_, []) -> IdentTypeExpr (l, tn)
-      | _ -> raise (ParseException (l, "Type arguments are not supported."))
-    end
-and
-  parse_targlist = parser
-    [< '(_, Kwd "["); ts = rep_comma parse_type; '(_, Kwd "]") >] -> ts
-  | [< >] -> []
-and
-  parse_contract = parser
-    [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
-       '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post)
-and
-  parse_asn = parser
-    [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
-  | [< e = parse_expr >] -> ExprPred (expr_loc e, e)
-and
-  parse_primary_expr = parser
-    [< '(l, Kwd "true") >] -> True l
-  | [< '(l, Kwd "false") >] -> False l
-  | [< '(l, Int n) >] -> IntLit (l, n, ref None)
-  | [< '(l, Ident x) >] -> Var (l, x, ref None)
-and
-  parse_add_expr = parser
-    [< e0 = parse_primary_expr; e = parse_add_expr_rest e0 >] -> e
-and
-  parse_add_expr_rest e0 = parser
-    [< '(l, Kwd "+"); e1 = parse_primary_expr; e = parse_add_expr_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
-  | [< >] -> e0
-and
-  parse_rel_expr = parser
-    [< e0 = parse_add_expr; e = parse_rel_expr_rest e0 >] -> e
-and
-  parse_rel_expr_rest e0 = parser
-    [< '(l, Kwd "=="); e1 = parse_add_expr; e = parse_rel_expr_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
-  | [< >] -> e0
-and
-  parse_expr stream = parse_rel_expr stream
-and
-  parse_stmt = parser
-    [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, e)
-  | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
+  let rec
+    parse_decl = parser
+      [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
+      Class (l, cn, ms, [], [], "Object", [])
+  and
+    parse_method = parser
+      [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
+      let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
+      Meth (l, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public)
+  and
+    parse_paramlist = parser
+      [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
+  and
+    parse_param = parser
+      [< '(_, Ident x); t = parse_type_ann >] -> (t, x)
+  and
+    parse_type_ann: (loc * token) Stream.t -> type_expr = parser
+      [< '(_, Kwd ":"); t = parse_type >] -> t
+  and
+    parse_type = parser
+      [< '(l, Ident tn); targs = parse_targlist >] ->
+      begin
+        match (tn, targs) with
+          ("Unit", []) -> ManifestTypeExpr (l, Void)
+        | ("Int", []) -> ManifestTypeExpr (l, IntType)
+        | ("Array", [t]) -> ArrayTypeExpr (l, t)
+        | (_, []) -> IdentTypeExpr (l, tn)
+        | _ -> raise (ParseException (l, "Type arguments are not supported."))
+      end
+  and
+    parse_targlist = parser
+      [< '(_, Kwd "["); ts = rep_comma parse_type; '(_, Kwd "]") >] -> ts
+    | [< >] -> []
+  and
+    parse_contract = parser
+      [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
+         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post)
+  and
+    parse_asn = parser
+      [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
+    | [< e = parse_expr >] -> ExprPred (expr_loc e, e)
+  and
+    parse_primary_expr = parser
+      [< '(l, Kwd "true") >] -> True l
+    | [< '(l, Kwd "false") >] -> False l
+    | [< '(l, Int n) >] -> IntLit (l, n, ref None)
+    | [< '(l, Ident x) >] -> Var (l, x, ref None)
+  and
+    parse_add_expr = parser
+      [< e0 = parse_primary_expr; e = parse_add_expr_rest e0 >] -> e
+  and
+    parse_add_expr_rest e0 = parser
+      [< '(l, Kwd "+"); e1 = parse_primary_expr; e = parse_add_expr_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
+    | [< >] -> e0
+  and
+    parse_rel_expr = parser
+      [< e0 = parse_add_expr; e = parse_rel_expr_rest e0 >] -> e
+  and
+    parse_rel_expr_rest e0 = parser
+      [< '(l, Kwd "=="); e1 = parse_add_expr; e = parse_rel_expr_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
+    | [< >] -> e0
+  and
+    parse_expr stream = parse_rel_expr stream
+  and
+    parse_stmt = parser
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, e)
+    | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
 
+(* The C/Java parser.
+   The difference is in the scanner: when parsing a C file, the scanner treats "class" like an identifier, not a keyword.
+   And Kwd "class" does not match Ident "class".
+   *)
 let parse_decls =
 let rec
   parse_decls = parser
@@ -1742,8 +1801,8 @@ let parse_import = parser
 let parse_package_decl= parser
   [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is,ds)
 
-let parse_scala_file path reportRange =
-  let lexer = make_lexer (common_keywords @ Scala.keywords) ghost_keywords in
+let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
+  let lexer = make_lexer Scala.keywords ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
   let parse_decls_eof = parser [< ds = rep Scala.parse_decl; _ = Stream.empty >] -> PackageDecl(dummy_loc,"",[Import(dummy_loc,"java.lang",None)],ds) in
   try
@@ -1752,7 +1811,7 @@ let parse_scala_file path reportRange =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_java_file path reportRange=
+let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   if Filename.check_suffix (Filename.basename path) ".scala" then
     parse_scala_file path reportRange
   else
@@ -1765,7 +1824,9 @@ let parse_java_file path reportRange=
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_include_directives ignore_eol =
+type 'result parser_ = (loc * token) Stream.t -> 'result
+
+let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_ =
   let rec parse_include_directives = parser
     [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers
   | [< >] -> []
@@ -1776,13 +1837,12 @@ let parse_include_directives ignore_eol =
 in
   parse_include_directives
 
-let parse_c_file path reportRange reportShouldFail =
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
   let parse_c_file =
     parser
-      [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers,
-[PackageDecl(dummy_loc,"",[],ds)])
+      [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
   in
   try
     parse_c_file token_stream
@@ -1790,7 +1850,7 @@ let parse_c_file path reportRange reportShouldFail =
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_header_file basePath relPath reportRange reportShouldFail =
+let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange reportShouldFail in
   let parse_header_file =
@@ -1882,17 +1942,27 @@ exception StaticError of loc * string
 
 let static_error l msg = raise (StaticError (l, msg))
 
+(** Internal pattern. Either a pattern from the source code, or a term pattern. A term pattern (TermPat t) matches a term t' if t and t' are definitely_equal. *)
 type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
-type 'termnode chunk = Chunk of ('termnode * bool) * type_ list * 'termnode * 'termnode list * int option
+(** A heap chunk. *)
+type 'termnode chunk =
+  Chunk of
+    ('termnode (* Predicate name *) * bool (* true if a declared predicate's symbol; false in a scenario where predicate names are passed as values. Used to avoid prover queries. *) ) *
+    type_ list *  (* Type arguments *)
+    'termnode *  (* Coefficient of fractional permission *)
+    'termnode list *  (* Arguments; their prover type is as per the instantiated parameter types, not the generic ones. *)
+    int option  (* Size of this chunk with respect to the first chunk of the precondition; used to check lemma termination. *)
 type 'termnode heap = 'termnode chunk list
 type 'termnode env = (string * 'termnode) list
+(** Execution trace. For error reporting. *)
 type 'termnode context =
   Assuming of 'termnode
 | Executing of 'termnode heap * 'termnode env * loc * string
 | PushSubcontext
 | PopSubcontext
 
-let get_callers ctxts =
+(* Returns the locations of the "call stack" of the current execution step. *)
+let get_callers (ctxts: 'termnode context list): loc option list =
   let rec iter lo ls ctxts =
     match ctxts with
       [] -> ls
@@ -1931,7 +2001,8 @@ let rec string_of_type t =
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
 
-let string_of_chunk (Chunk ((g, literal), targs, coef, ts, size)) =
+(* This assumes the termnodes have already been converted to strings. *)
+let string_of_chunk (Chunk ((g, literal), targs, coef, ts, size): string chunk): string =
   (if coef = "1" then "" else "[" ^ coef ^ "]") ^ g ^ string_of_targs targs ^ "(" ^ String.concat ", " ts ^ ")"
 
 let string_of_heap h = String.concat " * " (List.map string_of_chunk h)
@@ -1945,10 +2016,7 @@ let string_of_context c =
 
 exception SymbolicExecutionError of string context list * string * loc * string
 
-let full_name pn n=
-  if pn="" then n 
-  else if startswith n (pn^".") then n
-       else (pn^"."^n)
+let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 
 let zip xs ys =
   let rec iter xs ys zs =
@@ -1959,15 +2027,6 @@ let zip xs ys =
   in
   iter xs ys []
 
-let unzip xs=
-  let rec iter xs ys=
-    match xs with
-      [] -> Some (List.rev ys)
-    | (x, y)::rest -> iter rest ((x,y)::ys)
-    | _ -> None
-  in
-  iter xs []
-  
 let do_finally tryBlock finallyBlock =
   let result =
     try
@@ -1981,6 +2040,12 @@ type options = {option_verbose: bool; option_disable_overflow_check: bool; optio
 
 (* Region: verify_program_core: the toplevel function *)
 
+(** Verifies the .c/.jarsrc/.scala file at path [path].
+    Uses the SMT solver [ctxt].
+    Reports syntax highlighting regions using the callback [reportRange].
+    Stops at source line [breakpoint], if not None.
+    This function is generic in the types of SMT solver types, symbols, and terms.
+    *)
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
   let language = file_type path in
@@ -1994,15 +2059,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let verbose_print_endline s = if verbose then print_endline s else () in
   let verbose_print_string s = if verbose then print_string s else () in
 
+  (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
   let used_ids = ref [] in
+  (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
   let dummy_frac_terms = ref [] in
+  (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref [] in
-  
+
+  (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
     used_ids_stack := (!used_ids, !dummy_frac_terms)::!used_ids_stack;
     ctxt#push
   in
   
+  (** Restore the previous path condition, set of used IDs, and set of dummy fraction terms. *)
   let pop() =
     let ((ids, dummyFracTerms)::t) = !used_ids_stack in
     used_ids := ids;
@@ -2011,12 +2081,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ctxt#pop
   in
   
+  (** Execute [cont] in a temporary context. *)
   let in_temporary_context cont =
     push();
     cont();
     pop()
   in
   
+  (** Generate a fresh ID based on string [s]. *)
   let mk_ident s =
     let rec iter k =
       let sk = s ^ string_of_int k in
@@ -2025,12 +2097,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
     name
   in
-  
+
+  (** Generate a fresh SMT solver symbol based on string [s]. *)  
   let mk_symbol s domain range kind =
     ctxt#mk_symbol (mk_ident s) domain range kind
   in
   
   let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
+
+  (* Generate some global symbols. *)
   
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
@@ -2053,7 +2128,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
   
   let real_unit_pat = TermPat real_unit in
-  
+
+  (** Convert term [t] from type [proverType] to type [proverType0]. *)  
   let apply_conversion proverType proverType0 t =
     match (proverType, proverType0) with
     | (ProverBool, ProverInductive) -> ctxt#mk_boxed_bool t
@@ -2068,8 +2144,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let preludePath = Filename.concat bindir "prelude.h" in
   let rtdir= Filename.concat bindir "rt" in 
   let rtpath= Filename.concat rtdir "rt.jarspec" in
+  (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs = ref [] in
   
+  (* Callback function called from the lexer. *)
   let reportShouldFail l =
     if allow_should_fail then
       shouldFailLocs := l::!shouldFailLocs
@@ -2088,7 +2166,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StaticError (l, msg) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, phi, l, msg) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
   in
-  
+
+  (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
   let headermap = ref [] in
   let spec_classes= ref [] in
   let spec_lemmas= ref [] in
@@ -2120,9 +2199,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   (* Region: check_file *)
-  
+
+  (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
+      As a side-effect, adds all processed headers to the header map.
+      Recursively calls itself on headers included by the current file.
+      Returns the elements declared directly in the current file.
+      May add symbols and global assumptions to the SMT solver.
+    *)      
   let rec check_file include_prelude basedir headers ps =
-  let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let maps0 =
     if include_prelude then
       if file_type path =Java then
       begin
@@ -2130,25 +2215,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> 
           let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
           let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
-          let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-          headermap := (rtpath, ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-          (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+          let (_, maps0) = check_file false bindir [] ds in
+          headermap := (rtpath, ([], maps0))::!headermap;
+          maps0
+      | Some ([], maps0) ->
+        maps0
       end
       else
       begin
       match try_assoc preludePath !headermap with
         None ->
         let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
-        let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, _, _,boxmap0,classmap0,interfmap0) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0))::!headermap;
-        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
-      | Some ([], structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) ->
-        (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        let (_, maps0) = check_file false bindir [] ds in
+        headermap := (preludePath, ([], maps0))::!headermap;
+        maps0
+      | Some ([], maps0) ->
+        maps0
       end
       else
-      ([], [], [], [], [], [], [], [], [], [], [], [], [],[],[])
+      ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
   in
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
@@ -2160,18 +2245,38 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter xys
   in
-
   let id x = x in
-  
+  let merge_maps l
+    (structmap, enummap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
+    (structmap0, enummap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
+    =
+    (append_nodups structmap structmap0 id l "struct",
+     append_nodups enummap enummap0 id l "enum",
+     append_nodups inductivemap inductivemap0 id l "inductive datatype",
+     append_nodups purefuncmap purefuncmap0 id l "pure function",
+     append_nodups predctormap predctormap0 id l "predicate constructor",
+     append_nodups fixpointmap fixpointmap0 id l "fixpoint function",
+     malloc_block_pred_map @ malloc_block_pred_map0,
+     field_pred_map @ field_pred_map0,
+     append_nodups predfammap predfammap0 id l "predicate",
+     append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance",
+     append_nodups functypemap functypemap0 id l "function type",
+     append_nodups funcmap funcmap0 id l "function",
+     append_nodups boxmap boxmap0 id l "box predicate",
+     append_nodups classmap classmap0 id l "class",
+     append_nodups interfmap interfmap0 id l "interface")
+  in
+
   let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     let headers_included = ref [] in
-    let rec iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers =
+    (** [iter maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
+    let rec iter maps0 headers =
       match headers with
-        [] -> (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0)
+        [] -> maps0
       | (l, header_path)::headers ->
     if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+          iter maps0 headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -2187,38 +2292,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l "No such file."
           in
           if List.mem path !headers_included then
-            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter maps0 headers
           else
           begin
             headers_included := path::!headers_included;
-            let (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) =
+            let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir headers' ds in
-                headermap := (path, (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
-                (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
-              | Some (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap) ->
-                (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap)
+                let (_, maps) = check_file true basedir headers' ds in
+                headermap := (path, (headers', maps))::!headermap;
+                (headers', maps)
+              | Some (headers', maps) ->
+                (headers', maps)
             in
-            let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) = iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers' in
-            iter
-              (append_nodups structmap structmap0 id l "struct")
-              (append_nodups enummap enummap0 id l "enum")
-              (append_nodups inductivemap inductivemap0 id l "inductive datatype")
-              (append_nodups purefuncmap purefuncmap0 id l "pure function")
-			  (append_nodups predctormap predctormap0 id l "predicate constructor")
-              (append_nodups fixpointmap fixpointmap0 id l "fixpoint function")
-              (malloc_block_pred_map @ malloc_block_pred_map0)
-              (field_pred_map @ field_pred_map0)
-              (append_nodups predfammap predfammap0 id l "predicate")
-              (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance")
-              (append_nodups functypemap functypemap0 id l "function type")
-              (append_nodups funcmap funcmap0 id l "function")
-              (append_nodups boxmap boxmap0 id l "box predicate")
-              (append_nodups classmap classmap0 id l "class")
-              (append_nodups interfmap interfmap0 id l "interface")
-              headers
+            let maps0 = iter maps0 headers' in
+            iter (merge_maps l maps maps0) headers
           end
         end
     else (* JAVA DEEL*)
@@ -2235,12 +2324,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 static_error l ("No such file: "^systempath)
           in
           if List.mem path !headers_included then
-            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter maps0 headers
           else
           if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
             begin
             headers_included := path::!headers_included;
-            iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+            iter maps0 headers
             end
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
           begin
@@ -2249,29 +2338,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let allspecs= remove (fun x -> List.mem x !headers_included)(list_remove_dups allspecs) in
             let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
             let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
-            let (structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, _, _,boxmap,classmap,interfmap) = check_file true basedir [] ds in
-            headermap := (path, (headers', structmap, enummap, inductivemap, purefuncmap,predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap,boxmap,classmap,interfmap))::!headermap;
+            let (_, maps) = check_file true basedir [] ds in
+            headermap := (path, (headers', maps))::!headermap;
             spec_classes:=classes;
             spec_lemmas:=lemmas;
-            ((append_nodups structmap structmap0 id l "struct"),
-            (append_nodups enummap enummap0 id l "enum"),
-            (append_nodups inductivemap inductivemap0 id l "inductive datatype"),
-            (append_nodups purefuncmap purefuncmap0 id l "pure function"),
-			(append_nodups predctormap predctormap0 id l "predicate constructor"),
-            (append_nodups fixpointmap fixpointmap0 id l "fixpoint function"),
-            (malloc_block_pred_map @ malloc_block_pred_map0),
-            (field_pred_map @ field_pred_map0),
-            (append_nodups predfammap predfammap0 id l "predicate"),
-            (append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance"),
-            (append_nodups functypemap functypemap0 id l "function type"),
-            (append_nodups funcmap funcmap0 id l "function"),
-            (append_nodups boxmap boxmap0 id l "box predicate"),
-            (append_nodups classmap classmap0 id l "class"),
-            (append_nodups interfmap interfmap0 id l "interface"))
+            merge_maps l maps maps0
           end
         end
     in
-    iter structmap0 enummap0 inductivemap0 purefuncmap0 predctormap0 fixpointmap0 malloc_block_pred_map0 field_pred_map0 predfammap0 predinstmap0 functypemap0 funcmap0 boxmap0 classmap0 interfmap0 headers
+    iter maps0 headers
   in
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
@@ -3645,7 +3720,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w2, t) = check e2 in
       let w3 = checkt e3 t in
       (IfExpr (l, w1, w2, w3), t)
-    | FuncNameExpr _ -> (e, PtrType Void)
     | SwitchExpr (l, e, cs, tref) ->
       let (w, t) = check e in
       begin
@@ -3967,7 +4041,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
         cs
     | PredNameExpr (l, _) -> []
-    | FuncNameExpr _ -> []
     | CastExpr (_, _, e) -> vars_used e
     | SizeofExpr (_, _) -> []
     | ProverTypeConversion (_, _, e) -> vars_used e
@@ -4466,7 +4539,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           field_address (ev e) f
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
-    | FuncNameExpr fn -> (List.assoc fn funcnameterms)
     | SwitchExpr (l, e, cs, tref) ->
       let g = mk_ident "switch_expression" in
       let t = ev e in
@@ -7598,7 +7670,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  (structmap1, enummap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, !prototypes_used, prototypes_implemented,boxmap,classmap1,interfmap1)
+  ((!prototypes_used, prototypes_implemented), (structmap1, enummap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
   
   in
   
@@ -7631,7 +7703,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (_, _,  _, _, _, _, _, _,_,_, _, _, prototypes_used, prototypes_implemented,_,_,_) = check_file true programDir headers ds in
+      let ((prototypes_used, prototypes_implemented), _) = check_file true programDir headers ds in
       (prototypes_used, prototypes_implemented)
     in
     begin
