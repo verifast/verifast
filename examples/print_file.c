@@ -17,7 +17,7 @@ int main()
   while(res != 0) 
     //@ invariant file(fp) &*& chars(buffer, ?cs) &*& chars_length(cs) == 100 &*& res != 0 ? chars_contains(cs, 0) == true : true;
   {
-    printf(buffer);
+    puts(buffer);
     res = fgets(buffer, 100, fp);
   }
   free(buffer);

@@ -53,6 +53,13 @@ fixpoint int chars_index_of(chars cs, char c) {
     }
 }
 
+fixpoint char char_at(chars cs, int index) {
+  switch(cs) {
+    case chars_nil: return default<char>;
+    case chars_cons(h, t): return index == 0 ? h : char_at(t, index - 1);
+  }
+}
+
 fixpoint chars chars_append(chars cs, chars cs0) {
     switch (cs) {
         case chars_nil: return cs0;

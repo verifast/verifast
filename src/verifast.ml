@@ -5894,14 +5894,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h value
         )
       | _ ->
-        let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+	    let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
         let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
+		let (_, _, _, _, chars_nil_symb) = List.assoc "chars_nil" purefuncmap in
+		let (_, _, _, _, chars_cons_symb) = List.assoc "chars_cons" purefuncmap in
+		let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
+		let rec string_to_term s = 
+		  if String.length s == 0 then
+  		    ctxt#mk_app chars_cons_symb [ctxt#mk_intlit 0;(ctxt#mk_app chars_nil_symb [] )]
+		  else
+		    ctxt#mk_app chars_cons_symb [ctxt#mk_intlit (Char.code (String.get s 0)); (string_to_term (String.sub s 1 ((String.length s) -1)))]
+	    in
         let coef = get_dummy_frac_term () in
         assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () ->     (* chars_contains(cs, 0) == true *)
           assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
-            cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
+		    assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
+              cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
+			)
           )
         )
       end

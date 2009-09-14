@@ -36,4 +36,4 @@
 .provides stdio.h#fopen
 .provides stdio.h#fclose
 .provides stdio.h#fgets
-.provides stdio.h#printf
+.provides stdio.h#puts
