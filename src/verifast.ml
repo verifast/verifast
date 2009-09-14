@@ -5882,7 +5882,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e
   in 
   
-  let eval_h (pn,ilist) is_ghost_expr h env e cont =
+  let rec eval_h (pn,ilist) is_ghost_expr h env e cont =
     let rec iter h e cont =
     match e with
       StringLit (l, s)->
@@ -5918,6 +5918,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
       | Some v -> cont h v
       end
+	| Operation (l, Not, [e], ts) -> eval_h (pn,ilist) is_ghost_expr h env e (fun h v -> cont h (ctxt#mk_not v))
+	| Operation (l, Eq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
+	    eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
+    | Operation (l, Neq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
+	    eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_not (ctxt#mk_eq v1 v2))))
+	| Operation (l, And, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 
+	  (fun h1 v1 ->
+	    branch
+	      (fun _ -> assume (v1) (fun _ -> eval_h (pn,ilist) is_ghost_expr h1 env e2 cont))
+		  (fun _ -> assume (ctxt#mk_not v1) (fun _ -> cont h1 ctxt#mk_false))
+	  )
+	| Operation (l, Or, [e1; e2], ts) -> 
+	  eval_h (pn,ilist) is_ghost_expr h env e1 
+	  (fun h1 v1 ->
+	    branch
+	      (fun _ -> assume (v1) (fun _ -> cont h1 ctxt#mk_true))
+		  (fun _ -> assume (ctxt#mk_not v1) (fun _ -> eval_h (pn,ilist) is_ghost_expr h1 env e2 cont))
+	  )
+    | IfExpr (l, con, e1, e2) ->
+	  eval_h (pn, ilist) is_ghost_expr h env con (fun h v ->
+	    branch
+	      (fun _ -> assume (v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e1 cont))
+		  (fun _ -> assume (ctxt#mk_not v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e2 cont))
+	  )
     | e -> cont h (eval_non_pure (pn,ilist) is_ghost_expr h env e)
     in
     iter h e cont
@@ -6464,9 +6488,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      branch
-        (fun _ -> assume (ev w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont))
-        (fun _ -> assume (ctxt#mk_not (ev w)) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont))
+	  (eval_h h env w ( fun h w ->
+        branch
+          (fun _ -> assume w (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont))
+          (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont))
+	  ))
     | SwitchStmt (l, e, cs) ->
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -6929,7 +6955,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         branch
           (fun _ ->
              assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
-               assume (eval_non_pure (pn,ilist) false h' env e) (fun _ ->
+               (eval_h h' env e (fun h' v -> assume (v) (fun _ ->
                  let lblenv =
                    List.map
                      begin fun (lbl, cont) ->
@@ -6943,13 +6969,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
                    )
                  ) (fun h'' retval -> return_cont (h'' @ h) retval)
-               )
+               )))
              )
           )
           (fun _ ->
              assume_pred [] (pn,ilist) h ghostenv env p real_unit None None (fun h ghostenv' env' ->
-               assume (ctxt#mk_not (eval_non_pure (pn,ilist) false h env e)) (fun _ ->
-                 tcont sizemap tenv' ghostenv' h env')))
+               (eval_h h env e (fun h v -> assume (ctxt#mk_not (v)) (fun _ ->
+                 tcont sizemap tenv' ghostenv' h env')))))
       )
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context.";

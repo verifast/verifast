@@ -1,5 +1,3 @@
-#include "stdlib.h"
-
 struct node {
   bool m; // marked
   bool c; // which child is explored
@@ -23,62 +21,40 @@ void schorr_waite(struct node* root)
 {
   struct node* t = root; 
   struct node* p = 0;
-  bool tm = false;
-  if(t!=0) {
-    //@ open tree(t, false);
-    tm = t->m;
-    //@ close tree(t, false);
-  }
   //@ close stack(p);
-  while(p != 0 || (t != 0 && ! tm))
-    //@ invariant tree(t, tm) &*& stack(p);
+  //@ open tree(root, false);
+  while(p != 0 || (t != 0 && ! (t->m)))
+    //@ invariant (t == 0 ? true : t->m |-> ?marked &*& t->c |-> ?c &*& t->l |-> ?l &*& t->r |-> ?r &*& tree(l, marked) &*& tree(r, marked)) &*& stack(p);
   {
-    if(t == 0 || tm) {
+    if(t == 0 || t->m) {
       //@ open stack(p);
       if(p->c) { // pop
         struct node* q = t;
         t = p;
         p = p->r;
         t->r = q;
-        if(t != 0) { tm = t->m; } 
-        if(q == 0) 
-        { 
-          //@ open tree(q, _);
-          //@ close tree(q, true);
-        }
-        //@ close tree(t, true);
+        //@ close tree(q, true); 
       } else { // swing
         struct node* q = t;
         t = p->r;
         p->r = p->l;
         p->l = q;
         p->c = true;
-        if(q == 0) {
-          //@ open tree(q, _);
-          //@ close tree(q, true);
-        }
+        //@ close tree(q, true);  
         //@ close stack(p);
         //@ open tree(t, false);
-        if(t != 0) { tm = t->m; } else { tm = false; /* hack */ }
-        //@ close tree(t, false); 
       }
     } else { // push
       struct node* q = p;
-      //@ open tree(t, false);
       p = t;
       t = t->l;
       p->l = q;
       p->m = true;
       p->c = false;
-      //@ open tree(t, _);
-      if(t != 0) { tm = t->m; } else { tm = false; /* hack */ }
-      //@ close tree(t, tm);
+      //@ open tree(t, false);
       //@ close stack(p);
     }
   }
   //@ open stack(p);
-  if(t == 0) { 
-    //@ open tree(t, _);
-    //@ close tree(t, true);
-  }
+  //@ close tree(t, true);
 }
