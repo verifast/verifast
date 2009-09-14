@@ -33,3 +33,7 @@
 .provides list.h#reverse_reverse
 .provides list.h#take_0
 .provides list.h#take_length
+.provides stdio.h#fopen
+.provides stdio.h#fclose
+.provides stdio.h#fgets
+.provides stdio.h#printf

@@ -206,7 +206,7 @@ type token =
   | Int of big_int
   | Float of float
   | String of string
-  | Char of char
+  | CharToken of char
   | PreprocessorSymbol of string
   | Eol
   | ErrorToken
@@ -407,7 +407,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
             Stream.Failure -> error "Bad character literal."
         in
         begin match text_peek () with
-          '\'' -> text_junk (); Some (Char c)
+          '\'' -> text_junk (); Some (CharToken c)
         | _ -> error "Single quote expected."
         end
     | '"' ->
@@ -1649,6 +1649,7 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
+| [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref None)
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
 | [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],[],args0,Static)

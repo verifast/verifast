@@ -7,6 +7,8 @@ verifast_both -disable_overflow_check counter.c
 verifast_both -disable_overflow_check counter_with_pred.c
 verifast_both -disable_overflow_check counter_with_pred_auto.c
 verifast_both enums.c
+verifast_both char.c
+verifast_both print_file.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c
