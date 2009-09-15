@@ -1,6 +1,59 @@
 open Proverapi
 open Num
 
+type sexpr = Atom of string | List of sexpr list | String of char list
+
+let parse_sexpr text =
+  let rec parse_sexpr i =
+    match text.[i] with
+      '(' -> let (es, i) = parse_sexprs (i + 1) in (List es, i)
+    | ' '|'\r'|'\n'|'\t' -> parse_sexpr (i + 1)
+    | c -> parse_atom i (i + 1)
+  and parse_atom start i =
+    if i = String.length text then
+      (Atom (String.sub text start (i - start)), i)
+    else
+      match text.[i] with
+        ')' | ' ' | '\r' | '\n' | '\t' -> (Atom (String.sub text start (i - start)), i)
+      | c -> parse_atom start (i + 1)
+  and parse_sexprs i =
+    match text.[i] with
+      ')' -> ([], i + 1)
+    | ' '|'\r'|'\n'|'\t' -> parse_sexprs (i + 1)
+    | c -> let (e, i) = parse_sexpr i in let (es, i) = parse_sexprs i in (e::es, i)
+  in
+  let (e, _) = parse_sexpr 0 in e
+
+let rec simplify e =
+  match e with
+    Atom "chars_nil" -> String []
+  | List [Atom "chars_cons" as a0; Atom a as a1; e1] ->
+    begin try
+      let c = int_of_string a in
+      match simplify e1 with
+        String cs when 0 <= c && c < 255 -> String (char_of_int c::cs)
+      | e1 -> List [a0; a1; e1]
+    with Failure "int_of_string" -> List [a0; a1; simplify e1]
+    end
+  | List es -> List (List.map simplify es)
+  | a -> a
+
+let rec string_of_sexpr e =
+  let string_of_char c =
+    if int_of_char c < 32 then
+      match c with
+        '\r' -> "\\r"
+      | '\n' -> "\\n"
+      | '\t' -> "\\t"
+      | c -> Printf.sprintf "\\%o" (int_of_char c)
+    else
+      Printf.sprintf "%c" c
+  in
+  match e with
+    Atom a -> a
+  | List es -> "(" ^ String.concat " " (List.map string_of_sexpr es) ^ ")"
+  | String cs -> "\"" ^ String.concat "" (List.map string_of_char cs) ^ "\""
+
 class z3_context () =
   let ctxt = Z3.mk_context (Z3.mk_config ()) in
   (* let _ = Z3.trace_to_stdout ctxt in *)
@@ -143,7 +196,7 @@ class z3_context () =
     method mk_real_lt t1 t2 = Z3.mk_lt ctxt t1 t2
     method mk_real_le t1 t2 = Z3.mk_le ctxt t1 t2
     method get_type t = Z3.get_type ctxt t
-    method pprint t = Z3.ast_to_string ctxt t
+    method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt t)))
     method query t = query t
     method assume t = assert_term t
     method push = Z3.push ctxt
