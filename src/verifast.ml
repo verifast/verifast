@@ -4857,7 +4857,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let rec match_pats ghostenv env env' index pats tps0 tps ts cont =
       match (pats, tps0, tps, ts) with
-        (pat::pats, tp0::tps0, tp::tps, t::ts) -> match_pat ghostenv env env' (index < inputParamCount) pat tp0 tp t (fun ghostenv env env' -> match_pats ghostenv env env' (index + 1) pats tps0 tps ts cont)
+        (pat::pats, tp0::tps0, tp::tps, t::ts) ->
+        let isInputParam = match inputParamCount with None -> true | Some n -> index < n in
+        match_pat ghostenv env env' isInputParam pat tp0 tp t (fun ghostenv env env' -> match_pats ghostenv env env' (index + 1) pats tps0 tps ts cont)
       | ([], [], [], []) -> cont ghostenv env env'
     in
     let match_coef ghostenv env cont =
@@ -4873,7 +4875,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           else if ctxt#query (ctxt#mk_real_lt real_zero t) && ctxt#query (ctxt#mk_real_lt t coef0) then
             cont ghostenv env t [Chunk (g', targs0, ctxt#mk_real_sub coef0 t, ts0, size0)]
           else
-            assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0))
+            if inputParamCount = None then
+              None
+            else
+              assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0))
       in
       match coefpat with
         SrcPat (LitPat e) -> match_term_coefpat (eval (pn,ilist) None env e)
@@ -4947,8 +4952,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match iter [] h with
         [] ->
         begin fun cont ->
-          if coef != real_unit then cont () else
+          if inputParamCount = None || coef != real_unit then cont () else
           begin fun cont' ->
+            let Some inputParamCount = inputParamCount in
             let rec iter n ts pats tps0 tps =
               if n = 0 then cont' (List.rev ts) else
               match (pats, tps0, tps) with
@@ -5022,7 +5028,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let access l coefpat e f rhs =
       let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-      assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat 1 [SrcPat (LitPat e); rhs]
+      assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [SrcPat (LitPat e); rhs]
         (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
     in
     let callpred l coefpat g targs pats0 pats =
@@ -5033,7 +5039,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv g#domain in
-      let inputParamCount = List.length pats0 + match g#inputParamCount with None -> List.length pats | Some n -> n in
+      let inputParamCount = match g#inputParamCount with None -> None | Some n -> Some (List.length pats0 + n) in
       assert_chunk_core rules (pn,ilist) h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) g#domain domain (fun h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont h ghostenv env env' size
@@ -5294,7 +5300,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let dummypat = SrcPat DummyPat in
   
   let get_points_to (pn,ilist) h p predSymb l cont =
-    assert_chunk rules (pn,ilist) h [] [] [] l (predSymb, true) [] real_unit dummypat 1 [TermPat p; dummypat] (fun h coef [_; t] size ghostenv env env' ->
+    assert_chunk rules (pn,ilist) h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun h coef [_; t] size ghostenv env env' ->
       cont h coef t)
   in
     
@@ -6250,7 +6256,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             check_call h cont
           | Ghost ->
             let (_, _, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
-            assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat 1 [TermPat fterm] $. fun h coef _ _ _ _ _ ->
+            assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat (Some 1) [TermPat fterm] $. fun h coef _ _ _ _ _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required.";
             check_call h $. fun h env ->
             cont (Chunk ((predsymb, true), [], real_unit, [fterm], None)::h) env
@@ -6356,7 +6362,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | Some s ->
             let consume_chunk h cont =
               with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
-              assert_chunk rules (pn,ilist) h ghostenv [] [] l (symb, true) [] real_unit dummypat 1 [TermPat funcsym] (fun h coef ts chunk_size ghostenv env env' ->
+              assert_chunk rules (pn,ilist) h ghostenv [] [] l (symb, true) [] real_unit dummypat (Some 1) [TermPat funcsym] (fun h coef ts chunk_size ghostenv env env' ->
                 if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required.";
                 cont h
               )
@@ -6391,7 +6397,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       eval_h h env e $. fun h pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
-      assert_chunk rules (pn,ilist) h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat 1 [TermPat pointerTerm; SrcPat DummyPat] $. fun h coef ts _ _ _ _ ->
+      assert_chunk rules (pn,ilist) h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun h coef ts _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array.";
       let [_; cs] = ts in
       with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
@@ -6429,7 +6435,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter h fds
       end $. fun h ->
       with_context (Executing (h, env, l, "Consuming struct padding chunk")) $. fun () ->
-      assert_chunk rules (pn,ilist) h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat 1 [TermPat pointerTerm] $. fun h coef _ _ _ _ _ ->
+      assert_chunk rules (pn,ilist) h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk.";
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("chars", [])) in
@@ -6457,7 +6463,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               get_field (pn,ilist) h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
           let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-          assert_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat 1 [TermPat arg] (fun h coef _ _ _ _ _ ->
+          assert_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun h coef _ _ _ _ _ ->
             iter h fds
           )
         | _ -> call_stmt l None "free" [] (List.map (fun e -> LitPat e) args) Static
@@ -6603,7 +6609,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 | Some bs -> (targs, bs)
               in
               let ps = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps in
-              let inputParamCount = List.length fns + match inputParamCount with None -> List.length ps | Some n -> n in
+              let inputParamCount = match inputParamCount with None -> None | Some n -> Some (List.length fns + n) in
               (targs, tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p, inputParamCount)
             | None -> static_error l "No such predicate instance."
           end
@@ -6621,7 +6627,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
-            ([], [], (g_symb, false), [], 0, ps2, bs0, body, List.length ps1 + List.length ps2)
+            ([], [], (g_symb, false), [], 0, ps2, bs0, body, None)
           end
       in
       let (coefpat, tenv) =
@@ -6661,7 +6667,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some bs -> bs
           in
           if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements.";
-          let inputParamCount = match inputParamCount with None -> List.length pts | Some n -> n in
           (targs, (g_symb, true), instantiate_types tpenv pts, inputParamCount)
       in
       let splitcoef =
@@ -6708,8 +6713,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (inpats, outpats) = take_drop inputParamCount pats in
       List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
       let pats = srcpats pats in
-      assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat inputParamCount pats (fun h coef1 ts1 _ ghostenv env [] ->
-        assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat inputParamCount pats (fun h coef2 ts2 _ _ _ [] ->
+      assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun h coef1 ts1 _ ghostenv env [] ->
+        assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun h coef2 ts2 _ _ _ [] ->
           let (Some tpairs) = zip ts1 ts2 in
           let (ints, outts) = take_drop inputParamCount tpairs in
           let merged_chunk = Chunk (g_symb, targs, ctxt#mk_real_add coef1 coef2, ts1, None) in
@@ -6731,7 +6736,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let Some (_, _, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
-      assert_chunk rules (pn,ilist) h ghostenv env [] l (g_symb, true) [] real_unit dummypat (List.length pats) (srcpats pats) $. fun h coef ts _ ghostenv env [] ->
+      assert_chunk rules (pn,ilist) h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun h coef ts _ ghostenv env [] ->
       if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
       let boxId::argts = ts in
       let Some boxArgMap = zip boxpmap argts in
@@ -6752,7 +6757,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let Some (_, _, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
               let handlePat::argPats = wpats in
               let pats = handlePat::TermPat boxId::argPats in
-              assert_chunk rules (pn,ilist) h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat 1 pats $. fun h coef ts _ ghostenv env [] ->
+              assert_chunk rules (pn,ilist) h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun h coef ts _ ghostenv env [] ->
               if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission.";
               let env = List.filter (fun (x, t) -> x <> "#boxId") env in
               let handleId::_::hpArgs = ts in
@@ -7084,7 +7089,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	    Some x->x
 	  | None -> static_error lcb ("Box predicate not found: "^pre_bcn)
 	  in
-      assert_chunk rules (pn,ilist) h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat 1 pre_bcp_pats (fun h box_coef ts chunk_size ghostenv env [] ->
+      assert_chunk rules (pn,ilist) h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun h box_coef ts chunk_size ghostenv env [] ->
         if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement.";
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
@@ -7102,7 +7107,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 	    in
         let (pre_hp_pats, tenv) = check_pats (pn,ilist) lch tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = srcpats pre_hp_pats in
-        assert_chunk rules (pn,ilist) h ghostenv (("#boxId", boxId)::env) [] lch (pre_handlepred_symb, true) [] real_unit dummypat 1 (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
+        assert_chunk rules (pn,ilist) h ghostenv (("#boxId", boxId)::env) [] lch (pre_handlepred_symb, true) [] real_unit dummypat None (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
           (fun h coef ts chunk_size ghostenv env [] ->
              if not (coef == real_unit) then assert_false h env lch "Handle predicate coefficient must be 1.";
              let (handleId::_::pre_handlePredArgs) = ts in
