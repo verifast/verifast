@@ -37,3 +37,6 @@
 .provides stdio.h#fclose
 .provides stdio.h#fgets
 .provides stdio.h#puts
+.provides stdio.h#fread
+.provides stdio.h#fwrite
+.provides stdio.h#printf

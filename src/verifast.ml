@@ -5887,6 +5887,57 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: symbolic execution helpers *)
   
+  (* locals whose address is taken in e *)
+  let rec locals_address_taken e =
+    match e with
+      True(_) -> []
+    | False(_) -> []
+    | Null(_) -> []
+    | Var(_, _, _) -> []
+    | Operation(l, op, [e1; e2], _) -> List.append (locals_address_taken e1) (locals_address_taken e2)
+    | IntLit(_, _, _) -> []
+    | StringLit(_, _) -> []
+    | ClassLit(_, _) -> []
+    | Read(_, e, _) -> locals_address_taken e
+    | Deref(_, e, _) -> locals_address_taken e
+    | CallExpr(l, name, targs, _, args, binding) ->  List.flatten (List.map (fun pat -> match pat with LitPat(e) -> locals_address_taken e | _ -> []) args)
+    | IfExpr(_, con, e1, e2) -> (locals_address_taken con) @ (locals_address_taken e1) @ (locals_address_taken e2)
+    | SwitchExpr(_, e, clauses, _) -> (locals_address_taken e) @
+        (List.flatten (List.map (fun clause -> match clause with SwitchExprClause(_, _, _, e) -> locals_address_taken e) clauses))
+    | AddressOf(_, Var(_, x, scope)) when !scope = Some(LocalVar) -> [x]
+    | AddressOf(_, e) -> locals_address_taken e
+    | PredNameExpr(_, _) -> []
+    | CastExpr(_, _, e) -> locals_address_taken e
+    | SizeofExpr(_, _) -> []
+    | ProverTypeConversion(_, _, e) -> locals_address_taken e
+  in
+  
+  let rec locals_address_taken_stmt s =
+    match s with
+      PureStmt(_, s) -> locals_address_taken_stmt s (* can we take the address of a local in here? *)
+    | NonpureStmt(_, _, s) -> locals_address_taken_stmt s
+    | Assign(_, _, e) -> locals_address_taken e
+    | DeclStmt(_, _, _, e) -> locals_address_taken e
+    | Write(_, e1, f, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
+    | WriteDeref(_, e1, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
+    | CallStmt(_, _, _, args, _) -> List.flatten (List.map (fun e -> locals_address_taken e) args)
+    | IfStmt(_, e, thn, els) -> (locals_address_taken e) @ 
+        (List.flatten (List.map (fun s -> locals_address_taken_stmt s) (thn @ els)))
+    | SwitchStmt(_, e, clauses) -> (locals_address_taken e) @ 
+        (List.flatten (List.map (fun c -> match c with SwitchStmtClause(_, _, _, stmts) -> 
+          List.flatten (List.map (fun s -> locals_address_taken_stmt s) stmts)
+        ) clauses))
+    | Assert(_, p) -> [] (* should we look inside predicates as well? *)
+    | Leak(_, p) -> []
+    | Open(_, _, _, _, _, _) -> []
+    | Close(_, _, _, _, _, _) -> []
+    | ReturnStmt(_, e) -> (match e with None -> [] | Some(e) -> locals_address_taken e)
+    | WhileStmt(_, e, inv, body, _) -> (locals_address_taken e) @ 
+        (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
+    | BlockStmt(_, decls, body) -> (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
+    | _ -> [] (* todo *)
+  in
+ 
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
   let eval_non_pure (pn,ilist) is_ghost_expr h env e =
