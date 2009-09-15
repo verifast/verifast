@@ -13,7 +13,7 @@ char* fgets(char* buffer, int n, struct file* fp);
   //@ requires chars(buffer, ?cs) &*& chars_length(cs) == n &*& file(fp);
   //@ ensures chars(buffer, ?cs2) &*& chars_length(cs2) == n &*& file(fp) &*& result == 0 ? true : chars_contains(cs2, 0) == true;
 
-int puts(char* format); // todo: support varargs
+int puts(char* format);
   //@ requires [?f]chars(format, ?cs) &*& chars_contains(cs, 0) == true;
   //@ ensures [f]chars(format, cs);
 

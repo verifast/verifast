@@ -150,10 +150,13 @@ lemma void pointer_to_chars(void *p);
     requires pointer(p, _);
     ensures chars(p, ?cs) &*& chars_length(cs) == 4;
 
+predicate char_array(char** a, int count) =
+  count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a+1, count - 1);
+
 @*/
 
-int main();
-    //@ requires emp;
-    //@ ensures emp;
+int main(int argc, char** argv);
+  //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+  //@ ensures true;
 
 #endif

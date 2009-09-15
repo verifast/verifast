@@ -2027,6 +2027,12 @@ let zip xs ys =
     | _ -> None
   in
   iter xs ys []
+  
+let rec zip2 xs ys =
+  match (xs, ys) with
+    ([], _) -> []
+  | (_, []) -> []
+  | (x :: xs, y :: ys) -> (x, y) :: (zip2 xs ys)
 
 let do_finally tryBlock finallyBlock =
   let result =
@@ -5338,6 +5344,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let functypemap = functypemap1 @ functypemap0 in
   
+  let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
+    match breakpoint with
+      None -> ()
+    | Some (path0, line0) ->
+      if line = line0 && Filename.concat basepath relpath = path0 then
+        assert_false h env l "Breakpoint reached."
+  in
+  
+  let check_leaks h env l msg =
+    match file_type path with
+    Java -> check_breakpoint h env l
+    | _ ->
+    with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
+    let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
+    with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
+    if h <> [] then assert_false h env l msg;
+    check_breakpoint [] env l
+  in
+  
   let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
     if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
     let tpenv =
@@ -5351,15 +5376,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (Some rt, Some rt0) -> expect_type_core (pn,ilist) l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
       | _ -> static_error l (msg ^ "Return types do not match.")
     end;
-    begin
-      match zip xmap xmap0 with
-        None -> static_error l (msg ^ "Parameter counts do not match.")
-      | Some pairs ->
-        List.iter
-          (fun ((x, t), (x0, t0)) ->
+	begin
+	  (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype."));
+	  List.iter 
+	    (fun ((x, t), (x0, t0)) ->
            expect_type_core (pn,ilist) l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
-          )
-          pairs
+        )
+	    (zip2 xmap xmap0)
     end;
     if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.");
     push();
@@ -5367,7 +5390,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
     assume_pred [] (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
-      let (Some bs) = zip xmap env0_0 in
+      let bs = zip2 xmap env0_0 in
       let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       assert_pred rules tpenv (pn,ilist) h [] env pre true real_unit (fun h _ env _ ->
         let (env, env0) =
@@ -5377,7 +5400,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         assume_pred tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
           assert_pred rules [] (pn,ilist) h [] env0 post0 true real_unit (fun h _ env0 _ ->
-            with_context (Executing (h, env0, l, "Leak check.")) (fun _ -> if h <> [] then assert_false h env0 l (msg ^ "Implementation leaks heap chunks."))
+		    check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
         )
       )
@@ -5860,24 +5883,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
-  let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
-    match breakpoint with
-      None -> ()
-    | Some (path0, line0) ->
-      if line = line0 && Filename.concat basepath relpath = path0 then
-        assert_false h env l "Breakpoint reached."
-  in
-  
-  let check_leaks h env l msg =
-    match file_type path with
-    Java -> check_breakpoint h env l
-    | _ ->
-    with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
-    let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
-    with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
-    if h <> [] then assert_false h env l msg;
-    check_breakpoint [] env l
-  in
   let eval_non_pure (pn,ilist) is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
     eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e
