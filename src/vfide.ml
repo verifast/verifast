@@ -709,7 +709,8 @@ let show_ide initialPath prover =
     clearTrace();
     List.iter (fun tab ->
       let buffer = tab_buffer tab in
-      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter
+	  (save tab); (* prevents offset errors if files are modified outside of vfide *)
+	  buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
     ) !buffers;
     match get_current_tab() with
       None -> ()
