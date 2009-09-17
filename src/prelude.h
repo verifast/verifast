@@ -142,21 +142,33 @@ lemma void pointer_nonzero(void *pp);
     requires pointer(pp, ?p);
     ensures pointer(pp, p) &*& pp != 0;
 
+fixpoint void *pointer_of_chars(chars cs);
+fixpoint chars chars_of_pointer(void * p);
+fixpoint bool chars_within_limits(chars cs);
+
 lemma void chars_to_pointer(void *p);
-    requires chars(p, ?cs) &*& chars_length(cs) == 4;
-    ensures pointer(p, _);
+    requires chars(p, ?cs) &*& chars_length(cs) == sizeof(void *);
+    ensures pointer(p, pointer_of_chars(cs));
 
 lemma void pointer_to_chars(void *p);
-    requires pointer(p, _);
-    ensures chars(p, ?cs) &*& chars_length(cs) == 4;
+    requires pointer(p, ?v);
+    ensures chars(p, chars_of_pointer(v)) &*& chars_length(chars_of_pointer(v)) == sizeof(void *);
 
-predicate char_array(char** a, int count) =
-  count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a+1, count - 1);
+lemma void pointer_of_chars_of_pointer(void *p);
+    requires p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
+    ensures pointer_of_chars(chars_of_pointer(p)) == p &*& chars_within_limits(chars_of_pointer(p)) == true &*& chars_length(chars_of_pointer(p)) == sizeof(void *);
+
+lemma void chars_of_pointer_of_chars(chars cs);
+    requires chars_length(cs) == sizeof(void *) &*& chars_within_limits(cs) == true;
+    ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
+
+predicate char_array(char **a, int count) =
+    count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a + 1, count - 1);
 
 @*/
 
-int main(int argc, char** argv);
-  //@ requires 0 <= argc &*& [_]char_array(argv, argc);
-  //@ ensures true;
+int main(int argc, char **argv);
+    //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+    //@ ensures true;
 
 #endif
