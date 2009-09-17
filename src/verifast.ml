@@ -683,6 +683,7 @@ type
   | FuncName
   | PredFamName
   | EnumElemName of int
+  | GlobalName
 
 type
   operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | BitNot | BitAnd | BitXor | BitOr
@@ -839,6 +840,7 @@ and
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
+  | Global of loc * type_expr * string * (expr option)
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl =
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
@@ -1001,7 +1003,7 @@ let ghost_keywords = [
 
 let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "typedef"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"; "static"
 ]
 
 let java_keywords = [
@@ -1250,6 +1252,7 @@ and
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
   [FuncTypeDecl (l, Real, rt, g, ps, c)]
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
+| [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -2240,7 +2243,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         maps0
       end
       else
-      ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
+      ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
   in
   let append_nodups xys xys0 string_of_key l elementKind =
     let rec iter xys =
@@ -2254,11 +2257,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   let id x = x in
   let merge_maps l
-    (structmap, enummap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
-    (structmap0, enummap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
+    (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
+    (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
     =
     (append_nodups structmap structmap0 id l "struct",
      append_nodups enummap enummap0 id l "enum",
+	 append_nodups globalmap globalmap0 id l "global variable",
      append_nodups inductivemap inductivemap0 id l "inductive datatype",
      append_nodups purefuncmap purefuncmap0 id l "pure function",
      append_nodups predctormap predctormap0 id l "predicate constructor",
@@ -2274,7 +2278,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
      append_nodups interfmap interfmap0 id l "interface")
   in
 
-  let (structmap0, enummap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
     let headers_included = ref [] in
     (** [iter maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
     let rec iter maps0 headers =
@@ -2423,7 +2427,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     iter' [] ps
   in
-  
+   
   (* Region: Java name resolution functions *)
   
   let rec try_assoc' (pn,imports) name map=
@@ -2740,11 +2744,39 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structdeclmap
   in
   
+  let globaldeclmap =
+    let rec iter gdm ds =
+      match ds with
+        [] -> gdm
+      | Global(l, te, x, None) :: ds-> (* typecheck the rhs *)
+        begin
+          match try_assoc x globalmap0 with
+            Some(_) -> static_error l "Duplicate global variable name."
+          | None -> ()
+        end;
+        begin
+          match try_assoc x gdm with
+            Some (_) -> static_error l "Duplicate global variable name."
+          | None -> 
+		    let tp = check_pure_type ("",[]) [] te in
+			let global_symb = get_unique_var_symb x tp in
+			iter ((x, (l, tp, global_symb)) :: gdm) ds
+        end
+      | _::ds -> iter gdm ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> []
+  in
+  
   let structmap = structmap1 @ structmap0 in
   
   let enummap1 = enumdeclmap in
   
   let enummap = enummap1 @ enummap0 in
+  
+  let globalmap1 = globaldeclmap in
+  let globalmap = globalmap1 @ globalmap0 in
   
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh)) ->
@@ -3582,7 +3614,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     begin
                       let rec iter eds = 
                         match eds with
-                          [] -> static_error l ("No such variable, constructor, regular function, predicate, enum element: "^x)
+                          [] -> 
+						  begin
+						    match try_assoc' (pn, ilist) x globalmap with
+							  None -> static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable: "^x)
+							| Some((l, tp, symbol)) -> scope := Some GlobalName; (e, tp)
+						  end 
                         | (name, (l, elems)) :: eds ->
                           if(List.mem x elems) then
                             begin
@@ -4415,7 +4452,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | FuncName -> (List.assoc x funcnameterms)
         | PredFamName -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
         | EnumElemName(n) -> ctxt#mk_intlit n
-      end
+		| GlobalName ->
+		  begin
+            match read_field with
+              None -> static_error l "Cannot mention global variables in this context."
+            | Some (read_field, deref_pointer) ->
+			    let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
+				  deref_pointer l symbol tp
+          end
+	  end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
     | CastExpr (l, te, e) -> 
       let t = check_pure_type (pn,ilist) [] te in
@@ -4544,6 +4589,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
           field_address (ev e) f
+		| Var (l, x, scope) when ! scope = Some(GlobalName) ->
+		    let Some((l, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in  symbol
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
     | SwitchExpr (l, e, cs, tref) ->
@@ -6184,7 +6231,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_assign l x =
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
-    let vartp l x = match try_assoc x tenv with None -> static_error l ("No such variable: "^x) | Some tp -> tp in
+    let vartp l x = 
+	  match try_assoc x tenv with
+  	    None -> 
+		begin
+		  match try_assoc' (pn, ilist) x globalmap with
+		    None -> static_error l ("No such variable: "^x)
+	      | Some((l, tp, symbol)) -> (tp, Some(symbol))
+		end 
+	  | Some tp -> (tp, None) 
+	in
+	let update_local_or_global h env tpx x symb w cont =
+	  match symb with
+	    None -> cont h (update env x w)
+      | Some(symb) -> 
+	      let predSymb = pointee_pred_symb l tpx in
+          get_points_to (pn,ilist) h symb predSymb l (fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission.";
+            cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
+	in
     let check_correct xo g targs pats (lg, callee_tparams, tr, ps, funenv, pre, post, body, v) =
       verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, body, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
@@ -6204,7 +6269,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              if (match pats with LitPat(Var(_,cn,_))::_->(search cn (pn,ilist) classmap) |_->false)
                then match pats with LitPat(Var(_,cn,_))::rest->(cn,Static,rest,false)
              else
-               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) ObjType(class_name)->(class_name,Instance,pats,false))
+               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) (ObjType(class_name), _) ->(class_name,Instance,pats,false))
             )
            )
         in
@@ -6271,11 +6336,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         (match xo with
                            None -> static_error l "Cannot write call of pure function as statement."
                          | Some x ->
-                             let tpx = vartp l x in
+                             let (tpx, symb) = vartp l x in (* todo *)
                              let Some g=search' g (pn,ilist) purefuncmap in
                              let w = check_expr_t (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) tpx in
                              let _ = check_assign l x in
-                             cont h (update env x (ev w))
+							 update_local_or_global h env tpx x symb (ev w) cont
+                             (* cont h (update env x (ev w)) *)
                         )
                      )
                  | Some (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
@@ -6321,10 +6387,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match xo with
             None -> static_error l "Cannot write call of pure function as statement."
           | Some x ->
-            let tpx = vartp l x in
+            let (tpx, symb) = vartp l x in
             let w = check_expr_t (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) tpx in
             let _ = check_assign l x in
-            cont h (update env x (ev w))
+			update_local_or_global h env tpx x symb (ev w) cont
           )
         )
       | Some (funenv, fterm, lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
@@ -6345,7 +6411,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match args with
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
-          let tpx = vartp l x in
+          let (tpx, symb) = vartp l x in
           let _ = check_assign l x in
           let (_, fds_opt, _) = List.assoc tn structmap in
           let fds =
@@ -6371,7 +6437,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    match fds with
                      [] ->
                      let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-                     cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)]) (update env x result)
+                     update_local_or_global (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)]) env tpx x symb result cont 
                    | (f, (lf, gh, t))::fds ->
                      let fref = new fieldref f in
                      fref#set_parent tn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
@@ -6522,10 +6588,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Assign (l, x, CallExpr (lc, g, targs, [], pats,fb)) ->
       call_stmt l (Some x) g targs pats fb
     | Assign (l, x, e) -> 
-      let tpx = vartp l x in
+      let (tpx, symb) = vartp l x in
       let w = check_expr_t (pn,ilist) tparams tenv e tpx in
       let _ = check_assign l x in
-      eval_h h env w (fun h v -> cont h ((x, v)::env));
+      eval_h h env w (fun h v -> update_local_or_global h env tpx x symb v cont);
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type (pn,ilist) tparams te in
@@ -7769,7 +7835,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  ((!prototypes_used, prototypes_implemented), (structmap1, enummap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
+  ((!prototypes_used, prototypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
   
   in
   
