@@ -7715,6 +7715,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
                     let tenv = boxvarmap @ old_boxvarmap @ pmap @ apmap' in
                     push();
+                    let currentThread = get_unique_var_symb "currentThread" IntType in
                     let actionHandle = get_unique_var_symb "actionHandle" HandleIdType in
                     let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
                     assume (ctxt#mk_not (ctxt#mk_eq actionHandle predicateHandle)) (fun () ->
@@ -7734,7 +7735,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       assume (eval (pn,ilist) None ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) inv) (fun () ->
                         assume (eval (pn,ilist) None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) (fun () ->
                           let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
-                          let env = [("actionHandle", actionHandle)] @ [("predicateHandle", predicateHandle)] @
+                          let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
                             post_boxvars @ old_boxvars @ aarg_env @ hpargs in
                           verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
