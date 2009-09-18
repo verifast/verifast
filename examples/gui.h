@@ -1,24 +1,26 @@
 #ifndef GUI_H
 #define GUI_H
 
+//@ predicate gtk_initialized();
+
 void gui_init();
     //@ requires true;
-    //@ ensures true;
+    //@ ensures [_]gtk_initialized();
   
 struct widget;
 
-//@ predicate window(struct widget* result); 
+//@ predicate widget(struct widget* widget); 
    
 struct widget* gui_window_new();
     //@ requires true;
-    //@ ensures window(result);
+    //@ ensures widget(result);
 
-void gui_widget_show(struct widget* widget); // todo: generalize
-    //@ requires window(widget);
-    //@ ensures window(widget);
+void gui_widget_show(struct widget* widget);
+    //@ requires widget(widget);
+    //@ ensures widget(widget);
 
 void gui_main();
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [_]gtk_initialized();
+    //@ ensures false; // does this ever return?
 
 #endif
