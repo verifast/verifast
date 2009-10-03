@@ -79,6 +79,7 @@ verifast_both -c incr_box.c
 cd ..
 verifast_both -c contrib.c
 verifast_both reallittest.c
+verifast_both -allow_assume -disable_overflow_check dyncode.c
 cd ..
 cd tests
 cd errors

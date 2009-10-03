@@ -265,6 +265,22 @@ end
 
 (* The lexer *)
 
+let big_int_of_hex_string s =
+  let rec iter k weight sum =
+    if k < 2 then
+      sum
+    else
+      let c = int_of_char (s.[k]) in
+      let digit =
+        if int_of_char '0' <= c && c <= int_of_char '9' then
+          c - int_of_char '0'
+        else
+          c - int_of_char 'A' + 10
+      in
+      iter (k - 1) (mult_int_big_int 16 weight) (add_big_int sum (mult_int_big_int digit weight))
+  in
+  iter (String.length s - 1) unit_big_int zero_big_int
+
 (** For syntax highlighting. *)
 type range_kind =
     KeywordRange
@@ -451,11 +467,16 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     match text_peek () with
       ('0'..'9' as c) ->
         text_junk (); store c; number ()
+    | 'x' -> text_junk (); store 'x'; hex_number ()
     | '.' ->
         text_junk (); store '.'; decimal_part ()
     | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
     | _ -> Some (Int (big_int_of_string (get_string ())))
+  and hex_number () =
+    match text_peek () with
+      ('0'..'9' | 'A'..'F') as c -> text_junk (); store c; hex_number ()
+    | _ -> Some (Int (big_int_of_hex_string (get_string ())))
   and decimal_part () =
     match text_peek () with
       ('0'..'9' as c) ->
@@ -836,7 +857,7 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       func_binding *  (* static or instance *)
       visibility
-  | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (pred * pred)
+  | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (type_expr * string) list * (pred * pred)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
@@ -1243,14 +1264,18 @@ and
       MethMember(Meth(l,t,f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
 >] -> r
 and
+  parse_functype_paramlists = parser
+  [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
+| [< '(_, Kwd "/*@"); ps1 = parse_paramlist; '(_, Kwd "@*/"); ps2 = parse_paramlist >] -> (ps1, ps2)
+and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
-  [FuncTypeDecl (l, Real, rt, g, ps, c)]
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >]
+  -> [FuncTypeDecl (l, Real, rt, g, ftps, ps, c)]
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
@@ -1294,8 +1319,8 @@ and
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
-  | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(_, Ident g); ps = parse_paramlist; '(_, Kwd ";"); c = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, ps, c)]
+  | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >] ->
+    [FuncTypeDecl (l, Ghost, rt, g, ftps, ps, c)]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
@@ -2406,7 +2431,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [PackageDecl(_,"",[],ds)] -> ds
       | _ when file_type path=Java -> []
     in
-    flatmap (function (FuncTypeDecl (l, gh, _, g, _, _)) -> [g, (l, gh)] | _ -> []) ds
+    flatmap (function (FuncTypeDecl (l, gh, _, g, ftps, _, _)) -> [g, (l, gh, ftps)] | _ -> []) ds
   in
   
   let inductivedeclmap=
@@ -2779,9 +2804,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let globalmap = globalmap1 @ globalmap0 in
   
   let isfuncs = if file_type path=Java then [] else
-    flatmap (fun (ftn, (_, gh)) ->
-      match gh with
-        Real ->
+    flatmap (fun (ftn, (_, gh, ftps)) ->
+      match (gh, ftps) with
+        (Real, []) ->
         let isfuncname = "is_" ^ ftn in
         let domain = [ctxt#type_int] in
         let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
@@ -3294,6 +3319,46 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
   in
   
+  let functypedeclmap1 =
+    let rec iter functypedeclmap1 ds =
+      match ds with
+        [] -> List.rev functypedeclmap1
+      | FuncTypeDecl (l, gh, rt, ftn, ftxs, xs, (pre, post))::ds ->
+        let (pn,ilist) = ("",[]) in
+        if gh = Ghost && ftxs <> [] then static_error l "Parameterized lemma function types are not supported.";
+        let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
+        let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
+        let ftxmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (te, x)::xs ->
+              if List.mem_assoc x xm then static_error l "Duplicate function type parameter name.";
+              let t = check_pure_type (pn,ilist) [] te in
+              iter ((x, t)::xm) xs
+          in
+          iter [] ftxs
+        in
+        let xmap =
+          let rec iter xm xs =
+            match xs with
+              [] -> List.rev xm
+            | (te, x)::xs ->
+              if List.mem_assoc x xm || List.mem_assoc x ftxmap then static_error l "Duplicate parameter name.";
+              let t = check_pure_type (pn,ilist) [] te in
+              iter ((x, t)::xm) xs
+          in
+          iter [] xs
+        in
+        iter ((ftn, (l, gh, rt, ftxmap, xmap, pre, post))::functypedeclmap1) ds
+      | _::ds -> iter functypedeclmap1 ds
+    in
+    if file_type path=Java then [] else
+    (match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    )
+  in
+  
   (* Region: predicate families *)
   
   let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts)), inputParamCount)) in
@@ -3309,7 +3374,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let is_lemmafunctype_pred_map1 =
     flatmap
       (function
-         (g, (l, Ghost)) ->
+         (g, (l, Ghost, _)) ->
          [(g, mk_predfam ("is_" ^ g) l [] 0 [PtrType (FuncType g)] None)]
        | _ -> []
       )
@@ -3317,6 +3382,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let islemmafunctypepreds1 = List.map (fun (_, p) -> p) is_lemmafunctype_pred_map1 in
+  
+  let is_paramizedfunctype_pred_map1 =
+    flatmap
+      begin function
+        (g, (l, Real, rt, ftxmap, xmap, pre, post)) when ftxmap <> [] ->
+        let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
+        [(g, mk_predfam ("is_" ^ g) l [] 0 paramtypes (Some (List.length paramtypes)))]
+      | _ -> []
+      end
+      functypedeclmap1
+  in
+  
+  let isparamizedfunctypepreds1 = List.map snd is_paramizedfunctype_pred_map1 in
   
   let malloc_block_pred_map1 = 
     match file_type path with
@@ -3388,7 +3466,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter (pn,il) pm ds) rest
       | [] -> pm
     in
-    iter' (islemmafunctypepreds1 @ structpreds1) ps
+    iter' (islemmafunctypepreds1 @ isparamizedfunctypepreds1 @ structpreds1) ps
   in
   
   let (boxmap, predfammap1) =
@@ -3826,9 +3904,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), Char) ->
-      if not (le_big_int zero_big_int n && le_big_int n (big_int_of_int 127)) then
-        static_error l "Integer literal used as char must be between 0 and 127.";
-      t:=Some IntType; e
+      t:=Some IntType;
+      if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
+        if isCast then
+          let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
+          let n = if 128 <= n then n - 256 else n in
+          IntLit (l, big_int_of_int n, t)
+        else
+          static_error l "Integer literal used as char must be between -128 and 127."
+      else
+        e
     | _ ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       match (t, t0) with
@@ -5365,34 +5450,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | FuncTypeDecl (l, gh, rt, ftn, xs, (pre, post))::ds ->
+      | (ftn, (l, gh, rt, ftxmap, xmap, pre, post))::ds ->
         let (pn,ilist) = ("",[]) in
-        let _ = if List.mem_assoc ftn functypemap || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
-        let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
-        let xmap =
-          let rec iter xm xs =
-            match xs with
-              [] -> List.rev xm
-            | (te, x)::xs ->
-              if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-              let t = check_pure_type (pn,ilist) [] te in
-              iter ((x, t)::xm) xs
-          in
-          iter [] xs
-        in
         let (pre, post) =
-          let (wpre, tenv) = check_pred (pn,ilist) [] (xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
+          let (wpre, tenv) = check_pred (pn,ilist) [] (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
           let (wpost, tenv) = check_pred (pn,ilist) [] postmap post in
           (wpre, wpost)
         in
-        iter ((ftn, (l, gh, rt, xmap, pre, post))::functypemap) ds
+        iter ((ftn, (l, gh, rt, ftxmap, xmap, pre, post))::functypemap) ds
       | _::ds -> iter functypemap ds
     in
-    if file_type path=Java then [] else
-    (match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    )
+    iter [] functypedeclmap1
   in
   
   let functypemap = functypemap1 @ functypemap0 in
@@ -5501,7 +5570,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           match try_assoc ftn functypemap with
             None -> static_error l "No such function type."
-          | Some (_, gh, rt0, xmap0, pre0, post0) ->
+          | Some (_, gh, rt0, ftxmap0, xmap0, pre0, post0) ->
+            if ftxmap0 <> [] then static_error l "A function header cannot mention a parameterized function type.";
             let Some fterm = fterm in
             let cenv0 = [("this", fterm)] in
             let k' = match gh with Real -> Regular | Ghost -> Lemma in
@@ -6087,11 +6157,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
     let eval_h0 = eval_h (pn,ilist) in
-    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont in
-    let rec evhs h env es cont =
-      match es with
+    let eval_h h env pat cont =
+      match pat with
+        SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont
+      | TermPat t -> cont h t
+    in
+    let rec evhs h env pats cont =
+      match pats with
         [] -> cont h []
-      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+      | pat::pats -> eval_h h env pat (fun h v -> evhs h env pats (fun h vs -> cont h (v::vs)))
     in 
     let ev e = eval env e in
     let check_assign l x =
@@ -6115,9 +6189,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l "Incorrect number of arguments."
       | Some bs ->
         List.map
-          (function (LitPat e, (x, t0)) ->
-             let t = instantiate_type tpenv t0 in
-             box (check_expr_t (pn,ilist) tparams tenv e t) t t0
+          (function
+            (SrcPat (LitPat e), (x, t0)) ->
+            let t = instantiate_type tpenv t0 in
+            SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e t) t t0))
+          | (TermPat t, _) -> TermPat t
           ) bs
     in
     evhs h env ws (fun h ts ->
@@ -6251,7 +6327,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
 	in
     let check_correct xo g targs pats (lg, callee_tparams, tr, ps, funenv, pre, post, body, v) =
-      verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, body, v) pure leminfo sizemap h tparams tenv ghostenv env cont
+      verify_call l (pn, ilist) xo g targs (List.map (fun pat -> SrcPat pat) pats) (callee_tparams, tr, ps, funenv, pre, post, body, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let call_stmt l xo g targs pats fb=
       match file_type path with
@@ -6359,23 +6435,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc g tenv with
         Some (PtrType (FuncType ftn)) ->
         let fterm = List.assoc g env in
-        let (_, gh, rt, xmap, pre, post) = List.assoc ftn functypemap in
+        let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
         if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
-        let check_call h cont =
-          verify_call l (pn, ilist) xo None [] (LitPat (Var (dummy_loc, g, ref (Some LocalVar)))::pats) ([], rt, (("this", PtrType Void)::xmap), [], pre, post, None, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+        let check_call h args cont =
+          verify_call l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args @ List.map (fun pat -> SrcPat pat) pats) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
         in
         begin
           match gh with
-            Real ->
+            Real when ftxmap = [] ->
             let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
             let phi = ctxt#mk_app isfuncsymb [fterm] in
             assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
-            check_call h cont
+            check_call h [] cont
+          | Real ->
+            let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
+            let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
+            assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun h coef (_::args) _ _ _ _ ->
+            check_call h args $. fun h env ->
+            cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env
           | Ghost ->
             let (_, _, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
             assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat (Some 1) [TermPat fterm] $. fun h coef _ _ _ _ _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required.";
-            check_call h $. fun h env ->
+            check_call h [] $. fun h env ->
             cont (Chunk ((predsymb, true), [], real_unit, [fterm], None)::h) env
         end
       | _ ->
