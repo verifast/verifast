@@ -53,7 +53,7 @@ int get(struct Counter* c)
   return c->value;
 }
 
-int main()
+int main() //@ : main
   //@ requires emp;
   //@ ensures emp;
 {

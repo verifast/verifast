@@ -9,7 +9,7 @@ typedef int sillyfunc/*@(predicate() p)@*/();
 
 //@ predicate_ctor chars_ctor(char *start, chars contents)() = chars(start, contents);
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

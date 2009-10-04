@@ -65,7 +65,7 @@ int get(struct Counter* c)
   return tmp;
 }
 
-int main()
+int main() //@ : main
   //@ requires emp;
   //@ ensures emp;
 {

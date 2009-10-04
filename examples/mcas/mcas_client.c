@@ -300,7 +300,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
     }
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

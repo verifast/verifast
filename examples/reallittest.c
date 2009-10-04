@@ -6,7 +6,7 @@ lemma void foo(real x)
 }
 @*/
 
-int main()
+int main() //@ : main
    //@ requires true;
    //@ ensures true;
 {

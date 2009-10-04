@@ -5544,6 +5544,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
   in
   
+  let functypes_implemented = ref [] in
+  
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs atomic functype_opt contract_opt body =
     if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported.";
     check_tparams l tparams0 tparams;
@@ -5579,7 +5581,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           match try_assoc ftn functypemap with
             None -> static_error l "No such function type."
-          | Some (_, gh, rt0, ftxmap0, xmap0, pre0, post0) ->
+          | Some (lft, gh, rt0, ftxmap0, xmap0, pre0, post0) ->
             if ftxmap0 <> [] then static_error l "A function header cannot mention a parameterized function type.";
             let Some fterm = fterm in
             let cenv0 = [("this", fterm)] in
@@ -5588,7 +5590,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (k, tparams, rt, xmap, atomic, pre, post)
               (k', [], rt0, xmap0, false, cenv0, pre0, post0);
             if gh = Real then
-              assume_is_functype fn ftn
+            begin
+              assume_is_functype fn ftn;
+              if not (List.mem_assoc ftn functypemap1) then
+                functypes_implemented := (fn, lft, ftn)::!functypes_implemented
+            end
         end
     end;
     (rt, xmap, pre, pre_tenv, post)
@@ -8053,7 +8059,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   in
   
-  ((!prototypes_used, prototypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
+  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
   
   in
   
@@ -8063,7 +8069,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let jardeps= ref [] in
   let basepath=(Filename.basename path) in
   let dirpath= (Filename.dirname path) in
-  let (prototypes_used, prototypes_implemented) =
+  let (prototypes_used, prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
@@ -8085,9 +8091,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           parse_c_file path reportRange reportShouldFail
     in
     let result =
-      check_should_fail ([], []) $. fun () ->
-      let ((prototypes_used, prototypes_implemented), _) = check_file true programDir headers ds in
-      (prototypes_used, prototypes_implemented)
+      check_should_fail ([], [], []) $. fun () ->
+      let (linker_info, _) = check_file true programDir headers ds in
+      linker_info
     in
     begin
       match !shouldFailLocs with
@@ -8133,6 +8139,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       List.map (fun line -> ".requires " ^ line) (sorted_lines prototypes_used)
       @
       List.map (fun line -> ".provides " ^ line) (sorted_lines prototypes_implemented)
+      @
+      List.sort compare (List.map (fun (fn, (((_, header), _, _), _), ftn) -> Printf.sprintf ".provides %s : %s#%s" fn header ftn) functypes_implemented)
     in
     if emit_manifest then
       let file = open_out manifest_filename in
@@ -8250,4 +8258,4 @@ let link_program isLibrary modulepaths =
   in
   let impls = iter [] modulepaths in
   if not isLibrary then
-    if not (List.mem "prelude.h#main" impls) then raise (LinkError ("Program does not implement 'main'. Use the '-shared' option to suppress this error."))
+    if not (List.mem "main : prelude.h#main" impls) then raise (LinkError ("Program does not implement 'main'. Use the '-shared' option to suppress this error."))

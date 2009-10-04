@@ -74,7 +74,7 @@ void incrementor(void *data) //@ : thread_run
     //@ leak [_]lock(lock, _) &*& [_]counter->lock |-> _;
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

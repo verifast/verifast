@@ -5,7 +5,7 @@
 #include "sockets.h"
 //#include "threading.h"
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

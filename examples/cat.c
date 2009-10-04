@@ -5,7 +5,7 @@
 /*
 Prints the contents of given file to stdout.
 */
-int main(int argc, char** argv)
+int main(int argc, char** argv) //@ : main
   //@ requires 0 <= argc &*& [_]char_array(argv, argc);
   //@ ensures true;
 {

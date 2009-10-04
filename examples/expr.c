@@ -111,7 +111,7 @@ void dispose_expression(void *expression)
     }
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

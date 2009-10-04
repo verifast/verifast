@@ -22,7 +22,7 @@ void point_mirror(struct point *p)
     swap(&p->x, &p->y);
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

@@ -167,7 +167,7 @@ predicate char_array(char **a, int count) =
 
 @*/
 
-int main(int argc, char **argv);
+typedef int main(int argc, char **argv);
     //@ requires 0 <= argc &*& [_]char_array(argv, argc);
     //@ ensures true;
 

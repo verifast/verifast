@@ -475,7 +475,7 @@ struct tree* remove(struct tree *t, int x)
     }
   }
 }
-int main()
+int main() //@ : main
   //@ requires true;
   //@ ensures true;
 {

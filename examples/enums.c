@@ -1,6 +1,6 @@
 enum day { monday, tuesday, wednesday, thursday, friday, saturday, sunday };
 
-int main() 
+int main() //@ : main
   //@ requires true;
   //@ ensures true;
 {

@@ -5,7 +5,7 @@ struct foo {
     //@ int y;
 };
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

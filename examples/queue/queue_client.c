@@ -223,7 +223,7 @@ lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
 
 @*/
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

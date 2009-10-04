@@ -319,7 +319,7 @@ void session_run(void *data) //@ : thread_run
     //@ leak [_]lock(roomLock, _, _);
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures false;
 {

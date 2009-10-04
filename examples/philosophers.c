@@ -49,7 +49,7 @@ void philosopher_run(void *data) //@ : thread_run
 
 //@ predicate dummy() = true;
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

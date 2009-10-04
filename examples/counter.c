@@ -41,7 +41,7 @@ void swap(struct Counter* c1, struct Counter* c2)
   c1->value = tmp2;
 }
 
-int main()
+int main() //@ : main
   //@ requires emp;
   //@ ensures emp;
 {

@@ -136,7 +136,7 @@ void session(struct set *set) //@ : thread_run
     //@ close thread_run_post(session)(set);
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

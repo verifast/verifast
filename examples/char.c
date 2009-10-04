@@ -1,4 +1,4 @@
-int main() 
+int main() //@ : main
   //@ requires true;
   //@ ensures true;
 {

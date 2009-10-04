@@ -117,7 +117,7 @@ int plusOne(void *data, int x) //@ : mapfunc
     return x + 1;
 }
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {

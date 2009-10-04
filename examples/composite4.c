@@ -445,7 +445,7 @@ lemma void change_focus(struct node *node0, path path, struct node *node)
 
 @*/
 
-int main()
+int main() //@ : main
     //@ requires emp;
     //@ ensures emp;
 {

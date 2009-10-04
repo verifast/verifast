@@ -310,7 +310,7 @@ void main0()
   dispose(l);
 }
 
-int main()
+int main() //@ : main
   //@ requires emp;
   //@ ensures emp;
 {
