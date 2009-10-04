@@ -80,6 +80,7 @@ cd ..
 verifast_both -c contrib.c
 verifast_both reallittest.c
 verifast_both -allow_assume -disable_overflow_check dyncode.c
+verifast_both -c -disable_overflow_check alt_threading.c
 cd ..
 cd tests
 cd errors

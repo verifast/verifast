@@ -801,6 +801,7 @@ and
   | GotoStmt of loc * string
   | InvariantStmt of loc * pred (* join point *)
   | ProduceLemmaFunctionPointerChunkStmt of loc * string * stmt option
+  | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc
   | Throw of loc * expr
   | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
   | TryFinally of loc * stmt list * loc * stmt list
@@ -991,6 +992,7 @@ let stmt_loc s =
   | GotoStmt (l, _) -> l
   | InvariantStmt (l, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _) -> l
+  | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
 
 let type_expr_loc t =
   match t with
@@ -1017,7 +1019,7 @@ let ghost_keywords = [
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant";
   "forall"; "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
-  "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk";
+  "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
   "currentThread"
 ]
@@ -1514,6 +1516,12 @@ and
        [< '(_, Kwd ";") >] -> None
      | [< s = parse_stmt >] -> Some s
   >] -> ProduceLemmaFunctionPointerChunkStmt (l, x, body)
+| [< '(l, Kwd "produce_function_pointer_chunk"); '(_, Ident ftn);
+     '(_, Kwd "("); fpe = parse_expr; '(_, Kwd ")");
+     args = parse_arglist;
+     '(_, Kwd "("); params = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")");
+     '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
+  ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc)
 | [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
@@ -5406,6 +5414,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> []
         | Some s -> assigned_variables s
       end
+    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> []
     | SwitchStmt (l, e, cs) -> flatmap (fun (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
@@ -5498,7 +5507,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (Some rt, Some rt0) -> expect_type_core (pn,ilist) l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
       | _ -> static_error l (msg ^ "Return types do not match.")
     end;
-	begin
+    begin
 	  (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype."));
 	  List.iter 
 	    (fun ((x, t), (x0, t0)) ->
@@ -6585,6 +6594,133 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               consume_chunk h (fun h -> return_cont h retval)
             in
             verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+      end
+    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) ->
+      begin match try_assoc ftn functypemap with
+        None -> static_error l "No such function type"
+      | Some (l, gh, rt, ftxmap, xmap, pre, post) ->
+        if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types.";
+        let (lfn, fn) =
+          match fpe with
+            Var (lfn, x, _) -> (lfn, x)
+          | _ -> static_error (expr_loc fpe) "Function name expected"
+        in
+        let (fterm, l1, rt1, xmap1, pre1, post1) =
+          match try_assoc fn funcmap with
+            None -> static_error lfn "Function name expected"
+          | Some (fenv, Some fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body', binding, visibility) ->
+            if k <> Regular then static_error lfn "Regular function expected";
+            if body' = None then register_prototype_used l fn;
+            (fterm, l, rt, xmap, pre, post)
+        in
+        begin match (rt, rt1) with
+          (None, _) -> ()
+        | (Some t, Some t1) -> expect_type_core (pn,ilist) l "Function return type: " t1 t
+        | _ -> static_error l "Return type mismatch: Function does not return a value"
+        end;
+        begin match zip xmap xmap1 with
+          None -> static_error l "Function type parameter count does not match function parameter count"
+        | Some bs ->
+          List.iter
+            begin fun ((x, tp), (x1, tp1)) ->
+              expect_type_core (pn,ilist) l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1
+            end
+            bs
+        end;
+        let ftargenv =
+          match zip ftxmap args with
+            None -> static_error l "Incorrect number of function pointer chunk arguments"
+          | Some bs ->
+            List.map
+              begin fun ((x, tp), e) ->
+                let w = check_expr_t (pn,ilist) tparams tenv e tp in
+                (x, ev w)
+              end
+              bs
+        in
+        let fparams =
+          match zip params xmap with
+            None -> static_error l "Incorrect number of parameter names"
+          | Some bs ->
+            List.map
+              begin fun ((lx, x), (x0, tp)) ->
+                if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable";
+                (x, x0, tp, get_unique_var_symb x tp)
+              end
+              bs
+        in
+        let (ss_before, callLoc, resultvar, ss_after) =
+          let rec iter ss_before ss_after =
+            match ss_after with
+              [] -> static_error l "'call();' statement expected"
+            | CallStmt (lc, "call", [], [], Static)::ss_after -> (List.rev ss_before, lc, None, ss_after)
+            | DeclStmt (ld, te, x, CallExpr (lc, "call", [], [], [], Static))::ss_after ->
+              if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
+              let t = check_pure_type (pn,ilist) tparams te in
+              begin match rt1 with
+                None -> static_error ld "Function does not return a value"
+              | Some rt1 ->
+                expect_type (pn,ilist) ld rt1 t;
+                (List.rev ss_before, lc, Some (x, t), ss_after)
+              end
+            | s::ss_after -> iter (s::ss_before) ss_after
+          in
+          iter [] ss
+        in
+        let cont () =
+          let coef = get_dummy_frac_term () in
+          let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
+          cont (Chunk ((symb, true), [], coef, fterm::List.map snd ftargenv, None)::h) env
+        in
+        begin
+          let h = [] in
+          with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
+          with_context PushSubcontext $. fun () ->
+          assume_pred [] ("",[]) h [] (("this", fterm)::(ftargenv @ List.map (fun (x, x0, tp, t) -> (x0, t)) fparams)) pre real_unit None None $. fun h _ ft_env ->
+          with_context PopSubcontext $. fun () ->
+          let tenv = List.map (fun (x, x0, tp, t) -> (x, tp)) fparams @ tenv in
+          let ghostenv = List.map (fun (x, x0, tp, t) -> x) fparams @ ghostenv in
+          let env = List.map (fun (x, x0, tp, t) -> (x, t)) fparams @ env in
+          let lblenv = [] in
+          let pure = true in
+          let return_cont h t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" in
+          begin fun tcont ->
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont
+          end $. fun sizemap tenv ghostenv h env ->
+          with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
+          with_context PushSubcontext $. fun () ->
+          assert_pred rules [] ("",[]) h [] (List.map (fun (x, x0, tp, t) -> (x0, t)) fparams) pre1 true real_unit $. fun h _ f_env _ ->
+          let (f_env, ft_env, tenv, ghostenv, env) =
+            match rt1 with
+              None -> (f_env, ft_env, tenv, ghostenv, env)
+            | Some rt1 ->
+              let result = get_unique_var_symb "result" rt1 in
+              let f_env = ("result", result)::f_env in
+              let ft_env =
+                match rt with
+                  None -> ft_env
+                | Some rt -> ("result", result)::ft_env
+              in
+              let (tenv, ghostenv, env) =
+                match resultvar with
+                  None -> (tenv, ghostenv, env)
+                | Some (x, t) ->
+                  ((x, t)::tenv, x::ghostenv, (x, result)::env)
+              in
+              (f_env, ft_env, tenv, ghostenv, env)
+          in
+          assume_pred [] ("",[]) h [] f_env post1 real_unit None None $. fun h _ _ ->
+          with_context PopSubcontext $. fun () ->
+          begin fun tcont ->
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont
+          end $. fun sizemap tenv ghostenv h env ->
+          with_context (Executing (h, env, closeBraceLoc, "Consuming function type postcondition")) $. fun () ->
+          with_context PushSubcontext $. fun () ->
+          assert_pred rules [] ("",[]) h [] ft_env post true real_unit $. fun h _ _ _ ->
+          with_context PopSubcontext $. fun () ->
+          check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
+        end;
+        cont()
       end
     | CallStmt (l, "close_struct", targs, args, Static) when language = CLang ->
       let e = match (targs, args) with ([], [e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
