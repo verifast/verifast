@@ -165,10 +165,16 @@ lemma void chars_of_pointer_of_chars(chars cs);
 predicate char_array(char **a, int count) =
     count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a + 1, count - 1);
 
+predicate module(int moduleId, bool initialState);
+
 @*/
 
 typedef int main(int argc, char **argv);
     //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+    //@ ensures true;
+
+typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
+    //@ requires module(mainModule, true) &*& [_]char_array(argv, argc);
     //@ ensures true;
 
 #endif
