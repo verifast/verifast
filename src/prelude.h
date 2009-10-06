@@ -138,6 +138,10 @@ lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
     ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
 
+lemma void pointer_unique(void *pp);
+    requires [?f]pointer(pp, ?p);
+    ensures [f]pointer(pp, p) &*& f <= 1;
+
 lemma void pointer_nonzero(void *pp);
     requires pointer(pp, ?p);
     ensures pointer(pp, p) &*& pp != 0;
