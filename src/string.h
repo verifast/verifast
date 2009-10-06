@@ -13,6 +13,10 @@ int memcmp(char *array, char *array0, int count);
     //@ requires [?f]chars(array, ?cs) &*& [?f0]chars(array0, ?cs0) &*& count == chars_length(cs) &*& count == chars_length(cs0);
     //@ ensures [f]chars(array, cs) &*& [f0]chars(array0, cs0) &*& true == ((result == 0) == (cs == cs0));
 
+int strcmp(char *s1, char *s2);
+    //@ requires [?f1]chars(s1, ?cs1) &*& chars_contains(cs1, 0) == true &*& [?f2]chars(s2, ?cs2) &*& chars_contains(cs2, 0) == true;
+    //@ ensures [f1]chars(s1, cs1) &*& [f2]chars(s2, cs2);
+
 char *memchr(char *array, char c, int count);
     //@ requires [?f]chars(array, ?cs) &*& chars_length(cs) == count;
     //@ ensures [f]chars(array, cs) &*& result == 0 ? chars_contains(cs, c) == false : chars_contains(cs, c) == true &*& result == array + chars_index_of(cs, c);

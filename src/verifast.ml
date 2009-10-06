@@ -1721,7 +1721,7 @@ and
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
-| [< '(l, String s) >] -> StringLit (l, s)
+| [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> StringLit (l, String.concat "" (s::ss))
 | [< '(l, Kwd "(");
      e = parser
      [< e0 = parse_expr; '(_, Kwd ")");
@@ -4442,8 +4442,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structmap
   in
   
-  let field_offset f = (List.assoc (f#parent, f#name) field_offsets) in
-  let field_address t f = ctxt#mk_add t (field_offset f) in
+  let field_offset l f =
+    match try_assoc (f#parent, f#name) field_offsets with
+      Some term -> term
+    | None -> static_error l "Cannot take the address of a ghost field"
+  in
+  let field_address l t f = ctxt#mk_add t (field_offset l f) in
   
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
@@ -4678,7 +4682,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Read (le, e, f) -> 
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
-          field_address (ev e) f
+          field_address l (ev e) f
         | Var (l, x, scope) when ! scope = Some(GlobalName) ->
             let Some((l, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in  symbol
         | _ -> static_error l "Taking the address of this expression is not supported."

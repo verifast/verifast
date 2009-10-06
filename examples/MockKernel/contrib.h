@@ -1,0 +1,23 @@
+#ifndef CONTRIB_H
+#define CONTRIB_H
+
+/*@
+
+predicate contrib_sum(int id, int count, int sum);
+predicate contrib(int id, int contrib);
+
+lemma int create_contrib_sum();
+    requires true;
+    ensures contrib_sum(result, 0, 0);
+
+lemma void create_contrib(int id, int contrib);
+    requires contrib_sum(id, ?count, ?sum) &*& 0 <= contrib;
+    ensures contrib_sum(id, count + 1, sum + contrib) &*& contrib(id, contrib);
+
+lemma void dispose_contrib(int id);
+    requires contrib_sum(id, ?count, ?sum) &*& contrib(id, ?contrib);
+    ensures contrib_sum(id, count - 1, sum - contrib) &*& 1 <= count &*& 0 <= contrib &*& contrib <= sum;
+
+@*/
+
+#endif

@@ -1,0 +1,37 @@
+#ifndef GHOST_SETS_H
+#define GHOST_SETS_H
+
+//@ #include "list.h"
+
+/*@
+
+predicate ghost_set<t>(int id, list<t> elements);
+predicate ghost_set_member_handle<t>(int id, t element;);
+
+lemma int create_ghost_set<t>();
+    requires true;
+    ensures ghost_set<t>(result, nil);
+
+lemma void ghost_set_add<t>(int id, t element);
+    requires ghost_set<t>(id, ?elements) &*& !mem(element, elements);
+    ensures ghost_set<t>(id, cons(element, elements)) &*& ghost_set_member_handle<t>(id, element);
+
+lemma void ghost_set_remove<t>(int id, t element);
+    requires ghost_set<t>(id, ?elements) &*& ghost_set_member_handle<t>(id, element);
+    ensures ghost_set<t>(id, remove(element, elements)) &*& mem(element, elements) == true;
+
+lemma void ghost_set_match_member_handle<t>(int id, t element);
+    requires ghost_set<t>(id, ?elements) &*& [?f]ghost_set_member_handle<t>(id, element);
+    ensures ghost_set<t>(id, elements) &*& [f]ghost_set_member_handle<t>(id, element) &*& mem(element, elements) == true;
+
+lemma void ghost_set_member_handle_unique<t>(int id, t element);
+    requires [?f]ghost_set_member_handle(id, element);
+    ensures [f]ghost_set_member_handle(id, element) &*& f <= 1;
+
+lemma void ghost_set_remove_lemma<t>(int id, list<t> xs1, t x, list<t> xs2);
+    requires ghost_set<t>(id, append(xs1, cons(x, xs2)));
+    ensures ghost_set<t>(id, append(xs1, cons(x, xs2))) &*& remove(x, append(xs1, cons(x, xs2))) == append(xs1, xs2);
+
+@*/
+
+#endif

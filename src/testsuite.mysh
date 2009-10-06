@@ -33,6 +33,9 @@ cd ..
 cd mcas
 verifast_both -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..
+cd MockKernel
+verifast_both -c -disable_overflow_check MockKernel.c AdderModule.c
+cd ..
 verifast_both -c ifs.c
 verifast_both -shared goto.c
 verifast_both map.c

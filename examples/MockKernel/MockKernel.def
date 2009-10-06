@@ -1,0 +1,7 @@
+EXPORTS
+	create_lock
+	lock_acquire
+	lock_release
+	lock_dispose
+	register_device
+	unregister_device
