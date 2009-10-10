@@ -76,7 +76,7 @@ vfideredux_opt.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx prover
 
 verifast.cmx: vfversion.cmi proverapi.cmx verifast.ml 
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -c proverapi.cmx verifast.ml
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error F -pp camlp4o -c proverapi.cmx verifast.ml
 	time < nl.txt
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml

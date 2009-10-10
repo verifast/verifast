@@ -61,14 +61,18 @@ void unregister_device(struct device *device);
     //@ requires kernel_device(device, ?owner, ?name, ?nameChars, ?ops, ?device_) &*& kernel_module_disposing(owner, ?deviceCount);
     //@ ensures chars(name, nameChars) &*& file_ops(ops, _, _) &*& device_() &*& kernel_module_disposing(owner, deviceCount - 1);
 
-typedef void module_dispose_/*@(predicate(struct module *, int) state)@*/(struct module *self);
+typedef void module_dispose_/*@(predicate(struct module *, int) state, int moduleMainModule)@*/(struct module *self);
     //@ requires state(self, ?deviceCount) &*& kernel_module_disposing(self, deviceCount);
-    //@ ensures kernel_module_disposing(self, 0); // &*& module(moduleMainModule, false);
+    //@ ensures kernel_module_disposing(self, 0) &*& module(moduleMainModule, false);
 
 //@ predicate kernel_module_state(predicate(struct module *, int) state) = true;
 
 typedef module_dispose_ *module_init_/*@(int moduleMainModule)@*/(struct module *self);
     //@ requires module(moduleMainModule, true) &*& kernel_module_initializing(self, 0);
-    //@ ensures kernel_module_state(?state) &*& state(self, ?deviceCount) &*& [_]is_module_dispose_(result, state) &*& kernel_module_initializing(self, deviceCount);
+    /*@
+    ensures
+        kernel_module_state(?state) &*& state(self, ?deviceCount) &*&
+        [_]is_module_dispose_(result, state, moduleMainModule) &*& kernel_module_initializing(self, deviceCount);
+    @*/
 
 #endif

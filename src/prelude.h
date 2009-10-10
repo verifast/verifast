@@ -170,6 +170,7 @@ predicate char_array(char **a, int count) =
     count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a + 1, count - 1);
 
 predicate module(int moduleId, bool initialState);
+predicate module_code(int moduleId;);
 
 @*/
 

@@ -864,6 +864,7 @@ and
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
   | Global of loc * type_expr * string * (expr option)
+  | UnloadableModuleDecl of loc
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl =
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
@@ -1012,7 +1013,7 @@ let common_keywords = [
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "!"; "["; "]"; "{";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?";
-  "*"; "/"; "&"; "^"; "~"; "assert"
+  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"
 ]
 
 let ghost_keywords = [
@@ -1022,7 +1023,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "currentThread"
+  "unloadable_module"
 ]
 
 let c_keywords = [
@@ -1324,6 +1325,7 @@ and
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, ftps, ps, c)]
+  | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
@@ -2448,6 +2450,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
+  
+  let unloadable =
+    match language with
+      CLang -> let [PackageDecl (_, _, _, ds)] = ps in List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
+    | _ -> false
+  in
   
   let structdeclmap =
     let rec iter sdm ds =
@@ -4864,14 +4872,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter h0
   in
   
-  let assume_chunk h ghostenv env g_symb targs coef inputParamCount ts size cont =
+  let assume_chunk h g_symb targs coef inputParamCount ts size cont =
     if inputParamCount = None || coef == real_unit then
-      cont (Chunk (g_symb, targs, coef, ts, size)::h) ghostenv env
+      cont (Chunk (g_symb, targs, coef, ts, size)::h)
     else
       let Some n = inputParamCount in
       let rec iter hdone htodo =
         match htodo with
-          [] -> cont (Chunk (g_symb, targs, coef, ts, size)::h) ghostenv env
+          [] -> cont (Chunk (g_symb, targs, coef, ts, size)::h)
         | Chunk (g_symb', targs', coef', ts', size') as chunk::htodo ->
           if predname_eq g_symb g_symb' && List.for_all2 unify targs targs' && for_all_take2 definitely_equal n ts ts' then
             let assume_all_eq ts ts' cont =
@@ -4892,7 +4900,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 ctxt#mk_real_add coef coef'
             in
-            cont (Chunk (g_symb, targs, coef, ts, size)::h) ghostenv env
+            cont (Chunk (g_symb, targs, coef, ts, size)::h)
           else
             iter (chunk::hdone) htodo
       in
@@ -4920,7 +4928,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv g#domain in
       evalpats (pn,ilist) ghostenv env (pats0 @ pats) g#domain domain (fun ghostenv env ts ->
-        assume_chunk h ghostenv env g_symb targs coef g#inputParamCount ts size_first cont
+        assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
       )
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) -> assume_pred tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all (fun h ghostenv env -> assume_pred tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all cont)
@@ -5610,7 +5618,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               if ftargs = [] then
                 assume_is_functype fn ftn;
               if not (List.mem_assoc ftn functypemap1) then
-                functypes_implemented := (fn, lft, ftn, List.map snd ftargs)::!functypes_implemented
+                functypes_implemented := (fn, lft, ftn, List.map snd ftargs, unloadable)::!functypes_implemented
             end
         end
     end;
@@ -6105,6 +6113,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h value
         )
       | _ ->
+        if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead.";
         let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
         let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
         let (_, _, _, _, chars_nil_symb) = List.assoc "chars_nil" purefuncmap in
@@ -6823,11 +6832,37 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallStmt (l, "open_module", [], args, Static) ->
       if args <> [] then static_error l "open_module requires no arguments.";
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
+      let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       assert_chunk rules (pn,ilist) h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun h coef _ _ _ _ _ ->
       let globalChunks =
         List.map (fun (x, (l, tp, global_symb)) -> Chunk ((pointee_pred_symb l tp, true), [], coef, [global_symb; ctxt#mk_intlit 0], None)) globalmap
       in
-      cont (globalChunks @ h) env
+      let codeChunks =
+        if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
+      in
+      cont (codeChunks @ globalChunks @ h) env
+    | CallStmt (l, "close_module", [], args, Static) ->
+      if args <> [] then static_error l "close_module requires no arguments.";
+      let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
+      let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+      begin fun cont ->
+        let rec iter h globals =
+          match globals with
+            [] -> cont h
+          | (x, (lg, tp, global_symb))::globals ->
+            assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun h _ _ _ _ _ _ ->
+            iter h globals
+        in
+        iter h globalmap
+      end $. fun h ->
+      begin fun cont ->
+        if unloadable then
+          assert_chunk rules (pn,ilist) h [] [] [] l (module_code_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat current_module_term] $. fun h _ _ _ _ _ _ ->
+          cont h
+        else
+          cont h
+      end $. fun h ->
+      cont (Chunk ((module_symb, true), [], real_unit, [current_module_term; ctxt#mk_false], None)::h) env
     | Assign (l, x, e) ->
       let (tpx, symb) = vartp l x in
       verify_expr (Some tpx) (Some x) e $. fun h (Some (v, _)) ->
@@ -7314,13 +7349,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Some x-> x
       in
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
-    | ReturnStmt (l, Some e) ->
-      let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " | Some tp -> tp in
-      let _ = if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." in
-      let w = check_expr_t (pn,ilist) tparams tenv e tp in
-      eval_h h env w $. fun h v ->
-      return_cont h (Some v)
-    | ReturnStmt (l, None) -> return_cont h None
+    | ReturnStmt (l, eo) ->
+      verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
     | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
@@ -7645,6 +7675,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end;
       verify_stmt (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
     | GotoStmt (l, lbl) ->
+      if pure then static_error l "goto statements are not allowed in a pure context";
       begin
         match try_assoc lbl lblenv with
           None -> static_error l "No such label."
@@ -7686,8 +7717,32 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       | (false, None) ->
         let blocks_done = block::blocks_done in
-        verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+        verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
     end
+  and verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo epilog return_cont =
+    if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context.";
+    begin fun cont ->
+      match eo with
+        None -> cont h None
+      | Some e ->
+        if not pure then check_ghost ghostenv l e;
+        let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " | Some tp -> tp in
+        let w = check_expr_t (pn,ilist) tparams tenv e tp in
+        eval_h (pn,ilist) pure h env w $. fun h v ->
+        cont h (Some v)
+    end $. fun h retval ->
+    begin fun cont ->
+      if not pure && unloadable then
+        let codeCoef = List.assoc "currentCodeFraction" env in
+        let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+        assume_chunk h (module_code_symb, true) [] codeCoef (Some 1) [current_module_term] None cont
+      else
+        cont h
+    end $. fun h ->
+    begin fun cont ->
+      verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false)
+    end $. fun sizemap tenv ghostenv h env ->
+    return_cont h retval
   and
     verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     let (decls, ss) =
@@ -7797,11 +7852,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             assume_pred [] (pn,ilist) [] ghostenv env inv real_unit None None (fun h ghostenv env ->
               let blocks_done = block::blocks_done in
-              verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+              verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
             )
         end
         blocks
     end
+  and verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont =
+    let (ss, tcont) =
+      if not pure && List.exists (function ReturnStmt (_, _) -> true | _ -> false) ss then
+        let (ss, lr, eo, epilog) =
+          let rec iter ss ss' =
+            match ss' with
+              ReturnStmt (lr, eo)::epilog -> (List.rev ss, lr, eo, epilog)
+            | s::ss' -> iter (s::ss) ss'
+          in
+          iter [] ss
+        in
+        let tcont sizemap tenv ghostenv h env =
+          let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement.") epilog in
+          verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env lr eo epilog return_cont
+        in
+        (ss, tcont)
+      else
+        (ss, tcont)
+    in
+    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
   
   (* Region: verification of function bodies *)
   
@@ -7818,14 +7893,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       | _ -> ([], None)
     in
-    let (tenv, rxs) =
+    let tenv =
       match rt with
-        None -> (pre_tenv, [])
-      | Some rt -> (("#result", rt)::pre_tenv, ["#result"])
+        None -> pre_tenv
+      | Some rt -> ("#result", rt)::pre_tenv
     in
     let (in_pure_context, leminfo, lems', ghostenv) =
       if k = Lemma then 
-        (true, Some (lems, g, indinfo), g::lems, List.map (function (p, t) -> p) ps @ rxs)
+        (true, Some (lems, g, indinfo), g::lems, List.map (function (p, t) -> p) ps @ ["#result"])
       else
         (false, None, lems, [])
     in
@@ -7833,6 +7908,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let _ =
       check_should_fail () $. fun _ ->
       assume_pred [] (pn, ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+        let (prolog, ss) =
+          if in_pure_context then
+            ([], ss)
+          else
+            let rec iter prolog ss =
+              match ss with
+                PureStmt (l, s)::ss -> iter (s::prolog) ss
+              | _ -> (List.rev prolog, ss)
+            in
+            iter [] ss
+        in
+        begin fun tcont ->
+          verify_cont (pn,ilist) [] [] tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env prolog tcont (fun _ _ -> assert false)
+        end $. fun sizemap tenv ghostenv h env ->
+        begin fun cont ->
+          if unloadable && not in_pure_context then
+            let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+            with_context (Executing (h, env, l, "Consuming code fraction")) $. fun () ->
+            assert_chunk rules (pn,ilist) h [] [] [] l (module_code_symb, true) [] real_unit (SrcPat DummyPat) (Some 1) [TermPat current_module_term] $. fun h coef _ _ _ _ _ ->
+            let half = real_mul l real_half coef in
+            cont (Chunk ((module_code_symb, true), [], half, [current_module_term], None)::h) (("currentCodeFraction", RealType)::tenv) ("currentCodeFraction"::ghostenv) (("currentCodeFraction", half)::env)
+          else
+            cont h tenv ghostenv env
+        end $. fun h tenv ghostenv env ->
         let do_return h env_post =
           assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
@@ -7845,7 +7944,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | (None, Some _) -> assert_false h env l "Void function returns a value."
           | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
         in
-        verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+        begin fun tcont ->
+          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+        end $. fun sizemap tenv ghostenv h env ->
+        verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env closeBraceLoc None [] return_cont
       )
     in
     let _ = pop() in
@@ -8157,7 +8259,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       @
       List.map (fun line -> ".provides " ^ line) (sorted_lines prototypes_implemented)
       @
-      List.sort compare (List.map (fun (fn, (((_, header), _, _), _), ftn, ftargs) -> Printf.sprintf ".provides %s : %s#%s(%s)" fn header ftn (String.concat "," ftargs)) functypes_implemented)
+      List.sort compare
+        begin
+          List.map
+            begin fun (fn, (((_, header), _, _), _), ftn, ftargs, unloadable) ->
+              Printf.sprintf
+                ".provides %s : %s#%s(%s)%s" fn header ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
+            end
+            functypes_implemented
+        end
     in
     if emit_manifest then
       let file = open_out manifest_filename in

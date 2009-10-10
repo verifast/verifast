@@ -139,8 +139,8 @@ lemma void countable_integer_device_cellFactory() : countable_integer
 
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
     module->name |-> ?name &*& chars(name, ?nameChars) &*& chars_contains(nameChars, 0) == true &*& malloc_block(name, chars_length(nameChars)) &*&
-    module->library |-> ?library &*& [_]library(library, _) &*&
-    module->dispose |-> ?dispose &*& [_]is_module_dispose_(dispose, ?state) &*& state(module, ?deviceCount) &*&
+    module->library |-> ?library &*& library(library, ?mainModule) &*&
+    module->dispose |-> ?dispose &*& [_]is_module_dispose_(dispose, ?state, mainModule) &*& state(module, ?deviceCount) &*&
     module->ref_count |-> ?refCount &*&
     module->modulesId |-> modulesId &*&
     module->devicesId |-> devicesId &*&
@@ -496,8 +496,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
             name = reader_read_line_as_string(reader);
             if (name == 0) abort();
             library = load_library(name);
-            //@ assert library(library, ?mainModule);
-            //@ leak library(library, mainModule);
             init = library_lookup_symbol_module_init(library);
             m = malloc(sizeof(struct module));
             if (m == 0) abort();
@@ -604,7 +602,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
                             dispose(m);
                             //@ open kernel_module_disposing(m, 0);
                             free(m->name);
-                            // TODO: library_free(m->handle);
+                            library_free(m->library);
                             //@ counted_dispose(ghost_set_member_handle_ctor(modulesId, m));
                             //@ open ghost_set_member_handle_ctor(modulesId, m)();
                             //@ ghost_set_remove(modulesId, m);

@@ -5,7 +5,7 @@
 #include "MockKernel.h"
 
 module_init_ *library_lookup_symbol_module_init(struct library *library);
-    //@ requires [_]library(library, ?mainModule);
-    //@ ensures [_]is_module_init_(result, mainModule);
+    //@ requires [?f]library(library, ?mainModule);
+    //@ ensures [f]library(library, mainModule) &*& [_]is_module_init_(result, mainModule);
 
 #endif
