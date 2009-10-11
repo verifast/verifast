@@ -134,12 +134,14 @@ release: test refman
 	xcopy $(GTKLIB)\..\bin\*.dll .
 	copy ..\..\prelude.h
 	copy ..\..\stdlib.h
+	copy ..\..\stdio.h
 	copy ..\..\malloc.h
 	copy ..\..\string.h
 	copy ..\..\list.h
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
 	copy ..\..\mysh.exe mysh.exe
+	copy ..\..\dlsymtool.exe dlsymtool.exe
 	xcopy /E /I ..\..\rt rt
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .

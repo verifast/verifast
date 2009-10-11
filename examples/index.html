@@ -10,7 +10,27 @@ blockquote {margin: 0 10pt; padding: 0}
 <h1>VeriFast Examples</h1>
 <p><a href="counter.c.html">counter.c</a> - An introductory example. A simple counter module (without abstraction) and a client program.</p>
 <p><a href="counter_with_pred.c.html">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
+<p><a href="counter_with_pred_auto.c.html">counter_with_pred_auto.c</a> - The same counter, now using the automatic open/close feature.</p>
+<p><a href="enums.c.html">enums.c</a> - An example demonstrating VeriFast's support for enums.</p>
+<p><a href="char.c.html">char.c</a> - An example demonstrating VeriFast's support for character literals.</p>
+<p><a href="cat.c.html">cat.c</a> - A verified implementation of the *nix cat command (copies a file to standard output)</p>
+<p><a href="wc.c.html">wc.c</a> - A verified implementation of the *nix wc command (counts the number of words in a given file)</p>
+<p><a href="cp.c.html">cp.c</a> - A verified implementation of the *nix cp command (copies a file)</p>
+<p><a href="globals.c.html">globals.c</a> - Demonstrates VeriFast's support for global variables.</p>
+<p><a href="limits.c.html">limits.c</a> - Demonstrates VeriFast's support for C's limits on the size of integers.</p>
 <p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</p>
+<p><b>MockKernel</b> - A small server that allows clients to load, unload, and use modules,
+similar to how operating systems allow dynamic device driver loading and unloading.
+Demonstrates VeriFast's support for verification of unloadable modules and programs that load and unload them.</p>
+<blockquote>
+<p><a href="MockKernel/libraries.h.html">libraries.h</a> - A library loading/unloading API. Always returns a freshly loaded instance of the library.</p>
+<p><a href="MockKernel/MockKernel.h.html">MockKernel.h</a> - The header file defining the interface between the kernel and the modules</p>
+<p><a href="MockKernel/MockKernelModule_proxy.h.html">MockKernelModule_proxy.h</a> - The header file with the contract of the function that is dynamically looked up in the loaded DLL</p>
+<p><a href="MockKernel/MockKernel.c.html">MockKernel.c</a> - The kernel</p>
+<p><a href="MockKernel/AdderModule.c.html">AdderModule.c</a> - The example module</p>
+<p><a href="MockKernel/MockKernel.mysh">MockKernel.mysh</a> - The command-line script for verifying the example</p>
+</blockquote>
+<p><a href="philosophers.c.html">philosophers.c</a> - Demonstrates VeriFast's support for deadlock prevention</p>
 <p><a href="chat.c.html">chat.c</a> - A chat server. Demonstrates the use of threads, locks, sockets, lists.</p>
 <p><a href="lists.h.html">lists.h</a> - Specification of a list module</p>
 <p><a href="lists.c.html">lists.c</a> - Implementation of the list module</p>
@@ -20,10 +40,9 @@ blockquote {margin: 0 10pt; padding: 0}
 <p><a href="stringBuffers.c.html">stringBuffers.c</a> - Implementation of the string buffers module. Demonstrates the use of character arrays and strings.</p>
 <p><a href="threading.h.html">threading.h</a> - A specification of a threading module (a wrapper around the Win32/*nix threading API)</p>
 <p><a href="threading.vfmanifest">threading.vfmanifest</a> - Manifest file for the threading module</p>
-<p><b>chatbot</b> - A chat bot (= an automated client for the above chat server)</p>
-<blockquote>
-<p><a href="chatbot/bot.c.html">bot.c</a> - The chat bot<p>
-</blockquote>
+<p><a href="bot.c.html">bot.c</a> - A chat bot (= an automated client for the above chat server)<p>
+<p><a href="dyncode.c.html">dyncode.c</a> - An example that writes x86 assembly code for a plusOne function into a malloc'ed char array and then calls the function. Demonstates parameterized function types.</p>
+<p><a href="alt_threading.c.html">alt_threading.c</a> - An alternative threading API that uses parameterized function types instead of function-pointer-indexed predicate families, plus an example of its use.</p>
 <p><a href="composite4.c.html">composite4.c</a> - Demonstrates an approach for verifying instances of the Composite pattern in VeriFast.
 See Bart Jacobs, Jan Smans, and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/~bartj/verifast/composite.pdf">Verifying the Composite Pattern using Separation Logic</a>. SAVCBS 2008 Challenge problem track.</p>
