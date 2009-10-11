@@ -6,8 +6,11 @@ else
   Z3ARGS =
 endif
 
-test: mysh verifast vfide
+test: mysh verifast vfide dlsymtool
 	export PATH=`pwd`:$PATH; cd ..; src/mysh < src/testsuite.mysh
+
+dlsymtool: dlsymtool.ml
+	ocamlopt.opt -o dlsymtool dlsymtool.ml
 
 mysh: mysh.ml
 	ocamlopt.opt -o mysh unix.cmxa mysh.ml
@@ -131,10 +134,11 @@ else
 	cp verifast verifast-$(VFVERSION)/bin
 	cp vfide verifast-$(VFVERSION)/bin
 endif
-	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h malloc.h string.h list.h verifast-$(VFVERSION)/bin
+	cp assume.vfmanifest crt.vfmanifest prelude.h stdlib.h stdio.h malloc.h string.h list.h verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
 	cp testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
 	cp mysh verifast-$(VFVERSION)/bin
+	cp dlsymtool verifast-$(VFVERSION)/bin
