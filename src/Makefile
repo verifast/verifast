@@ -2,7 +2,7 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe mysh.exe
+test: verifast.exe vfide.exe mysh.exe dlsymtool.exe
 	time < nl.txt
 	cd ..
 	mysh < src\testsuite.mysh
@@ -21,6 +21,9 @@ refman:
 	pdflatex refman.tex
 	pdflatex refman.tex
 	cd ..\..\src
+
+dlsymtool.exe: dlsymtool.ml
+	ocamlopt.opt -o dlsymtool.exe dlsymtool.ml
 
 Fonts.cmx:
 	copy Fonts_default.ml Fonts.ml

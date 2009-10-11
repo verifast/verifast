@@ -496,6 +496,11 @@ void handle_connection(struct socket *socket) //@ : thread_run
             name = reader_read_line_as_string(reader);
             if (name == 0) abort();
             library = load_library(name);
+            if (library == 0) {
+                writer_write_string(writer, "Could not load the module.\r\n");
+                free(name);
+                goto skipLoad;
+            }
             init = library_lookup_symbol_module_init(library);
             m = malloc(sizeof(struct module));
             if (m == 0) abort();
@@ -539,6 +544,8 @@ void handle_connection(struct socket *socket) //@ : thread_run
             //@ close lseg(m, 0, _, kernel_module(modulesId, devicesId));
             //@ close kernel_inv(modulesId, devicesId)();
             lock_release(kernelLock);
+        skipLoad:
+            ;
             
         } else if (choice == 2) {
             
@@ -690,7 +697,12 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ ghost_set_match_member_handle(modulesId, d->owner);
                         //@ lseg_separate(modules, d->owner);
                         //@ open kernel_module(modulesId, devicesId)(owner);
-                        d->owner->ref_count++;
+                        {
+                            int refCount = d->owner->ref_count;
+                            //@ produce_limits(refCount);
+                            if (refCount == INT_MAX) abort();
+                            d->owner->ref_count = refCount + 1;
+                        }
                         //@ d->useCount++;
                         //@ int contribSumId = owner->contrib_sum_id;
                         //@ counted_integer_match_fraction(module_contrib_sum_id, owner);
@@ -727,7 +739,13 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ ghost_set_match_member_handle(modulesId, owner1);
                         //@ lseg_separate(modules1, owner1);
                         //@ open kernel_module(modulesId, devicesId)(owner1);
-                        d->owner->ref_count--;
+                        {
+                            int refCount = d->owner->ref_count;
+                            //@ produce_limits(refCount);
+                            //@ assert contrib_sum(?contribSumId_, _, _);
+                            //@ contrib_sum_nonnegative(contribSumId_);
+                            d->owner->ref_count = refCount - 1;
+                        }
                         //@ d->useCount--;
                         //@ int contribSumId1 = owner1->contrib_sum_id;
                         //@ assert contrib(contribSumId1, ?useCount1);

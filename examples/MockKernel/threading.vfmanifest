@@ -1,0 +1,5 @@
+.provides .\threading.h#create_lock
+.provides .\threading.h#lock_acquire
+.provides .\threading.h#lock_dispose
+.provides .\threading.h#lock_release
+.provides .\threading.h#thread_start

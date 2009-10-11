@@ -46,7 +46,17 @@ void adder_write(void *file, int value)
     //@ open adderFile(f, file);
     lock_acquire(adderLock);
     //@ open adderLockInv();
-    acc += value;
+    {
+        int acc0 = acc;
+        //@ produce_limits(acc0);
+        //@ produce_limits(value);
+        if (value < 0) {
+            if (acc0 < INT_MIN - value) abort();
+        } else {
+            if (INT_MAX - value < acc0) abort();
+        }
+        acc += value;
+    }
     //@ close adderLockInv();
     lock_release(adderLock);
     return;
@@ -152,6 +162,7 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     //@ open_module();
     adderName = malloc(11);
     if (adderName == 0) abort();
+    //@ malloc_block_limits(adderName);
     //@ chars_to_chars2(adderName);
     *(adderName + 0) = '/';
     *(adderName + 1) = 'd';

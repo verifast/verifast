@@ -132,7 +132,7 @@ let _ =
   if n = 1 then
   begin
     print_endline (Verifast.banner ());
-    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] [-emit_vfmanifest] [-emit_highlighted_source_files] {sourcefile|objectfile}"
+    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] [-emit_vfmanifest] [-emit_dll_vfmanifest] [-emit_highlighted_source_files] {sourcefile|objectfile} {-export exportmanifest}"
   end
   else
   let stats = ref false in
@@ -144,8 +144,10 @@ let _ =
   let allowAssume = ref false in
   let allowShouldFail = ref false in
   let emitManifest = ref false in
+  let emitDllManifest = ref false in
   let modules: string list ref = ref [] in
   let emitHighlightedSourceFiles = ref false in
+  let exports: string list ref = ref [] in
   let i = ref 1 in
   while !i < n do
     let arg = Sys.argv.(!i) in
@@ -161,7 +163,9 @@ let _ =
       | "-allow_assume" -> allowAssume := true
       | "-allow_should_fail" -> allowShouldFail := true
       | "-emit_vfmanifest" -> emitManifest := true
+      | "-emit_dll_vfmanifest" -> emitDllManifest := true
       | "-emit_highlighted_source_files" -> emitHighlightedSourceFiles := true
+      | "-export" -> if !i = n then failwith "-export option requires an argument"; exports := Sys.argv.(!i)::!exports; i := !i + 1
       | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
     else
     begin
@@ -189,7 +193,7 @@ let _ =
       let assume_lib = Filename.concat mydir "assume.a" in
       let modules = crt::List.rev !modules in
       let modules = if !allowAssume then assume_lib::modules else modules in
-      link_program (!isLibrary) modules; 
+      link_program (!isLibrary) modules !emitDllManifest !exports; 
       print_endline "Program linked successfully."
     with
       LinkError msg -> print_endline msg; exit 1

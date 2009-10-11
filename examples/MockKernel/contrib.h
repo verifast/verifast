@@ -18,6 +18,10 @@ lemma void dispose_contrib(int id);
     requires contrib_sum(id, ?count, ?sum) &*& contrib(id, ?contrib);
     ensures contrib_sum(id, count - 1, sum - contrib) &*& 1 <= count &*& 0 <= contrib &*& contrib <= sum;
 
+lemma void contrib_sum_nonnegative(int id);
+    requires contrib_sum(id, ?count, ?sum);
+    ensures contrib_sum(id, count, sum) &*& 0 <= count &*& 0 <= sum;
+
 @*/
 
 #endif

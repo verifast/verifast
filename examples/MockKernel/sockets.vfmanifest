@@ -1,0 +1,10 @@
+.provides .\sockets.h#create_server_socket
+.provides .\sockets.h#reader_read_line_as_string
+.provides .\sockets.h#reader_read_nonnegative_integer
+.provides .\sockets.h#server_socket_accept
+.provides .\sockets.h#socket_close
+.provides .\sockets.h#socket_get_reader
+.provides .\sockets.h#socket_get_writer
+.provides .\sockets.h#writer_write_integer_as_decimal
+.provides .\sockets.h#writer_write_pointer_as_hex
+.provides .\sockets.h#writer_write_string

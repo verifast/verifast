@@ -6,4 +6,4 @@ Known VeriFast unsoundnesses:
 - linking correctness: prevent duplicate struct definitions and duplicate predicate definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
-
+- disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)

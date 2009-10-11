@@ -800,6 +800,7 @@ and
   | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
   | LabelStmt of loc * string
   | GotoStmt of loc * string
+  | NoopStmt of loc
   | InvariantStmt of loc * pred (* join point *)
   | ProduceLemmaFunctionPointerChunkStmt of loc * string * stmt option
   | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc
@@ -992,6 +993,7 @@ let stmt_loc s =
   | DisposeBoxStmt (l, _, _, _) -> l
   | LabelStmt (l, _) -> l
   | GotoStmt (l, _) -> l
+  | NoopStmt l -> l
   | InvariantStmt (l, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
@@ -1567,6 +1569,7 @@ and
        | _ -> ()
      end;
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
+| [< '(l, Kwd ";") >] -> NoopStmt l
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
       (match e with
@@ -5443,6 +5446,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CreateHandleStmt (l, x, hpn, e) -> []
     | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
     | GotoStmt _ -> []
+    | NoopStmt _ -> []
     | LabelStmt _ -> []
     | InvariantStmt _ -> []
   in
@@ -7681,6 +7685,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None -> static_error l "No such label."
         | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
+    | NoopStmt l -> cont h env
     | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position."
     | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position."
   and
@@ -8268,6 +8273,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             end
             functypes_implemented
         end
+      @
+      [".produces module " ^ current_module_name]
     in
     if emit_manifest then
       let file = open_out manifest_filename in
@@ -8341,7 +8348,32 @@ let remove_dups bs =
 
 exception LinkError of string
 
-let link_program isLibrary modulepaths =
+let read_file_lines path msg =
+  if Sys.file_exists path then
+    let file = open_in path in
+    do_finally (fun () ->
+      let rec iter () =
+        try
+          let line = input_line file in
+          let n = String.length line in
+          let line = if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line in
+          line::iter()
+        with
+          End_of_file -> []
+      in
+      iter()
+    ) (fun () -> close_in file)
+  else failwith msg
+
+let parse_line line =
+  let space = String.index line ' ' in
+  let command = String.sub line 0 space in
+  let symbol = String.sub line (space + 1) (String.length line - space - 1) in
+  let n = String.length symbol in
+  for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
+  (command, symbol)
+
+let link_program isLibrary modulepaths emitDllManifest exports =
   let rec iter impls modulepaths =
     match modulepaths with
       [] -> impls
@@ -8350,41 +8382,84 @@ let link_program isLibrary modulepaths =
       let lines =
         if List.mem_assoc manifest_path !manifest_map then
           List.assoc manifest_path !manifest_map
-        else if Sys.file_exists manifest_path then
-          let file = open_in manifest_path in
-          do_finally (fun () ->
-            let rec iter () =
-              try
-                let line = input_line file in
-                let n = String.length line in
-                let line = if n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1) else line in
-                line::iter()
-              with
-                End_of_file -> []
-            in
-            iter()
-          ) (fun () -> close_in file)
-        else failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
+        else
+          read_file_lines manifest_path
+            ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
       in
       let rec iter0 impls' lines =
         match lines with
           [] -> iter impls' modulepaths
         | line::lines ->
-          let space = String.index line ' ' in
-          let command = String.sub line 0 space in
-          let symbol = String.sub line (space + 1) (String.length line - space - 1) in
-          let n = String.length symbol in
-          for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
+          let (command, symbol) = parse_line line in
           begin
             match command with
               ".requires" -> if List.mem symbol impls then iter0 impls' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
             | ".provides" -> iter0 (symbol::impls') lines
+            | ".produces" -> iter0 (symbol::impls') lines
           end
       in
       iter0 impls lines
   in
   let impls = iter [] modulepaths in
-  if not isLibrary then
-    if not (List.mem "main : prelude.h#main()" impls) then
-      if not (List.exists (fun line -> startswith line "main : prelude.h#main_full(") impls) then
-        raise (LinkError ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error."))
+  let mainModulePath = match List.rev modulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
+  let mainModuleName = Filename.chop_extension (Filename.basename mainModulePath) in
+  let consume msg x xs =
+    let rec iter xs' xs =
+      match xs with
+        [] -> raise (LinkError (msg x))
+      | x'::xs -> if x = x' then xs' @ xs else iter (x'::xs') xs
+    in
+    iter [] xs
+  in
+  let impls =
+    if not isLibrary then
+      if not (List.mem "main : prelude.h#main()" impls) then
+        if not (List.mem (Printf.sprintf "main : prelude.h#main_full(%s)" mainModuleName) impls) then
+          raise (LinkError ("Program does not implement a function 'main' that implements function type 'main' or 'main_full' declared in prelude.h. Use the '-shared' option to suppress this error."))
+        else
+          consume (fun _ -> "Could not consume the main module") ("module " ^ mainModuleName) impls
+      else
+        impls
+    else
+      impls
+  in
+  let impls =
+    let rec iter impls exports =
+      match exports with
+        [] -> impls
+      | exportPath::exports ->
+        let lines = read_file_lines exportPath ("Could not find export manifest file '" ^ exportPath ^ "'") in
+        let rec iter' impls lines =
+          match lines with
+            [] -> impls
+          | line::lines ->
+            let (command, symbol) = parse_line line in
+            match command with
+              ".provides" ->
+              if List.mem symbol impls then
+                iter' impls lines
+              else
+                raise (LinkError (Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" symbol exportPath))
+            | ".produces" ->
+              let impls = consume (fun s -> Printf.sprintf "Unsatisfied requirement '%s' in export manifest '%s'" s exportPath) symbol impls in
+              iter' impls lines
+        in
+        let impls = iter' impls lines in
+        iter impls exports
+    in
+    iter impls exports
+  in
+  if emitDllManifest then
+  begin
+    let manifestPath = Filename.chop_extension mainModulePath ^ ".dll.vfmanifest" in
+    begin
+      try
+        let file = open_out manifestPath in
+        do_finally begin fun () ->
+          List.iter (fun line -> Printf.fprintf file ".provides %s\n" line) impls
+        end (fun () -> close_out file)
+      with
+        Sys_error s -> raise (LinkError (Printf.sprintf "Could not create DLL manifest file '%s': %s" manifestPath s))
+    end;
+    Printf.fprintf stderr "Written %s\n" manifestPath
+  end

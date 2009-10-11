@@ -1,0 +1,4 @@
+.provides .\lists.h#linked_list_remove
+.provides .\lists.h#lseg_add
+.provides .\lists.h#lseg_append_final
+.provides .\lists.h#lseg_separate

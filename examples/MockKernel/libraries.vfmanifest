@@ -1,0 +1,2 @@
+.provides .\libraries.h#library_free
+.provides .\libraries.h#load_library

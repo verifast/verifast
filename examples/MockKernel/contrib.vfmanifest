@@ -1,0 +1,4 @@
+.provides .\contrib.h#contrib_sum_nonnegative
+.provides .\contrib.h#create_contrib
+.provides .\contrib.h#create_contrib_sum
+.provides .\contrib.h#dispose_contrib

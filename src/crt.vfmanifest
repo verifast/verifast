@@ -6,6 +6,7 @@
 .provides string.h#memcmp
 .provides string.h#memcpy
 .provides string.h#memchr
+.provides string.h#strcmp
 .provides string.h#strlen
 .provides prelude.h#chars_contains_chars_index_of
 .provides prelude.h#chars_join
@@ -16,6 +17,7 @@
 .provides prelude.h#chars_take_0
 .provides prelude.h#pointer_nonzero
 .provides prelude.h#pointer_distinct
+.provides prelude.h#pointer_unique
 .provides list.h#append_assoc
 .provides list.h#append_nil
 .provides list.h#drop_0
