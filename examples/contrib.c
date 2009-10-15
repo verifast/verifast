@@ -1,56 +1,5 @@
 #include "stdlib.h"
-
-struct lock;
-
-/*@
-predicate lock(struct lock *lock; predicate() inv);
-
-predicate locked(struct lock *lock, predicate() inv, int threadId, real frac);
-
-predicate create_lock_ghost_arg(predicate() inv) = true;
-
-@*/
-
-struct lock *create_lock();
-    //@ requires create_lock_ghost_arg(?a) &*& a();
-    //@ ensures lock(result, a);
-
-void lock_acquire(struct lock *lock);
-    //@ requires [?f]lock(lock, ?a);
-    //@ ensures locked(lock, a, currentThread, f) &*& a();
-
-void lock_release(struct lock *lock);
-    //@ requires locked(lock, ?a, currentThread, ?f) &*& a();
-    //@ ensures [f]lock(lock, a);
-
-void lock_dispose(struct lock *lock);
-    //@ requires lock(lock, ?a);
-    //@ ensures a();
-
-/*@
-
-predicate_family thread_run_pre(void *thread_run)(void *data, any info);
-predicate_family thread_run_post(void *thread_run)(void *data, any info);
-
-@*/
-
-typedef void thread_run(void *data);
-    //@ requires thread_run_pre(this)(data, ?info);
-    //@ ensures thread_run_post(this)(data, info);
-
-struct thread;
-
-/*@
-predicate thread(struct thread *thread, void *thread_run, void *data, any info);
-@*/
-
-struct thread *thread_start(void *run, void *data);
-    //@ requires is_thread_run(run) == true &*& thread_run_pre(run)(data, ?info);
-    //@ ensures thread(result, run, data, info);
-    
-void thread_join(struct thread *thread);
-    //@ requires thread(thread, ?run, ?data, ?info);
-    //@ ensures thread_run_post(run)(data, info);
+#include "threading.h"
 
 struct sum {
     int sum;
@@ -96,20 +45,20 @@ predicate_family_instance thread_run_pre(contribute)(struct session *session, co
 predicate contribute_pre(struct session *session, box box1, handle handle1, box box2, handle handle2, box thisBox, struct sum *sumObject, struct lock *lock)
     requires
         session->sum_object |-> sumObject &*& session->lock |-> lock &*& malloc_block_session(session) &*&
-        [1/2]lock(lock, sum(sumObject, box1, handle1, box2, handle2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
+        [1/2]lock(lock, _, sum(sumObject, box1, handle1, box2, handle2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
 
 predicate_family_instance thread_run_post(contribute)(struct session *session, contribute_info info)
     requires
         switch (info) {
             case contribute_info(box1, handle1, box2, handle2, thisBox, sumObject, lock):
-                return [1/2]lock(lock, sum(sumObject, box1, handle1, box2, handle2)) &*& contrib_box(thisBox, 1, _);
+                return [1/2]lock(lock, _, sum(sumObject, box1, handle1, box2, handle2)) &*& contrib_box(thisBox, 1, _);
         };
 
 @*/
 
 void contribute(void *data) //@ : thread_run
-    //@ requires thread_run_pre(contribute)(data, ?info);
-    //@ ensures thread_run_post(contribute)(data, info);
+    //@ requires thread_run_pre(contribute)(data, ?info) &*& lockset(currentThread, nil);
+    //@ ensures thread_run_post(contribute)(data, info) &*& lockset(currentThread, nil);
 {
     //@ open thread_run_pre(contribute)(data, _);
     struct session *session = data;
@@ -157,7 +106,7 @@ int main()
     and_handle handle2 = contrib_handle(0);
     @*/
     //@ close sum(sumObject, box1, handle1, box2, handle2)();
-    //@ close create_lock_ghost_arg(sum(sumObject, box1, handle1, box2, handle2));
+    //@ close create_lock_ghost_args(sum(sumObject, box1, handle1, box2, handle2), nil, nil);
     struct lock *lock = create_lock();
     
     struct session *session1 = malloc(sizeof(struct session));

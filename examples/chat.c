@@ -238,16 +238,16 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
 
 /*@
 
-predicate_family_instance thread_run_data(session_run)(void *data)
-    requires session(data);
+predicate_family_instance thread_run_pre(session_run)(void *data, any info) = session(data);
+predicate_family_instance thread_run_post(session_run)(void *data, any info) = true;
 
 @*/
 
 void session_run(void *data) //@ : thread_run
-    //@ requires thread_run_data(session_run)(data) &*& lockset(currentThread, nil);
-    //@ ensures lockset(currentThread, nil);
+    //@ requires thread_run_pre(session_run)(data, ?info) &*& lockset(currentThread, nil);
+    //@ ensures thread_run_post(session_run)(data, info) &*& lockset(currentThread, nil);
 {
-    //@ open thread_run_data(session_run)(data);
+    //@ open thread_run_pre(session_run)(data, info);
     struct session *session = data;
     //@ open session(session);
     struct room *room = session->room;
@@ -317,6 +317,7 @@ void session_run(void *data) //@ : thread_run
 
     socket_close(socket);
     //@ leak [_]lock(roomLock, _, _);
+    //@ close thread_run_post(session_run)(data, info);
 }
 
 int main() //@ : main
@@ -335,7 +336,8 @@ int main() //@ : main
     {
         struct socket *socket = server_socket_accept(serverSocket);
         struct session *session = create_session(room, roomLock, socket);
-        //@ close thread_run_data(session_run)(session);
+        //@ close thread_run_pre(session_run)(session, unit);
         thread_start(session_run, session);
+        //@ leak thread(_, _, _, _);
     }
 }
