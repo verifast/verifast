@@ -22,6 +22,7 @@ let show_ide initialPath prover =
   let appTitle = "Verifast " ^ Vfversion.version ^ " IDE" in
   let root = GWindow.window ~width:800 ~height:600 ~title:appTitle ~allow_shrink:true () in
   let codeFont = ref Fonts.code_font in
+  let traceFont = ref Fonts.trace_font in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let _ =
@@ -367,7 +368,7 @@ let show_ide initialPath prover =
     let store = GTree.tree_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name Fonts.trace_font;
+    lb#coerce#misc#modify_font_by_name !traceFont;
     let col = GTree.view_column ~title:"Steps" ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
@@ -379,7 +380,7 @@ let show_ide initialPath prover =
     let store = GTree.list_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name Fonts.trace_font;
+    lb#coerce#misc#modify_font_by_name !traceFont;
     let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
@@ -394,6 +395,15 @@ let show_ide initialPath prover =
   let _ = srcPaned#pack2 ~resize:true ~shrink:true (srcEnvFrame#coerce) in
   let (subEnvFrame, subEnvList, subEnvKCol, subEnvCol, _, subEnvStore) = create_listbox "Locals" in
   let _ = subPaned#pack2 ~resize:true ~shrink:true (subEnvFrame#coerce) in
+  let setTraceFont fontName =
+    traceFont := fontName;
+    let setFont widget = widget#coerce#misc#modify_font_by_name !traceFont in
+    setFont stepList;
+    setFont assumptionsList;
+    setFont chunksList;
+    setFont srcEnvList;
+    setFont subEnvList
+  in
   let get_tab_for_path path0 =
     (* This function is called only at a time when no buffers are modified. *)
     let rec iter k tabs =
@@ -785,12 +795,15 @@ let show_ide initialPath prover =
   let showPreferencesDialog () =
     let dialog = GWindow.dialog ~title:"Preferences" ~parent:root () in
     let vbox = dialog#vbox in
-    let itemsTable = GPack.table ~rows:1 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
+    let itemsTable = GPack.table ~rows:2 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
     GMisc.label ~text:"Code font:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
-    let fontButton = GButton.font_button ~font_name:!codeFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) () in
+    let codeFontButton = GButton.font_button ~font_name:!codeFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) () in
+    GMisc.label ~text:"Trace font:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
+    let traceFontButton = GButton.font_button ~font_name:!traceFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
     okButton#connect#clicked (fun () ->
-      setCodeFont fontButton#font_name;
+      setCodeFont codeFontButton#font_name;
+      setTraceFont traceFontButton#font_name;
       dialog#response `DELETE_EVENT
     );
     let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
