@@ -21,6 +21,7 @@ let show_ide initialPath prover =
   let msg = ref None in
   let appTitle = "Verifast " ^ Vfversion.version ^ " IDE" in
   let root = GWindow.window ~width:800 ~height:600 ~title:appTitle ~allow_shrink:true () in
+  let codeFont = ref Fonts.code_font in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let _ =
@@ -35,6 +36,7 @@ let show_ide initialPath prover =
       a "Edit" ~label:"_Edit";
       a "Undo" ~stock:`UNDO ~accel:"<Ctrl>Z";
       a "Redo" ~stock:`REDO ~accel:"<Ctrl>Y";
+      a "Preferences" ~label:"_Preferences...";
       a "View" ~label:"Vie_w";
       a "ClearTrace" ~label:"_Clear trace" ~accel:"<Ctrl>L";
       a "Verify" ~label:"_Verify";
@@ -61,6 +63,8 @@ let show_ide initialPath prover =
         <menu action='Edit'>
           <menuitem action='Undo' />
           <menuitem action='Redo' />
+          <separator />
+          <menuitem action='Preferences' />
         </menu>
         <menu action='View'>
           <menuitem action='ClearTrace' />
@@ -199,8 +203,8 @@ let show_ide initialPath prover =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
     let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
-    let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name Fonts.code_font in
-    let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name Fonts.code_font in
+    let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name !codeFont in
+    let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name !codeFont in
     srcText#set_pixels_above_lines 1;
     srcText#set_pixels_below_lines 1;
     subText#set_pixels_above_lines 1;
@@ -274,6 +278,15 @@ let show_ide initialPath prover =
     subText#event#connect#focus_in ~callback:focusIn;
     buffers := !buffers @ [tab];
     tab
+  in
+  let setCodeFont fontName =
+    codeFont := fontName;
+    List.iter
+      begin fun (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+        (new GObj.misc_ops srcText#as_widget)#modify_font_by_name !codeFont;
+        (new GObj.misc_ops subText#as_widget)#modify_font_by_name !codeFont
+      end
+      !buffers
   in
   let updateMessageEntry() =
     match !msg with
@@ -769,7 +782,24 @@ let show_ide initialPath prover =
           end
       end
   in
+  let showPreferencesDialog () =
+    let dialog = GWindow.dialog ~title:"Preferences" ~parent:root () in
+    let vbox = dialog#vbox in
+    let itemsTable = GPack.table ~rows:1 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
+    GMisc.label ~text:"Code font:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
+    let fontButton = GButton.font_button ~font_name:!codeFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) () in
+    let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
+    okButton#connect#clicked (fun () ->
+      setCodeFont fontButton#font_name;
+      dialog#response `DELETE_EVENT
+    );
+    let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
+    cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
+    dialog#run();
+    dialog#destroy()
+  in
   (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
+  (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
   (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
   (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
   undoAction#connect#activate undo;
