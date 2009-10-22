@@ -790,7 +790,7 @@ and
       pat option  (* Coefficient for fractional permission *)
   | Close of loc * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
-  | WhileStmt of loc * expr * pred * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
+  | WhileStmt of loc * expr * pred option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
@@ -1535,8 +1535,8 @@ and
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/");
-     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, p, b, closeBraceLoc)
+     inv = opt (parser [< '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/") >] -> p);
+     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, b, closeBraceLoc)
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "try");
      body = parse_block;
@@ -2224,6 +2224,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
   let max_ptr_big_int = big_int_of_string "4294967295" in
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
+  let min_char_big_int = big_int_of_string "-128" in
+  let min_char_term = ctxt#mk_intlit_of_string "-128" in
+  let max_char_big_int = big_int_of_string "127" in
+  let max_char_term = ctxt#mk_intlit_of_string "127" in
   
   let real_unit_pat = TermPat real_unit in
   
@@ -3802,7 +3806,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CastExpr (l, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
-      (CastExpr (l, te, w), t)
+      (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t)
     | Read (l, e, f) -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
       let (w, t) = check e in
@@ -3935,6 +3939,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (ObjType _, ObjType _) when isCast -> w
       | (PtrType _, UintPtrType) when isCast -> w
       | (UintPtrType, PtrType _) when isCast -> w
+      | (IntType, Char) when isCast -> w
       | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
   and check_deref is_write pure (pn,ilist) l tparams tenv e f =
     let check_ok gh =
@@ -4567,13 +4572,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | ModuleName -> List.assoc x modulemap
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
-    | CastExpr (l, te, e) -> 
-      let t = check_pure_type (pn,ilist) [] te in
+    | CastExpr (l, ManifestTypeExpr (_, t), e) -> 
       begin
         match (e, t) with
           (IntLit (_, n, _), PtrType _) ->
           if assert_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
           ctxt#mk_intlit_of_string (string_of_big_int n)
+        | (e, Char) ->
+          check_overflow l min_char_term (ev e) max_char_term
         | _ -> ev e
       end
     | IntLit (l, n, t) ->
@@ -7357,6 +7363,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
     | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
+      let p = match p with None -> static_error l "Loop invariant required." | Some p -> p in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
