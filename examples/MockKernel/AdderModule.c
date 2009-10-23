@@ -84,7 +84,7 @@ predicate adderState(struct module *self, int deviceCount) =
     pointer(&adderOps, ?adderOps_) &*& malloc_block_file_ops(adderOps_) &*&
     pointer(&adderDevice, ?adderDevice_) &*&
     kernel_device(adderDevice_, self, adderName_, ?adderNameChars, adderOps_, adderDeviceState) &*&
-    chars_length(adderNameChars) == 11;
+    length(adderNameChars) == 11;
 
 @*/
 
@@ -107,24 +107,24 @@ void module_dispose(struct module *self)
 
 /*@
 
-predicate chars2(char *c0, int length; chars cs) =
+predicate chars2(char *c0, int length; list<char> cs) =
     length == 0 ?
-        cs == chars_nil
+        cs == nil
     :
-        character(c0, ?c) &*& chars2(c0 + 1, length - 1, ?cs0) &*& cs == chars_cons(c, cs0);
+        character(c0, ?c) &*& chars2(c0 + 1, length - 1, ?cs0) &*& cs == cons(c, cs0);
 
 lemma void chars_to_chars2(char *c0)
     requires chars(c0, ?cs);
-    ensures chars2(c0, chars_length(cs), cs);
+    ensures chars2(c0, length(cs), cs);
 {
     open chars(c0, cs);
     switch (cs) {
-        case chars_nil:
-        case chars_cons(c, cs0):
-            chars_length_nonnegative(cs0);
+        case nil:
+        case cons(c, cs0):
+            length_nonnegative(cs0);
             chars_to_chars2(c0 + 1);
     }
-    close chars2(c0, chars_length(cs), cs);
+    close chars2(c0, length(cs), cs);
 }
 
 lemma void chars2_to_chars(char *c0)
@@ -133,8 +133,8 @@ lemma void chars2_to_chars(char *c0)
 {
     open chars2(c0, n, cs);
     switch (cs) {
-        case chars_nil:
-        case chars_cons(c, cs0):
+        case nil:
+        case cons(c, cs0):
             chars2_to_chars(c0 + 1);
     }
     close chars(c0, cs);

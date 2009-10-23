@@ -7,7 +7,7 @@ typedef int sillyfunc/*@(predicate() p)@*/();
     //@ requires [?f]p();
     //@ ensures [f]p() &*& result == 1;
 
-//@ predicate_ctor chars_ctor(char *start, chars contents)() = chars(start, contents);
+//@ predicate_ctor chars_ctor(char *start, list<char> contents)() = chars(start, contents);
 
 int main() //@ : main
     //@ requires true;
@@ -32,10 +32,10 @@ int main() //@ : main
     //@ open chars(code + 3, _);
     *(code + 3) = (char)0xC3;
     //@ assert chars(code + 4, ?cs);
-    //@ close chars(code + 3, chars_cons((char)0xC3, cs));
-    //@ close chars(code + 2, chars_cons(0x40, chars_cons((char)0xC3, cs)));
-    //@ close chars(code + 1, chars_cons((char)0xC0, chars_cons(0x40, chars_cons((char)0xC3, cs))));
-    //@ close chars(code, chars_cons(0x33, chars_cons((char)0xC0, chars_cons(0x40, chars_cons((char)0xC3, cs)))));
+    //@ close chars(code + 3, cons((char)0xC3, cs));
+    //@ close chars(code + 2, cons((char)0x40, cons((char)0xC3, cs)));
+    //@ close chars(code + 1, cons((char)0xC0, cons((char)0x40, cons((char)0xC3, cs))));
+    //@ close chars(code, cons((char)0x33, cons((char)0xC0, cons((char)0x40, cons((char)0xC3, cs)))));
     
     //@ assert chars(code, ?contents);
     //@ close chars_ctor(code, contents)();

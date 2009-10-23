@@ -6,121 +6,17 @@
 
 /*@
 
-inductive chars = chars_nil | chars_cons(char, chars);
-
-fixpoint int chars_length(chars cs) {
-    switch (cs) {
-        case chars_nil: return 0;
-        case chars_cons(c, cs0): return 1 + chars_length(cs0);
-    }
-}
-
-fixpoint chars chars_take(chars cs, int offset) {
-    switch (cs) {
-        case chars_nil: return chars_nil;
-        case chars_cons(c, cs0): return offset == 0 ? chars_nil : chars_cons(c, chars_take(cs0, offset - 1));
-    }
-}
-
-fixpoint chars chars_drop(chars cs, int offset) {
-    switch (cs) {
-        case chars_nil: return chars_nil;
-        case chars_cons(c, cs0): return offset == 0 ? cs : chars_drop(cs0, offset - 1);
-    }
-}
-
-fixpoint bool chars_contains(chars cs, char c) {
-    switch (cs) {
-        case chars_nil: return false;
-        case chars_cons(c0, cs0): return c0 == c || chars_contains(cs0, c);
-    }
-}
-
-fixpoint int chars_index_of(chars cs, char c) {
-    switch (cs) {
-        case chars_nil: return -1;
-        case chars_cons(c0, cs0): return c0 == c ? 0 : 1 + chars_index_of(cs0, c);
-    }
-}
-
-fixpoint char char_at(chars cs, int index) {
-  switch(cs) {
-    case chars_nil: return default<char>;
-    case chars_cons(h, t): return index == 0 ? h : char_at(t, index - 1);
-  }
-}
-
-fixpoint chars chars_append(chars cs, chars cs0) {
-    switch (cs) {
-        case chars_nil: return cs0;
-        case chars_cons(c, cs1): return chars_cons(c, chars_append(cs1, cs0));
-    }
-}
-
-lemma void chars_length_nonnegative(chars cs);
-    requires true;
-    ensures 0 <= chars_length(cs);
-
-lemma void chars_contains_chars_index_of(chars cs, char c);
-    requires true;
-    ensures chars_contains(cs, c) == (0 <= chars_index_of(cs, c) && chars_index_of(cs, c) <= chars_length(cs));
-
-lemma void chars_take_0(chars cs);
-    requires true;
-    ensures chars_take(cs, 0) == chars_nil;
-
-predicate character(char *p; char c);
-
-predicate chars(char *array, chars cs) =
-    switch (cs) {
-        case chars_nil: return true;
-        case chars_cons(c, cs0): return character(array, c) &*& chars(array + 1, cs0);
-    };
-
-lemma void chars_nil(char *array);
-    requires emp;
-    ensures chars(array, chars_nil);
-
-lemma void open_chars_nil(char *array);
-    requires chars(array, chars_nil);
-    ensures emp;
-
-lemma void chars_zero(); // There is nothing at address 0.
-    requires chars(0, ?cs);
-    ensures cs == chars_nil;
-
-lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?cs);
-    ensures [f]chars(array, cs) &*& cs == chars_nil ? true : true == ((char *)0 <= array) &*& array + chars_length(cs) <= (char *)4294967295;
-
-lemma void chars_split(char *array, int offset);
-   requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= chars_length(cs);
-   ensures
-       [f]chars(array, chars_take(cs, offset))
-       &*& [f]chars(array + chars_length(chars_take(cs, offset)), chars_drop(cs, offset))
-       &*& chars_length(chars_take(cs, offset)) == offset
-       &*& chars_length(chars_drop(cs, offset)) == chars_length(cs) - offset
-       &*& chars_append(chars_take(cs, offset), chars_drop(cs, offset)) == cs;
-
-lemma void chars_join(char *array);
-    requires [?f]chars(array, ?cs) &*& [f]chars(array + chars_length(cs), ?cs0);
-    ensures
-        [f]chars(array, chars_append(cs, cs0))
-        &*& chars_length(chars_append(cs, cs0)) == chars_length(cs) + chars_length(cs0); // To avoid lemma call at call site in common scenario.
-
 lemma void assume(bool b);
     requires true;
     ensures b;
 
+@*/
+
+/*@
+
+predicate character(char *p; char c);
+
 predicate integer(int *p; int v);
-
-lemma void chars_to_integer(void *p);
-    requires chars(p, ?cs) &*& chars_length(cs) == 4;
-    ensures integer(p, _);
-
-lemma void integer_to_chars(void *p);
-    requires integer(p, _);
-    ensures chars(p, ?cs) &*& chars_length(cs) == 4;
 
 predicate pointer(void **pp; void *p);
 
@@ -136,31 +32,76 @@ lemma void pointer_nonzero(void *pp);
     requires pointer(pp, ?p);
     ensures pointer(pp, p) &*& pp != 0;
 
-fixpoint void *pointer_of_chars(chars cs);
-fixpoint chars chars_of_pointer(void * p);
-fixpoint bool chars_within_limits(chars cs);
+fixpoint void *pointer_of_chars(list<char> cs);
+fixpoint list<char> chars_of_pointer(void * p);
+fixpoint bool chars_within_limits(list<char> cs);
+
+lemma void pointer_of_chars_of_pointer(void *p);
+    requires p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
+    ensures pointer_of_chars(chars_of_pointer(p)) == p &*& chars_within_limits(chars_of_pointer(p)) == true &*& length(chars_of_pointer(p)) == sizeof(void *);
+
+lemma void chars_of_pointer_of_chars(list<char> cs);
+    requires length(cs) == sizeof(void *) &*& chars_within_limits(cs) == true;
+    ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
+
+@*/
+
+/*@
+
+predicate chars(char *array, list<char> cs) =
+    switch (cs) {
+        case nil: return true;
+        case cons(c, cs0): return character(array, c) &*& chars(array + 1, cs0);
+    };
+
+lemma void chars_zero(); // There is nothing at address 0.
+    requires chars(0, ?cs);
+    ensures cs == nil;
+
+lemma void chars_limits(char *array);
+    requires [?f]chars(array, ?cs);
+    ensures [f]chars(array, cs) &*& cs == nil ? true : true == ((char *)0 <= array) &*& array + length(cs) <= (char *)UINTPTR_MAX;
+
+lemma void chars_split(char *array, int offset);
+   requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= length(cs);
+   ensures
+       [f]chars(array, take(offset, cs))
+       &*& [f]chars(array + length(take(offset, cs)), drop(offset, cs))
+       &*& length(take(offset, cs)) == offset
+       &*& length(drop(offset, cs)) == length(cs) - offset
+       &*& append(take(offset, cs), drop(offset, cs)) == cs;
+
+lemma void chars_join(char *array);
+    requires [?f]chars(array, ?cs) &*& [f]chars(array + length(cs), ?cs0);
+    ensures
+        [f]chars(array, append(cs, cs0))
+        &*& length(append(cs, cs0)) == length(cs) + length(cs0); // To avoid lemma call at call site in common scenario.
+
+lemma void chars_to_integer(void *p);
+    requires chars(p, ?cs) &*& length(cs) == sizeof(int);
+    ensures integer(p, _);
+
+lemma void integer_to_chars(void *p);
+    requires integer(p, _);
+    ensures chars(p, ?cs) &*& length(cs) == sizeof(int);
 
 lemma void chars_to_pointer(void *p);
-    requires chars(p, ?cs) &*& chars_length(cs) == sizeof(void *);
+    requires chars(p, ?cs) &*& length(cs) == sizeof(void *);
     ensures pointer(p, pointer_of_chars(cs));
 
 lemma void pointer_to_chars(void *p);
     requires pointer(p, ?v);
-    ensures chars(p, chars_of_pointer(v)) &*& chars_length(chars_of_pointer(v)) == sizeof(void *);
+    ensures chars(p, chars_of_pointer(v)) &*& length(chars_of_pointer(v)) == sizeof(void *);
 
-lemma void pointer_of_chars_of_pointer(void *p);
-    requires p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
-    ensures pointer_of_chars(chars_of_pointer(p)) == p &*& chars_within_limits(chars_of_pointer(p)) == true &*& chars_length(chars_of_pointer(p)) == sizeof(void *);
+@*/
 
-lemma void chars_of_pointer_of_chars(chars cs);
-    requires chars_length(cs) == sizeof(void *) &*& chars_within_limits(cs) == true;
-    ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
-
-predicate char_array(char **a, int count) =
-    count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& chars_contains(cs, 0) == true &*& char_array(a + 1, count - 1);
+/*@
 
 predicate module(int moduleId, bool initialState);
 predicate module_code(int moduleId;);
+
+predicate char_array(char **a, int count) =
+    count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& mem('\0', cs) == true &*& char_array(a + 1, count - 1);
 
 @*/
 

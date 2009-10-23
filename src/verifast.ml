@@ -533,9 +533,9 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
                 Char.chr
                   ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
                      (Char.code c3 - 48))
-            | _ -> error "Bad escape sequence."
+            | _ -> Char.chr ((Char.code c1 - 48) * 10 + (Char.code c2 - 48))
             end
-        | _ -> error "Bad escape sequence."
+        | _ -> Char.chr (Char.code c1 - 48)
         end
     | c when c < ' ' -> raise Stream.Failure
     | c -> text_junk (); c
@@ -1695,7 +1695,7 @@ and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
-| [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref None)
+| [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
 | [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],[],args0,Static)
@@ -3129,7 +3129,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             let w1 = checkt e1 RealType in
                             let w2 = checkt e2 RealType in
                             (Operation (l, Div, [w1; w2], ts), RealType)
-                          | IntLit (l, n, t) -> t := Some intt; (e, intt)
+                          | IntLit (l, n, t) -> if !t = None then t := Some intt; (e, intt)
                           | StringLit (l, s) ->
                             begin match file_type path with
                               Java-> (e, ObjType "java.lang.String")
@@ -3790,7 +3790,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w1 = checkt e1 RealType in
       let w2 = checkt e2 RealType in
       (Operation (l, Div, [w1; w2], ts), RealType)
-    | IntLit (l, n, t) -> t := Some intt; (e, intt)
+    | IntLit (l, n, t) -> (e, match !t with None -> t := Some intt; intt | Some t -> t)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType "Class")
@@ -3917,7 +3917,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), Char) ->
-      t:=Some IntType;
+      t:=Some Char;
       if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
@@ -4587,6 +4587,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (min, max) =
             match t with
               IntType -> (min_int_big_int, max_int_big_int)
+            | Char -> (min_char_big_int, max_char_big_int)
             | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
           in
           if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range."
@@ -6124,19 +6125,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead.";
         let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
-        let (_, _, _, _, chars_contains_symb) = List.assoc "chars_contains" purefuncmap in
-        let (_, _, _, _, chars_nil_symb) = List.assoc "chars_nil" purefuncmap in
-        let (_, _, _, _, chars_cons_symb) = List.assoc "chars_cons" purefuncmap in
-        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("chars", [])) in
+        let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
+        let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
+        let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
+        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
         let rec string_to_term s = 
           if String.length s == 0 then
-              ctxt#mk_app chars_cons_symb [ctxt#mk_intlit 0;(ctxt#mk_app chars_nil_symb [] )]
+              ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); ctxt#mk_app nil_symb []]
           else
-            ctxt#mk_app chars_cons_symb [ctxt#mk_intlit (Char.code (String.get s 0)); (string_to_term (String.sub s 1 ((String.length s) -1)))]
+            ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
         in
         let coef = get_dummy_frac_term () in
-        assume (ctxt#mk_app chars_contains_symb [cs; ctxt#mk_intlit 0]) (fun () ->     (* chars_contains(cs, 0) == true *)
+        assume (ctxt#mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
           assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
             assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
               cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
@@ -6772,8 +6773,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array.";
       let [_; cs] = ts in
       with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
-      let Some (_, _, _, _, chars_length_symb) = try_assoc' (pn,ilist) "chars_length" purefuncmap in
-      if not (definitely_equal (ctxt#mk_app chars_length_symb [cs]) (List.assoc sn struct_sizes)) then
+      let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
+      if not (definitely_equal (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
         assert_false h env l "Could not prove that length of character array equals size of struct.";
       let rec iter h fds =
         match fds with
@@ -6809,9 +6810,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assert_chunk rules (pn,ilist) h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk.";
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
-      let cs = get_unique_var_symb "cs" (InductiveType ("chars", [])) in
-      let Some (_, _, _, _, chars_length_symb) = try_assoc' (pn,ilist) "chars_length" purefuncmap in
-      assume (ctxt#mk_eq (ctxt#mk_app chars_length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
+      let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
+      let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
+      assume (ctxt#mk_eq (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
     | CallStmt (l, "free", [], args,Static) ->
       begin

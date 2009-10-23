@@ -2,23 +2,23 @@
 #define STRING_H
 
 void memcpy(void *array, void *array0, int count);
-    //@ requires chars(array, ?cs) &*& [?f]chars(array0, ?cs0) &*& count == chars_length(cs) &*& count == chars_length(cs0);
+    //@ requires chars(array, ?cs) &*& [?f]chars(array0, ?cs0) &*& count == length(cs) &*& count == length(cs0);
     //@ ensures chars(array, cs0) &*& [f]chars(array0, cs0);
 
 int strlen(char *string);
-    //@ requires [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
-    //@ ensures [f]chars(string, cs) &*& result == chars_index_of(cs, 0);
+    //@ requires [?f]chars(string, ?cs) &*& mem('\0', cs) == true;
+    //@ ensures [f]chars(string, cs) &*& result == index_of('\0', cs);
 
 int memcmp(char *array, char *array0, int count);
-    //@ requires [?f]chars(array, ?cs) &*& [?f0]chars(array0, ?cs0) &*& count == chars_length(cs) &*& count == chars_length(cs0);
+    //@ requires [?f]chars(array, ?cs) &*& [?f0]chars(array0, ?cs0) &*& count == length(cs) &*& count == length(cs0);
     //@ ensures [f]chars(array, cs) &*& [f0]chars(array0, cs0) &*& true == ((result == 0) == (cs == cs0));
 
 int strcmp(char *s1, char *s2);
-    //@ requires [?f1]chars(s1, ?cs1) &*& chars_contains(cs1, 0) == true &*& [?f2]chars(s2, ?cs2) &*& chars_contains(cs2, 0) == true;
+    //@ requires [?f1]chars(s1, ?cs1) &*& mem('\0', cs1) == true &*& [?f2]chars(s2, ?cs2) &*& mem('\0', cs2) == true;
     //@ ensures [f1]chars(s1, cs1) &*& [f2]chars(s2, cs2);
 
 char *memchr(char *array, char c, int count);
-    //@ requires [?f]chars(array, ?cs) &*& chars_length(cs) == count;
-    //@ ensures [f]chars(array, cs) &*& result == 0 ? chars_contains(cs, c) == false : chars_contains(cs, c) == true &*& result == array + chars_index_of(cs, c);
+    //@ requires [?f]chars(array, ?cs) &*& length(cs) == count;
+    //@ ensures [f]chars(array, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
 
 #endif

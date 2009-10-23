@@ -1,11 +1,11 @@
 void puts(char *s);
-    //@ requires [?f]chars(s, ?cs) &*& chars_contains(cs, 0) == true;
+    //@ requires [?f]chars(s, ?cs) &*& mem('\0', cs) == true;
     //@ ensures [f]chars(s, cs);
 
 /*@
 
 predicate argv(char **argv, int argc)
-    requires argc <= 0 ? emp : [_]pointer(argv, ?arg) &*& [_]chars(arg, ?argChars) &*& chars_contains(argChars, 0) == true &*& argv(argv + 1, argc - 1);
+    requires argc <= 0 ? emp : [_]pointer(argv, ?arg) &*& [_]chars(arg, ?argChars) &*& mem('\0', argChars) == true &*& argv(argv + 1, argc - 1);
 
 lemma void pointer_is_in_range(void **p);
     requires [?f]pointer(p, ?v);

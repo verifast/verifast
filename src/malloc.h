@@ -18,10 +18,10 @@ lemma void malloc_block_limits(void *array);
 
 void *malloc(int size);
     //@ requires 0 <= size;
-    //@ ensures result == 0 ? emp : chars(result, ?cs) &*& malloc_block(result, size) &*& chars_length(cs) == size;
+    //@ ensures result == 0 ? emp : chars(result, ?cs) &*& malloc_block(result, size) &*& length(cs) == size;
 
 void free(void *array);
-    //@ requires malloc_block(array, ?size) &*& chars(array, ?cs) &*& chars_length(cs) == size;
+    //@ requires malloc_block(array, ?size) &*& chars(array, ?cs) &*& length(cs) == size;
     //@ ensures emp;
 
 #endif

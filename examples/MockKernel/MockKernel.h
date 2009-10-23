@@ -43,7 +43,7 @@ struct device;
 
 /*@
 
-predicate kernel_device(struct device *device, struct module *owner, char *name, chars nameChars, struct file_ops *fileOps, predicate() device);
+predicate kernel_device(struct device *device, struct module *owner, char *name, list<char> nameChars, struct file_ops *fileOps, predicate() device);
 
 @*/
 
@@ -51,7 +51,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     /*@
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
-        chars(name, ?nameChars) &*& chars_contains(nameChars, 0) == true &*&
+        chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
         file_ops(ops, ?device, _) &*& device() &*&
         is_countable(?countable) &*& countable(countable)(device);
     @*/

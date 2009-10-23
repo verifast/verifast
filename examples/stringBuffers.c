@@ -13,7 +13,7 @@ struct string_buffer {
 /*@
 predicate string_buffer(struct string_buffer *buffer) =
     buffer->length |-> ?length &*& buffer->capacity |-> ?capacity &*& buffer->chars |-> ?charsArray &*& malloc_block_string_buffer(buffer) &*&
-    chars(charsArray, ?cs) &*& malloc_block(charsArray, capacity) &*& 0 <= length &*& length <= capacity &*& chars_length(cs) == capacity;
+    chars(charsArray, ?cs) &*& malloc_block(charsArray, capacity) &*& 0 <= length &*& length <= capacity &*& length(cs) == capacity;
 @*/
 
 struct string_buffer *create_string_buffer()
@@ -27,7 +27,7 @@ struct string_buffer *create_string_buffer()
     buffer->length = 0;
     buffer->capacity = 0;
     buffer->chars = 0;
-    //@ chars_nil(0);
+    //@ close chars(0, nil);
     //@ malloc_block_null();
     //@ close string_buffer(buffer);
     return buffer;
@@ -60,11 +60,11 @@ void string_buffer_clear(struct string_buffer *buffer)
 }
 
 void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int count)
-    //@ requires string_buffer(buffer) &*& [?f]chars(chars, ?cs) &*& count == chars_length(cs);
+    //@ requires string_buffer(buffer) &*& [?f]chars(chars, ?cs) &*& count == length(cs);
     //@ ensures string_buffer(buffer) &*& [f]chars(chars, cs);
 {
     int newLength = 0;
-    //@ chars_length_nonnegative(cs);
+    //@ length_nonnegative(cs);
     //@ open string_buffer(buffer);
     //@ malloc_block_limits(buffer->chars);
     //@ produce_limits(count);
@@ -108,11 +108,11 @@ void string_buffer_append_string_buffer(struct string_buffer *buffer, struct str
 }
 
 void string_buffer_append_string(struct string_buffer *buffer, char *string)
-    //@ requires string_buffer(buffer) &*& [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
+    //@ requires string_buffer(buffer) &*& [?f]chars(string, ?cs) &*& mem('\0', cs) == true;
     //@ ensures string_buffer(buffer) &*& [f]chars(string, cs);
 {
     int length = strlen(string);
-    //@ chars_contains_chars_index_of(cs, 0);
+    //@ mem_index_of('\0', cs);
     //@ chars_split(string, length);
     string_buffer_append_chars(buffer, string, length);
     //@ chars_join(string);
@@ -158,13 +158,13 @@ bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *bu
 }
 
 bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
-    //@ requires [?f1]string_buffer(buffer) &*& [?f2]chars(string, ?cs) &*& chars_contains(cs, 0) == true;
+    //@ requires [?f1]string_buffer(buffer) &*& [?f2]chars(string, ?cs) &*& mem('\0', cs) == true;
     //@ ensures [f1]string_buffer(buffer) &*& [f2]chars(string, cs);
 {
     bool result = false;
     //@ open string_buffer(buffer);
     int length = strlen(string);
-    //@ chars_contains_chars_index_of(cs, 0);
+    //@ mem_index_of('\0', cs);
     if (length == buffer->length) {
         //@ chars_split(buffer->chars, length);
         //@ chars_split(string, length);
@@ -187,18 +187,18 @@ void string_buffer_dispose(struct string_buffer *buffer)
 }
 
 int chars_index_of_string(char *chars, int length, char *string)
-    //@ requires [?f1]chars(chars, ?charsChars) &*& chars_length(charsChars) == length &*& [?f2]chars(string, ?stringChars) &*& chars_contains(stringChars, 0) == true;
+    //@ requires [?f1]chars(chars, ?charsChars) &*& length(charsChars) == length &*& [?f2]chars(string, ?stringChars) &*& mem('\0', stringChars) == true;
     /*@
     ensures
         [f1]chars(chars, charsChars) &*& [f2]chars(string, stringChars) &*&
-        result == -1 ? true : 0 <= result &*& result + chars_index_of(stringChars, 0) <= chars_length(charsChars);
+        result == -1 ? true : 0 <= result &*& result + index_of('\0', stringChars) <= length(charsChars);
     @*/
 {
     int n = strlen(string);
-    //@ chars_contains_chars_index_of(stringChars, 0);
+    //@ mem_index_of('\0', stringChars);
     char *p = chars;
     char *end = 0;
-    //@ chars_length_nonnegative(charsChars);
+    //@ length_nonnegative(charsChars);
     //@ produce_limits(chars);
     //@ produce_limits(length);
     //@ chars_limits(chars);
@@ -217,12 +217,12 @@ int chars_index_of_string(char *chars, int length, char *string)
             //@ chars_join(p);
             //@ chars_join(chars);
             if (cmp == 0) return p - chars;
-            //@ chars_take_0(stringChars);
-            //@ chars_take_0(chars_drop(charsChars, p - chars));
+            //@ take_0(stringChars);
+            //@ take_0(drop(p - chars, charsChars));
             //@ assert [_]chars(chars, ?charsChars2);
-            //@ assert p + 1 - chars <= chars_length(charsChars);
+            //@ assert p + 1 - chars <= length(charsChars);
             //@ assert(charsChars2 == charsChars);
-            //@ assert p + 1 - chars <= chars_length(charsChars2);
+            //@ assert p + 1 - chars <= length(charsChars2);
             p++;
             //@ open chars(string, stringChars);
             //@ chars_split(chars, p - chars);
@@ -231,16 +231,16 @@ int chars_index_of_string(char *chars, int length, char *string)
             //@ chars_join(chars);
             //@ close [f2]chars(string, stringChars);
             if (p == 0) return -1;
-            //@ chars_contains_chars_index_of(pChars, c0);
+            //@ mem_index_of(c0, pChars);
         }
     }
 }
 
 bool string_buffer_split(struct string_buffer *buffer, char *separator, struct string_buffer *before, struct string_buffer *after)
-    //@ requires [?f1]string_buffer(buffer) &*& [?f2]chars(separator, ?cs) &*& chars_contains(cs, 0) == true &*& string_buffer(before) &*& string_buffer(after);
+    //@ requires [?f1]string_buffer(buffer) &*& [?f2]chars(separator, ?cs) &*& mem('\0', cs) == true &*& string_buffer(before) &*& string_buffer(after);
     //@ ensures [f1]string_buffer(buffer) &*& [f2]chars(separator, cs) &*& string_buffer(before) &*& string_buffer(after);
 {
-    //@ chars_contains_chars_index_of(cs, 0);
+    //@ mem_index_of('\0', cs);
     //@ open string_buffer(buffer);
     int n = strlen(separator);
     char *chars = buffer->chars;

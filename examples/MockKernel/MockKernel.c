@@ -28,7 +28,7 @@ static struct module *modules;
 struct device {
     struct device *next;
     char *name;
-    //@ chars nameChars;
+    //@ list<char> nameChars;
     struct module *owner;
     struct file_ops *ops;
     //@ int cellFactory;
@@ -138,7 +138,7 @@ lemma void countable_integer_device_cellFactory() : countable_integer
 }
 
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
-    module->name |-> ?name &*& chars(name, ?nameChars) &*& chars_contains(nameChars, 0) == true &*& malloc_block(name, chars_length(nameChars)) &*&
+    module->name |-> ?name &*& chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, length(nameChars)) &*&
     module->library |-> ?library &*& library(library, ?mainModule) &*&
     module->dispose |-> ?dispose &*& [_]is_module_dispose_(dispose, ?state, mainModule) &*& state(module, ?deviceCount) &*&
     module->ref_count |-> ?refCount &*&
@@ -180,7 +180,7 @@ lemma void countable_file_ops_ctor() : countable
 
 predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     [1/2]device->name |-> ?name &*&
-    [1/2]device->nameChars |-> ?nameChars &*& chars(name, nameChars) &*& chars_contains(nameChars, 0) == true &*&
+    [1/2]device->nameChars |-> ?nameChars &*& chars(name, nameChars) &*& mem('\0', nameChars) == true &*&
     [1/2]device->owner |-> ?owner &*& ticket(ghost_set_member_handle_ctor(modulesId, owner), ?f1) &*& [f1]ghost_set_member_handle(modulesId, owner) &*&
     device->useCount |-> ?useCount &*&
     counted_ghost_cell_factory(device_cellFactory, device, 2) &*&
@@ -207,7 +207,7 @@ predicate kernel_module_initializing(struct module *owner, int deviceCount) =
     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?devices, device(modulesId, devicesId)) &*& ghost_set(devicesId, devices);
 
 predicate kernel_device(
-    struct device *device, struct module *owner, char *name, chars nameChars,
+    struct device *device, struct module *owner, char *name, list<char> nameChars,
     struct file_ops *ops, predicate() device_) =
     counted_integer_ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
     ticket(ghost_set_member_handle_ctor(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
@@ -233,7 +233,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     /*@
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
-        chars(name, ?nameChars) &*& chars_contains(nameChars, 0) == true &*&
+        chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
         file_ops(ops, ?device, _) &*& device() &*&
         is_countable(?countable) &*& countable(countable)(device);
     @*/

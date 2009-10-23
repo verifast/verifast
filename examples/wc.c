@@ -7,16 +7,16 @@
 // Counts the number of words in the given file.
 
 /*@
-fixpoint int wcount(chars cs, bool inword) {
+fixpoint int wcount(list<char> cs, bool inword) {
   switch(cs) {
-    case chars_nil: return 0;
-    case chars_cons(h, t): return 0 == h ? (inword ? 1 : 0) : (' ' == h ? ((inword ? 1 : 0) + wcount(t, false)) : wcount(t, true));
+    case nil: return 0;
+    case cons(h, t): return 0 == h ? (inword ? 1 : 0) : (' ' == h ? ((inword ? 1 : 0) + wcount(t, false)) : wcount(t, true));
   }
 }
 @*/
 
 int wc(char* string, bool inword)
-  //@ requires [?f]chars(string, ?cs) &*& chars_contains(cs, 0) == true;  
+  //@ requires [?f]chars(string, ?cs) &*& mem('\0', cs) == true;  
   //@ ensures [f]chars(string, cs) &*& result == wcount(cs, inword);
 {
   //@ open [f]chars(string, cs);
@@ -58,7 +58,7 @@ int main(int argc, char** argv) //@ : main
   if(buff == 0 || fp == 0) { abort(); }
   res = fgets(buff, 100, fp);
   while(res != 0)
-    //@ invariant file(fp) &*& chars(buff, ?cs) &*& chars_length(cs) == 100 &*& res != 0 ? chars_contains(cs, 0) == true : true;
+    //@ invariant file(fp) &*& chars(buff, ?cs) &*& length(cs) == 100 &*& res != 0 ? mem('\0', cs) == true : true;
   {
     int tmp = wc(buff, inword);
     total = total + tmp;
