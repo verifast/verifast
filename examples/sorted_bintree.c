@@ -10,69 +10,69 @@ struct tree{
 /*@
 predicate tree(struct tree *t,bintree b)
   requires switch(b){
-    case nil: return t==0;
-    case cons(a,bl,br): return t->value |-> ?v &*& t->left |-> ?l &*& t->right |-> ?r 
+    case empty: return t==0;
+    case tree(a,bl,br): return t->value |-> ?v &*& t->left |-> ?l &*& t->right |-> ?r 
 			&*& malloc_block_tree(t) &*& tree(l,bl) &*& tree(r,br) &*& t!=0 &*& a==v ;
   }&*& inorder(b)==true;
 
-inductive bintree = |nil |cons(int,bintree,bintree);
+inductive bintree = |empty |tree(int,bintree,bintree);
 
 fixpoint bool t_contains(bintree b, int v) {
   switch (b) {
-    case nil: return false;
-    case cons(a,l,r): return a==v || (v < a? t_contains(l,v):t_contains(r,v));
+    case empty: return false;
+    case tree(a,l,r): return a==v || (v < a? t_contains(l,v):t_contains(r,v));
   }
 }
 fixpoint bintree tree_add(bintree b, int x) {
   switch (b) {
-    case nil: return cons(x,nil,nil);
-    case cons(v,l,r): return x < v? cons(v,tree_add(l,x),r):
-			(x==v? cons(v,l,r):cons(v,l,tree_add(r,x)));
+    case empty: return tree(x,empty,empty);
+    case tree(v,l,r): return x < v? tree(v,tree_add(l,x),r):
+			(x==v? tree(v,l,r):tree(v,l,tree_add(r,x)));
   }
 }
 fixpoint int max(bintree b){
   switch(b){
-    case cons(a,bl,br): return (br==nil? a:max(br));
-    case nil: return 0;
+    case tree(a,bl,br): return (br==empty? a:max(br));
+    case empty: return 0;
   }
 }
 fixpoint int min(bintree b){
   switch(b){
-    case cons(a,bl,br): return (bl==nil? a:min(bl));
-    case nil: return 0;
+    case tree(a,bl,br): return (bl==empty? a:min(bl));
+    case empty: return 0;
   }
 }
 fixpoint bintree tree_rem(bintree b, int x) {
   switch (b) {
-    case cons(v,l,r): return
+    case tree(v,l,r): return
       x == v ?
-        l == nil ? r : r == nil ? l : cons(max(l), tree_rem(l, max(l)), r)
+        l == empty ? r : r == empty ? l : tree(max(l), tree_rem(l, max(l)), r)
       :
         x < v ?
-          cons(v,tree_rem(l,x),r)
+          tree(v,tree_rem(l,x),r)
         :
-          cons(v,l,tree_rem(r,x));
-    case nil: return nil;
+          tree(v,l,tree_rem(r,x));
+    case empty: return empty;
   }
 }
 fixpoint bool inorder(bintree b){
   switch(b){
-	case nil: return true;
-	case cons(a,bl,br): return (bl==nil? true:max(bl)<a)&& (br==nil? true: a < min(br))
+	case empty: return true;
+	case tree(a,bl,br): return (bl==empty? true:max(bl)<a)&& (br==empty? true: a < min(br))
 		&& inorder(bl) && inorder(br);
   }
 }
 lemma void min_le_max(bintree b)
-  requires inorder(b)==true &*& b!=nil;
+  requires inorder(b)==true &*& b!=empty;
   ensures min(b)<=max(b);
 {
   switch(b){
-	case nil:
-	case cons(v,l,r):if(l!=nil||r!=nil){
-			   if(l==nil){
+	case empty:
+	case tree(v,l,r):if(l!=empty||r!=empty){
+			   if(l==empty){
 			     min_le_max(r);
 			   }else{
-			     if(r!=nil){
+			     if(r!=empty){
 			       min_le_max(r);
 			     }
 			     min_le_max(l);
@@ -81,12 +81,12 @@ lemma void min_le_max(bintree b)
   }
 }
 lemma void contains_max(bintree r)
-  requires r!=nil && inorder(r)==true;
+  requires r!=empty && inorder(r)==true;
   ensures t_contains(r,max(r))==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(c!=nil){
+	case empty:
+	case tree(a,b,c):if(c!=empty){
 			   min_le_max(c);
 			   contains_max(c);
                            /* Needed by Redux. */ if (a == max(r)) {} else {}
@@ -95,12 +95,12 @@ lemma void contains_max(bintree r)
   }
 }
 lemma void contains_min(bintree r)
-  requires r!=nil &*& inorder(r)==true;
+  requires r!=empty &*& inorder(r)==true;
   ensures t_contains(r,min(r))==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(b!=nil){
+	case empty:
+	case tree(a,b,c):if(b!=empty){
 			  min_le_max(b);
 			  contains_min(b);
                           /* Needed by Redux. */ if (a == min(r)) {} else {}
@@ -109,32 +109,32 @@ lemma void contains_min(bintree r)
   }
 }
 lemma void max_conj_add(bintree l,int v,int x)
-  requires x < v &*& (max(l)<v||l==nil) &*& inorder(l)==true;
+  requires x < v &*& (max(l)<v||l==empty) &*& inorder(l)==true;
   ensures max(tree_add(l,x))<v &*& inorder(l)==true;
 {
   switch(l){
-	case nil:
-	case cons(a,b,c):if(x < a){
-                          /* Needed by Redux. */ if (b == nil) {} else {}
+	case empty:
+	case tree(a,b,c):if(x < a){
+                          /* Needed by Redux. */ if (b == empty) {} else {}
 			  max_conj_add(b,a,x);
 			 }
 			 if(a < x){
-                          /* Needed by Redux. */ if (c == nil) {} else {}
+                          /* Needed by Redux. */ if (c == empty) {} else {}
 			  max_conj_add(c,v,x);
 			 }
                          /* Needed by Redux. */ if ((x < a) == true) {} else { if (x == a) {} else {} }
-                         /* Needed by Redux. */ if (c == nil) {} else {}
+                         /* Needed by Redux. */ if (c == empty) {} else {}
                          /* Needed by Redux. */ if (x == a) {} else {}
-                         /* Needed by Redux. */ if (tree_add(c, x) == nil) {} else {}
+                         /* Needed by Redux. */ if (tree_add(c, x) == empty) {} else {}
   }
 }
 lemma void min_conj_add(bintree r,int v,int x)
-  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==empty) &*& inorder(r)==true;
   ensures v < min(tree_add(r,x)) &*& inorder(r)==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(a < x){
+	case empty:
+	case tree(a,b,c):if(a < x){
 			  min_conj_add(c,a,x);
 			 }
 			 if(x < a){
@@ -143,12 +143,12 @@ lemma void min_conj_add(bintree r,int v,int x)
   }
 }
 lemma void max_conj_rem(bintree l,int v,int x)
-  requires x < v &*& (max(l)<v||l==nil) &*& inorder(l)==true;
-  ensures (max(tree_rem(l,x))<v||tree_rem(l,x)==nil) &*& inorder(l)==true;
+  requires x < v &*& (max(l)<v||l==empty) &*& inorder(l)==true;
+  ensures (max(tree_rem(l,x))<v||tree_rem(l,x)==empty) &*& inorder(l)==true;
 {
   switch(l){
-	case nil:
-	case cons(a,b,c):if(x < a){
+	case empty:
+	case tree(a,b,c):if(x < a){
 			  max_conj_rem(b,a,x);
 			 }
 			 if(a < x){
@@ -162,8 +162,8 @@ lemma void tree_add_inorder(bintree b, int x)
     ensures inorder(tree_add(b,x))==true &*& t_contains(tree_add(b,x),x)==true;
 {
     switch (b) {
-        case nil:
-        case cons(v,l,r):if(x < v){
+        case empty:
+        case tree(v,l,r):if(x < v){
 			  max_conj_add(l,v,x);
 			  tree_add_inorder(l,x);
 			 }
@@ -178,8 +178,8 @@ lemma void min_all(bintree r,int x)
   ensures min(r)<=x;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(b!=nil){
+	case empty:
+	case tree(a,b,c):if(b!=empty){
 			   contains_max(b);
 			   min_all(b,max(b));
 			 }
@@ -193,8 +193,8 @@ lemma void max_all(bintree r,int x)
   ensures x < max(r);
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(c!=nil){
+	case empty:
+	case tree(a,b,c):if(c!=empty){
 			   contains_min(c);
 			   min_le_max(c);
 			 }
@@ -204,18 +204,18 @@ lemma void max_all(bintree r,int x)
   }
 }
 lemma void min_conj_rem(bintree r,int v,int x)
-  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
-  ensures (v < min(tree_rem(r,x))||tree_rem(r,x)==nil) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==empty) &*& inorder(r)==true;
+  ensures (v < min(tree_rem(r,x))||tree_rem(r,x)==empty) &*& inorder(r)==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(a < x){
+	case empty:
+	case tree(a,b,c):if(a < x){
 			  min_conj_rem(c,a,x);
 			 }
 			 if(x < a){
 			  min_conj_rem(b,v,x);
 			 }
-			 if(b!=nil&&c!=nil){
+			 if(b!=empty&&c!=empty){
 			  contains_max(b);
 			  min_all(b,max(b));
 			  min_conj_rem(b,v,max(b));
@@ -223,13 +223,13 @@ lemma void min_conj_rem(bintree r,int v,int x)
   }
 }
 lemma void contains_rem_max(bintree b)
-  requires inorder(b)==true &*& b!=nil &*& tree_rem(b,max(b))!=nil &*& inorder(tree_rem(b,max(b)))==true;
+  requires inorder(b)==true &*& b!=empty &*& tree_rem(b,max(b))!=empty &*& inorder(tree_rem(b,max(b)))==true;
   ensures t_contains(b,max(tree_rem(b,max(b))))==true;
 {
   switch (b) {
-        case nil:
-        case cons(v,l,r):if(l==nil||r!=nil){
-			   if(tree_rem(r,max(r))==nil){
+        case empty:
+        case tree(v,l,r):if(l==empty||r!=empty){
+			   if(tree_rem(r,max(r))==empty){
 			     min_le_max(r);
 		  	     contains_max(tree_rem(b,max(b)));
 			   }else{
@@ -249,8 +249,8 @@ lemma void tree_rem_inorder(bintree b, int x)
     ensures inorder(tree_rem(b,x))==true&*& t_contains(tree_rem(b,x),x)==false;
 {
     switch (b) {
-        case nil:
-        case cons(v,l,r):if(x < v){
+        case empty:
+        case tree(v,l,r):if(x < v){
 			  max_conj_rem(l,v,x);
 			  tree_rem_inorder(l,x);
 			 }
@@ -259,20 +259,20 @@ lemma void tree_rem_inorder(bintree b, int x)
 			  tree_rem_inorder(r,x);
 			 }
 			 if(x==v){
-				if(l==nil && r!=nil){
+				if(l==empty && r!=empty){
 					if(t_contains(r,x)==false){
 					  contains_min(r);
 					}else{
 					  min_all(r,x);
 					}
-				}if(r==nil&&l!=nil){
+				}if(r==empty&&l!=empty){
 					if(t_contains(l,x)==false){
 					  contains_min(l);
 					}else{
 					  max_all(l,x);
 					}
-				}if(r!=nil&&l!=nil){
-				   if(tree_rem(l,max(l))!=nil){
+				}if(r!=empty&&l!=empty){
+				   if(tree_rem(l,max(l))!=empty){
 				     contains_max(l);
 				     tree_rem_inorder(l,max(l));
 				     contains_rem_max(l);
@@ -300,7 +300,7 @@ lemma void tree_rem_inorder(bintree b, int x)
 @*/
 struct tree *init_tree(int x)
   //@ requires true;
-  //@ ensures tree(result,cons(x,nil,nil));
+  //@ ensures tree(result,tree(x,empty,empty));
 {
   struct tree *t = malloc(sizeof(struct tree));
   if(t!=0){
@@ -308,11 +308,11 @@ struct tree *init_tree(int x)
     t->left=0;
     t->right=0;
     //@ struct tree *l = t->left;
-    //@ close tree(l,nil);
+    //@ close tree(l,empty);
     //@ struct tree *r = t->right;
-    //@ close tree(r,nil);
+    //@ close tree(r,empty);
     //@ int v = t->value;
-    //@ close tree(t,cons(x,nil,nil));
+    //@ close tree(t,tree(x,empty,empty));
     return t;
   }else{
 	abort();
@@ -340,7 +340,7 @@ bool contains(struct tree *t,int x)
 {
   if(t==0){
     //@ open tree(t,b);
-    //@ close tree(t,nil);
+    //@ close tree(t,empty);
     return false;
   }else{
     //@ open tree(t,b);
@@ -362,7 +362,7 @@ bool contains(struct tree *t,int x)
   }
 }
 void add(struct tree *t, int x)
-  //@ requires tree(t,?b) &*& b!=nil &*& false==t_contains(b,x) &*& inorder(b)==true;
+  //@ requires tree(t,?b) &*& b!=empty &*& false==t_contains(b,x) &*& inorder(b)==true;
   //@ ensures tree(t,tree_add(b,x)) &*& inorder(tree_add(b,x))==true;
  {
   //@ open tree(t,b);
@@ -377,12 +377,12 @@ void add(struct tree *t, int x)
     if(l!=0){
       add(l,x);
       //@ tree_add_inorder(b,x);
-      //@ close tree(t,cons(v,tree_add(bl,x),br));
+      //@ close tree(t,tree(v,tree_add(bl,x),br));
     }else{
       struct tree *temp=init_tree(x);
       t->left=temp;
       //@ open tree(l,bl);
-      //@ close tree(t,cons(v,cons(x,nil,nil),br));
+      //@ close tree(t,tree(v,tree(x,empty,empty),br));
       //@ tree_add_inorder(b,x);
     }
   }else{
@@ -390,18 +390,18 @@ void add(struct tree *t, int x)
       if(r!=0){
         add(r,x);
         //@ tree_add_inorder(b,x);
-        //@ close tree(t,cons(v,bl,tree_add(br,x)));	
+        //@ close tree(t,tree(v,bl,tree_add(br,x)));	
       }else{
         struct tree *temp=init_tree(x);
         t->right=temp;
         //@ open tree(r,br);
-        //@ close tree(t,cons(v,bl,cons(x,nil,nil)));
+        //@ close tree(t,tree(v,bl,tree(x,empty,empty)));
       }
     }
   }
 }
 int maximum(struct tree *t)
-  //@ requires tree(t,?b) &*& b!=nil &*& inorder(b)==true;
+  //@ requires tree(t,?b) &*& b!=empty &*& inorder(b)==true;
   //@ ensures result==max(b) &*& tree(t,b);
 {
   //@ open tree(t,b);
@@ -419,7 +419,7 @@ int maximum(struct tree *t)
   }
 }
 struct tree* remove(struct tree *t, int x)
-  //@ requires tree(t,?b) &*& b!=nil &*& true==t_contains(b,x) &*& inorder(b)==true;
+  //@ requires tree(t,?b) &*& b!=empty &*& true==t_contains(b,x) &*& inorder(b)==true;
   //@ ensures tree(result,tree_rem(b,x))&*& inorder(tree_rem(b,x))==true &*& false==t_contains(tree_rem(b,x),x);
 {
   //@ open tree(t,b);
@@ -435,14 +435,14 @@ struct tree* remove(struct tree *t, int x)
     if(l!=0){
       struct tree *temp=remove(l,x);
       t->left=temp;
-      //@ close tree(t,cons(v,tree_rem(bl,x),br));
+      //@ close tree(t,tree(v,tree_rem(bl,x),br));
       return t;
     }
   } else if(v < x){
     if(r!=0){
       struct tree *temp=remove(r,x);
       t->right=temp;
-      //@ close tree(t,cons(v,bl,tree_rem(br,x)));
+      //@ close tree(t,tree(v,bl,tree_rem(br,x)));
       return t;
     }
   } else {
@@ -450,16 +450,16 @@ struct tree* remove(struct tree *t, int x)
       if (r == 0) {
         //@ close tree(t,b);
         free_tree(t);
-        //@ close tree(0,nil);
+        //@ close tree(0,empty);
         return 0;
       } else {
-        //@ open tree(l,nil);
+        //@ open tree(l,empty);
         free(t);
         return r;
       }
     } else {
       if(r==0){
-        //@ open tree(r,nil);
+        //@ open tree(r,empty);
         free(t);
         return l;
       } else {
@@ -469,7 +469,7 @@ struct tree* remove(struct tree *t, int x)
         //@ contains_max(bl);
         temp=remove(l,m);
         t->left=temp;
-        //@ close tree(t,cons(m,tree_rem(bl,m),br));
+        //@ close tree(t,tree(m,tree_rem(bl,m),br));
         return t;
       }
     }

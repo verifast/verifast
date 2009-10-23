@@ -1,6 +1,8 @@
 #ifndef LIST_H
 #define LIST_H
 
+#include "prelude_core.h"
+
 /*@
 
 inductive list<t> = nil | cons(t, list<t>);

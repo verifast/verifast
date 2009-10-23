@@ -133,6 +133,7 @@ release: test refman
 	copy ..\..\crt.vfmanifest
 	xcopy $(GTKLIB)\..\bin\*.dll .
 	copy ..\..\prelude.h
+	copy ..\..\prelude_core.h
 	copy ..\..\stdlib.h
 	copy ..\..\stdio.h
 	copy ..\..\malloc.h

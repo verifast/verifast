@@ -21,7 +21,6 @@ verifast_both -c args.c
 verifast_both swap.c
 verifast_both -c limits.c
 verifast_both -disable_overflow_check -c fractions-counting.c
-verifast_both -shared polytest.c
 verifast_both -disable_overflow_check expr.c
 verifast_both -disable_overflow_check -shared stack.c
 cd queue

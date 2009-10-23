@@ -2313,77 +2313,49 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       May add symbols and global assumptions to the SMT solver.
     *)      
   let rec check_file include_prelude basedir headers ps =
-  let maps0 =
-    if include_prelude then
-      if file_type path =Java then
-      begin
-      match try_assoc rtpath !headermap with
-        None -> 
-          let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
-          let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
-          let (_, maps0) = check_file false bindir [] ds in
-          headermap := (rtpath, ([], maps0))::!headermap;
-          maps0
-      | Some ([], maps0) ->
-        maps0
-      end
-      else
-      begin
-      match try_assoc preludePath !headermap with
-        None ->
-        let ([], ds) = parse_header_file bindir "prelude.h" reportRange reportShouldFail in
-        let (_, maps0) = check_file false bindir [] ds in
-        headermap := (preludePath, ([], maps0))::!headermap;
-        maps0
-      | Some ([], maps0) ->
-        maps0
-      end
-      else
-      ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
-  in
-  let append_nodups xys xys0 string_of_key l elementKind =
-    let rec iter xys =
-      match xys with
-        [] -> xys0
-      | ((x, y) as elem)::xys ->
-        if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
-        elem::iter xys
-    in
-    iter xys
-  in
-  let id x = x in
-  let merge_maps l
-    (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
-    (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
-    =
-    (append_nodups structmap structmap0 id l "struct",
-     append_nodups enummap enummap0 id l "enum",
-     append_nodups globalmap globalmap0 id l "global variable",
-     append_nodups inductivemap inductivemap0 id l "inductive datatype",
-     append_nodups purefuncmap purefuncmap0 id l "pure function",
-     append_nodups predctormap predctormap0 id l "predicate constructor",
-     append_nodups fixpointmap fixpointmap0 id l "fixpoint function",
-     malloc_block_pred_map @ malloc_block_pred_map0,
-     field_pred_map @ field_pred_map0,
-     append_nodups predfammap predfammap0 id l "predicate",
-     append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance",
-     append_nodups functypemap functypemap0 id l "function type",
-     append_nodups funcmap funcmap0 id l "function",
-     append_nodups boxmap boxmap0 id l "box predicate",
-     append_nodups classmap classmap0 id l "class",
-     append_nodups interfmap interfmap0 id l "interface")
-  in
-
   let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
-    let headers_included = ref [] in
-    (** [iter maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
-    let rec iter maps0 headers =
+  
+    let append_nodups xys xys0 string_of_key l elementKind =
+      let rec iter xys =
+        match xys with
+          [] -> xys0
+        | ((x, y) as elem)::xys ->
+          if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
+          elem::iter xys
+      in
+      iter xys
+    in
+    let id x = x in
+    let merge_maps l
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
+      =
+      (append_nodups structmap structmap0 id l "struct",
+       append_nodups enummap enummap0 id l "enum",
+       append_nodups globalmap globalmap0 id l "global variable",
+       append_nodups inductivemap inductivemap0 id l "inductive datatype",
+       append_nodups purefuncmap purefuncmap0 id l "pure function",
+       append_nodups predctormap predctormap0 id l "predicate constructor",
+       append_nodups fixpointmap fixpointmap0 id l "fixpoint function",
+       malloc_block_pred_map @ malloc_block_pred_map0,
+       field_pred_map @ field_pred_map0,
+       append_nodups predfammap predfammap0 id l "predicate",
+       append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance",
+       append_nodups functypemap functypemap0 id l "function type",
+       append_nodups funcmap funcmap0 id l "function",
+       append_nodups boxmap boxmap0 id l "box predicate",
+       append_nodups classmap classmap0 id l "class",
+       append_nodups interfmap interfmap0 id l "interface")
+    in
+
+    (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
+    let rec merge_header_maps include_prelude maps0 headers_included headers =
       match headers with
-        [] -> maps0
+        [] -> (maps0, headers_included)
       | (l, header_path)::headers ->
     if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"] then
-          iter maps0 headers
+          merge_header_maps include_prelude maps0 headers_included headers
         else
         begin
           if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
@@ -2398,23 +2370,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 static_error l "No such file."
           in
-          if List.mem path !headers_included then
-            iter maps0 headers
+          if List.mem path headers_included then
+            merge_header_maps include_prelude maps0 headers_included headers
           else
           begin
-            headers_included := path::!headers_included;
             let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (_, maps) = check_file true basedir headers' ds in
+                let (_, maps) = check_file include_prelude basedir headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
                 (headers', maps)
             in
-            let maps0 = iter maps0 headers' in
-            iter (merge_maps l maps maps0) headers
+            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included headers' in
+            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) headers
           end
         end
     else (* JAVA DEEL*)
@@ -2430,30 +2401,53 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 static_error l ("No such file: "^systempath)
           in
-          if List.mem path !headers_included then
-            iter maps0 headers
+          if List.mem path headers_included then
+            merge_header_maps include_prelude maps0 headers_included headers
           else
           if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
             begin
-            headers_included := path::!headers_included;
-            iter maps0 headers
+            merge_header_maps include_prelude maps0 (path::headers_included) headers
             end
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
           begin
-            headers_included := path::!headers_included;
+            let headers_included = path::headers_included in
             let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
-            let allspecs= remove (fun x -> List.mem x !headers_included)(list_remove_dups allspecs) in
+            let allspecs= remove (fun x -> List.mem x headers_included)(list_remove_dups allspecs) in
             let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
             let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
-            let (_, maps) = check_file true basedir [] ds in
+            let (_, maps) = check_file include_prelude basedir [] ds in
             headermap := (path, (headers', maps))::!headermap;
             spec_classes:=classes;
             spec_lemmas:=lemmas;
-            merge_maps l maps maps0
+            (merge_maps l maps maps0, headers_included)
           end
         end
     in
-    iter maps0 headers
+
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    
+    let (maps0, headers_included) =
+      if include_prelude then
+        if file_type path =Java then
+        begin
+        match try_assoc rtpath !headermap with
+          None -> 
+            let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
+            let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
+            let (_, maps0) = check_file false bindir [] ds in
+            headermap := (rtpath, ([], maps0))::!headermap;
+            (maps0, [])
+        | Some ([], maps0) ->
+          (maps0, [])
+        end
+        else
+        merge_header_maps false maps0 [] [(dummy_loc, "prelude.h")]
+      else
+        (maps0, [])
+    in
+
+    let (maps, _) = merge_header_maps include_prelude maps0 headers_included headers in
+    maps
   in
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
@@ -5075,21 +5069,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     lookup_points_to_chunk h env l f_symb t
   in
   
-  let (pointer_pred_symb, int_pred_symb, char_pred_symb) =
-    match file_type path with
-      Java -> (real_unit, real_unit, real_unit) (* Anything, doesn't matter. *)
-    | _ ->
-      let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
-      let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
-      let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
-      (pointer_pred_symb, int_pred_symb, char_pred_symb)
+  let pointer_pred_symb () =
+    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
+    pointer_pred_symb
+  in
+  
+  let int_pred_symb () =
+    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
+    int_pred_symb
+  in
+  
+  let char_pred_symb () =
+    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
+    char_pred_symb
   in
   
   let pointee_pred_symb l pointeeType =
     match pointeeType with
-      PtrType _ -> pointer_pred_symb
-    | IntType -> int_pred_symb
-    | Char -> char_pred_symb
+      PtrType _ -> pointer_pred_symb ()
+    | IntType -> int_pred_symb ()
+    | Char -> char_pred_symb ()
     | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
   in
   
@@ -8378,6 +8377,7 @@ let parse_line line =
   let symbol = String.sub line (space + 1) (String.length line - space - 1) in
   let n = String.length symbol in
   for i = 0 to n - 1 do if symbol.[i] = '/' then symbol.[i] <- '\\' done;
+  let symbol = if startswith symbol ".\\" then String.sub symbol 2 (String.length symbol - 2) else symbol in
   (command, symbol)
 
 let link_program isLibrary modulepaths emitDllManifest exports =

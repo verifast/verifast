@@ -52,26 +52,26 @@ int main()
   //@ assert counter(c, 5, ?id, 1, 0);
   bool b = random();
   int n = 0;
-  //@ close foreach(c, 5, id, 0);
+  //@ close tickets(c, 5, id, 0);
   // split of an arbitrary number of children
   while(b) 
-    //@ invariant 0<=n &*& counter(c, 5, id, 1, n) &*& foreach(c, 5, id, n);
+    //@ invariant 0<=n &*& counter(c, 5, id, 1, n) &*& tickets(c, 5, id, n);
   {
     //@ create_ticket(c);
     n = n + 1;
-    //@ close foreach(c, 5, id, n);
+    //@ close tickets(c, 5, id, n);
     b = random();
   }
 
   // put the permission back together
   while(0<n) 
-    //@ invariant 0<=n &*& counter(c, 5, id, 1, n) &*& foreach(c, 5, id, n);
+    //@ invariant 0<=n &*& counter(c, 5, id, 1, n) &*& tickets(c, 5, id, n);
   {
-    //@ open foreach(c, 5, id, n);
+    //@ open tickets(c, 5, id, n);
     //@ dispose_ticket(c);
     n = n - 1;
   }
-  //@ open foreach(c, 5, id, 0);
+  //@ open tickets(c, 5, id, 0);
   //@ dispose_counter(c);
   free(c);
   return 0;
@@ -97,6 +97,6 @@ int main2()
 }
 
 /*@
-predicate foreach(struct C* c, int x, int id, int howMany)
-  requires howMany <= 0 ? emp : ticket(c, id, ?f) &*& [f]c->x |-> x &*& foreach(c, x, id, howMany - 1);
+predicate tickets(struct C* c, int x, int id, int howMany)
+  requires howMany <= 0 ? emp : ticket(c, id, ?f) &*& [f]c->x |-> x &*& tickets(c, x, id, howMany - 1);
 @*/
