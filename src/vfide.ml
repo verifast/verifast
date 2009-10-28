@@ -146,7 +146,8 @@ let show_ide initialPath prover =
     | ErrorRange -> "error"
   in
   let srcpos_iter buffer (line, col) =
-    buffer#get_iter (`LINECHAR (line - 1, col - 1))
+    (buffer#get_iter_at_byte ~line:(line - 1) 0)#set_line_index (col - 1) (* Hack, to work around an apparent Gtk or lablgtk bug *)
+    (* buffer#get_iter (`LINEBYTE (line - 1, col - 1)) *)
   in
   let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
   let rec perform_syntax_highlighting ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) start stop =

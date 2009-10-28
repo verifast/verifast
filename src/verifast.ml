@@ -401,7 +401,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk ();
         if text_peek () = '\010' then text_junk ();
         new_line ()
-    |('A'..'Z' | 'a'..'z' | '_' | '\192'..'\255' as c) ->
+    |('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255' as c) ->
         start_token();
         text_junk ();
         ident ()
@@ -439,7 +439,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | c -> start_token(); text_junk (); Some (keyword_or_error c)
   and ident () =
     match text_peek () with
-      ('A'..'Z' | 'a'..'z' | '\192'..'\255' | '0'..'9' | '_' | '\'' as c) ->
+      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'' as c) ->
       text_junk (); ident ()
     | _ -> Some (ident_or_keyword (String.sub text !tokenpos (!textpos - !tokenpos)) true)
   and ident2 () =
