@@ -13,6 +13,7 @@ verifast_both -disable_overflow_check wc.c
 verifast_both -disable_overflow_check cp.c
 verifast_both -disable_overflow_check globals.c
 verifast_both -disable_overflow_check -c gui-app.c
+verifast -disable_overflow_check -c arraylist.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c
