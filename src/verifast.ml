@@ -828,7 +828,7 @@ and
   func_kind =
   | Regular
   | Fixpoint
-  | Lemma
+  | Lemma of bool (* indicates whether an axiom should be generated for this lemma *)
 and
   meth =
   | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
@@ -925,7 +925,7 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
     ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
 let string_of_func_kind f=
   match f with
-    Lemma -> "lemma"
+    Lemma(_) -> "lemma"
   | Regular -> "regular"
   | Fixpoint -> "fixpoint"
 let tostring f=
@@ -1020,7 +1020,7 @@ let common_keywords = [
 
 let ghost_keywords = [
   "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
-  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant";
+  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "forall"; "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
@@ -1321,7 +1321,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest Lemma t >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false)) t >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); t = parse_return_type; d = parse_func_rest (Lemma(true)) t >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -1989,6 +1990,10 @@ exception StaticError of loc * string
 
 let static_error l msg = raise (StaticError (l, msg))
 
+let is_lemma k = match k with Lemma(_) -> true | _ -> false
+
+let printff format = kfprintf (fun _ -> flush stdout) stdout format
+
 (** Internal pattern. Either a pattern from the source code, or a term pattern. A term pattern (TermPat t) matches a term t' if t and t' are definitely_equal. *)
 type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
 (** A heap chunk. *)
@@ -2291,7 +2296,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let cons'= List.filter (fun x-> match x with Cons (lm,ps,co,ss,v) -> match ss with None->true |Some _ -> false) cons 
       in
       iter (pn,ilist) (Class(l,cn,meths',fds,cons,super,inames)::classes) lemmas rest
-    | Func(l,Lemma,tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
+    | Func(l,Lemma(_),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
       let fn=full_name pn fn in iter (pn,ilist) classes (elem::lemmas) rest
     | _::rest -> 
       iter (pn,ilist) classes lemmas rest
@@ -3639,7 +3644,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let funcnames = if file_type path=Java then [] else
   let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
-  list_remove_dups (flatmap (function (Func (l, (Regular|Lemma), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  list_remove_dups (flatmap (function (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
   in
   
   let check_classname (pn, ilist) (l, c) =
@@ -5514,7 +5519,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
-    if k <> k0 then static_error l (msg ^ "Not the same kind of function.");
+    if k <> k0 then 
+      if (not (is_lemma k)) || (not (is_lemma k0)) then
+        static_error l (msg ^ "Not the same kind of function.");
     let tpenv =
       match zip tparams tparams0 with
         None -> static_error l (msg ^ "Type parameter counts do not match.")
@@ -5619,7 +5626,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let Some fterm = fterm in
             let cenv0 = [("this", fterm)] @ ftargenv in
-            let k' = match gh with Real -> Regular | Ghost -> Lemma in
+            let k' = match gh with Real -> Regular | Ghost -> Lemma(true) in
             check_func_header_compat (pn,ilist) l "Function type implementation check: " env0
               (k, tparams, rt, xmap, atomic, pre, post)
               (k', [], rt0, xmap0, false, cenv0, pre0, post0);
@@ -5998,7 +6005,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
-      | Func(l,Lemma,tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
+      | Func(l,Lemma(auto),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
           if List.mem (fn,l) impl then
             let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
             check_spec_lemmas rest impl'
@@ -6460,7 +6467,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-                     let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
+                     let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
                      check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, body,v) cont
                 )
             )
@@ -6508,7 +6515,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-        let _ = if not pure && k = Lemma then static_error l "Cannot call lemma functions in a non-pure context." in
+        let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
         check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, body,v) cont
       ) 
     in 
@@ -6583,7 +6590,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match try_assoc x funcmap with
           None -> static_error l "No such function."
         | Some (funenv, fterm, _, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, _,fb,v) ->
-          if k <> Lemma then static_error l "Not a lemma function.";
+          if not (is_lemma k) then static_error l "Not a lemma function.";
           begin
             match leminfo with
               None -> ()
@@ -7615,11 +7622,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." in
               if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance.";
               (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts)
-            | Func (l, Lemma, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
+            | Func (l, Lemma(auto), tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name.";
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name.";
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
+              ((fn, (auto, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances."
           end
           ([], [])
@@ -7628,7 +7635,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (lems, predinsts) = (List.rev lems, List.rev predinsts) in
       let funcnameterms' =
         List.map
-          (fun (fn, (fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
+          (fun (fn, (autom, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
         lems
       in
       let env = funcnameterms' @ env in
@@ -7644,11 +7651,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let funcmap' =
         List.map
-          begin fun (fn, (fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
+          begin fun (fn, (auto, fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
             let (rt, xmap, pre, pre_tenv, post) =
-              check_func_header pn ilist tparams tenv env l Lemma tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
+              check_func_header pn ilist tparams tenv env l (Lemma(auto)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
             in
-            (fn, (env, Some fterm, l, Lemma, tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
+            (fn, (env, Some fterm, l, Lemma(auto), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
@@ -7667,7 +7674,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           None ->
           let lems0 =
             flatmap
-              (function (fn, (funenv, fterm, l, Lemma, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
+              (function (fn, (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
               funcmap
           in
           verify_lems lems0;
@@ -7911,7 +7918,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Some rt -> ("#result", rt)::pre_tenv
     in
     let (in_pure_context, leminfo, lems', ghostenv) =
-      if k = Lemma then 
+      if is_lemma k then 
         (true, Some (lems, g, indinfo), g::lems, List.map (function (p, t) -> p) ps @ ["#result"])
       else
         (false, None, lems, [])
@@ -7963,6 +7970,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     in
     let _ = pop() in
+    let _ = 
+      (match k with
+        Lemma(true) -> 
+          (match (pre, post) with
+            (ExprPred(_, pre), ExprPred(_, post)) ->
+              let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
+              let xs = Array.to_list xs in
+              let Some(env) = zip (List.map fst ps) xs in
+              let t_pre = eval (pn,ilist) None env pre in
+              let t_post = eval (pn,ilist) None env post in
+              let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
+              (ctxt#assume_forall tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+          | _ -> static_error l "Contract of automatic lemma must be pure.")
+      | _ -> ()
+    ) in
     lems'
   in
   
@@ -8093,7 +8115,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
      [] -> (boxes, lems)
-    | Func (l, Lemma, _, rt, g, ps, _, _, _, None, _, _)::ds -> let g=full_name pn g in
+    | Func (l, (Lemma(auto) as k), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
+      let g = full_name pn g in
+      let (((_, g_file_name), _, _), _) = l in
+      let f_file_name = Filename.chop_extension g_file_name in
+      let c_file_name = Filename.chop_extension (Filename.basename path) in
+      let _ = 
+      (if auto && ((Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name)) then 
+        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, _,fb,v) = (List.assoc g funcmap) in
+        (match (pre, post) with
+          (ExprPred(_, pre), ExprPred(_, post)) ->
+            let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
+            let xs = Array.to_list xs in
+            let Some(env) = zip (List.map fst ps) xs in
+            let t_pre = eval (pn,ilist) None env pre in
+            let t_post = eval (pn,ilist) None env post in
+            let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
+            let _ = register_prototype_used l g in
+            (ctxt#assume_forall tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+        | _ -> static_error l "Contract of automatic lemma must be pure.")
+      ) in
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
@@ -8178,7 +8219,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   let lems0 =
     flatmap
-      (function (g, (funenv, fterm, l, Lemma, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
       funcmap0
   in
   let rec verify_funcs' boxes lems ps=

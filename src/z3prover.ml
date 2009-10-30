@@ -1,5 +1,6 @@
 open Proverapi
 open Num
+open Printf
 
 type sexpr = Atom of string | List of sexpr list | String of char list
 
@@ -203,4 +204,9 @@ class z3_context () =
     method pop = Z3.pop ctxt 1
     method perform_pending_splits (cont: Z3.ast list -> bool) = cont []
     method stats = ""
+    method mk_bound (i: int) (tp: Z3.type_ast) = Z3.mk_bound ctxt i tp
+    method assume_forall (tps: Z3.type_ast list) (body: Z3.ast): unit = 
+      let quant = (Z3.mk_forall ctxt 0 [| |] (Array.of_list tps) (Array.init (List.length tps) (Z3.mk_int_symbol ctxt)) (body)) in
+      (* printf "%s\n" (string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt quant)))); *)
+      Z3.assert_cnstr ctxt quant
   end

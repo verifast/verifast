@@ -1195,4 +1195,7 @@ and context () =
       (* print_endline ("==== Redux query failed: State report ====");
       List.iter (fun v -> if v#initial_child#value = v then (v#dump_state)) values; *)
       ()
+      
+    method mk_bound (i: int) (s: unit): (symbol, termnode) term = True
+    method assume_forall (tps: unit list) (t: (symbol, termnode) term): unit = ()
   end
