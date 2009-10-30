@@ -18,6 +18,7 @@ verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c
 verifast_both iter.c
+verifast iter_with_auto.c
 verifast_both -c args.c
 verifast_both swap.c
 verifast_both -c limits.c

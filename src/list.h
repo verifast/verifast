@@ -28,7 +28,7 @@ fixpoint int length<t>(list<t> xs) {
     }
 }
 
-lemma void length_nonnegative<t>(list<t> xs);
+lemma_auto void length_nonnegative<t>(list<t> xs);
     requires true;
     ensures 0 <= length(xs);
 
@@ -39,7 +39,7 @@ fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
     }
 }
 
-lemma void append_nil<t>(list<t> xs);
+lemma_auto void append_nil<t>(list<t> xs);
     requires true;
     ensures append(xs, nil) == xs;
 
@@ -58,7 +58,7 @@ lemma void reverse_append<t>(list<t> xs, list<t> ys);
     requires true;
     ensures reverse(append(xs, ys)) == append(reverse(ys), reverse(xs));
 
-lemma void reverse_reverse<t>(list<t> xs);
+lemma_auto void reverse_reverse<t>(list<t> xs);
     requires true;
     ensures reverse(reverse(xs)) == xs;
 
@@ -94,7 +94,7 @@ fixpoint list<t> take<t>(int n, list<t> xs) {
     }
 }
 
-lemma void take_0<t>(list<t> xs);
+lemma_auto void take_0<t>(list<t> xs);
     requires true;
     ensures take(0, xs) == nil;
 
@@ -117,7 +117,7 @@ fixpoint list<t> drop<t>(int n, list<t> xs) {
     }
 }
 
-lemma void drop_0<t>(list<t> xs);
+lemma_auto void drop_0<t>(list<t> xs);
     requires true;
     ensures drop(0, xs) == xs;
 
