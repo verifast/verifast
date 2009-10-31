@@ -86,6 +86,29 @@ verifast_both reallittest.c
 verifast_both -allow_assume -disable_overflow_check dyncode.c
 verifast_both -c -disable_overflow_check alt_threading.c
 cd ..
+cd tutorial
+verifast -c -disable_overflow_check account.c
+verifast -c -disable_overflow_check deposit.c
+verifast -c -disable_overflow_check limit.c
+verifast -c -disable_overflow_check pred.c
+verifast -c -disable_overflow_check stack.c
+verifast -c -disable_overflow_check dispose.c
+verifast -c -disable_overflow_check sum.c
+verifast -c -disable_overflow_check popn.c
+verifast -c -disable_overflow_check values.c
+verifast -c -disable_overflow_check fixpoints.c
+verifast -c -disable_overflow_check sum_full.c
+verifast -c -disable_overflow_check lemma.c
+verifast -c -disable_overflow_check push_all.c
+verifast -c -disable_overflow_check reverse.c
+verifast -c -disable_overflow_check overflow.c
+verifast -c -disable_overflow_check filter.c
+verifast -c -disable_overflow_check byref.c
+verifast -c -disable_overflow_check family0.c
+verifast -c -disable_overflow_check family.c
+verifast -c -disable_overflow_check map.c
+verifast -c -disable_overflow_check generics.c
+cd ..
 cd tests
 cd errors
 verifast_both -c -allow_should_fail basics.c

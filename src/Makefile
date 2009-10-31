@@ -153,5 +153,6 @@ release: test refman
 	cd ..
 	xcopy /E /I ..\..\examples examples
 	xcopy /E /I ..\..\tests tests
+	xcopy /E /I ..\..\tutorial tutorial
 	copy ..\..\src\testsuite.mysh
 	copy ..\..\test.bat

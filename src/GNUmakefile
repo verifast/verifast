@@ -138,6 +138,7 @@ endif
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
+	cp -R ../tutorial verifast-$(VFVERSION)
 	cp testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
 	cp mysh verifast-$(VFVERSION)/bin
