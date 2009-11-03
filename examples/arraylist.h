@@ -24,6 +24,10 @@ int list_length(struct arraylist *a);
 void list_add(struct arraylist *a, void *v);
   //@ requires arraylist(a, ?vs);
   //@ ensures arraylist(a, append(vs, cons(v, nil)));
+  
+void list_remove_nth(struct arraylist *a, int n);
+  //@ requires arraylist(a, ?vs) &*& 0 <= n &*& n < length(vs);
+  //@ ensures arraylist(a, append(take(n, vs), tail(drop(n, vs))));
 
 void list_dispose(struct arraylist* a);
   //@ requires arraylist(a, ?vs);

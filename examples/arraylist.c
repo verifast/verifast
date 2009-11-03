@@ -50,9 +50,10 @@ struct arraylist *create_arraylist()
   //@ ensures arraylist(result, nil);
 {
   struct arraylist *a = malloc(sizeof(struct arraylist));
+  void *data = 0;
   if(a == 0) abort();
   a->size = 0;
-  void *data = malloc(100 * sizeof(void*));
+  data = malloc(100 * sizeof(void*));
   if(data == 0) abort();
   a->data = data;
   a->capacity = 100;
@@ -108,10 +109,12 @@ void list_add(struct arraylist *a, void *v)
   //@ requires arraylist(a, ?vs);
   //@ ensures arraylist(a, append(vs, cons(v, nil)));
 {
+  int size = 0;
+  void** data = 0;
   //@ open arraylist(a, vs);
   if(a->capacity == a->size) {
-    void** data = a->data;
-    int size = a->size;
+    data = a->data;
+    size = a->size;
     int capacity = a->capacity;
     void** newData = malloc((capacity + 100) * sizeof(void*));
     if(newData == 0) abort();
@@ -126,8 +129,8 @@ void list_add(struct arraylist *a, void *v)
     free(data);
     //@ char_list_to_pointers(vs);
   }
-  int size = a->size;
-  void** data = a->data;
+  size = a->size;
+  data = a->data;
   //@ assert chars((void*) data + (size * sizeof(void*)), ?unused); 
   //@ chars_split((void*) (data + size), 4);
   //@ chars_to_pointer(data + size);
@@ -139,6 +142,48 @@ void list_add(struct arraylist *a, void *v)
   a->size += 1;
   //@ append_length(vs, cons(v, nil));
   //@ close arraylist(a, append(vs, cons(v, nil)));
+}
+
+void shift(void** data, int n) 
+  //@ requires pointer_array(data, ?vs) &*& 0 <= n &*& n + 1 == length(vs);
+  //@ ensures pointer_array(data, tail(vs)) &*& chars((void*) data + (n*sizeof(void*)), ?cs) &*& length(cs) == sizeof(void*);
+{
+  if(n == 0) {
+    //@ switch(vs) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): } }
+    //@ assert tail(vs) == nil;
+    //@ pointer_array_to_chars(data);
+    //@ close pointer_array(data, nil);
+  } else {
+    //@ open pointer_array(data, vs);
+    //@ assert pointer_array(data + 1, ?t);
+    //@ open pointer_array(data + 1, t);
+    * (data) = *(data + 1);
+    //@ close pointer_array(data + 1, t);
+    shift(data + 1, n - 1);
+    //@ close pointer_array(data, tail(vs));
+  }
+}
+
+void list_remove_nth(struct arraylist *a, int n)
+  //@ requires arraylist(a, ?vs) &*& 0 <= n &*& n < length(vs);
+  //@ ensures arraylist(a, append(take(n, vs), tail(drop(n, vs))));
+{
+  //@ open arraylist(a, vs);
+  void** data = a->data;
+  int size = a->size;
+  int i = n;
+  //@ split_pointer_array(data, n);
+  //@ length_drop(n, vs);
+  //@ length_take(n, vs);
+  //@ assert size == length(vs);
+  shift(data + (n), size - n - 1);
+  //@ merge_pointer_array(data, n);
+  //@ chars_join((void*)data + (size - 1)*4);
+  //@ switch(drop(n, vs)) { case nil: case cons(h0, t0): }
+  a->size = a->size - 1;
+  //@ assert length(tail(drop(n, vs))) == length(vs) - n - 1;
+  //@ length_append(take(n, vs), tail(drop(n, vs)));
+  //@ close arraylist(a, append(take(n, vs), tail(drop(n, vs))));
 }
 
 void list_dispose(struct arraylist* a)
@@ -160,10 +205,11 @@ void main()
   //@ ensures true;
 {
   struct arraylist* a = create_arraylist();
+  void* tmp = 0;
   list_add(a, 0);
   list_add(a, 0);
   
-  void* tmp = list_get(a, 1);
+  tmp = list_get(a, 1);
   //@ assert tmp == 0;
   list_dispose(a);
 }

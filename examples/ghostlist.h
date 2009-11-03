@@ -23,10 +23,18 @@ lemma void ghost_list_add_last<t>(int id, t d);
 lemma void ghost_list_remove<t>(int id, t d);
     requires ghost_list<t>(id, ?ds) &*& ghost_list_member_handle<t>(id, d);
     ensures ghost_list<t>(id, remove(d, ds));
+    
+lemma void ghost_list_remove_nth<t>(int id, int n);
+    requires ghost_list<t>(id, ?ds) &*& 0<=n &*& n < length(ds) &*& ghost_list_member_handle<t>(id, nth(n, ds));
+    ensures ghost_list<t>(id, remove_nth(n, ds));
 
 lemma void ghost_list_member_handle_lemma<t>();
     requires [?f1]ghost_list<t>(?id, ?ds) &*& [?f2]ghost_list_member_handle<t>(id, ?d);
     ensures [f1]ghost_list<t>(id, ds) &*& [f2]ghost_list_member_handle<t>(id, d) &*& mem(d, ds) == true;
+    
+lemma void ghost_list_dispose<t>();
+  requires ghost_list<t>(?id, nil);
+  ensures true;
 @*/
 
 #endif

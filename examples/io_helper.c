@@ -1,4 +1,5 @@
 #include "stdio.h"
+#include "bool.h"
 
 int read_int()
 {
@@ -15,10 +16,11 @@ int read_int()
 
 char *read_string()
 {
+    int n;
     char *buffer = malloc(40);
     char *result = fgets(buffer, 40, stdin);
     if (result == 0) abort();
-    int n = strlen(buffer);
+    n = strlen(buffer);
     if (n > 0 && buffer[n - 1] == '\n')
         buffer[n - 1] = 0;
     return buffer;

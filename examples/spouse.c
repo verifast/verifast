@@ -104,8 +104,9 @@ int main() //@ : main
 {
   struct person* alice = create_person();
   struct person* bob = create_person();
+  struct person* eve = 0;
   marry(alice, bob);
-  struct person* eve = create_person();
+  eve = create_person();
   divorce(bob);
   marry(bob, eve);
   die(alice);
