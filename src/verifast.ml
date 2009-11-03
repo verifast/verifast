@@ -4017,14 +4017,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (Access (l, w, f, wv), tenv', [])
     | CallPred (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (p, callee_tparams, arity, xs, inputParamCount) =
+      let (p, callee_tparams, ts0, xs, inputParamCount) =
         match resolve (pn,ilist) l p#name predfammap with
-          Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) -> (new predref pname, callee_tparams, arity, xs, inputParamCount)
+          Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) ->
+          let ts0 = match file_type path with
+            Java-> list_make arity (ObjType "Class")
+          | _   -> list_make arity (PtrType Void)
+          in
+          (new predref pname, callee_tparams, ts0, xs, inputParamCount)
         | None ->
           begin
             match try_assoc p#name tenv with
-              None -> static_error l ("No such predicate: " ^ p#name)
-            | Some (PredType (callee_tparams, ts)) -> (new predref (p#name), callee_tparams, 0, ts, None)
+              None ->
+              begin match try_assoc p#name predctormap with
+                Some (l, ps1, ps2, body, funcsym, pn, ilist) ->
+                (new predref (p#name), [], List.map snd ps1, List.map snd ps2, None)
+              | None -> static_error l ("No such predicate: " ^ p#name)
+              end
+            | Some (PredType (callee_tparams, ts)) -> (new predref (p#name), callee_tparams, [], ts, None)
             | Some _ -> static_error l ("Variable is not of predicate type: " ^ p#name)
           end
       in
@@ -4040,11 +4050,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams))
             | Some bs -> (targs, bs, [])
         in
-        if List.length ps0 <> arity then static_error l "Incorrect number of indexes.";
-        let ts0 = match file_type path with
-          Java-> list_make arity (ObjType "Class")
-        | _   -> list_make arity (PtrType Void)
-        in
+        if List.length ps0 <> List.length ts0 then static_error l "Incorrect number of indexes.";
         let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
         let xs' = List.map (instantiate_type tpenv) xs in
         let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
@@ -4929,14 +4935,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let te = ev e in
       evalpat (pn,ilist) ghostenv env rhs f#range f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
     | WCallPred (l, g, targs, pats0, pats) ->
-      let g_symb =
+      let (g_symb, pats0, pats, types) =
         match try_assoc g#name predfammap with
-          Some (_, _, _, _, symb, _) -> (symb, true)
-        | None -> (List.assoc g#name env, false)
+          Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
+        | None ->
+          begin match try_assoc g#name env with
+            Some term -> ((term, false), pats0, pats, g#domain)
+          | None ->
+            let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
+            let g_symb = ctxt#mk_app funcsym ctorargs in
+            ((g_symb, false), [], pats, List.map snd ps2)
+          end
       in
       let targs = instantiate_types tpenv targs in
-      let domain = instantiate_types tpenv g#domain in
-      evalpats (pn,ilist) ghostenv env (pats0 @ pats) g#domain domain (fun ghostenv env ts ->
+      let domain = instantiate_types tpenv types in
+      evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
         assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
       )
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
@@ -5195,15 +5209,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
     in
     let callpred l coefpat g targs pats0 pats =
-      let g_symb =
+      let (g_symb, pats0, pats, types) =
         match try_assoc' (pn,ilist) g#name predfammap with
-          Some (_, _, _, _, symb, _) -> (symb, true)
-        | None -> (List.assoc (g#name) env, false)
+          Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
+        | None ->
+          begin match try_assoc (g#name) env with
+            Some term -> ((term, false), pats0, pats, g#domain)
+          | None ->
+            let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
+            let g_symb = ctxt#mk_app funcsym ctorargs in
+            ((g_symb, false), [], pats, List.map snd ps2)
+          end
       in
       let targs = instantiate_types tpenv targs in
-      let domain = instantiate_types tpenv g#domain in
+      let domain = instantiate_types tpenv types in
       let inputParamCount = match g#inputParamCount with None -> None | Some n -> Some (List.length pats0 + n) in
-      assert_chunk_core rules (pn,ilist) h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) g#domain domain (fun h coef ts size ghostenv env env' ->
+      assert_chunk_core rules (pn,ilist) h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont h ghostenv env env' size
       )
