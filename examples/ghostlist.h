@@ -16,6 +16,10 @@ lemma void ghost_list_add<t>(int id, t d);
     requires ghost_list<t>(id, ?ds);
     ensures ghost_list<t>(id, cons(d, ds)) &*& ghost_list_member_handle<t>(id, d);
     
+lemma void ghost_list_add_last<t>(int id, t d);
+    requires ghost_list<t>(id, ?ds);
+    ensures ghost_list<t>(id, append(ds, cons(d, nil))) &*& ghost_list_member_handle<t>(id, d);
+    
 lemma void ghost_list_remove<t>(int id, t d);
     requires ghost_list<t>(id, ?ds) &*& ghost_list_member_handle<t>(id, d);
     ensures ghost_list<t>(id, remove(d, ds));

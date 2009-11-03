@@ -1,6 +1,7 @@
 #include "stdlib.h"
 #include "malloc.h"
 #include "string.h"
+#include "arraylist.h"
 
 struct arraylist {
   void *data;
@@ -44,7 +45,7 @@ predicate arraylist(struct arraylist *a, list<void*> vs) =
   pointer_array(data, vs) &*& chars((void*) data + (size * sizeof(void*)), ?unused) &*& length(unused) == 4 * (capacity - size);
 @*/
 
-struct arraylist *list_create() 
+struct arraylist *create_arraylist() 
   //@ requires true;
   //@ ensures arraylist(result, nil);
 {
@@ -85,6 +86,15 @@ void *list_get(struct arraylist *a, int i)
   return res;
   //@ append_drop_take(vs, i);
   //@ nth_drop(vs, i);
+  //@ close arraylist(a, vs);
+}
+
+int list_length(struct arraylist *a)
+  //@ requires arraylist(a, ?vs);
+  //@ ensures arraylist(a, vs) &*& result == length(vs);
+{
+  //@ open arraylist(a, vs);
+  return a->size;
   //@ close arraylist(a, vs);
 }
 
@@ -149,7 +159,7 @@ void main()
   //@ requires true;
   //@ ensures true;
 {
-  struct arraylist* a = list_create();
+  struct arraylist* a = create_arraylist();
   list_add(a, 0);
   list_add(a, 0);
   
