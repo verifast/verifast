@@ -8,24 +8,6 @@
 predicate_ctor person_ctor(int gid)(struct person* p) =
   p!=0 &*& person(p, ?spouse) &*& spouse == 0 ? ghost_list_member_handle(gid, p) : ghost_list_member_handle(gid, spouse);
 
-lemma void unique_persons(list<void*> ps, int gid, int i, int j)
-  requires foreach(ps, person_ctor(gid)) &*& 0 <= i &*& i < length(ps) &*& 0 <= j &*& j < length(ps) &*& i != j;
-  ensures foreach(ps, person_ctor(gid)) &*& nth(i, ps) != nth(j, ps);
-{
-  mem_nth(i, ps);
-  mem_nth(j, ps);
-  foreach_remove(nth(i, ps), ps);
-  assume(mem(nth(j, ps), remove(nth(i, ps), ps))); // todo
-  foreach_remove(nth(j, ps), remove(nth(i, ps), ps));
-  open person_ctor(gid)(nth(i, ps));
-  open person_ctor(gid)(nth(j, ps));
-  person_diff(nth(i, ps), nth(j, ps));
-  close person_ctor(gid)(nth(i, ps));
-  close person_ctor(gid)(nth(j, ps));
-  foreach_unremove(nth(j, ps), remove(nth(i, ps), ps));
-  foreach_unremove(nth(i, ps), ps);
-}
-
 lemma void remove_diff_mem<t>(list<t> xs, t x, t y)
   requires mem(x, xs) == true &*& mem(y, xs) == true &*& x != y;
   ensures mem(y, remove(x, xs)) == true;
@@ -49,7 +31,7 @@ lemma void remove_diff_index_mem<t>(list<t> xs, int i, int j);
   ensures mem(nth(j, xs), remove(nth(i, xs), xs)) == true;
 @*/
 
-int main() 
+int main() //@ : main
   //@ requires true;
   //@ ensures true;
 {
@@ -140,7 +122,9 @@ int main()
         puts("Invalid index");
       }
     } else if (choice == 4) {
-      // todo
+      puts("Enter a person's index.");
+      int index = read_int();
+      //@ assume(false);
     } else if (choice == 5) {
       //@ assume(false);
       return 0;

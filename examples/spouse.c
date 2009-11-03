@@ -98,7 +98,7 @@ void die(struct person *this)
   free(this); 
 }
 
-void main()
+int main() //@ : main
   //@ requires true;
   //@ ensures true;
 {
@@ -111,4 +111,5 @@ void main()
   die(alice);
   die(bob);
   die(eve);
+  return 0;
 }
