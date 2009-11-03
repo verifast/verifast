@@ -708,7 +708,7 @@ type
   | ModuleName
 
 type
-  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | BitNot | BitAnd | BitXor | BitOr
+  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr
 and
   expr =
     True of loc
@@ -1014,7 +1014,7 @@ let common_keywords = [
   "switch"; "case"; ":"; "return";
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "!"; "["; "]"; "{";
-  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?";
+  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%";
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"
 ]
 
@@ -1034,7 +1034,7 @@ let c_keywords = [
 ]
 
 let java_keywords = [
-  "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import"; "*";
+  "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
   "throw"; "try"; "catch"; "throws"
 ]
 
@@ -1768,6 +1768,7 @@ and
   parse_expr_mul_rest e0 = parser
   [< '(l, Kwd "*"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mul, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "/"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Div, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd "%"); e1 = parse_expr_suffix; e = parse_expr_mul_rest (Operation (l, Mod, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_arith_rest e0 = parser
@@ -2215,6 +2216,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
+  let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   
   let boolt = Bool in
   let intt = IntType in
@@ -2359,7 +2361,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [] -> (maps0, headers_included)
       | (l, header_path)::headers ->
     if file_type path <> Java then
-        if List.mem header_path ["bool.h"; "assert.h"] then
+        if List.mem header_path ["bool.h"; "assert.h"; "limits.h"] then
           merge_header_maps include_prelude maps0 headers_included headers
         else
         begin
@@ -3755,6 +3757,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w1 = checkt e1 UintPtrType in
       let w2 = checkt e2 UintPtrType in
       (Operation (l, operator, [w1; w2], ts), UintPtrType)
+    | Operation (l, Mod, [e1; e2], ts) ->
+      let w1 = checkt e1 IntType in
+      let w2 = checkt e2 IntType in
+      (Operation (l, Mod, [w1; w2], ts), IntType)
     | Operation (l, BitNot, [e], ts) ->
       let w = checkt e UintPtrType in
       (Operation (l, BitNot, [w], ts), UintPtrType)
@@ -4629,12 +4635,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ctxt#mk_app bitwise_and_symbol [ev e1; ctxt#mk_app bitwise_not_symbol [ev e2]]
     | Operation (l, BitNot, _, _) ->
       static_error l "VeriFast does not currently support a bitwise complement (~) expression except as part of a bitwise AND (x & ~y)."
-    | Operation (l, (BitAnd|BitXor|BitOr as operator), es, ts) ->
+    | Operation (l, (BitAnd|BitXor|BitOr|Mod as operator), es, ts) ->
       let symb =
         match operator with
           BitAnd -> bitwise_and_symbol
         | BitXor -> bitwise_xor_symbol
         | BitOr -> bitwise_or_symbol
+        | Mod -> modulo_symbol
       in
       ctxt#mk_app symb (List.map ev es)
     | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
@@ -8418,7 +8425,9 @@ let remove_dups bs =
 
 exception LinkError of string
 
-let read_file_lines path msg =
+exception FileNotFound
+
+let read_file_lines path =
   if Sys.file_exists path then
     let file = open_in path in
     do_finally (fun () ->
@@ -8433,7 +8442,7 @@ let read_file_lines path msg =
       in
       iter()
     ) (fun () -> close_in file)
-  else failwith msg
+  else raise FileNotFound
 
 let parse_line line =
   let space = String.index line ' ' in
@@ -8454,8 +8463,13 @@ let link_program isLibrary modulepaths emitDllManifest exports =
         if List.mem_assoc manifest_path !manifest_map then
           List.assoc manifest_path !manifest_map
         else
-          read_file_lines manifest_path
-            ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
+          try
+            read_file_lines manifest_path
+          with FileNotFound ->
+            try
+              read_file_lines (Filename.concat bindir manifest_path)
+            with FileNotFound ->
+              failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
       in
       let rec iter0 impls' lines =
         match lines with
@@ -8499,7 +8513,7 @@ let link_program isLibrary modulepaths emitDllManifest exports =
       match exports with
         [] -> impls
       | exportPath::exports ->
-        let lines = read_file_lines exportPath ("Could not find export manifest file '" ^ exportPath ^ "'") in
+        let lines = try read_file_lines exportPath with FileNotFound -> failwith ("Could not find export manifest file '" ^ exportPath ^ "'") in
         let rec iter' impls lines =
           match lines with
             [] -> impls

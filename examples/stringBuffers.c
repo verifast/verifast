@@ -1,4 +1,5 @@
 #include "bool.h"
+#include "limits.h"
 #include "stringBuffers.h"
 #include "malloc.h"
 #include "string.h"

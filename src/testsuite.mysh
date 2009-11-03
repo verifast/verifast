@@ -103,13 +103,17 @@ verifast -c -disable_overflow_check sum_full.c
 verifast -c -disable_overflow_check lemma.c
 verifast -c -disable_overflow_check push_all.c
 verifast -c -disable_overflow_check reverse.c
-verifast -c -disable_overflow_check overflow.c
+verifast -c overflow.c
 verifast -c -disable_overflow_check filter.c
 verifast -c -disable_overflow_check byref.c
 verifast -c -disable_overflow_check family0.c
 verifast -c -disable_overflow_check family.c
 verifast -c -disable_overflow_check map.c
 verifast -c -disable_overflow_check generics.c
+verifast -c -disable_overflow_check foreach.c
+verifast -c -disable_overflow_check predctors.c
+verifast -c -disable_overflow_check threads0.c
+verifast -c -disable_overflow_check threads.c
 cd ..
 cd tests
 cd errors
