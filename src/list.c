@@ -35,6 +35,17 @@ lemma void append_assoc<t>(list<t> xs, list<t> ys, list<t> zs)
     }
 }
 
+lemma void length_append<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures length(append(xs, ys)) == length(xs) + length(ys);
+{
+    switch(xs) {
+      case nil: 
+      case cons(h, t):
+          length_append(t, ys);
+    }
+}
+
 lemma void reverse_append<t>(list<t> xs, list<t> ys)
     requires true;
     ensures reverse(append(xs, ys)) == append(reverse(ys), reverse(xs));

@@ -46,6 +46,11 @@ lemma_auto void append_nil<t>(list<t> xs);
 lemma void append_assoc<t>(list<t> xs, list<t> ys, list<t> zs);
     requires true;
     ensures append(append(xs, ys), zs) == append(xs, append(ys, zs));
+    
+lemma void length_append<t>(list<t> xs, list<t> ys);
+  requires true;
+  ensures length(append(xs, ys)) == length(xs) + length(ys);
+
 
 fixpoint list<t> reverse<t>(list<t> xs) {
     switch (xs) {
@@ -141,6 +146,13 @@ fixpoint list<t> remove<t>(t x, list<t> xs) {
     switch (xs) {
         case nil: return nil;
         case cons(x0, xs0): return x0 == x ? xs0 : cons(x0, remove(x, xs0));
+    }
+}
+
+fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
+    switch(xs) {
+        case nil: return nil;
+        case cons(h, t): return n == 0 ? t : cons(h, remove_nth(n - 1, t));
     }
 }
 
