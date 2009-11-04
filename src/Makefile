@@ -139,6 +139,9 @@ release: test refman
 	copy ..\..\malloc.h
 	copy ..\..\string.h
 	copy ..\..\list.h
+	copy ..\..\threading.h
+	copy ..\..\threading.vfmanifest
+	copy ..\..\threading.c
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
 	copy ..\..\mysh.exe mysh.exe
