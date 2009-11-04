@@ -22,6 +22,7 @@ let rec exec_lines filepath file lineno =
       match parse_cmdline line with
         ["cd"; dir] -> Sys.chdir dir
       | ["del"; file] -> Sys.remove file
+      | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
       | ["let"; macroName] ->
         let lines =
           let rec read_macro_lines () =

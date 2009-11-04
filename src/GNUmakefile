@@ -12,9 +12,6 @@ test: mysh verifast vfide dlsymtool
 dlsymtool: dlsymtool.ml
 	ocamlopt.opt -o dlsymtool dlsymtool.ml
 
-mysh: mysh.ml
-	ocamlopt.opt -o mysh unix.cmxa mysh.ml
-
 reduxtest: verifastredux.opt
 	cd ../examples
 	../src/verifastredux.opt linkedlist.c
@@ -48,6 +45,9 @@ Fonts.cmx: Fonts_default.ml
 	cp Fonts_default.ml Fonts.ml
 	ocamlopt -c Fonts.ml
 endif
+
+mysh: Fonts.cmx mysh.ml
+	ocamlopt.opt -o mysh unix.cmxa Fonts.cmx mysh.ml
 
 vfversion.cmi: vfversion.mli
 	ocamlc -c vfversion.mli

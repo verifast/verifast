@@ -1,5 +1,5 @@
 let verifast_both
-verifast
+ifnotmac verifast
 verifast -prover redux
 in
 cd examples
@@ -13,14 +13,14 @@ verifast_both -disable_overflow_check wc.c
 verifast_both -disable_overflow_check cp.c
 verifast_both -disable_overflow_check globals.c
 verifast_both -disable_overflow_check -c gui-app.c
-verifast -disable_overflow_check -c arraylist.c
+ifnotmac verifast -disable_overflow_check -c arraylist.c
 verifast_both spouse.c
-verifast -c spouse-user.c
+ifnotmac verifast -c spouse-user.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c
 verifast_both iter.c
-verifast iter_with_auto.c
+ifnotmac verifast iter_with_auto.c
 verifast_both -c args.c
 verifast_both swap.c
 verifast_both -c limits.c
@@ -89,32 +89,32 @@ verifast_both -allow_assume -disable_overflow_check dyncode.c
 verifast_both -c -disable_overflow_check alt_threading.c
 cd ..
 cd tutorial
-verifast -c -disable_overflow_check account.c
-verifast -c -disable_overflow_check deposit.c
-verifast -c -disable_overflow_check limit.c
-verifast -c -disable_overflow_check pred.c
-verifast -c -disable_overflow_check stack.c
-verifast -c -disable_overflow_check dispose.c
-verifast -c -disable_overflow_check sum.c
-verifast -c -disable_overflow_check popn.c
-verifast -c -disable_overflow_check values.c
-verifast -c -disable_overflow_check fixpoints.c
-verifast -c -disable_overflow_check sum_full.c
-verifast -c -disable_overflow_check lemma.c
-verifast -c -disable_overflow_check push_all.c
-verifast -c -disable_overflow_check reverse.c
-verifast -c overflow.c
-verifast -c -disable_overflow_check filter.c
-verifast -c -disable_overflow_check byref.c
-verifast -c -disable_overflow_check family0.c
-verifast -c -disable_overflow_check family.c
-verifast -c -disable_overflow_check map.c
-verifast -c -disable_overflow_check generics.c
-verifast -c -disable_overflow_check foreach.c
-verifast -c -disable_overflow_check predctors.c
-verifast -c -disable_overflow_check threads0.c
-verifast -c -disable_overflow_check threads.c
-verifast -c -disable_overflow_check fractions.c
+verifast_both -c -disable_overflow_check account.c
+verifast_both -c -disable_overflow_check deposit.c
+verifast_both -c -disable_overflow_check limit.c
+verifast_both -c -disable_overflow_check pred.c
+verifast_both -c -disable_overflow_check stack.c
+verifast_both -c -disable_overflow_check dispose.c
+verifast_both -c -disable_overflow_check sum.c
+verifast_both -c -disable_overflow_check popn.c
+verifast_both -c -disable_overflow_check values.c
+verifast_both -c -disable_overflow_check fixpoints.c
+verifast_both -c -disable_overflow_check sum_full.c
+verifast_both -c -disable_overflow_check lemma.c
+verifast_both -c -disable_overflow_check push_all.c
+verifast_both -c -disable_overflow_check reverse.c
+verifast_both -c overflow.c
+verifast_both -c -disable_overflow_check filter.c
+verifast_both -c -disable_overflow_check byref.c
+verifast_both -c -disable_overflow_check family0.c
+verifast_both -c -disable_overflow_check family.c
+verifast_both -c -disable_overflow_check map.c
+verifast_both -c -disable_overflow_check generics.c
+verifast_both -c -disable_overflow_check foreach.c
+verifast_both -c -disable_overflow_check predctors.c
+verifast_both -c -disable_overflow_check threads0.c
+verifast_both -c -disable_overflow_check threads.c
+verifast_both -c -disable_overflow_check fractions.c
 cd ..
 cd tests
 cd errors

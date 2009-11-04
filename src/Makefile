@@ -9,9 +9,6 @@ test: verifast.exe vfide.exe mysh.exe dlsymtool.exe
 	cd src
 	time < nl.txt
 
-mysh.exe: mysh.ml
-	ocamlopt.opt -o mysh.exe unix.cmxa mysh.ml
-
 clean:
 	del *.cm* *.obj *.exe
 
@@ -28,6 +25,9 @@ dlsymtool.exe: dlsymtool.ml
 Fonts.cmx:
 	copy Fonts_default.ml Fonts.ml
 	ocamlopt.opt -c Fonts.ml
+
+mysh.exe: Fonts.cmx mysh.ml
+	ocamlopt.opt -o mysh.exe unix.cmxa Fonts.cmx mysh.ml
 
 Printexc_proxy.cmx:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml
