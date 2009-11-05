@@ -828,7 +828,7 @@ and
   func_kind =
   | Regular
   | Fixpoint
-  | Lemma of bool (* indicates whether an axiom should be generated for this lemma *)
+  | Lemma of bool (* indicates whether an axiom should be generated for this lemma *) * expr option (* trigger *)
 and
   meth =
   | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * func_binding * visibility
@@ -1321,8 +1321,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false)) t >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); t = parse_return_type; d = parse_func_rest (Lemma(true)) t >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -5655,7 +5655,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let Some fterm = fterm in
             let cenv0 = [("this", fterm)] @ ftargenv in
-            let k' = match gh with Real -> Regular | Ghost -> Lemma(true) in
+            let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             check_func_header_compat (pn,ilist) l "Function type implementation check: " env0
               (k, tparams, rt, xmap, atomic, pre, post)
               (k', [], rt0, xmap0, false, cenv0, pre0, post0);
@@ -6034,7 +6034,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
-      | Func(l,Lemma(auto),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
+      | Func(l,Lemma(auto, trigger),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
           if List.mem (fn,l) impl then
             let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
             check_spec_lemmas rest impl'
@@ -7651,11 +7651,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." in
               if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance.";
               (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts)
-            | Func (l, Lemma(auto), tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
+            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name.";
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name.";
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (auto, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
+              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances."
           end
           ([], [])
@@ -7664,7 +7664,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (lems, predinsts) = (List.rev lems, List.rev predinsts) in
       let funcnameterms' =
         List.map
-          (fun (fn, (autom, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
+          (fun (fn, (autom, trigger, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
         lems
       in
       let env = funcnameterms' @ env in
@@ -7680,11 +7680,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let funcmap' =
         List.map
-          begin fun (fn, (auto, fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
+          begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
             let (rt, xmap, pre, pre_tenv, post) =
-              check_func_header pn ilist tparams tenv env l (Lemma(auto)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
+              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
             in
-            (fn, (env, Some fterm, l, Lemma(auto), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
+            (fn, (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
@@ -8001,7 +8001,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let _ = pop() in
     let _ = 
       (match k with
-        Lemma(true) -> 
+        Lemma(true, trigger) -> 
           (match (pre, post) with
             (ExprPred(_, pre), ExprPred(_, post)) ->
               let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
@@ -8010,7 +8010,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let t_pre = eval (pn,ilist) None env pre in
               let t_post = eval (pn,ilist) None env post in
               let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
-              (ctxt#assume_forall tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+              (ctxt#assume_forall [] tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
           | _ -> static_error l "Contract of automatic lemma must be pure.")
       | _ -> ()
     ) in
@@ -8144,7 +8144,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
      [] -> (boxes, lems)
-    | Func (l, (Lemma(auto) as k), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
+    | Func (l, (Lemma(auto, trigger) as k), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
       let f_file_name = Filename.chop_extension g_file_name in
@@ -8161,9 +8161,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let t_post = eval (pn,ilist) None env post in
             let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
             let _ = register_prototype_used l g in
-            (ctxt#assume_forall tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+            let trigger = (
+              match trigger with
+                None -> []
+              | Some(trigger) -> 
+                  let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
+                  [eval (pn,ilist) None env trigger]
+            ) in
+            (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
         | _ -> static_error l "Contract of automatic lemma must be pure.")
-      ) in
+      ) in 
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in

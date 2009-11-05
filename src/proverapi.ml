@@ -50,5 +50,5 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual query: 'termnode -> bool
     method virtual stats: string
     method virtual mk_bound: int -> 'typenode -> 'termnode
-    method virtual assume_forall: ('typenode) list -> 'termnode -> unit
+    method virtual assume_forall: 'termnode list -> ('typenode) list -> 'termnode -> unit
   end

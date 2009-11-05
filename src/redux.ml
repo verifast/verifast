@@ -1197,5 +1197,5 @@ and context () =
       ()
       
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = True
-    method assume_forall (tps: unit list) (t: (symbol, termnode) term): unit = ()
+    method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (t: (symbol, termnode) term): unit = ()
   end

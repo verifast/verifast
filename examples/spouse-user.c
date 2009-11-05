@@ -35,10 +35,7 @@ lemma void foreach_remove_nth<t>(int n, list<t> xs);
     requires foreach(xs, ?p) &*& 0 <= n &*& n < length(xs);
     ensures foreach(remove_nth(n, xs), p) &*& p(nth(n, xs));
     
-lemma void drop_take_remove_nth<t>(list<t> xs, int n);
-  requires 0<=n &*& n < length(xs);
-  ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
-  
+ 
 lemma void remove_nth_mem<t>(list<t> xs, int n, t x) 
   requires 0 <= n &*& n < length(xs) &*& mem(x, xs) == true &*& nth(n, xs) != x;
   ensures mem(x, remove_nth(n, xs)) == true;
@@ -94,11 +91,9 @@ int main() //@ : main
       if(0 <= index1 && index1 < max && 0<= index2 && index2 < max && index1 != index2) {
         p1 = list_get(persons, index1);
         p2 = list_get(persons, index2);
-        //@ mem_nth(index1, ps);
         //@ foreach_remove(p1, ps);
         //@ open person_ctor(gid)(p1);
         spouse1 = person_get_spouse(p1);
-        //@ mem_nth(index2, ps);
         //@ remove_diff_index_mem(ps, index1, index2);
         //@ foreach_remove(p2, remove(p1, ps));
         //@ open person_ctor(gid)(p2);
@@ -126,7 +121,6 @@ int main() //@ : main
       max = list_length(persons);
       if(0 <= index && index < max) {
         p = list_get(persons, index);
-        //@ mem_nth(index, ps);
         //@ foreach_remove(p, ps);
         //@ open person_ctor(gid)(p);
         spouse = person_get_spouse(p);
@@ -160,7 +154,6 @@ int main() //@ : main
         list_remove_nth(persons, index);
         //@ foreach_remove_nth(index, ps);
         //@ open person_ctor(gid)(nth(index, ps));
-        //@ drop_take_remove_nth(ps, index);
         spouse = person_get_spouse(p);
         //@ spouse_diff(p);
         if(spouse != 0) {
@@ -193,7 +186,6 @@ int main() //@ : main
         spouse = person_get_spouse(p);
         //@ assume(spouse == 0); // todo
         //@ ghost_list_remove_nth(gid, 0);
-        //@ drop_take_remove_nth(ps0, 0);
         die(p);
         i = list_length(persons);
       }

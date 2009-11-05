@@ -196,6 +196,20 @@ lemma void nth_take<a>(int i, int n, list<a> xs)
     }
 }
 
+lemma void drop_take_remove_nth<t>(list<t> xs, int n)
+  requires 0<=n && n < length(xs);
+  ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(n == 0) {
+      } else {
+        drop_take_remove_nth(t, n - 1);
+      }
+  }
+}
+
 lemma void foreach_remove<t>(t x, list<t> xs)
     requires foreach(xs, ?p) &*& mem(x, xs) == true;
     ensures foreach(remove(x, xs), p) &*& p(x);

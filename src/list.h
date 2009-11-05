@@ -30,7 +30,7 @@ fixpoint int length<t>(list<t> xs) {
 
 lemma_auto void length_nonnegative<t>(list<t> xs);
     requires true;
-    ensures 0 <= length(xs);
+    ensures length(xs) >= 0;
 
 fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
     switch (xs) {
@@ -47,7 +47,7 @@ lemma void append_assoc<t>(list<t> xs, list<t> ys, list<t> zs);
     requires true;
     ensures append(append(xs, ys), zs) == append(xs, append(ys, zs));
     
-lemma void length_append<t>(list<t> xs, list<t> ys);
+lemma_auto(length(append<t>(xs, ys))) void length_append<t>(list<t> xs, list<t> ys);
   requires true;
   ensures length(append(xs, ys)) == length(xs) + length(ys);
 
@@ -81,8 +81,8 @@ fixpoint t nth<t>(int n, list<t> xs) {
     }
 }
 
-lemma void mem_nth<t>(int n, list<t> xs);
-    requires 0 <= n &*& n < length(xs);
+lemma_auto(mem(nth(n, xs), xs)) void mem_nth<t>(int n, list<t> xs);
+    requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;
 
 fixpoint bool distinct<t>(list<t> xs) {
@@ -103,16 +103,16 @@ lemma_auto void take_0<t>(list<t> xs);
     requires true;
     ensures take(0, xs) == nil;
 
-lemma void take_length<t>(list<t> xs);
+lemma_auto(take(length(xs), xs)) void take_length<t>(list<t> xs);
     requires true;
     ensures take(length(xs), xs) == xs;
 
-lemma void length_take<t>(int n, list<t> xs);
-    requires 0 <= n &*& n <= length(xs);
+lemma_auto(length(take(n, xs))) void length_take<t>(int n, list<t> xs);
+    requires 0 <= n && n <= length(xs);
     ensures length(take(n, xs)) == n;
 
-lemma void nth_take<t>(int i, int n, list<t> xs);
-    requires 0 <= i &*& i < n &*& n <= length(xs);
+lemma_auto(nth(i, take(n, xs))) void nth_take<t>(int i, int n, list<t> xs);
+    requires 0 <= i && i < n && n <= length(xs);
     ensures nth(i, take(n, xs)) == nth(i, xs);
 
 fixpoint list<t> drop<t>(int n, list<t> xs) {
@@ -130,15 +130,15 @@ lemma void drop_n_plus_one<t>(int n, list<t> xs);
     requires 0 <= n &*& n < length(xs);
     ensures drop(n, xs) == cons(nth(n, xs), drop(n + 1, xs));
 
-lemma void drop_length<t>(list<t> xs);
+lemma_auto(drop(length(xs), xs)) void drop_length<t>(list<t> xs);
     requires true;
     ensures drop(length(xs), xs) == nil;
 
-lemma void length_drop<t>(int n, list<t> xs);
-    requires 0 <= n &*& n <= length(xs);
+lemma_auto(length(drop(n, xs))) void length_drop<t>(int n, list<t> xs);
+    requires 0 <= n && n <= length(xs);
     ensures length(drop(n, xs)) == length(xs) - n;
 
-lemma void drop_n_take_n<t>(int n, list<t> xs);
+lemma_auto(drop(n, take(n, xs))) void drop_n_take_n<t>(int n, list<t> xs);
     requires true;
     ensures drop(n, take(n, xs)) == nil;
 
@@ -155,6 +155,10 @@ fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
         case cons(h, t): return n == 0 ? t : cons(h, remove_nth(n - 1, t));
     }
 }
+
+lemma_auto(append(take(n, xs), tail(drop(n, xs)))) void drop_take_remove_nth<t>(list<t> xs, int n);
+  requires 0<=n && n < length(xs);
+  ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
 
 fixpoint int index_of<t>(t x, list<t> xs) {
     switch (xs) {
