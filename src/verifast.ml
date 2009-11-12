@@ -717,9 +717,11 @@ and
   | Var of loc * string * ident_scope option ref  (* An identifier. *)
   | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
   | IntLit of loc * big_int * type_ option ref (* int literal*)
+  | ByteLit of loc * char
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field access *)
+  | ReadArray of loc * expr * expr
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
   | CallExpr of
       loc *
@@ -729,6 +731,7 @@ and
       pat list (* arguments *) *
       func_binding
       (* oproep van functie/methode/lemma/fixpoint *)
+  | NewArray of loc * type_expr * expr
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
       loc *
@@ -943,8 +946,10 @@ let expr_loc e =
   | ClassLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
+  | ReadArray (l, _, _) -> l
   | Deref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
+  | NewArray(l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
@@ -1035,7 +1040,7 @@ let c_keywords = [
 
 let java_keywords = [
   "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"
+  "throw"; "try"; "catch"; "throws"; "byte"
 ]
 
 let file_type path=
@@ -1239,15 +1244,15 @@ and
       [< '(_, Kwd ";"); co = opt parse_spec >] -> (None, co)
     | [< co = opt parse_spec; ss = parse_some_block >] -> (ss, co)
     >] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
-| [<'(l,Ident t);e=parser
+| [<'(l,Ident t); rt_array = opt (parser [< '(_, Kwd "["); '(_, Kwd "]") >] -> ()); e=parser
     [<'(_,Ident f);r=parser
-      [<'(_, Kwd ";")>]->FieldMember(Field (l,Real,IdentTypeExpr(l,t),f,Instance,vis))
+      [<'(_, Kwd ";")>]->FieldMember(Field (l,Real, (match rt_array with None -> IdentTypeExpr(l,t) | Some(_) -> ArrayTypeExpr(l, IdentTypeExpr(l,t))),f,Instance,vis))
     | [< ps = parse_paramlist;
          _ = opt parse_throws_clause;
          (ss,co)=parser
         [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
       | [<co = opt parse_spec;ss=parse_some_block>] -> (ss,co)
-    >] -> MethMember(Meth(l,Some (IdentTypeExpr(l,t)),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
+    >] -> MethMember(Meth(l,Some ((match rt_array with None -> IdentTypeExpr(l,t) | Some(_) -> ArrayTypeExpr(l, IdentTypeExpr(l,t)))),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
     >] -> r
   | [< ps = parse_paramlist;
        _ = opt parse_throws_clause;
@@ -1407,6 +1412,7 @@ and
 | [< '(l, Kwd "boolean") >] -> ManifestTypeExpr (l, Bool)
 | [< '(l, Kwd "void") >] -> ManifestTypeExpr (l, Void)
 | [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
+| [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Kwd "predicate"); '(_, Kwd "("); ts = parse_types >] -> PredTypeExpr (l, ts)
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
@@ -1699,7 +1705,15 @@ and
 | [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
-| [< '(l, Kwd "new");'(_, Ident x);args0 = parse_patlist;>] -> CallExpr(l,("new "^x),[],[],args0,Static)
+| [< '(l, Kwd "new");
+     res = parser
+               [< '(l2, Ident x);
+                  e = (parser 
+                    [< '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, IdentTypeExpr (l2, x), length)
+                  | [< args0 = parse_patlist >] -> CallExpr(l,("new "^x),[],[],args0,Static))
+               >] -> e
+            | [< tp = parse_primary_type; '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, tp, length)
+  >] -> res
 | [<
     '(l, Ident x);
     targs = parse_type_args l;
@@ -1763,6 +1777,7 @@ and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
 | [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] ->e
+| [< '(l, Kwd "["); e1 = parse_expr; '(l, Kwd "]"); >] -> ReadArray(l, e0, e1)
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
