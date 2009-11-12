@@ -54,7 +54,7 @@ predicate_family_instance thread_run_pre(Session.class)(Session session, contrib
 
 predicate contribute_pre(Session session, box box1, handle handle1, box box2, handle handle2, box thisBox, Counter c, Semaphore l)
     requires
-        session.counter |-> c &*& session.lock |-> l &*&
+        session.counter |-> c &*& session.lock |-> l &*& l!= null &*&
         [1/2]lock(l, sum(c,box1,handle1,box2,handle2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
 
 predicate_family_instance thread_run_post(Session.class)(Session session, contribute_info info)

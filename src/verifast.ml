@@ -1165,19 +1165,19 @@ let rec
   parse_decls = parser
 [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
 | [< '(l, Kwd "public");ds'=parser
-    [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
+    [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s, methods s mem,fields mem,constr mem,super,il)::ds
   | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
 Interface(l,cn,mem)::ds
   >]-> ds'
 | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
 Interface(l,cn,mem)::ds (* TODO: enkel public classes/interfaces toelaten??*)
-| [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem,fields mem,constr mem,super,il)::ds
+| [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem, fields mem,constr mem,super,il)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
 and
   parse_super_class= parser
-  (*[<'(_, Kwd "extends");'(_, Ident s)>] -> s 
-|*) [<>] -> "Object"
+    [<'(_, Kwd "extends");'(_, Ident s)>] -> s 
+  | [<>] -> "Object"
 and
   parse_interfaces= parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 
@@ -1848,7 +1848,7 @@ let parse_import = parser
 | [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] -> i
 
 let parse_package_decl= parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is,ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
@@ -2649,7 +2649,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 None-> static_error l ("Superclass wasn't found: "^super)
               | Some _ -> check_interfs interfs
           in
-          iter (pn,il) ifdm ((i, (l,meths,fields,constr,super,interfs,pn,il))::classlist) ds
+          iter (pn,il) ifdm ((i, (l, meths ,fields,constr,super,interfs,pn,il))::classlist) ds
       | _::ds -> iter (pn,il) ifdm classlist ds
     in
     let rec iter' (ifdm,classlist) ps =
@@ -4861,7 +4861,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let assume_field h0 f tp tv tcoef cont =
-    let (_, (_, _, _, _, symb, _)) =(List.assoc (f#parent, f#name) field_pred_map)in
+    let (_, (_, _, _, _, symb, _)) = (List.assoc (f#parent, f#name) field_pred_map)in
     begin fun cont ->
       if tcoef != real_unit && tcoef != real_half then
         assume (ctxt#mk_real_lt real_zero tcoef) cont
@@ -4891,7 +4891,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter h
       | _::h -> iter h
     in
-    iter h0
+    if (file_type path) <> Java || ctxt#query (ctxt#mk_not (ctxt#mk_eq tp (ctxt#mk_intlit 0))) then 
+      iter h0
+    else
+      assume_neq tp (ctxt#mk_intlit 0) (fun _ -> iter h0) (* in Java, the target of a field chunk is non-null *)
   in
   
   let assume_chunk h g_symb targs coef inputParamCount ts size cont =
@@ -6270,7 +6273,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l "Incorrect number of type arguments."
       | Some tpenv -> tpenv
     in
-    let ys = List.map (function (p, t) -> p) ps in
+    let ys: string list = List.map (function (p, t) -> p) ps in
     let ws =
       match zip pats ps with
         None -> static_error l "Incorrect number of arguments."
@@ -6285,6 +6288,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     evhs h env ws $. fun h ts ->
     let Some env' = zip ys ts in
+    let _ = if file_type path = Java && (List.mem "this" ys) then 
+      let this_term = List.assoc "this" env' in
+      if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (ctxt#mk_intlit 0)))) then
+        assert_false h env l "Target of method call might be null."
+    in
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
     with_context PushSubcontext (fun () ->
       assert_pred rules tpenv (pn,ilist) h ghostenv cenv pre true real_unit (fun h ghostenv' env' chunk_size ->
@@ -8104,7 +8112,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let ("this", ObjType cn)::_ = ps in
                 (* CAVEAT: Remove this assumption once we allow subclassing. *)
                 (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
-                cont (("this", ObjType cn)::pre_tenv)
+                assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType cn)::pre_tenv))
               end else cont pre_tenv
             end $. fun tenv ->
             let (sizemap, indinfo) = switch_stmt ss env in
@@ -8282,10 +8290,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
               let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
-              let ds= (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange)impllist)in
-              let specpath= (Filename.chop_extension basepath)^".jarspec" in
-              main_file:=main;
-              jardeps:=jdeps;
+              let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange)impllist)in
+              let specpath = (Filename.chop_extension basepath)^".jarspec" in
+              main_file:= main;
+              jardeps:= jdeps;
               if Sys.file_exists (Filename.concat dirpath specpath) then
                 (jarlist@[(dummy_loc,specpath)],ds)
               else

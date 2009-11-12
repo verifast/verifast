@@ -27,6 +27,7 @@ public class Counter {
   {
     this.value = this.value + 1;
   }
+  
   void add(int x)
     //@ requires this.value |-> ?v;
     //@ ensures this.value |-> v + x;

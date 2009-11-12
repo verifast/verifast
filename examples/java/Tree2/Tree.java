@@ -297,7 +297,7 @@ public class Tree{
 	}
 	public static Tree init_tree(int x)
 	//@ requires true;
-	//@ ensures tree(result,cons(x,nil,nil));
+	//@ ensures result != null &*& tree(result,cons(x,nil,nil));
 	{
 		Tree t=new Tree();
 		//@ open tree(t,cons(0,nil,nil));
@@ -316,29 +316,34 @@ public class Tree{
 	//@ requires tree(this,?b);
 	//@ ensures tree(this,b) &*& result==t_contains(b,x);
 	{
-		if(this==null){
-			//@ open tree(this,b);
-			//@ close tree(this,nil);
-			return false;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
+		Tree r=this.right;
+		if(v==x){
+			//@close tree(this,b);
+			return true;
 		}else{
-			//@ open tree(this,b);
-			int v=this.value;
-			Tree l=this.left;
-			Tree r=this.right;
-			if(v==x){
-				//@close tree(this,b);
-				return true;
-			}else{
-				if(x < v){
-					boolean temp1=false;
-					temp1=l.contains(x);
-					//@close tree(this,b);
-					return temp1;
-				}else{
-					boolean temp2=r.contains(x);
-					//@close tree(this,b);
-					return temp2;
+			if(x < v){
+				boolean temp1=false;
+				if(l != null) {
+				  temp1 = l.contains(x);
+				} else {
+				  //@ open tree(l, ?lv);
+			          //@ close tree(l, lv);
 				}
+				//@close tree(this,b);
+				return temp1;
+			}else{
+				boolean temp2= false;
+				if(r != null) {
+				  temp2 = r.contains(x);
+				} else {
+		                  //@ open tree(r, ?rv);
+			          //@ close tree(r, rv);
+				}
+				//@close tree(this,b);
+				return temp2;
 			}
 		}
 	}
@@ -471,7 +476,7 @@ public class Tree{
 		boolean f=false;
 
 		t1 = Tree.init_tree(3);
-		b=t1.contains(2);
+		b = t1.contains(2);
 		assert(!b);
 		t1.add(2);
 
@@ -480,14 +485,18 @@ public class Tree{
 		c=t1.contains(3);
 		assert(c);
 		t2=t1.remove(3);
-		d= t2.contains(3);
-		assert(!d);
+		if(t2 != null) {
+		  d = t2.contains(3);
+		  assert(!d);
 
-		t2.add(3);
-		e= t2.contains(2);
-		assert(e);
-		t3=t2.remove(3);
-		f=t3.contains(3);
-		assert(!f);
+		  t2.add(3);
+		  e= t2.contains(2);
+		  assert(e);
+		  t3=t2.remove(3);
+		  if(t3 != null) {
+		    f=t3.contains(3);
+		    assert(!f);
+		  }
+		}
 	}
 }

@@ -10,8 +10,8 @@ import java.util.concurrent.*;
 predicate_ctor room_ctor(Room room)() = room(room);
 
 predicate session(Session session) =
-    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo)
-    &*& [?f]lock(roomLock, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo)
+    &*& roomLock != null &*& [?f]lock(roomLock, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
 
 predicate_family_instance thread_run_pre(Session.class)(Session session, any info) = session(session);
 
@@ -27,8 +27,8 @@ public class Session implements Runnable {
     public Session(Room room, Semaphore roomLock, Socket socket)
         /*@
         requires
-            [?f]lock(roomLock, room_ctor(room)) &*&
-            Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+            roomLock != null &*& [?f]lock(roomLock, room_ctor(room)) &*&
+            socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
         @*/
         //@ ensures session(result);
     {
@@ -41,9 +41,9 @@ public class Session implements Runnable {
     public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException, IOException
         /*@
         requires
-            locked(roomLock, room_ctor(room), ?f) &*& room(room) &*&
-            BufferedReader(reader, ?reader0, ?reader0Info) &*&
-            Writer(writer.getClass())(writer, ?writerInfo);
+            roomLock != null &*& locked(roomLock, room_ctor(room), ?f) &*& room!= null &*& room(room) &*&
+            reader != null &*& BufferedReader(reader, ?reader0, ?reader0Info) &*&
+            writer != null &*& Writer(writer.getClass())(writer, ?writerInfo);
         @*/
         //@ ensures [f]lock(roomLock, room_ctor(room)) &*& BufferedReader(reader, reader0, reader0Info) &*& Writer(writer.getClass())(writer, writerInfo);
     {

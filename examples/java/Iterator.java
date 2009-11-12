@@ -77,7 +77,7 @@ class SingletonIterator implements Iterator {
 }
 class IteratorUtil {
   public static Object getLast(Iterator iterator)
-      //@ requires iterator(iterator.getClass())(iterator, ?xs);
+      //@ requires iterator != null &*& iterator(iterator.getClass())(iterator, ?xs);
       //@ ensures iterator(iterator.getClass())(iterator, nil) &*& result == objects_last(xs);
   {
       Object value = null;

@@ -78,14 +78,14 @@ interface List {
     
     List tail();
         //@ requires List(this.getClass())(this, ?xs) &*& xs != nil;
-        //@ ensures List(this.getClass())(this, xs) &*& List(result.getClass())(result, tail(xs));
+        //@ ensures List(this.getClass())(this, xs) &*& result != null &*& List(result.getClass())(result, tail(xs));
     
     List map(MapFunc f);
-        //@ requires List(this.getClass())(this, ?xs) &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
-        //@ ensures List(this.getClass())(this, xs) &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
+        //@ requires List(this.getClass())(this, ?xs) &*& f != null &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
+        //@ ensures List(this.getClass())(this, xs) &*& result != null &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
     
     boolean equals(List other);
-        //@ requires List(this.getClass())(this, ?xs) &*& List(other.getClass())(other, ?ys);
+        //@ requires List(this.getClass())(this, ?xs) &*& other != null &*& List(other.getClass())(other, ?ys);
         //@ ensures List(this.getClass())(this, xs) &*& List(other.getClass())(other, ys) &*& result == (xs == ys);
 
 }
@@ -93,7 +93,7 @@ interface List {
 /*@
 
 predicate_family_instance List(Nil.class)(Nil l, list<int> xs) =
-    xs == nil;
+    l != null &*& xs == nil;
 
 @*/
 
@@ -125,7 +125,7 @@ class Nil implements List {
     
     List tail()
         //@ requires List(Nil.class)(this, ?xs) &*& xs != nil;
-        //@ ensures List(Nil.class)(this, xs) &*& List(result.getClass())(result, tail(xs));
+        //@ ensures List(Nil.class)(this, xs) &*& result != null &*& List(result.getClass())(result, tail(xs));
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -133,8 +133,8 @@ class Nil implements List {
     }
     
     List map(MapFunc f)
-        //@ requires List(Nil.class)(this, ?xs) &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
-        //@ ensures List(Nil.class)(this, xs) &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
+        //@ requires List(Nil.class)(this, ?xs) &*& f != null &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
+        //@ ensures List(Nil.class)(this, xs) &*& result!= null &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
@@ -145,7 +145,7 @@ class Nil implements List {
     }
     
     boolean equals(List other)
-        //@ requires List(Nil.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
+        //@ requires List(Nil.class)(this, ?xs) &*& other!= null &*& List(other.getClass())(other, ?ys);
         //@ ensures List(Nil.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result ? xs == ys : xs != ys;
     {
         //@ open List(Nil.class)(this, xs);
@@ -159,7 +159,7 @@ class Nil implements List {
 /*@
 
 predicate_family_instance List(Cons.class)(Cons l, list<int> xs) =
-    [_]l.head |-> ?head &*& [_]l.tail |-> ?tail &*& List(tail.getClass())(tail, ?t) &*& xs == cons(head, t);
+    [_]l.head |-> ?head &*& [_]l.tail |-> ?tail &*& tail != null &*& List(tail.getClass())(tail, ?t) &*& xs == cons(head, t);
 
 @*/
 
@@ -169,7 +169,7 @@ class Cons implements List {
     List tail;
     
     Cons(int head, List tail)
-        //@ requires List(tail.getClass())(tail, ?t);
+        //@ requires tail != null &*& List(tail.getClass())(tail, ?t);
         //@ ensures List(Cons.class)(result, cons(head, t));
     {
         this.head = head;
@@ -198,7 +198,7 @@ class Cons implements List {
     
     List tail()
         //@ requires List(Cons.class)(this, ?xs) &*& xs != nil;
-        //@ ensures List(Cons.class)(this, xs) &*& List(result.getClass())(result, tail(xs));
+        //@ ensures List(Cons.class)(this, xs) &*& result!= null &*& List(result.getClass())(result, tail(xs));
     {
         //@ open List(Cons.class)(this, ?xs_);
         List result = this.tail;
@@ -208,8 +208,8 @@ class Cons implements List {
     }
     
     List map(MapFunc f)
-        //@ requires List(Cons.class)(this, ?xs) &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
-        //@ ensures List(Cons.class)(this, xs) &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
+        //@ requires List(Cons.class)(this, ?xs) &*& f != null &*& MapFunc(f.getClass())(f, xs, ?ys, ?info);
+        //@ ensures List(Cons.class)(this, xs) &*& result != null &*& List(result.getClass())(result, ?zs) &*& MapFunc(f.getClass())(f, nil, append(ys, zs), info);
     {
         //@ open List(Cons.class)(this, ?xs_);
         int fhead = f.apply(this.head);
@@ -223,7 +223,7 @@ class Cons implements List {
     }
     
     boolean equals(List other)
-        //@ requires List(Cons.class)(this, ?xs) &*& List(other.getClass())(other, ?ys);
+        //@ requires List(Cons.class)(this, ?xs) &*& other != null &*& List(other.getClass())(other, ?ys);
         //@ ensures List(Cons.class)(this, xs) &*& List(other.getClass())(other, ys) &*& result ? xs == ys : xs != ys;
     {
         //@ switch (ys) { case nil: case cons(h, t): }

@@ -46,7 +46,7 @@ public class BufferedReader implements Reader {
     
     public String readLine();
         //@ requires BufferedReader(this, ?reader, ?info);
-        //@ ensures BufferedReader(this, reader, info);
+        //@ ensures BufferedReader(this, reader, info) &*& result!=null;
 }
 
 /*@

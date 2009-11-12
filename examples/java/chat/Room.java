@@ -6,7 +6,7 @@ import java.util.*;
 /*@
 
 predicate room(Room room) =
-    room.members |-> ?membersList &*& list(membersList, ?members) &*& foreach(members, member);
+    room.members |-> ?membersList &*& membersList != null &*& list(membersList, ?members) &*& foreach(members, member);
 
 @*/
 
@@ -24,7 +24,7 @@ public class Room {
     }
     
     public boolean has_member(String nick)
-        //@ requires room(this);
+        //@ requires room(this) &*& nick != null;
         //@ ensures room(this);
     {
         //@ open room(this);
@@ -57,7 +57,7 @@ public class Room {
     }
     
     public void broadcast_message(String message) throws IOException
-        //@ requires room(this);
+        //@ requires room(this) &*& message != null;
         //@ ensures room(this);
     {
         //@ open room(this);

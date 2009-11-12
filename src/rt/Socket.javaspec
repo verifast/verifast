@@ -38,5 +38,5 @@ public class ServerSocket {
     
     public Socket accept();
         //@ requires ServerSocket(this);
-        //@ ensures ServerSocket(this) &*& Socket(result, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        //@ ensures result!= null &*& ServerSocket(this) &*& Socket(result, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
 }

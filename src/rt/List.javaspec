@@ -234,7 +234,7 @@ interface List{
   //@ ensures contains(v, element) ?list(this, remove(v, element)):list(this,v);
   Iterator iterator();
   //@ requires list(this, ?v);
-  //@ ensures iter(result, this, v, 0);
+  //@ ensures result != null &*& iter(result, this, v, 0);
 }
 interface Iterator{
   boolean hasNext();
