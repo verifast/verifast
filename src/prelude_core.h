@@ -3,7 +3,7 @@
 
 /*@
 
-fixpoint t default<t>();
+fixpoint t default_value<t>();
 
 inductive unit = unit;
 

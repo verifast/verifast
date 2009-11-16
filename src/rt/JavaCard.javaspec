@@ -1,0 +1,7 @@
+package javacard.framework;
+
+class APDU {
+}
+
+class Applet {
+}

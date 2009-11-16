@@ -9,7 +9,7 @@ inductive list<t> = nil | cons(t, list<t>);
 
 fixpoint t head<t>(list<t> xs) {
     switch (xs) {
-        case nil: return default<t>;
+        case nil: return default_value<t>;
         case cons(x, xs0): return x;
     }
 }
@@ -76,7 +76,7 @@ fixpoint bool mem<t>(t x, list<t> xs) {
 
 fixpoint t nth<t>(int n, list<t> xs) {
     switch (xs) {
-        case nil: return default<t>;
+        case nil: return default_value<t>;
         case cons(x, xs0): return n == 0 ? x : nth(n - 1, xs0);
     }
 }

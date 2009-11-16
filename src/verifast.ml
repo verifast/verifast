@@ -643,6 +643,7 @@ type type_ =
     Bool
   | Void
   | IntType
+  | ShortType
   | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
   | RealType
   | Char
@@ -652,6 +653,7 @@ type type_ =
   | InductiveType of string * type_ list
   | PredType of string list * type_ list
   | ObjType of string
+  | ArrayType of type_
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
@@ -708,7 +710,7 @@ type
   | ModuleName
 
 type
-  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr
+  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
   expr =
     True of loc
@@ -717,7 +719,6 @@ and
   | Var of loc * string * ident_scope option ref  (* An identifier. *)
   | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
   | IntLit of loc * big_int * type_ option ref (* int literal*)
-  | ByteLit of loc * char
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field access *)
@@ -778,6 +779,7 @@ and
   | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
+  | WriteArray of loc * expr * expr * expr
   | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
   | CallStmt of loc * string * type_expr list * expr list * func_binding (* oproep: regel - naam - type-argumenten - argumenten *)
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
@@ -810,9 +812,12 @@ and
   | Throw of loc * expr
   | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
   | TryFinally of loc * stmt list * loc * stmt list
+  | Break of loc
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
+  | SwitchStmtIntClause of loc * expr * stmt list
+  | SwitchStmtDefaultClause of loc * stmt list
 and
   pred = (* A separation logic assertion *)
     Access of loc * expr * fieldref * pat (*  toegang tot veld regel-expr-veld-pattern*)
@@ -976,6 +981,7 @@ let stmt_loc s =
   | Assign (l, _, _) -> l
   | DeclStmt (l, _, _, _) -> l
   | Write (l, _, _, _) -> l
+  | WriteArray(l, _, _, _) -> l
   | WriteDeref (l, _, _) -> l
   | CallStmt (l, _, _, _, _) -> l
   | IfStmt (l, _, _, _) -> l
@@ -1002,6 +1008,7 @@ let stmt_loc s =
   | InvariantStmt (l, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
+  | Break (l) -> l
 
 let type_expr_loc t =
   match t with
@@ -1018,9 +1025,9 @@ let type_expr_loc t =
 let common_keywords = [
   "switch"; "case"; ":"; "return";
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
-  "||"; "!"; "["; "]"; "{";
-  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%";
-  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"
+  "||"; "!"; "["; "]"; "{"; "break"; "default";
+  "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
+  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<"
 ]
 
 let ghost_keywords = [
@@ -1406,6 +1413,7 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
@@ -1493,6 +1501,7 @@ and
     match lhs with
     | Var (_, x, _) -> Assign (l, x, rhs)
     | Read (_, e, f) -> Write (l, e, f, rhs)
+    | ReadArray(_, e, i) -> WriteArray(l, e, i, rhs)
     | Deref (_, e, _) -> WriteDeref (l, e, rhs)
     | _ -> raise (ParseException (expr_loc lhs, "The left-hand side of an assignment must be an identifier, a field dereference expression, or a pointer dereference expression."))
   in
@@ -1545,6 +1554,7 @@ and
      inv = opt (parser [< '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/") >] -> p);
      '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, b, closeBraceLoc)
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
+| [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
      body = parse_block;
      catches = rep (parser [< '(l, Kwd "catch"); '(_, Kwd "("); t = parse_type; '(_, Ident x); '(_, Kwd ")"); body = parse_block >] -> (l, t, x, body));
@@ -1621,7 +1631,14 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
+  (*[< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)*)
+  [< '(l, Kwd "case"); clause = parser 
+    (* *)
+      [< '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
+    | [< '(l2, Int n); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtIntClause(l, IntLit(l2, n, ref None), ss)
+    (* *)
+   >] -> clause
+| [< '(l, Kwd "default"); '(_, Kwd ":"); ss = parse_stmts; >] -> SwitchStmtDefaultClause(l, ss)
 and
   parse_more_pats = parser
   [< '(_, Kwd ")") >] -> []
@@ -1684,7 +1701,10 @@ and
   [< e0 = parse_expr_rel; e = parse_bitand_expr_rest e0 >] -> e
 and
   parse_expr_rel = parser
-  [< e0 = parse_expr_arith; e = parse_expr_rel_rest e0 >] -> e
+  [< e0 = parse_shift; e = parse_expr_rel_rest e0 >] -> e
+and
+  parse_shift = parser
+  [< e0 = parse_expr_arith; e = parse_shift_rest e0 >] -> e
 and
   parse_expr_arith = parser
   [< e0 = parse_expr_mul; e = parse_expr_arith_rest e0 >] -> e
@@ -1789,6 +1809,11 @@ and
   parse_expr_arith_rest e0 = parser
   [< '(l, Kwd "+"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Add, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "-"); e1 = parse_expr_mul; e = parse_expr_arith_rest (Operation (l, Sub, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_shift_rest e0 = parser
+  [< '(l, Kwd "<<"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftLeft, [e0; e1], ref None)) >] -> e
+| [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
   parse_expr_rel_rest e0 = parser
@@ -2048,6 +2073,7 @@ let rec string_of_type t =
     Bool -> "bool"
   | Void -> "void"
   | IntType -> "int"
+  | ShortType -> "short"
   | UintPtrType -> "uintptr_t"
   | RealType -> "real"
   | Char -> "char"
@@ -2193,12 +2219,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match t with
       Bool -> ProverBool
     | IntType -> ProverInt
+    | ShortType -> ProverInt
     | UintPtrType -> ProverInt
     | RealType -> ProverReal
     | Char -> ProverInt
     | InductiveType _ -> ProverInductive
     | StructType sn -> assert false
     | ObjType n -> ProverInt
+    | ArrayType t -> ProverInt
     | PtrType t -> ProverInt
     | FuncType _ -> ProverInt
     | PredType (tparams, ts) -> ProverInductive
@@ -2242,6 +2270,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let min_int_big_int = big_int_of_string "-2147483648" in
   let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let min_short = big_int_of_string "-32768" in
+  let max_short = big_int_of_string "32767" in
+  let min_short_term = ctxt#mk_intlit_of_string "-32768" in
+  let max_short_term = ctxt#mk_intlit_of_string "32767" in
   let max_int_big_int = big_int_of_string "2147483647" in
   let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
   let max_ptr_big_int = big_int_of_string "4294967295" in
@@ -2690,6 +2722,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
                  | ManifestTypeExpr (_, Bool) -> Bool
+                 | ManifestTypeExpr (_, ShortType) -> ShortType
+                 | ArrayTypeExpr (l, tp) -> 
+                     let elem_tp = check_type tp in ArrayType(elem_tp)
                  | IdentTypeExpr(lt, sn) ->
                    match search2' sn (pn,ilist) classdeclmap classmap0 with
                      Some s -> ObjType s
@@ -2933,6 +2968,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType "null", ObjType _) -> ()
     | (Char, IntType) -> ()
+    | (ShortType, IntType) -> ()
+    | (Char, ShortType) -> ()
     | (ObjType x, ObjType y) ->
       let x= match search2' x (pn,ilist) classdeclmap classmap0 with 
         Some x -> x
@@ -3953,6 +3990,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           static_error l "Integer literal used as char must be between -128 and 127."
       else
         e
+    | (IntLit (l, n, t), ShortType) ->
+      t:=Some ShortType;
+      if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
+        if isCast then
+          let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
+          let n = if 32768 <= n then n - 65536 else n in
+          IntLit (l, big_int_of_int n, t)
+        else
+          static_error l "Integer literal used as short must be between -32768 and 32767."
+      else
+        e
     | _ ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       match (t, t0) with
@@ -3960,6 +4008,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (PtrType _, UintPtrType) when isCast -> w
       | (UintPtrType, PtrType _) when isCast -> w
       | (IntType, Char) when isCast -> w
+      | (IntType, ShortType) when isCast -> w
+      | (ShortType, Char) when isCast -> w
       | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
   and check_deref is_write pure (pn,ilist) l tparams tenv e f =
     let check_ok gh =
@@ -4606,6 +4656,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           ctxt#mk_intlit_of_string (string_of_big_int n)
         | (e, Char) ->
           check_overflow l min_char_term (ev e) max_char_term
+        | (e, ShortType) ->
+          check_overflow l min_short_term (ev e) max_short_term
         | _ -> ev e
       end
     | IntLit (l, n, t) ->
@@ -4620,6 +4672,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match t with
               IntType -> (min_int_big_int, max_int_big_int)
             | Char -> (min_char_big_int, max_char_big_int)
+            | ShortType -> (min_short, max_short)
             | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
           in
           if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range."
@@ -5485,7 +5538,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some s -> assigned_variables s
       end
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> []
-    | SwitchStmt (l, e, cs) -> flatmap (fun (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss) cs
+    | SwitchStmt (l, e, cs) -> flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss | (SwitchStmtIntClause(_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
     | Open (l, g, targs, ps0, ps1, coef) -> []
@@ -5507,6 +5560,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | NoopStmt _ -> []
     | LabelStmt _ -> []
     | InvariantStmt _ -> []
+    | Break _ -> []
   in
 
   let dummypat = SrcPat DummyPat in
@@ -5847,6 +5901,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    ManifestTypeExpr (_, IntType) -> IntType
                  | ManifestTypeExpr (_, Char) -> Char
                  | ManifestTypeExpr (_, Bool) -> Bool
+                 | ManifestTypeExpr(_, ShortType) -> ShortType
+                 | ArrayTypeExpr (_, tp) -> let elem_tp = check_type tp in ArrayType(elem_tp)
                  | IdentTypeExpr(lt, cn) ->
                      match search2' cn (pn,ilist) classdeclmap classmap0 with
                        Some s -> ObjType s
@@ -6980,60 +7036,89 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | SwitchStmt (l, e, cs) ->
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      let (tn, targs, Some (_, tparams, ctormap)) =
-        match tp with
-          InductiveType (i, targs) -> (i, targs, try_assoc' (pn,ilist) i inductivemap)
-        | _ -> static_error l "Switch statement operand is not an inductive value."
-      in
-      let (Some tpenv) = zip tparams targs in
-      let t = ev w in
-      let rec iter ctors cs =
-        match cs with
-          [] ->
-          begin
-          match ctors with
-            [] -> success()
-          | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
-          end
-        | SwitchStmtClause (lc, cn, pats, ss)::cs ->
-          let pts =
-            match try_assoc' (pn,ilist) cn ctormap with
-              None -> static_error lc ("Not a constructor of type " ^ tn)
-            | Some (l, pts) -> pts
-          in
-          let Some cn= search' cn (pn,ilist) ctormap in
-          let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
-          let (ptenv, xterms, xenv) =
-            let rec iter ptenv xterms xenv pats pts =
-              match (pats, pts) with
-                ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
-              | (pat::pats, tp::pts) ->
-                if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
-                if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
-                let tp' = instantiate_type tpenv tp in
-                let term = get_unique_var_symb pat tp' in
-                let term' =
-                  match unfold_inferred_type tp with
-                    TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
-                  | _ -> term
+      (match tp with
+        InductiveType(i, targs) ->
+          let (tn, targs, Some (_, tparams, ctormap)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
+          let (Some tpenv) = zip tparams targs in
+          let t = ev w in
+          let rec iter ctors cs =
+            match cs with
+              [] ->
+              begin
+              match ctors with
+                [] -> success()
+              | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
+              end
+            | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype"
+            | SwitchStmtIntClause (l, _, _) :: cs -> static_error l "integer clause not allowed in switch over inductive datatype"
+            | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+              let pts =
+                match try_assoc' (pn,ilist) cn ctormap with
+                  None -> static_error lc ("Not a constructor of type " ^ tn)
+                | Some (l, pts) -> pts
+              in
+              let Some cn= search' cn (pn,ilist) ctormap in
+              let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
+              let (ptenv, xterms, xenv) =
+                let rec iter ptenv xterms xenv pats pts =
+                  match (pats, pts) with
+                    ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
+                  | (pat::pats, tp::pts) ->
+                    if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
+                    if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
+                    let tp' = instantiate_type tpenv tp in
+                    let term = get_unique_var_symb pat tp' in
+                    let term' =
+                      match unfold_inferred_type tp with
+                        TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                      | _ -> term
+                    in
+                    iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
+                  | ([], _) -> static_error lc "Too few arguments."
+                  | _ -> static_error lc "Too many arguments."
                 in
-                iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
-              | ([], _) -> static_error lc "Too few arguments."
-              | _ -> static_error lc "Too many arguments."
+                iter [] [] [] pats pts
+              in
+              let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
+              let sizemap =
+                match try_assq t sizemap with
+                  None -> sizemap
+                | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
+              in
+              branch
+                (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+                (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
             in
-            iter [] [] [] pats pts
-          in
-          let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
-          let sizemap =
-            match try_assq t sizemap with
-              None -> sizemap
-            | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
-          in
-          branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
-            (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
-      in
-      iter (List.map (function (cn, _) -> cn) ctormap) cs
+            iter (List.map (function (cn, _) -> cn) ctormap) cs
+      | IntType -> 
+          if 1 < List.length (List.filter (fun cl -> match cl with SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) then
+            static_error l "switch statement can have at most one default clause"
+          else
+            eval_h h env w (fun h switch_term ->      
+              List.iter (fun clause ->
+                match clause with
+                | SwitchStmtIntClause (l, i, ss) -> 
+                    let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+                    let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+                    eval_h h env w2 (fun h t ->
+                      assume_eq t switch_term (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont)
+                    )
+                | SwitchStmtDefaultClause (l, ss) -> 
+                    (*static_error l "not supported"*)
+                    let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+                    let restr = List.fold_left (fun state clause -> 
+                      match clause with
+                        SwitchStmtIntClause (l, i, ss) -> 
+                          let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+                          ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq switch_term (ev w2))) 
+                      | _ -> state
+                    ) (ctxt#mk_true) cs in
+                    let _ = assume restr (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont) in
+                    ()
+                | SwitchStmtClause (lc, cn, pats, ss) -> static_error l "inductive value not allowed in switch over integer"
+              ) cs
+            )
+      | _ -> static_error l "Switch statement operand is not an inductive value or integer.")
     | Assert (l, p) ->
       let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
       assert_pred rules [] (pn,ilist) h ghostenv env wp false real_unit (fun _ ghostenv env _ ->
@@ -7754,6 +7839,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | NoopStmt l -> cont h env
     | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position."
     | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position."
+    | Break(l) -> cont h env (* need to add break continuation? *)
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with

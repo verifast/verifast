@@ -12,7 +12,7 @@ fixpoint list<pair<a, b> > zip<a, b>(list<a> xs, list<b> ys) {
         case nil: return nil;
         case cons(x, xs0): return
             switch (ys) {
-                case nil: return cons(pair(x, default<b>), zip(xs0, nil));
+                case nil: return cons(pair(x, default_value<b>), zip(xs0, nil));
                 case cons(y, ys0): return cons(pair(x, y), zip(xs0, ys0));
             };
     }
@@ -30,7 +30,7 @@ fixpoint bool mem_assoc<a, b>(a x, list<pair<a, b> > xys) {
 
 fixpoint b assoc<a, b>(a x, list<pair<a, b> > xys) {
     switch (xys) {
-        case nil: return default;
+        case nil: return default_value;
         case cons(xy, xys0): return
             switch (xy) {
                 case pair(x0, y0): return x0 == x ? y0 : assoc(x, xys0);
