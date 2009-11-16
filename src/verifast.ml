@@ -1610,12 +1610,16 @@ and
   | [< '(l, Kwd "--"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; IntLit (l, unit_big_int, ref None)], ref None))
   | [< '(l, Kwd "+="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; e'], ref None))
   | [< '(l, Kwd "-="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; e'], ref None))
-  | [<'(_, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >]->
-    (match e with
-     | Var (lx, t, _) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
-     | _ -> raise (ParseException (expr_loc e, "Parse error."))
-    )
-  >] -> s
+  | [< '(_, Kwd "["); '(_, Kwd "]"); '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+        (match e with
+         | Var (lx, t, _) -> DeclStmt (l, ArrayTypeExpr(lx, IdentTypeExpr (lx,t)), x, rhs)
+         | _ -> raise (ParseException (expr_loc e, "Parse error."))
+        )
+  | [<'(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+        (match e with
+         | Var (lx, t, _) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
+         | _ -> raise (ParseException (expr_loc e, "Parse error."))
+        ) >] ->s
 | [< te = parse_type; '(_, Ident x); '(l, Kwd "=");
      s = parser
        [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
@@ -2091,6 +2095,7 @@ let rec string_of_type t =
   | AnyType -> "any"
   | TypeParam x -> x
   | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
+  | ArrayType(t) -> (string_of_type t) ^ "[]"
 
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
@@ -2755,7 +2760,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec check_pure_type (pn,ilist) tpenv te=
     match te with
       ManifestTypeExpr (l, t) -> t
-    | ArrayTypeExpr (l, t) -> check_pure_type (pn,ilist) tpenv t
+    | ArrayTypeExpr (l, t) -> 
+        let tp = check_pure_type (pn,ilist) tpenv t in
+        ArrayType(tp)
     | IdentTypeExpr (l, id) ->
       if List.mem id tpenv then
         TypeParam id
@@ -3913,6 +3920,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "Class")
                 else static_error l ("No such pure function: "^g')
       )
+    | NewArray(l, te, length) ->
+      let w1 = checkt length intt in
+      let t = check_pure_type (pn,ilist) tparams te in
+      (NewArray(l, te, length), ArrayType(t))
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
       let (w2, t) = check e2 in
@@ -6541,7 +6552,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       with StaticError (l, msg) -> false
                 in
                 if(match_args xmap pats) then
-                  check_correct xo (Some g) targs pats (lm, [],Some (ObjType(class_name)), xmap, [], pre, post,ss,Static) cont
+                  check_correct xo (Some g) targs pats (lm, [], Some (ObjType(class_name)), xmap, [], pre, post,ss,Static) cont
                 else search_cons rest
               in
               if iscons then 
@@ -6676,6 +6687,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | CallExpr (lc, g, targs, [], pats,fb) ->
         call_stmt lc xo g targs pats fb check_type
+      | NewArray(l, tp, e) ->
+          let elem_tp = check_pure_type (pn,ilist) tparams tp in
+          let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+          eval_h h env w (fun h lv ->
+            if ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv) then
+              let at = get_unique_var_symb "arr" (ArrayType(elem_tp)) in
+              cont h (Some (at, ArrayType(elem_tp)))
+            else
+              assert_false h env l "array length might be negative"
+          )
       | e ->
         let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
         eval_h h env w $. fun h v ->
