@@ -1,7 +1,34 @@
 package javacard.framework;
 
 class APDU {
+  public byte[] getBuffer();
+    //@ requires true;
+    //@ ensures true;
+    
+  public short setIncomingAndReceive() throws APDUException;
+    //@ requires true;
+    //@ ensures true;
+
 }
 
 class Applet {
+}
+
+class ISOException {
+  public static void throwIt() throws ISOException;
+    //@ requires true;
+    //@ ensures true;
+}
+
+class OPSystem {
+  public static byte getCardContentState();
+    //@ requires true;
+    //@ ensures true;
+}
+
+class Util {
+  public short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+	throws ArrayIndexOutOfBoundsException;
+    //@ requires true;
+    //@ ensures true;
 }

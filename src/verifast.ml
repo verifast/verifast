@@ -1635,12 +1635,9 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  (*[< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)*)
-  [< '(l, Kwd "case"); clause = parser 
-    (* *)
+  [< '(l, Kwd "case"); clause = parser
       [< '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
     | [< '(l2, Int n); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtIntClause(l, IntLit(l2, n, ref None), ss)
-    (* *)
    >] -> clause
 | [< '(l, Kwd "default"); '(_, Kwd ":"); ss = parse_stmts; >] -> SwitchStmtDefaultClause(l, ss)
 and
@@ -2974,6 +2971,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec expect_type_core (pn,ilist) l msg t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType "null", ObjType _) -> ()
+    | (ObjType "null", ArrayType _) -> ()
+    | (ArrayType (ObjType "Object"), ArrayType (ObjType "Object")) -> ()
+    | (ArrayType t1, ArrayType t2) when t1 = t2 -> ()
     | (Char, IntType) -> ()
     | (ShortType, IntType) -> ()
     | (Char, ShortType) -> ()
@@ -3154,7 +3154,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           match e with
                             True l -> (e, boolt)
                           | False l -> (e, boolt)
-                          | Null l -> (e, match rt with ObjType id -> ObjType id | TypeParam t -> TypeParam t) (* null is allowed for every object type or a type param*)
+                          | Null l -> (e, match rt with ObjType id -> ObjType id | TypeParam t -> TypeParam t | AnyType -> AnyType) (* null is allowed for every object type or a type param*)
                           | Var (l, x, scope) -> (
                             match try_assoc x tenv with
                               None -> (
@@ -3734,6 +3734,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let w1 = checkt e1 RealType in
         ts := Some [RealType; RealType];
         (w1, w2, RealType)
+      | (Char, IntType) ->
+        let w1 = checkt e1 IntType in
+        ts := Some [IntType; IntType];
+        (w1, w2, IntType)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
         ts := Some [t1; t1];
@@ -3741,8 +3745,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
-        (w1, w2, (IntType | RealType | PtrType _)) as result -> result
-      | _ -> static_error l "Expression of type int, real, or pointer type expected."
+        (w1, w2, (Char | ShortType | IntType | RealType | PtrType _)) as result -> result
+      | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected."
     in
     match e with
       True l -> (e, boolt)
@@ -3843,14 +3847,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             ts:=Some [t1; IntType];
             (Operation (l, operator, [w1; w2], ts), t1)
           end
-        | IntType | RealType ->
+        | IntType | RealType | ShortType | Char ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
           (Operation (l, operator, [w1; w2], ts), t1)
-        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
+        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
       end
     | Operation (l, Mul, [e1; e2], ts) ->
       let (w1, w2, t) = promote l e1 e2 ts in
@@ -3924,6 +3928,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w1 = checkt length intt in
       let t = check_pure_type (pn,ilist) tparams te in
       (NewArray(l, te, length), ArrayType(t))
+    | ReadArray(l, arr, index) ->
+        let (w1, arr_t) = check arr in
+        let w2 = checkt index intt in
+        (match arr_t with
+          ArrayType(tp) -> (ReadArray(l, arr, index), tp)
+        | _ -> static_error l "target of array access is not an array"
+        )
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
       let (w2, t) = check e2 in
@@ -4652,7 +4663,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin
             match read_field with
               None -> static_error l "Cannot mention global variables in this context."
-            | Some (read_field, deref_pointer) ->
+            | Some (read_field, deref_pointer, read_array) ->
                 let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
                   deref_pointer l symbol tp
           end
@@ -4740,6 +4751,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_add (ev e1) (ev e2)
+        | Some [ShortType; ShortType] ->
+          check_overflow l min_short_term (ctxt#mk_add (ev e1) (ev e2)) max_short_term
+        | Some [Char; Char] ->
+          check_overflow l min_char_term (ctxt#mk_add (ev e1) (ev e2)) max_char_term
         | _ -> static_error l "Internal error in eval."
       end
     | Operation (l, Sub, [e1; e2], ts) ->
@@ -4775,13 +4790,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match read_field with
           None -> static_error l "Cannot use field dereference in this context."
-        | Some (read_field, deref_pointer) -> read_field l (ev e) f
+        | Some (read_field, deref_pointer, read_array) -> read_field l (ev e) f
+      end
+    | ReadArray(l, arr, i) ->
+      begin
+        match read_field with
+          None -> static_error l "Cannot use array indexing in this context."
+        | Some (read_field, deref_pointer, read_array) -> read_array l (ev arr) (ev i)
       end
     | Deref (l, e, t) ->
       begin
         match read_field with
           None -> static_error l "Cannot use field dereference in this context."
-        | Some (read_field, deref_pointer) ->
+        | Some (read_field, deref_pointer, read_array) ->
           let (Some t) = !t in
           deref_pointer l (ev e) t
       end
@@ -5176,6 +5197,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let read_field h env l t f =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
+  in
+  
+  let read_array h env l a i =
+    (*let a_arrays = List.find_all (fun Chunk((q, _), targs, frac, args, _) -> 
+      ctxt#query (ctxt#mk_eq (List.nth args 1)
+    ) h in*)
+    get_unique_var_symb "junk" IntType
   in
   
   let pointer_pred_symb () =
@@ -6230,7 +6258,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let eval_non_pure (pn,ilist) is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
-    eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t))) env e
+    eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t), (fun l a i -> read_array h env l a i))) env e
   in 
   
   let rec eval_h (pn,ilist) is_ghost_expr h env e cont =
@@ -6543,7 +6571,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let rec search_cons clist=
                match clist with
                 [] -> static_error l ("Constructor "^g^" not found!")
-              | (xmap,(lm,pre,pre_tenv,post,ss,v))::rest->
+              | (xmap,(lm,pre,pre_tenv,post,ss,v)) :: rest->
                 let match_args xmap pats =
                   match zip pats xmap with
                     None -> false
