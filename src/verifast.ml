@@ -3734,8 +3734,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let w1 = checkt e1 RealType in
         ts := Some [RealType; RealType];
         (w1, w2, RealType)
-      | (Char, IntType) ->
-        let w1 = checkt e1 IntType in
+      | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
         ts := Some [IntType; IntType];
         (w1, w2, IntType)
       | (t1, t2) ->

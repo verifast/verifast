@@ -58,6 +58,10 @@ lemma void chars_zero(); // There is nothing at address 0.
     requires chars(0, ?cs);
     ensures cs == nil;
 
+lemma void char_limits(char *pc);
+    requires [?f]character(pc, ?c);
+    ensures [f]character(pc, c) &*& true == ((char *)0 <= pc) &*& pc <= (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
+
 lemma void chars_limits(char *array);
     requires [?f]chars(array, ?cs);
     ensures [f]chars(array, cs) &*& cs == nil ? true : true == ((char *)0 <= array) &*& array + length(cs) <= (char *)UINTPTR_MAX;
