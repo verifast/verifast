@@ -680,6 +680,7 @@ class fieldref (name: string) =
     val mutable range: type_ option = None  (* Declared type of the field. *)
     method name = name
     method parent = match parent with None -> assert false | Some s -> s
+    method is_array_length = match parent with None -> true | Some s -> false (* only use after type checking *)
     method range = match range with None -> assert false | Some r -> r
     method set_parent s = parent <- Some s
     method set_range r = range <- Some r
@@ -2262,6 +2263,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
   let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
+  let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
   
   let boolt = Bool in
   let intt = IntType in
@@ -3874,7 +3876,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
       (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t)
-    | Read (l, e, f) -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
+    | Read (l, e, f) -> 
+        let (w, t) = check e in
+        (match t with
+          ArrayType(_) when f#name = "length" -> (Read(l, e, f), IntType)
+        | _ -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t))
     | Deref (l, e, tr) ->
       let (w, t) = check e in
       begin
@@ -4632,11 +4638,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: evaluation *)
   
-  let rec eval_core (pn,ilist) assert_term read_field (env: (string * 'termnode) list) e : 'termnode =
-    let ev = eval_core (pn,ilist) assert_term read_field env in
+  let rec eval_core (pn,ilist) ass_term read_field (env: (string * 'termnode) list) e : 'termnode =
+    let ev = eval_core (pn,ilist) ass_term read_field env in
     let check_overflow l min t max =
       begin
-      match assert_term with
+      match ass_term with
         Some assert_term when not disable_overflow_check ->
         assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow.";
         assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow."
@@ -4673,7 +4679,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match (e, t) with
           (IntLit (_, n, _), PtrType _) ->
-          if assert_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
+          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
           ctxt#mk_intlit_of_string (string_of_big_int n)
         | (e, Char) ->
           check_overflow l min_char_term (ev e) max_char_term
@@ -4687,7 +4693,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if eq_big_int n unit_big_int then real_unit
         else ctxt#mk_reallit_of_num (num_of_big_int n)
       | Some t ->
-        if assert_term <> None then
+        if ass_term <> None then
         begin
           let (min, max) =
             match t with
@@ -4766,6 +4772,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
         | Some [RealType; RealType] ->
           ctxt#mk_real_sub (ev e1) (ev e2)
+        | Some [ShortType; ShortType] ->
+          check_overflow l min_short_term (ctxt#mk_sub (ev e1) (ev e2)) max_short_term
+        | Some [Char; Char] ->
+          check_overflow l min_char_term (ctxt#mk_sub (ev e1) (ev e2)) max_char_term
         | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
           check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
       end
@@ -4786,11 +4796,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->
-      begin
-        match read_field with
-          None -> static_error l "Cannot use field dereference in this context."
-        | Some (read_field, deref_pointer, read_array) -> read_field l (ev e) f
-      end
+      if f#is_array_length then
+        let t = ev e in
+        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
+          assert_false [] env l "target of arraylength expression might be null"
+        else
+          ctxt#mk_app arraylength_symbol [t]
+      else
+        begin
+          match read_field with
+            None -> static_error l "Cannot use field dereference in this context."
+          | Some (read_field, deref_pointer, read_array) -> read_field l (ev e) f
+        end
     | ReadArray(l, arr, i) ->
       begin
         match read_field with
@@ -6544,6 +6561,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
            )
         in
+        let _ = List.iter (fun (LitPat e) -> ignore (check_expr (pn, ilist) [] tenv e)) pats in
         match try_assoc' (pn,ilist) class_name classmap with
           Some(_,Some methmap,_,Some consmap,super,interfs,pn,ilist) -> 
             (if pure then 
@@ -7056,6 +7074,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
       )
+    | WriteArray(l, arr, i, rhs) -> 
+        cont h env (* todo!!! *)
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (w, pointerType) = check_expr (pn,ilist) tparams tenv e in

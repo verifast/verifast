@@ -8,6 +8,10 @@ class APDU {
   public short setIncomingAndReceive() throws APDUException;
     //@ requires true;
     //@ ensures true;
+    
+  public void setOutgoingAndSend(short bOff, short len) throws APDUException;
+    //@ requires true;
+    //@ ensures true;
 
 }
 
@@ -27,7 +31,7 @@ class OPSystem {
 }
 
 class Util {
-  public short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+  public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
 	throws ArrayIndexOutOfBoundsException;
     //@ requires true;
     //@ ensures true;
