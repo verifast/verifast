@@ -2278,6 +2278,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
   let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
+  let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
+  let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   
   let boolt = Bool in
   let intt = IntType in
@@ -3760,7 +3762,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec check_expr (pn,ilist) tparams tenv e =
     let check e = check_expr (pn,ilist) tparams tenv e in
     let checkt e t0 = check_expr_t_core (pn,ilist) tparams tenv e t0 false in
-    let checkt_cast e t0 = check_expr_t_core (pn,ilist) tparams tenv e t0 true in
+    let checkt_cast e t0 = 
+      (*if (file_type path = Java) then
+        let (w, et) = check e in
+        (match (t0, et) with
+          ((Char | ShortType | IntType), (Char | ShortType | IntType)) -> w
+        | (ObjType "object", (ObjType (_) | ArrayType(_))) -> w (* stupid-cast *)
+        | ((ObjType (_) | ArrayType(_)), ObjType "object") -> w
+        | (ObjType(_), ObjType(_)) -> w
+        | _ -> static_error (expr_loc e) (sprintf "illegal cast to %s from %s" (string_of_type t0) (string_of_type et)))
+      else *)
+        check_expr_t_core (pn,ilist) tparams tenv e t0 true in
     let promote_numeric e1 e2 ts =
       let (w1, t1) = check e1 in
       let (w2, t2) = check e2 in
@@ -3927,6 +3939,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w1 = checkt e1 RealType in
       let w2 = checkt e2 RealType in
       (Operation (l, Div, [w1; w2], ts), RealType)
+    | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
+      let w1 = checkt e1 IntType in
+      let w2 = checkt e2 IntType in
+      (Operation (l, op, [w1; w2], ts), IntType)
     | IntLit (l, n, t) -> (e, match !t with None -> t := Some intt; intt | Some t -> t)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
@@ -3996,7 +4012,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (w1, arr_t) = check arr in
         let w2 = checkt index intt in
         (match arr_t with
-          ArrayType(tp) -> (ReadArray(l, arr, index), tp)
+          ArrayType(tp) -> (ReadArray(l, w1, w2), tp)
         | _ -> static_error l "target of array access is not an array"
         )
     | IfExpr (l, e1, e2, e3) ->
@@ -4096,6 +4112,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (IntType, Char) when isCast -> w
       | (IntType, ShortType) when isCast -> w
       | (ShortType, Char) when isCast -> w
+      | (ObjType ("Object"), ArrayType _) when isCast -> w
+      | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
       | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
   and check_deref is_write pure (pn,ilist) l tparams tenv e f =
     let check_ok gh =
@@ -4972,6 +4990,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> static_error (expr_loc e) "The denominator of a division must be a literal."
       in
       ctxt#mk_real_mul (ev e1) (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))
+    | Operation (l, ShiftLeft, [e1; e2], ts) ->
+        ctxt#mk_app shiftleft_symbol [ev e1; ev e2]
+    | Operation (l, ShiftRight, [e1; e2], ts) ->
+        ctxt#mk_app shiftright_symbol [ev e1; ev e2]
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
     | Read(l, e, f) ->
@@ -5768,6 +5790,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Assign (l, x, e) -> [x]
     | DeclStmt (l, t, x, e) -> []
     | Write (l, e, f, e') -> []
+    | WriteArray(_, _, _, _) -> []
     | WriteDeref (l, e, e') -> []
     | CallStmt (l, g, targs, es, _) -> []
     | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
@@ -7345,7 +7368,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
             in
             iter (List.map (function (cn, _) -> cn) ctormap) cs
-      | IntType -> 
+      | Char | ShortType | IntType -> 
           if 1 < List.length (List.filter (fun cl -> match cl with SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) then
             static_error l "switch statement can have at most one default clause"
           else

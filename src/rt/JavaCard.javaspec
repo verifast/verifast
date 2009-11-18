@@ -5,11 +5,23 @@ class APDU {
     //@ requires true;
     //@ ensures true;
     
+  public short setOutgoing() throws APDUException;
+    //@ requires true;
+    //@ ensures true;
+    
   public short setIncomingAndReceive() throws APDUException;
     //@ requires true;
     //@ ensures true;
     
   public void setOutgoingAndSend(short bOff, short len) throws APDUException;
+    //@ requires true;
+    //@ ensures true;
+    
+  public void setOutgoingLength(short len) throws APDUException;
+    //@ requires true;
+    //@ ensures true;
+    
+  public void sendBytes(short bOff, short len) throws APDUException;
     //@ requires true;
     //@ ensures true;
 
@@ -28,11 +40,44 @@ class OPSystem {
   public static byte getCardContentState();
     //@ requires true;
     //@ ensures true;
+    
+  public static boolean setCardContentState(byte state);
+    //@ requires true;
+    //@ ensures true;
+}
+
+class AID {
+}
+
+class JCSystem {
+  public static AID lookupAID(byte[] buffer, short offset, byte length);
+    //@ requires true;
+    //@ ensures true;
+    
+  public static void beginTransaction();
+    //@ requires true;
+    //@ ensures true;
+
+  public static void commitTransaction();
+    //@ requires true;
+    //@ ensures true;
 }
 
 class Util {
+  public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+    //@ requires true;
+    //@ ensures true;
+
   public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
 	throws ArrayIndexOutOfBoundsException;
+    //@ requires true;
+    //@ ensures true;
+    
+  public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+    //@ requires true;
+    //@ ensures true;
+  
+  public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
     //@ requires true;
     //@ ensures true;
 }
