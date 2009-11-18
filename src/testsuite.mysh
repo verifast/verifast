@@ -48,6 +48,7 @@ verifast_both -c odd_even_lemmas.c
 verifast_both -shared doubly_linked_list.c
 cd java
 verifast_both -c hello.scala
+verifast_both -c Constants.java
 verifast_both -disable_overflow_check -c map.java
 verifast_both -disable_overflow_check -c Counter.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc

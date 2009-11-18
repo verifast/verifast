@@ -637,6 +637,16 @@ let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
   let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail in
   (loc, ignore_eol, token_stream)
 
+(* Some types for dealing with constants *)
+
+type constant_value =
+  IntConst of big_int
+| BoolConst of bool
+| StringConst of string
+| NullConst
+
+exception NotAConstant
+
 (* Region: ASTs *)
 
 type type_ =
@@ -659,6 +669,8 @@ type type_ =
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
   | TypeParam of string (* a reference to a type parameter declared in the enclosing datatype/function/predicate *)
   | InferredType of type_ option ref (* inferred type, is unified during type checking *)
+  | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
+  | PackageName of string (* not a real type; used only during type checking *)
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
 
@@ -678,12 +690,18 @@ class fieldref (name: string) =
   object
     val mutable parent: string option = None  (* Name of the struct that declares this field. *)
     val mutable range: type_ option = None  (* Declared type of the field. *)
+    val mutable static: bool = false
+    val mutable value: constant_value option option ref option = None
     method name = name
     method parent = match parent with None -> assert false | Some s -> s
     method is_array_length = match parent with None -> true | Some s -> false (* only use after type checking *)
     method range = match range with None -> assert false | Some r -> r
+    method static = static
+    method value = get !(get value)
     method set_parent s = parent <- Some s
     method set_range r = range <- Some r
+    method set_static = static <- true
+    method set_value v = value <- Some v
   end
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
@@ -888,7 +906,7 @@ and
   ghostness = Ghost | Real
 and
   field =
-  | Field of loc * ghostness * type_expr * string * func_binding * visibility  (* veld met regel-type-naam*)
+  | Field of loc * ghostness * type_expr * string * func_binding * visibility * bool (* final *) * expr option
 and
   ctor =
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
@@ -1048,7 +1066,7 @@ let c_keywords = [
 
 let java_keywords = [
   "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"; "byte"
+  "throw"; "try"; "catch"; "throws"; "byte"; "final"
 ]
 
 let file_type path=
@@ -1176,14 +1194,12 @@ end
 let parse_decls =
 let rec
   parse_decls = parser
-[< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
+  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
 | [< '(l, Kwd "public");ds'=parser
     [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s, methods s mem,fields mem,constr mem,super,il)::ds
-  | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
-Interface(l,cn,mem)::ds
+  | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,mem)::ds
   >]-> ds'
-| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]->
-Interface(l,cn,mem)::ds (* TODO: enkel public classes/interfaces toelaten??*)
+| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,mem)::ds
 | [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem, fields mem,constr mem,super,il)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
@@ -1206,7 +1222,7 @@ and
 and
   fields m=
   match m with
-    FieldMember (Field (l, gh, t, f,fb,v))::ms -> Field (l, gh, t, f,fb,v)::(fields ms)
+    FieldMember f::ms -> f::(fields ms)
     |_::ms -> fields ms
     | []->[]
 and
@@ -1244,44 +1260,42 @@ and
   parse_throws_clause = parser
   [< '(l, Kwd "throws"); _ = rep_comma parse_qualified_identifier >] -> ()
 and
-  parse_java_member vis cn= parser
-  [< '(l, Kwd "static");t=parse_return_type;'(_,Ident n);
-    ps = parse_paramlist;
-    _ = opt parse_throws_clause;
+  parse_java_member vis cn = parser
+  [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance);
+     final = (parser [< '(_, Kwd "final") >] -> true | [< >] -> false);
+     t = parse_return_type;
+     member = parser
+       [< '(l, Ident x);
+          member = parser
+            [< init = parser
+                 [< '(_, Kwd ";") >] -> None
+               | [< '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> Some e
+            >] ->
+            let t = match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some t -> t in
+            FieldMember (Field (l, Real, t, x, binding, vis, final, init))
+          | [< (ps, co, ss) = parse_method_rest >] ->
+            let ps = if binding = Instance then (IdentTypeExpr (l, cn), "this")::ps else ps in
+            MethMember (Meth (l, t, x, ps, co, ss, binding, vis))
+       >] -> member
+     | [< (ps, co, ss) = parse_method_rest >] ->
+       let l =
+         match t with
+           None -> raise (Stream.Error "Keyword 'void' cannot be followed by a parameter list.")
+         | Some (IdentTypeExpr (l, x)) -> if x = cn then l else raise (ParseException (l, "Constructor name does not match class name."))
+         | Some t -> raise (ParseException (type_expr_loc t, "Constructor name expected."))
+       in
+       if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
+       if final then raise (ParseException (l, "A constructor cannot be final."));
+       ConsMember (Cons (l, ps, co, ss, vis))
+  >] -> member
+and
+  parse_method_rest = parser
+  [< ps = parse_paramlist;
+     _ = opt parse_throws_clause;
     (ss, co) = parser
       [< '(_, Kwd ";"); co = opt parse_spec >] -> (None, co)
     | [< co = opt parse_spec; ss = parse_some_block >] -> (ss, co)
-    >] -> MethMember(Meth(l,t,n,ps,co,ss,Static,vis))
-| [<'(l,Ident t); rt_array = opt (parser [< '(_, Kwd "["); '(_, Kwd "]") >] -> ()); e=parser
-    [<'(_,Ident f);r=parser
-      [<'(_, Kwd ";")>]->FieldMember(Field (l,Real, (match rt_array with None -> IdentTypeExpr(l,t) | Some(_) -> ArrayTypeExpr(l, IdentTypeExpr(l,t))),f,Instance,vis))
-    | [< ps = parse_paramlist;
-         _ = opt parse_throws_clause;
-         (ss,co)=parser
-        [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
-      | [<co = opt parse_spec;ss=parse_some_block>] -> (ss,co)
-    >] -> MethMember(Meth(l,Some ((match rt_array with None -> IdentTypeExpr(l,t) | Some(_) -> ArrayTypeExpr(l, IdentTypeExpr(l,t)))),f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
-    >] -> r
-  | [< ps = parse_paramlist;
-       _ = opt parse_throws_clause;
-       i=parser
-      [<'(_, Kwd ";");co = opt parse_spec>]-> ConsMember(Cons(l,ps,co,None,vis))
-    | [<co = opt parse_spec; ss=parse_some_block>]-> ConsMember(Cons(l,ps,co,ss,vis))
-   >]-> i
- >] -> e
-| [< t=parse_return_type;'(l,Ident f);r=parser
-    [<'(_, Kwd ";")>] ->
-      (match t with 
-        None -> raise (ParseException (l, "Invalid type of field")) 
-      | Some t -> FieldMember(Field (l,Real,t,f,Instance,vis)))
-  | [< ps = parse_paramlist;
-       _ = opt parse_throws_clause;
-      (ss,co)=parser
-      [<'(_, Kwd ";");co = opt parse_spec>]-> (None,co)
-    | [<co = opt parse_spec; ss=parse_some_block>] -> (ss,co)
-    >] -> 
-      MethMember(Meth(l,t,f,(IdentTypeExpr(l,cn),"this")::ps,co,ss,Instance,vis))
->] -> r
+    >] -> (ps, co, ss)
 and
   parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
@@ -1402,7 +1416,7 @@ and
 | [< f = parse_field_core Real >] -> f
 and
   parse_field_core gh = parser
-  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, gh, t, f,Instance,Public)
+  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, gh, t, f, Instance, Public, false, None)
 and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
@@ -1737,27 +1751,27 @@ and
             | [< tp = parse_primary_type; '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, tp, length)
   >] -> res
 | [<
-    '(l, Ident x);
-    targs = parse_type_args l;
+    '(lx, Ident x);
+    targs = parse_type_args lx;
     ex = parser
       [<
         args0 = parse_patlist;
         e = parser
-          [< args = parse_patlist >] -> CallExpr (l, x, targs, args0, args,Static)
-        | [< >] -> CallExpr (l, x, targs, [], args0,Static)
+          [< args = parse_patlist >] -> CallExpr (lx, x, targs, args0, args,Static)
+        | [< >] -> CallExpr (lx, x, targs, [], args0,Static)
       >] -> e
     | [<
-        '(l, Kwd ".") when targs = [];
+        '(ldot, Kwd ".") when targs = [];
         r = parser
-          [<'(l, Kwd "class")>] -> ClassLit(l,x)
+          [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
-            '(l, Ident f);
+            '(lf, Ident f);
             e = parser
-              [<args0 = parse_patlist>] -> CallExpr (l, f, [], [], LitPat(Var(l,x,ref None))::args0,Instance)
-            | [<>] -> Read (l, Var(l,x, ref None), new fieldref f)
+              [<args0 = parse_patlist>] -> CallExpr (lf, f, [], [], LitPat(Var(lx,x,ref None))::args0,Instance)
+            | [<>] -> Read (ldot, Var(lx,x, ref None), new fieldref f)
           >]->e 
       >]-> r
-    | [< >] -> if targs = [] then Var (l, x, ref None) else CallExpr (l, x, targs, [], [], Static)
+    | [< >] -> if targs = [] then Var (lx, x, ref None) else CallExpr (lx, x, targs, [], [], Static)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
@@ -2717,7 +2731,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          let rec iter fmap fds =
            match fds with
              [] -> (sn, (l,meths, Some (List.rev fmap),constr,super,interfs,pn,ilist))
-           | Field (lf, _, t, f,Instance,vis)::fds ->
+           | Field (lf, _, t, f, binding, vis, final, init)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else (
@@ -2737,7 +2751,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      | None -> static_error lt ("No such class or interface: "^sn)
                  | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class."
                in
-               iter ((f, (lf, check_type t,vis))::fmap) fds
+               iter ((f, (lf, check_type t, vis, binding, final, init, ref None))::fmap) fds
              )
          in
           begin
@@ -2843,7 +2857,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  Some (get_unique_var_symb ("struct_" ^ sn ^ "_padding") (PredType ([], [PtrType (StructType sn)])))
               )
              )
-           | Field (lf, gh, t, f,Instance,Public)::fds ->
+           | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
              else
@@ -3507,9 +3521,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            None -> []
          | Some fds ->
            List.map
-             (fun (fn, (l, t,_)) ->
-              ((cn, fn), mk_predfam (cn ^ "_" ^ fn) l [] 0 [ObjType cn; t] (Some 1))
-             )
+             begin fun (fn, (l, t, vis, binding, final, init, value)) ->
+              ((cn, fn),
+               match binding with
+                 Static -> mk_predfam (cn ^ "_" ^ fn) l [] 0 [t] (Some 0)
+               | Instance -> mk_predfam (cn ^ "_" ^ fn) l [] 0 [ObjType cn; t] (Some 1))
+             end
              fds
       )
       classfmap
@@ -3724,6 +3741,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name."; i) is 
   in
   
+  let lookup_class_field cn fn =
+    let fds =
+      match try_assoc cn classfmap with
+        Some (_,_, Some fds,_,_,_,_,_) -> fds
+      | None ->
+        let (_,_, Some fds,_,_,_,_,_) = List.assoc cn classmap0 in fds
+    in
+    try_assoc fn fds
+  in
+  
+  let is_package x =
+    let x = x ^ "." in
+    let has_package map = List.exists (fun (cn, _) -> startswith cn x) map in
+    has_package classfmap || has_package classmap0 || has_package interfdeclmap || has_package interfmap0
+  in
+
   let rec check_expr (pn,ilist) tparams tenv e =
     let check e = check_expr (pn,ilist) tparams tenv e in
     let checkt e t0 = check_expr_t_core (pn,ilist) tparams tenv e t0 false in
@@ -3796,7 +3829,36 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc x modulemap with
       | Some _ -> scope := Some ModuleName; (e, IntType)
       | None ->
-      static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x)
+      if language <> Java then static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x);
+      let field_of_this =
+        match try_assoc "this" tenv with
+          None -> None
+        | Some ObjType cn ->
+          match lookup_class_field cn x with
+            None -> None
+          | Some (lf, t, vis, binding, final, init, value) ->
+            let f = new fieldref x in f#set_parent cn; f#set_range t;
+            Some (Read (l, Var (l, "this", ref (Some LocalVar)), f), t)
+      in
+      match field_of_this with
+        Some result -> result
+      | None ->
+      match resolve (pn,ilist) l x classfmap with
+        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+      | None ->
+      match resolve (pn,ilist) l x interfdeclmap with
+        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+      | None ->
+      match resolve (pn,ilist) l x classmap0 with
+        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+      | None ->
+      match resolve (pn,ilist) l x interfmap0 with
+        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+      | None ->
+      if is_package x then
+        (e, PackageName x)
+      else
+      static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate"
       end
     | PredNameExpr (l, g) ->
       begin
@@ -3876,11 +3938,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
       (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t)
-    | Read (l, e, f) -> 
-        let (w, t) = check e in
-        (match t with
-          ArrayType(_) when f#name = "length" -> (Read(l, e, f), IntType)
-        | _ -> let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t))
+    | Read (l, e, f) ->
+      let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
     | Deref (l, e, tr) ->
       let (w, t) = check e in
       begin
@@ -4056,21 +4115,141 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
-    | ObjType sn ->
+    | ObjType cn ->
       begin
-      match try_assoc' (pn,ilist) sn classfmap with
-        Some (_,_, Some fds,_,_,_,_,_) ->
-        begin
-          match try_assoc' (pn,ilist) f#name fds with
-            None -> static_error l ("No such field in class '" ^ sn ^ "'.")
-          | Some (_, t,_) -> check_ok Real; f#set_parent sn; f#set_range t; (w, t)
-        end
-      | Some (_,_,None,_,_,_,_,_) -> static_error l ("Invalid dereference; class '" ^ sn ^ "' was declared without a body.")
+      match lookup_class_field cn f#name with
+        None -> static_error l ("No such field in class '" ^ cn ^ "'.")
+      | Some (_, t, vis, binding, final, init, value) ->
+        if binding = Static then static_error l "Accessing a static field via an instance is not supported.";
+        check_ok Real; f#set_parent cn; f#set_range t; (w, t)
+      end
+    | ArrayType _ when f#name = "length" ->
+      (w, IntType)
+    | ClassOrInterfaceName cn ->
+      begin match lookup_class_field cn f#name with
+        None -> static_error l "No such field"
+      | Some (_, t, vis, binding, final, init, value) ->
+        if binding = Instance then static_error l "You cannot access an instance field without specifying a target object.";
+        check_ok Real; f#set_parent cn; f#set_static; f#set_range t; f#set_value value; (w, t)
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct."
     end
   in
 
+  (* Region: Type checking of field initializers *)
+  
+  let classfmap =
+    List.map
+      begin fun (cn, (l, meths, fds_opt, constr, super, interfs, pn, ilist)) ->
+        let fds_opt =
+          match fds_opt with
+            None -> fds_opt
+          | Some fds ->
+            let fds =
+              List.map
+                begin function
+                  (f, (l, t, vis, binding, final, Some e, value)) ->
+                  (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [] e t), value))
+                | fd -> fd
+                end
+                fds
+            in
+            Some fds
+        in
+        (cn, (l, meths, fds_opt, constr, super, interfs, pn, ilist))
+      end
+      classfmap
+  in
+  
+  (* Region: Computing constant field values *)
+  
+  begin
+    let string_of_const v =
+      match v with
+        IntConst n -> string_of_big_int n
+      | BoolConst b -> if b then "true" else "false"
+      | StringConst s -> s
+      | NullConst -> "null"
+    in
+    let rec eval callers e =
+      let ev = eval callers in
+      match e with
+        True l -> BoolConst true
+      | False l -> BoolConst false
+      | Null l -> NullConst
+      | Operation (l, Add, [e1; e2], _) ->
+        begin match (ev e1, ev e2) with
+          (IntConst n1, IntConst n2) -> IntConst (add_big_int n1 n2)
+        | (StringConst s1, v) -> StringConst (s1 ^ string_of_const v)
+        | (v, StringConst s2) -> StringConst (string_of_const v ^ s2)
+        | _ -> raise NotAConstant
+        end
+      | Operation (l, Sub, [e1; e2], _) ->
+        begin match (ev e1, ev e2) with
+          (IntConst n1, IntConst n2) -> IntConst (sub_big_int n1 n2)
+        | _ -> raise NotAConstant
+        end
+      | IntLit (l, n, _) -> IntConst n
+      | StringLit (l, s) -> StringConst s
+      | Read (l, _, f) when f#static -> eval_field callers (f#parent, f#name)
+      | CastExpr (l, ManifestTypeExpr (_, t), e) ->
+        let v = ev e in
+        begin match (t, v) with
+          (Char, IntConst n) ->
+          let n =
+            if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
+              let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
+              let n = if 128 <= n then n - 256 else n in
+              big_int_of_int n
+            else
+              n
+          in
+          IntConst n
+        | (ShortType, IntConst n) ->
+          let n =
+            if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
+              let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
+              let n = if 32768 <= n then n - 65536 else n in
+              big_int_of_int n
+            else
+              n
+          in
+          IntConst n
+        | _ -> raise NotAConstant
+        end
+      | _ -> raise NotAConstant
+    and eval_field callers ((cn, fn) as f) =
+      if List.mem f callers then raise NotAConstant;
+      match try_assoc cn classfmap with
+        Some (l, meths, Some fds, const, super, interfs, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+      | None ->
+        match try_assoc cn classmap0 with
+          Some (l, meths, Some fds, const, super, interfs, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+    and eval_field_body callers (l, t, vis, binding, final, init, value) =
+      match !value with
+        Some None -> raise NotAConstant
+      | Some (Some v) -> v
+      | None ->
+        match (binding, final, init) with
+          (Static, true, Some e) ->
+          begin try
+            let v = eval callers e in
+            value := Some (Some v);
+            v
+          with NotAConstant -> value := Some None; raise NotAConstant
+          end
+        | _ -> value := Some None; raise NotAConstant
+    in
+    List.iter
+      begin fun (cn, (l, meths, fds_opt, constr, super, interfs, pn, ilist)) ->
+        match fds_opt with
+          None -> ()
+        | Some fds ->
+          List.iter (fun (f, fbody) -> try eval_field_body [] fbody; () with NotAConstant -> ()) fds
+      end
+      classfmap
+  end;
+  
   (* Region: type checking of assertions *)
   
   let check_pat_core (pn,ilist) l tparams tenv t p =
@@ -4802,6 +4981,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_false [] env l "target of arraylength expression might be null"
         else
           ctxt#mk_app arraylength_symbol [t]
+      else if f#static && f#value <> None then
+        match get f#value with
+          IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
+        | StringConst s -> static_error l "String constants are not yet supported."
+        | NullConst -> ctxt#mk_intlit 0
       else
         begin
           match read_field with
@@ -6104,11 +6289,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter fds0 fds1=
             match fds0 with
               [] -> fds1
-            | (f0, (lf0,t0,vis0)) as elem::rest ->
+            | (f0, (lf0,t0,vis0,binding0,final0,init0,value0)) as elem::rest ->
               match try_assoc f0 fds1 with
                 None-> iter rest (elem::fds1)
-              | Some(lf1,t1,vis1) -> if t0<>t1 || vis0<>vis1 then static_error lf1 "Duplicate field"
-                else iter rest fds1
+              | Some(lf1,t1,vis1,binding1,final1,init1,value1) ->
+                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 || !value0 <> !value1 then static_error lf1 "Duplicate field";
+                if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer.";
+                iter rest fds1
             in
             match fds0 with
               None-> fds1
@@ -6315,7 +6502,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
       assume_neq value (ctxt#mk_intlit 0) $. fun () ->
       cont h value
-    | Read (l, e, f) ->
+    | Read (l, e, f) when not f#static ->
       iter h e $. fun h t ->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
@@ -8250,9 +8437,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                let env'= update env "result" result in
                                let env''= update env' "this" this in
                                (do_body h ghostenv env'')
-                           | (f, (lf, t,vis))::fds ->
+                           | (f, (lf, t,vis, binding, final, init, value))::fds ->
+                             if binding = Instance then begin
+                               if init <> None then static_error lf "Instance field initializers are not yet supported.";
                                let fref = new fieldref f in
                                fref#set_parent cn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+                             end else
+                               iter h fds
                           in
                           iter h fds
                         )
