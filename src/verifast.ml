@@ -3901,14 +3901,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Not, [e], ts) -> 
       let w = checkt e boolt in
       (Operation (l, Not, [w], ts), boolt)
-    | Operation (l, (BitAnd | BitXor | BitOr as operator), [e1; e2], ts) ->
+    | Operation (l, BitAnd, [e1; e2], ts) ->
       let (w1, t1) = check e1 in
       let (w2, t2) = check e2 in
+      begin match (t1, t2) with
+        ((Char|ShortType|IntType|UintPtrType), (Char|ShortType|IntType|UintPtrType)) ->
+        let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
+        (Operation (l, BitAnd, [w1; w2], ts), t)
+      | _ -> static_error l "Arguments to bitwise operators must be integral types."
+      end
+    | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
+      let (w1, t1) = check e1 in
       begin
-      match (t1, t2) with
-        ((Char | ShortType | IntType), (Char | ShortType | IntType)) -> (Operation (l, operator, [w1; w2], ts), IntType)
-      | (UintPtrType, (UintPtrType | IntType)) -> (Operation (l, operator, [w1; w2], ts), UintPtrType)
-      | _ -> static_error l "arguments to bitwise operators must be char, short, int or uintptr"
+      match t1 with
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in (Operation (l, operator, [w1; w2], ts), IntType)
+      | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType)
+      | _ -> static_error l "Arguments to bitwise operators must be integral types."
       end
     | Operation (l, Mod, [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
@@ -3918,8 +3926,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, t) = check e in
       begin
       match t with
-        Char | ShortType | IntType -> (Operation (l, BitNot, [w], ts), IntType)
-      | UintPtrType -> (Operation (l, BitNot, [w], ts), UintPtrType)
+        Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType)
+      | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr"
       end
     | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
@@ -4950,8 +4958,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Operation (l, Not, [e], ts) -> ctxt#mk_not (ev e)
     | Operation (l, BitAnd, [e1; Operation (_, BitNot, [e2], ts2)], ts1) ->
       ctxt#mk_app bitwise_and_symbol [ev e1; ctxt#mk_app bitwise_not_symbol [ev e2]]
-    | Operation (l, BitNot, _, _) ->
-      static_error l "VeriFast does not currently support a bitwise complement (~) expression except as part of a bitwise AND (x & ~y)."
+    | Operation (l, BitNot, [e], ts) ->
+      begin match !ts with
+        Some [IntType] -> ctxt#mk_app bitwise_not_symbol [ev e]
+      | _ ->
+        static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)."
+      end
     | Operation (l, (BitAnd|BitXor|BitOr|Mod as operator), es, ts) ->
       let symb =
         match operator with
