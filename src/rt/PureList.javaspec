@@ -184,4 +184,11 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys);
     requires foreach(xs, ?p) &*& foreach(ys, p);
     ensures foreach(append(xs, ys), p);
 
+fixpoint boolean all_default_value<t>(list<t> xs) {
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return x == default_value && all_default_value(xs0);
+    }
+}
+
 @*/

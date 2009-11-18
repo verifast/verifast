@@ -16,6 +16,9 @@ lemma void assume(boolean b);
     requires true;
     ensures b;
 
+predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
+predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T, V) p, A info, list<T> elements, list<V> values);
+
 @*/
 
 public class Object {

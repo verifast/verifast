@@ -3009,6 +3009,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType (ObjType "Object"), ArrayType (ObjType "Object")) -> ()
     | (ArrayType t1, ArrayType t2) when t1 = t2 -> ()
+    | (ArrayType _, ObjType "java.lang.Object") -> ()
     | (Char, IntType) -> ()
     | (ShortType, IntType) -> ()
     | (Char, ShortType) -> ()
