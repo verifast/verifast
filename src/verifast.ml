@@ -475,7 +475,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | _ -> Some (Int (big_int_of_string (get_string ())))
   and hex_number () =
     match text_peek () with
-      ('0'..'9' | 'A'..'F') as c -> text_junk (); store c; hex_number ()
+      ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_number ()
     | _ -> Some (Int (big_int_of_hex_string (get_string ())))
   and decimal_part () =
     match text_peek () with
@@ -796,7 +796,7 @@ and
     PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
   | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
   | Assign of loc * string * expr (* toekenning *)
-  | DeclStmt of loc * type_expr * string * expr (* enkel declaratie *)
+  | DeclStmt of loc * type_expr * string * expr option (* enkel declaratie *)
   | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
   | WriteArray of loc * expr * expr * expr
   | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
@@ -1182,7 +1182,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = parser
-      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, e)
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, Some(e))
     | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
@@ -1618,7 +1618,7 @@ and
   | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     begin match e with
       Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _) ->
-      DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, rhs)
+      DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, Some(rhs))
     | _ -> assignment_stmt l e rhs
     end
   | [< '(l, Kwd "++"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; IntLit (l, unit_big_int, ref None)], ref None))
@@ -1627,23 +1627,26 @@ and
   | [< '(l, Kwd "-="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; e'], ref None))
   | [< '(_, Kwd "["); '(_, Kwd "]"); '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
         (match e with
-         | Var (lx, t, _) -> DeclStmt (l, ArrayTypeExpr(lx, IdentTypeExpr (lx,t)), x, rhs)
+         | Var (lx, t, _) -> DeclStmt (l, ArrayTypeExpr(lx, IdentTypeExpr (lx,t)), x, Some(rhs))
          | _ -> raise (ParseException (expr_loc e, "Parse error."))
         )
-  | [<'(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
+  | [<'(lx, Ident x); rhs = opt (parser [< '(_, Kwd "="); r = parse_expr; >] -> r); '(_, Kwd ";") >] ->
         (match e with
-         | Var (lx, t, _) -> DeclStmt (l, IdentTypeExpr (lx,t), x, rhs)
+         | Var (lx, t, _) -> DeclStmt (lx, IdentTypeExpr (lx,t), x, rhs)
          | _ -> raise (ParseException (expr_loc e, "Parse error."))
         ) >] ->s
-| [< te = parse_type; '(_, Ident x); '(l, Kwd "=");
-     s = parser
+| [< te = parse_type; '(_, Ident x); 
+     s2 = parser 
+       [< '(l, Kwd ";") >] -> DeclStmt(l, te, x, None)
+     | [<'(l, Kwd "=");
+       s = parser
        [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
          begin
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
          CreateHandleStmt (l, x, hpn, e)
-     | [< rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, rhs)
-  >] -> s
+       | [< rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, Some(rhs)) >] -> s
+  >] -> s2
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -2108,6 +2111,8 @@ let rec string_of_type t =
   | TypeParam x -> x
   | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
+  | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
+  | PackageName(n) -> n (* not a real type; used only during type checking *)
 
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
@@ -3839,8 +3844,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp)
       | None ->
       match try_assoc x modulemap with
-      | Some _ -> scope := Some ModuleName; (e, IntType)
-      | None ->
+      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType)
+      | _ ->
+      begin
       if language <> Java then static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x);
       let field_of_this =
         match try_assoc "this" tenv with
@@ -3867,10 +3873,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match resolve (pn,ilist) l x interfmap0 with
         Some (cn, _) -> (e, ClassOrInterfaceName cn)
       | None ->
+      (match try_assoc x modulemap with
+      | Some _ -> scope := Some ModuleName; (e, IntType)
+      | None ->
       if is_package x then
         (e, PackageName x)
       else
-      static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate"
+      static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate")
+      end
       end
     | PredNameExpr (l, g) ->
       begin
@@ -3892,16 +3902,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w = checkt e boolt in
       (Operation (l, Not, [w], ts), boolt)
     | Operation (l, (BitAnd | BitXor | BitOr as operator), [e1; e2], ts) ->
-      let w1 = checkt e1 UintPtrType in
-      let w2 = checkt e2 UintPtrType in
-      (Operation (l, operator, [w1; w2], ts), UintPtrType)
+      let (w1, t1) = check e1 in
+      let (w2, t2) = check e2 in
+      begin
+      match (t1, t2) with
+        ((Char | ShortType | IntType), (Char | ShortType | IntType)) -> (Operation (l, operator, [w1; w2], ts), IntType)
+      | (UintPtrType, (UintPtrType | IntType)) -> (Operation (l, operator, [w1; w2], ts), UintPtrType)
+      | _ -> static_error l "arguments to bitwise operators must be char, short, int or uintptr"
+      end
     | Operation (l, Mod, [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
       (Operation (l, Mod, [w1; w2], ts), IntType)
     | Operation (l, BitNot, [e], ts) ->
-      let w = checkt e UintPtrType in
-      (Operation (l, BitNot, [w], ts), UintPtrType)
+      let (w, t) = check e in
+      begin
+      match t with
+        Char | ShortType | IntType -> (Operation (l, BitNot, [w], ts), IntType)
+      | UintPtrType -> (Operation (l, BitNot, [w], ts), UintPtrType)
+      | _ -> static_error l "argument to ~ must be char, short, int or uintptr"
+      end
     | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote l e1 e2 ts in
       (Operation (l, operator, [w1; w2], ts), boolt)
@@ -4007,7 +4027,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | NewArray(l, te, length) ->
       let w1 = checkt length intt in
       let t = check_pure_type (pn,ilist) tparams te in
-      (NewArray(l, te, length), ArrayType(t))
+      (NewArray(l, te, w1), ArrayType(t))
     | ReadArray(l, arr, index) ->
         let (w1, arr_t) = check arr in
         let w2 = checkt index intt in
@@ -6316,7 +6336,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match try_assoc f0 fds1 with
                 None-> iter rest (elem::fds1)
               | Some(lf1,t1,vis1,binding1,final1,init1,value1) ->
-                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 || !value0 <> !value1 then static_error lf1 "Duplicate field";
+                let v1 = ! value0 in
+                let v2 = ! value1 in
+                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 (*|| v1 <> v2*) then static_error lf1 "Duplicate field";
                 if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer.";
                 iter rest fds1
             in
@@ -6459,7 +6481,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PureStmt(_, s) -> locals_address_taken_stmt s (* can we take the address of a local in here? *)
     | NonpureStmt(_, _, s) -> locals_address_taken_stmt s
     | Assign(_, _, e) -> locals_address_taken e
-    | DeclStmt(_, _, _, e) -> locals_address_taken e
+    | DeclStmt(_, _, _, e) -> begin match e with None -> [] | Some(e) -> locals_address_taken e end
     | Write(_, e1, f, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
     | WriteDeref(_, e1, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
     | CallStmt(_, _, _, args, _) -> List.flatten (List.map (fun e -> locals_address_taken e) args)
@@ -6771,7 +6793,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
            )
         in
-        let _ = List.iter (fun (LitPat e) -> ignore (check_expr (pn, ilist) [] tenv e)) pats in
+        let _ = List.iter (fun (LitPat e) -> let (w, t) = (check_expr (pn, ilist) [] tenv e) in ()) pats in
         match try_assoc' (pn,ilist) class_name classmap with
           Some(_,Some methmap,_,Some consmap,super,interfs,pn,ilist) -> 
             (if pure then 
@@ -7079,7 +7101,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match ss_after with
               [] -> static_error l "'call();' statement expected"
             | CallStmt (lc, "call", [], [], Static)::ss_after -> (List.rev ss_before, lc, None, ss_after)
-            | DeclStmt (ld, te, x, CallExpr (lc, "call", [], [], [], Static))::ss_after ->
+            | DeclStmt (ld, te, x, Some(CallExpr (lc, "call", [], [], [], Static)))::ss_after ->
               if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
               let t = check_pure_type (pn,ilist) tparams te in
               begin match rt1 with
@@ -7273,7 +7295,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type (pn,ilist) tparams te in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+      begin
+      match e with
+        None -> 
+          let xt = get_unique_var_symb x t in verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h (update env x xt) (BlockStmt(l, [], [])) tcont return_cont (*let xt = get_unique_var_symb x t in cont h (update env x xt)*)
+      | Some(e) -> verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
+      end
       ;
     | Write (l, e, f, rhs) ->
       let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
@@ -7963,7 +7990,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                          match s with
                            CallStmt (lcall, g, targs, args, _) -> g
                          | Assign (lcall, x, CallExpr (_, g, _, _, _, _)) -> g
-                         | DeclStmt (lcall, xtype, x, CallExpr (_, g, _, _, _, _)) -> g
+                         | DeclStmt (lcall, xtype, x, Some(CallExpr (_, g, _, _, _, _))) -> g
                          | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call."
                        in
                        match try_assoc funcname funcmap with

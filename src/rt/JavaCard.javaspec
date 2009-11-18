@@ -28,15 +28,39 @@ class APDU {
 }
 
 class Applet {
+  public static boolean selectingApplet(Object self);
+    //@ requires self != null;
+    //@ ensures true;
+    
+  public static void register(Object self);
+    //@ requires self != null;
+    //@ ensures true;
+    
+  public static void register(Object self, byte[] bArray, short bOffset, byte bLength) throws SystemException;
+    //@ requires self != null;
+    //@ ensures true;
 }
 
 class ISOException {
-  public static void throwIt() throws ISOException;
+  public static void throwIt(short sw) throws ISOException;
     //@ requires true;
     //@ ensures true;
 }
 
 class OPSystem {
+    public static final byte APPLET_BLOCKED = 127;
+    public static final byte APPLET_PERSONALIZED = 15;
+    public static final byte APPLET_INSTALLED = 3;
+    public static final byte APPLET_SELECTABLE = 7;
+    public static final byte APPLET_LOCKED = -1;
+    public static final byte CARD_INITIALIZED = 7;
+    public static final byte INITIALIZED = 7;
+    public static final byte CARD_SECURED = 15;
+    public static final byte CARD_LOCKED = 127;
+    public static final byte CARD_OP_READY = 1;
+    public static final byte PACKAGE_LOADED = 1;
+
+
   public static byte getCardContentState();
     //@ requires true;
     //@ ensures true;
@@ -80,4 +104,44 @@ class Util {
   public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
     //@ requires true;
     //@ ensures true;
+}
+
+class ISO7816 {
+    
+    public static final byte CLA_ISO7816 = 0x00;
+    public static final byte INS_EXTERNAL_AUTHENTICATE = (byte) 0x82;
+    public static final byte INS_SELECT = (byte) 0xA4;
+    public static final byte OFFSET_CDATA = 5;
+    public static final byte OFFSET_CLA = 0;
+    public static final byte OFFSET_EXT_CDATA = 7;
+    public static final byte OFFSET_INS = 1;
+    public static final byte OFFSET_LC = 4;
+    public static final byte OFFSET_P1 = 2;
+    public static final byte OFFSET_P2 = 3;
+    
+    public static final short SW_APPLET_SELECT_FAILED = (short) 0x6999;
+    public static final short SW_BYTES_REMAINING_00 = (short) 0x6100;
+    public static final short SW_CLA_NOT_SUPPORTED = (short) 0x6E00;
+    public static final short SW_COMMAND_CHAINING_NOT_SUPPORTED = (short) 0x6884;
+    public static final short SW_COMMAND_NOT_ALLOWED = (short) 0x6986;
+    public static final short SW_CONDITIONS_NOT_SATISFIED = (short) 0x6985;
+    public static final short SW_CORRECT_LENGTH_00 = (short) 0x6C00;
+    public static final short SW_DATA_INVALID = (short) 0x6984;
+    public static final short SW_FILE_FULL = (short) 0x6A84;
+    public static final short SW_FILE_INVALID = (short) 0x6983;
+    public static final short SW_FILE_NOT_FOUND = (short) 0x6A82;
+    public static final short SW_FUNC_NOT_SUPPORTED = (short) 0x6A81;
+    public static final short SW_INCORRECT_P1P2 = (short) 0x6A86;
+    public static final short SW_INS_NOT_SUPPORTED = (short) 0x6D00;
+    public static final short SW_LAST_COMMAND_EXPECTED = (short) 0x6883;
+    public static final short SW_LOGICAL_CHANNEL_NOT_SUPPORTED = (short) 0x6881;
+    public static final short SW_NO_ERROR = (short) 0x9000;
+    public static final short SW_RECORD_NOT_FOUND = (short) 0x6A83;
+    public static final short SW_SECURE_MESSAGING_NOT_SUPPORTED = (short) 0x6882;
+    public static final short SW_SECURITY_STATUS_NOT_SATISFIED = (short) 0x6982;
+    public static final short SW_UNKNOWN = (short) 0x6F00;
+    public static final short SW_WARNING_STATE_UNCHANGED = (short) 0x6200;
+    public static final short SW_WRONG_DATA = (short) 0x6A80;
+    public static final short SW_WRONG_LENGTH = (short) 0x6700;
+    public static final short SW_WRONG_P1P2 = (short) 0x6B00;
 }
