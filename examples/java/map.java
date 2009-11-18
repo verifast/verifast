@@ -1,49 +1,5 @@
 /*@
 
-inductive list<t> = nil | cons(t, list<t>);
-
-fixpoint list<t> list_add<t>(list<t> xs, t x) {
-    switch (xs) {
-        case nil: return cons(x, nil);
-        case cons(h, t): return cons(h, list_add(t, x));
-    }
-}
-
-fixpoint list<t> append<t>(list<t> xs, list<t> ys) {
-    switch (xs) {
-        case nil: return ys;
-        case cons(h, t): return cons(h, append(t, ys));
-    }
-}
-
-lemma void append_nil<t>(list<t> xs)
-    requires true;
-    ensures append(xs, nil) == xs;
-{
-    switch (xs) {
-        case nil:
-        case cons(h, t): append_nil(t);
-    }
-}
-
-lemma void append_add<t>(list<t> xs, t y, list<t> ys)
-    requires true;
-    ensures append(list_add(xs, y), ys) == append(xs, cons(y, ys));
-{
-    switch (xs) {
-        case nil:
-        case cons(h, t):
-            append_add(t, y, ys);
-    }
-}
-
-fixpoint list<t> tail<t>(list<t> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(h, t): return t;
-    }
-}
-
 predicate_family MapFunc(Class c)(MapFunc f, list<int> in, list<int> out, any info);
 
 @*/
@@ -52,7 +8,7 @@ interface MapFunc {
 
     int apply(int x);
         //@ requires MapFunc(this.getClass())(this, ?in, ?out, ?info) &*& switch (in) { case nil: return false; case cons(h, t): return x == h; };
-        //@ ensures MapFunc(this.getClass())(this, tail(in), list_add(out, result), info);
+        //@ ensures MapFunc(this.getClass())(this, tail(in), append(out, cons(result, nil)), info);
 
 }
 
@@ -218,7 +174,7 @@ class Cons implements List {
         //@ assert List(_)(ftail, ?ftailxs);
         List result = new Cons(fhead, ftail);
         //@ close List(Cons.class)(this, xs_);
-        //@ append_add(ys, fhead, ftailxs);
+        //@ append_assoc(ys, cons(fhead, nil), ftailxs);
         return result;
     }
     
@@ -251,12 +207,6 @@ class Cons implements List {
 
 /*@
 
-fixpoint int head(list<int> xs) {
-    switch (xs) {
-        case nil: return 0;
-        case cons(h, t): return h;
-    }
-}
 fixpoint list<int> plusOne(list<int> xs) {
     switch (xs) {
         case nil: return nil;
@@ -279,11 +229,11 @@ class PlusOne implements MapFunc {
     
     int apply(int x)
         //@ requires MapFunc(PlusOne.class)(this, ?in, ?out, ?info) &*& switch (in) { case nil: return false; case cons(h, t): return x == h; };
-        //@ ensures MapFunc(PlusOne.class)(this, tail(in), list_add(out, result), info);
+        //@ ensures MapFunc(PlusOne.class)(this, tail(in), append(out, cons(result, nil)), info);
     {
         //@ open MapFunc(PlusOne.class)(this, ?in_, ?out_, ?info_);
-        //@ append_add(out_, x + 1, plusOne(tail(in_)));
-        //@ close MapFunc(PlusOne.class)(this, tail(in_), list_add(out_, x + 1), info_);
+        //@ append_assoc(out_, cons(x + 1, nil), plusOne(tail(in_)));
+        //@ close MapFunc(PlusOne.class)(this, tail(in_), append(out_, cons(x + 1, nil)), info_);
         return x + 1;
     }
     

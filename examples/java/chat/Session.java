@@ -55,10 +55,12 @@ public class Session implements Runnable {
             member = new Member(nick, writer);
             List list = room.members;
             list.add(member);
-            //@ open foreach(?members, @member);
+            //@ open foreach<Object>(?members, @member);
             //@ close foreach(members, @member);
             //@ foreach_member_not_contains(members, member);
-            //@ foreach_add(members, member);
+            //@ close foreach<Object>(nil, @member);
+            //@ close foreach<Object>(cons<Object>(member, nil), @member);
+            //@ foreach_append<Object>(members, cons<Object>(member, nil));
             //@ close room(room);
         }
         //@ close room_ctor(room)();
@@ -84,9 +86,9 @@ public class Session implements Runnable {
         {
             List membersList = room.members;
             //@ assert list(membersList, ?members);
-            //@ assume(contains(members, member));
+            //@ assume(mem<Object>(member, members));
             membersList.remove(member);
-            //@ foreach_remove(members, member);
+            //@ foreach_remove<Object>(member, members);
         }
         //@ close room(room);
         {
@@ -150,7 +152,7 @@ public class Session implements Runnable {
             //@ assert list(membersList, ?members);
             Iterator iter = membersList.iterator();
             boolean hasNext = iter.hasNext();
-            //@ lengthPositive(members);
+            //@ length_nonnegative(members);
             while (hasNext)
                 /*@
                 invariant
@@ -161,13 +163,13 @@ public class Session implements Runnable {
             {
                 Object o = iter.next();
                 Member member = (Member)o;
-                //@ containsIth(members, i);
-                //@ foreach_remove(members, member);
+                //@ mem_nth(i, members);
+                //@ foreach_remove<Object>(member, members);
                 //@ open member(member);
                 writer.write(member.nick);
                 writer.write("  ");
                 //@ close member(member);
-                //@ foreach_unremove(members, member);
+                //@ foreach_unremove<Object>(member, members);
                 hasNext = iter.hasNext();
             }
             writer.write("\r\n");

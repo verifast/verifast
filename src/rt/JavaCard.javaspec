@@ -44,7 +44,7 @@ class Applet {
 class ISOException {
   public static void throwIt(short sw) throws ISOException;
     //@ requires true;
-    //@ ensures true;
+    //@ ensures false;
 }
 
 class OPSystem {

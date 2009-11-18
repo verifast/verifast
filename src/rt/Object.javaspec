@@ -4,6 +4,8 @@ package java.lang;
 
 inductive unit = unit;
 
+fixpoint t default_value<t>();
+
 inductive boxed_int = boxed_int(int);
 fixpoint int unboxed_int(boxed_int i) { switch (i) { case boxed_int(value): return value; } }
 

@@ -2,27 +2,9 @@ package iterator.it;
 
 import iterator.singleton.*;
 import iterator.itutil.*;
-/*@
 
-inductive objects = nil | cons(Object, objects);
+//@ predicate_family iterator(Class c)(Iterator i, list<Object> xs);
 
-fixpoint Object head(objects os) {
-    switch (os) {
-        case nil: return null;
-        case cons(o, os0): return o;
-    }
-}
-
-fixpoint objects tail(objects os) {
-    switch (os) {
-        case nil: return nil;
-        case cons(o, os0): return os0;
-    }
-}
-
-predicate_family iterator(Class c)(Iterator i, objects xs);
-
-@*/
 public interface Iterator {
   boolean hasNext();
       //@ requires iterator(this.getClass())(this, ?xs);
@@ -33,7 +15,7 @@ public interface Iterator {
 }
 
 /*@
-fixpoint Object objects_last(objects a) {
+fixpoint Object objects_last(list<Object> a) {
   switch (a) {
       case nil: return null;
       case cons(x, xs): return x!=null && xs == nil ? x : objects_last(xs);

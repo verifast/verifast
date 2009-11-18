@@ -4,7 +4,13 @@ import iterator.it.*;
 import iterator.itutil.*;
 
 
-//@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, objects xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
+/*@
+
+predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, list<Object> xs) =
+    i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
+
+@*/
+
 public class SingletonIterator implements Iterator{
   Object value;
   boolean done;

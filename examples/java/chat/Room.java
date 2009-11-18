@@ -6,7 +6,7 @@ import java.util.*;
 /*@
 
 predicate room(Room room) =
-    room.members |-> ?membersList &*& membersList != null &*& list(membersList, ?members) &*& foreach(members, member);
+    room.members |-> ?membersList &*& membersList != null &*& list(membersList, ?members) &*& foreach<Object>(members, member);
 
 @*/
 
@@ -19,7 +19,7 @@ public class Room {
     {
         List a = new ArrayList();
         this.members = a;
-        //@ close foreach(nil, member);
+        //@ close foreach<Object>(nil, member);
         //@ close room(this);
     }
     
@@ -33,7 +33,7 @@ public class Room {
         Iterator iter = membersList.iterator();
         boolean hasMember = false;
         boolean hasNext = iter.hasNext();
-        //@ lengthPositive(members);
+        //@ length_nonnegative(members);
         while (hasNext && !hasMember)
             /*@
             invariant
@@ -43,12 +43,12 @@ public class Room {
         {
             Object o = iter.next();
             Member member = (Member)o;
-            //@ containsIth(members, i);
-            //@ foreach_remove(members, member);
+            //@ mem_nth(i, members);
+            //@ foreach_remove<Object>(member, members);
             //@ open member(member);
             hasMember = nick.equals(member.nick);
             //@ close member(member);
-            //@ foreach_unremove(members, member);
+            //@ foreach_unremove<Object>(member, members);
             hasNext = iter.hasNext();
         }
         //@ iter_dispose(iter);
@@ -65,7 +65,7 @@ public class Room {
         List membersList = this.members;
         Iterator iter = membersList.iterator();
         boolean hasNext = iter.hasNext();
-        //@ lengthPositive(members0);
+        //@ length_nonnegative(members0);
         while (hasNext)
             /*@
             invariant
@@ -75,15 +75,15 @@ public class Room {
         {
             Object o = iter.next();
             Member member = (Member)o;
-            //@ containsIth(members, i);
-            //@ foreach_remove(members, member);
+            //@ mem_nth(i, members);
+            //@ foreach_remove<Object>(member, members);
             //@ open member(member);
             Writer writer = member.writer;
             writer.write(message);
             writer.write("\r\n");
             writer.flush();
             //@ close member(member);
-            //@ foreach_unremove(members, member);
+            //@ foreach_unremove<Object>(member, members);
             hasNext = iter.hasNext();
         }
         //@ iter_dispose(iter);
