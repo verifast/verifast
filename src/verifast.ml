@@ -4227,6 +4227,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (IntConst n1, IntConst n2) -> IntConst (sub_big_int n1 n2)
         | _ -> raise NotAConstant
         end
+      | Operation (l, Mul, [e1; e2], _) ->
+        begin match (ev e1, ev e2) with
+          (IntConst n1, IntConst n2) -> IntConst (mult_big_int n1 n2)
+        | _ -> raise NotAConstant
+        end
       | IntLit (l, n, _) -> IntConst n
       | StringLit (l, s) -> StringConst s
       | Read (l, _, f) when f#static -> eval_field callers (f#parent, f#name)
