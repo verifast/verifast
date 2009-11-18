@@ -763,6 +763,7 @@ and
   | SizeofExpr of loc * type_expr
   | AddressOf of loc * expr
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
+  | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
 and
   pat =
     LitPat of expr (* literal pattern *)
@@ -980,6 +981,7 @@ let expr_loc e =
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
   | AddressOf (l, e) -> l
+  | ArrayTypeExpr' (l, e) -> l
 
 let pred_loc p =
   match p with
@@ -1631,10 +1633,14 @@ and
          | _ -> raise (ParseException (expr_loc e, "Parse error."))
         )
   | [<'(lx, Ident x); rhs = opt (parser [< '(_, Kwd "="); r = parse_expr; >] -> r); '(_, Kwd ";") >] ->
-        (match e with
-         | Var (lx, t, _) -> DeclStmt (lx, IdentTypeExpr (lx,t), x, rhs)
-         | _ -> raise (ParseException (expr_loc e, "Parse error."))
-        ) >] ->s
+    let rec type_expr_of_expr e =
+      match e with
+        Var (l, x, _) -> IdentTypeExpr (l, x)
+      | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
+      | e -> raise (ParseException (expr_loc e, "Type expected."))
+    in
+    DeclStmt (lx, type_expr_of_expr e, x, rhs)
+  >] -> s
 | [< te = parse_type; '(_, Ident x); 
      s2 = parser 
        [< '(l, Kwd ";") >] -> DeclStmt(l, te, x, None)
@@ -1815,8 +1821,12 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
-| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] ->e
-| [< '(l, Kwd "["); e1 = parse_expr; '(l, Kwd "]"); >] -> ReadArray(l, e0, e1)
+| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
+| [< '(l, Kwd "["); 
+     e = begin parser
+       [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
+     | [< e1 = parse_expr; '(l, Kwd "]") >] -> ReadArray (l, e0, e1)
+     end; e = parse_expr_suffix_rest e >] -> e
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
@@ -2095,7 +2105,7 @@ let rec string_of_type t =
   | ShortType -> "short"
   | UintPtrType -> "uintptr_t"
   | RealType -> "real"
-  | Char -> "char"
+  | Char -> "int8"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
   | ObjType l -> "class " ^ l
@@ -2835,6 +2845,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> assert false
       | Some t -> instantiate_type tpenv t
       end
+    | ArrayType t -> ArrayType (instantiate_type tpenv t)
     | _ -> t
   in
   
@@ -2987,6 +2998,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (InferredType t, t0) -> t := Some t0; true
     | (InductiveType (i1, args1), InductiveType (i2, args2)) ->
       i1=i2 && List.for_all2 unify args1 args2
+    | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
   in
