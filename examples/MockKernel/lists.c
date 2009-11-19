@@ -13,7 +13,6 @@ lemma void lseg_append(void *n1)
     } else {
         assert pointer(n1, ?n1Next);
         lseg_append(n1Next);
-        pointer_nonzero(n1);
         if (n3 != 0) {
             open lseg(n3, 0, xs2, p);
             pointer_distinct(n1, n3);
@@ -38,7 +37,6 @@ lemma void lseg_add(void *n1)
 {
     open lseg(n3, 0, xs1, p);
     close lseg(n3, n3, nil, p);
-    pointer_nonzero(n2);
     if (n3 != 0) pointer_distinct(n2, n3);
     close lseg(n2, n3, cons(n2, nil), p);
     close lseg(n3, 0, xs1, p);
@@ -96,7 +94,6 @@ void linked_list_remove(void *phead, void *element)
         *pnext = nextNext;
         /*@
         if (pnext != phead) {
-            pointer_nonzero(pnext);
             close lseg(pnext, 0, cons(pnext, xs2), p);
             lseg_append_final(head);
         }

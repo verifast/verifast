@@ -49,7 +49,6 @@ void adder_write(void *file, int value)
     {
         int acc0 = acc;
         //@ produce_limits(acc0);
-        //@ produce_limits(value);
         if (value < 0) {
             if (acc0 < INT_MIN - value) abort();
         } else {

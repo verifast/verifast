@@ -28,20 +28,20 @@ lemma void pointer_unique(void *pp);
     requires [?f]pointer(pp, ?p);
     ensures [f]pointer(pp, p) &*& f <= 1;
 
-lemma void pointer_nonzero(void *pp);
-    requires pointer(pp, ?p);
+lemma_auto void pointer_nonzero();
+    requires pointer(?pp, ?p);
     ensures pointer(pp, p) &*& pp != 0;
 
 fixpoint void *pointer_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointer(void * p);
 fixpoint bool chars_within_limits(list<char> cs);
 
-lemma void pointer_of_chars_of_pointer(void *p);
-    requires p >= (void *)0 &*& p <= (void *)UINTPTR_MAX;
-    ensures pointer_of_chars(chars_of_pointer(p)) == p &*& chars_within_limits(chars_of_pointer(p)) == true &*& length(chars_of_pointer(p)) == sizeof(void *);
+lemma_auto(pointer_of_chars(chars_of_pointer(p))) void pointer_of_chars_of_pointer(void *p);
+    requires p >= (void *)0 && p <= (void *)UINTPTR_MAX;
+    ensures pointer_of_chars(chars_of_pointer(p)) == p && chars_within_limits(chars_of_pointer(p)) == true && length(chars_of_pointer(p)) == sizeof(void *);
 
-lemma void chars_of_pointer_of_chars(list<char> cs);
-    requires length(cs) == sizeof(void *) &*& chars_within_limits(cs) == true;
+lemma_auto(chars_of_pointer(pointer_of_chars(cs))) void chars_of_pointer_of_chars(list<char> cs);
+    requires length(cs) == sizeof(void *) && chars_within_limits(cs) == true;
     ensures chars_of_pointer(pointer_of_chars(cs)) == cs;
 
 @*/

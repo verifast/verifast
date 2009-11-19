@@ -699,7 +699,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ open kernel_module(modulesId, devicesId)(owner);
                         {
                             int refCount = d->owner->ref_count;
-                            //@ produce_limits(refCount);
                             if (refCount == INT_MAX) abort();
                             d->owner->ref_count = refCount + 1;
                         }

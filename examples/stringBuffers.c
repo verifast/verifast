@@ -111,7 +111,6 @@ void string_buffer_append_string(struct string_buffer *buffer, char *string)
     //@ ensures string_buffer(buffer) &*& [f]chars(string, cs);
 {
     int length = strlen(string);
-    //@ mem_index_of('\0', cs);
     //@ chars_split(string, length);
     string_buffer_append_chars(buffer, string, length);
     //@ chars_join(string);
@@ -163,7 +162,6 @@ bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
     bool result = false;
     //@ open string_buffer(buffer);
     int length = strlen(string);
-    //@ mem_index_of('\0', cs);
     if (length == buffer->length) {
         //@ chars_split(buffer->chars, length);
         //@ chars_split(string, length);
@@ -194,18 +192,14 @@ int chars_index_of_string(char *chars, int length, char *string)
     @*/
 {
     int n = strlen(string);
-    //@ mem_index_of('\0', stringChars);
     char *p = chars;
     char *end = 0;
     //@ length_nonnegative(charsChars);
-    //@ produce_limits(chars);
     //@ chars_limits(chars);
     end = chars + length;
     while (true)
         //@ invariant [f1]chars(chars, charsChars) &*& [f2]chars(string, stringChars) &*& chars <= p &*& p <= end;
     {
-        ////@ produce_limits(p); // why can I remove this? (not assuming anything for pointer types?)
-        //@ assert(p < (void*) 2000000000000000);
         if (end - p < n) return -1;
         //@ chars_split(chars, p - chars);
         //@ chars_split(p, n);
@@ -230,7 +224,6 @@ int chars_index_of_string(char *chars, int length, char *string)
             //@ chars_join(chars);
             //@ close [f2]chars(string, stringChars);
             if (p == 0) return -1;
-            //@ mem_index_of(c0, pChars);
         }
     }
 }
@@ -239,7 +232,6 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     //@ requires [?f1]string_buffer(buffer) &*& [?f2]chars(separator, ?cs) &*& mem('\0', cs) == true &*& string_buffer(before) &*& string_buffer(after);
     //@ ensures [f1]string_buffer(buffer) &*& [f2]chars(separator, cs) &*& string_buffer(before) &*& string_buffer(after);
 {
-    //@ mem_index_of('\0', cs);
     //@ open string_buffer(buffer);
     int n = strlen(separator);
     char *chars = buffer->chars;
@@ -253,7 +245,6 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     string_buffer_append_chars(before, chars, index);
     //@ chars_join(chars);
     string_buffer_clear(after);
-    //@ produce_limits(chars);
     //@ chars_limits(chars);
     //@ chars_split(chars, index + n);
     //@ chars_split(chars + index + n, length - index - n);

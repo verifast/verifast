@@ -2337,6 +2337,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       Char -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term res) (ctxt#mk_le res max_char_term)); res
     | ShortType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term res) (ctxt#mk_le res max_short_term)); res  
     | IntType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term res) (ctxt#mk_le res max_int_term)); res
+    | PtrType _ | UintPtrType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) res) (ctxt#mk_le res max_ptr_term)); res
     | _ -> res
   in
   let get_unique_var_symb_ x t ghost = 
@@ -5308,9 +5309,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     (* assuming limits if non-ghost *)
     (if true then (* how to check if field is ghost??? *)
       match f#range with
-         Char -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term))); ()
-      | ShortType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term))); ()
-      | IntType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term))); ()
+         Char -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term)))
+      | ShortType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term)))
+      | IntType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term)))
+      | PtrType _ | UintPtrType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) tv) (ctxt#mk_le tv max_ptr_term)))
       | _ -> ()
     ); 
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
