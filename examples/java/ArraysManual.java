@@ -6,7 +6,6 @@ class ArrayTest {
         //@ ensures array_slice_deep(records, 0, records.length, record, recordLength, _, _);
     {
         Object record0 = records[i];
-        //@ open record(recordLength, record0, _);
         byte[] record = (byte[])record0;
         record[recordLength - 1] = 0;
         //@ array_slice_join(record, 0);

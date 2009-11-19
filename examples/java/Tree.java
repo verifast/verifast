@@ -3,66 +3,66 @@ package tree;
 /*@
 predicate tree(Tree t,bintree b)
   requires switch(b){
-    case nil: return t==null;
-    case cons(a,bl,br): return t.value |-> ?v &*& t.left |-> ?l &*& t.right |-> ?r
+    case tnil: return t==null;
+    case tcons(a,bl,br): return t.value |-> ?v &*& t.left |-> ?l &*& t.right |-> ?r
 			&*& tree(l,bl) &*& tree(r,br) &*& t!=null &*& a==v ;
   }&*& inorder(b)==true;
 
-inductive bintree = |nil |cons(int,bintree,bintree);
+inductive bintree = |tnil |tcons(int,bintree,bintree);
 
 fixpoint boolean t_contains(bintree b, int v) {
   switch (b) {
-    case nil: return false;
-    case cons(a,l,r): return (a==v ? true: (v < a? t_contains(l,v):t_contains(r,v)));
+    case tnil: return false;
+    case tcons(a,l,r): return (a==v ? true: (v < a? t_contains(l,v):t_contains(r,v)));
   }
 }
 fixpoint bintree tree_add(bintree b, int x) {
   switch (b) {
-    case nil: return cons(x,nil,nil);
-    case cons(v,l,r): return x < v? cons(v,tree_add(l,x),r):
-			(x==v? cons(v,l,r):cons(v,l,tree_add(r,x)));
+    case tnil: return tcons(x,tnil,tnil);
+    case tcons(v,l,r): return x < v? tcons(v,tree_add(l,x),r):
+			(x==v? tcons(v,l,r):tcons(v,l,tree_add(r,x)));
   }
 }
 fixpoint int max(bintree b){
   switch(b){
-    case cons(a,bl,br): return (br==nil? a:max(br));
-    case nil: return 0;
+    case tcons(a,bl,br): return (br==tnil? a:max(br));
+    case tnil: return 0;
   }
 }
 fixpoint int min(bintree b){
   switch(b){
-    case cons(a,bl,br): return (bl==nil? a:min(bl));
-    case nil: return 0;
+    case tcons(a,bl,br): return (bl==tnil? a:min(bl));
+    case tnil: return 0;
   }
 }
 fixpoint bintree tree_rem(bintree b, int x) {
   switch (b) {
-    case cons(v,l,r): return l==nil&&r==nil&&x==v? nil:
-			(x==v&&l==nil? r:
-			(x==v&&r==nil? l:
-			(x==v? cons(max(l),tree_rem(l,max(l)),r):
-			x < v? cons(v,tree_rem(l,x),r):cons(v,l,tree_rem(r,x)) ))) ;
-    case nil: return nil;
+    case tcons(v,l,r): return l==tnil&&r==tnil&&x==v? tnil:
+			(x==v&&l==tnil? r:
+			(x==v&&r==tnil? l:
+			(x==v? tcons(max(l),tree_rem(l,max(l)),r):
+			x < v? tcons(v,tree_rem(l,x),r):tcons(v,l,tree_rem(r,x)) ))) ;
+    case tnil: return tnil;
   }
 }
 fixpoint boolean inorder(bintree b){
   switch(b){
-	case nil: return true;
-	case cons(a,bl,br): return (bl==nil? true:max(bl) < a)&& (br==nil? true: a < min(br))
+	case tnil: return true;
+	case tcons(a,bl,br): return (bl==tnil? true:max(bl) < a)&& (br==tnil? true: a < min(br))
 		&& inorder(bl) && inorder(br);
   }
 }
 lemma void min_le_max(bintree b)
-  requires inorder(b)==true &*& b!=nil;
+  requires inorder(b)==true &*& b!=tnil;
   ensures min(b)<=max(b);
 {
   switch(b){
-        case nil:
-	case cons(v,l,r):if(l!=nil||r!=nil){
-			   if(l==nil){
+        case tnil:
+	case tcons(v,l,r):if(l!=tnil||r!=tnil){
+			   if(l==tnil){
 			     min_le_max(r);
 			   }else{
-			     if(r!=nil){
+			     if(r!=tnil){
 			       min_le_max(r);
 			     }
 			     min_le_max(l);
@@ -71,36 +71,36 @@ lemma void min_le_max(bintree b)
   }
 }
 lemma void contains_max(bintree r)
-  requires r!=nil && inorder(r)==true;
+  requires r!=tnil && inorder(r)==true;
   ensures t_contains(r,max(r))==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(c!=nil){
+	case tnil:
+	case tcons(a,b,c):if(c!=tnil){
 			   min_le_max(c);
 			   contains_max(c);
 			 }
   }
 }
 lemma void contains_min(bintree r)
-  requires r!=nil &*& inorder(r)==true;
+  requires r!=tnil &*& inorder(r)==true;
   ensures t_contains(r,min(r))==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(b!=nil){
+	case tnil:
+	case tcons(a,b,c):if(b!=tnil){
 			 min_le_max(b);
 			 contains_min(b);
 			 }
   }
 }
 lemma void max_conj_add(bintree l,int v,int x)
-  requires x < v &*& (max(l) < v||l==nil) &*& inorder(l)==true;
+  requires x < v &*& (max(l) < v||l==tnil) &*& inorder(l)==true;
   ensures max(tree_add(l,x)) < v &*& inorder(l)==true;
 {
   switch(l){
-	case nil:
-	case cons(a,b,c):if(x < a){
+	case tnil:
+	case tcons(a,b,c):if(x < a){
 			  max_conj_add(b,a,x);
 			 }
 			 if(a < x){
@@ -109,12 +109,12 @@ lemma void max_conj_add(bintree l,int v,int x)
   }
 }
 lemma void min_conj_add(bintree r,int v,int x)
-  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==tnil) &*& inorder(r)==true;
   ensures v < min(tree_add(r,x)) &*& inorder(r)==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(a < x){
+	case tnil:
+	case tcons(a,b,c):if(a < x){
 			  min_conj_add(c,a,x);
 			 }
 			 if(x < a){
@@ -123,12 +123,12 @@ lemma void min_conj_add(bintree r,int v,int x)
   }
 }
 lemma void max_conj_rem(bintree l,int v,int x)
-  requires x < v &*& (max(l) < v||l==nil) &*& inorder(l)==true;
-  ensures (max(tree_rem(l,x)) < v||tree_rem(l,x)==nil) &*& inorder(l)==true;
+  requires x < v &*& (max(l) < v||l==tnil) &*& inorder(l)==true;
+  ensures (max(tree_rem(l,x)) < v||tree_rem(l,x)==tnil) &*& inorder(l)==true;
 {
   switch(l){
-	case nil:
-	case cons(a,b,c):if(x < a){
+	case tnil:
+	case tcons(a,b,c):if(x < a){
 			  max_conj_rem(b,a,x);
 			 }
 			 if(a < x){
@@ -142,8 +142,8 @@ lemma void tree_add_inorder(bintree b, int x)
     ensures inorder(tree_add(b,x))==true &*& t_contains(tree_add(b,x),x)==true;
 {
     switch (b) {
-        case nil:
-        case cons(v,l,r):if(x < v){
+        case tnil:
+        case tcons(v,l,r):if(x < v){
 			  max_conj_add(l,v,x);
 			  tree_add_inorder(l,x);
 			 }
@@ -158,8 +158,8 @@ lemma void min_all(bintree r,int x)
   ensures min(r)<=x;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(b!=nil){
+	case tnil:
+	case tcons(a,b,c):if(b!=tnil){
 			   contains_max(b);
 			   min_all(b,max(b));
 			 }
@@ -173,9 +173,9 @@ lemma void max_all(bintree r,int x)
   ensures x < max(r);
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(c!=nil){
-			  contains_min(c);
+	case tnil:
+	case tcons(a,b,c):if(c!=tnil){
+			   contains_min(c);
 			   min_le_max(c);
 			 }
 			 if(t_contains(c,x)){
@@ -184,18 +184,18 @@ lemma void max_all(bintree r,int x)
   }
 }
 lemma void min_conj_rem(bintree r,int v,int x)
-  requires v < x &*& (v < min(r)||r==nil) &*& inorder(r)==true;
-  ensures (v < min(tree_rem(r,x))||tree_rem(r,x)==nil) &*& inorder(r)==true;
+  requires v < x &*& (v < min(r)||r==tnil) &*& inorder(r)==true;
+  ensures (v < min(tree_rem(r,x))||tree_rem(r,x)==tnil) &*& inorder(r)==true;
 {
   switch(r){
-	case nil:
-	case cons(a,b,c):if(a < x){
+	case tnil:
+	case tcons(a,b,c):if(a < x){
 			  min_conj_rem(c,a,x);
 			 }
 			 if(x < a){
 			  min_conj_rem(b,v,x);
 			 }
-			 if(b!=nil&&c!=nil){
+			 if(b!=tnil&&c!=tnil){
 			  contains_max(b);
 			  min_all(b,max(b));
 			  min_conj_rem(b,v,max(b));
@@ -203,13 +203,13 @@ lemma void min_conj_rem(bintree r,int v,int x)
   }
 }
 lemma void contains_rem_max(bintree b)
-  requires inorder(b)==true &*& b!=nil &*& tree_rem(b,max(b))!=nil &*& inorder(tree_rem(b,max(b)))==true;
+  requires inorder(b)==true &*& b!=tnil &*& tree_rem(b,max(b))!=tnil &*& inorder(tree_rem(b,max(b)))==true;
   ensures t_contains(b,max(tree_rem(b,max(b))))==true;
 {
   switch (b) {
-        case nil:
-        case cons(v,l,r):if(l==nil||r!=nil){
-			   if(tree_rem(r,max(r))==nil){
+        case tnil:
+        case tcons(v,l,r):if(l==tnil||r!=tnil){
+			   if(tree_rem(r,max(r))==tnil){
 			     min_le_max(r);
 		  	     contains_max(tree_rem(b,max(b)));
 			   }else{
@@ -229,8 +229,8 @@ lemma void tree_rem_inorder(bintree b, int x)
     ensures inorder(tree_rem(b,x))==true&*& t_contains(tree_rem(b,x),x)==false;
 {
     switch (b) {
-        case nil:
-        case cons(v,l,r):if(x < v){
+        case tnil:
+        case tcons(v,l,r):if(x < v){
 			  max_conj_rem(l,v,x);
 			  tree_rem_inorder(l,x);
 			 }
@@ -239,20 +239,20 @@ lemma void tree_rem_inorder(bintree b, int x)
 			  tree_rem_inorder(r,x);
 			 }
 			 if(x==v){
-				if(l==nil && r!=nil){
+				if(l==tnil && r!=tnil){
 					if(t_contains(r,x)==false){
 					  contains_min(r);
 					}else{
 					  min_all(r,x);
 					}
-				}if(r==nil&&l!=nil){
+				}if(r==tnil&&l!=tnil){
 					if(t_contains(l,x)==false){
 					  contains_min(l);
 					}else{
 					  max_all(l,x);
 					}
-				}if(r!=nil&&l!=nil){
-				   if(tree_rem(l,max(l))!=nil){
+				}if(r!=tnil&&l!=tnil){
+				   if(tree_rem(l,max(l))!=tnil){
 				     contains_max(l);
 				     tree_rem_inorder(l,max(l));
 				     contains_rem_max(l);
@@ -282,175 +282,170 @@ public class Tree{
 	public int value;
 	public Tree left;
 	public Tree right;
-	public Tree()
+
+	public Tree(int x)
 	//@ requires true;
-	//@ ensures tree(result,cons(0,nil,nil));
+	//@ ensures tree(result,tcons(x,tnil,tnil));
 	{
-	this.value=0;
-        this.left=null;
-	this.right=null;
-	//@ Tree l = this.left;
-	//@ close tree(l,nil);
-        //@ Tree r = this.right;
-        //@ close tree(r,nil);
-        //@ close tree(this,cons(0,nil,nil));
+	    	this.value=x;
+		this.left=null;
+		this.right=null;
+		//@ Tree l = this.left;
+		//@ close tree(l,tnil);
+		//@ Tree r = this.right;
+		//@ close tree(r,tnil);
+		//@ close tree(this,tcons(x,tnil,tnil));
 	}
-	public static Tree init_tree(int x)
-	//@ requires true;
-	//@ ensures tree(result,cons(x,nil,nil));
+	public boolean contains(int x)
+	//@ requires tree(this,?b);
+	//@ ensures tree(this,b) &*& result==t_contains(b,x);
 	{
-		Tree t=null;
-	        t=new Tree();
-	        //@ open tree(t,cons(0,nil,nil));
-		t.value=x;
-		t.left=null;
-		t.right=null;
-		//@ Tree l = t.left;
-		//@ close tree(l,nil);
-		//@ Tree r = t.right;
-		//@ close tree(r,nil);
-		//@ int v = t.value;
-		//@ close tree(t,cons(x,nil,nil));
-		return t;
-	}
-	public static boolean contains(Tree t,int x)
-	//@ requires tree(t,?b);
-	//@ ensures tree(t,b) &*& result==t_contains(b,x);
-	{
-		if(t==null){
-			//@ open tree(t,b);
-			//@ close tree(t,nil);
+		if(this==null){
+			//@ open tree(this,b);
+			//@ close tree(this,tnil);
 			return false;
 		}else{
-			//@ open tree(t,b);
-			int v=t.value;
-			Tree l=t.left;
-			Tree r=t.right;
+			//@ open tree(this,b);
+			int v=this.value;
+			Tree l=this.left;
+			Tree r=this.right;
 			if(v==x){
-				//@close tree(t,b);
+				//@close tree(this,b);
 				return true;
 			}else{
 				if(x < v){
-					boolean temp1=Tree.contains(l,x);
-					//@close tree(t,b);
+					boolean temp1=false;
+					if(l != null) {
+					  temp1 = l.contains(x);
+					} else {
+					  //@ open tree(l, ?lv);
+					  //@ close tree(l, lv);
+					}
+					//@close tree(this,b);
 					return temp1;
 				}else{
-					boolean temp2=Tree.contains(r,x);
-					//@close tree(t,b);
+					boolean temp2=false;
+					if(r != null) {
+					  temp2 = r.contains(x);
+					} else {
+					  //@ open tree(r, ?rv);
+					  //@ close tree(r, rv);
+					}
+					//@close tree(this,b);
 					return temp2;
 				}
 			}
 		}
 	}
-	public static void add(Tree t, int x)
-	//@ requires tree(t,?b) &*& b!=nil &*& false==t_contains(b,x) &*& inorder(b)==true;
-	//@ ensures tree(t,tree_add(b,x)) &*& inorder(tree_add(b,x))==true;
+	public void add(int x)
+	//@ requires tree(this,?b) &*& b!=tnil &*& false==t_contains(b,x) &*& inorder(b)==true;
+	//@ ensures tree(this,tree_add(b,x)) &*& inorder(tree_add(b,x))==true;
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree l=t.left;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
 		//@ open tree(l,?bl);
 		//@ close tree(l,bl);
-		Tree r=t.right;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		if(x < v){
 			if(l!=null){
-				Tree.add(l,x);
+				l.add(x);
 				//@ tree_add_inorder(b,x);
-				//@ close tree(t,cons(v,tree_add(bl,x),br));
+				//@ close tree(this,tcons(v,tree_add(bl,x),br));
 			}else{
-				Tree temp=Tree.init_tree(x);
-				t.left=temp;
+				Tree temp=new Tree(x);
+				this.left=temp;
 				//@ open tree(l,bl);
-				//@ close tree(t,cons(v,cons(x,nil,nil),br));
+				//@ close tree(this,tcons(v,tcons(x,tnil,tnil),br));
 				//@ tree_add_inorder(b,x);
 			}
 		}else{
 			if(v < x){
 				if(r!=null){
-					Tree.add(r,x);
+					r.add(x);
 					//@ tree_add_inorder(b,x);
-					//@ close tree(t,cons(v,bl,tree_add(br,x)));	
+					//@ close tree(this,tcons(v,bl,tree_add(br,x)));	
 				}else{
-					Tree temp=Tree.init_tree(x);
-					t.right=temp;
+					Tree temp=new Tree(x);
+					this.right=temp;
 					//@ open tree(r,br);
-					//@ close tree(t,cons(v,bl,cons(x,nil,nil)));
+					//@ close tree(this,tcons(v,bl,tcons(x,tnil,tnil)));
 				}
 			}
 		}
 	}
-	public static int maximum(Tree t)
-	//@ requires tree(t,?b) &*& b!=nil &*& inorder(b)==true;
-	//@ ensures result==max(b) &*& tree(t,b);
+	public int maximum()
+	//@ requires tree(this,?b) &*& b!=tnil &*& inorder(b)==true;
+	//@ ensures result==max(b) &*& tree(this,b);
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree r=t.right;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		if(r==null){
-			//@ close tree(t,b);
+			//@ close tree(this,b);
 			return v;
 		}else{
-			int m= Tree.maximum(r);
-			//@ close tree(t,b);
+			int m= r.maximum();
+			//@ close tree(this,b);
 			return m;
 		}
 	}
-	public static Tree remove(Tree t, int x)
-	//@ requires tree(t,?b) &*& b!=nil &*& true==t_contains(b,x) &*& inorder(b)==true;
+	public Tree remove(int x)
+	//@ requires tree(this,?b) &*& b!=tnil &*& true==t_contains(b,x)  &*& inorder(b)==true;
 	//@ ensures tree(result,tree_rem(b,x))&*& inorder(tree_rem(b,x))==true &*& false==t_contains(tree_rem(b,x),x);
 	{
-		//@ open tree(t,b);
-		int v=t.value;
-		Tree l=t.left;
+		//@ open tree(this,b);
+		int v=this.value;
+		Tree l=this.left;
 		//@ open tree(l,?bl);
 		//@ close tree(l,bl);
-		Tree r=t.right;
+		Tree r=this.right;
 		//@ open tree(r,?br);
 		//@ close tree(r,br);
 		//@ tree_rem_inorder(b,x);
 		if(x < v){
 			if(l!=null){
-				Tree temp=Tree.remove(l,x);
-				t.left=temp;
-				//@ close tree(t,cons(v,tree_rem(bl,x),br));
-				return t;
+				Tree temp=l.remove(x);
+				this.left=temp;
+				//@ close tree(this,tcons(v,tree_rem(bl,x),br));
+				return this;
 			}
 		}
 		if(v < x){
 			if(r!=null){
-				Tree temp=Tree.remove(r,x);
-				t.right=temp;
-				//@ close tree(t,cons(v,bl,tree_rem(br,x)));
-				return t;
+				Tree temp=r.remove(x);
+				this.right=temp;
+				//@ close tree(this,tcons(v,bl,tree_rem(br,x)));
+				return this;
 			}
 		}
-		else{
+		if(v==x){
 			if(l!=null&&r==null){
-				//@ open tree(r,nil);
+				//@ open tree(r,tnil);
 				return l;
 			}
 			if(l==null&&r==null){
-				//@ close tree(t,b);
-				//@ close tree(null,nil);
+				//@ close tree(this,b);
+				//@ close tree(null,tnil);
 				return null;
 			}
 			if(l==null&&r!=null){
-				//@ open tree(l,nil);
+				//@ open tree(l,tnil);
 				return r;
 			}
 			if(l!=null&&r!=null){
 				Tree temp=null;
-				int m=Tree.maximum(l);
-				t.value=m;
+				int m=l.maximum();
+				this.value=m;
 				//@ contains_max(bl);
-				temp=Tree.remove(l,m);
-				t.left=temp;
-				//@ close tree(t,cons(m,tree_rem(bl,m),br));
-				return t;
+				temp=l.remove(m);
+				this.left=temp;
+				//@ close tree(this,tcons(m,tree_rem(bl,m),br));
+				return this;
 			}
 		}
 		//this return statement is necessary because javac can't tell that this code will never be reached
@@ -470,24 +465,28 @@ public class Tree{
 		boolean e=false;
 		boolean f=false;
 
-		t1 = Tree.init_tree(3);
-		b= Tree.contains(t1,2);
+		t1 = new Tree(3);
+		b=t1.contains(2);
 		assert(!b);
-		Tree.add(t1,2);
+		t1.add(2);
 
-		a= Tree.contains(t1,2);
+		a=t1.contains(2);
 		assert(a);
-		c= Tree.contains(t1,3);
+		c=t1.contains(3);
 		assert(c);
-		t2=Tree.remove(t1,3);
-		d= Tree.contains(t2,3);
-		assert(!d);
+		t2=t1.remove(3);
+		if(t2 != null) {
+		  d= t2.contains(3);
+		  assert(!d);
 
-		Tree.add(t2,3);
-		e= Tree.contains(t2,2);
-		assert(e);
-		t3=Tree.remove(t2,3);
-		f= Tree.contains(t3,3);
-		assert(!f);
+		  t2.add(3);
+		  e= t2.contains(2);
+		  assert(e);
+		  t3=t2.remove(3);
+		  if(t3 != null) {
+		    f=t3.contains(3);
+		    assert(!f);
+		  }
+		}
 	}
 }

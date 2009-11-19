@@ -55,12 +55,6 @@ verifast_both -disable_overflow_check -c map.java
 verifast_both -disable_overflow_check -c Counter.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -c Tree.java
-cd Tree2
-verifast_both -c Tree.java
-cd ..
-cd Tree3
-verifast_both -c Tree.java
-cd ..
 verifast_both -c Iterator.java
 cd Iterator
 verifast_both -c it.jarsrc

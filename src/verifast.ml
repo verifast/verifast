@@ -3280,11 +3280,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             | _ -> (e, PtrType Char)
                             end
                           | CallExpr (l', g', targes, [], pats, info) -> (
-                            match (match try_assoc' (pn,ilist) g' pfm with
-                              None -> try_assoc' (pn,ilist) g' purefuncmap0
+                            match (match resolve (pn,ilist) l' g' pfm with
+                              None -> resolve (pn,ilist) l' g' purefuncmap0
                             | result -> result)
                             with
-                              Some (l, callee_tparams, t0, ts0, _) -> (
+                              Some (g', (l, callee_tparams, t0, ts0, _)) -> (
                               let (targs, tpenv) =
                                 if callee_tparams <> [] && targes = [] then
                                   let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
@@ -3863,18 +3863,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc x tenv with
       | Some t -> scope := Some LocalVar; (e, t)
       | None ->
-      match try_assoc' (pn,ilist) x purefuncmap with
-      | Some (_, tparams, t, [], _) ->
+      match resolve (pn,ilist) l x purefuncmap with
+      | Some (x, (_, tparams, t, [], _)) ->
         if tparams <> [] then
         begin
           let targs = List.map (fun _ -> InferredType (ref None)) tparams in
           let Some tpenv = zip tparams targs in
           scope := Some PureCtor;
-          (e, instantiate_type tpenv t)
+          (Var (l, x, scope), instantiate_type tpenv t)
         end
         else
         begin
-          scope := Some PureCtor; (e, t)
+          scope := Some PureCtor; (Var (l, x, scope), t)
         end
       | _ ->
       if List.mem x funcnames then
@@ -3882,12 +3882,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Java -> static_error l "In java methods can't be used as pointers"
         | _ -> scope := Some FuncName; (e, PtrType Void)
       else
-      match try_assoc' (pn,ilist) x predfammap with
-      | Some (_, tparams, arity, ts, _, _) ->
+      match resolve (pn,ilist) l x predfammap with
+      | Some (x, (_, tparams, arity, ts, _, _)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
         scope := Some PredFamName;
-        (e, PredType (tparams, ts))
+        (Var (l, x, scope), PredType (tparams, ts))
       | None ->
       let enumElems = flatmap (fun (name, (l, elems)) -> imap (fun i x -> (x, i)) elems) enummap in
       match try_assoc x enumElems with
@@ -3939,11 +3939,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | PredNameExpr (l, g) ->
       begin
-        match try_assoc' (pn,ilist) g predfammap with
-          Some (_, tparams, arity, ts, _, _) ->
+        match resolve (pn,ilist) l g predfammap with
+          Some (g, (_, tparams, arity, ts, _, _)) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
           if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
-          (e, PredType (tparams, ts))
+          (PredNameExpr (l, g), PredType (tparams, ts))
         | None -> static_error l "No such predicate."
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
@@ -4050,8 +4050,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, t) = check e in
       (AddressOf (l, w), PtrType t)
     | CallExpr (l, g', targes, [], pats, info) -> (
-      match try_assoc' (pn,ilist) g' purefuncmap with
-        Some (_, callee_tparams, t0, ts, _) -> (
+      match resolve (pn,ilist) l g' purefuncmap with
+        Some (g', (_, callee_tparams, t0, ts, _)) -> (
         let (targs, tpenv) =
           if callee_tparams <> [] && targes = [] then
             let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
@@ -5809,6 +5809,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CLang -> fun fn -> List.assoc fn funcnameterms
   in
   
+  let predinstmap_by_predfamsymb =
+    flatmap
+      begin fun ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) ->
+        let (_, _, _, _, symb, _) = List.assoc p predfammap in
+        if fns = [] && predinst_tparams = [] && env = [] then
+          [(symb, (xs, wbody))]
+        else
+          []
+      end
+      predinstmap
+  in
+  
   let contains_edges =
     flatmap
       begin fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) as predinst) ->
@@ -5919,8 +5931,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let before_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; istart'; istart; p; a; elems1; vs1], None) in
               let slice_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; iend; iend'; p; a; tail_elems2; tail_vs2], None) in
               let after_chunk = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil ())], None) in
-              let p_chunk = Chunk ((p, false), [], coef, [a; elem; v], None) in
-              cont (Some (slice_chunk::p_chunk::after_chunk::before_chunk::h))
+              let h = slice_chunk::after_chunk::before_chunk::h in
+              match try_assq p predinstmap_by_predfamsymb with
+                None -> cont (Some (Chunk ((p, false), [], coef, [a; elem; v], None)::h))
+              | Some (xs, wbody) ->
+                let tpenv = [] in
+                let (pn,ilist) = ("", []) in
+                let ghostenv = [] in
+                let Some env = zip (List.map fst xs) [a; elem; v] in
+                assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h _ _ ->
+                cont (Some h)
         else (* is_unit_slice *)
           cont None (* TODO: implement auto-splitting and auto-merging for non-unit slices *)
       in

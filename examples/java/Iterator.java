@@ -2,23 +2,7 @@ package iterator;
 
 /*@
 
-inductive objects = nil | cons(Object, objects);
-
-fixpoint Object head(objects os) {
-    switch (os) {
-        case nil: return null;
-        case cons(o, os0): return o;
-    }
-}
-
-fixpoint objects tail(objects os) {
-    switch (os) {
-        case nil: return nil;
-        case cons(o, os0): return os0;
-    }
-}
-
-predicate_family iterator(Class c)(Iterator i, objects xs);
+predicate_family iterator(Class c)(Iterator i, list<Object> xs);
 
 @*/
 
@@ -33,7 +17,7 @@ interface Iterator {
 }
 
 /*@
-fixpoint Object objects_last(objects a) {
+fixpoint Object objects_last(list<Object> a) {
   switch (a) {
       case nil: return null;
       case cons(x, xs): return x!=null && xs == nil ? x : objects_last(xs);
@@ -42,7 +26,7 @@ fixpoint Object objects_last(objects a) {
 
 @*/
 
-//@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, objects xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
+//@ predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, list<Object> xs) requires i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
 class SingletonIterator implements Iterator {
   Object value;
   boolean done;
