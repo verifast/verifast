@@ -2189,6 +2189,8 @@ type options = {option_verbose: bool; option_disable_overflow_check: bool; optio
 let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
 
   let language = file_type path in
+  
+  let auto_lemmas = Hashtbl.create 10 in
 
   let {
     option_verbose=verbose;
@@ -5287,7 +5289,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume_neq tp (ctxt#mk_intlit 0) (fun _ -> iter h0) (* in Java, the target of a field chunk is non-null *)
   in
   
-  let assume_chunk h g_symb targs coef inputParamCount ts size cont =
+  let assume_chunk h g_symb targs coef inputParamCount ts size cont =     
     if inputParamCount = None || coef == real_unit then
       cont (Chunk (g_symb, targs, coef, ts, size)::h)
     else
@@ -5322,7 +5324,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       iter [] h
   in
 
-  let rec assume_pred tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
+  let rec assume_pred_core tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all (assuming: bool) cont =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -5351,15 +5353,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
       evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
-        assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+        if Hashtbl.mem auto_lemmas (g#name) && not assuming then
+          let (frac, xs1, xs2, pre, post) = Hashtbl.find auto_lemmas (g#name) in
+          match (frac, coef) with (* is tpenv the right type environment? :-/ *)
+            (None, real_unit) -> assume_pred_core tpenv (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+          | (Some f, coef) -> assume_pred_core tpenv (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+          | _ -> assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+        else
+          assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
       )
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
-    | Sep (l, p1, p2) -> assume_pred tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all (fun h ghostenv env -> assume_pred tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all cont)
+    | Sep (l, p1, p2) -> assume_pred_core tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all assuming (fun h ghostenv env -> assume_pred_core tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all assuming cont)
     | IfPred (l, e, p1, p2) ->
       let cont h _ _ = cont h ghostenv env in
       branch
-        (fun _ -> assume (ev e) (fun _ -> assume_pred tpenv (pn,ilist) h ghostenv env p1 coef size_all size_all cont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all cont))
+        (fun _ -> assume (ev e) (fun _ -> assume_pred_core tpenv (pn,ilist) h ghostenv env p1 coef size_all size_all assuming cont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> assume_pred_core tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all assuming cont))
     | SwitchPred (l, e, cs) ->
       let cont h _ _ = cont h ghostenv env in
       let t = ev e in
@@ -5388,19 +5397,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      pts
                in
                let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
-               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all cont))
+               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred_core tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpPred l -> cont h ghostenv env
     | CoefPred (l, DummyPat, body) ->
-      assume_pred tpenv (pn,ilist) h ghostenv env body (get_dummy_frac_term ()) size_first size_all cont
+      assume_pred_core tpenv (pn,ilist) h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefPred (l, coef', body) ->
       evalpat (pn,ilist) ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
-      assume_pred tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all cont
+      assume_pred_core tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
     )
   in
+  let assume_pred tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
+    assume_pred_core tpenv (pn,ilist) h ghostenv env p coef size_first size_all false cont
+  in
+  
+ 
   
   (* Region: consumption of assertions *)
   
@@ -8514,8 +8528,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let t_pre = eval (pn,ilist) None env pre in
               let t_post = eval (pn,ilist) None env post in
               let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
-              (ctxt#assume_forall [] tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
-          | _ -> static_error l "Contract of automatic lemma must be pure.")
+              let trigger = (
+              match trigger with
+                None -> []
+              | Some(trigger) -> 
+                  let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
+                  [eval (pn,ilist) None env trigger]
+              ) in
+              (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+          | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) -> 
+              (Hashtbl.add auto_lemmas (p_ref#name) (None, List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
+          | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) ->
+              (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
+          | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g))
       | _ -> ()
     ) in
     lems'
@@ -8663,7 +8688,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name) or 
         (* case of Java: *)
         (g_file_name = "PureList.javaspec")) then 
-        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, _,fb,v) = (List.assoc g funcmap) in
+        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
         (match (pre, post) with
           (ExprPred(_, pre), ExprPred(_, post)) ->
             let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
@@ -8681,7 +8706,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   [eval (pn,ilist) None env trigger]
             ) in
             (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
-        | _ -> static_error l "Contract of automatic lemma must be pure.")
+        | _ -> static_error l "public invariants not supported here yet") (*(Hashtbl.add auto_lemmas fterm ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v)))*)
       ) in 
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
