@@ -80,6 +80,10 @@ lemma_auto(mem(nth(n, xs), xs)) void mem_nth<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;
 
+lemma_auto(nth(0, vs)) void nth_zero<t>(list<t> vs);
+    requires true;
+    ensures nth(0, vs) == head(vs);
+
 fixpoint boolean distinct<t>(list<t> xs) {
     switch (xs) {
         case nil: return true;
@@ -184,10 +188,10 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys);
     requires foreach(xs, ?p) &*& foreach(ys, p);
     ensures foreach(append(xs, ys), p);
 
-fixpoint boolean all_default_value<t>(list<t> xs) {
+fixpoint boolean all_eq<t>(list<t> xs, t x0) {
     switch (xs) {
         case nil: return true;
-        case cons(x, xs0): return x == default_value && all_default_value(xs0);
+        case cons(x, xs0): return x == x0 && all_eq(xs0, x0);
     }
 }
 

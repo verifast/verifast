@@ -35,6 +35,14 @@ let for_all_take2 f n xs ys =
 
 let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
 let flatmap f xs = List.concat (List.map f xs)
+let rec head_flatmap f xs =
+  match xs with
+    [] -> None
+  | x::xs ->
+    match f x with
+      [] -> head_flatmap f xs
+    | y::ys -> Some y
+
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
 let rec take n xs = if n = 0 then [] else match xs with x::xs -> x::take (n - 1) xs
 (* Same as [(take n xs, drop n xs)] *)
@@ -2296,6 +2304,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   
+  ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false); (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
+
   let boolt = Bool in
   let intt = IntType in
 
@@ -2334,7 +2344,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
     | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
   in
-
+  
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
   let rtdir= Filename.concat bindir "rt" in 
@@ -4118,7 +4128,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | e -> static_error (expr_loc e) "Expression form not allowed here."
   and check_expr_t (pn,ilist) tparams tenv e t0 = check_expr_t_core (pn, ilist) tparams tenv e t0 false
   and check_expr_t_core (pn,ilist) tparams tenv e t0 isCast =
-    match (e, t0) with
+    match (e, unfold_inferred_type t0) with
       (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
     | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
@@ -5473,10 +5483,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let read_array h env l a i =
-    (*let a_arrays = List.find_all (fun Chunk((q, _), targs, frac, args, _) -> 
-      ctxt#query (ctxt#mk_eq (List.nth args 1)
-    ) h in*)
-    get_unique_var_symb "junk" IntType
+    let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+    let slices =
+      head_flatmap
+        begin function
+          Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
+            when g == array_slice_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
+            [apply_conversion ProverInductive (provertype_of_type tp) (ctxt#mk_app nth_symb [ctxt#mk_sub i istart; vs])]
+        | _ -> []
+        end
+        h
+    in
+    match slices with
+      None -> assert_false h env l "No matching array slice chunk"
+    | Some v -> v
   in
   
   let pointer_pred_symb () =
@@ -6995,15 +7016,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | CallExpr (lc, g, targs, [], pats,fb) ->
         call_stmt lc xo g targs pats fb check_type
       | NewArray(l, tp, e) ->
-          let elem_tp = check_pure_type (pn,ilist) tparams tp in
-          let w = check_expr_t (pn,ilist) tparams tenv e IntType in
-          eval_h h env w (fun h lv ->
-            if ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv) then
-              let at = get_unique_var_symb "arr" (ArrayType(elem_tp)) in
-              cont h (Some (at, ArrayType(elem_tp)))
-            else
-              assert_false h env l "array length might be negative"
-          )
+        let elem_tp = check_pure_type (pn,ilist) tparams tp in
+        let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+        eval_h h env w $. fun h lv ->
+        if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative";
+        let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+        let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+        assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
+        assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) lv) $. fun () ->
+        let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
+        assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
+        cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; lv; elems], None)::h) (Some (at, ArrayType elem_tp))
       | e ->
         let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
         eval_h h env w $. fun h v ->
