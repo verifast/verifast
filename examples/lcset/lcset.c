@@ -369,7 +369,6 @@ loop:
         pValue < e;
     @*/
     struct node *c = p->next;
-    //@ produce_limits(e);
     if (c->value < e) {
         {
             /*@

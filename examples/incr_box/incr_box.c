@@ -60,7 +60,6 @@ void incrementor(void *data) //@ : thread_run
             if (count0 == 2147483647) {
                 abort();
             }
-            //@ produce_limits(count0);
             counter->count = count0 + 1;
         }
         /*@

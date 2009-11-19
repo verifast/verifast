@@ -225,7 +225,6 @@ int length(struct llist *list)
     //@ close [frac]node(n, next, n->value);
     //@ lseg2_add(f);
     n = next;
-    //@ produce_limits(c);
     if (c == 2147483647) abort();
     c = c + 1;
     //@ assert [frac]lseg(next, l, ?ls3);
@@ -249,7 +248,6 @@ int lookup(struct llist *list, int index)
   int i = 0;
   //@ close lseg(f, n, nil);
   //@ drop_0(_v);
-  //@ produce_limits(index);
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + length(_ls2) == length(_v);
   {

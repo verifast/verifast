@@ -108,7 +108,6 @@ int plusOne(void *data, int x) //@ : mapfunc
     //@ requires mapfunc(plusOne)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
     //@ ensures mapfunc(plusOne)(data, tail(in), append(out, cons(result, nil)), info);
 {
-    //@ produce_limits(x);
     if (x == 2147483647) abort();
     //@ open mapfunc(plusOne)(data, in, out, ?info_);
     //@ append_assoc(out, cons(x + 1, nil), plusOne(tail(in)));

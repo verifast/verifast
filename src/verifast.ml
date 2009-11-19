@@ -2291,19 +2291,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
-  
-  let get_unique_var_symb x t = ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) [] in
-  
-  let get_dummy_frac_term () =
-    let t = get_unique_var_symb "dummy" RealType in
-    dummy_frac_terms := t::!dummy_frac_terms;
-    t
-  in
-  
-  let is_dummy_frac_term t = List.memq t !dummy_frac_terms in
-  
-  let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
-  
+   
   (* Generate some global symbols. *)
   
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
@@ -2339,6 +2327,36 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let min_char_term = ctxt#mk_intlit_of_string "-128" in
   let max_char_big_int = big_int_of_string "127" in
   let max_char_term = ctxt#mk_intlit_of_string "127" in
+  
+  let get_unique_var_symb x t = 
+    ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
+  in
+  let get_unique_var_symb_non_ghost x t = 
+    let res = get_unique_var_symb x t in
+    match t with
+      Char -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term res) (ctxt#mk_le res max_char_term)); res
+    | ShortType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term res) (ctxt#mk_le res max_short_term)); res  
+    | IntType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term res) (ctxt#mk_le res max_int_term)); res
+    | _ -> res
+  in
+  let get_unique_var_symb_ x t ghost = 
+    if ghost then
+      get_unique_var_symb x t
+    else
+      get_unique_var_symb_non_ghost x t
+  in
+  
+  let get_dummy_frac_term () =
+    let t = get_unique_var_symb "dummy" RealType in
+    dummy_frac_terms := t::!dummy_frac_terms;
+    t
+  in
+  
+  let is_dummy_frac_term t = List.memq t !dummy_frac_terms in
+  
+  let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
+  let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts in
+  let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts in
   
   let real_unit_pat = TermPat real_unit in
   
@@ -5287,6 +5305,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let assume_field h0 f tp tv tcoef cont =
     let (_, (_, _, _, _, symb, _)) = (List.assoc (f#parent, f#name) field_pred_map)in
+    (* assuming limits if non-ghost *)
+    (if true then (* how to check if field is ghost??? *)
+      match f#range with
+         Char -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term))); ()
+      | ShortType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term))); ()
+      | IntType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term))); ()
+      | _ -> ()
+    ); 
+    (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->
       if tcoef != real_unit && tcoef != real_half then
         assume (ctxt#mk_real_lt real_zero tcoef) cont
@@ -6742,7 +6769,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let elem_tp = unfold_inferred_type elem_tp in
       let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
       let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-      let elem = get_unique_var_symb "elem" elem_tp in
+      let elem = get_unique_var_symb_non_ghost "elem" elem_tp in
       let elems' = ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive elem; ctxt#mk_app nil_symb []] in
       assume (ctxt#mk_eq elems elems') $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; i; i_plus_1; elems], None)::h) elem
@@ -6892,7 +6919,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 None -> "result"
               | Some x -> x
             in
-            Some (get_unique_var_symb symbol_name t, t)
+            Some (get_unique_var_symb_ symbol_name t pure, t)
         in
         let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
         assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
@@ -7144,7 +7171,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    | (f, (lf, gh, t))::fds ->
                      let fref = new fieldref f in
                      fref#set_parent tn; fref#set_range t;
-                     assume_field h fref result (get_unique_var_symb "value" t) real_unit $. fun h ->
+                     assume_field h fref result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
                      iter h fds
                  in
                  iter h fds
@@ -7388,7 +7415,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont (h @ [Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)]) env
         | (f, (lf, gh, t))::fds ->
           let fref = new fieldref f in
-          fref#set_parent sn; fref#set_range t; assume_field h fref pointerTerm (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+          fref#set_parent sn; fref#set_range t; assume_field h fref pointerTerm (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit (fun h -> iter h fds)
       in
       iter h fds
     | CallStmt (l, "open_struct", targs, args, Static) when language = CLang ->
@@ -7491,7 +7518,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
       match e with
         None -> 
-          let xt = get_unique_var_symb x t in verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h (update env x xt) (BlockStmt(l, [], [])) tcont return_cont (*let xt = get_unique_var_symb x t in cont h (update env x xt)*)
+          let xt = get_unique_var_symb_non_ghost x t in verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h (update env x xt) (BlockStmt(l, [], [])) tcont return_cont (*let xt = get_unique_var_symb x t in cont h (update env x xt)*)
       | Some(e) -> verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
       end
       ;
@@ -8027,7 +8054,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
       assert_pred rules [] (pn,ilist) h ghostenv env p true real_unit (fun h _ _ _ ->
-        let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
+        let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
         let env = bs @ env in
         branch
           (fun _ ->
@@ -8070,7 +8097,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (* Havoc the variables that are assigned by the try block. *)
           let xs = block_assigned_variables body in
           let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-          let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
+          let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
           let env = bs @ env in
           let h = [] in
           let rec iter catches =
@@ -8081,7 +8108,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
                   let t = check_pure_type (pn,ilist) tparams te in
-                  let xterm = get_unique_var_symb x t in
+                  let xterm = get_unique_var_symb_non_ghost x t in
                   let tenv = (x, t)::tenv in
                   let env = (x, xterm)::env in
                   verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
@@ -8121,7 +8148,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin fun () ->
           let xs = block_assigned_variables body in
           let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-          let bs = List.map (fun x -> (x, get_unique_var_symb x (List.assoc x tenv))) xs in
+          let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
           let env = bs @ env in
           let h = [] in
           let tcont _ _ _ _ _ = () in
@@ -8514,7 +8541,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     None -> []
                   | Some t ->
                     if List.mem x assigned_vars then
-                      [(x, get_unique_var_symb x t)]
+                      [(x, get_unique_var_symb_ x t (List.mem x ghostenv))]
                     else
                       [(x, v)]
                 end
@@ -8577,7 +8604,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
     let _ = push() in
-    let penv = get_unique_var_symbs ps in (* actual params invullen *)
+    let penv = get_unique_var_symbs_ ps (match k with Regular -> false | _ -> true) in (* actual params invullen *)
     let (sizemap, indinfo) =
       match ss with
         [SwitchStmt (_, Var (_, x, _), _)] -> (
@@ -8679,7 +8706,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else static_error lm "Constructor specification is only allowed in javaspec files!"
           | Some(Some (ss, closeBraceLoc)) ->
               let _ = push() in
-              let env = get_unique_var_symbs ([(current_thread_name, current_thread_type)] @ xmap) in
+              let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
               let (sizemap, indinfo) = switch_stmt ss env in
               let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
               let _ =
@@ -8712,7 +8739,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                              if binding = Instance then begin
                                if init <> None then static_error lf "Instance field initializers are not yet supported.";
                                let fref = new fieldref f in
-                               fref#set_parent cn; fref#set_range t; assume_field h fref result (get_unique_var_symb "value" t) real_unit (fun h -> iter h fds)
+                               fref#set_parent cn; fref#set_range t; assume_field h fref result (get_unique_var_symb_non_ghost "value" t) real_unit (fun h -> iter h fds)
                              end else
                                iter h fds
                           in
@@ -8735,7 +8762,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             else static_error l "Constructor specification is only allowed in javaspec files!"
         | Some(Some (ss, closeBraceLoc)) ->(
             let _ = push() in
-            let env = get_unique_var_symbs (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
+            let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
             begin fun cont ->
               if fb = Instance then
               begin

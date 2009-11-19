@@ -68,9 +68,7 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     //@ length_nonnegative(cs);
     //@ open string_buffer(buffer);
     //@ malloc_block_limits(buffer->chars);
-    //@ produce_limits(count);
     int length = buffer->length;
-    //@ produce_limits(length);
     if (INT_MAX - buffer->length < count) abort();
     newLength = buffer->length + count;
     if (buffer->capacity < newLength) {
@@ -201,13 +199,13 @@ int chars_index_of_string(char *chars, int length, char *string)
     char *end = 0;
     //@ length_nonnegative(charsChars);
     //@ produce_limits(chars);
-    //@ produce_limits(length);
     //@ chars_limits(chars);
     end = chars + length;
     while (true)
         //@ invariant [f1]chars(chars, charsChars) &*& [f2]chars(string, stringChars) &*& chars <= p &*& p <= end;
     {
-        //@ produce_limits(p);
+        ////@ produce_limits(p); // why can I remove this? (not assuming anything for pointer types?)
+        //@ assert(p < (void*) 2000000000000000);
         if (end - p < n) return -1;
         //@ chars_split(chars, p - chars);
         //@ chars_split(p, n);
@@ -256,7 +254,6 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     //@ chars_join(chars);
     string_buffer_clear(after);
     //@ produce_limits(chars);
-    //@ produce_limits(length);
     //@ chars_limits(chars);
     //@ chars_split(chars, index + n);
     //@ chars_split(chars + index + n, length - index - n);
