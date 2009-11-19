@@ -42,6 +42,16 @@ let rec head_flatmap f xs =
     match f x with
       [] -> head_flatmap f xs
     | y::ys -> Some y
+let extract f xs =
+  let rec iter xs' xs =
+    match xs with
+      [] -> None
+    | x::xs ->
+      match f x with
+        None -> iter (x::xs') xs
+      | Some y -> Some (y, xs'@xs)
+  in
+  iter [] xs
 
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
 let rec take n xs = if n = 0 then [] else match xs with x::xs -> x::take (n - 1) xs
@@ -4831,13 +4841,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
   
-  let array_slice_symb =
+  let (array_slice_symb, array_slice_deep_symb) =
     if language = Java then
-      let (_, _, _, _, symb, _) = List.assoc "java.lang.array_slice" predfammap in symb
+      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+      let (_, _, _, _, array_slice_deep_symb, _) = List.assoc "java.lang.array_slice_deep" predfammap in
+      (array_slice_symb, array_slice_deep_symb)
     else
-      get_unique_var_symb "#array_slice" (PredType ([], []))
+      (get_unique_var_symb "#array_slice" (PredType ([], [])), get_unique_var_symb "#array_slice_deep" (PredType ([], [])))
   in
 
+  let mk_nil () =
+    let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
+    ctxt#mk_app nil_symb []
+  in
+  
+  let mk_cons elem_tp head tail =
+    let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
+    ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+  in
+  
+  let mk_take n xs =
+    let (_, _, _, _, take_symb) = List.assoc "take" purefuncmap in
+    ctxt#mk_app take_symb [n; xs]
+  in
+  
+  let mk_drop n xs =
+    let (_, _, _, _, drop_symb) = List.assoc "drop" purefuncmap in
+    ctxt#mk_app drop_symb [n; xs]
+  in
+  
   let contextStack = ref ([]: 'termnode context list) in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
@@ -5583,13 +5615,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let rec iter rules =
                 match rules with
                   [] -> cont ()
-                | (rule_match_func, rule_exec_func)::rules ->
-                  if rule_match_func h targs ts then
-                    rule_exec_func h targs ts $. fun h ->
+                | rule::rules ->
+                  rule h targs ts $. fun h ->
+                  match h with
+                    None -> iter rules
+                  | Some h ->
                     with_context (Executing (h, env, l, "Consuming chunk (retry)")) $. fun () ->
                     assert_chunk_core_core h
-                  else
-                    iter rules
               in
               iter rules
             | None -> cont ()
@@ -5800,6 +5832,50 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         rules := rule::!rules
     in
     let (pn, ilist) = ("", []) in
+    (* rules for array slices *)
+    begin if language = Java then
+      let get_slice_rule h [elem_tp] [arr; istart; iend] cont =
+        let istartp1 = ctxt#mk_add istart (ctxt#mk_intlit 1) in
+        let is_unit_slice = ctxt#query (ctxt#mk_eq iend istartp1) in
+        if is_unit_slice then
+          match extract
+            begin function
+              (Chunk ((g, is_symb), [elem_tp'], coef, arr'::istart'::iend'::args_rest, _)) when
+                (g == array_slice_symb || g == array_slice_deep_symb) &&
+                definitely_equal arr' arr && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le iend iend')) &&
+                unify elem_tp elem_tp' ->
+              Some (g, coef, istart', iend', args_rest)
+            | _ -> None
+            end
+            h
+          with
+            None -> cont None
+          | Some ((g, coef, istart', iend', args_rest), h) ->
+            if g == array_slice_symb then
+              let [vs] = args_rest in
+              let split_after vs h =
+                let elem = get_unique_var_symb "elem" elem_tp in
+                let elems_tail = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+                assume (ctxt#mk_eq vs (mk_cons elem_tp elem elems_tail)) $. fun () ->
+                let chunk1 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil())], None) in
+                let chunk2 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; iend; iend'; elems_tail], None) in
+                cont (Some (chunk1::chunk2::h))
+              in
+              if ctxt#query (ctxt#mk_eq istart' istart) then
+                split_after vs h
+              else
+                let elems1 = mk_take (ctxt#mk_sub istart istart') vs in
+                let elems2 = mk_drop (ctxt#mk_sub istart istart') vs in
+                let chunk0 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart'; istart; elems1], None) in
+                split_after elems2 (chunk0::h)
+            else
+              cont None
+        else
+          cont None (* TODO: implement auto-splitting and auto-merging for non-unit slices *)
+      in
+      add_rule array_slice_symb get_slice_rule
+    end;
+    (* auto-open/close rules for chunks that contain other chunks *)
     List.iter
       begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
         let g = (symb, true) in
@@ -5836,7 +5912,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
           in
-          (match_func, exec_func)
+          let rule h targs ts cont =
+            if match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
+          in
+          rule
         in
         add_rule symb autoclose_rule;
         let autoopen_rule =
@@ -5863,7 +5942,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             assume_pred tpenv (pn,ilist) h ghostenv env wbody real_unit None None $. fun h ghostenv env ->
             cont h
           in
-          (match_func, exec_func)
+          let rule h targs ts cont =
+            if match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
+          in
+          rule
         in
         add_rule symb' autoopen_rule
       end

@@ -55,7 +55,6 @@ class ArrayTest {
         Object record0 = records[i];
         //@ open record(recordLength, record0, _);
         byte[] record = (byte[])record0;
-        //@ array_slice_split(record, 0, recordLength - 1);
         //@ produce_limits(recordLength);
         record[recordLength - 1] = 0;
         //@ array_slice_join(record, 0);
@@ -76,7 +75,6 @@ class ArrayTest {
         while (i < count)
             //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& array_slice(records, i, records.length, ?elems) &*& all_eq(elems, null) == true;
         {
-            //@ array_slice_split(records, i, i + 1);
             Object tmp = records[i];
             assert tmp == null;
             byte[] record = new byte[recordLength];
