@@ -8598,7 +8598,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let f_file_name = Filename.chop_extension g_file_name in
       let c_file_name = Filename.chop_extension (Filename.basename path) in
       let _ = 
-      (if auto && ((Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name)) then 
+      (if auto && (
+        (* case of C: *)
+        (Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name) or 
+        (* case of Java: *)
+        (g_file_name = "PureList.javaspec")) then 
         let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, _,fb,v) = (List.assoc g funcmap) in
         (match (pre, post) with
           (ExprPred(_, pre), ExprPred(_, post)) ->
