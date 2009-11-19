@@ -7365,8 +7365,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
           cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
       )
-    | WriteArray(l, arr, i, rhs) -> 
-        cont h env (* todo!!! *)
+    | WriteArray(l, arr, i, rhs) ->
+      if pure then static_error l "Cannot write in a pure context.";
+      let (arr, arrType) = check_expr (pn,ilist) tparams tenv arr in
+      let elem_tp = match arrType with ArrayType t -> t | _ -> static_error l "Array expected" in
+      let i = check_expr_t (pn,ilist) tparams tenv i IntType in
+      let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
+      eval_h h env arr $. fun h arr ->
+      eval_h h env i $. fun h i ->
+      eval_h h env rhs $. fun h rhs ->
+      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+      let i_plus_1 = ctxt#mk_add i (ctxt#mk_intlit 1) in
+      let pats = [TermPat arr; TermPat i; TermPat i_plus_1; SrcPat DummyPat] in
+      assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_slice_symb, true) [elem_tp] real_unit real_unit_pat (Some 3) pats $. fun h _ [_; _; _; elems] _ _ _ _ ->
+      let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
+      let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
+      let elems' = ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive rhs; ctxt#mk_app nil_symb []] in
+      cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [arr; i; i_plus_1; elems'], None)::h) env
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (w, pointerType) = check_expr (pn,ilist) tparams tenv e in
