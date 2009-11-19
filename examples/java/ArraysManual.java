@@ -5,9 +5,6 @@ class ArrayTest {
         //@ requires records != null &*& array_slice_deep(records, 0, records.length, record, recordLength, ?rs, _) &*& 0 <= i &*& i < records.length &*& 0 < recordLength;
         //@ ensures array_slice_deep(records, 0, records.length, record, recordLength, _, _);
     {
-        //@ array_slice_deep_split(records, 0, i);
-        //@ array_slice_deep_split(records, i, i + 1);
-        //@ array_slice_deep_open(records, i);
         Object record0 = records[i];
         //@ open record(recordLength, record0, _);
         byte[] record = (byte[])record0;

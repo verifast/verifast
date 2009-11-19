@@ -2355,6 +2355,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (ProverInductive, ProverBool) -> ctxt#mk_unboxed_bool t
     | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
     | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
+    | (t1, t2) when t1 = t2 -> t
   in
   
   let programDir = Filename.dirname path in
@@ -5844,37 +5845,54 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if is_unit_slice then
           match extract
             begin function
-              (Chunk ((g, is_symb), [elem_tp'], coef, arr'::istart'::iend'::args_rest, _)) when
+              (Chunk ((g, is_symb), elem_tp'::targs_rest, coef, arr'::istart'::iend'::args_rest, _)) when
                 (g == array_slice_symb || g == array_slice_deep_symb) &&
                 definitely_equal arr' arr && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le iend iend')) &&
                 unify elem_tp elem_tp' ->
-              Some (g, coef, istart', iend', args_rest)
+              Some (g, targs_rest, coef, istart', iend', args_rest)
             | _ -> None
             end
             h
           with
             None -> cont None
-          | Some ((g, coef, istart', iend', args_rest), h) ->
+          | Some ((g, targs_rest, coef, istart', iend', args_rest), h) ->
             if g == array_slice_symb then
-              let [vs] = args_rest in
-              let split_after vs h =
+              let [elems] = args_rest in
+              let split_after elems h =
                 let elem = get_unique_var_symb "elem" elem_tp in
                 let elems_tail = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
-                assume (ctxt#mk_eq vs (mk_cons elem_tp elem elems_tail)) $. fun () ->
+                assume (ctxt#mk_eq elems (mk_cons elem_tp elem elems_tail)) $. fun () ->
                 let chunk1 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil())], None) in
                 let chunk2 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; iend; iend'; elems_tail], None) in
                 cont (Some (chunk1::chunk2::h))
               in
               if ctxt#query (ctxt#mk_eq istart' istart) then
-                split_after vs h
+                split_after elems h
               else
-                let elems1 = mk_take (ctxt#mk_sub istart istart') vs in
-                let elems2 = mk_drop (ctxt#mk_sub istart istart') vs in
+                let elems1 = mk_take (ctxt#mk_sub istart istart') elems in
+                let elems2 = mk_drop (ctxt#mk_sub istart istart') elems in
                 let chunk0 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart'; istart; elems1], None) in
                 split_after elems2 (chunk0::h)
             else
-              cont None
-        else
+              let [ta; tv] = targs_rest in
+              let [p; a; elems; vs] = args_rest in
+              let n1 = ctxt#mk_sub istart istart' in
+              let elems1 = mk_take n1 elems in
+              let vs1 = mk_take n1 vs in
+              let elems2 = mk_drop n1 elems in
+              let vs2 = mk_drop n1 vs in
+              let elem = get_unique_var_symb "elem" elem_tp in
+              let tail_elems2 = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+              let v = get_unique_var_symb "value" tv in
+              let tail_vs2 = get_unique_var_symb "values" (InductiveType ("list", [tv])) in
+              assume (ctxt#mk_eq elems2 (mk_cons elem_tp elem tail_elems2)) $. fun () ->
+              assume (ctxt#mk_eq vs2 (mk_cons tv v tail_vs2)) $. fun () ->
+              let before_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; istart'; istart; p; a; elems1; vs1], None) in
+              let slice_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; iend; iend'; p; a; tail_elems2; tail_vs2], None) in
+              let after_chunk = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil ())], None) in
+              let p_chunk = Chunk ((p, false), [], coef, [a; elem; v], None) in
+              cont (Some (slice_chunk::p_chunk::after_chunk::before_chunk::h))
+        else (* is_unit_slice *)
           cont None (* TODO: implement auto-splitting and auto-merging for non-unit slices *)
       in
       add_rule array_slice_symb get_slice_rule
