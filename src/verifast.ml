@@ -4828,6 +4828,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let prover_convert_term term t t0 =
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
+  
+  let array_slice_symb =
+    if language = Java then
+      let (_, _, _, _, symb, _) = List.assoc "java.lang.array_slice" predfammap in symb
+    else
+      get_unique_var_symb "#array_slice" (PredType ([], []))
+  in
 
   let contextStack = ref ([]: 'termnode context list) in
   
@@ -6607,6 +6614,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
       | Some v -> cont h v
       end
+    | ReadArray (l, arr, i) ->
+      iter h arr $. fun h arr ->
+      iter h i $. fun h i ->
+      let elem_tp = InferredType (ref None) in
+      let i_plus_1 = ctxt#mk_add i (ctxt#mk_intlit 1) in
+      let pats = [TermPat arr; TermPat i; TermPat i_plus_1; SrcPat DummyPat] in
+      assert_chunk rules (pn,ilist) h [] [] [] l (array_slice_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 3) pats $. fun h coef [_; _; _; elems] _ _ _ _ ->
+      let elem_tp = unfold_inferred_type elem_tp in
+      let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
+      let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
+      let elem = get_unique_var_symb "elem" elem_tp in
+      let elems' = ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive elem; ctxt#mk_app nil_symb []] in
+      assume (ctxt#mk_eq elems elems') $. fun () ->
+      cont (Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; i; i_plus_1; elems], None)::h) elem
     | Operation (l, Not, [e], ts) -> eval_h (pn,ilist) is_ghost_expr h env e (fun h v -> cont h (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
         eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
