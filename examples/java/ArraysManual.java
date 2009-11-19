@@ -8,7 +8,6 @@ class ArrayTest {
         Object record0 = records[i];
         //@ open record(recordLength, record0, _);
         byte[] record = (byte[])record0;
-        //@ produce_limits(recordLength);
         record[recordLength - 1] = 0;
         //@ array_slice_join(record, 0);
         //@ close record(recordLength, record0, _);
@@ -22,7 +21,6 @@ class ArrayTest {
         //@ ensures array_slice_deep(result, 0, result.length, record, recordLength, _, _);
     {
         Object[] records = new Object[count];
-        //@ produce_limits(count);
         int i = 0;
         //@ array_slice_deep_empty_close(records, 0, record, recordLength);
         while (i < count)
