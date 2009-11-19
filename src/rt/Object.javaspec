@@ -19,6 +19,46 @@ lemma void assume(boolean b);
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
 predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T, V) p, A info, list<T> elements, list<V> values);
 
+lemma_auto void array_slice_inv<T>();
+    requires [?f]array_slice<T>(?array, ?start, ?end, ?elems);
+    ensures [f]array_slice<T>(array, start, end, elems) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end;
+
+lemma void array_slice_deep_close<T, A, V>(T[] array, int start, predicate(A, T, V) p, A a);
+    requires array_slice<T>(array, start, start + 1, ?elems) &*& p(a, head(elems), ?v);
+    ensures array_slice_deep<T, A, V>(array, start, start + 1, p, a, elems, cons(v, nil));
+
+lemma void array_slice_deep_open<T, A, V>(T[] array, int start);
+    requires array_slice_deep<T, A, V>(array, start, start + 1, ?p, ?a, ?elems, ?vs);
+    ensures array_slice<T>(array, start, start + 1, elems) &*& p(a, head(elems), head(vs));
+
+lemma void array_slice_split<T>(T[] array, int start, int start1);
+    requires array_slice<T>(array, start, ?end, ?elems) &*& start <= start1 &*& start1 <= end;
+    ensures
+        array_slice<T>(array, start, start1, take(start1 - start, elems)) &*&
+        array_slice<T>(array, start1, end, drop(start1 - start, elems)) &*&
+        elems == append(take(start1 - start, elems), drop(start1 - start, elems));
+
+lemma void array_slice_join<T>(T[] array, int start);
+    requires
+        array_slice<T>(array, start, ?start1, ?elems1) &*& array_slice<T>(array, start1, ?end, ?elems2);
+    ensures array_slice<T>(array, start, end, append(elems1, elems2));
+
+lemma void array_slice_deep_split<T, A, V>(T[] array, int start, int start1);
+    requires array_slice_deep<T, A, V>(array, start, ?end, ?p, ?a, ?elems, ?vs) &*& start <= start1 &*& start1 <= end;
+    ensures
+        array_slice_deep<T, A, V>(array, start, start1, p, a, take(start1 - start, elems), take(start1 - start, vs)) &*&
+        array_slice_deep<T, A, V>(array, start1, end, p, a, drop(start1 - start, elems), drop(start1 - start, vs));
+
+lemma void array_slice_deep_join<T, A, V>(T[] array, int start);
+    requires
+        array_slice_deep<T, A, V>(array, start, ?start1, ?p, ?a, ?elems1, ?vs1) &*&
+        array_slice_deep<T, A, V>(array, start1, ?end, p, a, ?elems2, ?vs2);
+    ensures array_slice_deep<T, A, V>(array, start, end, p, a, append(elems1, elems2), append(vs1, vs2));
+
+lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate(A, T, V) p, A a);
+    requires array != null &*& 0 <= start &*& start <= array.length;
+    ensures array_slice_deep<T, A, V>(array, start, start, p, a, nil, nil);
+
 @*/
 
 public class Object {

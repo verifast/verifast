@@ -5386,11 +5386,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let domain = instantiate_types tpenv types in
       evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
         if Hashtbl.mem auto_lemmas (g#name) && not assuming then
-          let (frac, xs1, xs2, pre, post) = Hashtbl.find auto_lemmas (g#name) in
-          match (frac, coef) with (* is tpenv the right type environment? :-/ *)
-            (None, real_unit) -> assume_pred_core tpenv (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
-          | (Some f, coef) -> assume_pred_core tpenv (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
-          | _ -> assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+          let (frac, tparams, xs1, xs2, pre, post) = Hashtbl.find auto_lemmas (g#name) in
+          match frac with
+            None -> 
+              if coef == real_unit then 
+                assume_pred_core (zip2 tparams targs) (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+              else
+                assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+          | Some(f) ->
+                assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
         else
           assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
       )
@@ -8527,6 +8531,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
   
   (* Region: verification of function bodies *)
+  and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
+    match (pre, post) with
+    (ExprPred(_, pre), ExprPred(_, post)) ->
+      let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
+      let xs = Array.to_list xs in
+      let Some(env) = zip (List.map fst ps) xs in
+      let t_pre = eval (pn,ilist) None env pre in
+      let t_post = eval (pn,ilist) None env post in
+      let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
+      let trigger = (
+      match trigger with
+        None -> []
+      | Some(trigger) -> 
+          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
+          [eval (pn,ilist) None env trigger]
+      ) in
+      (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+  | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
+      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
+  | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
+      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
+  | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g)
   
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
@@ -8601,33 +8629,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let _ = pop() in
     let _ = 
       (match k with
-        Lemma(true, trigger) -> 
-          (match (pre, post) with
-            (ExprPred(_, pre), ExprPred(_, post)) ->
-              let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
-              let xs = Array.to_list xs in
-              let Some(env) = zip (List.map fst ps) xs in
-              let t_pre = eval (pn,ilist) None env pre in
-              let t_post = eval (pn,ilist) None env post in
-              let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
-              let trigger = (
-              match trigger with
-                None -> []
-              | Some(trigger) -> 
-                  let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
-                  [eval (pn,ilist) None env trigger]
-              ) in
-              (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
-          | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) -> 
-              (Hashtbl.add auto_lemmas (p_ref#name) (None, List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
-          | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) ->
-              (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
-          | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g))
+        Lemma(true, trigger) -> create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       | _ -> ()
     ) in
     lems'
   in
-  
   let switch_stmt ss env=
     match ss with
       [SwitchStmt (_, Var (_, x, _), _)] ->
@@ -8767,28 +8773,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let _ = 
       (if auto && (
         (* case of C: *)
-        (Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name) or 
+          (Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name) or 
         (* case of Java: *)
-        (g_file_name = "PureList.javaspec")) then 
-        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
-        (match (pre, post) with
-          (ExprPred(_, pre), ExprPred(_, post)) ->
-            let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
-            let xs = Array.to_list xs in
-            let Some(env) = zip (List.map fst ps) xs in
-            let t_pre = eval (pn,ilist) None env pre in
-            let t_post = eval (pn,ilist) None env post in
-            let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
-            let _ = register_prototype_used l g in
-            let trigger = (
-              match trigger with
-                None -> []
-              | Some(trigger) -> 
-                  let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
-                  [eval (pn,ilist) None env trigger]
-            ) in
-            (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
-        | _ -> static_error l "public invariants not supported here yet") (*(Hashtbl.add auto_lemmas fterm ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v)))*)
+          (g_file_name = "PureList.javaspec") or
+          (g_file_name = "Object.javaspec")) 
+        then 
+          let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
+          create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       ) in 
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
