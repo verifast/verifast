@@ -4987,7 +4987,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin
             match read_field with
               None -> static_error l "Cannot mention global variables in this context."
-            | Some (read_field, deref_pointer, read_array) ->
+            | Some (read_field, read_static_field, deref_pointer, read_array) ->
                 let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
                   deref_pointer l symbol tp
           end
@@ -5129,29 +5129,34 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_false [] env l "target of arraylength expression might be null"
         else
           ctxt#mk_app arraylength_symbol [t]
-      else if f#static && f#value <> None then
+      else if f#static then
+        if f#value <> None then
         match get f#value with
           IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
         | StringConst s -> static_error l "String constants are not yet supported."
         | NullConst -> ctxt#mk_intlit 0
+        else
+        match read_field with
+          None -> static_error l "Cannot use field read expression in this context."
+        | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l f
       else
         begin
           match read_field with
             None -> static_error l "Cannot use field dereference in this context."
-          | Some (read_field, deref_pointer, read_array) -> read_field l (ev e) f
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_field l (ev e) f
         end
     | ReadArray(l, arr, i) ->
       begin
         match read_field with
           None -> static_error l "Cannot use array indexing in this context."
-        | Some (read_field, deref_pointer, read_array) -> read_array l (ev arr) (ev i)
+        | Some (read_field, read_static_field, deref_pointer, read_array) -> read_array l (ev arr) (ev i)
       end
     | Deref (l, e, t) ->
       begin
         match read_field with
           None -> static_error l "Cannot use field dereference in this context."
-        | Some (read_field, deref_pointer, read_array) ->
+        | Some (read_field, read_static_field, deref_pointer, read_array) ->
           let (Some t) = !t in
           deref_pointer l (ev e) t
       end
@@ -5572,6 +5577,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let read_field h env l t f =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
+  in
+  
+  let read_static_field h env l f =
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+    match extract (function Chunk (g, targs, coef, arg0::args, size) when predname_eq (f_symb, true) g -> Some arg0 | _ -> None) h with
+      None -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
+    | Some (v, _) -> v
   in
   
   let read_array h env l a i =
@@ -6000,69 +6012,69 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 cont (Some(chunk_before :: thechunk :: chunk_after :: curr_h))
               end
       in
-      let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info; elems; vs] cont = 
+      let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info] cont = 
         let _ = printff "trying array slice deep\n" in
         if definitely_equal istart iend then (* create empty array by default *)
-          cont (Some((Chunk((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; elems; vs], None)) :: h))
-        else cont None
-       (* match extract
+          cont (Some((Chunk((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)) :: h))
+        else
+          match extract
             begin function
               (Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _)) when
                 (g' == array_slice_deep_symb) && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
-                definitely_equal arr' arr  (*&& definitely_equal p p' && definitely_equal info info'*) && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend'))->
-              Some (g', [a_tp'; v_tp'], coef', istart', iend', [p'; info'; elems'; vs'])
+                definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend')) ->
+              Some (coef', istart', iend', elems', vs')
             | _ -> None
             end
             h
-        with
-          None -> let _ = printff "no basic match\n" in cont None
-        | Some (((g', [a_tp'; v_tp'], coef', istart', iend', [p'; info'; elems'; vs']) as ch), h0) -> 
-          let rec find_slices curr_end curr_elems curr_vs curr_chunk curr_h =
-            if ctxt#query (ctxt#mk_le iend curr_end) then
-              (* found a list of chunks all the way to the end *)
-              (Some(curr_end, curr_elems, curr_vs, curr_chunk, curr_h))
-            else
-              (* need to consume more chunks *)
-            match extract
-              begin function
-                (Chunk ((g'', is_symb), [elem_tp''; a_tp''; v_tp''], coef'',  [arr''; istart''; iend''; p''; info''; elems''; vs''], _)) when
-                  (g'' == array_slice_deep_symb) && definitely_equal coef' coef'' &&
-                  definitely_equal arr'' arr && definitely_equal p' p'' (*&& definitely_equal info' info''*)  && ctxt#query (ctxt#mk_eq istart'' curr_end) &&
-                  unify elem_tp elem_tp'' && unify a_tp a_tp'' && unify v_tp v_tp''->
-                Some (g'', [a_tp''; v_tp''], coef'', istart'', iend'', [p''; info''; elems''; vs''])
-              | _ -> None
-              end
-              curr_h
-            with
-              None -> None
-            | Some(((g'', [a_tp''; v_tp''], coef'', istart'', iend'', [p''; info''; elems''; vs'']) as new_curr_chunk), h_rest) ->
-                let (_, _, _, strt, _, [_; _; els; vss]) = curr_chunk in
-                find_slices iend''
-                (mk_append curr_elems (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) els) else els)) 
-                (mk_append curr_vs (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) vss) else vss)) 
-                new_curr_chunk h_rest
-          in
-          begin
-            match find_slices iend' (mk_nil()) (mk_nil()) ch h0 with
-              None -> let _ = printff "cannot complete\n" in cont None
-            | Some(curr_end, curr_elems, curr_vs, (g'', [a_tp''; v_tp''], coef'', istart'', iend'', [p''; info''; elems''; vs'']) , curr_h) ->
-              let chunk_elems = (if ctxt#query (ctxt#mk_le iend iend') then
-                  mk_take (ctxt#mk_sub iend istart) curr_elems
-                else
-                  mk_append curr_elems  (mk_take (ctxt#mk_sub iend istart'') elems'')
-              )
-              in
-              let chunk_vs = (if ctxt#query (ctxt#mk_le iend iend') then
-                  mk_take (ctxt#mk_sub iend istart) curr_vs
-                else
-                  mk_append curr_vs (mk_take (ctxt#mk_sub iend istart'') vs'')
-              )
-              in
-              let chunk_before = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart'; istart; p; info; mk_take (ctxt#mk_sub istart istart') elems'; mk_take (ctxt#mk_sub istart istart') vs'], None) in
-              let thechunk = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart; iend; p; info; chunk_elems; chunk_vs], None) in
-              let chunk_after = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; iend; iend''; p; info; mk_drop (ctxt#mk_sub iend istart'') elems''; mk_drop (ctxt#mk_sub iend istart'') vs''], None) in
-              cont (Some(chunk_before :: thechunk :: chunk_after :: curr_h))
-          end*)
+          with
+            None -> let _ = printff "no basic match\n" in cont None
+          | Some (((coef', istart', iend', elems', vs') as ch), h0) -> 
+            let rec find_slices curr_end curr_elems curr_vs curr_chunk curr_h =
+              if ctxt#query (ctxt#mk_le iend curr_end) then
+                (* found a list of chunks all the way to the end *)
+                (Some(curr_end, curr_elems, curr_vs, curr_chunk, curr_h))
+              else
+                (* need to consume more chunks *)
+              match extract
+                begin function
+                  (Chunk ((g'', is_symb), [elem_tp''; a_tp''; v_tp''], coef'',  [arr''; istart''; iend''; p''; info''; elems''; vs''], _)) when
+                    (g'' == array_slice_deep_symb) && definitely_equal coef' coef'' &&
+                    definitely_equal arr'' arr && definitely_equal p p'' && definitely_equal info info''  && ctxt#query (ctxt#mk_eq istart'' curr_end) &&
+                    unify elem_tp elem_tp'' && unify a_tp a_tp'' && unify v_tp v_tp''->
+                  Some (coef'', istart'', iend'', elems'', vs'')
+                | _ -> None
+                end
+                curr_h
+              with
+                None -> None
+              | Some(((coef'', istart'', iend'', elems'', vs'') as new_curr_chunk), h_rest) ->
+                  let (_, strt, _, els, vss) = curr_chunk in
+                  find_slices iend''
+                  (mk_append curr_elems (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) els) else els)) 
+                  (mk_append curr_vs (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) vss) else vss)) 
+                  new_curr_chunk h_rest
+            in
+            begin
+              match find_slices iend' (mk_nil()) (mk_nil()) ch h0 with
+                None -> let _ = printff "cannot complete\n" in cont None
+              | Some(curr_end, curr_elems, curr_vs, (coef'', istart'', iend'', elems'', vs''), curr_h) ->
+                let chunk_elems = (if ctxt#query (ctxt#mk_le iend iend') then
+                    mk_take (ctxt#mk_sub iend istart) curr_elems
+                  else
+                    mk_append curr_elems  (mk_take (ctxt#mk_sub iend istart'') elems'')
+                )
+                in
+                let chunk_vs = (if ctxt#query (ctxt#mk_le iend iend') then
+                    mk_take (ctxt#mk_sub iend istart) curr_vs
+                  else
+                    mk_append curr_vs (mk_take (ctxt#mk_sub iend istart'') vs'')
+                )
+                in
+                let chunk_before = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart'; istart; p; info; mk_take (ctxt#mk_sub istart istart') elems'; mk_take (ctxt#mk_sub istart istart') vs'], None) in
+                let thechunk = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart; iend; p; info; chunk_elems; chunk_vs], None) in
+                let chunk_after = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; iend; iend''; p; info; mk_drop (ctxt#mk_sub iend istart'') elems''; mk_drop (ctxt#mk_sub iend istart'') vs''], None) in
+                cont (Some(chunk_before :: thechunk :: chunk_after :: curr_h))
+            end
       in
       begin
       add_rule array_slice_symb get_slice_rule;
@@ -6854,7 +6866,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let eval_non_pure (pn,ilist) is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
-    eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l p t -> deref_pointer h env l p t), (fun l a i -> read_array h env l a i))) env e
+    eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l f -> read_static_field h env l f), (fun l p t -> deref_pointer h env l p t), (fun l a i -> read_array h env l a i))) env e
   in 
   
   let rec eval_h (pn,ilist) is_ghost_expr h env e cont =
@@ -7670,12 +7682,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Write (l, e, f, rhs) ->
       let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-      eval_h h env w (fun h t ->
-        let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-        get_field (pn,ilist) h t f l (fun h coef _ ->
-          if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-          cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
-      )
+      let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+      if not f#static then
+        eval_h h env w (fun h t ->
+          get_field (pn,ilist) h t f l (fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
+            cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
+        )
+      else
+        assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun h _ _ _ _ _ _ ->
+        cont (Chunk ((f_symb, true), [], real_unit, [ev wrhs], None)::h) env
     | WriteArray(l, arr, i, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (arr, arrType) = check_expr (pn,ilist) tparams tenv arr in

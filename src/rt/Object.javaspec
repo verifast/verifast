@@ -17,7 +17,7 @@ lemma void assume(boolean b);
     ensures b;
 
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
-predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T, V) p, A info, list<T> elements, list<V> values);
+predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T, V) p, A info; list<T> elements, list<V> values);
 
 lemma_auto void array_slice_inv<T>();
     requires [?f]array_slice<T>(?array, ?start, ?end, ?elems);

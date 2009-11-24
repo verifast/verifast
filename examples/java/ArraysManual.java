@@ -1,6 +1,12 @@
-//@ predicate record(int recordLength, Object record, unit value) = array_slice((byte[])record, 0, recordLength, _) &*& value == unit;
+//@ predicate record(int recordLength, Object record; unit value) = array_slice((byte[])record, 0, recordLength, _) &*& value == unit;
 
 class ArrayTest {
+    static void arraytest(Object[] a, int i)
+      //@ requires 0<= i &*& array_slice(a, 0, i + 10, ?l) &*& array_slice(a, i + 10, i + 20, ?l2) &*& array_slice(a, i + 20, i + 35, ?l3);
+      //@ ensures array_slice(a, i, i + 30, append(append(drop(i,l), l2),take(10,l3))) &*& array_slice(a, 0, i, take(i, l)) &*& array_slice(a, i + 30, i + 35, drop(10, l3));
+      {
+      }
+    
     static void deleteRecord(Object[] records, int recordLength, int i)
         //@ requires records != null &*& array_slice_deep(records, 0, records.length, record, recordLength, ?rs, _) &*& 0 <= i &*& i < records.length &*& 0 < recordLength;
         //@ ensures array_slice_deep(records, 0, records.length, record, recordLength, _, _);
@@ -8,11 +14,8 @@ class ArrayTest {
         Object record0 = records[i];
         byte[] record = (byte[])record0;
         record[recordLength - 1] = 0;
-        //@ array_slice_join(record, 0);
         //@ close record(recordLength, record0, _);
         //@ array_slice_deep_close(records, i, @record, recordLength);
-        //@ array_slice_deep_join(records, 0);
-        //@ array_slice_deep_join(records, 0);
     }
     
     static Object[] createRecords(int count, int recordLength)
@@ -21,7 +24,6 @@ class ArrayTest {
     {
         Object[] records = new Object[count];
         int i = 0;
-        //@ array_slice_deep_empty_close(records, 0, record, recordLength);
         while (i < count)
             //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& array_slice(records, i, records.length, ?elems) &*& all_eq(elems, null) == true;
         {
@@ -31,7 +33,6 @@ class ArrayTest {
             records[i] = record;
             //@ close record(recordLength, record, _);
             //@ array_slice_deep_close(records, i, @record, recordLength);
-            //@ array_slice_deep_join(records, 0);
             i++;
         }
         return records;
