@@ -5424,7 +5424,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
-      evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
+      evalpats (pn,ilist) ghostenv env (pats0 @ pats) (if assuming then domain else types) domain (fun ghostenv env ts ->
         if Hashtbl.mem auto_lemmas (g#name) && not assuming then
           let (frac, tparams, xs1, xs2, pre, post) = Hashtbl.find auto_lemmas (g#name) in
           match frac with
@@ -6013,7 +6013,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               end
       in
       let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info] cont = 
-        let _ = printff "trying array slice deep\n" in
         if definitely_equal istart iend then (* create empty array by default *)
           cont (Some((Chunk((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)) :: h))
         else
@@ -6027,7 +6026,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             end
             h
           with
-            None -> let _ = printff "no basic match\n" in cont None
+            None -> cont None
           | Some (((coef', istart', iend', elems', vs') as ch), h0) -> 
             let rec find_slices curr_end curr_elems curr_vs curr_chunk curr_h =
               if ctxt#query (ctxt#mk_le iend curr_end) then
@@ -6056,7 +6055,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             begin
               match find_slices iend' (mk_nil()) (mk_nil()) ch h0 with
-                None -> let _ = printff "cannot complete\n" in cont None
+                None -> cont None
               | Some(curr_end, curr_elems, curr_vs, (coef'', istart'', iend'', elems'', vs''), curr_h) ->
                 let chunk_elems = (if ctxt#query (ctxt#mk_le iend iend') then
                     mk_take (ctxt#mk_sub iend istart) curr_elems
@@ -6078,7 +6077,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       begin
       add_rule array_slice_symb get_slice_rule;
-      add_rule array_slice_deep_symb get_slice_deep_rule (* does not work properly yet *)
+      add_rule array_slice_deep_symb get_slice_deep_rule
       end
     end;
     (* auto-open/close rules for chunks that contain other chunks *)
