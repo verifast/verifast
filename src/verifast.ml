@@ -5409,34 +5409,43 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let te = ev e in
       evalpat (pn,ilist) ghostenv env rhs f#range f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
     | WCallPred (l, g, targs, pats0, pats) ->
-      let (g_symb, pats0, pats, types) =
+      let (g_symb, pats0, pats, types, auto_info) =
         match try_assoc g#name predfammap with
-          Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
+          Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
         | None ->
           begin match try_assoc g#name env with
-            Some term -> ((term, false), pats0, pats, g#domain)
+            Some term -> ((term, false), pats0, pats, g#domain, None)
           | None ->
             let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
             let g_symb = ctxt#mk_app funcsym ctorargs in
-            ((g_symb, false), [], pats, List.map snd ps2)
+            ((g_symb, false), [], pats, List.map snd ps2, None)
           end
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
-      evalpats (pn,ilist) ghostenv env (pats0 @ pats) (if assuming then domain else types) domain (fun ghostenv env ts ->
-        if Hashtbl.mem auto_lemmas (g#name) && not assuming then
-          let (frac, tparams, xs1, xs2, pre, post) = Hashtbl.find auto_lemmas (g#name) in
+      evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
+        let do_assume_chunk () = assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env) in
+        match
+          if assuming then None else
+          match auto_info with
+            None -> None
+          | Some (predName, declared_paramtypes) ->
+            try
+              Some (Hashtbl.find auto_lemmas predName, declared_paramtypes)
+            with Not_found -> None
+        with
+          None -> do_assume_chunk ()
+        | Some ((frac, tparams, xs1, xs2, pre, post), declared_paramtypes) ->
+          let ts = List.map (fun (t, (tp0, tp)) -> prover_convert_term t tp0 tp) (zip2 ts (zip2 domain declared_paramtypes)) in
           match frac with
             None -> 
-              if coef == real_unit then 
-                assume_pred_core (zip2 tparams targs) (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
-              else
-                assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+            if coef == real_unit then 
+              assume_pred_core (zip2 tparams targs) (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+            else
+              do_assume_chunk ()
           | Some(f) ->
-                assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
-        else
-          assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env)
+            assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
       )
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
     | Sep (l, p1, p2) -> assume_pred_core tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all assuming (fun h ghostenv env -> assume_pred_core tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all assuming cont)
