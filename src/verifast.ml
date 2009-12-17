@@ -5005,7 +5005,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_overflow l min_char_term (ev e) max_char_term
         | (e, ShortType) ->
           check_overflow l min_short_term (ev e) max_short_term
-        | _ -> ev e
+        | _ -> ev e (* BUGBUG: This is fishy *)
       end
     | IntLit (l, n, t) ->
       begin match !t with
@@ -7309,7 +7309,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont h retval
       in
       match e with
-      | CastExpr (l, te, e) ->
+      | CastExpr (l, te, (CallExpr (_, "malloc", _, _, _, _) as e)) ->
         let t = check_pure_type (pn,ilist) tparams te in
         verify_expr (Some t) xo e $. fun h (Some (v, _)) ->
         check_type h (Some (v, t))

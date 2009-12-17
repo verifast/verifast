@@ -1,5 +1,5 @@
 #include "stdlib.h"
-#include "list.h"
+#include "assert.h"
 
 struct node {
     struct node *next;
@@ -17,7 +17,7 @@ struct node *cons(int value, struct node *next)
     //@ requires list(next, ?tail);
     //@ ensures list(result, cons(value, tail));
 {
-    struct node *result = malloc(sizeof(struct node));
+    struct node *result = (struct node *)malloc(sizeof(struct node)); // Include the cast to make it a valid C++ program
     if (result == 0) { abort(); }
     result->value = value;
     result->next = next;
