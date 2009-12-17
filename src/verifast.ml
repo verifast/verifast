@@ -7298,7 +7298,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, body,v) cont
       ) 
     in 
-    let verify_expr typ0 xo e cont =
+    let rec verify_expr typ0 xo e cont =
       let l = expr_loc e in
       let check_type h retval =
         begin match (typ0, retval) with
@@ -7309,6 +7309,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont h retval
       in
       match e with
+      | CastExpr (l, te, e) ->
+        let t = check_pure_type (pn,ilist) tparams te in
+        verify_expr (Some t) xo e $. fun h (Some (v, _)) ->
+        check_type h (Some (v, t))
       | CallExpr (l, "malloc", [], [], args,Static) ->
         begin match args with
           [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
