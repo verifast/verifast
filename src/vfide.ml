@@ -311,6 +311,7 @@ let show_ide initialPath prover =
       let chunks = iter() in
       let text = String.concat "" chunks in
       let _ = close_in chan in
+      let text = if startswith text "\xEF\xBB\xBF" then String.sub text 3 (String.length text - 3) else text in (* Remove UTF-8 BOM (Byte Order Mark) *)
       ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in

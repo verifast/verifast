@@ -216,6 +216,7 @@ let readFile path =
       iter2 chunks (offset + size)
   in
   iter2 chunks 0;
+  let s = if startswith s "\xEF\xBB\xBF" then String.sub s 3 (String.length s - 3) else s in (* Remove UTF-8 BOM (Byte Order Mark) *)
   s
 
 type token =
