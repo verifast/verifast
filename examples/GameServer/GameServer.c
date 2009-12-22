@@ -12,11 +12,7 @@ struct game {
 
 struct session {
   struct socket* socket;
-  struct globals* globals;
-};
-
-struct globals {
-  struct game* games;
+  struct game** games;
   struct lock* games_lock;
 };
 
@@ -45,7 +41,7 @@ void run_game(struct game* game)
     writer_write_string(writer2, "Waiting for other player to make a choice ...\r\n");
     number1 = reader_read_nonnegative_integer(reader1);
     writer_write_string(writer2, "Select rock (1), paper (2) or scissors (_).\r\n");
-    writer_write_string(writer2, "Waiting for other player to make a choice ...\r\n");
+    writer_write_string(writer1, "Waiting for other player to make a choice ...\r\n");
     number2 = reader_read_nonnegative_integer(reader2);
     if(number1 == number2) {
       writer_write_string(writer1, "The other player selected the same option. Try again.\r\n");
@@ -67,8 +63,8 @@ void run_game(struct game* game)
 }
 
 /*@
-predicate_ctor globs(struct globals* globals)() = 
-  globals->games |-> ?game &*& gamelist(game);
+predicate_ctor lock_invariant(struct game** games)() = 
+  pointer(games, ?game) &*& gamelist(game);
 
 predicate gamelist(struct game* game) =
    game == 0 ? 
@@ -79,7 +75,7 @@ predicate gamelist(struct game* game) =
     
 predicate_family_instance thread_run_data(handle_connection)(struct session* session) =
   session->socket |-> ?s &*& socket(s, ?reader, ?writer) &*& reader(reader) &*& writer(writer) &*&
-  session->globals |-> ?globals &*& [?f]globals->games_lock |-> ?l &*& [f]lock(l, ?id, globs(globals)) &*&
+  session->games_lock |-> ?l &*& session->games |-> ?games &*& [?f]lock(l, ?id, lock_invariant(games)) &*&
   malloc_block_session(session);
 @*/
 
@@ -88,7 +84,10 @@ void handle_connection(struct session* session) //@: thread_run
   //@ ensures lockset(currentThread, nil);
 {
   //@ open thread_run_data(handle_connection)(session);
-  int choice; struct globals* globals;
+  int choice;
+  struct socket* socket = session->socket;
+  struct lock* games_lock = session->games_lock;
+  struct game** games = session->games;
   struct reader* reader = socket_get_reader(session->socket);
   struct writer* writer = socket_get_writer(session->socket);
   writer_write_string(writer, "Welcome to our Game Server!\r\n");
@@ -112,42 +111,40 @@ void handle_connection(struct session* session) //@: thread_run
     game->name = name;
     game->next = 0;
     game->player1 = session->socket;
-    lock_acquire(session->globals->games_lock);
-    //@ open globs(session->globals)();
-    game->next = session->globals->games;   
-    session->globals->games = game;
+    lock_acquire(games_lock);
+    //@ open lock_invariant(games)();
+    game->next = *games;   
+    *games = game;
     writer_write_string(writer, "Game created, waiting for another player ...\r\n");
     //@ close gamelist(game);
-    //@ close globs(session->globals)();
-    lock_release(session->globals->games_lock);
+    //@ close lock_invariant(games)();
+    lock_release(games_lock);
   } else if(choice == 2) {
     writer_write_string(writer, "Joining ...\r\n");
-    lock_acquire(session->globals->games_lock);
-    //@ open globs(session->globals)();
-    if(session->globals->games == 0) {
+    lock_acquire(games_lock);
+    //@ open lock_invariant(games)();
+    if(*games == 0) {
       // add possibility to let players pick a game from a list
-      //@ close globs(session->globals)();
-      lock_release(session->globals->games_lock);
+      //@ close lock_invariant(games)();
+      lock_release(games_lock);
       writer_write_string(writer, "Sorry, no games are available.\r\n");
-      socket_close(session->socket); // player should be given the option to create a game here
+      socket_close(socket); // player should be given the option to create a game here
     } else {
-      struct game* my_game = session->globals->games;
-      //@ open gamelist(my_game);
-      session->globals->games = my_game->next;
-      //@ close globs(session->globals)();
-      lock_release(session->globals->games_lock);
-      my_game->player2 = session->socket;
+      struct game* game = *games;
+      //@ open gamelist(game);
+      *games = game->next;
+      //@ close lock_invariant(games)();
+      lock_release(games_lock);
+      game->player2 = socket;
       writer_write_string(writer, "You have joined game ");
-      writer_write_string(writer, my_game->name);
+      writer_write_string(writer, game->name);
       writer_write_string(writer, " ...\r\n");
-      run_game(my_game);
+      run_game(game);
     }
   } else {
     writer_write_string(writer, "Bye!\r\n");
     socket_close(session->socket);
   }
-  globals = session->globals;
-  //@ leak [_]globals_games_lock(globals, _);
   //@ leak [_]lock(_, _, _);
   free(session);
 }
@@ -156,25 +153,27 @@ int main() //@: main
   //@ requires true;
   //@ ensures true;
 {
+  struct server_socket* ss;
   struct lock* lock;
-  struct server_socket* ss = create_server_socket(1234);
-  struct globals* globals = malloc(sizeof(struct globals));
-  if(globals == 0) { abort(); }
-  globals->games = 0;
+  struct game** games = malloc(sizeof(struct game*));
+  if(games == 0) { abort (); }
+  //@ chars_to_pointer(games);
+  *games = 0;
+  ss = create_server_socket(1234);
   //@ close gamelist(0);
-  //@ close globs(globals)();
-  //@ close create_lock_ghost_args(globs(globals), nil, nil);
+  //@ close lock_invariant(games)();
+  //@ close create_lock_ghost_args(lock_invariant(games), nil, nil);
   lock = create_lock();
-  globals->games_lock = lock;
   while(true) 
-    //@ invariant server_socket(ss) &*& [?f]globals->games_lock |-> lock &*& [f]lock(lock, _, globs(globals));
+    //@ invariant server_socket(ss) &*& [?f]lock(lock, _, lock_invariant(games));
   {
     struct socket* socket = server_socket_accept(ss);
     struct session* session = malloc(sizeof(struct session));
     if(session == 0) abort();
-    session->globals = globals;
+    session->games = games;
+    session->games_lock = lock;
     session->socket = socket;
-    //@ split_fraction globals_games_lock(globals, lock);
+    //@ split_fraction lock(lock, _, _);
     //@ close thread_run_data(handle_connection)(session);
     thread_start(handle_connection, session);
   }
