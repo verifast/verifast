@@ -66,21 +66,21 @@ predicate locked(struct lock *lock, int lockId, predicate() p, int threadId, rea
 
 predicate lockset(int threadId, list<int> locks);
 
-predicate create_lock_ghost_args(predicate() p, list<int> lockLowerBounds, list<int> lockUpperBounds) = true;
+predicate create_lock_ghost_args(predicate() p) = true;
 
 @*/
 
 struct lock *create_lock();
-    //@ requires create_lock_ghost_args(?p, ?ls, ?us) &*& p() &*& lock_all_below_all(ls, us) == true;
-    //@ ensures lock(result, ?lockId, p) &*& lock_above_all(lockId, ls) == true &*& lock_below_all(lockId, us) == true;
+    //@ requires create_lock_ghost_args(?p) &*& p() ;
+    //@ ensures lock(result, ?lockId, p);
 
 void lock_acquire(struct lock *lock);
-    //@ requires [?f]lock(lock, ?lockId, ?p) &*& lockset(currentThread, ?locks) &*& lock_below_top(lockId, locks) == true;
-    //@ ensures locked(lock, lockId, p, currentThread, f) &*& p() &*& lockset(currentThread, cons(lockId, locks));
+    //@ requires [?f]lock(lock, ?lockId, ?p);
+    //@ ensures locked(lock, lockId, p, currentThread, f) &*& p();
 
 void lock_release(struct lock *lock);
-    //@ requires locked(lock, ?lockId, ?p, currentThread, ?f) &*& p() &*& lockset(currentThread, ?locks);
-    //@ ensures [f]lock(lock, lockId, p) &*& lockset(currentThread, remove(lockId, locks));
+    //@ requires locked(lock, ?lockId, ?p, currentThread, ?f) &*& p();
+    //@ ensures [f]lock(lock, lockId, p);
 
 void lock_dispose(struct lock *lock);
     //@ requires lock(lock, ?lockId, ?p);
@@ -88,16 +88,27 @@ void lock_dispose(struct lock *lock);
 
 /*@
 
-predicate_family thread_run_data(void *run)(void *data);
+predicate_family thread_run_pre(void *thread_run)(void *data, any info);
+predicate_family thread_run_post(void *thread_run)(void *data, any info);
 
 @*/
 
 typedef void thread_run(void *data);
-    //@ requires thread_run_data(this)(data) &*& lockset(currentThread, nil);
-    //@ ensures lockset(currentThread, nil);
+    //@ requires thread_run_pre(this)(data, ?info) &*& lockset(currentThread, nil);
+    //@ ensures thread_run_post(this)(data, info) &*& lockset(currentThread, nil);
 
-void thread_start(void *run, void *data);
-    //@ requires is_thread_run(run) == true &*& thread_run_data(run)(data);
-    //@ ensures emp;
+struct thread;
+
+/*@
+predicate thread(struct thread *thread, void *thread_run, void *data, any info);
+@*/
+
+struct thread *thread_start(void *run, void *data);
+    //@ requires is_thread_run(run) == true &*& thread_run_pre(run)(data, ?info);
+    //@ ensures thread(result, run, data, info);
+    
+void thread_join(struct thread *thread);
+    //@ requires thread(thread, ?run, ?data, ?info);
+    //@ ensures thread_run_post(run)(data, info);
 
 #endif

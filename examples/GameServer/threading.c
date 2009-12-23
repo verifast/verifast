@@ -8,6 +8,10 @@
 #include "threading.h"
 
 #ifdef WIN32
+struct thread {
+    HANDLE handle;
+};
+
 // The callback function needs to respect a non-standard calling convention.
 struct run_closure {
     void (*run)(void *data);
@@ -23,26 +27,52 @@ DWORD WINAPI run_closure_run(LPVOID argument)
     run(data);
     return 0;
 }
+#else
+struct thread {
+    pthread_t id;
+};
 #endif
 
-void thread_start(void run(void *data), void *data)
+struct thread *thread_start(void run(void *data), void *data)
 {
 #ifdef WIN32
-    struct run_closure *closure = malloc(sizeof(struct run_closure));
+    struct run_closure *closure;
+    HANDLE result;
+    struct thread *t;
+    
+    closure = malloc(sizeof(struct run_closure));
     closure->run = run;
     closure->data = data;
-    {
-        HANDLE result = CreateThread(0, 0, run_closure_run, closure, 0, 0);
-        if (result == NULL)
-            abort();
-    }
+    result = CreateThread(0, 0, run_closure_run, closure, 0, 0);
+    if (result == NULL)
+        abort();
+    t = malloc(sizeof(struct thread));
+    if (t == 0) abort();
+    t->handle = result;
+    return t;
 #else
     pthread_t id;
     
     int result = pthread_create(&id, 0, (void *(*)(void *))run, data);
     if (result != 0)
         abort();
+    struct thread *t = malloc(sizeof(struct thread));
+    if (t == 0) abort();
+    t->id = result;
+    return t;
 #endif
+}
+
+void thread_join(struct thread *t)
+{
+#ifdef WIN32
+    DWORD result = WaitForSingleObject(t->handle, INFINITE);
+    if (result != WAIT_OBJECT_0) abort();
+#else
+    int result = pthread_join(t->id);
+    if (result != 0) abort();
+#endif
+    free(t);
 }
 
 struct lock {
@@ -97,14 +127,5 @@ void lock_release(struct lock *lock)
         abort();
     lock->ownerThreadId = 0;
     pthread_mutex_unlock(&(lock->mutex));
-#endif
-}
-
-void lock_dispose(struct lock *lock)
-{
-#ifdef WIN32
-    DeleteCriticalSection(&(lock->criticalSection));
-#else
-    pthread_mutex_dispose(&(lock->mutex));
 #endif
 }
