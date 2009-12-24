@@ -144,6 +144,12 @@ struct server_socket *create_server_socket(int port)
 
 #define READER_BUFFER_SIZE 4096
 
+struct socket {
+    int handle;
+    struct reader *reader;
+    struct writer *writer;
+};
+
 struct reader {
     int handle;
     char *bufferStart;
@@ -181,6 +187,11 @@ bool reader_read_line(struct reader *reader, struct string_buffer *buffer)
     }
 }
 
+void socket_read_line(struct socket* socket, struct string_buffer* buffer) 
+{
+  reader_read_line(socket->reader, buffer);
+}
+
 char *reader_read_line_as_string(struct reader *reader)
 {
     struct string_buffer *buffer = create_string_buffer();
@@ -190,6 +201,11 @@ char *reader_read_line_as_string(struct reader *reader)
         return 0;
     }
     return string_buffer_to_string(buffer);
+}
+
+char* socket_read_line_as_string(struct socket *socket)
+{
+  return reader_read_line_as_string(socket->reader);
 }
 
 int reader_read_nonnegative_integer(struct reader *reader)
@@ -202,6 +218,11 @@ int reader_read_nonnegative_integer(struct reader *reader)
     return value;
 }
 
+int socket_read_nonnegative_integer(struct socket* socket)
+{
+  return reader_read_nonnegative_integer(socket->reader);
+}
+
 struct writer {
     int handle;
 };
@@ -212,11 +233,21 @@ void writer_write_string(struct writer *writer, char *text)
     send(writer->handle, text, length, 0);
 }
 
+void socket_write_string(struct socket* socket, char* text)
+{
+  writer_write_string(socket->writer, text);
+}
+
 void writer_write_integer_as_decimal(struct writer *writer, int value)
 {
     char buffer[40];
     snprintf(buffer, 40, "%d", value);
     writer_write_string(writer, buffer);
+}
+
+void socket_write_integer_as_decimal(struct socket* socket, int value)
+{
+  writer_write_integer_as_decimal(socket->writer, value);
 }
 
 void writer_write_pointer_as_hex(struct writer *writer, void *value)
@@ -231,11 +262,10 @@ void writer_write_string_buffer(struct writer *writer, struct string_buffer *buf
     send(writer->handle, string_buffer_get_chars(buffer), string_buffer_get_length(buffer), 0);
 }
 
-struct socket {
-    int handle;
-    struct reader *reader;
-    struct writer *writer;
-};
+void socket_write_string_buffer(struct socket* socket, struct string_buffer* buffer) 
+{
+  writer_write_string_buffer(socket->writer, buffer);
+}
 
 struct socket *server_socket_accept(struct server_socket *serverSocket)
 {

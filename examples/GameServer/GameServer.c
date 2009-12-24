@@ -19,8 +19,8 @@ struct session {
 /*@
 predicate game(struct game* game, struct socket* s1, struct socket* s2, struct game* next) =
   game != 0 &*& game->name |-> ?name &*& string_buffer(name) &*& 
-  game->player1 |-> s1 &*& socket(s1, ?r1, ?w1) &*& reader(r1) &*& writer(w1) &*&
-  game->player2 |-> s2 &*& (s2 == 0 ? true : socket(s2, ?r2, ?w2) &*& reader(r2) &*& writer(w2)) &*&
+  game->player1 |-> s1 &*& socket(s1) &*&
+  game->player2 |-> s2 &*& (s2 == 0 ? true : socket(s2)) &*&
   malloc_block_game(game) &*& game->next |-> next;
 
 predicate games_lseg(struct game* from, struct game* to, int howMany) = 
@@ -33,21 +33,16 @@ predicate_ctor lock_invariant(struct game** games_list)() =
 struct rpc_session {
   struct socket* socket;
   int result;
-  //@ struct reader* reader;
-  //@ struct writer* writer;
 };
 
 enum rpc { rock, paper, scissors};
 
 /*@
 predicate_family_instance thread_run_pre(read_rpc)(struct rpc_session* s, any info) =
-  [1/2]s->socket |-> ?socket &*& [1/2]s->writer |-> ?writer &*& [1/2]s->reader |-> ?reader &*&
-  socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*&
-  s->result |-> _;
+  [1/2]s->socket |-> ?socket &*&  socket(socket) &*& s->result |-> _;
   
 predicate_family_instance thread_run_post(read_rpc)(struct rpc_session* s, any info) =
-  [1/2]s->socket |-> ?socket &*& [1/2]s->writer |-> ?writer &*& [1/2]s->reader |-> ?reader 
-  &*& socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*&
+  [1/2]s->socket |-> ?socket &*& socket(socket) &*&
   s->result |-> ?res &*& res == rock || res == paper || res == scissors;
 @*/
 
@@ -56,37 +51,34 @@ void read_rpc(struct rpc_session* s) //@: thread_run
   //@ ensures thread_run_post(read_rpc)(s, info);
 {
   //@ open thread_run_pre(read_rpc)(s, info);
-  struct writer* w = socket_get_writer(s->socket);
-  struct reader* r = socket_get_reader(s->socket);
+  struct socket* socket = s->socket;
   int choice;
-  writer_write_string(w, "Enter rock (0), paper (1) or scissors (2) ...\r\n");
-  choice = reader_read_nonnegative_integer(r);
+  socket_write_string(socket, "Enter rock (0), paper (1) or scissors (2) ...\r\n");
+  choice = socket_read_nonnegative_integer(socket);
   while(choice != rock && choice != paper && choice != scissors) 
-    //@ invariant reader(r) &*& writer(w);
+    //@ invariant socket(socket);
   {
-    writer_write_string(w, "Invalid choice. Try again.\r\n");
-    choice = reader_read_nonnegative_integer(r);
+    socket_write_string(socket, "Invalid choice. Try again.\r\n");
+    choice = socket_read_nonnegative_integer(socket);
   }
-  writer_write_string(w, "Waiting for other player ...\r\n");
+  socket_write_string(socket, "Waiting for other player ...\r\n");
   s->result = choice;
   //@ close thread_run_post(read_rpc)(s, info);
 }
 
 void play_game(struct game* game) 
-  //@ requires game(game, ?s1, ?s2, _) &*& s2 != 0;
+  //@ requires game(game, ?player1, ?player2, _) &*& player2 != 0;
   //@ ensures true;
 {
-  //@ open game(game, s1, s2, _);
-  struct writer* w1 = socket_get_writer(game->player1);
-  struct writer* w2 = socket_get_writer(game->player2);
-  struct reader* r1 = socket_get_reader(game->player1);
-  struct reader* r2 = socket_get_reader(game->player2);
+  //@ open game(game, _, _, _);
+  struct socket* s1 = game->player1;
+  struct socket* s2 = game->player2;
   int choice1; int choice2;
   bool victory = false;
-  writer_write_string(w1, "A player joined your game ...\r\n");
-  writer_write_string(w2, "You have joined a game ...\r\n");
+  socket_write_string(s1, "A player joined your game ...\r\n");
+  socket_write_string(s2, "You have joined a game ...\r\n");
   while(! victory) 
-    /*@ invariant socket(s1, r1, w1) &*& reader(r1) &*& writer(w1) &*& socket(s2, r2, w2) &*& reader(r2) &*& writer(w2) &*&
+    /*@ invariant socket(s1) &*& socket(s2) &*&
         game->player1 |-> s1 &*& game->player2 |-> s2; @*/
   {
     struct rpc_session* rpc_s1 = malloc(sizeof(struct rpc_session));
@@ -94,11 +86,7 @@ void play_game(struct game* game)
     struct thread* t1; struct thread* t2;
     if(rpc_s1 == 0 || rpc_s2 == 0) abort();
     rpc_s1->socket = game->player1;
-    //@ rpc_s1->reader = r1;
-    //@ rpc_s1->writer = w1;
     rpc_s2->socket = game->player2;
-    //@ rpc_s2->reader = r2;
-    //@ rpc_s2->writer = w2;
     //@ close thread_run_pre(read_rpc)(rpc_s1, unit);
     t1 = thread_start(read_rpc, rpc_s1);
     //@ close thread_run_pre(read_rpc)(rpc_s2, unit);
@@ -112,15 +100,15 @@ void play_game(struct game* game)
     free(rpc_s1);
     free(rpc_s2);
     if(choice1 == choice2) {
-      writer_write_string(w1, "The other player made the same choice. Try Again.\r\n");
-      writer_write_string(w2, "The other player made the same choice. Try Again.\r\n");
+      socket_write_string(s1, "The other player made the same choice. Try Again.\r\n");
+      socket_write_string(s2, "The other player made the same choice. Try Again.\r\n");
     } else if(choice1 == rock && choice2 == scissors || choice1 == paper && choice2 == rock || choice1 == scissors && choice2 == paper) {
-      writer_write_string(w1, "You win ...\r\n");
-      writer_write_string(w2, "You lose ...\r\n");
+      socket_write_string(s1, "You win ...\r\n");
+      socket_write_string(s2, "You lose ...\r\n");
       victory = true;
     } else {
-      writer_write_string(w2, "You win ...\r\n");
-      writer_write_string(w1, "You lose ...\r\n");
+      socket_write_string(s2, "You win ...\r\n");
+      socket_write_string(s1, "You lose ...\r\n");
       victory = true;
     }
   }
@@ -165,15 +153,15 @@ lemma void lseg_append_lemma(struct game* head)
 }
 @*/
 
-void create_game(struct socket* socket, struct reader* reader, struct writer* writer, struct lock* games_lock, struct game** games_list) 
-  //@ requires socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*& [?f]lock(games_lock, ?id, lock_invariant(games_list));
+void create_game(struct socket* socket, struct lock* games_lock, struct game** games_list) 
+  //@ requires socket(socket) &*& [?f]lock(games_lock, ?id, lock_invariant(games_list));
   //@ ensures true;
 {
   struct game* new_game; struct game* current;
   struct string_buffer * name = create_string_buffer();
-  writer_write_string(writer, "Enter a name for your game ...\r\n");
-  reader_read_line(reader, name);
-  writer_write_string(writer, "Waiting for another player to join ...\r\n");
+  socket_write_string(socket, "Enter a name for your game ...\r\n");
+  socket_read_line(socket, name);
+  socket_write_string(socket, "Waiting for another player to join ...\r\n");
   new_game = malloc(sizeof(struct game));
   if(new_game == 0) abort();
   new_game->player1 = socket;
@@ -197,7 +185,7 @@ void create_game(struct socket* socket, struct reader* reader, struct writer* wr
     while(current->next != 0) 
       /*@ invariant current != 0 &*& games_lseg(head, current, ?a) &*&
                     current->name |-> ?nm &*& string_buffer(nm) &*&
-                    current->next |-> ?next &*& current->player1 |-> ?s1 &*& socket(s1, ?r1, ?w1) &*& reader(r1) &*& writer(w1) &*&
+                    current->next |-> ?next &*& current->player1 |-> ?s1 &*& socket(s1) &*&
                     current->player2 |-> 0 &*& malloc_block_game(current) &*& games_lseg(next, 0, ?b); @*/
     {
       struct game* old_current = current;
@@ -223,16 +211,16 @@ void create_game(struct socket* socket, struct reader* reader, struct writer* wr
 
 /*@
 lemma_auto void socket_non_null();
-  requires socket(?socket, ?r, ?w);
-  ensures socket(socket, r, w) &*& socket != 0; 
+  requires socket(?socket);
+  ensures socket(socket) &*& socket != 0; 
 @*/
 
-void show_main_menu(struct socket* socket, struct reader* reader, struct writer* writer, struct lock* games_lock, struct game** games_list);
-  //@ requires socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
+void show_main_menu(struct socket* socket, struct lock* games_lock, struct game** games_list);
+  //@ requires socket(socket) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
   //@ ensures true;
 
-void join_random_game(struct socket* socket, struct reader* reader, struct writer* writer, struct lock* games_lock, struct game** games_list) 
-  //@ requires socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
+void join_random_game(struct socket* socket, struct lock* games_lock, struct game** games_list) 
+  //@ requires socket(socket) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
   //@ ensures true;
 {
   lock_acquire(games_lock);
@@ -240,8 +228,8 @@ void join_random_game(struct socket* socket, struct reader* reader, struct write
   if(*games_list == 0) {
     //@ close lock_invariant(games_list)();
     lock_release(games_lock);
-    writer_write_string(writer, "No games available for joining.\r\n");
-    show_main_menu(socket, reader, writer, games_lock, games_list);
+    socket_write_string(socket, "No games available for joining.\r\n");
+    show_main_menu(socket, games_lock, games_list);
   } else {
     struct game* game = *games_list;
     //@ open games_lseg(game, 0, _);
@@ -256,138 +244,73 @@ void join_random_game(struct socket* socket, struct reader* reader, struct write
   }
 }
 
-void join_selected_game(struct socket* socket, struct reader* reader, struct writer* writer, struct lock* games_lock, struct game** games_list) 
-  //@ requires socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
+void show_games(struct socket* socket, struct lock* games_lock, struct game** games_list) 
+  //@ requires socket(socket) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
   //@ ensures true;
 {
   lock_acquire(games_lock);
   //@ open lock_invariant(games_list)();
-  if(*games_list == 0) {
+  if(* games_list == 0) {
     //@ close lock_invariant(games_list)();
     lock_release(games_lock);
-    writer_write_string(writer, "No games available for joining.\r\n");
-    show_main_menu(socket, reader, writer, games_lock, games_list);
+    socket_write_string(socket, "No games found.");
+    show_main_menu(socket, games_lock, games_list);
   } else {
-    int choice;
-    int i;
-    struct game* game;
+    //@ struct game* head = *games_list;
     struct game* current = *games_list;
-    int count = 1;
-    //@ struct game* head = current;
-    //@ assert games_lseg(head, 0, ?total_length);
-    //@ close games_lseg(head, head, 0);
-    while(current != 0) 
-      //@ invariant writer(writer) &*& games_lseg(head, current, count - 1) &*& games_lseg(current, 0, total_length - (count - 1));
+    //@ close games_lseg(head, current, 0);
+    socket_write_string(socket, "The following games are available for joining: \r\n");
+    while(current != 0)
+      //@ invariant games_lseg(head, current, _) &*& games_lseg(current, 0, _) &*& socket(socket);
     {
-      writer_write_integer_as_decimal(writer, count);
-      writer_write_string(writer, ". ");
-      //@ open games_lseg(current, 0, total_length - (count - 1));
-      //@ assert game(current, ?s1, 0, ?n);
-      //@ open game(current, s1, 0, n);
-      writer_write_string_buffer(writer, current->name);
-      writer_write_string(writer, "\r\n");
+      //@ assert games_lseg(current, 0, ?howMany2);
+      //@ open games_lseg(current, 0, _);
+      //@ assert game(current, ?s, 0, ?next);
+      //@ open game(current, _, _, next);
+      socket_write_string_buffer(socket, current->name);
+      socket_write_string(socket, "\r\n");
       //@ struct game* old_current = current;
       current = current->next;
-      //@ close game(old_current, s1, 0, n);
-      count = count + 1;
-      /*@
+      //@ close game(old_current, s, 0, next);
+      /*@ 
       if(current == 0) {
-        close games_lseg(0, 0, 0);
-        close games_lseg(old_current, 0, 1);
+        close games_lseg(old_current, 0, howMany2);
+        close games_lseg(current, current, 0);
         lseg_append_lemma(head);
       } else {
-        assert games_lseg(current, 0, ?clength);
-        open games_lseg(current, 0, clength);
-        assert game(current, ?ss, 0, ?nnn);
-        open game(current, ss, 0, nnn);
+        open games_lseg(current, 0, _);
+        assert game(current, ?s2, 0, ?next2);
+        open game(current, s2, 0, next2);
         add_last_lemma(head);
-        close game(current, ss, 0, nnn);
-        close games_lseg(current, 0, clength);
+        close game(current, s2, 0, next2);
+        close games_lseg(current, 0, howMany2 - 1);
       }
       @*/
     }
-    //@ assert games_lseg(0, 0, ?zero);
-    //@ open games_lseg(0, 0, zero);
-    choice = reader_read_nonnegative_integer(reader);
-    while(choice < 1 || choice >= count) 
-      //@ invariant writer(writer) &*& reader(reader);
-    {
-      writer_write_string(writer, "Invalid choice. Try again.\r\n");
-      choice = reader_read_nonnegative_integer(reader);
-    }
-    if(choice == 1) {
-      game = *games_list;
-      //@ assert current == 0;
-      //@ open games_lseg(game, 0, total_length);
-      //@ assert game(game, ?s1, 0, ?n);
-      //@ open game(game, s1, 0, n);
-      *games_list = game->next;
-      //@ close lock_invariant(games_list)();
-      lock_release(games_lock);
-      game->player2 = socket;
-      //@ close game(game, s1, socket, _);
-      play_game(game);
-      //@ leak [f]lock(_, _, _);
-    } else {
-      current = *games_list;
-      i = 1;
-      //@ close games_lseg(head, head, 0);
-      while(i < choice - 1) 
-        //@ invariant 0 <= i &*& i <= choice - 1 &*& games_lseg(head, current, i - 1) &*& games_lseg(current, 0, total_length - (i - 1));
-      {
-        //@ struct game* old_current = current;
-        //@ open games_lseg(current, 0, total_length - (i - 1));
-        //@ assert game(current, ?ss, 0, ?nn);
-        //@ open game(current, ss, 0, nn);
-        current = current->next;
-        //@ close game(old_current, ss, 0, nn);
-        //@ assert games_lseg(current, 0, ?m);
-        //@ open games_lseg(current, 0, m);
-        //@ assert game(current, ?ss2, 0, ?nn2);
-        //@ open game(current, ss2, 0, nn2);
-        //@ add_last_lemma(head);
-        //@ close game(current, ss2,0, nn2);
-        //@ close games_lseg(current,0,m);
-        i = i + 1;
-      }
-      //@ open games_lseg(current, 0, total_length - (i - 1)); 
-      //@ assert game(current, ?ss, 0, ?nn);
-      //@ open game(current, ss, 0, nn);
-      game = current->next;
-      //@ open games_lseg(game, 0, total_length - i);
-      //@ assert game(game, ?ss2, 0, ?nn2);
-      //@ open game(game, ss2, 0, nn2);
-      current->next = current->next->next;
-      //@ close game(current, ss, 0, nn2);
-      //@ close games_lseg(current, 0, total_length - i); 
-      //@ lseg_append_lemma(head);
-      //@ close lock_invariant(games_list)();
-      lock_release(games_lock);
-      game->player2 = socket;
-      //@ close game(game, ss2, socket, nn2);
-      play_game(game);
-      //@ leak [f]lock(_, _, _);
-    }
+    //@ close lock_invariant(games_list)();
+    //@ open games_lseg(current, 0, _);
+    lock_release(games_lock);
+    show_main_menu(socket, games_lock, games_list);
   }
 }
 
-void show_main_menu(struct socket* socket, struct reader* reader, struct writer* writer, struct lock* games_lock, struct game** games_list) 
-  //@ requires socket(socket, reader, writer) &*& reader(reader) &*& writer(writer) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
+void show_main_menu(struct socket* socket, struct lock* games_lock, struct game** games_list) 
+  //@ requires socket(socket) &*& [?f]lock(games_lock, _, lock_invariant(games_list));
   //@ ensures true;
 {
   int choice;
-  writer_write_string(writer, "1. Create a new game and wait for another player to join ...\r\n");
-  writer_write_string(writer, "2. Join a random game ...\r\n");
-  writer_write_string(writer, "3. Select a game from a list ...\r\n");
-  writer_write_string(writer, "_. Quit ...\r\n");
+  socket_write_string(socket, "1. Create a new game and wait for another player to join ...\r\n");
+  socket_write_string(socket, "2. Join a random game ...\r\n");
+  socket_write_string(socket, "3. Show all games waiting for opponent ...\r\n");
+  socket_write_string(socket, "_. Quit ...\r\n");
   
-  choice = reader_read_nonnegative_integer(reader);
+  choice = socket_read_nonnegative_integer(socket);
   if(choice == 1) {
-    create_game(socket, reader, writer, games_lock, games_list);
+    create_game(socket, games_lock, games_list);
   } else if(choice == 2) {
-    join_random_game(socket, reader, writer, games_lock, games_list);
+    join_random_game(socket, games_lock, games_list);
   } else if(choice == 3) {
-    join_selected_game(socket, reader, writer, games_lock, games_list);
+    show_games(socket, games_lock, games_list);
   } else {
     socket_close(socket);
     //@ leak [f]lock(_, _, _);
@@ -396,7 +319,7 @@ void show_main_menu(struct socket* socket, struct reader* reader, struct writer*
 
 /*@
 predicate_family_instance thread_run_pre(handle_connection)(struct session* session, any info) = 
-  session->socket |-> ?s &*& socket(s, ?r, ?w) &*& reader(r) &*& writer(w) &*&
+  session->socket |-> ?s &*& socket(s) &*&
   session->games_lock |-> ?games_lock &*& session->games_list |-> ?games_list &*&
   [?f]lock(games_lock, _, lock_invariant(games_list)) &*& malloc_block_session(session);
   
@@ -409,11 +332,9 @@ void handle_connection(struct session* session) //@: thread_run
 {
   //@ open thread_run_pre(handle_connection)(session, info);
   struct socket* socket = session->socket;
-  struct reader* reader = socket_get_reader(socket);
-  struct writer* writer = socket_get_writer(socket);
   struct lock* games_lock = session->games_lock;
   struct game** games_list = session->games_list;
-  show_main_menu(socket, reader, writer, games_lock, games_list);
+  show_main_menu(socket, games_lock, games_list);
   free(session);
   //@ close thread_run_post(handle_connection)(session, info);
 }
