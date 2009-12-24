@@ -6024,12 +6024,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info] cont = 
         if definitely_equal istart iend then (* create empty array by default *)
-          cont (Some((Chunk((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)) :: h))
+          cont (Some (Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)::h))
         else
           match extract
             begin function
               (Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _)) when
-                (g' == array_slice_deep_symb) && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
+                g' == array_slice_deep_symb && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
                 definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend')) ->
               Some (coef', istart', iend', elems', vs')
             | _ -> None
@@ -6037,53 +6037,48 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             h
           with
             None -> cont None
-          | Some (((coef', istart', iend', elems', vs') as ch), h0) -> 
-            let rec find_slices curr_end curr_elems curr_vs curr_chunk curr_h =
+          | Some ((coef, istart0, iend0, elems0, vs0), h) ->
+            let mk_chunk istart iend elems vs =
+              Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef, [arr; istart; iend; p; info; elems; vs], None)
+            in
+            let before_length = ctxt#mk_sub istart istart0 in
+            let chunk_before = mk_chunk istart0 istart (mk_take before_length elems0) (mk_take before_length vs0) in
+            let slices = [(istart, iend0, mk_drop before_length elems0, mk_drop before_length vs0)] in
+            let rec find_slices slices curr_end h cont' =
               if ctxt#query (ctxt#mk_le iend curr_end) then
                 (* found a list of chunks all the way to the end *)
-                (Some(curr_end, curr_elems, curr_vs, curr_chunk, curr_h))
+                cont' (slices, h)
               else
                 (* need to consume more chunks *)
               match extract
                 begin function
-                  (Chunk ((g'', is_symb), [elem_tp''; a_tp''; v_tp''], coef'',  [arr''; istart''; iend''; p''; info''; elems''; vs''], _)) when
-                    (g'' == array_slice_deep_symb) && definitely_equal coef' coef'' &&
-                    definitely_equal arr'' arr && definitely_equal p p'' && definitely_equal info info''  && ctxt#query (ctxt#mk_eq istart'' curr_end) &&
-                    unify elem_tp elem_tp'' && unify a_tp a_tp'' && unify v_tp v_tp''->
-                  Some (coef'', istart'', iend'', elems'', vs'')
+                  (Chunk ((g'', is_symb), [elem_tp''; a_tp''; v_tp''], coef'', [arr''; istart''; iend''; p''; info''; elems''; vs''], _)) when
+                    (g'' == array_slice_deep_symb) && definitely_equal coef coef'' &&
+                    definitely_equal arr'' arr && definitely_equal p p'' && definitely_equal info info'' && ctxt#query (ctxt#mk_eq istart'' curr_end) &&
+                    unify elem_tp elem_tp'' && unify a_tp a_tp'' && unify v_tp v_tp'' ->
+                  Some (istart'', iend'', elems'', vs'')
                 | _ -> None
                 end
-                curr_h
+                h
               with
-                None -> None
-              | Some(((coef'', istart'', iend'', elems'', vs'') as new_curr_chunk), h_rest) ->
-                  let (_, strt, _, els, vss) = curr_chunk in
-                  find_slices iend''
-                  (mk_append curr_elems (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) els) else els)) 
-                  (mk_append curr_vs (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) vss) else vss)) 
-                  new_curr_chunk h_rest
-            in
-            begin
-              match find_slices iend' (mk_nil()) (mk_nil()) ch h0 with
                 None -> cont None
-              | Some(curr_end, curr_elems, curr_vs, (coef'', istart'', iend'', elems'', vs''), curr_h) ->
-                let chunk_elems = (if ctxt#query (ctxt#mk_le iend iend') then
-                    mk_take (ctxt#mk_sub iend istart) curr_elems
-                  else
-                    mk_append curr_elems  (mk_take (ctxt#mk_sub iend istart'') elems'')
-                )
-                in
-                let chunk_vs = (if ctxt#query (ctxt#mk_le iend iend') then
-                    mk_take (ctxt#mk_sub iend istart) curr_vs
-                  else
-                    mk_append curr_vs (mk_take (ctxt#mk_sub iend istart'') vs'')
-                )
-                in
-                let chunk_before = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart'; istart; p; info; mk_take (ctxt#mk_sub istart istart') elems'; mk_take (ctxt#mk_sub istart istart') vs'], None) in
-                let thechunk = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; istart; iend; p; info; chunk_elems; chunk_vs], None) in
-                let chunk_after = Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef', [arr; iend; iend''; p; info; mk_drop (ctxt#mk_sub iend istart'') elems''; mk_drop (ctxt#mk_sub iend istart'') vs''], None) in
-                cont (Some(chunk_before :: thechunk :: chunk_after :: curr_h))
-            end
+              | Some ((_, iend'', _, _) as slice, h) ->
+                find_slices (slice::slices) iend'' h cont'
+            in
+            find_slices slices iend0 h $. fun ((istart_last, iend_last, elems_last, vs_last)::slices, h) ->
+            let length_last = ctxt#mk_sub iend istart_last in
+            let slices = List.rev ((istart_last, iend, mk_take length_last elems_last, mk_take length_last vs_last)::slices) in
+            let rec mk_concat lists =
+              match lists with
+                [] -> mk_nil()
+              | [l] -> l
+              | l::ls -> mk_append l (mk_concat ls)
+            in
+            let target_elems = mk_concat (List.map (fun (istart, iend, elems, vs) -> elems) slices) in
+            let target_vs = mk_concat (List.map (fun (istart, iend, elems, vs) -> vs) slices) in
+            let target_chunk = mk_chunk istart iend target_elems target_vs in
+            let chunk_after = mk_chunk iend iend_last (mk_drop length_last elems_last) (mk_drop length_last vs_last) in
+            cont (Some (target_chunk::chunk_before::chunk_after::h))
       in
       begin
       add_rule array_slice_symb get_slice_rule;
