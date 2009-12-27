@@ -65,7 +65,6 @@ class ArrayTest {
         Object record0 = records[i];
         byte[] record = (byte[])record0;
         record[recordLength - 1] = 0;
-        //@ close record(recordLength, record0, _);
     }
     
     static Object[] createRecords(int count, int recordLength)
@@ -81,7 +80,6 @@ class ArrayTest {
             assert tmp == null;
             byte[] record = new byte[recordLength];
             records[i] = record;
-            //@ close record(recordLength, record, _);
             i++;
         }
         return records;

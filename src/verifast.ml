@@ -5895,6 +5895,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       predinstmap
   in
   
+  let rules_cell = ref [] in (* A hack to allow the rules to recursively use the rules *)
+  
   let rules =
     let rulemap = ref [] in
     let add_rule predSymb rule =
@@ -6066,7 +6068,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let ghostenv = [] in
                 let [xinfo, _; xelem, _; xvalue, _] = xs in
                 let env = [xinfo, info; xelem, elem] in
-                let rules = [] in
+                let rules = !rules_cell in
                 with_context (Executing (h, env, pred_loc wbody, "Auto-closing array slice")) $. fun () ->
                 assert_pred rules tpenv (pn,ilist) h ghostenv env wbody true coef' $. fun h ghostenv env size_first ->
                 match try_assoc xvalue env with
@@ -6191,6 +6193,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       contains_edges;
     List.map (fun (predSymb, rules) -> (predSymb, !rules)) !rulemap
   in
+  
+  rules_cell := rules;
 
   let rec block_assigned_variables ss =
     match ss with
