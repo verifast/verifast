@@ -1,3 +1,21 @@
+class Person {
+    int age;
+}
+
+//@ predicate person(int minAge, Person person; int age) = person.age |-> age &*& minAge <= age;
+
+class Persons {
+    Person[] persons;
+    
+    void processBirthday(int i)
+        //@ requires this.persons |-> ?persons &*& persons != null &*& array_slice_deep(persons, 0, persons.length, person, 18, _, _) &*& 0 <= i &*& i < persons.length;
+        //@ ensures this.persons |-> persons &*& array_slice_deep(persons, 0, persons.length, person, 18, _, _);
+    {
+        Person p = this.persons[i];
+        p.age++;
+    }
+}
+
 //@ predicate record(int recordLength, Object record; unit value) = array_slice((byte[])record, 0, recordLength, _) &*& value == unit;
 
 class ArrayTest {
@@ -48,7 +66,6 @@ class ArrayTest {
         byte[] record = (byte[])record0;
         record[recordLength - 1] = 0;
         //@ close record(recordLength, record0, _);
-        //@ array_slice_deep_close(records, i, @record, recordLength);
     }
     
     static Object[] createRecords(int count, int recordLength)
@@ -65,7 +82,6 @@ class ArrayTest {
             byte[] record = new byte[recordLength];
             records[i] = record;
             //@ close record(recordLength, record, _);
-            //@ array_slice_deep_close(records, i, @record, recordLength);
             i++;
         }
         return records;
