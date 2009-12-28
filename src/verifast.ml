@@ -196,6 +196,79 @@ let stats = new stats
 
 (* Region: lexical analysis *)
 
+let latin1_to_utf8 text =
+  let n = String.length text in
+  let rec iter i =
+    if i = n then
+      text
+    else if text.[i] <= '\x7f' then
+      iter (i + 1)
+    else begin
+      let b = Buffer.create (2 * n) in
+      Buffer.add_substring b text 0 i;
+      for i = i to n - 1 do
+        let c = text.[i] in
+        if c <= '\x7f' then
+          Buffer.add_char b c
+        else begin
+          Buffer.add_char b (char_of_int ((int_of_char c lsr 6) lor 0xC0));
+          Buffer.add_char b (char_of_int ((int_of_char c land 0x3f) lor 0x80))
+        end
+      done;
+      Buffer.contents b
+    end
+  in
+  iter 0
+
+let utf8_byte_order_mark = "\xEF\xBB\xBF"
+
+let file_to_utf8 s =
+  if startswith s utf8_byte_order_mark then
+    String.sub s 3 (String.length s - 3)
+  else
+    latin1_to_utf8 s
+
+let utf8_to_file s =
+  (* First, find the largest substring that's ASCII *)
+  let n = String.length s in
+  let rec ascii i =
+    if i = n then
+      s
+    else if s.[i] <= '\x7f' then
+      ascii (i + 1)
+    else begin
+      (* We found a non-ASCII character. *)
+      (* Check if it's all Latin 1. *)
+      let rec is_latin1 i =
+        if i = n then
+          true
+        else if s.[i] <= '\xC3' then
+          is_latin1 (i + 1)
+        else
+          false
+      in
+      if is_latin1 i then begin
+        let b = Buffer.create n in
+        Buffer.add_substring b s 0 i;
+        let rec add_latin1_chars i =
+          if i = n then
+            ()
+          else if s.[i] <= '\x7f' then begin
+            Buffer.add_char b s.[i];
+            add_latin1_chars (i + 1)
+          end else begin
+            Buffer.add_char b (char_of_int (((int_of_char s.[i] land 0x03) lsl 6) lor (int_of_char s.[i + 1] land 0x3f)));
+            add_latin1_chars (i + 2)
+          end
+        in
+        add_latin1_chars i;
+        Buffer.contents b
+      end else
+        utf8_byte_order_mark ^ s
+    end
+  in
+  ascii 0
+
 let readFile path =
   let chan = open_in path in
   let count = ref 0 in
@@ -216,8 +289,7 @@ let readFile path =
       iter2 chunks (offset + size)
   in
   iter2 chunks 0;
-  let s = if startswith s "\xEF\xBB\xBF" then String.sub s 3 (String.length s - 3) else s in (* Remove UTF-8 BOM (Byte Order Mark) *)
-  s
+  file_to_utf8 s
 
 type token =
     Kwd of string

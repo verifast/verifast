@@ -155,7 +155,7 @@ let show_ide initialPath prover =
     let commentTag = new GText.tag commentTag in
     let Some ghostRangeTag = GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
     let ghostRangeTag = new GText.tag ghostRangeTag in
-    let start = start#backward_line in
+    let start = if start#line = 0 then buffer#start_iter else start#backward_line in (* Works around an apparent bug in backward_line *)
     let stop = stop#forward_line in
     let startLine = start#line in
     let startIsInComment = start#has_tag commentTag && not (start#begins_tag (Some commentTag)) in
@@ -311,7 +311,7 @@ let show_ide initialPath prover =
       let chunks = iter() in
       let text = String.concat "" chunks in
       let _ = close_in chan in
-      let text = if startswith text "\xEF\xBB\xBF" then String.sub text 3 (String.length text - 3) else text in (* Remove UTF-8 BOM (Byte Order Mark) *)
+      let text = file_to_utf8 text in
       ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
@@ -335,7 +335,7 @@ let show_ide initialPath prover =
     let chan = open_out thePath in
     let gBuf = buffer in
     let text = (gBuf: GText.buffer)#get_text () in
-    output_string chan text;
+    output_string chan (utf8_to_file text);
     close_out chan;
     buffer#set_modified false;
     updateBufferTitle tab;
