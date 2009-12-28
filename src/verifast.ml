@@ -761,6 +761,7 @@ and
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field access *)
   | ReadArray of loc * expr * expr
+  | WReadArray of loc * expr * type_ * expr
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
   | CallExpr of
       loc *
@@ -992,6 +993,7 @@ let expr_loc e =
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
   | ReadArray (l, _, _) -> l
+  | WReadArray (l, _, _, _) -> l
   | Deref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
   | NewArray(l, _, _) -> l
@@ -3909,7 +3911,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match lookup_class_field cn x with
             None -> None
           | Some (lf, t, vis, binding, final, init, value) ->
-            let f = new fieldref x in f#set_parent cn; f#set_range t;
+            let f = new fieldref x in f#set_parent cn; f#set_range t; if binding = Static then f#set_static; f#set_value value;
             Some (Read (l, Var (l, "this", ref (Some LocalVar)), f), t)
       in
       match field_of_this with
@@ -4094,7 +4096,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (w1, arr_t) = check arr in
         let w2 = checkt index intt in
         (match arr_t with
-          ArrayType(tp) -> (ReadArray(l, w1, w2), tp)
+          ArrayType(tp) -> (WReadArray(l, w1, tp, w2), tp)
         | _ -> static_error l "target of array access is not an array"
         )
     | IfExpr (l, e1, e2, e3) ->
@@ -4624,7 +4626,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       WAccess (l, lhs, tp, pv) ->
       begin match lhs with
         Read (lr, et, f) -> assert_expr_fixed fixed et
-      | ReadArray (la, ea, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
+      | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
       end;
       assume_pat_fixed fixed pv
     | WCallPred (l, g, targs, pats0, pats) ->
@@ -5159,7 +5161,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> static_error l "Cannot use field dereference in this context."
           | Some (read_field, read_static_field, deref_pointer, read_array) -> read_field l (ev e) f
         end
-    | ReadArray(l, arr, i) ->
+    | WReadArray(l, arr, tp, i) ->
       begin
         match read_field with
           None -> static_error l "Cannot use array indexing in this context."
@@ -5421,7 +5423,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WAccess (l, Read (lr, e, f), tp, rhs) ->
       let te = ev e in
       evalpat (pn,ilist) ghostenv env rhs tp tp (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
-    | WAccess (l, ReadArray (la, ea, ei), tp, rhs) ->
+    | WAccess (l, WReadArray (la, ea, _, ei), tp, rhs) ->
       let a = ev ea in
       let i = ev ei in
       evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
@@ -5630,7 +5632,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         h
     in
     match slices with
-      None -> assert_false h env l "No matching array slice chunk"
+      None -> assert_false h env l "No matching array element or array slice chunk"
     | Some v -> v
   in
   
@@ -5754,7 +5756,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
         assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [SrcPat (LitPat e); rhs]
           (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
-      | ReadArray (la, ea, ei) ->
+      | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
         assert_chunk rules (pn,ilist) h ghostenv env env' l (array_element_symb, true) [tp] coef coefpat (Some 2) pats $.
         fun h coef ts size ghostenv env env' ->
@@ -6992,10 +6994,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
       | Some v -> cont h v
       end
-    | ReadArray (l, arr, i) ->
+    | WReadArray (l, arr, elem_tp, i) ->
       iter h arr $. fun h arr ->
       iter h i $. fun h i ->
-      let elem_tp = InferredType (ref None) in
       let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
       assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun h coef [_; _; elem] _ _ _ _ ->
       let elem_tp = unfold_inferred_type elem_tp in

@@ -1,29 +1,39 @@
 package javacard.framework;
 
+/*@
+
+predicate APDU(APDU apdu, byte[] buffer);
+
+lemma_auto void APDU_inv();
+    requires APDU(?apdu, ?buffer);
+    ensures APDU(apdu, buffer) &*& buffer != null &*& 133 <= buffer.length;
+    
+@*/
+
 class APDU {
   public byte[] getBuffer();
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer);
+    //@ ensures APDU(this, buffer) &*& result == buffer;
     
   public short setOutgoing() throws APDUException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
   public short setIncomingAndReceive() throws APDUException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
   public void setOutgoingAndSend(short bOff, short len) throws APDUException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
   public void setOutgoingLength(short len) throws APDUException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
   public void sendBytes(short bOff, short len) throws APDUException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 
 }
 
