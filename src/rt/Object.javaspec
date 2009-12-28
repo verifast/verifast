@@ -16,18 +16,21 @@ lemma void assume(boolean b);
     requires true;
     ensures b;
 
+predicate array_element<T>(T[] array, int index; T value);
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
 predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T, V) p, A info; list<T> elements, list<V> values);
+
+lemma_auto void array_element_inv<T>();
+    requires [?f]array_element<T>(?array, ?index, ?value);
+    ensures [f]array_element<T>(array, index, value) &*& array != null &*& 0 <= index &*& index < array.length;
 
 lemma_auto void array_slice_inv<T>();
     requires [?f]array_slice<T>(?array, ?start, ?end, ?elems);
     ensures [f]array_slice<T>(array, start, end, elems) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end;
 
-lemma_auto void array_slice__deep_inv<T, A, V>();
+lemma_auto void array_slice_deep_inv<T, A, V>();
     requires [?f]array_slice_deep<T, A, V>(?array, ?start, ?end, ?p, ?info, ?elems, ?vs);
     ensures [f]array_slice_deep<T, A, V>(array, start, end, p, info, elems, vs) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end;
-
-
 
 lemma void array_slice_deep_close<T, A, V>(T[] array, int start, predicate(A, T, V) p, A a);
     requires array_slice<T>(array, start, start + 1, ?elems) &*& p(a, head(elems), ?v);

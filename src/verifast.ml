@@ -859,7 +859,8 @@ and
   | SwitchStmtDefaultClause of loc * stmt list
 and
   pred = (* A separation logic assertion *)
-    Access of loc * expr * fieldref * pat (*  toegang tot veld regel-expr-veld-pattern*)
+    Access of loc * expr * pat (*  toegang tot veld regel-expr-veld-pattern*)
+  | WAccess of loc * expr * type_ * pat
   | CallPred of loc * predref * type_expr list * pat list (* indices of predicate family instance *) * pat list  (* Predicate assertion, before type checking *)
   | WCallPred of loc * predref * type_ list * pat list * pat list  (* Predicate assertion, after type checking. (W is for well-formed) *)
   | ExprPred of loc * expr (*  uitdrukking regel-expr *)
@@ -1004,7 +1005,8 @@ let expr_loc e =
 
 let pred_loc p =
   match p with
-    Access (l, e, f, rhs) -> l
+    Access (l, e, rhs) -> l
+  | WAccess (l, e, tp, rhs) -> l
   | CallPred (l, g, targs, ies, es) -> l
   | WCallPred (l, g, targs, ies, es) -> l
   | ExprPred (l, e) -> l
@@ -1701,11 +1703,7 @@ and
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefPred (l, coef, p)
 | [< e = parse_conj_expr; p = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] ->
-    (match e with
-     | Read (_, e, f) -> Access (l, e, f, rhs)
-     | _ -> raise (ParseException (expr_loc e, "Left-hand side of access predicate must be a field dereference expression."))
-    )
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> Access (l, e, rhs)
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
     (match e with
@@ -4391,14 +4389,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ([], _) -> static_error l "Too many patterns"
     | (_, []) -> static_error l "Too few patterns"
   in
-
+  
   let rec check_pred_core (pn,ilist) tparams tenv p =
     let check_pred = check_pred_core in
     match p with
-      Access (l, e, f, v) ->
-      let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in
+      Access (l, lhs, v) ->
+      let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
+      begin match lhs with
+        Read (_, _, _) | ReadArray (_, _, _) -> ()
+      | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference or an array element expression."
+      end;
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
-      (Access (l, w, f, wv), tenv', [])
+      (WAccess (l, wlhs, t, wv), tenv', [])
     | CallPred (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (p, callee_tparams, ts0, xs, inputParamCount) =
@@ -4619,8 +4621,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let rec check_pred_precise fixed p =
     match p with
-      Access (l, et, f, pv) ->
-      assert_expr_fixed fixed et;
+      WAccess (l, lhs, tp, pv) ->
+      begin match lhs with
+        Read (lr, et, f) -> assert_expr_fixed fixed et
+      | ReadArray (la, ea, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
+      end;
       assume_pat_fixed fixed pv
     | WCallPred (l, g, targs, pats0, pats) ->
       begin
@@ -4862,13 +4867,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
   
-  let (array_slice_symb, array_slice_deep_symb) =
+  let (array_element_symb, array_slice_symb, array_slice_deep_symb) =
     if language = Java then
+      let (_, _, _, _, array_element_symb, _) = List.assoc "java.lang.array_element" predfammap in
       let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
       let (_, _, _, _, array_slice_deep_symb, _) = List.assoc "java.lang.array_slice_deep" predfammap in
-      (array_slice_symb, array_slice_deep_symb)
+      (array_element_symb, array_slice_symb, array_slice_deep_symb)
     else
-      (get_unique_var_symb "#array_slice" (PredType ([], [])), get_unique_var_symb "#array_slice_deep" (PredType ([], [])))
+      (get_unique_var_symb "#array_element" (PredType ([], [])), get_unique_var_symb "#array_slice" (PredType ([], [])), get_unique_var_symb "#array_slice_deep" (PredType ([], [])))
   in
 
   let mk_nil () =
@@ -4879,6 +4885,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let mk_cons elem_tp head tail =
     let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
     ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+  in
+  
+  let rec mk_list elem_tp elems =
+    match elems with
+      [] -> mk_nil()
+    | e::es -> mk_cons elem_tp e (mk_list elem_tp es)
   in
   
   let mk_take n xs =
@@ -5406,9 +5418,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     with_context_helper (fun _ ->
     let ev = eval (pn,ilist) None env in
     match p with
-    | Access (l, e, f, rhs) ->
+    | WAccess (l, Read (lr, e, f), tp, rhs) ->
       let te = ev e in
-      evalpat (pn,ilist) ghostenv env rhs f#range f#range (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
+      evalpat (pn,ilist) ghostenv env rhs tp tp (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
+    | WAccess (l, ReadArray (la, ea, ei), tp, rhs) ->
+      let a = ev ea in
+      let i = ev ei in
+      evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+      let slice = Chunk ((array_element_symb, true), [tp], coef, [a; i; t], None) in
+      cont (slice::h) ghostenv env
     | WCallPred (l, g, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
         match try_assoc g#name predfammap with
@@ -5597,11 +5615,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let read_array h env l a i =
-    let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
     let slices =
       head_flatmap
         begin function
-          Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
+          Chunk ((g, true), [tp], coef, [a'; i'; v], _)
+            when g == array_element_symb && definitely_equal a' a && definitely_equal i' i ->
+            [v]
+        | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
             when g == array_slice_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (ctxt#mk_app nth_symb [ctxt#mk_sub i istart; vs])]
@@ -5728,10 +5748,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         SrcPat DummyPat -> if not (is_dummy_frac_term coef) then assert_false h env l "Cannot match a non-dummy fraction chunk against a dummy fraction pattern. First leak the chunk using the 'leak' command."
       | _ -> ()
     in
-    let access l coefpat e f rhs =
-      let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-      assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [SrcPat (LitPat e); rhs]
-        (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
+    let access l coefpat e tp rhs =
+      match e with
+        Read (lr, e, f) ->
+        let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+        assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [SrcPat (LitPat e); rhs]
+          (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
+      | ReadArray (la, ea, ei) ->
+        let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
+        assert_chunk rules (pn,ilist) h ghostenv env env' l (array_element_symb, true) [tp] coef coefpat (Some 2) pats $.
+        fun h coef ts size ghostenv env env' ->
+        check_dummy_coefpat l coefpat coef;
+        cont h ghostenv env env' size
     in
     let callpred l coefpat g targs pats0 pats =
       let (g_symb, pats0, pats, types) =
@@ -5756,7 +5784,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     in
     match p with
-    | Access (l, e, f, rhs) -> access l real_unit_pat e f (SrcPat rhs)
+    | WAccess (l, e, tp, rhs) -> access l real_unit_pat e tp (SrcPat rhs)
     | WCallPred (l, g, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
     | ExprPred (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
       begin match try_assoc x env with
@@ -5821,7 +5849,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter cs
     | EmpPred l -> cont h ghostenv env env' None
-    | CoefPred (l, coefpat, Access (_, e, f, rhs)) -> access l (SrcPat coefpat) e f (SrcPat rhs)
+    | CoefPred (l, coefpat, WAccess (_, e, tp, rhs)) -> access l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefPred (l, coefpat, WCallPred (_, g, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     )
   in
@@ -5860,7 +5888,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let inputVars = List.map fst (take n xs) in
           let rec iter wbody =
             match wbody with
-              Access (_, e, f, v) ->
+              WAccess (_, Read (lr, e, f), tp, v) ->
               if expr_is_fixed inputVars e then
                 let (_, (_, _, _, [tp; _], symb', _)) = List.assoc (f#parent, f#name) field_pred_map in
                 [(symb, fsymbs, symb', [], [tp], [e], predinst)]
@@ -5909,120 +5937,125 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let (pn, ilist) = ("", []) in
     (* rules for array slices *)
     begin if language = Java then
-      let get_slice_rule h [elem_tp] [arr; istart; iend] cont =
-        let istartp1 = ctxt#mk_add istart (ctxt#mk_intlit 1) in
-        let is_unit_slice = ctxt#query (ctxt#mk_eq iend istartp1) in
-        if is_unit_slice then
-          match extract
-            begin function
-              (Chunk ((g, is_symb), elem_tp'::targs_rest, coef, arr'::istart'::iend'::args_rest, _)) when
-                (g == array_slice_symb || g == array_slice_deep_symb) &&
-                definitely_equal arr' arr && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le iend iend')) &&
-                unify elem_tp elem_tp' ->
-              Some (g, targs_rest, coef, istart', iend', args_rest)
-            | _ -> None
-            end
-            h
-          with
-            None -> cont None
-          | Some ((g, targs_rest, coef, istart', iend', args_rest), h) ->
-            if g == array_slice_symb then
-              let [elems] = args_rest in
-              let split_after elems h =
-                let elem = get_unique_var_symb "elem" elem_tp in
-                let elems_tail = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
-                assume (ctxt#mk_eq elems (mk_cons elem_tp elem elems_tail)) $. fun () ->
-                let chunk1 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil())], None) in
-                let chunk2 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; iend; iend'; elems_tail], None) in
-                cont (Some (chunk1::chunk2::h))
-              in
-              if ctxt#query (ctxt#mk_eq istart' istart) then
-                split_after elems h
-              else
-                let elems1 = mk_take (ctxt#mk_sub istart istart') elems in
-                let elems2 = mk_drop (ctxt#mk_sub istart istart') elems in
-                let chunk0 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart'; istart; elems1], None) in
-                split_after elems2 (chunk0::h)
-            else
-              let [ta; tv] = targs_rest in
-              let [p; a; elems; vs] = args_rest in
-              let n1 = ctxt#mk_sub istart istart' in
-              let elems1 = mk_take n1 elems in
-              let vs1 = mk_take n1 vs in
-              let elems2 = mk_drop n1 elems in
-              let vs2 = mk_drop n1 vs in
+      let get_element_rule h [elem_tp] [arr; index] cont =
+        match extract
+          begin function
+            (Chunk ((g, is_symb), elem_tp'::targs_rest, coef, arr'::istart'::iend'::args_rest, _)) when
+              (g == array_slice_symb || g == array_slice_deep_symb) &&
+              definitely_equal arr' arr && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' index) (ctxt#mk_lt index iend')) &&
+              unify elem_tp elem_tp' ->
+            Some (g, targs_rest, coef, istart', iend', args_rest)
+          | _ -> None
+          end
+          h
+        with
+          None -> cont None
+        | Some ((g, targs_rest, coef, istart', iend', args_rest), h) ->
+          if g == array_slice_symb then
+            let [elems] = args_rest in
+            let split_after elems h =
               let elem = get_unique_var_symb "elem" elem_tp in
-              let tail_elems2 = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
-              let v = get_unique_var_symb "value" tv in
-              let tail_vs2 = get_unique_var_symb "values" (InductiveType ("list", [tv])) in
-              assume (ctxt#mk_eq elems2 (mk_cons elem_tp elem tail_elems2)) $. fun () ->
-              assume (ctxt#mk_eq vs2 (mk_cons tv v tail_vs2)) $. fun () ->
-              let before_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; istart'; istart; p; a; elems1; vs1], None) in
-              let slice_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; iend; iend'; p; a; tail_elems2; tail_vs2], None) in
-              let after_chunk = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; mk_cons elem_tp elem (mk_nil ())], None) in
-              let h = slice_chunk::after_chunk::before_chunk::h in
-              match try_assq p predinstmap_by_predfamsymb with
-                None -> cont (Some (Chunk ((p, false), [], coef, [a; elem; v], None)::h))
-              | Some (xs, wbody) ->
-                let tpenv = [] in
-                let (pn,ilist) = ("", []) in
-                let ghostenv = [] in
-                let Some env = zip (List.map fst xs) [a; elem; v] in
-                assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h _ _ ->
-                cont (Some h)
-        else (* is_unit_slice *)
+              let elems_tail = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+              assume (ctxt#mk_eq elems (mk_cons elem_tp elem elems_tail)) $. fun () ->
+              let chunk1 = Chunk ((array_element_symb, true), [elem_tp], coef, [arr; index; elem], None) in
+              let chunk2 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; ctxt#mk_add index (ctxt#mk_intlit 1); iend'; elems_tail], None) in
+              cont (Some (chunk1::chunk2::h))
+            in
+            if ctxt#query (ctxt#mk_eq istart' index) then
+              split_after elems h
+            else
+              let elems1 = mk_take (ctxt#mk_sub index istart') elems in
+              let elems2 = mk_drop (ctxt#mk_sub index istart') elems in
+              let chunk0 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart'; index; elems1], None) in
+              split_after elems2 (chunk0::h)
+          else
+            let [ta; tv] = targs_rest in
+            let [p; a; elems; vs] = args_rest in
+            let n1 = ctxt#mk_sub index istart' in
+            let elems1 = mk_take n1 elems in
+            let vs1 = mk_take n1 vs in
+            let elems2 = mk_drop n1 elems in
+            let vs2 = mk_drop n1 vs in
+            let elem = get_unique_var_symb "elem" elem_tp in
+            let tail_elems2 = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+            let v = get_unique_var_symb "value" tv in
+            let tail_vs2 = get_unique_var_symb "values" (InductiveType ("list", [tv])) in
+            assume (ctxt#mk_eq elems2 (mk_cons elem_tp elem tail_elems2)) $. fun () ->
+            assume (ctxt#mk_eq vs2 (mk_cons tv v tail_vs2)) $. fun () ->
+            let before_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; istart'; index; p; a; elems1; vs1], None) in
+            let after_chunk = Chunk ((array_slice_deep_symb, true), [elem_tp; ta; tv], coef, [arr; ctxt#mk_add index (ctxt#mk_intlit 1); iend'; p; a; tail_elems2; tail_vs2], None) in
+            let element_chunk = Chunk ((array_element_symb, true), [elem_tp], coef, [arr; index; elem], None) in
+            let h = element_chunk::before_chunk::after_chunk::h in
+            match try_assq p predinstmap_by_predfamsymb with
+              None -> cont (Some (Chunk ((p, false), [], coef, [a; elem; v], None)::h))
+            | Some (xs, wbody) ->
+              let tpenv = [] in
+              let (pn,ilist) = ("", []) in
+              let ghostenv = [] in
+              let Some env = zip (List.map fst xs) [a; elem; v] in
+              assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h _ _ ->
+              cont (Some h)
+      in
+      let get_slice_rule h [elem_tp] [arr; istart; iend] cont =
+        let extract_slice h cond cont' =
           match extract
             begin function
-              (Chunk ((g', is_symb), elem_tp'::targs_rest', coef', arr'::istart'::iend'::args_rest', _)) when
-                (g' == array_slice_symb) &&
-                definitely_equal arr' arr && ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend')) &&
-                unify elem_tp elem_tp' ->
-              Some (g', targs_rest', coef', istart', iend', args_rest')
+              Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _) when
+                g' == array_slice_symb && unify elem_tp elem_tp' &&
+                definitely_equal arr' arr && cond coef' istart' (Some iend') ->
+              Some (Some (coef', istart', iend', elems'), None)
+            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; index; elem], _) when
+                g' == array_element_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && cond coef' index None ->
+              Some (None, Some (coef', index, elem))
             | _ -> None
             end
             h
           with
             None -> cont None
-          | Some ((g', targs_rest', coef', istart', iend', args_rest') as ch, h0) ->
-              let rec find_slices curr_end curr_elems curr_chunk curr_h =
-                if ctxt#query (ctxt#mk_le iend curr_end) then
-                  (* found a list of chunks all the way to the end *)
-                  (Some(curr_end, curr_elems, curr_chunk, curr_h))
-                else
-                  (* need to consume more chunks *)
-                match extract
-                  begin function
-                    (Chunk ((g'', is_symb), elem_tp''::targs_rest'', coef'', arr''::istart''::iend''::args_rest'', _)) when
-                      (g'' == array_slice_symb) && ctxt#query (ctxt#mk_eq coef' coef'') &&
-                      definitely_equal arr'' arr && ctxt#query (ctxt#mk_eq istart'' curr_end) &&
-                      unify elem_tp elem_tp'' ->
-                    Some (g'', targs_rest'', coef'', istart'', iend'', args_rest'')
-                  | _ -> None
-                  end
-                  curr_h
-                with
-                  None -> None
-                | Some(((g'', targs_rest'', coef'', istart'', iend'', args_rest'') as new_curr_chunk), h_rest) ->
-                    let (_, _, _, strt, _, [els]) = curr_chunk in
-                    find_slices iend'' (mk_append curr_elems (if (ctxt#query (ctxt#mk_le strt istart)) then (mk_drop (ctxt#mk_sub istart strt) els) else els)) new_curr_chunk h_rest
-              in
-              begin
-              let [elems'] = args_rest' in
-              match find_slices iend' (mk_nil()) ch h0 with
-                None -> cont None
-              | Some(curr_end, curr_elems, (g'', targs_rest'', coef'', istart'', iend'', args_rest''), curr_h) ->
-                let [elems''] = args_rest'' in
-                let chunk_elems = (if ctxt#query (ctxt#mk_le iend iend') then
-                    mk_take (ctxt#mk_sub iend istart) curr_elems
-                  else
-                    mk_append curr_elems  (mk_take (ctxt#mk_sub iend istart'') elems'')
-                )
-                in
-                let chunk_before = Chunk ((array_slice_symb, true), [elem_tp], coef', [arr; istart'; istart; mk_take (ctxt#mk_sub istart istart') elems'], None) in
-                let thechunk = Chunk ((array_slice_symb, true), [elem_tp], coef', [arr; istart; iend; chunk_elems], None) in
-                let chunk_after = Chunk ((array_slice_symb, true), [elem_tp], coef', [arr; iend; iend''; mk_drop (ctxt#mk_sub iend istart'') elems''], None) in
-                cont (Some(chunk_before :: thechunk :: chunk_after :: curr_h))
-              end
+          | Some ((Some slice, None), h) -> cont' (slice, h)
+          | Some ((None, Some (coef', index, elem)), h) ->
+            (* Close a unit array_slice chunk *)
+            cont' ((coef', index, ctxt#mk_add index (ctxt#mk_intlit 1), mk_list elem_tp [elem]), h)
+        in
+        if definitely_equal istart iend then (* create empty array by default *)
+          cont (Some (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [arr; istart; iend; mk_nil()], None)::h))
+        else
+          extract_slice h
+            begin fun coef' istart' iend' ->
+              match iend' with
+                None -> definitely_equal istart istart'
+              | Some iend' -> ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend'))
+            end $.
+          fun ((coef, istart0, iend0, elems0), h) ->
+          let mk_chunk istart iend elems =
+            Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; elems], None)
+          in
+          let before_length = ctxt#mk_sub istart istart0 in
+          let chunk_before = mk_chunk istart0 istart (mk_take before_length elems0) in
+          let slices = [(istart, iend0, mk_drop before_length elems0)] in
+          let rec find_slices slices curr_end h cont' =
+            if ctxt#query (ctxt#mk_le iend curr_end) then
+              (* found a list of chunks all the way to the end *)
+              cont' (slices, h)
+            else
+              (* need to consume more chunks *)
+            extract_slice h (fun coef'' istart'' end'' -> definitely_equal coef coef'' && definitely_equal istart'' curr_end) $.
+            fun ((_, istart'', iend'', elems''), h) ->
+            find_slices ((istart'', iend'', elems'')::slices) iend'' h cont'
+          in
+          find_slices slices iend0 h $. fun ((istart_last, iend_last, elems_last)::slices, h) ->
+          let length_last = ctxt#mk_sub iend istart_last in
+          let slices = List.rev ((istart_last, iend, mk_take length_last elems_last)::slices) in
+          let rec mk_concat lists =
+            match lists with
+              [] -> mk_nil()
+            | [l] -> l
+            | l::ls -> mk_append l (mk_concat ls)
+          in
+          let target_elems = mk_concat (List.map (fun (istart, iend, elems) -> elems) slices) in
+          let target_chunk = mk_chunk istart iend target_elems in
+          let chunk_after = mk_chunk iend iend_last (mk_drop length_last elems_last) in
+          cont (Some (target_chunk::chunk_before::chunk_after::h))
       in
       let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info] cont = 
         let extract_slice_deep h cond cont' =
@@ -6030,55 +6063,60 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin function
               Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _) when
                 g' == array_slice_deep_symb && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
-                definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && cond coef' istart' iend' ->
+                definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && cond coef' istart' (Some iend') ->
               Some (Some (coef', istart', iend', elems', vs'), None)
-            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _) when
-                g' == array_slice_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && cond coef' istart' iend' &&
-                ctxt#query (ctxt#mk_eq (ctxt#mk_add istart' (ctxt#mk_intlit 1)) iend') ->
-              Some (None, Some (coef', istart', iend', elems'))
+            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; index; elem], _) when
+                g' == array_element_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && cond coef' index None ->
+              Some (None, Some (coef', index, elem))
             | _ -> None
             end
             h
           with
             None -> cont None
           | Some ((Some slice, None), h) -> cont' (slice, h)
-          | Some ((None, Some (coef', istart', iend', elems')), h) ->
-            (* Close this unit slice *)
-            let elem = get_unique_var_symb "elem" elem_tp in
-            assume (ctxt#mk_eq elems' (mk_cons elem_tp elem (mk_nil()))) $. fun () ->
+          | Some ((None, Some (coef', index, elem)), h) ->
+            (* Close a unit array_slice_deep chunk *)
             (* First check if there is a p(info, elem, ?value) chunk *)
-            match
-              extract
-                begin function
-                  Chunk ((g, is_symb), [], coef'', [arg''; elem''; value''], _) when
-                    g == p && definitely_equal coef'' coef' && definitely_equal arg'' info && definitely_equal elem'' elem ->
-                    Some value''
-                | _ -> None
-                end
-                h
-            with
-              Some (v, h) -> cont' ((coef', istart', iend', elems', mk_cons v_tp v (mk_nil())), h)
-            | None ->
-              (* Try to close p(info, elem, ?value) *)
-              match try_assq p predinstmap_by_predfamsymb with
-                None -> cont None
-              | Some (xs, wbody) ->
-                let tpenv = [] in
-                let (pn,ilist) = ("", []) in
-                let ghostenv = [] in
-                let [xinfo, _; xelem, _; xvalue, _] = xs in
-                let env = [xinfo, info; xelem, elem] in
-                let rules = !rules_cell in
-                with_context (Executing (h, env, pred_loc wbody, "Auto-closing array slice")) $. fun () ->
-                assert_pred rules tpenv (pn,ilist) h ghostenv env wbody true coef' $. fun h ghostenv env size_first ->
-                match try_assoc xvalue env with
+            begin fun cont'' ->
+              match
+                extract
+                  begin function
+                    Chunk ((g, is_symb), [], coef'', [arg''; elem''; value''], _) when
+                      g == p && definitely_equal coef'' coef' && definitely_equal arg'' info && definitely_equal elem'' elem ->
+                      Some value''
+                  | _ -> None
+                  end
+                  h
+              with
+                Some (v, h) -> cont'' v h
+              | None ->
+                (* Try to close p(info, elem, ?value) *)
+                match try_assq p predinstmap_by_predfamsymb with
                   None -> cont None
-                | Some v -> cont' ((coef', istart', iend', elems', mk_cons v_tp v (mk_nil())), h)
+                | Some (xs, wbody) ->
+                  let tpenv = [] in
+                  let (pn,ilist) = ("", []) in
+                  let ghostenv = [] in
+                  let [xinfo, _; xelem, _; xvalue, _] = xs in
+                  let env = [xinfo, info; xelem, elem] in
+                  let rules = !rules_cell in
+                  with_context (Executing (h, env, pred_loc wbody, "Auto-closing array slice")) $. fun () ->
+                  assert_pred rules tpenv (pn,ilist) h ghostenv env wbody true coef' $. fun h ghostenv env size_first ->
+                  match try_assoc xvalue env with
+                    None -> cont None
+                  | Some v -> cont'' v h
+            end $. fun v h ->
+            cont' ((coef', index, ctxt#mk_add index (ctxt#mk_intlit 1), mk_list elem_tp [elem], mk_list v_tp [v]), h)
         in
         if definitely_equal istart iend then (* create empty array by default *)
           cont (Some (Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)::h))
         else
-          extract_slice_deep h (fun coef' istart' iend' -> ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend'))) $.
+          extract_slice_deep h
+            begin fun coef' istart' iend' ->
+              match iend' with
+                None -> definitely_equal istart istart'
+              | Some iend' -> ctxt#query (ctxt#mk_and (ctxt#mk_le istart' istart) (ctxt#mk_le istart iend'))
+            end $.
           fun ((coef, istart0, iend0, elems0, vs0), h) ->
           let mk_chunk istart iend elems vs =
             Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], coef, [arr; istart; iend; p; info; elems; vs], None)
@@ -6112,6 +6150,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont (Some (target_chunk::chunk_before::chunk_after::h))
       in
       begin
+      add_rule array_element_symb get_element_rule;
       add_rule array_slice_symb get_slice_rule;
       add_rule array_slice_deep_symb get_slice_deep_rule
       end
@@ -6957,16 +6996,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       iter h arr $. fun h arr ->
       iter h i $. fun h i ->
       let elem_tp = InferredType (ref None) in
-      let i_plus_1 = ctxt#mk_add i (ctxt#mk_intlit 1) in
-      let pats = [TermPat arr; TermPat i; TermPat i_plus_1; SrcPat DummyPat] in
-      assert_chunk rules (pn,ilist) h [] [] [] l (array_slice_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 3) pats $. fun h coef [_; _; _; elems] _ _ _ _ ->
+      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+      assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun h coef [_; _; elem] _ _ _ _ ->
       let elem_tp = unfold_inferred_type elem_tp in
-      let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
-      let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-      let elem = get_unique_var_symb_non_ghost "elem" elem_tp in
-      let elems' = ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive elem; ctxt#mk_app nil_symb []] in
-      assume (ctxt#mk_eq elems elems') $. fun () ->
-      cont (Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; i; i_plus_1; elems], None)::h) elem
+      cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
     | Operation (l, Not, [e], ts) -> eval_h (pn,ilist) is_ghost_expr h env e (fun h v -> cont h (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
         eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
@@ -7742,14 +7775,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       eval_h h env arr $. fun h arr ->
       eval_h h env i $. fun h i ->
       eval_h h env rhs $. fun h rhs ->
-      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
-      let i_plus_1 = ctxt#mk_add i (ctxt#mk_intlit 1) in
-      let pats = [TermPat arr; TermPat i; TermPat i_plus_1; SrcPat DummyPat] in
-      assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_slice_symb, true) [elem_tp] real_unit real_unit_pat (Some 3) pats $. fun h _ [_; _; _; elems] _ _ _ _ ->
-      let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
-      let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-      let elems' = ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive rhs; ctxt#mk_app nil_symb []] in
-      cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [arr; i; i_plus_1; elems'], None)::h) env
+      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+      assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun h _ [_; _; elem] _ _ _ _ ->
+      cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
     | WriteDeref (l, e, rhs) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (w, pointerType) = check_expr (pn,ilist) tparams tenv e in

@@ -1,3 +1,12 @@
+class Incrementor {
+    static void increment(int[] xs, int i)
+        //@ requires xs[i] |-> ?n;
+        //@ ensures xs[i] |-> n + 1;
+    {
+        xs[i]++;
+    }
+}
+
 class Person {
     int age;
 }
@@ -29,7 +38,7 @@ class ArrayTest {
       @*/
       /*@
       ensures
-          array_slice(a, i, i + 30, append(append(drop(i,l), l2),take(10,l3))) &*&
+          array_slice(a, i, i + 30, append(drop(i,l), append(l2, take(10,l3)))) &*&
           array_slice(a, 0, i, take(i, l)) &*&
           array_slice(a, i + 30, i + 35, drop(10, l3));
       @*/
