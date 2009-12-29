@@ -151,6 +151,8 @@ let show_ide initialPath prover =
   in
   let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
   let rec perform_syntax_highlighting ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) start stop =
+    let firstLine = buffer#start_iter#get_text ~stop:buffer#start_iter#forward_to_line_end in
+    let {file_opt_annot_char=annotChar} = get_file_options firstLine in
     let Some commentTag = GtkText.TagTable.lookup buffer#tag_table "comment" in
     let commentTag = new GText.tag commentTag in
     let Some ghostRangeTag = GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
@@ -170,7 +172,7 @@ let show_ide initialPath prover =
     let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_core keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) in
+        make_lexer_core keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter

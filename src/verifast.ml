@@ -269,6 +269,42 @@ let utf8_to_file s =
   in
   ascii 0
 
+let get_first_line_tokens text =
+  let n = String.length text in
+  let rec first_line_tokens i =
+    if i = n then
+      []
+    else
+      match text.[i] with
+        'A'..'Z'|'a'..'z'|'0'..'9'|'_' -> ident_token i (i + 1)
+      | ' '|'\t' -> first_line_tokens (i + 1)
+      | '\r'|'\n' -> []
+      | c -> Printf.sprintf "%c" c::first_line_tokens (i + 1)
+  and ident_token start i =
+    match if i = n then None else Some text.[i] with
+      Some ('A'..'Z'|'a'..'z'|'0'..'9'|'_') -> ident_token start (i + 1)
+    | _ -> String.sub text start (i - start)::first_line_tokens i
+  in
+  first_line_tokens 0
+
+type file_options = {file_opt_annot_char: char; file_opt_tab_size: int}
+
+let get_file_options text =
+  let tokens = get_first_line_tokens text in
+  let rec iter annotChar tabSize toks =
+    match toks with
+      "verifast_annotation_char"::":"::c::toks when String.length c = 1 -> iter c.[0] tabSize toks
+    | "tab_size"::":"::n::toks ->
+      begin
+        try
+          iter annotChar (int_of_string n) toks
+        with Failure "int_of_string" -> iter annotChar tabSize toks
+      end
+    | tok::toks -> iter annotChar tabSize toks
+    | [] -> {file_opt_annot_char=annotChar; file_opt_tab_size=tabSize}
+  in
+  iter '@' 8 tokens
+
 let readFile path =
   let chan = open_in path in
   let count = ref 0 in
@@ -385,7 +421,8 @@ type range_kind =
     @param reportShouldFail Function that will be called whenever a should-fail directive is found in the source code.
       Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.
   *)
-let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail =
+let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
+  let annotEnd = Printf.sprintf "%c*/" annotChar in
   let textlength = String.length text in
   let textpos = ref 0 in
   let text_peek () = if !textpos = textlength then '\000' else text.[!textpos] in
@@ -540,7 +577,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk (); store c; ident2 ()
     | _ ->
       let s = get_string() in
-      if s = "@*/" then
+      if s = annotEnd then
       begin
         ghost_range_end();
         reportRange GhostRangeDelimiter (current_loc());
@@ -642,7 +679,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       text_junk ();
       (
         match text_peek () with
-          '@' ->
+          c when c = annotChar ->
           begin
             text_junk ();
             if !ghost_range_start <> None then raise Stream.Failure;
@@ -665,7 +702,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       text_junk ();
       (
         match text_peek () with
-          '@' ->
+          c when c = annotChar ->
           text_junk ();
           if !ghost_range_start <> None then raise Stream.Failure;
           ghost_range_start := Some !token_srcpos;
@@ -725,7 +762,8 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
    in_ghost_range)
 
 let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
-  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail in
+  let {file_opt_annot_char=annotChar} = get_file_options text in
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail annotChar in
   (loc, ignore_eol, token_stream)
 
 (* Some types for dealing with constants *)
