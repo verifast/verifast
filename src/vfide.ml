@@ -228,7 +228,17 @@ let show_ide initialPath prover =
         in
         let home = iter lineStart in
         let indent = lineStart#get_text ~stop:home in
-        buffer#insert ("\n" ^ indent);
+        let lineEnd = cursor#forward_to_line_end in
+        let eol = (* Copy the end-of-line sequence from the current line, or else the previous line, or else use the system standard sequence. *)
+          if lineEnd#is_end then
+            if lineStart#is_start then
+              if Sys.os_type = "Win32" then "\r\n" else "\n"
+            else
+              lineStart#backward_cursor_position#get_text ~stop:lineStart
+          else
+            lineEnd#get_text ~stop:lineEnd#forward_cursor_position
+        in
+        buffer#insert (eol ^ indent);
         srcText#scroll_mark_onscreen `INSERT;
         true
       end
