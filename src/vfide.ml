@@ -25,6 +25,32 @@ let show_ide initialPath prover =
   let traceFont = ref Fonts.trace_font in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
+  let current_tab = ref None in
+  let showLineNumbers enable =
+    match !current_tab with
+      None -> ()
+    | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+      srcText#set_show_line_numbers enable;
+      subText#set_show_line_numbers enable
+  in
+  let showWhitespace enable =
+    match !current_tab with
+      None -> ()
+    | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+      let flags = if enable then [`SPACE; `TAB] else [] in
+      srcText#set_draw_spaces flags;
+      subText#set_draw_spaces flags
+  in
+  let showLineNumbersAction =
+    let a = GAction.toggle_action ~name:"ShowLineNumbers" () in
+    a#set_label "Show _line numbers"; a#connect#toggled (fun () -> showLineNumbers a#get_active);
+    a
+  in
+  let showWhitespaceAction =
+    let a = GAction.toggle_action ~name:"ShowWhitespace" () in
+    a#set_label "Show _whitespace"; a#connect#toggled (fun () -> showWhitespace a#get_active);
+    a
+  in
   let _ =
     let a = GAction.add_action in
     GAction.add_actions actionGroup [
@@ -40,6 +66,8 @@ let show_ide initialPath prover =
       a "Preferences" ~label:"_Preferences...";
       a "View" ~label:"Vie_w";
       a "ClearTrace" ~label:"_Clear trace" ~accel:"<Ctrl>L";
+      (fun group -> group#add_action showLineNumbersAction);
+      (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
@@ -69,6 +97,9 @@ let show_ide initialPath prover =
         </menu>
         <menu action='View'>
           <menuitem action='ClearTrace' />
+          <separator />
+          <menuitem action='ShowLineNumbers' />
+          <menuitem action='ShowWhitespace' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -124,17 +155,21 @@ let show_ide initialPath prover =
     subLabel#set_text text
   in
   let bufferChangeListener = ref (fun _ -> ()) in
-  let current_tab = ref None in
   let set_current_tab tab =
     current_tab := tab;
-    let (undoSensitive, redoSensitive) =
-      match tab with
-        None -> (false, false)
-      | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
-        (!undoList <> [], !redoList <> [])
-    in
-    undoAction#set_sensitive undoSensitive;
-    redoAction#set_sensitive redoSensitive
+    match tab with
+      None ->
+      undoAction#set_sensitive false;
+      redoAction#set_sensitive false;
+      showLineNumbersAction#set_sensitive false;
+      showWhitespaceAction#set_sensitive false
+    | Some (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
+      undoAction#set_sensitive (!undoList <> []);
+      redoAction#set_sensitive (!redoList <> []);
+      showLineNumbersAction#set_sensitive true;
+      showLineNumbersAction#set_active (srcText#show_line_numbers);
+      showWhitespaceAction#set_sensitive true;
+      showWhitespaceAction#set_active (srcText#draw_spaces <> [])
   in
   let tag_name_of_range_kind kind =
     match kind with
@@ -191,8 +226,8 @@ let show_ide initialPath prover =
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
-    let srcText = GText.view ~packing:textScroll#add () in
-    let buffer = srcText#buffer in
+    let srcText = (*GText.view*) GSourceView2.source_view ~show_line_numbers:true ~packing:textScroll#add () in
+    let buffer = srcText#source_buffer in
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
     let ghostRangeTag = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
     let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
@@ -207,13 +242,9 @@ let show_ide initialPath prover =
     let subScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
-    let subText = GText.view ~buffer:buffer ~packing:subScroll#add () in
-    let _ = (new GObj.misc_ops srcText#as_widget)#modify_font_by_name !codeFont in
-    let _ = (new GObj.misc_ops subText#as_widget)#modify_font_by_name !codeFont in
-    srcText#set_pixels_above_lines 1;
-    srcText#set_pixels_below_lines 1;
-    subText#set_pixels_above_lines 1;
-    subText#set_pixels_below_lines 1;
+    let subText = (*GText.view ~buffer:buffer*) GSourceView2.source_view ~source_buffer:buffer ~show_line_numbers:true ~packing:subScroll#add () in
+    srcText#misc#modify_font_by_name !codeFont;
+    subText#misc#modify_font_by_name !codeFont;
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
@@ -298,8 +329,8 @@ let show_ide initialPath prover =
     codeFont := fontName;
     List.iter
       begin fun (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
-        (new GObj.misc_ops srcText#as_widget)#modify_font_by_name !codeFont;
-        (new GObj.misc_ops subText#as_widget)#modify_font_by_name !codeFont
+        srcText#misc#modify_font_by_name !codeFont;
+        subText#misc#modify_font_by_name !codeFont
       end
       !buffers
   in
@@ -328,7 +359,10 @@ let show_ide initialPath prover =
       ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
-      (buffer: GText.buffer)#insert ~iter:gIter text;
+      (buffer: GSourceView2.source_buffer)#insert ~iter:gIter text;
+      let {file_opt_tab_size=tabSize} = get_file_options text in
+      srcText#set_tab_width tabSize;
+      subText#set_tab_width tabSize;
       ignore_text_changes := false;
       undoList := [];
       redoList := [];
@@ -347,7 +381,7 @@ let show_ide initialPath prover =
     path := Some thePath;
     let chan = open_out_bin thePath in
     let gBuf = buffer in
-    let text = (gBuf: GText.buffer)#get_text () in
+    let text = (gBuf: GSourceView2.source_buffer)#get_text () in
     output_string chan (utf8_to_file text);
     close_out chan;
     buffer#set_modified false;

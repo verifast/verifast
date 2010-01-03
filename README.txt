@@ -9,13 +9,13 @@ In order to build VeriFast on an x86 Windows machine, you need to
 1) Install Required Software Packages
 =====================================
 
-You can either use tools.zip, which contains all required tools (except Visual Studio),
+You can either use tools2.zip, which contains all required tools (except Visual Studio),
 or you can do a manual install.
 
-i) Use tools.zip
+i) Use tools2.zip
 ----------------
 
-Simply download tools.zip from https://aramis.cs.kuleuven.be/verifast/chrome/site/tools.zip and unzip it to C:\.
+Simply download tools2.zip from https://aramis.cs.kuleuven.be/verifast/chrome/site/tools2.zip and unzip it to C:\.
 
 Note: unfortunately, the tools are not relocatable. I installed them to C:\, so you
 MUST unzip them to C:\ as well.
@@ -26,11 +26,11 @@ ii) Manual install
 You also need Microsoft Visual C++ 8.0 (Visual Studio 2005) or newer.
 
 A. OCaml 3.11 or newer
-B. Flexdll 0.14 or newer
+B. Flexdll 0.21 or newer
 C. Cygwin; GNU make (to build Camlidl)
 D. Camlidl 1.05 or newer
 E. Z3 1.3.6 or newer
-F. LablGTK 2.12.0 or newer
+F. LablGTK with GtkSourceView
 
 A. OCaml
 --------
@@ -39,7 +39,7 @@ VeriFast is written in O'Caml.
 
 1) Download the OCaml 3.11 Windows binaries (for the Microsoft Visual C++ toolchain) and install it.
 2) Add the bin directory to your PATH
-3) set OCAMLLIB=C:\Ocaml311\lib
+3) set OCAMLLIB=C:\Ocaml\lib
 
 B. Flexdll
 ----------
@@ -101,31 +101,35 @@ VeriFast uses the Z3 SMT solver.
 
     c) Run exec.cmd
 
-F. LablGTK
-----------
+F. LablGTK with GtkSourceView
+-----------------------------
 
-VeriFast uses LablGTK, an OCaml language binding for the GTK GUI toolkit.
-To build and run VeriFast, you must first download and install GTK and
-LablGTK, as follows:
+VeriFast requires:
+- The GTK user interface toolkit
+- The GtkSourceView editor widget for GTK, and its dependencies
+- The LablGtk OCaml binding for GTK
+- The LablGtkSourceView OCaml binding for GtkSourceView
 
-1) Download and unzip the GTK bundle:
+LablGtkSourceView is included in the LablGtk source release but not in the
+Win32 binary release. Therefore, LablGtk must be built from source. Unfortunately,
+the Makefile does not work out of the box and some tweaking in various places is
+required.
 
-http://ftp.gnome.org/pub/gnome/binaries/win32/gtk+/2.12/gtk+-bundle-2.12.11.zip
+To get the various input files required to build and run LablGtk and
+LablGtkSourceView, download the following files and unpack all of them into C:\GTK:
+- glade3-3.6.7-with-GTK+.exe
+- libxml2_2.7.4-1_win32.zip
+- libxml2-dev_2.7.4-1_win32.zip
+- gtksourceview-2.6.2.zip
+- gtksourceview-dev-2.6.2.zip
+- lablgtk-2.14.0.tar.gz
 
-2) Download and unzip the LablGTK bundle:
+You need to create C:\gtk\bin\libgtksourceview-2.0-0.lib as follows:
+- dumpbin /exports libgtksourceview-2.0-0.dll > exports.txt
+- using awk, turn exports.txt into libgtksourceview-2.0-0.def
+- using the lib tool, turn libgtksourceview-2.0-0.def into libgtksourceview-2.0-0.lib
 
-http://wwwfun.kurims.kyoto-u.ac.jp/soft/olabl/dist/lablgtk-2.12.0-win32.zip
-
-3) Build LablGTK:
-
-cd <lablgtkdir>\lib\lablgtk2
-ocaml build.ml
-
-4) Install LablGTK:
-
-xcopy /E <lablgtkdir>\lib\lablgtk2 <ocamldir>\lib
-xcopy <lablgtkdir>\lib\stublibs\dlllablgtk2.dll <ocamldir>\lib\stublibs
-xcopy <lablgtkdir>\bin\lablgtk2.bat <ocamldir>\bin
+Then build lablgtk with gtksourceview, tweaking the sources as necessary.
 
 Before running a program that uses GTK, put the GTK DLLs in your PATH:
 
@@ -148,6 +152,6 @@ C:\WINDOWS\system32\cmd.exe /k C:\verifast\settings.bat
 3) Run Nmake
 ============
 
-Go to the src directory, and run nmake. You will get verify.exe and vfide.exe in the src directory.
+Go to the src directory, and run nmake. You will get verifast.exe and vfide.exe in the src directory.
 The makefile will also run the test suite.
 You might want to put the src directory in your PATH.

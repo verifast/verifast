@@ -22,7 +22,7 @@ refman:
 dlsymtool.exe: dlsymtool.ml
 	ocamlopt.opt -o dlsymtool.exe dlsymtool.ml
 
-Fonts.cmx:
+Fonts.cmx: Fonts_default.ml
 	copy Fonts_default.ml Fonts.ml
 	ocamlopt.opt -c Fonts.ml
 
@@ -71,7 +71,7 @@ vfide.cmx: vfversion.cmi verifast.cmx Fonts.cmx vfide.ml
 
 vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
 vfideredux_opt.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml Fonts.cmx vfide.cmx
