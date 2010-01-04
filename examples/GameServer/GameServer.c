@@ -30,27 +30,27 @@ predicate_ctor lock_invariant(struct game** games_list)() =
   pointer(games_list, ?games) &*& games_lseg(games, 0, ?howmany);
 @*/
 
-struct rpc_session {
+struct rps_session {
   struct socket* socket;
   int result;
 };
 
-enum rpc { rock, paper, scissors};
+enum rps { rock, paper, scissors};
 
 /*@
-predicate_family_instance thread_run_pre(read_rpc)(struct rpc_session* s, any info) =
+predicate_family_instance thread_run_pre(read_rps)(struct rps_session* s, any info) =
   [1/2]s->socket |-> ?socket &*&  socket(socket) &*& s->result |-> _;
   
-predicate_family_instance thread_run_post(read_rpc)(struct rpc_session* s, any info) =
+predicate_family_instance thread_run_post(read_rps)(struct rps_session* s, any info) =
   [1/2]s->socket |-> ?socket &*& socket(socket) &*&
   s->result |-> ?res &*& res == rock || res == paper || res == scissors;
 @*/
 
-void read_rpc(struct rpc_session* s) //@: thread_run
-  //@ requires thread_run_pre(read_rpc)(s, ?info);
-  //@ ensures thread_run_post(read_rpc)(s, info);
+void read_rps(struct rps_session* s) //@: thread_run
+  //@ requires thread_run_pre(read_rps)(s, ?info);
+  //@ ensures thread_run_post(read_rps)(s, info);
 {
-  //@ open thread_run_pre(read_rpc)(s, info);
+  //@ open thread_run_pre(read_rps)(s, info);
   struct socket* socket = s->socket;
   int choice;
   socket_write_string(socket, "Enter rock (0), paper (1) or scissors (2) ...\r\n");
@@ -63,7 +63,7 @@ void read_rpc(struct rpc_session* s) //@: thread_run
   }
   socket_write_string(socket, "Waiting for other player ...\r\n");
   s->result = choice;
-  //@ close thread_run_post(read_rpc)(s, info);
+  //@ close thread_run_post(read_rps)(s, info);
 }
 
 void play_game(struct game* game) 
@@ -81,24 +81,24 @@ void play_game(struct game* game)
     /*@ invariant socket(s1) &*& socket(s2) &*&
         game->player1 |-> s1 &*& game->player2 |-> s2; @*/
   {
-    struct rpc_session* rpc_s1 = malloc(sizeof(struct rpc_session));
-    struct rpc_session* rpc_s2 = malloc(sizeof(struct rpc_session));
+    struct rps_session* rps_s1 = malloc(sizeof(struct rps_session));
+    struct rps_session* rps_s2 = malloc(sizeof(struct rps_session));
     struct thread* t1; struct thread* t2;
-    if(rpc_s1 == 0 || rpc_s2 == 0) abort();
-    rpc_s1->socket = game->player1;
-    rpc_s2->socket = game->player2;
-    //@ close thread_run_pre(read_rpc)(rpc_s1, unit);
-    t1 = thread_start(read_rpc, rpc_s1);
-    //@ close thread_run_pre(read_rpc)(rpc_s2, unit);
-    t2 = thread_start(read_rpc, rpc_s2);
+    if(rps_s1 == 0 || rps_s2 == 0) abort();
+    rps_s1->socket = game->player1;
+    rps_s2->socket = game->player2;
+    //@ close thread_run_pre(read_rps)(rps_s1, unit);
+    t1 = thread_start(read_rps, rps_s1);
+    //@ close thread_run_pre(read_rps)(rps_s2, unit);
+    t2 = thread_start(read_rps, rps_s2);
     thread_join(t1);
     thread_join(t2);
-    //@ open thread_run_post(read_rpc)(rpc_s1, unit);
-    //@ open thread_run_post(read_rpc)(rpc_s2, unit);
-    choice1 = rpc_s1->result;
-    choice2 = rpc_s2->result;
-    free(rpc_s1);
-    free(rpc_s2);
+    //@ open thread_run_post(read_rps)(rps_s1, unit);
+    //@ open thread_run_post(read_rps)(rps_s2, unit);
+    choice1 = rps_s1->result;
+    choice2 = rps_s2->result;
+    free(rps_s1);
+    free(rps_s2);
     if(choice1 == choice2) {
       socket_write_string(s1, "The other player made the same choice. Try Again.\r\n");
       socket_write_string(s2, "The other player made the same choice. Try Again.\r\n");
