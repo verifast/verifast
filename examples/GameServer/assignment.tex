@@ -1,0 +1,21 @@
+\documentclass{article}
+
+\title{Assignment:\\
+Verification of an Internet Game Server}
+
+\begin{document}
+
+\maketitle
+
+\section{Assignment}
+The goal of this assignment is to verify a game server. More specifically, you must add annotations to \texttt{GameServer.c} such that the VeriFast program verifier accepts the program. Modifying the source code itself or using \texttt{assume} statements is not permitted. It is not necessary for specifications to be complete; it suffices to prove the absence of memory errors and data races.
+
+Your final solution must be submitted to \texttt{bart.jacobs@cs.kuleuven.be} by March 7th 2010. It suffices to send the annotated version of \texttt{GameServer.c}. If you get stuck, you can request hints by sending an email describing your problem to \texttt{bart.jacobs@cs.kuleuven.be}.
+
+\section{Hints}
+
+\begin{itemize}
+  \item To verify memory safety of pointer dereference \texttt{*p}, VeriFast looks for a heap chunk \texttt{pointer(p, \_)}. \texttt{prelude.h} contains various lemmas to create and manipulate \texttt{pointer} chunks.
+\end{itemize}
+
+\end{document}
