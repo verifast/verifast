@@ -1,8 +1,8 @@
 package foo;
 
 class Bar {
-    public static final short QUUX = (short) (Foo.FOO + Bar.BAR);
-    public static final short BLA = (short) (Bar.QUUX);
+    public static final short QUUX = (short) (Foo.FOO + BAR);
+    public static final short BLA = (short)QUUX;
     public static final short BAR = (byte)0x103;
 
     private Bar() 
@@ -24,10 +24,10 @@ class Bar {
         //@ ensures true;
     {
         short tmp0 = 0;
-        tmp0 = Bar.BLA;
+        tmp0 = BLA;
         assert Foo.FOO == 12345;
-        assert Bar.BAR == 3;
-        assert Bar.QUUX == 12348;
+        assert BAR == 3;
+        assert QUUX == 12348;
     }
     
 }

@@ -3963,6 +3963,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let has_package map = List.exists (fun (cn, _) -> startswith cn x) map in
     has_package classmap1 || has_package classmap0 || has_package interfmap1 || has_package interfmap0
   in
+  
+  let current_class = "#currentClass" in
 
   let rec check_expr (pn,ilist) tparams tenv e =
     let check e = check_expr (pn,ilist) tparams tenv e in
@@ -4059,6 +4061,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Some (Read (l, Var (l, "this", ref (Some LocalVar)), f), t)
       in
       match field_of_this with
+        Some result -> result
+      | None ->
+      let field_of_class =
+        match try_assoc current_class tenv with
+          None -> None
+        | Some (ClassOrInterfaceName cn) ->
+          match lookup_class_field cn x with
+            None -> None
+          | Some (lf, t, vis, binding, final, init, value) ->
+            let f = new fieldref x in f#set_parent cn; f#set_range t; if binding = Static then f#set_static; f#set_value value;
+            Some (Read (l, Var (l, current_class, ref (Some LocalVar)), f), t)
+      in
+      match field_of_class with
         Some result -> result
       | None ->
       match resolve (pn,ilist) l x classmap1 with
@@ -4390,7 +4405,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               List.map
                 begin function
                   (f, (l, t, vis, binding, final, Some e, value)) ->
-                  (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [] e t), value))
+                  (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
                 | fd -> fd
                 end
                 fds
@@ -6774,7 +6789,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match co with
                 None -> None
               | Some (pre, post) ->
-                let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
+                let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                 Some (wpre, tenv, wpost)
@@ -6849,7 +6864,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match co with
                   None -> static_error lm "Constructor must have contract"
                 | Some (pre, post) ->
-                  let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
+                  let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
                   let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                   (wpre, tenv, wpost)

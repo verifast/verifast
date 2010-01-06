@@ -4,6 +4,6 @@ class Program {
         //@ requires Program_x(?v);
         //@ ensures Program_x(v + 1);
     {
-        Program.x = Program.x + 1;
+        Program.x = x + 1;
     }
 }
