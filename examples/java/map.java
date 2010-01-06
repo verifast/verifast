@@ -57,7 +57,7 @@ class Nil implements List {
 
     Nil()
         //@ requires true;
-        //@ ensures List(Nil.class)(result,nil);
+        //@ ensures List(Nil.class)(this,nil);
     {
         //@ close List(Nil.class)(this, nil);
     }
@@ -126,7 +126,7 @@ class Cons implements List {
     
     Cons(int head, List tail)
         //@ requires tail != null &*& List(tail.getClass())(tail, ?t);
-        //@ ensures List(Cons.class)(result, cons(head, t));
+        //@ ensures List(Cons.class)(this, cons(head, t));
     {
         this.head = head;
         this.tail = tail;

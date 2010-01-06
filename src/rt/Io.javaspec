@@ -36,13 +36,13 @@ public interface Reader {
 public class InputStreamReader implements Reader {
     public InputStreamReader(InputStream stream);
         //@ requires InputStream(stream.getClass())(stream, ?info);
-        //@ ensures InputStreamReader(result, stream, info);
+        //@ ensures InputStreamReader(this, stream, info);
 }
 
 public class BufferedReader implements Reader {
     public BufferedReader(Reader r);
         //@ requires Reader(r.getClass())(r, ?info);
-        //@ ensures BufferedReader(result, r, info);
+        //@ ensures BufferedReader(this, r, info);
     
     public String readLine();
         //@ requires BufferedReader(this, ?reader, ?info);
@@ -106,19 +106,19 @@ public interface Writer {
 public class OutputStreamWriter implements Writer {
     public OutputStreamWriter(OutputStream s);
         //@ requires OutputStream(s.getClass())(s, ?info);
-        //@ ensures OutputStreamWriter(result, s, info);
+        //@ ensures OutputStreamWriter(this, s, info);
 }
 
 public class BufferedWriter implements Writer {
     public BufferedWriter(Writer w);
         //@ requires Writer(w.getClass())(w, ?info);
-        //@ ensures BufferedWriter(result, w, info);
+        //@ ensures BufferedWriter(this, w, info);
 }
 
 public class PrintWriter {
     public PrintWriter(Writer w, boolean autoFlush);
         //@ requires Writer(w.getClass())(w, ?info);
-        //@ ensures PrintWriter(result, w, info);
+        //@ ensures PrintWriter(this, w, info);
     
     public void println(String text);
         //@ requires PrintWriter(this, ?w, ?info);

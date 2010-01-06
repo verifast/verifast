@@ -30,7 +30,7 @@ public class Session implements Runnable {
             roomLock != null &*& [?f]lock(roomLock, room_ctor(room)) &*&
             socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
         @*/
-        //@ ensures session(result);
+        //@ ensures session(this);
     {
         this.room = room;
         this.room_lock = roomLock;

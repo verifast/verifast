@@ -6,7 +6,7 @@ predicate APDU(APDU apdu, byte[] buffer);
 
 lemma_auto void APDU_inv();
     requires APDU(?apdu, ?buffer);
-    ensures APDU(apdu, buffer) &*& buffer != null &*& 133 <= buffer.length;
+    ensures APDU(apdu, buffer) &*& apdu != null &*& buffer != null &*& 133 <= buffer.length;
     
 @*/
 
@@ -37,18 +37,28 @@ class APDU {
 
 }
 
+//@ predicate_family Applet_(Class c)(Applet applet);
+
 class Applet {
-  public static boolean selectingApplet(Object self);
-    //@ requires self != null;
+  public Applet();
+    //@ requires true;
     //@ ensures true;
     
-  public static void register(Object self);
-    //@ requires self != null;
+  public boolean selectingApplet();
+    //@ requires true;
     //@ ensures true;
     
-  public static void register(Object self, byte[] bArray, short bOffset, byte bLength) throws SystemException;
-    //@ requires self != null;
+  public void register();
+    //@ requires Applet_(this.getClass())(this);
     //@ ensures true;
+    
+  public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException;
+    //@ requires Applet_(this.getClass())(this);
+    //@ ensures true;
+  
+  public void process(APDU apdu);
+    //@ requires Applet_(this.getClass())(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ ensures Applet_(this.getClass())(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 }
 
 class ISOException {

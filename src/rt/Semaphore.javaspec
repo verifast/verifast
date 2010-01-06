@@ -17,7 +17,7 @@ lemma void lock_dispose(Semaphore l);
 public class Semaphore {
     Semaphore(int n);
         //@ requires n == 1 &*& create_lock_ghost_arg(?a) &*& a();
-        //@ ensures lock(result, a);
+        //@ ensures lock(this, a);
 
     void acquire();
         //@ requires [?f]lock(this, ?a);

@@ -122,3 +122,6 @@ verifast_both -c -allow_should_fail ghost_field.c
 verifast_both -c -allow_should_fail inhabited.c
 verifast_both -c -allow_should_fail lemmafuncptr.c
 verifast_both -c -allow_should_fail redux.c redux2.c redux3.c redux4.c redux5.c redux6.c redux7.c redux8.c redux9.c redux10.c
+verifast_both -c -allow_should_fail override.java
+verifast_both -c -allow_should_fail override2.java
+verifast_both -c -allow_should_fail superctor.java

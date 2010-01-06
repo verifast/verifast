@@ -6,7 +6,7 @@ class Counter {
     
     Counter(int v)
         //@ requires true;
-        //@ ensures result.value |-> v;
+        //@ ensures this.value |-> v;
     {
       this.value = v;
     }
@@ -73,7 +73,7 @@ class Session implements Runnable {
     
     public Session(Counter c, Semaphore l)
         //@ requires c != null;
-        //@ ensures result.counter |-> c &*& result.lock |-> l;
+        //@ ensures this.counter |-> c &*& this.lock |-> l;
     {
         this.counter = c;
         this.lock = l;

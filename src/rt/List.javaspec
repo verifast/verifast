@@ -32,5 +32,5 @@ interface Iterator{
 public class ArrayList implements List{
   ArrayList();
   //@ requires emp;
-  //@ ensures list(result, nil);
+  //@ ensures list(this, nil);
 }

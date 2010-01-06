@@ -4,19 +4,19 @@ public class Counter {
 
   Counter(int v)
     //@ requires emp;
-    //@ ensures result.value |-> v;
+    //@ ensures this.value |-> v;
   {
     this.value=v;
   }
   Counter(Counter v)
     //@ requires v.value |-> ?t;
-    //@ ensures v.value |-> t &*& result.value |-> t;
+    //@ ensures v.value |-> t &*& this.value |-> t;
   {
     this.value=v.value;
   }
   Counter(int v,int b)
     //@ requires emp;
-    //@ ensures result.value |-> v+b;
+    //@ ensures this.value |-> v+b;
   {
     this.value=v+b;
   }

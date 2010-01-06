@@ -6,7 +6,7 @@ predicate string_buffer(StringBuffer buffer);
 public class StringBuffer{
   StringBuffer();
     //@ requires emp;
-    //@ ensures string_buffer(result);
+    //@ ensures string_buffer(this);
   StringBuffer append(StringBuffer b);
     //@ requires string_buffer(this) &*& [?f]string_buffer(b);
     //@ ensures string_buffer(this) &*& [f]string_buffer(b)  &*& result==this;

@@ -31,7 +31,7 @@ class Member {
     
     public Member(String nick, Writer writer)
         //@ requires writer != null &*& Writer(writer.getClass())(writer, _);
-        //@ ensures member(result);
+        //@ ensures member(this);
     {
         this.nick = nick;
         this.writer = writer;

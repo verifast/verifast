@@ -9,7 +9,7 @@ public class SingletonIterator implements Iterator {
 
   public SingletonIterator(Object value)
       //@ requires value!=null;
-      //@ ensures iterator(SingletonIterator.class)(result, cons(value, nil));
+      //@ ensures iterator(SingletonIterator.class)(this, cons(value, nil));
   {
       this.value = value;
       this.done = false;

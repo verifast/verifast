@@ -24,6 +24,12 @@ let jardeps_map: (string * string list) list ref = ref []
 (** Facilitates continuation-passing-style programming. *)
 let ($.) f x = f x
 
+let rec for_all2 p xs ys =
+  match (xs, ys) with
+    ([], []) -> true
+  | (x::xs, y::ys) -> p x y && for_all2 p xs ys
+  | _ -> false
+
 (** Same as [List.for_all2 f (take n xs) (take n ys)] *)
 let for_all_take2 f n xs ys =
   let rec iter n xs ys =
@@ -1201,7 +1207,7 @@ let c_keywords = [
 
 let java_keywords = [
   "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"; "byte"; "final"
+  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"
 ]
 
 let file_type path=
@@ -1341,7 +1347,7 @@ let rec
 and
   parse_super_class= parser
     [<'(_, Kwd "extends");'(_, Ident s)>] -> s 
-  | [<>] -> "Object"
+  | [<>] -> "java.lang.Object"
 and
   parse_interfaces= parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 
@@ -2058,12 +2064,12 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit): package =
+let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
   if Filename.check_suffix (Filename.basename path) ".scala" then
     parse_scala_file path reportRange
   else
   let lexer = make_lexer (common_keywords @ java_keywords) ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange (fun x->()) in
+  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
   let parse_decls_eof = parser [< p = parse_package_decl; _ = Stream.empty >] -> p in
   try
     parse_decls_eof token_stream
@@ -2655,8 +2661,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let headers_included = path::headers_included in
             let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
             let allspecs= remove (fun x -> List.mem x headers_included)(list_remove_dups allspecs) in
-            let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) jarspecs))in
-            let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange)) allspecs)) in
+            let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange reportShouldFail)) jarspecs))in
+            let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange reportShouldFail)) allspecs)) in
             let (_, maps) = check_file include_prelude basedir [] ds in
             headermap := (path, (headers', maps))::!headermap;
             spec_classes:=classes;
@@ -2675,7 +2681,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match try_assoc rtpath !headermap with
           None -> 
             let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
-            let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange)) allspecs) in
+            let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail)) allspecs) in
             let (_, maps0) = check_file false bindir [] ds in
             headermap := (rtpath, ([], maps0))::!headermap;
             (maps0, [])
@@ -2849,12 +2855,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | result -> result
   in
   
-  (* Region: interfdeclmap, classdeclmap *)
+  (* Region: interfdeclmap, classmap1 *)
   
-  let (interfdeclmap,classdeclmap)=
+  let (interfmap1,classmap1)=
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
-        [] -> (ifdm,classlist)
+        [] -> (ifdm, classlist)
       | (Interface (l, i, meth_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i)
@@ -2871,18 +2877,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i)
         else
-          let _=
-          if i<> "java.lang.Object" then
-              let rec check_interfs ls=
-                  match ls with
-                    [] -> ()
-                  | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
-                              Some _ -> check_interfs ls
-                            | None -> static_error l ("Interface wasn't found: "^i^" "^pn)
-              in
-              match search2' super (pn,il) classlist classmap0 with
-                None-> static_error l ("Superclass wasn't found: "^super)
-              | Some _ -> check_interfs interfs
+          let interfs =
+            let rec check_interfs ls=
+                match ls with
+                  [] -> []
+                | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
+                            Some i -> i::check_interfs ls
+                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn)
+            in
+            check_interfs interfs
+          in
+          let super =
+            if i = "java.lang.Object" then "" else
+            match search2' super (pn,il) classlist classmap0 with
+              None-> static_error l ("Superclass wasn't found: "^super)
+            | Some super -> super
           in
           iter (pn,il) ifdm ((i, (l, meths ,fields,constr,super,interfs,pn,il))::classlist) ds
       | _::ds -> iter (pn,il) ifdm classlist ds
@@ -2890,12 +2899,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter' (ifdm,classlist) ps =
       match ps with
       PackageDecl(l,pn,ilist,ds)::rest -> iter' (iter (pn,ilist) ifdm classlist ds) rest
-      | [] -> (ifdm,classlist)
+      | [] -> (List.rev ifdm, List.rev classlist)
     in
     iter' ([],[]) ps
   in
   
-  let classfmap =
+  let classmap1 =
     List.map
       (fun (sn, (l,meths, fds_opt,constr,super,interfs,pn,ilist)) ->
          let rec iter fmap fds =
@@ -2914,9 +2923,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  | ArrayTypeExpr (l, tp) -> 
                      let elem_tp = check_type tp in ArrayType(elem_tp)
                  | IdentTypeExpr(lt, sn) ->
-                   match search2' sn (pn,ilist) classdeclmap classmap0 with
+                   match search2' sn (pn,ilist) classmap1 classmap0 with
                      Some s -> ObjType s
-                   | None -> match search2' sn (pn,ilist) interfdeclmap interfmap0 with
+                   | None -> match search2' sn (pn,ilist) interfmap1 interfmap0 with
                        Some s -> ObjType s
                      | None -> static_error lt ("No such class or interface: "^sn)
                  | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class."
@@ -2930,7 +2939,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            | [] -> (sn, (l,meths,None,constr,super,interfs,pn,ilist))
          end
       )
-      classdeclmap
+      classmap1
   in
   
   let inductive_arities =
@@ -2956,9 +2965,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if n > 0 then static_error l "Missing type arguments.";
         InductiveType (s, [])
       | None ->
-        match (search2' id (pn,ilist) classdeclmap classmap0) with
+        match (search2' id (pn,ilist) classmap1 classmap0) with
           Some s -> ObjType s
-        | None -> match (search2' id (pn,ilist) interfdeclmap interfmap0) with
+        | None -> match (search2' id (pn,ilist) interfmap1 interfmap0) with
                     Some s->ObjType s
                   | None ->
                     if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
@@ -3008,7 +3017,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classterms =
     let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
-    terms_of classdeclmap @ terms_of classmap0
+    terms_of classmap1 @ terms_of classmap0
   in
   
   (* Region: structmap1 *)
@@ -3089,37 +3098,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     ) functypenames
   in
   
-  let checksuper (pn,ilist) super sub=(* check wether x is a superclass of y*)
-    let rec search a b=
-      if a=b then true
-      else if b="java.lang.Object" || b="Object" then false
-        else 
-          let s = match try_assoc' (pn,ilist) b classdeclmap with 
-            Some (_,_,_,_,s,_,_,_) -> s 
-          | None -> match try_assoc' (pn,ilist) b classmap0 with 
-              None -> "Object"
-           | Some (_,_,_,_,s,_,_,_) -> s
-          in
-          search a s
-    in
-    search super sub
-  in
-  
-  let checkinter (pn,ilist) inter cn=(* check wether y implements the interface x*)
-    let s = match try_assoc' (pn,ilist) cn classdeclmap with 
-              Some (_,_,_,_,_,s,_,_) -> s
-            | None -> match try_assoc' (pn,ilist) cn classmap0 with 
-                None -> []
-             | Some (_,_,_,_,_,s,_,_) -> s
-    in
-    let rec iter map=
-      match map with
-        []-> false
-      | n::rest -> match search2' n (pn,ilist) interfdeclmap interfmap0 with
-            Some n' when inter=n'-> true
-          | _ -> iter rest
-    in
-    iter s
+  let rec is_subtype_of x y =
+    x = y ||
+    y = "java.lang.Object" ||
+    match try_assoc x classmap1 with
+      Some (_, _, _, _, super, interfaces, _, _) ->
+      is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
+    | None ->
+      match try_assoc x classmap0 with
+        Some (_, _, _, _, super, interfaces, _, _) ->
+        is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
+      | None -> false
   in
 
   (* Region: type compatibility checker *)
@@ -3160,27 +3149,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
-    | (ArrayType (ObjType "Object"), ArrayType (ObjType "Object")) -> ()
-    | (ArrayType t1, ArrayType t2) when t1 = t2 -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
     | (Char, IntType) -> ()
     | (ShortType, IntType) -> ()
     | (Char, ShortType) -> ()
-    | (ObjType x, ObjType y) ->
-      let x= match search2' x (pn,ilist) classdeclmap classmap0 with 
-        Some x -> x
-      | None -> match search2' x (pn,ilist) interfdeclmap interfmap0 with 
-          Some x -> x
-        | None -> assert(false)
-      in
-      let y= match search2' y (pn,ilist) classdeclmap classmap0 with 
-        Some y -> y
-      | None -> match search2' y (pn,ilist) interfdeclmap interfmap0 with 
-          Some y -> y
-        | None -> assert(false)
-      in
-      if y="Object"||y="java.lang.Object"||x=y||(checkinter (pn,ilist) y x)||(checksuper (pn,ilist) x y) then ()
-      else static_error l (msg ^ "Type mismatch. Actual: " ^ x ^ ". Expected: " ^ y ^ ".")
+    | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts), PredType ([], ts0)) ->
       begin
         match zip ts ts0 with
@@ -3702,7 +3675,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              end
              fds
       )
-      classfmap
+      classmap1
     | _ ->
     flatmap
       (fun (sn, (_, fds_opt, _)) ->
@@ -3901,7 +3874,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let check_classname (pn, ilist) (l, c) =
-    match search2' c (pn, ilist) classdeclmap classmap0 with 
+    match search2' c (pn, ilist) classmap1 classmap0 with 
       None -> static_error l "No such class name."
     | Some s -> s
   in
@@ -3916,7 +3889,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let lookup_class_field cn fn =
     let fds =
-      match try_assoc cn classfmap with
+      match try_assoc cn classmap1 with
         Some (_,_, Some fds,_,_,_,_,_) -> fds
       | None ->
         let (_,_, Some fds,_,_,_,_,_) = List.assoc cn classmap0 in fds
@@ -3927,7 +3900,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let is_package x =
     let x = x ^ "." in
     let has_package map = List.exists (fun (cn, _) -> startswith cn x) map in
-    has_package classfmap || has_package classmap0 || has_package interfdeclmap || has_package interfmap0
+    has_package classmap1 || has_package classmap0 || has_package interfmap1 || has_package interfmap0
   in
 
   let rec check_expr (pn,ilist) tparams tenv e =
@@ -4027,10 +4000,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match field_of_this with
         Some result -> result
       | None ->
-      match resolve (pn,ilist) l x classfmap with
+      match resolve (pn,ilist) l x classmap1 with
         Some (cn, _) -> (e, ClassOrInterfaceName cn)
       | None ->
-      match resolve (pn,ilist) l x interfdeclmap with
+      match resolve (pn,ilist) l x interfmap1 with
         Some (cn, _) -> (e, ClassOrInterfaceName cn)
       | None ->
       match resolve (pn,ilist) l x classmap0 with
@@ -4140,7 +4113,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IntLit (l, n, t) -> (e, match !t with None -> t := Some intt; intt | Some t -> t)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
-      (ClassLit (l, s), ObjType "Class")
+      (ClassLit (l, s), ObjType "java.lang.Class")
     | StringLit (l, s) -> (match file_type path with
         Java-> (e, ObjType "java.lang.String")
       | _ -> (e, PtrType Char))
@@ -4195,7 +4168,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       | None -> if g'="getClass" && (file_type path)=Java then
                   match pats with
-                   [LitPat target] -> let w = checkt target (ObjType "Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "Class")
+                   [LitPat target] -> let w = checkt target (ObjType "java.lang.Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "java.lang.Class")
                 else static_error l ("No such pure function: "^g')
       )
     | NewArray(l, te, length) ->
@@ -4306,7 +4279,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (IntType, Char) when isCast -> w
       | (IntType, ShortType) when isCast -> w
       | (ShortType, Char) when isCast -> w
-      | (ObjType ("Object"), ArrayType _) when isCast -> w
       | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
       | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
   and check_deref is_write pure (pn,ilist) l tparams tenv e f =
@@ -4350,7 +4322,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: Type checking of field initializers *)
   
-  let classfmap =
+  let classmap1 =
     List.map
       begin fun (cn, (l, meths, fds_opt, constr, super, interfs, pn, ilist)) ->
         let fds_opt =
@@ -4370,7 +4342,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         (cn, (l, meths, fds_opt, constr, super, interfs, pn, ilist))
       end
-      classfmap
+      classmap1
   in
   
   (* Region: Computing constant field values *)
@@ -4437,7 +4409,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _ -> raise NotAConstant
     and eval_field callers ((cn, fn) as f) =
       if List.mem f callers then raise NotAConstant;
-      match try_assoc cn classfmap with
+      match try_assoc cn classmap1 with
         Some (l, meths, Some fds, const, super, interfs, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
         match try_assoc cn classmap0 with
@@ -4464,7 +4436,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some fds ->
           List.iter (fun (f, fbody) -> try eval_field_body [] fbody; () with NotAConstant -> ()) fds
       end
-      classfmap
+      classmap1
   end;
   
   (* Region: type checking of assertions *)
@@ -4519,7 +4491,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match resolve (pn,ilist) l p#name predfammap with
           Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) ->
           let ts0 = match file_type path with
-            Java-> list_make arity (ObjType "Class")
+            Java-> list_make arity (ObjType "java.lang.Class")
           | _   -> list_make arity (PtrType Void)
           in
           (new predref pname, callee_tparams, ts0, xs, inputParamCount)
@@ -6610,62 +6582,41 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let funcmap = funcmap1 @ funcmap0 in
   
-  let interfmap1 = if file_type path<>Java then [] else
+  let interfmap1 =
     List.map
-      (fun (ifn, (l,specs,pn,ilist)) ->
-         let rec iter mmap meth_specs =
-           match meth_specs with
-             [] -> (ifn, (l,(List.rev mmap),pn,ilist))
-           | MethSpec (lm, t, n, ps, co,fb,v)::meths ->
-             if List.mem_assoc n mmap then
-               static_error lm "Duplicate method name."
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, Bool) -> Bool
-                 | IdentTypeExpr(lt, sn) ->
-                     match search2' sn (pn,ilist) interfdeclmap interfmap0 with
-                       Some i -> ObjType i
-                     | None -> match search2' sn (pn,ilist) classdeclmap classmap0 with
-                         Some cn -> ObjType cn
-                       | None ->static_error lt ("No such class or interface: "^sn)
-                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
-               in
-               let check_t t=
-                 match t with
-                   Some ManifestTypeExpr (_, Void) -> None
-                 | Some t-> Some (check_type t)
-                 | None -> None
-               in
-               let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type (pn,ilist) [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-               in
-               let (pre, pre_tenv, post) =
-                 match co with
-                   None -> static_error lm ("Non-fixpoint function must have contract: "^n)
-                 | Some (pre, post) ->
-                   let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
-                   let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                   let (post, _) = check_pred (pn,ilist) [] postmap post in
-                   (pre, tenv, post)
-               in
-               iter ((n, (lm,check_t t, xmap, pre, pre_tenv, post,fb,v))::mmap) meths
-             )
-         in
-          begin
-           iter [] specs
-         end
-      )
-      interfdeclmap
+      begin fun (ifn, (l, specs, pn, ilist)) ->
+        let rec iter mmap meth_specs =
+          match meth_specs with
+            [] -> (ifn, (l, List.rev mmap, pn, ilist))
+          | MethSpec (lm, rt, n, ps, co, fb, v)::meths ->
+            let xmap =
+              let rec iter xm xs =
+                match xs with
+                 [] -> List.rev xm
+               | (te, x)::xs ->
+                 if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                 let t = check_pure_type (pn,ilist) [] te in
+                 iter ((x, t)::xm) xs
+              in
+              iter [] ps
+            in
+            let sign = (n, List.map snd xmap) in
+            if List.mem_assoc sign mmap then static_error lm "Duplicate method";
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
+            let (pre, pre_tenv, post) =
+              match co with
+                None -> static_error lm ("Non-fixpoint function must have contract: "^n)
+              | Some (pre, post) ->
+                let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
+                let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+                let (post, _) = check_pred (pn,ilist) [] postmap post in
+                (pre, tenv, post)
+            in
+            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, v))::mmap) meths
+        in
+        iter [] specs
+      end
+      interfmap1
   in
   
   let interfmap=
@@ -6680,10 +6631,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (mn, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,fb0,v0)) as elem::rest ->
-                match try_assoc mn meths1 with
+              | (sign, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,v0)) as elem::rest ->
+                match try_assoc sign meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,fb1,v1) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,v1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
                   iter rest meths1
             in
@@ -6695,177 +6646,149 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter interfmap0 interfmap1
   in
   
-  let classmethmap = if file_type path<>Java then [] else
-    List.map
-      (fun (cn, (l,meths_opt, fds,constr,super,interfs,pn,ilist)) ->
-         let rec iter mmap meths =
-           match meths with
-             [] -> (cn, (l,Some (List.rev mmap),fds,constr,super,interfs,pn,ilist))
-           | Meth (lm, t, n, ps, co, ss,fb,v)::meths ->
-             let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type (pn,ilist) [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-             in
-             let rec equal_types x c=
-                 match x with
-                 [] -> List.length c==0
-                |(name,t)::xrest -> match c with
-                  []-> false
-                  | (name',t')::crest-> t==t' && equal_types xrest crest
-             in
-             let rec search_equal x c=
-                 match c with
-                 [] -> false
-                 | (g,(_,_,c,_,_,_,_,_,_))::crest ->(if n==g then equal_types x c else false)|| search_equal x crest
-             in
-             if List.mem_assoc n mmap && search_equal xmap mmap then
-               static_error lm "Duplicate method."
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, Bool) -> Bool
-                 | ManifestTypeExpr(_, ShortType) -> ShortType
-                 | ArrayTypeExpr (_, tp) -> let elem_tp = check_type tp in ArrayType(elem_tp)
-                 | IdentTypeExpr(lt, cn) ->
-                     match search2' cn (pn,ilist) classdeclmap classmap0 with
-                       Some s -> ObjType s
-                     | None -> match search2' cn (pn,ilist) interfdeclmap interfmap0 with
-                         Some s -> ObjType s
-                       | None -> static_error lt ("No such class or interface: "^cn)
-                 | _ -> static_error (type_expr_loc te) "Invalid return type of this method."
-               in
-               let check_t t=
-                 match t with
-                   Some ManifestTypeExpr (_, Void) -> None
-                 | Some t-> Some (check_type t)
-                 | None -> None
-               in
-               let rec matchargs xs xs'= (* match the argument list of the method in the interface with the arg list of the method in the class *)
-                  match xs with
-                  [] -> if xs'=[] then () else static_error lm ("Incorrect number of arguments: "^n)
-                  | (an,x)::xs -> match xs' with
-                              [] -> static_error lm ("Incorrect number of arguments: "^n)
-                              |(an',x')::xs' when an=an'-> expect_type (pn,ilist) lm x x';matchargs xs xs'
-                              | _ -> static_error lm ("Arguments must have the same name as in the interface method: "^an)
-               in
-               let (pre, pre_tenv, post) =
-                 let rec search_interf i=
-                   match i with
-                    [] ->
-                    (match co with
-                       None ->static_error lm ("Non-fixpoint function must have contract: "^n)
-                     | Some (pre, post) -> 
-                       let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
-                       let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                       let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                       (wpre, tenv, wpost)
-                    )
-                  | name::rest ->
-                    match try_assoc' (pn,ilist) name interfmap with
-                      None -> search_interf rest
-                    | Some(_,meth_specs,_,_) -> match try_assoc n meth_specs with
-                        None -> search_interf rest
-                      | Some(_,rt', xmap', pre, pre_tenv, post,Instance,v) -> match co with
-                          None -> matchargs xmap xmap';(pre,pre_tenv,post)
-                        | Some(pre0,post0)->
-                            let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre0 in
-                            let postmap = match check_t t with None -> tenv | Some rt -> ("result", rt)::tenv in
-                            let (wpost, _) = check_pred (pn,ilist) [] postmap post0 in
-                            push();
-                            let ("this", thisType)::xmap = xmap in
-                            let ("this", _)::xmap' = xmap' in
-                            let thisTerm = get_unique_var_symb "this" thisType in
-                            assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
-                              check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
-                                (Regular, [], check_t t, xmap, false, wpre, wpost)
-                                (Regular, [], rt', xmap', false, [("this", thisTerm)], pre, post)
-                            );
-                            pop();
-                            (wpre, tenv, wpost)
-                 in
-                 search_interf interfs
-               in
-               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
-               (if n="main" then
-                 match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
-                   match pre with 
-                     True(_) -> 
-                       match post with
-                         True(_) -> main_meth:=(cn,l)::!main_meth
-                       | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
-                   | _ -> static_error lp "The precondition of the main method must be 'true'"
-                );
-               iter ((n, (lm,check_t t, xmap, pre, pre_tenv, post, ss',fb,v))::mmap) meths
-            )
-         in
-          begin
-           match meths_opt with
-             meths -> iter [] meths
-           | [] -> (cn, (l,None,fds,constr,super,interfs,pn,ilist))
-         end
-      )
-      classfmap
+  let string_of_sign (mn, ts) =
+    Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
   in
-  let classmap1 = if file_type path<>Java then [] else
+  
+  let classmap1 =
+    let rec iter classmap1_done classmap1_todo =
+      let interf_specs_for_sign sign itf =
+        let (_, meths, _, _) = List.assoc itf interfmap in
+        match try_assoc sign meths with
+          None -> []
+        | Some spec -> [(itf, spec)]
+      in
+      let rec super_specs_for_sign sign cn itfs =
+        class_specs_for_sign sign cn @ flatmap (interf_specs_for_sign sign) itfs
+      and class_specs_for_sign sign cn =
+        if cn = "" then [] else
+        let (super, interfs, mmap) =
+          match try_assoc cn classmap1_done with
+            Some (l, mmap, fds, constr, super, interfs, pn, ilist) -> (super, interfs, mmap)
+          | None ->
+            match try_assoc cn classmap0 with
+              Some (l, mmap, fds, constr, super, interfs, pn, ilist) -> (super, interfs, mmap)
+            | None -> assert false
+        in
+        let specs =
+          match try_assoc sign mmap with
+          | Some (lm, rt, xmap, pre, pre_tenv, post, ss, Instance, v, _) -> [(cn, (lm, rt, xmap, pre, pre_tenv, post, v))]
+          | _ -> []
+        in
+        specs @ super_specs_for_sign sign super interfs
+      in
+      match classmap1_todo with
+        [] -> List.rev classmap1_done
+      | (cn, (l, meths, fds, constr, super, interfs, pn, ilist))::classmap1_todo ->
+        let cont cl = iter (cl::classmap1_done) classmap1_todo in
+        let rec iter mmap meths =
+          match meths with
+            [] -> cont (cn, (l, List.rev mmap, fds, constr, super, interfs, pn, ilist))
+          | Meth (lm, rt, n, ps, co, ss, fb, v)::meths ->
+            let xmap =
+                let rec iter xm xs =
+                  match xs with
+                   [] -> List.rev xm
+                 | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                     let t = check_pure_type (pn,ilist) [] te in
+                     iter ((x, t)::xm) xs
+                in
+                iter [] ps
+            in
+            let xmap1 = match fb with Static -> xmap | Instance -> let _::xmap1 = xmap in xmap1 in
+            let sign = (n, List.map snd xmap1) in
+            if List.mem_assoc sign mmap then static_error lm "Duplicate method.";
+            let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
+            let co =
+              match co with
+                None -> None
+              | Some (pre, post) ->
+                let (wpre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
+                let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
+                let (wpost, _) = check_pred (pn,ilist) [] postmap post in
+                Some (wpre, tenv, wpost)
+            in
+            let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
+            List.iter
+              begin fun (tn, (lsuper, rt', xmap', pre', pre_tenv', post', vis')) ->
+                if rt <> rt' then static_error lm "Return type does not match overridden method";
+                match co with
+                  None -> ()
+                | Some (pre, pre_tenv, post) ->
+                  push();
+                  let ("this", thisType)::xmap = xmap in
+                  let ("this", _)::xmap' = xmap' in
+                  let thisTerm = get_unique_var_symb "this" thisType in
+                  assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
+                    check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
+                      (Regular, [], rt, xmap, false, pre, post)
+                      (Regular, [], rt', xmap', false, [("this", thisTerm)], pre', post')
+                  );
+                  pop()
+              end
+              super_specs;
+            let (pre, pre_tenv, post) =
+              match co with
+                Some (pre, pre_tenv, post) -> (pre, pre_tenv, post)
+              | None ->
+                match super_specs with
+                  (tn, (_, _, xmap', pre', pre_tenv', post', _))::_ ->
+                  if not (List.for_all2 (fun (x, t) (x', t') -> x = x') xmap xmap') then static_error lm (Printf.sprintf "Parameter names do not match overridden method in %s" tn);
+                  (pre', pre_tenv', post')
+                | [] -> static_error lm "Method must have contract"
+            in
+            let ss = match ss with None -> None | Some ss -> Some (Some ss) in
+            if n = "main" then begin
+              match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
+                match pre with 
+                  True(_) -> 
+                    match post with
+                      True(_) -> main_meth:=(cn,l)::!main_meth
+                    | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
+                | _ -> static_error lp "The precondition of the main method must be 'true'"
+            end;
+            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, ss, fb, v, super_specs <> []))::mmap) meths
+        in
+        iter [] meths
+    in
+    iter [] classmap1
+  in
+  
+  let classmap1 =
     List.map
-      (fun (cn, (l,meths, fds,constr_opt,super,interfs,pn,ilist)) ->
-         let rec iter cmap constr =
-           match constr with
-             [] -> (cn, (l,meths,fds,Some (List.rev cmap),super,interfs,pn,ilist))
-             | Cons (lm,ps, co, ss,v)::constr ->
-               let xmap =
-                 let rec iter xm xs =
-                   match xs with
-                    [] -> List.rev xm
-                  | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-                      let t = check_pure_type (pn,ilist) [] te in
-                      iter ((x, t)::xm) xs
-                 in
-                 iter [] ps
-               in
-               let rec equal_types x c=
-                 match x with
-                 [] -> List.length c==0
-                |(name,t)::xrest -> match c with
-                  []-> false
-                  | (name',t')::crest-> t==t' && equal_types xrest crest
-               in
-               let rec search_equal x c=
-                 match c with
-                 [] -> false
-                 | (c,_)::crest ->equal_types x c || search_equal x crest
-               in
-               if search_equal xmap cmap then
-               static_error lm "Duplicate constructor"
-               else (
-               let (pre, pre_tenv, post) =
-                 match co with
-                   None -> static_error lm "Constructor must have contract: "
-                 | Some (pre, post) ->
-                     let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
-                     let postmap = ("result", ObjType(cn))::tenv in
-                     let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                     (wpre, tenv, wpost)
-               in
-               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
-               iter ((xmap, (lm,pre,pre_tenv,post,ss',v))::cmap) constr
-               )
-         in
-         begin
-           match constr_opt with
-             constr -> iter [] constr
-             | [] -> (cn, (l,meths,fds,None,super,interfs,pn,ilist))
-         end
-      )
-      classmethmap
+      begin fun (cn, (l, meths, fds, ctors, super, interfs, pn, ilist)) ->
+        let rec iter cmap ctors =
+          match ctors with
+            [] -> (cn, (l, meths, fds, List.rev cmap, super, interfs, pn, ilist))
+            | Cons (lm, ps, co, ss, v)::ctors ->
+              let xmap =
+                let rec iter xm xs =
+                  match xs with
+                   [] -> List.rev xm
+                 | (te, x)::xs ->
+                   if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                   let t = check_pure_type (pn,ilist) [] te in
+                   iter ((x, t)::xm) xs
+                in
+                iter [] ps
+              in
+              let sign = List.map snd xmap in
+              if List.mem_assoc sign cmap then static_error lm "Duplicate constructor";
+              let (pre, pre_tenv, post) =
+                match co with
+                  None -> static_error lm "Constructor must have contract"
+                | Some (pre, post) ->
+                  let (wpre, tenv) = check_pred (pn,ilist) [] xmap pre in
+                  let postmap = ("this", ObjType(cn))::tenv in
+                  let (wpost, _) = check_pred (pn,ilist) [] postmap post in
+                  (wpre, tenv, wpost)
+              in
+              let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
+              iter ((sign, (lm, xmap, pre, pre_tenv, post, ss', v))::cmap) ctors
+        in
+        iter [] ctors
+      end
+      classmap1
   in
   
   let classmap= 
@@ -6898,34 +6821,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (n, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,ss0,fb0,v0)) as elem::rest ->
-                match try_assoc n meths1 with
+              | (sign0, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,ss0,fb0,v0,_)) as elem::rest ->
+                match try_assoc sign0 meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,ss1,fb1,v1) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,ss1,fb1,v1,_) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
-                  if ss0=None then meths_impl:=(n,lm0)::!meths_impl;
+                  if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
-            match meths0 with
-              None-> meths1
-            | Some meths0 -> match meths1 with None-> Some meths0 | Some meths1 -> Some (iter meths0 meths1)
+            iter meths0 meths1
           in
           let match_constr constr0 constr1=
             let rec iter constr0 constr1=
               match constr0 with
                 [] -> constr1
-              | (xmap0, (lm0,pre0,pre_tenv0,post0,ss0,v0)) as elem::rest ->
-                match try_assoc xmap0 constr1 with
+              | (sign0, (lm0,xmap0,pre0,pre_tenv0,post0,ss0,v0)) as elem::rest ->
+                match try_assoc sign0 constr1 with
                   None-> iter rest (elem::constr1)
-                | Some(lm1,pre1,pre_tenv1,post1,ss1,v1) ->
-                  let rt= Some (ObjType(cn)) in
-                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, xmap0,false, pre1, post1) (Regular, [], rt, xmap0, false, [], pre0, post0);
+                | Some(lm1,xmap1,pre1,pre_tenv1,post1,ss1,v1) ->
+                  let rt= None in
+                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], pre0, post0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
-            match constr0 with
-              None-> constr1
-            | Some constr0 -> match constr1 with None-> Some constr0 | Some constr1 -> Some (iter constr0 constr1)
+            iter constr0 constr1
           in
           if super0<>super1 || interfs0<>interfs1 then static_error l1 "Duplicate class"
           else 
@@ -6937,6 +6856,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter classmap0 classmap1
   in
   
+  begin
+    (* Inheritance check *)
+    let rec get_overrides cn =
+      if cn = "java.lang.Object" then [] else
+      let (l, meths, fds, constr, super, interfs, pn, ilist) = List.assoc cn classmap in
+      let overrides = flatmap (fun (sign, (lm, rt, xmap, pre, pre_tenv, post, ss, fb, v, is_override)) -> if is_override then [(cn, sign)] else []) meths in
+      overrides @ get_overrides super
+    in
+    List.iter
+      begin fun (cn, (l, meths, fds, constr, super, interfs, pn, ilist)) ->
+        let overrides = get_overrides cn in
+        List.iter
+          begin fun (cn, sign) ->
+            if not (List.mem_assoc sign meths) then
+              static_error l (Printf.sprintf "This class must override method %s declared in class %s" (string_of_sign sign) cn)
+          end
+          overrides
+      end
+      classmap1
+  end;
   
   let _=
   if file_type path=Java then
@@ -7156,7 +7095,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: verification of calls *)
   
-  let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, body,v) pure leminfo sizemap h tparams tenv ghostenv env cont =
+  let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont =
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
     let eval_h0 = eval_h (pn,ilist) in
@@ -7262,19 +7201,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let env'' = match r with None -> env' | Some (r, t) -> update env' "result" r in
         assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
         with_context PopSubcontext $. fun () ->
-        begin fun cont ->
-          match g with
-            Some g when (startswith g "new ") ->
-              let Some (result, _) = r in
-              let cn = String.sub g 4 ((String.length g)-4) in
-              let cn = check_classname (pn, ilist) (l, cn) in
-              assume_neq result (ctxt#mk_intlit 0) (fun () ->
-                assume_eq (ctxt#mk_app get_class_symbol [result]) (List.assoc cn classterms) (fun () ->
-                  cont()
-                )
-              )
-          | _ -> cont()
-        end $. fun () ->
         cont h r
       )
     )
@@ -7325,8 +7251,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission.";
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
-    let check_correct xo g targs pats (lg, callee_tparams, tr, ps, funenv, pre, post, body, v) cont =
-      verify_call l (pn, ilist) xo g targs (List.map (fun pat -> SrcPat pat) pats) (callee_tparams, tr, ps, funenv, pre, post, body, v) pure leminfo sizemap h tparams tenv ghostenv env cont
+    let check_correct xo g targs pats (lg, callee_tparams, tr, ps, funenv, pre, post, v) cont =
+      verify_call l (pn, ilist) xo g targs (List.map (fun pat -> SrcPat pat) pats) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let call_stmt l xo g targs pats fb cont =
       match file_type path with
@@ -7350,14 +7276,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         let _ = List.iter (fun (LitPat e) -> let (w, t) = (check_expr (pn, ilist) [] tenv e) in ()) pats in
         match try_assoc' (pn,ilist) class_name classmap with
-          Some(_,Some methmap,_,Some consmap,super,interfs,pn,ilist) -> 
+          Some (_, methmap, _, consmap, super, interfs, pn, ilist) -> 
             (if pure then 
                static_error l "Cannot call methods in a pure context."
              else
              let rec search_meth mmap=
                match mmap with
                  [] -> static_error l ("Method "^g^" not found!")
-               | (n,(lm,rt, xmap, pre, pre_tenv, post, body,fbm,v))::rest when n=g-> 
+               | ((n, _),(lm,rt, xmap, pre, pre_tenv, post, body,fbm,v,_))::rest when n=g-> 
                  let match_args xmap pats =
                    match zip pats xmap with
                      None -> false
@@ -7367,7 +7293,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  if(match_args xmap pats) then
                    if fb <>fbm then static_error l ("Wrong method binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm))
-                   else check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, body,v) cont
+                   else check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
                  else
                    search_meth rest
                | _::rest -> search_meth rest
@@ -7375,7 +7301,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let rec search_cons clist=
                match clist with
                 [] -> static_error l ("Constructor "^g^" not found!")
-              | (xmap,(lm,pre,pre_tenv,post,ss,v)) :: rest->
+              | (sign,(lm,xmap,pre,pre_tenv,post,ss,v)) :: rest->
                 let match_args xmap pats =
                   match zip pats xmap with
                     None -> false
@@ -7383,9 +7309,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       try List.map(function (LitPat e, (x, tp)) -> check_expr_t (pn,ilist) [] tenv e tp) bs; true
                       with StaticError (l, msg) -> false
                 in
-                if(match_args xmap pats) then
-                  check_correct xo (Some g) targs pats (lm, [], Some (ObjType(class_name)), xmap, [], pre, post,ss,Static) cont
-                else search_cons rest
+                if(match_args xmap pats) then begin
+                  let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType class_name) in
+                  assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
+                  assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc class_name classterms) $. fun () ->
+                  check_correct None (Some g) targs pats (lm, [], None, xmap, ["this", obj], pre, post, Static) $. fun h None ->
+                  cont h (Some (obj, ObjType class_name))
+                end else search_cons rest
               in
               if iscons then 
                 search_cons consmap
@@ -7395,13 +7325,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | None ->
            (match try_assoc' (pn,ilist) class_name interfmap with
               Some(_,methmap,pn,ilist) -> 
-                (match try_assoc g methmap with
-                   Some(lm,rt, xmap, pre, pre_tenv, post,fbm,v) ->
-                    if fb <>fbm 
-                      then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm));
+                (match flatmap (fun ((n, _), info) -> if n = g then [info] else []) methmap with
+                   (lm,rt, xmap, pre, pre_tenv, post,v)::_ ->
+                    if fb <>Instance 
+                      then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of Instance");
                       let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                      check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, None,v) cont
-                 | None->  static_error l ("Method "^class_name^" not found!!")
+                      check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
+                 | []->  static_error l ("Method "^class_name^" not found!!")
                 )
             | None ->
                 (match try_assoc' (pn,ilist) g funcmap with (* java probleem*)
@@ -7419,7 +7349,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      if body = None then register_prototype_used lg g;
                      let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
                      let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
-                     check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, body,v) cont
+                     check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, v) cont
                 )
             )
       )
@@ -7431,7 +7361,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
         if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
         let check_call h args cont =
-          verify_call l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args @ List.map (fun pat -> SrcPat pat) pats) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+          verify_call l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args @ List.map (fun pat -> SrcPat pat) pats) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
         in
         begin
           match gh with
@@ -7467,7 +7397,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
         let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
-        check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, body,v) cont
+        check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, v) cont
       ) 
     in 
     let rec verify_expr typ0 xo e cont =
@@ -9036,118 +8966,129 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | None -> static_error lm ("No class was found: "^cn)
   in
   
-  let _ =
-    let rec verify_cons (pn,ilist) cn boxes lems cons=
-      match cons with
-     [] -> ()
-      | (xmap, (lm,pre,pre_tenv,post,ss,v))::rest ->
-          match ss with
-            None -> let (((_,p),_,_),((_,_),_,_))=lm in 
-              if Filename.check_suffix p ".javaspec" then verify_cons (pn,ilist) cn boxes lems rest
-              else static_error lm "Constructor specification is only allowed in javaspec files!"
-          | Some(Some (ss, closeBraceLoc)) ->
-              let _ = push() in
-              let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
-              let (sizemap, indinfo) = switch_stmt ss env in
-              let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
-              let _ =
-                assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None
-                (fun h ghostenv env ->
-                  let do_body h ghostenv env=
-                    let do_return h env_post = assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit 
-                    (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
-                    in
-                    let return_cont h retval =
-                      match retval with None -> do_return h env | Some t -> do_return h (("this", t)::env)
-                    in
-                    let tenv = ("this", ObjType cn)::pre_tenv in
-                    verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss 
-                    (fun _ _ _ h _ -> return_cont h None ) return_cont
-                  in
-                  let result = get_unique_var_symb "result" (ObjType cn) in
-                  let this = get_unique_var_symb "this" (ObjType cn) in
-                  assume_neq this (ctxt#mk_intlit 0) 
-                      (fun()->( assume_eq result this 
-                        (fun()->
-                          let fds= get_fields (pn,ilist) cn lm in 
-                          let rec iter h fds =
-                            match fds with
-                             [] -> 
-                               let env'= update env "result" result in
-                               let env''= update env' "this" this in
-                               (do_body h ghostenv env'')
-                           | (f, (lf, t,vis, binding, final, init, value))::fds ->
-                             if binding = Instance then begin
-                               if init <> None then static_error lf "Instance field initializers are not yet supported.";
-                               let fref = new fieldref f in
-                               fref#set_parent cn; fref#set_range t; assume_field h fref result (get_unique_var_symb_non_ghost "value" t) real_unit (fun h -> iter h fds)
-                             end else
-                               iter h fds
-                          in
-                          iter h fds
-                        )
-                       )
-                      )
-                )
-              in
-              let _ = pop() in
-              verify_cons (pn,ilist) cn boxes lems' rest
-    in
-    let rec verify_meths (pn,ilist) boxes lems meths=
-      match meths with
-        [] -> ()
-      | (g, (l,rt, ps,pre,pre_tenv,post,sts,fb,v))::meths ->
-        match sts with
-          None -> let (((_,p),_,_),((_,_),_,_))=l in 
-            if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
-            else static_error l "Constructor specification is only allowed in javaspec files!"
-        | Some(Some (ss, closeBraceLoc)) ->(
-            let _ = push() in
-            let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
-            begin fun cont ->
-              if fb = Instance then
-              begin
-                let ("this", thisTerm)::_ = env in
-                let ("this", ObjType cn)::_ = ps in
-                (* CAVEAT: Remove this assumption once we allow subclassing. *)
-                (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
-                assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType cn)::pre_tenv))
-              end else cont pre_tenv
-            end $. fun tenv ->
-            let (sizemap, indinfo) = switch_stmt ss env in
-            let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
-            let (in_pure_context, leminfo, lems', ghostenv) =(false, None, lems, []) in
-            let _ =
-              assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
-              let do_return h env_post = assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
-              in
-              let return_cont h retval =
-                match (rt, retval) with
-                  (None, None) -> do_return h env
-                | (Some tp, Some t) -> do_return h (("result", t)::env)
-                | (None, Some _) -> assert_false h env l "Void function returns a value."
-                | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
-              in
-              verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
-              )
+  let rec verify_cons (pn,ilist) cn superctors boxes lems cons =
+    match cons with
+      [] -> ()
+    | (sign, (lm, xmap, pre, pre_tenv, post, ss, v))::rest ->
+      match ss with
+        None ->
+        let (((_, p), _, _), ((_, _), _, _)) = lm in 
+        if Filename.check_suffix p ".javaspec" then
+          verify_cons (pn,ilist) cn superctors boxes lems rest
+        else
+          static_error lm "Constructor specification is only allowed in javaspec files!"
+      | Some (Some (ss, closeBraceLoc)) ->
+        push();
+        let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
+        let (sizemap, indinfo) = switch_stmt ss env in
+        let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
+        begin
+          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
+          let this = get_unique_var_symb "this" (ObjType cn) in
+          let do_body h ghostenv env =
+            let do_return h env_post =
+              assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun h ghostenv env size_first ->
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
             in
-            let _ = pop() in
-            verify_meths (pn,ilist) boxes lems' meths
-            )
-    in
-    let rec verify_classes boxes lems classm=
-      match classm with
-        [] -> ()
-      | (cn,(l,meths,_,cons,_,_,pn,ilist))::classm ->
-          let _=
-            match cons with
-              None -> ()
-            | Some cons -> verify_cons (pn,ilist) cn boxes lems cons
+            let return_cont h retval =
+              assert (retval = None);
+              do_return h env
+            in
+            let tenv = ("this", ObjType cn)::pre_tenv in
+            begin fun cont ->
+              if cn = "java.lang.Object" then
+                cont h
+              else
+                match try_assoc [] superctors with
+                  None ->
+                  static_error lm "There is no superclass constructor that matches the implicit superclass constructor call"
+                | Some (lc0, xmap0, pre0, pre_tenv0, post0, _, v0) ->
+                  with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
+                  verify_call lm (pn, ilist) None None [] [] ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h None ->
+                  cont h
+            end $. fun h ->
+            verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
+              (fun _ _ _ h _ -> return_cont h None) return_cont
           in
-          (match meths with
-            None -> verify_classes boxes lems classm
-          | Some m -> verify_meths (pn,ilist) boxes lems m; verify_classes  boxes lems classm)
-    in
+          assume_neq this (ctxt#mk_intlit 0) $. fun() ->
+          let fds = get_fields (pn,ilist) cn lm in
+          let rec iter h fds =
+            match fds with
+              [] -> 
+              do_body h ghostenv (("this", this)::env)
+            | (f, (lf, t, vis, binding, final, init, value))::fds ->
+              if binding = Instance then begin
+                if init <> None then static_error lf "Instance field initializers are not yet supported.";
+                let fref = new fieldref f in
+                fref#set_parent cn; fref#set_range t;
+                assume_field h fref this (get_unique_var_symb_non_ghost "value" t) real_unit $. fun h ->
+                iter h fds
+              end else
+                iter h fds
+          in
+          iter h fds
+        end;
+        pop();
+        verify_cons (pn,ilist) cn superctors boxes lems' rest
+  in
+  
+  let rec verify_meths (pn,ilist) boxes lems meths=
+    match meths with
+      [] -> ()
+    | (g, (l,rt, ps,pre,pre_tenv,post,sts,fb,v, _))::meths ->
+      match sts with
+        None -> let (((_,p),_,_),((_,_),_,_))=l in 
+          if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
+          else static_error l "Constructor specification is only allowed in javaspec files!"
+      | Some(Some (ss, closeBraceLoc)) ->(
+          let _ = push() in
+          let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
+          begin fun cont ->
+            if fb = Instance then
+            begin
+              let ("this", thisTerm)::_ = env in
+              let ("this", ObjType cn)::_ = ps in
+              (* CAVEAT: Remove this assumption once we allow subclassing. *)
+              (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
+              assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType cn)::pre_tenv))
+            end else cont pre_tenv
+          end $. fun tenv ->
+          let (sizemap, indinfo) = switch_stmt ss env in
+          let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
+          let (in_pure_context, leminfo, lems', ghostenv) =(false, None, lems, []) in
+          let _ =
+            assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+            let do_return h env_post = assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
+            in
+            let return_cont h retval =
+              match (rt, retval) with
+                (None, None) -> do_return h env
+              | (Some tp, Some t) -> do_return h (("result", t)::env)
+              | (None, Some _) -> assert_false h env l "Void function returns a value."
+              | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
+            in
+            verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
+            )
+          in
+          let _ = pop() in
+          verify_meths (pn,ilist) boxes lems' meths
+          )
+  in
+  
+  let rec verify_classes boxes lems classm=
+    match classm with
+      [] -> ()
+    | (cn, (l, meths, _, cons, super, itfs, pn, ilist))::classm ->
+      let superctors =
+        if super = "" then [] else
+          let (l, meths, fds, cons, super, itfs, pn, ilist) = List.assoc super classmap in
+          cons
+      in
+      verify_cons (pn,ilist) cn superctors boxes lems cons;
+      verify_meths (pn,ilist) boxes lems meths;
+      verify_classes boxes lems classm
+  in
+  
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
      [] -> (boxes, lems)
@@ -9259,13 +9200,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PackageDecl(l,pn,il,ds)::rest-> let (boxes, lems) = verify_funcs (pn,il) boxes lems ds in verify_funcs' boxes lems rest
     | [] -> verify_classes boxes lems classmap
   in
-  verify_funcs' [] lems0 ps
-  
-  in
+  verify_funcs' [] lems0 ps;
   
   ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
   
-  in
+  in (* let rec check_file *)
   
   (* Region: top-level stuff *)
   
@@ -9278,7 +9217,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match file_type basepath with
       Java->if Filename.check_suffix path ".jarsrc" then
               let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
-              let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange)impllist)in
+              let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange reportShouldFail)impllist)in
               let specpath = (Filename.chop_extension basepath)^".jarspec" in
               main_file:= main;
               jardeps:= jdeps;
@@ -9287,7 +9226,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 ([],ds)
             else
-              ([],[parse_java_file path reportRange])
+              ([],[parse_java_file path reportRange reportShouldFail])
       | _->
         if Filename.check_suffix (Filename.basename path) ".h" then
           parse_header_file "" path reportRange reportShouldFail

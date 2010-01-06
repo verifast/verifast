@@ -12,7 +12,7 @@ predicate Socket(Socket socket, InputStream inputStream, any inputStreamInfo, Ou
 public class Socket {
     public Socket(String host, int port);
         //@ requires emp;
-        //@ ensures Socket(result, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        //@ ensures Socket(this, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
     
     public InputStream getInputStream();
         //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo);
@@ -34,7 +34,7 @@ public class Socket {
 public class ServerSocket {
     public ServerSocket(int port);
         //@ requires emp;
-        //@ ensures ServerSocket(result);
+        //@ ensures ServerSocket(this);
     
     public Socket accept();
         //@ requires ServerSocket(this);

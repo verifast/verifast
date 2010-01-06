@@ -15,7 +15,7 @@ public class Room {
 
     public Room()
         //@ requires emp;
-        //@ ensures room(result);
+        //@ ensures room(this);
     {
         List a = new ArrayList();
         this.members = a;

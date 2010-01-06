@@ -285,7 +285,7 @@ public class Tree{
 
 	public Tree(int x)
 	//@ requires true;
-	//@ ensures tree(result,tcons(x,tnil,tnil));
+	//@ ensures tree(this,tcons(x,tnil,tnil));
 	{
 	    	this.value=x;
 		this.left=null;

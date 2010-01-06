@@ -23,7 +23,7 @@ predicate thread_started(Thread thread, Runnable run, any info);
 public class Thread {
     public Thread(Runnable run);
         //@ requires true;
-        //@ ensures thread(result, run);
+        //@ ensures thread(this, run);
     
     void start();
         //@ requires thread(this, ?run) &*& thread_run_pre(run.getClass())(run, ?info);
