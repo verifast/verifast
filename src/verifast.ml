@@ -888,6 +888,7 @@ and
       func_binding
       (* oproep van functie/methode/lemma/fixpoint *)
   | NewArray of loc * type_expr * expr
+  | NewArrayWithInitializer of loc * type_expr * expr list
   | IfExpr of loc * expr * expr * expr
   | SwitchExpr of
       loc *
@@ -1113,6 +1114,7 @@ let expr_loc e =
   | Deref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
   | NewArray(l, _, _) -> l
+  | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
   | SwitchExpr (l, e, secs, _) -> l
   | SizeofExpr (l, t) -> l
@@ -1401,6 +1403,10 @@ and
   parse_throws_clause = parser
   [< '(l, Kwd "throws"); _ = rep_comma parse_qualified_identifier >] -> ()
 and
+  parse_array_dims t = parser
+  [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
+| [< >] -> t
+and
   parse_java_member vis cn = parser
   [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance);
      final = (parser [< '(_, Kwd "final") >] -> true | [< >] -> false);
@@ -1408,15 +1414,21 @@ and
      member = parser
        [< '(l, Ident x);
           member = parser
-            [< init = parser
-                 [< '(_, Kwd ";") >] -> None
-               | [< '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> Some e
-            >] ->
-            let t = match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some t -> t in
-            FieldMember (Field (l, Real, t, x, binding, vis, final, init))
-          | [< (ps, co, ss) = parse_method_rest >] ->
+            [< (ps, co, ss) = parse_method_rest >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, cn), "this")::ps else ps in
             MethMember (Meth (l, t, x, ps, co, ss, binding, vis))
+          | [< t = parse_array_dims (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some t -> t);
+               init = begin parser
+                 [< '(_, Kwd "="); e = parser
+                      [< e = parse_expr >] -> e
+                    | [< '(linit, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] ->
+                      match t with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> raise (ParseException (linit, "Cannot specify an array initializer for a field whose type is not an array type."))
+                 >] -> Some e
+               | [< >] -> None
+               end;
+               '(_, Kwd ";")
+            >] ->
+            FieldMember (Field (l, Real, t, x, binding, vis, final, init))
        >] -> member
      | [< (ps, co, ss) = parse_method_rest >] ->
        let l =
@@ -1879,6 +1891,10 @@ and
     [< targs = parse_angle_brackets l (rep_comma parse_type) >] -> targs
   | [< >] -> []
 and
+  parse_new_array_expr_rest l elem_typ = parser
+  [< '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, elem_typ, length)
+| [< '(_, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> NewArrayWithInitializer (l, elem_typ, es)
+and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l
 | [< '(l, Kwd "false") >] -> False l
@@ -1889,10 +1905,10 @@ and
      res = parser
                [< '(l2, Ident x);
                   e = (parser 
-                    [< '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, IdentTypeExpr (l2, x), length)
-                  | [< args0 = parse_patlist >] -> CallExpr(l,("new "^x),[],[],args0,Static))
+                    [< args0 = parse_patlist >] -> CallExpr(l,("new "^x),[],[],args0,Static)
+                  | [< e = parse_new_array_expr_rest l (IdentTypeExpr (l2, x)) >] -> e)
                >] -> e
-            | [< tp = parse_primary_type; '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, tp, length)
+            | [< tp = parse_primary_type; e = parse_new_array_expr_rest l tp >] -> e
   >] -> res
 | [<
     '(lx, Ident x);
@@ -4171,10 +4187,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    [LitPat target] -> let w = checkt target (ObjType "java.lang.Object") in (CallExpr (l, g', [], [], [LitPat w], info), ObjType "java.lang.Class")
                 else static_error l ("No such pure function: "^g')
       )
-    | NewArray(l, te, length) ->
-      let w1 = checkt length intt in
-      let t = check_pure_type (pn,ilist) tparams te in
-      (NewArray(l, te, w1), ArrayType(t))
     | ReadArray(l, arr, index) ->
         let (w1, arr_t) = check arr in
         let w2 = checkt index intt in
@@ -7410,6 +7422,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end;
         cont h retval
       in
+      let new_array l elem_tp length elems =
+        let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
+        let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+        assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
+        assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
+        cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) (Some (at, ArrayType elem_tp))
+      in
       match e with
       | CastExpr (l, te, (CallExpr (_, "malloc", _, _, _, _) as e)) ->
         let t = check_pure_type (pn,ilist) tparams te in
@@ -7458,14 +7477,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let w = check_expr_t (pn,ilist) tparams tenv e IntType in
         eval_h h env w $. fun h lv ->
         if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative";
-        let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
-        let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
-        assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
-        assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) lv) $. fun () ->
         let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
         assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
-        cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; lv; elems], None)::h) (Some (at, ArrayType elem_tp))
+        new_array l elem_tp lv elems
+      | NewArrayWithInitializer(l, tp, es) ->
+        let elem_tp = check_pure_type (pn,ilist) tparams tp in
+        let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
+        evhs h env ws $. fun h vs ->
+        let elems = mk_list elem_tp vs in
+        let lv = ctxt#mk_intlit (List.length vs) in
+        new_array l elem_tp lv elems
       | e ->
         let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
         eval_h h env w $. fun h v ->

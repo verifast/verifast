@@ -1,3 +1,19 @@
+class InitTest {
+    static void test()
+        //@ requires true;
+        //@ ensures true;
+    {
+        int[] xs = new int { 1, 2, 3 };
+        assert xs.length == 3;
+        int x = xs[0];
+        assert x == 1;
+        x = xs[1];
+        assert x == 2;
+        x = xs[2];
+        assert x == 3;
+    }
+}
+
 class Incrementor {
     static void increment(int[] xs, int i)
         //@ requires xs[i] |-> ?n;
