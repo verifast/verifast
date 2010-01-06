@@ -901,6 +901,8 @@ and
   | AddressOf of loc * expr
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
+  | AssignExpr of loc * expr * expr
+  | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
 and
   pat =
     LitPat of expr (* literal pattern *)
@@ -933,12 +935,8 @@ and
   stmt =
     PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
   | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
-  | Assign of loc * string * expr (* toekenning *)
   | DeclStmt of loc * type_expr * string * expr option (* enkel declaratie *)
-  | Write of loc * expr * fieldref * expr (*  overschrijven van huidige waarde*)
-  | WriteArray of loc * expr * expr * expr
-  | WriteDeref of loc * expr * expr (* write to a pointer dereference *)
-  | CallStmt of loc * string * type_expr list * expr list * func_binding (* oproep: regel - naam - type-argumenten - argumenten *)
+  | ExprStmt of expr
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
   | Assert of loc * pred (* assert regel-predicate *)
@@ -1122,6 +1120,8 @@ let expr_loc e =
   | CastExpr (l, te, e) -> l
   | AddressOf (l, e) -> l
   | ArrayTypeExpr' (l, e) -> l
+  | AssignExpr (l, lhs, rhs) -> l
+  | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
 
 let pred_loc p =
   match p with
@@ -1140,12 +1140,8 @@ let stmt_loc s =
   match s with
     PureStmt (l, _) -> l
   | NonpureStmt (l, _, _) -> l
-  | Assign (l, _, _) -> l
+  | ExprStmt e -> expr_loc e
   | DeclStmt (l, _, _, _) -> l
-  | Write (l, _, _, _) -> l
-  | WriteArray(l, _, _, _) -> l
-  | WriteDeref (l, _, _) -> l
-  | CallStmt (l, _, _, _, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
@@ -1664,16 +1660,7 @@ and
   parse_coef = parser
   [< '(l, Kwd "["); pat = parse_pattern; '(_, Kwd "]") >] -> pat
 and
-  parse_stmt0 =
-  let assignment_stmt l lhs rhs =
-    match lhs with
-    | Var (_, x, _) -> Assign (l, x, rhs)
-    | Read (_, e, f) -> Write (l, e, f, rhs)
-    | ReadArray(_, e, i) -> WriteArray(l, e, i, rhs)
-    | Deref (_, e, _) -> WriteDeref (l, e, rhs)
-    | _ -> raise (ParseException (expr_loc lhs, "The left-hand side of an assignment must be an identifier, a field dereference expression, or a pointer dereference expression."))
-  in
-  parser
+  parse_stmt0 = parser
   [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
 | [< '((sp1, _), Kwd "@*/"); s = parse_stmt; '((_, sp2), Kwd "/*@") >] -> NonpureStmt ((sp1, sp2), false, s)
 | [< '(l, Kwd "if"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); s1 = parse_stmt;
@@ -1757,27 +1744,11 @@ and
 | [< '(l, Kwd ";") >] -> NoopStmt l
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
-      (match e with
-        CallExpr (l, g, targs, [], es,fb) ->
-          let unpack_LitPat x =
-            match x with
-            | LitPat e -> e
-            | VarPat x -> raise (ParseException (expr_loc e, Printf.sprintf "No variable patterns (?%s) allowed in call expression." x))
-            | DummyPat -> raise (ParseException (expr_loc e, "No dummy patterns allowed in call expression."))
-          in
-          CallStmt (l, g, targs, List.map unpack_LitPat es, fb)
-       | _ -> raise (ParseException (expr_loc e, "An expression used as a statement must be a call expression.")))
-  | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
-  | [< '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
     begin match e with
-      Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _) ->
-      DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, Some(rhs))
-    | _ -> assignment_stmt l e rhs
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, Some(rhs))
+    | _ -> ExprStmt e
     end
-  | [< '(l, Kwd "++"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; IntLit (l, unit_big_int, ref None)], ref None))
-  | [< '(l, Kwd "--"); '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; IntLit (l, unit_big_int, ref None)], ref None))
-  | [< '(l, Kwd "+="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Add, [e; e'], ref None))
-  | [< '(l, Kwd "-="); e' = parse_expr; '(_, Kwd ";") >] -> assignment_stmt l e (Operation (l, Sub, [e; e'], ref None))
+  | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
   | [< '(_, Kwd "["); '(_, Kwd "]"); '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
         (match e with
          | Var (lx, t, _) -> DeclStmt (l, ArrayTypeExpr(lx, IdentTypeExpr (lx,t)), x, Some(rhs))
@@ -1832,7 +1803,7 @@ and
 | [< '(l, Kwd "emp") >] -> EmpPred l
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefPred (l, coef, p)
-| [< e = parse_conj_expr; p = parser
+| [< e = parse_disj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> Access (l, e, rhs)
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
   | [< >] ->
@@ -1854,14 +1825,22 @@ and
   parse_switch_pred_clause = parser
   [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, ref None, p)
 and
-  parse_expr = parser
-  [< e0 = parse_conj_expr; e = parser
-    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_expr >] -> IfExpr (l, e0, e1, e2)
+  parse_expr stream = parse_assign_expr stream
+and
+  parse_assign_expr = parser
+  [< e0 = parse_cond_expr; e = parse_assign_expr_rest e0 >] -> e
+and
+  parse_cond_expr = parser
+  [< e0 = parse_disj_expr; e = parser
+    [< '(l, Kwd "?"); e1 = parse_expr; '(_, Kwd ":"); e2 = parse_cond_expr >] -> IfExpr (l, e0, e1, e2)
   | [< >] -> e0
   >] -> e
 and
+  parse_disj_expr = parser
+  [< e0 = parse_conj_expr; e = parse_disj_expr_rest e0 >] -> e
+and
   parse_conj_expr = parser
-  [< e0 = parse_bitor_expr; e = parse_expr_conj_rest e0 >] -> e
+  [< e0 = parse_bitor_expr; e = parse_conj_expr_rest e0 >] -> e
 and
   parse_bitor_expr = parser
   [< e0 = parse_bitxor_expr; e = parse_bitor_expr_rest e0 >] -> e
@@ -1957,11 +1936,13 @@ and
    >] -> e*)
 | [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
-| [< '(l, Kwd "!"); e = parse_expr_primary >] -> Operation(l, Not, [e], ref None)
+| [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e], ref None)
+| [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false)
+| [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -1978,6 +1959,8 @@ and
        [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
      | [< e1 = parse_expr; '(l, Kwd "]") >] -> ReadArray (l, e0, e1)
      end; e = parse_expr_suffix_rest e >] -> e
+| [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, ref None), true)) >] -> e
+| [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, ref None), true)) >] -> e
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
@@ -2017,9 +2000,18 @@ and
   [< '(l, Kwd "|"); e1 = parse_bitxor_expr; e = parse_bitor_expr_rest (Operation (l, BitOr, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
-  parse_expr_conj_rest e0 = parser
-  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, And, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "||"); e1 = parse_expr_rel; e = parse_expr_conj_rest (Operation (l, Or, [e0; e1], ref None)) >] -> e
+  parse_conj_expr_rest e0 = parser
+  [< '(l, Kwd "&&"); e1 = parse_expr_rel; e = parse_conj_expr_rest (Operation (l, And, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_disj_expr_rest e0 = parser
+  [< '(l, Kwd "||"); e1 = parse_conj_expr; e = parse_disj_expr_rest (Operation (l, Or, [e0; e1], ref None)) >] -> e
+| [< >] -> e0
+and
+  parse_assign_expr_rest e0 = parser
+  [< '(l, Kwd "="); e1 = parse_assign_expr >] -> AssignExpr (l, e0, e1)
+| [< '(l, Kwd "+="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Add, e1, false)
+| [< '(l, Kwd "-="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Sub, e1, false)
 | [< >] -> e0
 and
   parse_arglist = parser
@@ -6335,17 +6327,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match ss with
       [] -> []
     | s::ss -> assigned_variables s @ block_assigned_variables ss
+  and expr_assigned_variables e =
+    match e with
+      Operation (l, op, es, _) -> flatmap expr_assigned_variables es
+    | Read (l, e, f) -> expr_assigned_variables e
+    | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
+    | Deref (l, e, _) -> expr_assigned_variables e
+    | CallExpr (l, g, _, _, pats, _) -> flatmap (fun (LitPat e) -> expr_assigned_variables e) pats
+    | NewArray (l, te, e) -> expr_assigned_variables e
+    | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
+    | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
+    | SwitchExpr (l, e, cs, _) -> expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs
+    | CastExpr (l, te, e) -> expr_assigned_variables e
+    | AddressOf (l, e) -> expr_assigned_variables e
+    | AssignExpr (l, Var (_, x, _), e) -> [x] @ expr_assigned_variables e
+    | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | AssignOpExpr (l, Var (_, x, _), op, e, _) -> [x] @ expr_assigned_variables e
+    | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | _ -> []
   and assigned_variables s =
     match s with
       PureStmt (l, s) -> assigned_variables s
     | NonpureStmt (l, _, s) -> assigned_variables s
-    | Assign (l, x, e) -> [x]
-    | DeclStmt (l, t, x, e) -> []
-    | Write (l, e, f, e') -> []
-    | WriteArray(_, _, _, _) -> []
-    | WriteDeref (l, e, e') -> []
-    | CallStmt (l, g, targs, es, _) -> []
-    | IfStmt (l, e, ss1, ss2) -> block_assigned_variables ss1 @ block_assigned_variables ss2
+    | ExprStmt e -> expr_assigned_variables e
+    | DeclStmt (l, t, x, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
+    | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
     | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
       begin
         match body with
@@ -6353,14 +6359,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some s -> assigned_variables s
       end
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> []
-    | SwitchStmt (l, e, cs) -> flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss | (SwitchStmtIntClause(_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
+    | SwitchStmt (l, e, cs) -> expr_assigned_variables e @ flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss | (SwitchStmtIntClause(_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
     | Open (l, g, targs, ps0, ps1, coef) -> []
     | Close (l, g, targs, ps0, ps1, coef) -> []
-    | ReturnStmt (l, e) -> []
-    | WhileStmt (l, e, p, ss, _) -> block_assigned_variables ss
-    | Throw (l, e) -> []
+    | ReturnStmt (l, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
+    | WhileStmt (l, e, p, ss, _) -> expr_assigned_variables e @ block_assigned_variables ss
+    | Throw (l, e) -> expr_assigned_variables e
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
     | BlockStmt (l, ds, ss) -> block_assigned_variables ss
@@ -6973,17 +6979,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CastExpr(_, _, e) -> locals_address_taken e
     | SizeofExpr(_, _) -> []
     | ProverTypeConversion(_, _, e) -> locals_address_taken e
+    | AssignExpr (_, lhs, rhs) -> locals_address_taken lhs @ locals_address_taken rhs
+    | AssignOpExpr (_, lhs, op, rhs, _) -> locals_address_taken lhs @ locals_address_taken rhs
   in
   
   let rec locals_address_taken_stmt s =
     match s with
       PureStmt(_, s) -> locals_address_taken_stmt s (* can we take the address of a local in here? *)
     | NonpureStmt(_, _, s) -> locals_address_taken_stmt s
-    | Assign(_, _, e) -> locals_address_taken e
+    | ExprStmt e -> locals_address_taken e
     | DeclStmt(_, _, _, e) -> begin match e with None -> [] | Some(e) -> locals_address_taken e end
-    | Write(_, e1, f, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
-    | WriteDeref(_, e1, e2) -> (locals_address_taken e1) @ (locals_address_taken e2)
-    | CallStmt(_, _, _, args, _) -> List.flatten (List.map (fun e -> locals_address_taken e) args)
     | IfStmt(_, e, thn, els) -> (locals_address_taken e) @ 
         (List.flatten (List.map (fun s -> locals_address_taken_stmt s) (thn @ els)))
     | SwitchStmt(_, e, clauses) -> (locals_address_taken e) @ 
@@ -7499,7 +7504,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
       else
         static_error l "Non-pure statements are not allowed here."
-    | CallStmt (l, "produce_limits", [], [Var (lv, x, _) as e],Static) ->
+    | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x, _) as e)], Static)) ->
       if not pure then static_error l "This function may be called only from a pure context.";
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
@@ -7614,7 +7619,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rec iter ss_before ss_after =
             match ss_after with
               [] -> static_error l "'call();' statement expected"
-            | CallStmt (lc, "call", [], [], Static)::ss_after -> (List.rev ss_before, lc, None, ss_after)
+            | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
             | DeclStmt (ld, te, x, Some(CallExpr (lc, "call", [], [], [], Static)))::ss_after ->
               if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
               let t = check_pure_type (pn,ilist) tparams te in
@@ -7686,8 +7691,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end;
         cont()
       end
-    | CallStmt (l, "close_struct", targs, args, Static) when language = CLang ->
-      let e = match (targs, args) with ([], [e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
+    | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
@@ -7712,8 +7717,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           fref#set_parent sn; fref#set_range t; assume_field h fref pointerTerm (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit (fun h -> iter h fds)
       in
       iter h fds
-    | CallStmt (l, "open_struct", targs, args, Static) when language = CLang ->
-      let e = match (targs, args) with ([], [e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." in
+    | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
@@ -7741,7 +7746,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
       assume (ctxt#mk_eq (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
-    | CallStmt (l, "free", [], args,Static) ->
+    | ExprStmt (CallExpr (l, "free", [], [], args,Static)) ->
+      let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here") args in
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
           [(arg, PtrType (StructType tn))] ->
@@ -7766,7 +7772,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           )
         | _ -> call_stmt l None "free" [] (List.map (fun e -> LitPat e) args) Static (fun h _ -> cont h env)
       end
-    | CallStmt (l, "open_module", [], args, Static) ->
+    | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments.";
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
@@ -7778,7 +7784,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
       in
       cont (codeChunks @ globalChunks @ h) env
-    | CallStmt (l, "close_module", [], args, Static) ->
+    | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) ->
       if args <> [] then static_error l "close_module requires no arguments.";
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
@@ -7800,7 +7806,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h
       end $. fun h ->
       cont (Chunk ((module_symb, true), [], real_unit, [current_module_term; ctxt#mk_false], None)::h) env
-    | Assign (l, x, e) ->
+    | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
+      (* CAVEAT: This is unsound if we allow side-effects in e1 *)
+      let s = ExprStmt (AssignExpr (l, e1, Operation (l, op, [e1; e2], ref None))) in
+      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+    | ExprStmt (AssignExpr (l, Var (lx, x, _), e)) ->
       let (tpx, symb) = vartp l x in
       verify_expr (Some tpx) (Some x) e $. fun h (Some (v, _)) ->
       check_assign l x;
@@ -7808,15 +7818,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | DeclStmt (l, te, x, e) ->
       if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
       let t = check_pure_type (pn,ilist) tparams te in
+      let tenv = (x, t)::tenv in
       let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      begin
-      match e with
-        None -> 
-          let xt = get_unique_var_symb_non_ghost x t in verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h (update env x xt) (BlockStmt(l, [], [])) tcont return_cont (*let xt = get_unique_var_symb x t in cont h (update env x xt)*)
-      | Some(e) -> verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap ((x, t)::tenv) ghostenv h env (Assign (l, x, e)) tcont return_cont (* BUGBUG: e should be typechecked outside of the scope of x *)
-      end
-      ;
-    | Write (l, e, f, rhs) ->
+      begin fun cont ->
+        match e with
+          None -> cont h (get_unique_var_symb_non_ghost x t)
+        | Some e -> verify_expr (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
+      end $. fun h v ->
+      tcont sizemap tenv ghostenv h ((x, v)::env)
+    | ExprStmt (AssignExpr (l, Read (_, e, f), rhs)) ->
       let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
@@ -7829,7 +7839,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       else
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun h _ _ _ _ _ _ ->
         cont (Chunk ((f_symb, true), [], real_unit, [ev wrhs], None)::h) env
-    | WriteArray(l, arr, i, rhs) ->
+    | ExprStmt (AssignExpr (l, ReadArray (_, arr, i), rhs)) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (arr, arrType) = check_expr (pn,ilist) tparams tenv arr in
       let elem_tp = match arrType with ArrayType t -> t | _ -> static_error l "Array expected" in
@@ -7841,7 +7851,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
       assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun h _ [_; _; elem] _ _ _ _ ->
       cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
-    | WriteDeref (l, e, rhs) ->
+    | ExprStmt (AssignExpr (l, Deref (_, e, _), rhs)) ->
       if pure then static_error l "Cannot write in a pure context.";
       let (w, pointerType) = check_expr (pn,ilist) tparams tenv e in
       let pointeeType = 
@@ -7856,8 +7866,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
           cont (Chunk ((predSymb, true), [], real_unit, [t; ev wrhs], None)::h) env)
       )
-    | CallStmt (l, g, targs, es,fb) ->
-      call_stmt l None g targs (List.map (fun e -> LitPat e) es) fb (fun h _ -> cont h env)
+    | ExprStmt (CallExpr (l, g, targs, pats0, es, fb)) ->
+      if pats0 <> [] then static_error l "Only a single argument list is allowed here";
+      List.iter (function LitPat e -> () | VarPat x -> static_error l "No variable patterns allowed here" | DummyPat -> static_error l "No dummy patterns allowed here") es;
+      call_stmt l None g targs es fb (fun h _ -> cont h env)
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -8516,8 +8528,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      begin
                        let funcname =
                          match s with
-                           CallStmt (lcall, g, targs, args, _) -> g
-                         | Assign (lcall, x, CallExpr (_, g, _, _, _, _)) -> g
+                           ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
+                         | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
                          | DeclStmt (lcall, xtype, x, Some(CallExpr (_, g, _, _, _, _))) -> g
                          | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call."
                        in
