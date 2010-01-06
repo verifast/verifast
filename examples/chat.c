@@ -331,7 +331,7 @@ int main() //@ : main
     //@ leak lock(roomLock, _, room_ctor(room));
     struct server_socket *serverSocket = create_server_socket(12345);
 
-    while (true)
+    for (;;)
         //@ invariant [_]lock(roomLock, _, room_ctor(room)) &*& server_socket(serverSocket);
     {
         struct socket *socket = server_socket_accept(serverSocket);

@@ -540,7 +540,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk ();
         ident ()
     | '(' -> text_junk (); Some(ident_or_keyword "(" false)
-    | ('!' | '%' | '&' | '$' | '#' | '+' | ':' | '<' | '=' | '>' |
+    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | ':' | '<' | '=' | '>' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();
@@ -564,7 +564,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         start_token();
         text_junk ();
         reset_buffer (); Some (String (string ()))
-    | '-' -> start_token(); text_junk (); neg_number ()
     | '/' -> start_token(); text_junk (); maybe_comment ()
     | '\000' ->
       in_ghost_range := !ghost_range_start <> None;
@@ -935,7 +934,7 @@ and
   stmt =
     PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
   | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
-  | DeclStmt of loc * type_expr * string * expr option (* enkel declaratie *)
+  | DeclStmt of loc * type_expr * (string * expr option) list (* enkel declaratie *)
   | ExprStmt of expr
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
@@ -1141,7 +1140,7 @@ let stmt_loc s =
     PureStmt (l, _) -> l
   | NonpureStmt (l, _, _) -> l
   | ExprStmt e -> expr_loc e
-  | DeclStmt (l, _, _, _) -> l
+  | DeclStmt (l, _, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
@@ -1181,7 +1180,7 @@ let type_expr_loc t =
 (* Region: the parser *)
 
 let common_keywords = [
-  "switch"; "case"; ":"; "return";
+  "switch"; "case"; ":"; "return"; "for";
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "!"; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
@@ -1321,7 +1320,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = parser
-      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, x, Some(e))
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, [x, Some(e)])
     | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
@@ -1706,8 +1705,28 @@ and
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     inv = opt (parser [< '((sp1, _), Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '((_, sp2), Kwd "@*/") >] -> p);
+     inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
      '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, b, closeBraceLoc)
+| [< '(l, Kwd "for");
+     '(_, Kwd "(");
+     init_stmts = begin parser
+       [< e = parse_expr;
+          ss = parser
+            [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> [s]
+          | [< es = comma_rep parse_expr; '(_, Kwd ";") >] -> List.map (fun e -> ExprStmt e) es
+       >] -> ss
+     | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te x >] -> [s]
+     | [< '(_, Kwd ";") >] -> []
+     end;
+     cond = opt parse_expr;
+     '(_, Kwd ";");
+     update_exprs = rep_comma parse_expr;
+     '(_, Kwd ")");
+     inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
+     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
+  >] ->
+  let cond = match cond with None -> True l | Some e -> e in
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
@@ -1745,36 +1764,34 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), x, Some(rhs))
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), [x, Some(rhs)])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
-  | [< '(_, Kwd "["); '(_, Kwd "]"); '(lx, Ident x); '(l, Kwd "="); rhs = parse_expr; '(_, Kwd ";") >] ->
-        (match e with
-         | Var (lx, t, _) -> DeclStmt (l, ArrayTypeExpr(lx, IdentTypeExpr (lx,t)), x, Some(rhs))
-         | _ -> raise (ParseException (expr_loc e, "Parse error."))
-        )
-  | [<'(lx, Ident x); rhs = opt (parser [< '(_, Kwd "="); r = parse_expr; >] -> r); '(_, Kwd ";") >] ->
-    let rec type_expr_of_expr e =
-      match e with
-        Var (l, x, _) -> IdentTypeExpr (l, x)
-      | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
-      | e -> raise (ParseException (expr_loc e, "Type expected."))
-    in
-    DeclStmt (lx, type_expr_of_expr e, x, rhs)
+  | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> s
   >] -> s
-| [< te = parse_type; '(_, Ident x); 
-     s2 = parser 
-       [< '(l, Kwd ";") >] -> DeclStmt(l, te, x, None)
-     | [<'(l, Kwd "=");
+| [< te = parse_type; '(_, Ident x); s2 = parse_decl_stmt_rest te x >] -> s2
+and
+  type_expr_of_expr e =
+  match e with
+    Var (l, x, _) -> IdentTypeExpr (l, x)
+  | CallExpr (l, x, targs, [], [], Static) -> ConstructedTypeExpr (l, x, targs)
+  | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
+  | e -> raise (ParseException (expr_loc e, "Type expected."))
+and
+  parse_decl_stmt_rest te x = parser 
+    [< '(l, Kwd "=");
        s = parser
-       [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+         [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
          begin
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
          CreateHandleStmt (l, x, hpn, e)
-       | [< rhs = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, te, x, Some(rhs)) >] -> s
-  >] -> s2
+       | [< rhs = parse_expr; xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e)); '(_, Kwd ";") >] ->
+         DeclStmt (l, te, (x, Some(rhs))::xs)
+    >] -> s
+  | [< xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e)); '(l, Kwd ";") >] ->
+    DeclStmt(l, te, (x, None)::xs)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -1891,16 +1908,15 @@ and
   >] -> res
 | [<
     '(lx, Ident x);
-    targs = parse_type_args lx;
     ex = parser
       [<
         args0 = parse_patlist;
         e = parser
-          [< args = parse_patlist >] -> CallExpr (lx, x, targs, args0, args,Static)
-        | [< >] -> CallExpr (lx, x, targs, [], args0,Static)
+          [< args = parse_patlist >] -> CallExpr (lx, x, [], args0, args,Static)
+        | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<
-        '(ldot, Kwd ".") when targs = [];
+        '(ldot, Kwd ".");
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
@@ -1910,7 +1926,7 @@ and
             | [<>] -> Read (ldot, Var(lx,x, ref None), new fieldref f)
           >]->e 
       >]-> r
-    | [< >] -> if targs = [] then Var (lx, x, ref None) else CallExpr (lx, x, targs, [], [], Static)
+    | [< >] -> Var (lx, x, ref None)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
@@ -1941,6 +1957,11 @@ and
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
 | [< '(l, Kwd "&"); e = parse_expr_suffix >] -> AddressOf (l, e)
 | [< '(l, Kwd "~"); e = parse_expr_suffix >] -> Operation (l, BitNot, [e], ref None)
+| [< '(l, Kwd "-"); e = parse_expr_suffix >] ->
+  begin match e with
+    IntLit (_, n, t) -> IntLit (l, minus_big_int n, t)
+  | _ -> Operation (l, Sub, [IntLit (l, zero_big_int, ref None); e], ref None)
+  end
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false)
 and
@@ -1983,9 +2004,41 @@ and
   [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1], ref None)) >] -> e
-| [< '(l, Kwd "<"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e1; e0], ref None)) >] -> e
 | [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e1; e0], ref None)) >] -> e
+| [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
+and
+  apply_type_args e targs args =
+  match e with
+    Var (lx, x, _) -> CallExpr (lx, x, targs, [], args, Static)
+  | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
+  | Operation (l, Not, [e], ts) -> Operation (l, Not, [apply_type_args e targs args], ts)
+  | Operation (l, BitNot, [e], ts) -> Operation (l, BitNot, [apply_type_args e targs args], ts)
+  | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
+  | AddressOf (l, e) -> AddressOf (l, apply_type_args e targs args)
+  | Operation (l, op, [e1; e2], ts) -> Operation (l, op, [e1; apply_type_args e2 targs args], ts)
+  | _ -> raise (ParseException (expr_loc e, "Identifier expected before type argument list"))
+and
+  parse_expr_lt_rest e0 cont = parser
+  [< '(l, Kwd "<");
+     e = parser
+       [< e1 = parse_expr_arith; e1 = parse_expr_lt_rest e1 (let rec iter e0 = parse_expr_lt_rest e0 iter in iter);
+          e = parser
+            [< '(_, Kwd ">"); (* Type argument *)
+               args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
+               e = cont (apply_type_args e0 [type_expr_of_expr e1] args)
+            >] -> e
+          | [< '(_, Kwd ","); ts = rep_comma parse_type; '(_, Kwd ">");
+               args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
+               e = cont (apply_type_args e0 ([type_expr_of_expr e1] @ ts) args)
+            >] -> e
+          | [< e = cont (Operation (l, Lt, [e0; e1], ref None)) >] -> e
+       >] -> e
+     | [< ts = rep_comma parse_type; '(_, Kwd ">");
+          args = (parser [< args = parse_patlist >] -> args | [< >] -> []);
+          e = cont (apply_type_args e0 ts args)
+       >] -> e
+  >] -> e
 | [< >] -> e0
 and
   parse_bitand_expr_rest e0 = parser
@@ -6350,7 +6403,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PureStmt (l, s) -> assigned_variables s
     | NonpureStmt (l, _, s) -> assigned_variables s
     | ExprStmt e -> expr_assigned_variables e
-    | DeclStmt (l, t, x, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
+    | DeclStmt (l, t, xs) -> flatmap (fun (x, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
     | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
     | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
       begin
@@ -6988,7 +7041,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PureStmt(_, s) -> locals_address_taken_stmt s (* can we take the address of a local in here? *)
     | NonpureStmt(_, _, s) -> locals_address_taken_stmt s
     | ExprStmt e -> locals_address_taken e
-    | DeclStmt(_, _, _, e) -> begin match e with None -> [] | Some(e) -> locals_address_taken e end
+    | DeclStmt(_, _, xs) -> flatmap (fun (x, e) -> begin match e with None -> [] | Some(e) -> locals_address_taken e end) xs
     | IfStmt(_, e, thn, els) -> (locals_address_taken e) @ 
         (List.flatten (List.map (fun s -> locals_address_taken_stmt s) (thn @ els)))
     | SwitchStmt(_, e, clauses) -> (locals_address_taken e) @ 
@@ -7620,7 +7673,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match ss_after with
               [] -> static_error l "'call();' statement expected"
             | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
-            | DeclStmt (ld, te, x, Some(CallExpr (lc, "call", [], [], [], Static)))::ss_after ->
+            | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static))])::ss_after ->
               if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
               let t = check_pure_type (pn,ilist) tparams te in
               begin match rt1 with
@@ -7815,17 +7868,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_expr (Some tpx) (Some x) e $. fun h (Some (v, _)) ->
       check_assign l x;
       update_local_or_global h env tpx x symb v cont
-    | DeclStmt (l, te, x, e) ->
-      if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
+    | DeclStmt (l, te, xs) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      let tenv = (x, t)::tenv in
-      let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-      begin fun cont ->
-        match e with
-          None -> cont h (get_unique_var_symb_non_ghost x t)
-        | Some e -> verify_expr (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
-      end $. fun h v ->
-      tcont sizemap tenv ghostenv h ((x, v)::env)
+      let rec iter h tenv' ghostenv' env' xs =
+        match xs with
+          [] -> tcont sizemap tenv' ghostenv' h env'
+        | (x, e)::xs ->
+          if List.mem_assoc x tenv' then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
+          begin fun cont ->
+            match e with
+              None -> cont h (get_unique_var_symb_non_ghost x t)
+            | Some e -> verify_expr (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
+          end $. fun h v ->
+          let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
+          iter h ((x, t)::tenv') ghostenv' ((x, v)::env') xs
+      in
+      iter h tenv ghostenv env xs
     | ExprStmt (AssignExpr (l, Read (_, e, f), rhs)) ->
       let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
       let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
@@ -8530,7 +8588,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                          match s with
                            ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
                          | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
-                         | DeclStmt (lcall, xtype, x, Some(CallExpr (_, g, _, _, _, _))) -> g
+                         | DeclStmt (lcall, xtype, [x, Some(CallExpr (_, g, _, _, _, _))]) -> g
                          | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call."
                        in
                        match try_assoc funcname funcmap with

@@ -16,14 +16,12 @@ int main0(int argc, char **argv)
     //@ requires 0 <= argc &*& argv(argv, argc);
     //@ ensures true;
 {
-    int i = 0;
-    while (i < argc)
+    for (int i = 0; i<argc; i++)
         //@ invariant 0 <= i &*& i <= argc &*& argv(argv + i, argc - i);
     {
         //@ open argv(argv + i, argc - i);
         //@ pointer_is_in_range(argv + i);
         puts(*(argv + i));
-        i = i + 1;
     }
     //@ open argv(_, 0);
     return 0;
