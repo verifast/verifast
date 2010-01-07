@@ -32,8 +32,8 @@ void start_session(struct session* session);
   //@ ensures thread_run_post(start_session)(session);
 
 void create_game(struct socket* socket, struct lock* lock, struct game** games)
-  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
-  //@ ensures [f]lock(lock, lock_invariant(games));
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
+  //@ ensures [_]lock(lock, lock_invariant(games));
 {
    struct string_buffer* name = create_string_buffer();
    struct game* new_game = malloc(sizeof(struct game));
@@ -67,8 +67,8 @@ void show_games_helper(struct socket* socket, struct game* game)
 }
 
 void show_games(struct socket* socket, struct lock* lock, struct game** games)
-  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
-  //@ ensures socket(socket) &*& [f]lock(lock, lock_invariant(games));
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
+  //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
 {
   lock_acquire(lock);
   //@ open lock_invariant(games)();
@@ -160,8 +160,8 @@ void play_game(struct socket* socket1, struct socket* socket2)
 }
 
 void join_game(struct socket* socket, struct lock* lock, struct game** games)
-  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
-  //@ ensures socket(socket) &*& [?g]lock(lock, lock_invariant(games));
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
+  //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
 {
   struct game* joined_game = 0;
   lock_acquire(lock);
@@ -188,7 +188,6 @@ void join_game(struct socket* socket, struct lock* lock, struct game** games)
     session->socket = joined_game->socket;
     session->lock = lock;
     session->games = games;
-    //@ split_fraction lock(_, _);
     //@ close thread_run_pre(start_session)(session);
     thread_start(start_session, session);
     //@ leak thread(_, _, _);
@@ -224,8 +223,8 @@ lemma void games_lseg_append_lemma2(struct game* a)
 
 // Verification of the function create_game_last is optional.
 void create_game_last(struct socket* socket, struct lock* lock, struct game** games) 
-  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
-  //@ ensures [f]lock(lock, lock_invariant(games));
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
+  //@ ensures [_]lock(lock, lock_invariant(games));
 {
     struct string_buffer* name = create_string_buffer();
     struct game* new_game = malloc(sizeof(struct game));
@@ -270,12 +269,12 @@ void create_game_last(struct socket* socket, struct lock* lock, struct game** ga
 }
 
 void main_menu(struct socket* socket, struct lock* lock, struct game** games) 
-  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures true;
 {
   bool quit = false;
   while(! quit) 
-    //@ invariant quit ? true : socket(socket) &*& [?g]lock(lock, lock_invariant(games));
+    //@ invariant quit ? true : socket(socket) &*& [_]lock(lock, lock_invariant(games));
   {
     int choice = 0;
     socket_write_string(socket, "What would you like to do?\r\n");
@@ -288,8 +287,6 @@ void main_menu(struct socket* socket, struct lock* lock, struct game** games)
     if(choice == 1) {
       create_game(socket, lock, games);
       quit = true;
-      //@ assert [?g]lock(lock, lock_invariant(games));
-      //@ leak [g]lock(_, _);
     } else if (choice == 2) {
       show_games(socket, lock, games);
     } else if (choice == 3) {
@@ -297,14 +294,10 @@ void main_menu(struct socket* socket, struct lock* lock, struct game** games)
     } else if (choice == 4) {
       socket_write_string(socket, "Bye!\r\n");
       socket_close(socket);
-      //@ assert [?g]lock(lock, lock_invariant(games));
-      //@ leak [g]lock(_, _);
       quit = true;
     } else if (choice == 5) {
       create_game_last(socket, lock, games);
       quit = true;
-      //@ assert [?g]lock(lock, lock_invariant(games));
-      //@ leak [g]lock(_, _);
     } else {
       socket_write_string(socket, "Invalid choice. Try again.\r\n");
     }
@@ -325,7 +318,7 @@ void start_session(struct session* session) //@: thread_run
 predicate_family_instance thread_run_pre(start_session)(struct session* session) =
   session->socket |-> ?socket &*& socket(socket) &*&
   session->games |-> ?games &*&
-  session->lock |-> ?lock &*& [?f]lock(lock, lock_invariant(games)) &*&
+  session->lock |-> ?lock &*& [_]lock(lock, lock_invariant(games)) &*&
   malloc_block_session(session);
   
 predicate_family_instance thread_run_post(start_session)(struct session* session) =
@@ -347,9 +340,10 @@ int main() //@: main
   //@ close lock_invariant(games)();
   //@ close create_lock_ghost_args(lock_invariant(games));
   lock = create_lock();
+  //@ leak lock(lock, lock_invariant(games));
   ss = create_server_socket(1234);
   while(true)
-    //@ invariant server_socket(ss) &*& [?f]lock(lock, lock_invariant(games));
+    //@ invariant server_socket(ss) &*& [_]lock(lock, lock_invariant(games));
   {
     struct socket* socket = server_socket_accept(ss);
     struct session* session = malloc(sizeof(struct session));
@@ -357,7 +351,6 @@ int main() //@: main
     session->socket = socket;
     session->lock = lock;
     session->games = games;
-    //@ split_fraction lock(lock, lock_invariant(games));
     //@ close thread_run_pre(start_session)(session);
     thread_start(start_session, session);
     //@ leak thread(_, _, _);
