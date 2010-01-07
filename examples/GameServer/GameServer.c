@@ -92,7 +92,33 @@ int get_rock_paper_or_scissors(struct socket* socket)
     socket_write_string(socket, "Try again.\r\n");
     choice = socket_read_nonnegative_integer(socket);
   }
+  socket_write_string(socket, "Waiting for other player ...\r\n");
   return choice;
+}
+
+struct rps_session {
+  struct socket* socket;
+  int result;
+};
+
+/*@
+predicate_family_instance thread_run_pre(get_rock_paper_or_scissors_async)(struct rps_session* rps_session) =
+  [1/2]rps_session->socket |-> ?socket &*& socket(socket) &*&
+  rps_session->result |-> _;
+  
+predicate_family_instance thread_run_post(get_rock_paper_or_scissors_async)(struct rps_session* rps_session) =
+  [1/2]rps_session->socket |-> ?socket &*& socket(socket) &*&
+  rps_session->result |-> ?res &*& 0 <= res &*& res <= 2;
+@*/
+
+void get_rock_paper_or_scissors_async(struct rps_session* rps_session) //@: thread_run
+  //@ requires thread_run_pre(get_rock_paper_or_scissors_async)(rps_session);
+  //@ ensures thread_run_post(get_rock_paper_or_scissors_async)(rps_session);
+{
+  //@ open thread_run_pre(get_rock_paper_or_scissors_async)(rps_session);
+  int tmp = get_rock_paper_or_scissors(rps_session->socket);
+  rps_session->result = tmp;
+  //@ close thread_run_post(get_rock_paper_or_scissors_async)(rps_session);
 }
 
 void play_game(struct socket* socket1, struct socket* socket2)
@@ -103,8 +129,17 @@ void play_game(struct socket* socket1, struct socket* socket2)
   while(! finished)
     //@ invariant socket(socket1) &*& socket(socket2);
   {
-    int choice1 = get_rock_paper_or_scissors(socket1);
-    int choice2 = get_rock_paper_or_scissors(socket2);
+    int choice1; int choice2; struct thread* thread;
+    struct rps_session* rps_session = malloc(sizeof(struct rps_session));
+    if(rps_session == 0) abort();
+    rps_session->socket = socket1;
+    //@ close thread_run_pre(get_rock_paper_or_scissors_async)(rps_session);
+    thread = thread_start(get_rock_paper_or_scissors_async, rps_session);
+    choice2 = get_rock_paper_or_scissors(socket2);
+    thread_join(thread);
+    //@ open thread_run_post(get_rock_paper_or_scissors_async)(rps_session);
+    choice1 = rps_session->result;
+    free(rps_session); 
     if(choice1 == choice2) {
       socket_write_string(socket1, "A draw! Try again.\r\n");
       socket_write_string(socket2, "A draw! Try again.\r\n");
@@ -161,6 +196,79 @@ void join_game(struct socket* socket, struct lock* lock, struct game** games)
   }
 }
 
+/*@
+lemma void games_lseg_append_lemma(struct game* a)
+  requires games_lseg(a, ?b) &*& games_lseg(b, ?c) &*& c->next |-> ?n;
+  ensures games_lseg(a, c) &*& c->next |-> n;
+{
+  open games_lseg(a, b);
+  if(a == b) {
+  } else {
+    games_lseg_append_lemma(a->next);
+    close games_lseg(a, c);
+  }
+}
+
+lemma void games_lseg_append_lemma2(struct game* a)
+  requires games_lseg(a, ?b) &*& games_lseg(b, 0);
+  ensures games_lseg(a, 0);
+{
+  open games_lseg(a, b);
+  if(a == b) {
+  } else {
+    games_lseg_append_lemma2(a->next);
+    close games_lseg(a, 0);
+  }
+}
+@*/
+
+// Verification of the function create_game_last is optional.
+void create_game_last(struct socket* socket, struct lock* lock, struct game** games) 
+  //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
+  //@ ensures [f]lock(lock, lock_invariant(games));
+{
+    struct string_buffer* name = create_string_buffer();
+    struct game* new_game = malloc(sizeof(struct game));
+    if(new_game == 0) abort();
+    socket_write_string(socket, "Enter the name of your game.\r\n");
+    socket_read_line(socket, name);
+    new_game->name = name;
+    new_game->socket = socket;
+    new_game->next = 0;
+    socket_write_string(socket, "Game created, waiting for other player...\r\n");
+    lock_acquire(lock);
+    //@ open lock_invariant(games)();
+    if(*games == 0) {
+      *games = new_game;
+      //@ close games_lseg(new_game, 0);
+      //@ close lock_invariant(games)();
+      lock_release(lock);
+    } else {
+      //@ struct game* head = * games;
+      struct game* current = *games;
+      //@ open games_lseg(head, 0);
+      //@ close games_lseg(head, current);
+      while(current->next != 0) 
+        //@ invariant games_lseg(head, current) &*& current != 0 &*& current->socket |-> ?s &*& socket(s) &*& current->name |-> ?nm &*& current->next |-> ?next  &*& string_buffer(nm) &*& malloc_block_game(current) &*& games_lseg(next, 0);
+      {
+        //@ struct game* old_current = current;
+        current = current->next;
+        //@ open games_lseg(current, 0);
+        //@ close games_lseg(current, current);
+        //@ close games_lseg(old_current, current);
+        //@ games_lseg_append_lemma(head);
+      }
+      current->next = new_game;
+      //@ close games_lseg(0, 0);
+      //@ close games_lseg(new_game, 0);
+      //@ close games_lseg(current, 0);
+      //@ games_lseg_append_lemma2(head);
+      //@ open games_lseg(0, 0);
+      //@ close lock_invariant(games)();
+      lock_release(lock);
+    }
+}
+
 void main_menu(struct socket* socket, struct lock* lock, struct game** games) 
   //@ requires socket(socket) &*& [?f]lock(lock, lock_invariant(games));
   //@ ensures true;
@@ -175,6 +283,7 @@ void main_menu(struct socket* socket, struct lock* lock, struct game** games)
     socket_write_string(socket, "2. Show all available games.\r\n");
     socket_write_string(socket, "3. Join an existing game.\r\n");
     socket_write_string(socket, "4. Quit.\r\n");
+    socket_write_string(socket, "5. Create a new game (optional).\r\n");
     choice = socket_read_nonnegative_integer(socket);
     if(choice == 1) {
       create_game(socket, lock, games);
@@ -191,6 +300,11 @@ void main_menu(struct socket* socket, struct lock* lock, struct game** games)
       //@ assert [?g]lock(lock, lock_invariant(games));
       //@ leak [g]lock(_, _);
       quit = true;
+    } else if (choice == 5) {
+      create_game_last(socket, lock, games);
+      quit = true;
+      //@ assert [?g]lock(lock, lock_invariant(games));
+      //@ leak [g]lock(_, _);
     } else {
       socket_write_string(socket, "Invalid choice. Try again.\r\n");
     }
