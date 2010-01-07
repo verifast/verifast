@@ -312,7 +312,7 @@ let get_file_options text =
   iter '@' 8 tokens
 
 let readFile path =
-  let chan = open_in path in
+  let chan = open_in_bin path in
   let count = ref 0 in
   let rec iter () =
     let buf = String.create 60000 in
