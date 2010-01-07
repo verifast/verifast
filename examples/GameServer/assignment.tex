@@ -12,18 +12,21 @@ The goal of this assignment is to verify a game server. More specifically, you m
 
 Your final solution must be submitted to \texttt{bart.jacobs@cs.kuleuven.be} by March 7th 2010. It suffices to send the annotated version of \texttt{GameServer.c}. If you get stuck, you can request hints by sending an email describing your problem to \texttt{bart.jacobs@cs.kuleuven.be}.
 
+After submitting your solution, we will shedule an appointment. In this appointment, you must defend your solution and demonstrate your understanding of VeriFast.
+
 \section{Extra}
 It is not necessary to complete the optional (but harder!) items in the list below to succeed for this assignment. However, completing them will be rewarded.
 
 \begin{itemize}
   \item Verification of the function \texttt{create\_game\_last} is optional.
-  \item It suffices to prove memory safety. However, verifying full functional correctness can be done.
+  \item Verify full functional correctness of the game server instead of only proving memory safety. 
 \end{itemize}
 
 \section{Hints}
 
 \begin{itemize}
   \item To verify memory safety of pointer dereference \texttt{*p}, VeriFast looks for a heap chunk \texttt{pointer(p, \_)}. \texttt{prelude.h} contains various lemmas to create and manipulate \texttt{pointer} chunks.
+  \item The use of fractional permissions is required to complete this assignment. Consumption of an assertion \texttt{[?f]P(x, y, z)} consumes the first chunk \texttt{[g]P(x, y, z)} in the heap and binds \texttt{f} to {g}. A heap chunk \texttt{[g]P(x, y, z)} can be split into two heap chunks using the \texttt{split\_fraction} ghost command: \texttt{//@ split\_fraction P(x, y, z)}.
 \end{itemize}
 
 \section{Compiling and Running the Server}
