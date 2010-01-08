@@ -63,4 +63,11 @@ void thread_join(struct thread *thread);
     //@ requires thread(thread, ?run, ?data);
     //@ ensures thread_run_post(run)(data);
 
+/*
+Note this function does not terminate <thread>. It just frees the object used for joining.
+*/
+void thread_dispose(struct thread *thread);
+    //@ requires thread(thread, ?run, ?data);
+    //@ ensures true;
+
 #endif

@@ -172,7 +172,7 @@ void join_game_core(struct socket* socket, struct lock* lock, struct game_list* 
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games)) &*& joined_game->socket |-> ?socket2 &*& socket(socket2) &*& joined_game->next |-> _ &*& joined_game->name |-> ?name &*& string_buffer(name) &*& malloc_block_game(joined_game);
   //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
 {
-  struct session* session;
+  struct session* session; struct thread* thread;
   socket_write_string(socket, "You have joined ");
   socket_write_string_buffer(socket, joined_game->name);
   socket_write_string(socket, ".\r\n");
@@ -185,8 +185,8 @@ void join_game_core(struct socket* socket, struct lock* lock, struct game_list* 
   session->lock = lock;
   session->games = games;
   //@ close thread_run_pre(start_session)(session);
-  thread_start(start_session, session);
-  //@ leak thread(_, _, _);
+  thread = thread_start(start_session, session);
+  thread_dispose(thread);
   free(joined_game);
 }
 
@@ -202,7 +202,6 @@ void join_game(struct socket* socket, struct lock* lock, struct game_list* games
     //@ close lock_invariant(games)();
     lock_release(lock);
   } else {
-    struct session* session;
     joined_game = games->head;
     //@ open games_lseg(joined_game, 0, _);
     games->head = joined_game->next;
@@ -426,6 +425,7 @@ int main() //@: main
   while(true)
     //@ invariant server_socket(ss) &*& [_]lock(lock, lock_invariant(games));
   {
+    struct thread* thread;
     struct socket* socket = server_socket_accept(ss);
     struct session* session = malloc(sizeof(struct session));
     if(session == 0) abort();
@@ -433,8 +433,8 @@ int main() //@: main
     session->lock = lock;
     session->games = games;
     //@ close thread_run_pre(start_session)(session);
-    thread_start(start_session, session);
-    //@ leak thread(_, _, _);
+    thread = thread_start(start_session, session);
+    thread_dispose(thread);
   }
   return 0;
 }

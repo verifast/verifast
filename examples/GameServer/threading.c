@@ -75,6 +75,11 @@ void thread_join(struct thread *t)
     free(t);
 }
 
+void thread_dispose(struct thread* t)
+{
+  free(t);
+}
+
 struct lock {
 #ifdef WIN32
     CRITICAL_SECTION criticalSection;
