@@ -8,7 +8,8 @@ predicate games_lseg(struct game* from, struct game* to, int count) =
   from == to ? count == 0 : from != 0 &*&
   from->name |-> ?name &*& string_buffer(name) &*& 
   from->socket |-> ?socket &*& socket(socket) &*&
-  from->next |-> ?next &*& games_lseg(next, to, count - 1) &*&  malloc_block_game(from);
+  from->next |-> ?next &*& games_lseg(next, to, count - 1) &*&
+  malloc_block_game(from);
 
 predicate_ctor lock_invariant(struct game_list* games)() = 
   games->head |-> ?head &*& games->count |-> ?count &*& games_lseg(head, 0, count) &*& malloc_block_game_list(games);
@@ -48,7 +49,8 @@ void create_game(struct socket* socket, struct lock* lock, struct game_list* gam
    new_game->socket = socket;
    socket_write_string(socket, "Game created, waiting for other player...\r\n");
    lock_acquire(lock);
-   //@ open lock_invariant(games)();   new_game->next = games->head;
+   //@ open lock_invariant(games)();
+   new_game->next = games->head;
    games->head = new_game;
    games->count = games->count + 1;
    //@ close games_lseg(new_game, 0, games->count);
@@ -166,6 +168,28 @@ void play_game(struct socket* socket1, struct socket* socket2)
   }
 }
 
+void join_game_core(struct socket* socket, struct lock* lock, struct game_list* games, struct game* joined_game)
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games)) &*& joined_game->socket |-> ?socket2 &*& socket(socket2) &*& joined_game->next |-> _ &*& joined_game->name |-> ?name &*& string_buffer(name) &*& malloc_block_game(joined_game);
+  //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
+{
+  struct session* session;
+  socket_write_string(socket, "You have joined ");
+  socket_write_string_buffer(socket, joined_game->name);
+  socket_write_string(socket, ".\r\n");
+  socket_write_string(joined_game->socket, "Another player joined your game.\r\n");
+  string_buffer_dispose(joined_game->name);
+  play_game(joined_game->socket, socket);
+  session = malloc(sizeof(struct session));
+  if(session == 0) abort();
+  session->socket = joined_game->socket;
+  session->lock = lock;
+  session->games = games;
+  //@ close thread_run_pre(start_session)(session);
+  thread_start(start_session, session);
+  //@ leak thread(_, _, _);
+  free(joined_game);
+}
+
 void join_game(struct socket* socket, struct lock* lock, struct game_list* games)
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
@@ -179,26 +203,70 @@ void join_game(struct socket* socket, struct lock* lock, struct game_list* games
     lock_release(lock);
   } else {
     struct session* session;
-    joined_game = games->head;    //@ open games_lseg(joined_game, 0, _);
+    joined_game = games->head;
+    //@ open games_lseg(joined_game, 0, _);
     games->head = joined_game->next;
     games->count = games->count - 1;
     //@ close lock_invariant(games)();
     lock_release(lock);
-    socket_write_string(socket, "You have joined ");
-    socket_write_string_buffer(socket, joined_game->name);
-    socket_write_string(socket, ".\r\n");
-    socket_write_string(joined_game->socket, "Another player joined your game.\r\n");
-    string_buffer_dispose(joined_game->name);
-    play_game(joined_game->socket, socket);
-    session = malloc(sizeof(struct session));
-    if(session == 0) abort();
-    session->socket = joined_game->socket;
-    session->lock = lock;
-    session->games = games;
-    //@ close thread_run_pre(start_session)(session);
-    thread_start(start_session, session);
-    //@ leak thread(_, _, _);
-    free(joined_game);
+    join_game_core(socket, lock, games, joined_game);
+  }
+}
+
+struct game* select_game_helper(struct game* game, int choice) 
+  //@ requires games_lseg(game, 0, ?count) &*& 0 < choice &*& choice < count;
+  //@ ensures games_lseg(game, 0, count - 1) &*& result != 0 &*& result->socket |-> ?socket &*& socket(socket) &*& result->name |-> ?name &*& string_buffer(name) &*& result->next |-> _ &*& malloc_block_game(result);
+{
+  struct game* joined_game;
+  //@ open games_lseg(game, 0, count);
+  if(choice == 1) {
+    joined_game = game->next;
+    //@ open games_lseg(joined_game, 0, count - 1);
+    game->next = joined_game->next;
+  } else {
+    joined_game = select_game_helper(game->next, choice - 1);
+  }
+  //@ close games_lseg(game, 0, count - 1);
+  return joined_game;
+}
+
+void join_selected_game(struct socket* socket, struct lock* lock, struct game_list* games)
+  //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
+  //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
+{
+  struct game* joined_game = 0;
+  lock_acquire(lock);
+  //@ open lock_invariant(games)();
+  if(games->count == 0) {
+    socket_write_string(socket, "No game is available.\r\n");
+    //@ close lock_invariant(games)();
+    lock_release(lock);
+  } else {
+    int choice;
+    socket_write_string(socket, "The following games are available.\r\n");
+    show_games_helper(socket, games->head, games->count);
+    socket_write_string(socket, "Enter the number of the game you want to join (between 1 and ");
+    socket_write_integer_as_decimal(socket, games->count);
+    socket_write_string(socket, ").\r\n");
+    choice = socket_read_nonnegative_integer(socket);
+    //@ int count = games->count;
+    while(choice < 1 || choice > games->count)
+      //@ invariant socket(socket) &*& games->count |-> count;
+    {
+      socket_write_string(socket, "Invalid choice. Try again.\r\n");
+      choice = socket_read_nonnegative_integer(socket);
+    }
+    if(choice == 1) {
+      joined_game = games->head;
+      //@ open games_lseg(joined_game, 0, _);
+      games->head = joined_game->next;
+    } else {
+      joined_game = select_game_helper(games->head, choice-1);
+    }
+    games->count = games->count - 1;
+    //@ close lock_invariant(games)();
+    lock_release(lock);
+    join_game_core(socket, lock, games, joined_game);
   }
 }
 
@@ -291,8 +359,9 @@ void main_menu(struct socket* socket, struct lock* lock, struct game_list* games
     socket_write_string(socket, "1. Create a new game.\r\n");
     socket_write_string(socket, "2. Show all available games.\r\n");
     socket_write_string(socket, "3. Join an existing game.\r\n");
-    socket_write_string(socket, "4. Quit.\r\n");
-    socket_write_string(socket, "5. Create a new game (optional).\r\n");
+    socket_write_string(socket, "4. Select and join an existing game.\r\n");
+    socket_write_string(socket, "5. Quit.\r\n");
+    socket_write_string(socket, "6. Create a new game (optional).\r\n");
     choice = socket_read_nonnegative_integer(socket);
     if(choice == 1) {
       create_game(socket, lock, games);
@@ -302,11 +371,13 @@ void main_menu(struct socket* socket, struct lock* lock, struct game_list* games
     } else if (choice == 3) {
       join_game(socket, lock, games);
     } else if (choice == 4) {
+      join_selected_game(socket, lock, games);
+    } else if (choice == 5) {
       socket_write_string(socket, "Bye!\r\n");
       socket_close(socket);
       quit = true;
-    } else if (choice == 5) {
-      create_game_last(socket, lock, games);
+    } else if (choice == 6) {
+      create_game_last(socket, lock, games); // place in comments if you do not verify create_game_last
       quit = true;
     } else {
       socket_write_string(socket, "Invalid choice. Try again.\r\n");
