@@ -4,15 +4,14 @@
 #include "bool.h"
 
 /*@
-predicate games_lseg(struct game* from, struct game* to) =
-  from == to ? true : from != 0 &*&
+predicate games_lseg(struct game* from, struct game* to, int count) =
+  from == to ? count == 0 : from != 0 &*&
   from->name |-> ?name &*& string_buffer(name) &*& 
   from->socket |-> ?socket &*& socket(socket) &*&
-  from->next |-> ?next &*& games_lseg(next, to) &*&
-  malloc_block_game(from);
+  from->next |-> ?next &*& games_lseg(next, to, count - 1) &*&  malloc_block_game(from);
 
-predicate_ctor lock_invariant(struct game** games)() = 
-  pointer(games, ?head) &*& games_lseg(head, 0) &*& malloc_block(games, 4);
+predicate_ctor lock_invariant(struct game_list* games)() = 
+  games->head |-> ?head &*& games->count |-> ?count &*& games_lseg(head, 0, count) &*& malloc_block_game_list(games);
 @*/
 
 struct game {
@@ -21,9 +20,14 @@ struct game {
   struct game* next;
 };
 
+struct game_list {
+  struct game* head;
+  int count;
+};
+
 struct session {
   struct socket* socket;
-  struct game** games;
+  struct game_list* games;
   struct lock* lock;
 };
 
@@ -31,7 +35,7 @@ void start_session(struct session* session);
   //@ requires thread_run_pre(start_session)(session);
   //@ ensures thread_run_post(start_session)(session);
 
-void create_game(struct socket* socket, struct lock* lock, struct game** games)
+void create_game(struct socket* socket, struct lock* lock, struct game_list* games)
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures [_]lock(lock, lock_invariant(games));
 {
@@ -44,35 +48,38 @@ void create_game(struct socket* socket, struct lock* lock, struct game** games)
    new_game->socket = socket;
    socket_write_string(socket, "Game created, waiting for other player...\r\n");
    lock_acquire(lock);
-   //@ open lock_invariant(games)();
-   new_game->next = *games;
-   *games = new_game;
-   //@ close games_lseg(new_game, 0);
+   //@ open lock_invariant(games)();   new_game->next = games->head;
+   games->head = new_game;
+   games->count = games->count + 1;
+   //@ close games_lseg(new_game, 0, games->count);
    //@ close lock_invariant(games)();
    lock_release(lock);
 }
 
-void show_games_helper(struct socket* socket, struct game* game) 
-  //@ requires socket(socket) &*& games_lseg(game, 0);
-  //@ ensures socket(socket) &*& games_lseg(game, 0);
+void show_games_helper(struct socket* socket, struct game* game, int count) 
+  //@ requires socket(socket) &*& games_lseg(game, 0, count);
+  //@ ensures socket(socket) &*& games_lseg(game, 0, count);
 {
-  //@ open games_lseg(game, 0);
-  if(game == 0) {
+  //@ open games_lseg(game, 0, count);
+  if(count == 0) {
   } else {
     socket_write_string_buffer(socket, game->name);
     socket_write_string(socket, "\r\n");
-    show_games_helper(socket, game->next);
+    show_games_helper(socket, game->next, count - 1);
   }
-  //@ close games_lseg(game, 0);
+  //@ close games_lseg(game, 0, count);
 }
 
-void show_games(struct socket* socket, struct lock* lock, struct game** games)
+void show_games(struct socket* socket, struct lock* lock, struct game_list* games)
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
 {
   lock_acquire(lock);
   //@ open lock_invariant(games)();
-  show_games_helper(socket, *games);
+  socket_write_string(socket, "There are ");
+  socket_write_integer_as_decimal(socket, games->count);
+  socket_write_string(socket, " available games:\r\n");
+  show_games_helper(socket, games->head, games->count);
   //@ close lock_invariant(games)();
   lock_release(lock);
 }
@@ -159,22 +166,22 @@ void play_game(struct socket* socket1, struct socket* socket2)
   }
 }
 
-void join_game(struct socket* socket, struct lock* lock, struct game** games)
+void join_game(struct socket* socket, struct lock* lock, struct game_list* games)
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures socket(socket) &*& [_]lock(lock, lock_invariant(games));
 {
   struct game* joined_game = 0;
   lock_acquire(lock);
   //@ open lock_invariant(games)();
-  if(*games == 0) {
+  if(games->head == 0) {
     socket_write_string(socket, "No game is available.\r\n");
     //@ close lock_invariant(games)();
     lock_release(lock);
   } else {
     struct session* session;
-    joined_game = *games;
-    //@ open games_lseg(joined_game, 0);
-    *games = joined_game->next;
+    joined_game = games->head;    //@ open games_lseg(joined_game, 0, _);
+    games->head = joined_game->next;
+    games->count = games->count - 1;
     //@ close lock_invariant(games)();
     lock_release(lock);
     socket_write_string(socket, "You have joined ");
@@ -197,32 +204,32 @@ void join_game(struct socket* socket, struct lock* lock, struct game** games)
 
 /*@
 lemma void games_lseg_append_lemma(struct game* a)
-  requires games_lseg(a, ?b) &*& games_lseg(b, ?c) &*& c->next |-> ?n;
-  ensures games_lseg(a, c) &*& c->next |-> n;
+  requires games_lseg(a, ?b, ?count1) &*& games_lseg(b, ?c, ?count2) &*& c->next |-> ?n;
+  ensures games_lseg(a, c, count1 + count2) &*& c->next |-> n;
 {
-  open games_lseg(a, b);
+  open games_lseg(a, b, count1);
   if(a == b) {
   } else {
     games_lseg_append_lemma(a->next);
-    close games_lseg(a, c);
+    close games_lseg(a, c, count1 + count2);
   }
 }
 
 lemma void games_lseg_append_lemma2(struct game* a)
-  requires games_lseg(a, ?b) &*& games_lseg(b, 0);
-  ensures games_lseg(a, 0);
+  requires games_lseg(a, ?b, ?count1) &*& games_lseg(b, 0, ?count2);
+  ensures games_lseg(a, 0, count1 + count2);
 {
-  open games_lseg(a, b);
+  open games_lseg(a, b, count1);
   if(a == b) {
   } else {
     games_lseg_append_lemma2(a->next);
-    close games_lseg(a, 0);
+    close games_lseg(a, 0, count1 + count2);
   }
 }
 @*/
 
 // Verification of the function create_game_last is optional.
-void create_game_last(struct socket* socket, struct lock* lock, struct game** games) 
+void create_game_last(struct socket* socket, struct lock* lock, struct game_list* games) 
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures [_]lock(lock, lock_invariant(games));
 {
@@ -237,38 +244,41 @@ void create_game_last(struct socket* socket, struct lock* lock, struct game** ga
     socket_write_string(socket, "Game created, waiting for other player...\r\n");
     lock_acquire(lock);
     //@ open lock_invariant(games)();
-    if(*games == 0) {
-      *games = new_game;
-      //@ close games_lseg(new_game, 0);
+    if(games->head == 0) {
+      games->head = new_game;
+      games->count = games->count + 1;
+      //@ close games_lseg(new_game, 0, games->count);
       //@ close lock_invariant(games)();
       lock_release(lock);
     } else {
-      //@ struct game* head = * games;
-      struct game* current = *games;
-      //@ open games_lseg(head, 0);
-      //@ close games_lseg(head, current);
+      //@ struct game* head = games->head;
+      struct game* current = games->head;
+      //@ assert games_lseg(head, 0, ?count);
+      //@ open games_lseg(head, 0, count);
+      //@ close games_lseg(head, current, 0);
       while(current->next != 0) 
-        //@ invariant games_lseg(head, current) &*& current != 0 &*& current->socket |-> ?s &*& socket(s) &*& current->name |-> ?nm &*& current->next |-> ?next  &*& string_buffer(nm) &*& malloc_block_game(current) &*& games_lseg(next, 0);
+        //@ invariant games_lseg(head, current, ?count1) &*& current != 0 &*& current->socket |-> ?s &*& socket(s) &*& current->name |-> ?nm &*& current->next |-> ?next  &*& string_buffer(nm) &*& malloc_block_game(current) &*& games_lseg(next, 0, ?count2) &*& count == 1 + count1 + count2;
       {
         //@ struct game* old_current = current;
         current = current->next;
-        //@ open games_lseg(current, 0);
-        //@ close games_lseg(current, current);
-        //@ close games_lseg(old_current, current);
+        //@ open games_lseg(current, 0, count2);
+        //@ close games_lseg(current, current, 0);
+        //@ close games_lseg(old_current, current, 1);
         //@ games_lseg_append_lemma(head);
       }
       current->next = new_game;
-      //@ close games_lseg(0, 0);
-      //@ close games_lseg(new_game, 0);
-      //@ close games_lseg(current, 0);
+      //@ close games_lseg(0, 0, 0);
+      //@ close games_lseg(new_game, 0, 1);
+      //@ close games_lseg(current, 0, 2);
       //@ games_lseg_append_lemma2(head);
-      //@ open games_lseg(0, 0);
+      //@ open games_lseg(0, 0, _);
+      games->count = games->count + 1;
       //@ close lock_invariant(games)();
       lock_release(lock);
     }
 }
 
-void main_menu(struct socket* socket, struct lock* lock, struct game** games) 
+void main_menu(struct socket* socket, struct lock* lock, struct game_list* games) 
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
   //@ ensures true;
 {
@@ -332,11 +342,11 @@ int main() //@: main
   //@ ensures true;
 {
   struct lock* lock; struct server_socket* ss;
-  struct game** games = malloc(sizeof(struct game*));
+  struct game_list* games = malloc(sizeof(struct game_list));
   if(games == 0) abort();
-  //@ chars_to_pointer(games);
-  * games = 0;
-  //@ close games_lseg(0, 0);
+  games->head = 0;
+  games->count = 0;
+  //@ close games_lseg(0, 0, 0);
   //@ close lock_invariant(games)();
   //@ close create_lock_ghost_args(lock_invariant(games));
   lock = create_lock();
