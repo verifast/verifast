@@ -20,6 +20,8 @@ typedef int ssize_t;
 #include <unistd.h> /* fork, write, close */
 #define SOCKET int
 #define INVALID_SOCKET (-1)
+#define SOCKADDR_IN struct sockaddr_in
+#define SOCKADDR struct sockaddr
 
 #endif
 
