@@ -58,7 +58,7 @@ struct thread *thread_start(void* run, void *data)
         abort();
     struct thread *t = malloc(sizeof(struct thread));
     if (t == 0) abort();
-    t->id = result;
+    t->id = id;
     return t;
 #endif
 }
@@ -69,7 +69,10 @@ void thread_join(struct thread *t)
     DWORD result = WaitForSingleObject(t->handle, INFINITE);
     if (result != WAIT_OBJECT_0) abort();
 #else
-    int result = pthread_join(t->id, 0);
+    void** tmp = malloc(sizeof(void*));
+    if(tmp == 0) abort();
+    int result = pthread_join(t->id, tmp);
+    free(tmp);
     if (result != 0) abort();
 #endif
     free(t);
