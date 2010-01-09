@@ -1,9 +1,9 @@
 class Program {
     static int x;
     static void foo()
-        //@ requires Program_x(?v);
-        //@ ensures Program_x(v + 1);
+        //@ requires x |-> ?v;
+        //@ ensures x |-> v + 1;
     {
-        Program.x = x + 1;
+        x = x + 1;
     }
 }

@@ -818,26 +818,6 @@ type type_expr =
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list
 
-(** An object used in field read expression ASTs and points-to assertion ASTs. Created by the parser and filled in by the type checker.
-    TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
-class fieldref (name: string) =
-  object
-    val mutable parent: string option = None  (* Name of the struct that declares this field. *)
-    val mutable range: type_ option = None  (* Declared type of the field. *)
-    val mutable static: bool = false
-    val mutable value: constant_value option option ref option = None
-    method name = name
-    method parent = match parent with None -> assert false | Some s -> s
-    method is_array_length = match parent with None -> true | Some s -> false (* only use after type checking *)
-    method range = match range with None -> assert false | Some r -> r
-    method static = static
-    method value = get !(get value)
-    method set_parent s = parent <- Some s
-    method set_range r = range <- Some r
-    method set_static = static <- true
-    method set_value v = value <- Some v
-  end
-
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
 class predref (name: string) =
@@ -874,7 +854,9 @@ and
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
-  | Read of loc * expr * fieldref (* lezen van een veld; hergebruiken voor java field access *)
+  | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
+  | ArrayLengthExpr of loc * expr
+  | WRead of loc * expr * string (* parent *) * string (* field name *) * type_ (* range *) * bool (* static *) * constant_value option option ref * ghostness
   | ReadArray of loc * expr * expr
   | WReadArray of loc * expr * type_ * expr
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
@@ -1106,6 +1088,7 @@ let expr_loc e =
   | ClassLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
   | Read (l, e, f) -> l
+  | WRead (l, _, _, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
   | WReadArray (l, _, _, _) -> l
   | Deref (l, e, t) -> l
@@ -1923,7 +1906,7 @@ and
             '(lf, Ident f);
             e = parser
               [<args0 = parse_patlist>] -> CallExpr (lf, f, [], [], LitPat(Var(lx,x,ref None))::args0,Instance)
-            | [<>] -> Read (ldot, Var(lx,x, ref None), new fieldref f)
+            | [<>] -> Read (ldot, Var(lx,x, ref None), f)
           >]->e 
       >]-> r
     | [< >] -> Var (lx, x, ref None)
@@ -1973,8 +1956,8 @@ and
   [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
   parse_expr_suffix_rest e0 = parser
-  [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
-| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, new fieldref f)) >] -> e
+  [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
 | [< '(l, Kwd "["); 
      e = begin parser
        [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
@@ -4057,8 +4040,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match lookup_class_field cn x with
             None -> None
           | Some (lf, t, vis, binding, final, init, value) ->
-            let f = new fieldref x in f#set_parent cn; f#set_range t; if binding = Static then f#set_static; f#set_value value;
-            Some (Read (l, Var (l, "this", ref (Some LocalVar)), f), t)
+            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), cn, x, t, binding = Static, value, Real), t)
       in
       match field_of_this with
         Some result -> result
@@ -4069,9 +4051,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some (ClassOrInterfaceName cn) ->
           match lookup_class_field cn x with
             None -> None
-          | Some (lf, t, vis, binding, final, init, value) ->
-            let f = new fieldref x in f#set_parent cn; f#set_range t; if binding = Static then f#set_static; f#set_value value;
-            Some (Read (l, Var (l, current_class, ref (Some LocalVar)), f), t)
+          | Some (lf, t, vis, binding, final, init, value) when binding = Static ->
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), cn, x, t, true, value, Real), t)
       in
       match field_of_class with
         Some result -> result
@@ -4198,7 +4179,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let w = checkt_cast e t in
       (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t)
     | Read (l, e, f) ->
-      let (w, t) = check_deref false true (pn,ilist) l tparams tenv e f in (Read (l, w, f), t)
+      check_deref (pn,ilist) l tparams tenv e f
     | Deref (l, e, tr) ->
       let (w, t) = check e in
       begin
@@ -4353,10 +4334,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (ShortType, Char) when isCast -> w
       | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
       | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
-  and check_deref is_write pure (pn,ilist) l tparams tenv e f =
-    let check_ok gh =
-      if is_write && pure && gh = Real then static_error l "Cannot write in a pure context."
-    in
+  and check_deref (pn,ilist) l tparams tenv e f =
     let (w, t) = check_expr (pn,ilist) tparams tenv e in
     begin
     match t with
@@ -4365,28 +4343,28 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match List.assoc sn structmap with
         (_, Some fds, _) ->
         begin
-          match try_assoc' (pn,ilist) f#name fds with
+          match try_assoc' (pn,ilist) f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
-          | Some (_, gh, t) -> check_ok gh; f#set_parent sn; f#set_range t; (w, t)
+          | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t)
         end
       | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
       end
     | ObjType cn ->
       begin
-      match lookup_class_field cn f#name with
+      match lookup_class_field cn f with
         None -> static_error l ("No such field in class '" ^ cn ^ "'.")
       | Some (_, t, vis, binding, final, init, value) ->
         if binding = Static then static_error l "Accessing a static field via an instance is not supported.";
-        check_ok Real; f#set_parent cn; f#set_range t; (w, t)
+        (WRead (l, w, cn, f, t, false, ref (Some None), Real), t)
       end
-    | ArrayType _ when f#name = "length" ->
-      (w, IntType)
+    | ArrayType _ when f = "length" ->
+      (ArrayLengthExpr (l, w), IntType)
     | ClassOrInterfaceName cn ->
-      begin match lookup_class_field cn f#name with
+      begin match lookup_class_field cn f with
         None -> static_error l "No such field"
       | Some (_, t, vis, binding, final, init, value) ->
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object.";
-        check_ok Real; f#set_parent cn; f#set_static; f#set_range t; f#set_value value; (w, t)
+        (WRead (l, w, cn, f, t, true, value, Real), t)
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct."
     end
@@ -4452,7 +4430,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
       | IntLit (l, n, _) -> IntConst n
       | StringLit (l, s) -> StringConst s
-      | Read (l, _, f) when f#static -> eval_field callers (f#parent, f#name)
+      | WRead (l, _, fparent, fname, _, fstatic, _, _) when fstatic -> eval_field callers (fparent, fname)
       | CastExpr (l, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
@@ -4551,8 +4529,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
       Access (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
-      begin match lhs with
-        Read (_, _, _) | ReadArray (_, _, _) -> ()
+      begin match wlhs with
+        WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference or an array element expression."
       end;
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
@@ -4723,6 +4701,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StringLit (_, _) -> []
     | ClassLit (l, _) -> []
     | Read (l, e, f) -> vars_used e
+    | WRead (l, e, _, _, _, _, _, _) -> vars_used e
     | Deref (l, e, t) -> vars_used e
     | AddressOf (l, e) -> vars_used e
     | CallExpr (l, g, targs, [], pats, _) ->
@@ -4779,7 +4758,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
       WAccess (l, lhs, tp, pv) ->
       begin match lhs with
-        Read (lr, et, f) -> assert_expr_fixed fixed et
+        WRead (lr, et, _, _, _, _, _, _) -> assert_expr_fixed fixed et
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
       end;
       assume_pat_fixed fixed pv
@@ -4844,10 +4823,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   p#set_inputParamCount (Some 1);
                   ((sn ^ "_" ^ f, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], Some 1,
-                    (let fref = new fieldref f in
-                    fref#set_parent sn;
-                    fref#set_range t;
-                    WCallPred (l, p, [], [], [LitPat (AddressOf (l, Read (l, Var (l, sn, ref (Some LocalVar)), fref))); LitPat (Var (l, "value", ref (Some LocalVar)))]))
+                    let r = WRead (l, Var (l, sn, ref (Some LocalVar)), sn, f, t, false, ref (Some None), Real) in
+                    WCallPred (l, p, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
                    )
                   )
                 in
@@ -5008,12 +4985,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structmap
   in
   
-  let field_offset l f =
-    match try_assoc (f#parent, f#name) field_offsets with
+  let field_offset l fparent fname =
+    match try_assoc (fparent, fname) field_offsets with
       Some term -> term
     | None -> static_error l "Cannot take the address of a ghost field"
   in
-  let field_address l t f = ctxt#mk_add t (field_offset l f) in
+  let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname) in
   
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
@@ -5291,29 +5268,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         ctxt#mk_app shiftright_symbol [ev e1; ev e2]
     | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
     | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
-    | Read(l, e, f) ->
-      if f#is_array_length then
-        let t = ev e in
-        if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
-          assert_false [] env l "target of arraylength expression might be null"
-        else
-          ctxt#mk_app arraylength_symbol [t]
-      else if f#static then
-        if f#value <> None then
-        match get f#value with
-          IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
-        | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
-        | StringConst s -> static_error l "String constants are not yet supported."
-        | NullConst -> ctxt#mk_intlit 0
-        else
-        match read_field with
-          None -> static_error l "Cannot use field read expression in this context."
-        | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l f
+    | ArrayLengthExpr (l, e) ->
+      let t = ev e in
+      if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
+        assert_false [] env l "Target of array length expression might be null"
+      else
+        ctxt#mk_app arraylength_symbol [t]
+    | WRead(l, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
+      if fstatic then
+        match !fvalue with
+          Some (Some v) ->
+          begin match v with
+            IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
+          | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
+          | StringConst s -> static_error l "String constants are not yet supported."
+          | NullConst -> ctxt#mk_intlit 0
+          end
+        | _ ->
+          match read_field with
+            None -> static_error l "Cannot use field read expression in this context."
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
       else
         begin
           match read_field with
             None -> static_error l "Cannot use field dereference in this context."
-          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_field l (ev e) f
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_field l (ev e) fparent fname
         end
     | WReadArray(l, arr, tp, i) ->
       begin
@@ -5332,12 +5311,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | AddressOf (l, e) ->
       begin
         match e with
-          Read (le, e, f) -> 
+          WRead (le, e, fparent, fname, frange, fstatic, fvalue, fghost) -> 
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
-          field_address l (ev e) f
-        | Var (l, x, scope) when ! scope = Some(GlobalName) ->
-            let Some((l, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in  symbol
+          field_address l (ev e) fparent fname
+        | Var (l, x, scope) when !scope = Some GlobalName ->
+          let Some (l, tp, symbol) = try_assoc' (pn, ilist) x globalmap in symbol
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
     | SwitchExpr (l, e, cs, tref) ->
@@ -5483,17 +5462,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
   in
   
-  let assume_field h0 f tp tv tcoef cont =
-    let (_, (_, _, _, _, symb, _)) = (List.assoc (f#parent, f#name) field_pred_map)in
-    (* assuming limits if non-ghost *)
-    (if true then (* how to check if field is ghost??? *)
-      match f#range with
+  let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
+    let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    if fghost = Real then begin
+      match frange with
          Char -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term tv) (ctxt#mk_le tv max_char_term)))
       | ShortType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term tv) (ctxt#mk_le tv max_short_term)))
       | IntType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term tv) (ctxt#mk_le tv max_int_term)))
       | PtrType _ | UintPtrType -> ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) tv) (ctxt#mk_le tv max_ptr_term)))
       | _ -> ()
-    ); 
+    end; 
     (* automatic generation of t1 != t2 if t1.f |-> _ &*& t2.f |-> _ *)
     begin fun cont ->
       if tcoef != real_unit && tcoef != real_half then
@@ -5574,9 +5552,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     with_context_helper (fun _ ->
     let ev = eval (pn,ilist) None env in
     match p with
-    | WAccess (l, Read (lr, e, f), tp, rhs) ->
-      let te = ev e in
-      evalpat (pn,ilist) ghostenv env rhs tp tp (fun ghostenv env t -> assume_field h f te t coef (fun h -> cont h ghostenv env))
+    | WAccess (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
+      if fstatic then
+        let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        assume_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
+        cont h ghostenv env
+      else
+        let te = ev e in
+        evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        assume_field h fparent fname frange fghost te t coef $. fun h ->
+        cont h ghostenv env
     | WAccess (l, WReadArray (la, ea, _, ei), tp, rhs) ->
       let a = ev ea in
       let i = ev ei in
@@ -5758,13 +5744,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Some v -> v
   in
 
-  let read_field h env l t f =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+  let read_field h env l t fparent fname =
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
   in
   
-  let read_static_field h env l f =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+  let read_static_field h env l fparent fname =
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     match extract (function Chunk (g, targs, coef, arg0::args, size) when predname_eq (f_symb, true) g -> Some arg0 | _ -> None) h with
       None -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb)
     | Some (v, _) -> v
@@ -5906,9 +5892,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let access l coefpat e tp rhs =
       match e with
-        Read (lr, e, f) ->
-        let (_, (_, _, _, _, symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-        assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [SrcPat (LitPat e); rhs]
+        WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
+        let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        let (inputParamCount, pats) =
+          if fstatic then
+            (Some 0, [rhs])
+          else
+            (Some 1, [SrcPat (LitPat e); rhs])
+        in
+        assert_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat inputParamCount pats
           (fun h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
@@ -6044,9 +6036,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let inputVars = List.map fst (take n xs) in
           let rec iter wbody =
             match wbody with
-              WAccess (_, Read (lr, e, f), tp, v) ->
+              WAccess (_, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
               if expr_is_fixed inputVars e then
-                let (_, (_, _, _, [tp; _], symb', _)) = List.assoc (f#parent, f#name) field_pred_map in
+                let (_, (_, _, _, [tp; _], symb', _)) = List.assoc (fparent, fname) field_pred_map in
                 [(symb, fsymbs, symb', [], [tp], [e], predinst)]
               else
                 []
@@ -6399,6 +6391,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
       Operation (l, op, es, _) -> flatmap expr_assigned_variables es
     | Read (l, e, f) -> expr_assigned_variables e
+    | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
     | Deref (l, e, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (fun (LitPat e) -> expr_assigned_variables e) pats
@@ -6459,8 +6452,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cont h coef t)
   in
     
-  let get_field (pn,ilist) h t f l cont =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+  let get_field (pn,ilist) h t fparent fname l cont =
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     get_points_to (pn,ilist) h t f_symb l cont
   in
   
@@ -7036,6 +7029,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StringLit(_, _) -> []
     | ClassLit(_, _) -> []
     | Read(_, e, _) -> locals_address_taken e
+    | WRead(_, e, _, _, _, _, _, _) -> locals_address_taken e
     | Deref(_, e, _) -> locals_address_taken e
     | CallExpr(l, name, targs, _, args, binding) ->  List.flatten (List.map (fun pat -> match pat with LitPat(e) -> locals_address_taken e | _ -> []) args)
     | IfExpr(_, con, e1, e2) -> (locals_address_taken con) @ (locals_address_taken e1) @ (locals_address_taken e2)
@@ -7119,9 +7113,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
       assume_neq value (ctxt#mk_intlit 0) $. fun () ->
       cont h value
-    | Read (l, e, f) when not f#static ->
+    | WRead (l, e, fparent, fname, frange, false, fvalue, fghost) ->
       iter h e $. fun h t ->
-      let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
+      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
         get_points_to (pn,ilist) h t f_symb l $. fun h coef v ->
@@ -7533,9 +7527,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
                      cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)])
                    | (f, (lf, gh, t))::fds ->
-                     let fref = new fieldref f in
-                     fref#set_parent tn; fref#set_range t;
-                     assume_field h fref result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
+                     assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
                      iter h fds
                  in
                  iter h fds
@@ -7781,8 +7773,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           [] ->
           cont (h @ [Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)]) env
         | (f, (lf, gh, t))::fds ->
-          let fref = new fieldref f in
-          fref#set_parent sn; fref#set_range t; assume_field h fref pointerTerm (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit (fun h -> iter h fds)
+          assume_field h sn f t gh pointerTerm (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit (fun h -> iter h fds)
       in
       iter h fds
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
@@ -7798,9 +7789,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match fds with
             [] -> cont h
           | (f, (_, gh, t))::fds ->
-            let fref = new fieldref f in
-            fref#set_parent sn;
-            get_field (pn,ilist) h pointerTerm fref l $. fun h coef _ ->
+            get_field (pn,ilist) h pointerTerm sn f l $. fun h coef _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full field chunk permissions.";
             iter h fds
         in
@@ -7830,9 +7819,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match fds with
               [] -> cont h env
             | (f, (lf, gh, t))::fds ->
-              let fref = new fieldref f in
-              fref#set_parent tn;
-              get_field (pn,ilist) h arg fref l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
+              get_field (pn,ilist) h arg tn f l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions."; iter h fds)
           in
           let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
           assert_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun h coef _ _ _ _ _ ->
@@ -7874,15 +7861,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h
       end $. fun h ->
       cont (Chunk ((module_symb, true), [], real_unit, [current_module_term; ctxt#mk_false], None)::h) env
-    | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
-      (* CAVEAT: This is unsound if we allow side-effects in e1 *)
-      let s = ExprStmt (AssignExpr (l, e1, Operation (l, op, [e1; e2], ref None))) in
-      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
-    | ExprStmt (AssignExpr (l, Var (lx, x, _), e)) ->
-      let (tpx, symb) = vartp l x in
-      verify_expr (Some tpx) (Some x) e $. fun h (Some (v, _)) ->
-      check_assign l x;
-      update_local_or_global h env tpx x symb v cont
     | DeclStmt (l, te, xs) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let rec iter h tenv' ghostenv' env' xs =
@@ -7899,46 +7877,51 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter h ((x, t)::tenv') ghostenv' ((x, v)::env') xs
       in
       iter h tenv ghostenv env xs
-    | ExprStmt (AssignExpr (l, Read (_, e, f), rhs)) ->
-      let (w, tp) = check_deref true pure (pn,ilist) l tparams tenv e f in
-      let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-      let (_, (_, _, _, _, f_symb, _)) = List.assoc (f#parent, f#name) field_pred_map in
-      if not f#static then
+    | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
+      (* CAVEAT: This is unsound if we allow side-effects in e1 *)
+      let s = ExprStmt (AssignExpr (l, e1, Operation (l, op, [e1; e2], ref None))) in
+      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+    | ExprStmt (AssignExpr (l, lhs, rhs)) ->
+      let (lhs, t) = check_expr (pn,ilist) tparams tenv lhs in
+      begin match lhs with
+        Var (lx, x, _) ->
+        let (tpx, symb) = vartp l x in
+        verify_expr (Some tpx) (Some x) rhs $. fun h (Some (v, _)) ->
+        check_assign l x;
+        update_local_or_global h env tpx x symb v cont
+      | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
+        if pure && fghost = Real then static_error l "Cannot write in a pure context";
+        let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
+        let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+        if not fstatic then
+          eval_h h env w (fun h t ->
+            get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
+              if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
+              cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
+          )
+        else
+          assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun h _ _ _ _ _ _ ->
+          cont (Chunk ((f_symb, true), [], real_unit, [ev wrhs], None)::h) env
+      | WReadArray (_, arr, elem_tp, i) ->
+        if pure then static_error l "Cannot write in a pure context.";
+        let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
+        eval_h h env arr $. fun h arr ->
+        eval_h h env i $. fun h i ->
+        eval_h h env rhs $. fun h rhs ->
+        let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+        assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun h _ [_; _; elem] _ _ _ _ ->
+        cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
+      | Deref (_, w, _) ->
+        if pure then static_error l "Cannot write in a pure context.";
+        let pointeeType = t in
+        let wrhs = check_expr_t (pn,ilist) tparams tenv rhs pointeeType in
         eval_h h env w (fun h t ->
-          get_field (pn,ilist) h t f l (fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-            cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
+          let predSymb = pointee_pred_symb l pointeeType in
+          get_points_to (pn,ilist) h t predSymb l (fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
+            cont (Chunk ((predSymb, true), [], real_unit, [t; ev wrhs], None)::h) env)
         )
-      else
-        assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun h _ _ _ _ _ _ ->
-        cont (Chunk ((f_symb, true), [], real_unit, [ev wrhs], None)::h) env
-    | ExprStmt (AssignExpr (l, ReadArray (_, arr, i), rhs)) ->
-      if pure then static_error l "Cannot write in a pure context.";
-      let (arr, arrType) = check_expr (pn,ilist) tparams tenv arr in
-      let elem_tp = match arrType with ArrayType t -> t | _ -> static_error l "Array expected" in
-      let i = check_expr_t (pn,ilist) tparams tenv i IntType in
-      let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
-      eval_h h env arr $. fun h arr ->
-      eval_h h env i $. fun h i ->
-      eval_h h env rhs $. fun h rhs ->
-      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-      assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun h _ [_; _; elem] _ _ _ _ ->
-      cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
-    | ExprStmt (AssignExpr (l, Deref (_, e, _), rhs)) ->
-      if pure then static_error l "Cannot write in a pure context.";
-      let (w, pointerType) = check_expr (pn,ilist) tparams tenv e in
-      let pointeeType = 
-        match pointerType with
-          PtrType t -> t
-        | _ -> static_error l "Operand of dereference must be pointer."
-      in
-      let wrhs = check_expr_t (pn,ilist) tparams tenv rhs pointeeType in
-      eval_h h env w (fun h t ->
-        let predSymb = pointee_pred_symb l pointeeType in
-        get_points_to (pn,ilist) h t predSymb l (fun h coef _ ->
-          if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission.";
-          cont (Chunk ((predSymb, true), [], real_unit, [t; ev wrhs], None)::h) env)
-      )
+      end
     | ExprStmt (CallExpr (l, g, targs, pats0, es, fb)) ->
       if pats0 <> [] then static_error l "Only a single argument list is allowed here";
       List.iter (function LitPat e -> () | VarPat x -> static_error l "No variable patterns allowed here" | DummyPat -> static_error l "No dummy patterns allowed here") es;
@@ -9126,9 +9109,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (f, (lf, t, vis, binding, final, init, value))::fds ->
               if binding = Instance then begin
                 if init <> None then static_error lf "Instance field initializers are not yet supported.";
-                let fref = new fieldref f in
-                fref#set_parent cn; fref#set_range t;
-                assume_field h fref this (get_unique_var_symb_non_ghost "value" t) real_unit $. fun h ->
+                assume_field h cn f t Real this (get_unique_var_symb_non_ghost "value" t) real_unit $. fun h ->
                 iter h fds
               end else
                 iter h fds
