@@ -4933,7 +4933,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
   
-  let check_ghost ghostenv l e =
+  let check_ghost ghostenv l e = (* BUGBUG: Add missing cases *)
     let rec iter e =
       match e with
         Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
@@ -5103,8 +5103,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: evaluation *)
   
-  let rec eval_core (pn,ilist) ass_term read_field (env: (string * 'termnode) list) e : 'termnode =
-    let ev = eval_core (pn,ilist) ass_term read_field env in
+  let rec eval_core_cps ev state (pn,ilist) ass_term read_field env e cont =
+    (* let ev = eval_core (pn,ilist) ass_term read_field env in *)
+    let evs state es cont =
+      let rec iter state vs es =
+        match es with
+          [] -> cont state (List.rev vs)
+        | e::es -> ev state e $. fun state v -> iter state (v::vs) es
+      in
+      iter state [] es
+    in
     let check_overflow l min t max =
       begin
       match ass_term with
@@ -5116,47 +5124,55 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       t
     in
     match e with
-      True l -> ctxt#mk_true
-    | False l -> ctxt#mk_false
-    | Null l -> ctxt#mk_intlit 0
+      True l -> cont state ctxt#mk_true
+    | False l -> cont state ctxt#mk_false
+    | Null l -> cont state (ctxt#mk_intlit 0)
     | Var (l, x, scope) ->
+      cont state
       begin
         if !scope = None then print_endline (string_of_loc l);
         let (Some scope) = !scope in
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x))
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in ctxt#mk_app s []
-        | FuncName -> (List.assoc x funcnameterms)
-        | PredFamName -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) x predfammap)in symb
-        | EnumElemName(n) -> ctxt#mk_intlit n
+        | FuncName -> List.assoc x funcnameterms
+        | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) x predfammap in symb
+        | EnumElemName n -> ctxt#mk_intlit n
         | GlobalName ->
           begin
             match read_field with
               None -> static_error l "Cannot mention global variables in this context."
             | Some (read_field, read_static_field, deref_pointer, read_array) ->
-                let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
-                  deref_pointer l symbol tp
+              let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
+              deref_pointer l symbol tp
           end
         | ModuleName -> List.assoc x modulemap
       end
-    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = (try_assoc' (pn,ilist) g predfammap) in symb
-    | CastExpr (l, ManifestTypeExpr (_, t), e) -> 
+    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) g predfammap in cont state symb
+    | CastExpr (l, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t) with
           (IntLit (_, n, _), PtrType _) ->
           if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
-          ctxt#mk_intlit_of_string (string_of_big_int n)
+          cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
         | (e, Char) ->
-          check_overflow l min_char_term (ev e) max_char_term
+          ev state e $. fun state t ->
+          cont state (check_overflow l min_char_term t max_char_term)
         | (e, ShortType) ->
-          check_overflow l min_short_term (ev e) max_short_term
-        | _ -> ev e (* BUGBUG: This is fishy *)
+          ev state e $. fun state t ->
+          cont state (check_overflow l min_short_term t max_short_term)
+        | _ -> ev state e cont (* BUGBUG: This is fishy *)
       end
     | IntLit (l, n, t) ->
       begin match !t with
         Some RealType ->
-        if eq_big_int n unit_big_int then real_unit
-        else ctxt#mk_reallit_of_num (num_of_big_int n)
+        cont state
+          begin
+            if eq_big_int n unit_big_int then
+              real_unit
+            else
+              ctxt#mk_reallit_of_num (num_of_big_int n)
+          end
       | Some t ->
         if ass_term <> None then
         begin
@@ -5169,91 +5185,46 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range."
         end;
-        try
-          let n = int_of_big_int n in ctxt#mk_intlit n
-        with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+        cont state
+          begin
+            try
+              let n = int_of_big_int n in ctxt#mk_intlit n
+            with Failure "int_of_big_int" -> ctxt#mk_intlit_of_string (string_of_big_int n)
+          end
       end
-    | ClassLit (l,s) -> List.assoc s classterms
-    | StringLit (l, s) -> (match file_type path with
-        Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
-      | _ -> get_unique_var_symb "stringLiteral" (PtrType Char))
+    | ClassLit (l,s) -> cont state (List.assoc s classterms)
+    | StringLit (l, s) -> 
+      cont state
+        begin match file_type path with
+          Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
+        | _ -> get_unique_var_symb "stringLiteral" (PtrType Char)
+        end
     | CallExpr (l, g, targs, [], pats,_) ->
       if g="getClass" && (file_type path=Java) then 
         match pats with
           [LitPat target] ->
-          ctxt#mk_app get_class_symbol [ev target]
+          ev state target $. fun state t ->
+          cont state (ctxt#mk_app get_class_symbol [t])
       else
       begin
         match try_assoc' (pn,ilist) g purefuncmap with
           None -> static_error l ("No such pure function: "^g)
-        | Some (lg, tparams, t, pts, s) -> ctxt#mk_app s (List.map (function (LitPat e) -> ev e) pats)
+        | Some (lg, tparams, t, pts, s) ->
+          evs state (List.map (function (LitPat e) -> e) pats) $. fun state vs ->
+          cont state (ctxt#mk_app s vs)
       end
-    | Operation (l, And, [e1; e2], ts) -> ctxt#mk_and (ev e1) (ev e2)
-    | Operation (l, Or, [e1; e2], ts) -> ctxt#mk_or (ev e1) (ev e2)
-    | Operation (l, Not, [e], ts) -> ctxt#mk_not (ev e)
+    | IfExpr (l, e1, e2, e3) ->
+      evs state [e1; e2; e3] $. fun state [v1; v2; v3] ->
+      cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
     | Operation (l, BitAnd, [e1; Operation (_, BitNot, [e2], ts2)], ts1) ->
-      ctxt#mk_app bitwise_and_symbol [ev e1; ctxt#mk_app bitwise_not_symbol [ev e2]]
+      ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 ->
+      cont state (ctxt#mk_app bitwise_and_symbol [v1; ctxt#mk_app bitwise_not_symbol [v2]])
+    | Operation (l, Not, [e], ts) -> ev state e $. fun state v -> cont state (ctxt#mk_not v)
     | Operation (l, BitNot, [e], ts) ->
       begin match !ts with
-        Some [IntType] -> ctxt#mk_app bitwise_not_symbol [ev e]
+        Some [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
       | _ ->
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)."
-      end
-    | Operation (l, (BitAnd|BitXor|BitOr|Mod as operator), es, ts) ->
-      let symb =
-        match operator with
-          BitAnd -> bitwise_and_symbol
-        | BitXor -> bitwise_xor_symbol
-        | BitOr -> bitwise_or_symbol
-        | Mod -> modulo_symbol
-      in
-      ctxt#mk_app symb (List.map ev es)
-    | IfExpr (l, e1, e2, e3) -> ctxt#mk_ifthenelse (ev e1) (ev e2) (ev e3)
-    | Operation (l, Eq, [e1; e2], ts) ->
-      if !ts = Some [Bool; Bool] then
-        ctxt#mk_iff (ev e1) (ev e2)
-      else
-        ctxt#mk_eq (ev e1) (ev e2)
-    | Operation (l, Neq, [e1; e2], ts) -> ctxt#mk_not (ctxt#mk_eq (ev e1) (ev e2))
-    | Operation (l, Add, [e1; e2], ts) ->
-      begin
-        match !ts with
-          Some [IntType; IntType] ->
-          check_overflow l min_int_term (ctxt#mk_add (ev e1) (ev e2)) max_int_term
-        | Some [PtrType t; IntType] ->
-          let n = sizeof l t in
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
-        | Some [RealType; RealType] ->
-          ctxt#mk_real_add (ev e1) (ev e2)
-        | Some [ShortType; ShortType] ->
-          check_overflow l min_short_term (ctxt#mk_add (ev e1) (ev e2)) max_short_term
-        | Some [Char; Char] ->
-          check_overflow l min_char_term (ctxt#mk_add (ev e1) (ev e2)) max_char_term
-        | _ -> static_error l "Internal error in eval."
-      end
-    | Operation (l, Sub, [e1; e2], ts) ->
-      begin
-        match !ts with
-          Some [IntType; IntType] ->
-          check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
-        | Some [PtrType t; IntType] ->
-          let n = sizeof l t in
-          check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub (ev e1) (ctxt#mk_mul n (ev e2))) max_ptr_term
-        | Some [RealType; RealType] ->
-          ctxt#mk_real_sub (ev e1) (ev e2)
-        | Some [ShortType; ShortType] ->
-          check_overflow l min_short_term (ctxt#mk_sub (ev e1) (ev e2)) max_short_term
-        | Some [Char; Char] ->
-          check_overflow l min_char_term (ctxt#mk_sub (ev e1) (ev e2)) max_char_term
-        | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
-          check_overflow l min_int_term (ctxt#mk_sub (ev e1) (ev e2)) max_int_term
-      end
-    | Operation (l, Mul, [e1; e2], ts) ->
-      begin match !ts with
-        Some [IntType; IntType] ->
-        check_overflow l min_int_term (ctxt#mk_mul (ev e1) (ev e2)) max_int_term
-      | Some [RealType; RealType] ->
-        ctxt#mk_real_mul (ev e1) (ev e2)
       end
     | Operation (l, Div, [e1; e2], ts) ->
       let rec eval_reallit e =
@@ -5261,52 +5232,125 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           IntLit (l, n, t) -> num_of_big_int n
         | _ -> static_error (expr_loc e) "The denominator of a division must be a literal."
       in
-      ctxt#mk_real_mul (ev e1) (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))
-    | Operation (l, ShiftLeft, [e1; e2], ts) ->
-        ctxt#mk_app shiftleft_symbol [ev e1; ev e2]
-    | Operation (l, ShiftRight, [e1; e2], ts) ->
-        ctxt#mk_app shiftright_symbol [ev e1; ev e2]
-    | Operation (l, Le, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_le (ev e1) (ev e2))
-    | Operation (l, Lt, [e1; e2], ts) -> (match !ts with Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt (ev e1) (ev e2) | Some [RealType; RealType] -> ctxt#mk_real_lt (ev e1) (ev e2))
+      ev state e1 $. fun state v1 ->
+      cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2))))
+    | Operation (l, op, ([e1; e2] as es), ts) ->
+      evs state es $. fun state [v1; v2] ->
+      cont state
+        begin match op with
+          And -> ctxt#mk_and v1 v2
+        | Or -> ctxt#mk_or v1 v2
+        | Eq ->
+          if !ts = Some [Bool; Bool] then
+            ctxt#mk_iff v1 v2
+          else
+            ctxt#mk_eq v1 v2
+        | Neq -> ctxt#mk_not (ctxt#mk_eq v1 v2)
+        | Add ->
+          begin match !ts with
+            Some [IntType; IntType] ->
+            check_overflow l min_int_term (ctxt#mk_add v1 v2) max_int_term
+          | Some [PtrType t; IntType] ->
+            let n = sizeof l t in
+            check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_ptr_term
+          | Some [RealType; RealType] ->
+            ctxt#mk_real_add v1 v2
+          | Some [ShortType; ShortType] ->
+            check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
+          | Some [Char; Char] ->
+            check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
+          | _ -> static_error l "Internal error in eval."
+          end
+        | Sub ->
+          begin match !ts with
+            Some [IntType; IntType] ->
+            check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
+          | Some [PtrType t; IntType] ->
+            let n = sizeof l t in
+            check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_ptr_term
+          | Some [RealType; RealType] ->
+            ctxt#mk_real_sub v1 v2
+          | Some [ShortType; ShortType] ->
+            check_overflow l min_short_term (ctxt#mk_sub v1 v2) max_short_term
+          | Some [Char; Char] ->
+            check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
+          | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
+            check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
+          end
+        | Mul ->
+          begin match !ts with
+            Some [IntType; IntType] ->
+            check_overflow l min_int_term (ctxt#mk_mul v1 v2) max_int_term
+          | Some [RealType; RealType] ->
+            ctxt#mk_real_mul v1 v2
+          end
+        | Le ->
+          begin match !ts with
+            Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le v1 v2
+          | Some [RealType; RealType] -> ctxt#mk_real_le v1 v2
+          end
+        | Lt ->
+          begin match !ts with
+            Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt v1 v2
+          | Some [RealType; RealType] -> ctxt#mk_real_lt v1 v2
+          end
+        | _ ->
+          let symb =
+            match op with
+              BitAnd -> bitwise_and_symbol
+            | BitXor -> bitwise_xor_symbol
+            | BitOr -> bitwise_or_symbol
+            | Mod -> modulo_symbol
+            | ShiftLeft -> shiftleft_symbol
+            | ShiftRight -> shiftright_symbol
+            | _ -> static_error l "This operator is not supported in this position"
+          in
+          ctxt#mk_app symb [v1; v2]
+        end
     | ArrayLengthExpr (l, e) ->
-      let t = ev e in
+      ev state e $. fun state t ->
       if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
         assert_false [] env l "Target of array length expression might be null"
       else
-        ctxt#mk_app arraylength_symbol [t]
+        cont state (ctxt#mk_app arraylength_symbol [t])
     | WRead(l, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
       if fstatic then
-        match !fvalue with
-          Some (Some v) ->
-          begin match v with
-            IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
-          | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
-          | StringConst s -> static_error l "String constants are not yet supported."
-          | NullConst -> ctxt#mk_intlit 0
+        cont state
+          begin match !fvalue with
+            Some (Some v) ->
+            begin match v with
+              IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
+            | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
+            | StringConst s -> static_error l "String constants are not yet supported."
+            | NullConst -> ctxt#mk_intlit 0
+            end
+          | _ ->
+            match read_field with
+              None -> static_error l "Cannot use field read expression in this context."
+            | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
           end
-        | _ ->
-          match read_field with
-            None -> static_error l "Cannot use field read expression in this context."
-          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
       else
+        ev state e $. fun state v ->
         begin
           match read_field with
             None -> static_error l "Cannot use field dereference in this context."
-          | Some (read_field, read_static_field, deref_pointer, read_array) -> read_field l (ev e) fparent fname
+          | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_field l v fparent fname)
         end
     | WReadArray(l, arr, tp, i) ->
+      evs state [arr; i] $. fun state [arr; i] ->
       begin
         match read_field with
           None -> static_error l "Cannot use array indexing in this context."
-        | Some (read_field, read_static_field, deref_pointer, read_array) -> read_array l (ev arr) (ev i)
+        | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_array l arr i)
       end
     | Deref (l, e, t) ->
+      ev state e $. fun state v ->
       begin
         match read_field with
           None -> static_error l "Cannot use field dereference in this context."
         | Some (read_field, read_static_field, deref_pointer, read_array) ->
           let (Some t) = !t in
-          deref_pointer l (ev e) t
+          cont state (deref_pointer l v t)
       end
     | AddressOf (l, e) ->
       begin
@@ -5314,14 +5358,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           WRead (le, e, fparent, fname, frange, fstatic, fvalue, fghost) -> 
           (* MS Visual C++ behavior: http://msdn.microsoft.com/en-us/library/hx1b6kkd.aspx (= depends on command-line switches and pragmas) *)
           (* GCC documentation is not clear about it. *)
-          field_address l (ev e) fparent fname
+          ev state e $. fun state v ->
+          cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
-          let Some (l, tp, symbol) = try_assoc' (pn, ilist) x globalmap in symbol
+          let Some (l, tp, symbol) = try_assoc' (pn, ilist) x globalmap in cont state symbol
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
     | SwitchExpr (l, e, cs, tref) ->
       let g = mk_ident "switch_expression" in
-      let t = ev e in
+      ev state e $. fun state t ->
       let env =
         let rec iter env0 env =
           match env with
@@ -5360,12 +5405,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cs
       in
       ctxt#set_fpclauses symbol 0 fpclauses;
-      ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env)
-    | ProverTypeConversion (tfrom, tto, e) -> convert_provertype (ev e) tfrom tto
+      cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
+    | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, te) ->
       let t = check_pure_type (pn,ilist) [] te in
-      sizeof l t
+      cont state (sizeof l t)
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
+  and eval_core (pn,ilist) ass_term read_field env e =
+    let rec ev () e cont = eval_core_cps ev () (pn,ilist) ass_term read_field env e cont in
+    ev () e $. fun () v -> v
   in
   
   let eval (pn,ilist) = eval_core (pn,ilist) None in
