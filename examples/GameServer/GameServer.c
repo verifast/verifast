@@ -12,7 +12,19 @@ predicate games_lseg(struct game* from, struct game* to, int count) =
   malloc_block_game(from);
 
 predicate_ctor lock_invariant(struct game_list* games)() = 
-  games->head |-> ?head &*& games->count |-> ?count &*& games_lseg(head, 0, count) &*& malloc_block_game_list(games);
+  games->head |-> ?head &*& games->count |-> ?count &*& 0 <= count &*& games_lseg(head, 0, count) &*& malloc_block_game_list(games);
+
+lemma void games_lseg_positive(struct game* head)
+  requires games_lseg(head, ?stop, ?count);
+  ensures games_lseg(head, stop, count) &*& 0 <= count;
+{
+  open games_lseg(head, stop, count);
+  if(head == stop) {
+  } else {
+    games_lseg_positive(head->next);
+  }
+  close games_lseg(head, stop, count);
+}
 @*/
 
 struct game {
@@ -36,30 +48,37 @@ void start_session(struct session* session);
   //@ requires thread_run_pre(start_session)(session);
   //@ ensures thread_run_post(start_session)(session);
 
-void create_game(struct socket* socket, struct lock* lock, struct game_list* games)
+bool create_game(struct socket* socket, struct lock* lock, struct game_list* games)
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
-  //@ ensures [_]lock(lock, lock_invariant(games));
+  //@ ensures [_]lock(lock, lock_invariant(games)) &*& result ? true : socket(socket);
 {
-   struct string_buffer* name = create_string_buffer();
-   struct game* new_game = malloc(sizeof(struct game));
-   if(new_game == 0) abort();
-   socket_write_string(socket, "Enter the name of your game.\r\n");
-   socket_read_line(socket, name);
-   new_game->name = name;
-   new_game->socket = socket;
-   socket_write_string(socket, "Game created, waiting for other player...\r\n");
    lock_acquire(lock);
    //@ open lock_invariant(games)();
-   new_game->next = games->head;
-   games->head = new_game;
-   games->count = games->count + 1;
-   //@ close games_lseg(new_game, 0, games->count);
-   //@ close lock_invariant(games)();
-   lock_release(lock);
+   if(games->count == INT_MAX) {
+      //@ close lock_invariant(games)();
+      lock_release(lock);
+      return false;
+   } else {
+     struct string_buffer* name = create_string_buffer();
+     struct game* new_game = malloc(sizeof(struct game));
+     if(new_game == 0) abort();
+     socket_write_string(socket, "Enter the name of your game.\r\n");
+     socket_read_line(socket, name);
+     new_game->name = name;
+     new_game->socket = socket;
+     socket_write_string(socket, "Game created, waiting for other player...\r\n");
+     new_game->next = games->head;
+     games->head = new_game;
+     games->count = games->count + 1;
+     //@ close games_lseg(new_game, 0, games->count);
+     //@ close lock_invariant(games)();
+     lock_release(lock);
+     return true;
+   }
 }
 
 void show_games_helper(struct socket* socket, struct game* game, int count) 
-  //@ requires socket(socket) &*& games_lseg(game, 0, count);
+  //@ requires socket(socket) &*& games_lseg(game, 0, count) &*& 0 <= count;
   //@ ensures socket(socket) &*& games_lseg(game, 0, count);
 {
   //@ open games_lseg(game, 0, count);
@@ -202,9 +221,9 @@ void join_game(struct socket* socket, struct lock* lock, struct game_list* games
     //@ close lock_invariant(games)();
     lock_release(lock);
   } else {
-    joined_game = games->head;
-    //@ open games_lseg(joined_game, 0, _);
+    joined_game = games->head;    //@ open games_lseg(joined_game, 0, _);
     games->head = joined_game->next;
+    //@ games_lseg_positive(games->head);
     games->count = games->count - 1;
     //@ close lock_invariant(games)();
     lock_release(lock);
@@ -296,9 +315,9 @@ lemma void games_lseg_append_lemma2(struct game* a)
 @*/
 
 // Verification of the function create_game_last is optional.
-void create_game_last(struct socket* socket, struct lock* lock, struct game_list* games) 
+bool create_game_last(struct socket* socket, struct lock* lock, struct game_list* games) 
   //@ requires socket(socket) &*& [_]lock(lock, lock_invariant(games));
-  //@ ensures [_]lock(lock, lock_invariant(games));
+  //@ ensures [_]lock(lock, lock_invariant(games)) &*& result ? true : socket(socket);
 {
     struct string_buffer* name = create_string_buffer();
     struct game* new_game = malloc(sizeof(struct game));
@@ -311,37 +330,46 @@ void create_game_last(struct socket* socket, struct lock* lock, struct game_list
     socket_write_string(socket, "Game created, waiting for other player...\r\n");
     lock_acquire(lock);
     //@ open lock_invariant(games)();
-    if(games->head == 0) {
-      games->head = new_game;
-      games->count = games->count + 1;
-      //@ close games_lseg(new_game, 0, games->count);
+    if(games->count == INT_MAX) {
       //@ close lock_invariant(games)();
       lock_release(lock);
+      free(new_game);
+      string_buffer_dispose(name);
+      return false;
     } else {
-      //@ struct game* head = games->head;
-      struct game* current = games->head;
-      //@ assert games_lseg(head, 0, ?count);
-      //@ open games_lseg(head, 0, count);
-      //@ close games_lseg(head, current, 0);
-      while(current->next != 0) 
-        //@ invariant games_lseg(head, current, ?count1) &*& current != 0 &*& current->socket |-> ?s &*& socket(s) &*& current->name |-> ?nm &*& current->next |-> ?next  &*& string_buffer(nm) &*& malloc_block_game(current) &*& games_lseg(next, 0, ?count2) &*& count == 1 + count1 + count2;
-      {
-        //@ struct game* old_current = current;
-        current = current->next;
-        //@ open games_lseg(current, 0, count2);
-        //@ close games_lseg(current, current, 0);
-        //@ close games_lseg(old_current, current, 1);
-        //@ games_lseg_append_lemma(head);
+      if(games->head == 0) {
+        games->head = new_game;
+        games->count = games->count + 1;
+        //@ close games_lseg(new_game, 0, games->count);
+        //@ close lock_invariant(games)();
+        lock_release(lock);
+      } else {
+        //@ struct game* head = games->head;
+        struct game* current = games->head;
+        //@ assert games_lseg(head, 0, ?count);
+        //@ open games_lseg(head, 0, count);
+        //@ close games_lseg(head, current, 0);
+        while(current->next != 0) 
+          //@ invariant games_lseg(head, current, ?count1) &*& current != 0 &*& current->socket |-> ?s &*& socket(s) &*& current->name |-> ?nm &*& current->next |-> ?next  &*& string_buffer(nm) &*& malloc_block_game(current) &*& games_lseg(next, 0, ?count2) &*& count == 1 + count1 + count2;
+        {
+          //@ struct game* old_current = current;
+          current = current->next;
+          //@ open games_lseg(current, 0, count2);
+          //@ close games_lseg(current, current, 0);
+          //@ close games_lseg(old_current, current, 1);
+          //@ games_lseg_append_lemma(head);
+        }
+        current->next = new_game;
+        //@ close games_lseg(0, 0, 0);
+        //@ close games_lseg(new_game, 0, 1);
+        //@ close games_lseg(current, 0, 2);
+        //@ games_lseg_append_lemma2(head);
+        //@ open games_lseg(0, 0, _);
+        games->count = games->count + 1;
+        //@ close lock_invariant(games)();
+        lock_release(lock);
       }
-      current->next = new_game;
-      //@ close games_lseg(0, 0, 0);
-      //@ close games_lseg(new_game, 0, 1);
-      //@ close games_lseg(current, 0, 2);
-      //@ games_lseg_append_lemma2(head);
-      //@ open games_lseg(0, 0, _);
-      games->count = games->count + 1;
-      //@ close lock_invariant(games)();
-      lock_release(lock);
+      return true;
     }
 }
 
@@ -363,9 +391,11 @@ void main_menu(struct socket* socket, struct lock* lock, struct game_list* games
     socket_write_string(socket, "6. Create a new game (optional).\r\n");
     choice = socket_read_nonnegative_integer(socket);
     if(choice == 1) {
-      create_game(socket, lock, games);
-      quit = true;
-    } else if (choice == 2) {
+      bool success = create_game(socket, lock, games);
+      if(success) {
+        quit = true;
+      } else {        socket_write_string(socket, "Insufficient space. Try again later.");
+      }    } else if (choice == 2) {
       show_games(socket, lock, games);
     } else if (choice == 3) {
       join_game(socket, lock, games);
@@ -376,8 +406,15 @@ void main_menu(struct socket* socket, struct lock* lock, struct game_list* games
       socket_close(socket);
       quit = true;
     } else if (choice == 6) {
-      create_game_last(socket, lock, games); // place in comments if you do not verify create_game_last
-      quit = true;
+      // place the code between begin and end in comments if you do not verify the optional function create_game_last
+      // <begin>
+      bool success = create_game_last(socket, lock, games); 
+      if(success) {
+        quit = true;
+      } else {
+        socket_write_string(socket, "Insufficient space. Try again later.");
+      }
+      // <end>
     } else {
       socket_write_string(socket, "Invalid choice. Try again.\r\n");
     }
@@ -404,8 +441,6 @@ predicate_family_instance thread_run_pre(start_session)(struct session* session)
 predicate_family_instance thread_run_post(start_session)(struct session* session) =
   true;
 @*/
-
-
 
 int main() //@: main
   //@ requires true;

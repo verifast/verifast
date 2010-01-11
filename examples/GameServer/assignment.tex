@@ -5,12 +5,18 @@
 \title{Assignment:\\
 Verification of an Internet Game Server}
 
+\author{Bart Jacobs \and Jan Smans}
+
+\date{}
+
 \begin{document}
 
 \maketitle
 
 \section{Assignment}
-The goal of this assignment is to verify a game server. More specifically, you must add annotations to \texttt{GameServer.c} such that the VeriFast program verifier accepts the program. Modifying the source code itself or using \texttt{assume} statements is not permitted. It is not necessary for specifications to be complete; it suffices to prove the absence of memory errors and data races.
+The goal of this assignment is to verify a game server. More specifically, you must add annotations to \texttt{GameServer.c} such that the VeriFast program verifier accepts the program. 
+
+Modifying the source code itself or using \texttt{assume} statements is not permitted. It is not necessary for specifications to be complete; it suffices to prove the absence of memory errors and data races. You must verify the absence of overflow errors (that is the option \texttt{Check arithmetic overflow} in the \texttt{Verify} menu must be enabled). The \texttt{leak} command may be used in your solution.
 
 Your final solution must be submitted to \texttt{jan.smans@cs.kuleuven.be} by March 7th 2010. It suffices to send the annotated version of \texttt{GameServer.c}. If you get stuck, you can request hints by sending an email describing your problem to \texttt{jan.smans@cs.kuleuven.be}. In fact, we strongly encourage asking for help if you get stuck: it's better to ask questions and submit a more complete assignment, than to give up!
 
@@ -27,6 +33,8 @@ It is not necessary to complete the optional (but harder!) items in the list bel
 \section{Hints}
 
 \begin{itemize}
+  \item The threading API (\texttt{threading.h}) used for this assignment differs slightly from the one used in Section 18 of the tutorial. In particular, the parameter \texttt{info} is no longer used in \texttt{thread\_run\_pre} and \texttt{thread\_run\_post}.
+  \item Predicate constructors (as discussed in Section 17 of the tutorial) are needed to specify the use of locks.
   \item Fractional permissions (as discussed in Section 19 of the tutorial) are needed to complete this assignment. Consumption of an assertion \texttt{[?f]P(x, y, z)} consumes the first chunk \texttt{[g]P(x, y, z)} in the heap and binds \texttt{f} to \texttt{g}. A heap chunk \texttt{[g]P(x, y, z)} can be split into two heap chunks using the \texttt{split\_fraction} ghost command: \texttt{//@ split\_fraction P(x, y, z)}.
   \item Whenever VeriFast encounters a string literal, it generates a heap chunk \texttt{[dummy]chars(stringLiteral, stringLiteralChars)} and introduces an assumption about \texttt{stringLiteralChars}. In this assignment, you can largely ignore those heap chunks and assumptions.
 \end{itemize}
