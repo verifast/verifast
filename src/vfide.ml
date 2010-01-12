@@ -226,7 +226,7 @@ let show_ide initialPath prover =
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
-    let srcText = (*GText.view*) GSourceView2.source_view ~show_line_numbers:true ~packing:textScroll#add () in
+    let srcText = (*GText.view*) GSourceView2.source_view ~packing:textScroll#add () in
     let buffer = srcText#source_buffer in
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
     let ghostRangeTag = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
@@ -242,7 +242,7 @@ let show_ide initialPath prover =
     let subScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
-    let subText = (*GText.view ~buffer:buffer*) GSourceView2.source_view ~source_buffer:buffer ~show_line_numbers:true ~packing:subScroll#add () in
+    let subText = (*GText.view ~buffer:buffer*) GSourceView2.source_view ~source_buffer:buffer ~packing:subScroll#add () in
     srcText#misc#modify_font_by_name !codeFont;
     subText#misc#modify_font_by_name !codeFont;
     let undoList: undo_action list ref = ref [] in
