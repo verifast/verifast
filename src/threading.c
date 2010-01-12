@@ -78,10 +78,8 @@ void thread_join(struct thread *t)
 struct lock {
 #ifdef WIN32
     CRITICAL_SECTION criticalSection;
-    DWORD ownerThreadId;
 #else
     pthread_mutex_t mutex;
-    pthread_t ownerThreadId;
 #endif
 };
 
@@ -95,7 +93,6 @@ struct lock *create_lock()
     if (result != 0)
         abort();
 #endif
-    lock->ownerThreadId = 0;
     return lock;
 }
 
@@ -106,26 +103,88 @@ void lock_acquire(struct lock *lock)
 #else
     pthread_mutex_lock(&(lock->mutex));
 #endif
-    if (lock->ownerThreadId != 0)
-        abort();
-#ifdef WIN32
-    lock->ownerThreadId = GetCurrentThreadId();
-#else
-    lock->ownerThreadId = pthread_self();
-#endif
 }
 
 void lock_release(struct lock *lock)
 {
 #ifdef WIN32
-    if (lock->ownerThreadId != GetCurrentThreadId())
-        abort();
-    lock->ownerThreadId = 0;
     LeaveCriticalSection(&(lock->criticalSection));
 #else
-    if (!pthread_equal(lock->ownerThreadId, pthread_self()))
-        abort();
-    lock->ownerThreadId = 0;
     pthread_mutex_unlock(&(lock->mutex));
 #endif
+}
+
+void lock_dispose(struct lock *lock)
+{
+#ifdef WIN32
+    DeleteCriticalSection(&(lock->criticalSection));
+#else
+    pthread_mutex_dispose(&(lock->mutex));
+#endif
+    free(lock);
+}
+
+struct mutex {
+#ifdef WIN32
+    CRITICAL_SECTION criticalSection;
+    DWORD ownerThreadId;
+#else
+    pthread_mutex_t mutex;
+    pthread_t ownerThreadId;
+#endif
+};
+
+struct mutex *create_mutex()
+{
+    struct mutex *mutex = malloc(sizeof(struct mutex));
+#ifdef WIN32
+    InitializeCriticalSection(&(mutex->criticalSection));
+#else
+    int result = pthread_mutex_init(&(mutex->mutex), 0);
+    if (result != 0)
+        abort();
+#endif
+    mutex->ownerThreadId = 0;
+    return mutex;
+}
+
+void mutex_acquire(struct mutex *mutex)
+{
+#ifdef WIN32
+    EnterCriticalSection(&(mutex->criticalSection));
+#else
+    pthread_mutex_lock(&(mutex->mutex));
+#endif
+    if (mutex->ownerThreadId != 0)
+        abort();
+#ifdef WIN32
+    mutex->ownerThreadId = GetCurrentThreadId();
+#else
+    mutex->ownerThreadId = pthread_self();
+#endif
+}
+
+void mutex_release(struct mutex *mutex)
+{
+#ifdef WIN32
+    if (mutex->ownerThreadId != GetCurrentThreadId())
+        abort();
+    mutex->ownerThreadId = 0;
+    LeaveCriticalSection(&(mutex->criticalSection));
+#else
+    if (!pthread_equal(mutex->ownerThreadId, pthread_self()))
+        abort();
+    mutex->ownerThreadId = 0;
+    pthread_mutex_unlock(&(mutex->mutex));
+#endif
+}
+
+void mutex_dispose(struct mutex *mutex)
+{
+#ifdef WIN32
+    DeleteCriticalSection(&(mutex->criticalSection));
+#else
+    pthread_mutex_dispose(&(mutex->mutex));
+#endif
+    free(mutex);
 }

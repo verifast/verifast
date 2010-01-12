@@ -107,4 +107,5 @@ void lock_dispose(struct lock *lock)
 #else
     pthread_mutex_dispose(&(lock->mutex));
 #endif
+    free(lock);
 }

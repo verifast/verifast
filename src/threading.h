@@ -3,7 +3,48 @@
 
 //@ #include "list.h"
 
-// Lock ordering for re-entry and deadlock prevention.
+// The threading.c module provides two synchronization constructs: mutexes and
+// locks. The only difference between these two constructs is that mutexes
+// are non-re-entrant, whereas locks are re-entrant. Furthermore, the
+// specifications for locks in this file prevent deadlock, whereas the
+// specifications for mutexes do not. The benefit of using mutexes is
+// that programs that use mutexes are easier to verify than programs that use
+// locks.
+
+// **** Mutexes ****
+
+// Mutexes are non-re-entrant. Specifically, if a thread attempts to acquire a mutex that it already holds, the program aborts.
+
+struct mutex;
+
+/*@
+
+predicate mutex(struct mutex *mutex; predicate() p);
+
+predicate mutex_held(struct mutex *mutex, predicate() p, int threadId, real frac);
+
+predicate create_mutex_ghost_arg(predicate() p) = true;
+
+@*/
+
+struct mutex *create_mutex();
+    //@ requires create_mutex_ghost_arg(?p) &*& p();
+    //@ ensures mutex(result, p);
+
+void mutex_acquire(struct mutex *mutex);
+    //@ requires [?f]mutex(mutex, ?p);
+    //@ ensures mutex_held(mutex, p, currentThread, f) &*& p();
+
+void mutex_release(struct mutex *mutex);
+    //@ requires mutex_held(mutex, ?p, currentThread, ?f) &*& p();
+    //@ ensures [f]mutex(mutex, p);
+
+void mutex_dispose(struct mutex *mutex);
+    //@ requires mutex(mutex, ?p);
+    //@ ensures p();
+
+// **** Lock ordering for re-entry and deadlock prevention ****
+
 // Note: we use lock IDs instead of struct lock pointers because
 // 1) if a lock is disposed and its address is reused for a new lock, it could be inserted in a different place in the lock order DAG,
 // causing inconsistency, and
@@ -51,7 +92,8 @@ fixpoint bool lock_below_top(int l, list<int> ls) {
 
 @*/
 
-// Standard locks (= POSIX mutexes/Win32 critical sections)
+// **** Standard locks (= POSIX mutexes/Win32 critical sections) ****
+
 // The implementations are re-entrant; however, the contracts prevent re-entry since this would be unsound.
 // (An alternative approach would be to allow re-entry, but not produce the invariant on re-entry.)
 // The contracts enforce that a thread releases a lock only if it is currently holding the lock.
@@ -63,8 +105,6 @@ struct lock;
 predicate lock(struct lock *lock; int lockId, predicate() p);
 
 predicate locked(struct lock *lock, int lockId, predicate() p, int threadId, real frac);
-
-predicate lockset(int threadId, list<int> locks);
 
 predicate create_lock_ghost_args(predicate() p, list<int> lockLowerBounds, list<int> lockUpperBounds) = true;
 
@@ -86,7 +126,11 @@ void lock_dispose(struct lock *lock);
     //@ requires lock(lock, ?lockId, ?p);
     //@ ensures p();
 
+// **** Threading ****
+
 /*@
+
+predicate lockset(int threadId, list<int> lockIds);
 
 predicate_family thread_run_pre(void *thread_run)(void *data, any info);
 predicate_family thread_run_post(void *thread_run)(void *data, any info);
