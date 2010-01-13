@@ -155,4 +155,9 @@ void thread_join(struct thread *thread);
     //@ requires thread(thread, ?run, ?data, ?info);
     //@ ensures thread_run_post(run)(data, info);
 
+// Disposes the thread handle but does not affect the running thread.
+void thread_dispose(struct thread *thread);
+    //@ requires thread(thread, _, _, _);
+    //@ ensures true;
+
 #endif
