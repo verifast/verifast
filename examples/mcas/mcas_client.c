@@ -321,7 +321,7 @@ int main() //@ : main
     //@ mcas_add_cell(id, &interval->a);
     //@ close interval_ctor(id, interval)();
     //@ create_atomic_space(interval_ctor(id, interval));
-    //@ leak atomic_space(interval_ctor(id, interval));
+    //@ leak atomic_space(_);
     //@ leak interval->id |-> id;
     //@ close thread_run_pre(shift_interval)(interval);
     thread_start(shift_interval, interval);
