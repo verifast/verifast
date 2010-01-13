@@ -7,5 +7,5 @@
 .provides .\threading.h#lock_release
 .provides .\threading.h#lock_dispose
 .provides .\threading.h#thread_start
+.provides .\threading.h#thread_start_joinable
 .provides .\threading.h#thread_join
-.provides .\threading.h#thread_dispose

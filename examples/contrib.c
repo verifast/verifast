@@ -56,7 +56,7 @@ predicate_family_instance thread_run_post(contribute)(struct session *session, c
 
 @*/
 
-void contribute(void *data) //@ : thread_run
+void contribute(void *data) //@ : thread_run_joinable
     //@ requires thread_run_pre(contribute)(data, ?info) &*& lockset(currentThread, nil);
     //@ ensures thread_run_post(contribute)(data, info) &*& lockset(currentThread, nil);
 {
@@ -117,7 +117,7 @@ int main()
     session1->lock = lock;
     //@ close contribute_pre(session1, box1, handle1, box2, handle2, box1, sumObject, lock);
     //@ close thread_run_pre(contribute)(session1, contribute_info(box1, handle1, box2, handle2, box1, sumObject, lock));
-    struct thread *thread1 = thread_start(contribute, session1);
+    struct thread *thread1 = thread_start_joinable(contribute, session1);
     
     struct session *session2 = malloc(sizeof(struct session));
     if (session2 == 0) {
@@ -127,7 +127,7 @@ int main()
     session2->lock = lock;
     //@ close contribute_pre(session2, box1, handle1, box2, handle2, box2, sumObject, lock);
     //@ close thread_run_pre(contribute)(session2, contribute_info(box1, handle1, box2, handle2, box2, sumObject, lock));
-    struct thread *thread2 = thread_start(contribute, session2);
+    struct thread *thread2 = thread_start_joinable(contribute, session2);
     
     thread_join(thread1);
     //@ open thread_run_post(contribute)(session1, contribute_info(box1, handle1, box2, handle2, box1, sumObject, lock));

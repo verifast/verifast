@@ -33,7 +33,7 @@ struct thread {
 };
 #endif
 
-struct thread *thread_start(void* run, void *data)
+struct thread *thread_start_joinable(void* run, void *data)
 {
 #ifdef WIN32
     struct run_closure *closure;
@@ -68,6 +68,7 @@ void thread_join(struct thread *t)
 #ifdef WIN32
     DWORD result = WaitForSingleObject(t->handle, INFINITE);
     if (result != WAIT_OBJECT_0) abort();
+    CloseHandle(t->handle);
 #else
     int result = pthread_join(t->id, 0);
     if (result != 0) abort();
@@ -83,6 +84,12 @@ void thread_dispose(struct thread* t)
     pthread_detach(t->id);
 #endif
     free(t);
+}
+
+void thread_start(void* run, void *data)
+{
+    struct thread *t = thread_start_joinable(run, data);
+    thread_dispose(t);
 }
 
 struct lock {

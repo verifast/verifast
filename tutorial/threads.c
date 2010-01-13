@@ -87,7 +87,7 @@ predicate_family_instance thread_run_post(summator)(struct sum_data *data, any i
 
 @*/
 
-void summator(struct sum_data *data) //@ : thread_run
+void summator(struct sum_data *data) //@ : thread_run_joinable
     //@ requires thread_run_pre(summator)(data, ?info);
     //@ ensures thread_run_post(summator)(data, info);
 {
@@ -107,7 +107,7 @@ struct sum_data *start_sum_thread(struct tree *tree)
     //@ leak malloc_block_sum_data(data);
     data->tree = tree;
     //@ close thread_run_pre(summator)(data, unit);
-    t = thread_start(summator, data);
+    t = thread_start_joinable(summator, data);
     data->thread = t;
     return data;
 }

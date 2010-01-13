@@ -114,6 +114,7 @@ verifast_both -c -disable_overflow_check threads0.c
 verifast_both -c -disable_overflow_check threads.c
 verifast_both -c -disable_overflow_check fractions.c
 verifast_both -c -disable_overflow_check mutexes.c
+verifast_both -c -disable_overflow_check leaks.c
 cd ..
 cd tests
 cd errors

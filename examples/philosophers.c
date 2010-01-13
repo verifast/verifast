@@ -8,7 +8,7 @@ struct philosopher {
 
 /*@
 
-predicate_family_instance thread_run_pre(philosopher_run)(struct philosopher *data, any info) =
+predicate_family_instance thread_run_data(philosopher_run)(struct philosopher *data) =
     data->fork1 |-> ?fork1 &*& [_]lock(fork1, ?fork1Id, _) &*&
     data->fork2 |-> ?fork2 &*& [_]lock(fork2, ?fork2Id, _) &*&
     malloc_block_philosopher(data) &*&
@@ -24,16 +24,15 @@ void create_philosopher(struct lock *fork1, struct lock *fork2)
     if (philosopher == 0) abort();
     philosopher->fork1 = fork1;
     philosopher->fork2 = fork2;
-    //@ close thread_run_pre(philosopher_run)(philosopher, unit);
+    //@ close thread_run_data(philosopher_run)(philosopher);
     thread_start(philosopher_run, philosopher);
-    //@ leak thread(_, _, _, _);
 }
 
 void philosopher_run(void *data) //@ : thread_run
-    //@ requires thread_run_pre(philosopher_run)(data, _) &*& lockset(currentThread, nil);
+    //@ requires thread_run_data(philosopher_run)(data) &*& lockset(currentThread, nil);
     //@ ensures false;
 {
-    //@ open thread_run_pre(philosopher_run)(data, _);
+    //@ open thread_run_data(philosopher_run)(data);
     struct philosopher *philosopher = data;
     struct lock *fork1 = philosopher->fork1;
     struct lock *fork2 = philosopher->fork2;
