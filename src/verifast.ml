@@ -7985,91 +7985,103 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont))
       ))
     | SwitchStmt (l, e, cs) ->
+      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      (match tp with
-        InductiveType(i, targs) ->
-          let (tn, targs, Some (_, tparams, ctormap)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
-          let (Some tpenv) = zip tparams targs in
-          let t = ev w in
-          let rec iter ctors cs =
-            match cs with
-              [] ->
-              begin
-              match ctors with
-                [] -> success()
-              | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
-              end
-            | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype"
-            | SwitchStmtIntClause (l, _, _) :: cs -> static_error l "integer clause not allowed in switch over inductive datatype"
-            | SwitchStmtClause (lc, cn, pats, ss)::cs ->
-              let pts =
-                match try_assoc' (pn,ilist) cn ctormap with
-                  None -> static_error lc ("Not a constructor of type " ^ tn)
-                | Some (l, pts) -> pts
-              in
-              let Some cn= search' cn (pn,ilist) ctormap in
-              let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
-              let (ptenv, xterms, xenv) =
-                let rec iter ptenv xterms xenv pats pts =
-                  match (pats, pts) with
-                    ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
-                  | (pat::pats, tp::pts) ->
-                    if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
-                    if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
-                    let tp' = instantiate_type tpenv tp in
-                    let term = get_unique_var_symb pat tp' in
-                    let term' =
-                      match unfold_inferred_type tp with
-                        TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
-                      | _ -> term
-                    in
-                    iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
-                  | ([], _) -> static_error lc "Too few arguments."
-                  | _ -> static_error lc "Too many arguments."
-                in
-                iter [] [] [] pats pts
-              in
-              let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
-              let sizemap =
-                match try_assq t sizemap with
-                  None -> sizemap
-                | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
-              in
-              branch
-                (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
-                (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
+      begin match tp with
+        InductiveType (i, targs) ->
+        let (tn, targs, Some (_, tparams, ctormap)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
+        let (Some tpenv) = zip tparams targs in
+        let t = ev w in
+        let rec iter ctors cs =
+          match cs with
+            [] ->
+            begin
+            match ctors with
+              [] -> success()
+            | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
+            end
+          | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype"
+          | SwitchStmtIntClause (l, _, _) :: cs -> static_error l "integer clause not allowed in switch over inductive datatype"
+          | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+            let pts =
+              match try_assoc' (pn,ilist) cn ctormap with
+                None -> static_error lc ("Not a constructor of type " ^ tn)
+              | Some (l, pts) -> pts
             in
-            iter (List.map (function (cn, _) -> cn) ctormap) cs
+            let Some cn= search' cn (pn,ilist) ctormap in
+            let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
+            let (ptenv, xterms, xenv) =
+              let rec iter ptenv xterms xenv pats pts =
+                match (pats, pts) with
+                  ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
+                | (pat::pats, tp::pts) ->
+                  if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
+                  if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
+                  let tp' = instantiate_type tpenv tp in
+                  let term = get_unique_var_symb pat tp' in
+                  let term' =
+                    match unfold_inferred_type tp with
+                      TypeParam x -> convert_provertype term (provertype_of_type tp') ProverInductive
+                    | _ -> term
+                  in
+                  iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
+                | ([], _) -> static_error lc "Too few arguments."
+                | _ -> static_error lc "Too many arguments."
+              in
+              iter [] [] [] pats pts
+            in
+            let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
+            let sizemap =
+              match try_assq t sizemap with
+                None -> sizemap
+              | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
+            in
+            branch
+              (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+              (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
+        in
+        iter (List.map (function (cn, _) -> cn) ctormap) cs
       | Char | ShortType | IntType -> 
-          if 1 < List.length (List.filter (fun cl -> match cl with SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) then
-            static_error l "switch statement can have at most one default clause"
-          else
-            eval_h h env w (fun h switch_term ->      
-              List.iter (fun clause ->
-                match clause with
-                | SwitchStmtIntClause (l, i, ss) -> 
-                    let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
-                    let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-                    eval_h h env w2 (fun h t ->
-                      assume_eq t switch_term (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont)
-                    )
-                | SwitchStmtDefaultClause (l, ss) -> 
-                    (*static_error l "not supported"*)
-                    let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-                    let restr = List.fold_left (fun state clause -> 
-                      match clause with
-                        SwitchStmtIntClause (l, i, ss) -> 
-                          let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
-                          ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq switch_term (ev w2))) 
-                      | _ -> state
-                    ) (ctxt#mk_true) cs in
-                    let _ = assume restr (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont) in
-                    ()
-                | SwitchStmtClause (lc, cn, pats, ss) -> static_error l "inductive value not allowed in switch over integer"
-              ) cs
-            )
-      | _ -> static_error l "Switch statement operand is not an inductive value or integer.")
+        let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
+        if n > 1 then static_error l "switch statement can have at most one default clause";
+        eval_h h env w $. fun h switch_term ->
+        let cs0 = cs in
+        let rec verify_case h env cs =
+          match cs with
+            [] -> cont h env
+          | c::cs ->
+            let tcont _ _ _ h env = verify_case h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) cs in
+            match c with
+              SwitchStmtIntClause (l, i, ss) ->
+              let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+              eval_h h env w2 $. fun h t ->
+              assume_eq t switch_term $. fun () ->
+              verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+            | SwitchStmtDefaultClause (l, ss) ->
+              let restr =
+                List.fold_left
+                  begin fun state clause -> 
+                    match clause with
+                      SwitchStmtIntClause (l, i, ss) -> 
+                        let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+                        ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq switch_term (ev w2))) 
+                    | _ -> state
+                  end
+                  ctxt#mk_true cs0
+              in
+              assume restr $. fun () ->
+              verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+            | SwitchStmtClause (lc, cn, pats, ss) -> static_error l "inductive value not allowed in switch over integer"
+        in
+        let rec verify_cases cs =
+          match cs with
+            [] -> if n = 0 then (* implicit default *) cont h env
+          | c::cs' as cs -> verify_case h env cs; verify_cases cs'
+        in
+        verify_cases cs
+      | _ -> static_error l "Switch statement operand is not an inductive value or integer."
+      end
     | Assert (l, p) ->
       let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
       assert_pred rules [] (pn,ilist) h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
@@ -8457,6 +8469,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
     | WhileStmt (l, e, p, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
+      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let p = match p with None -> static_error l "Loop invariant required." | Some p -> p in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
@@ -8789,7 +8802,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | NoopStmt l -> cont h env
     | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position."
     | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position."
-    | Break(l) -> cont h env (* need to add break continuation? *)
+    | Break l ->
+      begin match try_assoc "#break" lblenv with
+        None -> static_error l "Unexpected break statement"
+      | Some cont -> cont blocks_done sizemap tenv ghostenv h env
+      end
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with

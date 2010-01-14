@@ -72,3 +72,14 @@ void nested_blocks(struct node *n1, struct node *n2)
     }
 l3:
 }
+
+void break_test(struct node *n1, struct node *n2)
+    //@ requires nodes(n1) &*& nodes(n2);
+    //@ ensures nodes(n1) &*& nodes(n2);
+{
+    while (true)
+        //@ invariant nodes(n1);
+    {
+        break;
+    }
+}

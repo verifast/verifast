@@ -1,7 +1,5 @@
 #include "stdlib.h"
 
-// note: switch statements only work if break statements are written in each case!
-
 void m(int i) 
   //@ requires true;
   //@ ensures true;
@@ -23,4 +21,21 @@ void m(int i)
   } else {
     assert(j == 3);
   } 
+}
+
+void n(int i)
+  //@ requires true;
+  //@ ensures true;
+{
+  int j = 0;
+  int t = 0;
+  switch(i) {
+    case 1:
+      j = 1;
+    case 2:
+      j = 2;
+      t = 2;
+      break;
+  }
+  assert(j == 2 && t == 2 || j == 0 && t == 0);
 }
