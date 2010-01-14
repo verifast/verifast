@@ -35,6 +35,9 @@ class APDU {
     //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
     //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 
+  public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException, SecurityException;
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& array_slice(outData, bOff, bOff + len, _);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& array_slice(outData, bOff, bOff + len, _);
 }
 
 //@ predicate_family Applet_(Class c)(Applet applet);
@@ -43,18 +46,26 @@ class Applet {
   public Applet();
     //@ requires true;
     //@ ensures true;
-    
+  
   public boolean selectingApplet();
     //@ requires true;
     //@ ensures true;
-    
+  
   public void register();
     //@ requires Applet_(this.getClass())(this);
     //@ ensures true;
-    
+  
   public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException;
     //@ requires Applet_(this.getClass())(this);
     //@ ensures true;
+  
+  public boolean select();
+    //@ requires Applet_(this.getClass())(this);
+    //@ ensures Applet_(this.getClass())(this);
+  
+  public void deselect();
+    //@ requires Applet_(this.getClass())(this);
+    //@ ensures Applet_(this.getClass())(this);
   
   public void process(APDU apdu);
     //@ requires Applet_(this.getClass())(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
