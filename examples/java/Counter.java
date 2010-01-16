@@ -38,7 +38,7 @@ public class Counter {
     //@ requires this.value |-> ?v &*& x.value |-> ?v';
     //@ ensures this.value |-> v + v' &*& x.value |-> v';
   {
-    this.add(x.value);
+    add(x.value);
   }
   
   static void swap(Counter c1, Counter c2)

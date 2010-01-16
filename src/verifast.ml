@@ -4707,7 +4707,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StringLit (_, _) -> []
     | ClassLit (l, _) -> []
     | Read (l, e, f) -> vars_used e
+    | ArrayLengthExpr (l, e) -> vars_used e
     | WRead (l, e, _, _, _, _, _, _) -> vars_used e
+    | ReadArray (l, a, i) -> vars_used a @ vars_used i
+    | WReadArray (l, a, tp, i) -> vars_used a @ vars_used i
     | Deref (l, e, t) -> vars_used e
     | AddressOf (l, e) -> vars_used e
     | CallExpr (l, g, targs, [], pats, _) ->
@@ -7476,28 +7479,45 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont h (Some (obj, ObjType cn))
           | _ -> static_error l "Multiple matching overloads"
       else (* startswith g "new " *)
+        let try_qualified_call tn pats argpats fb on_fail =
+          let ms = get_methods tn g in
+          if ms = [] then on_fail () else
+          let argtps = List.map (function LitPat e -> snd (check_expr (pn,ilist) tparams tenv e) | _ -> static_error l "Patterns are not allowed here") argpats in
+          let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
+          begin match ms with
+            [] -> static_error l "No matching method"
+          | [(sign, (tn', lm, rt, xmap, pre, post, fb', v))] ->
+            let (fb, pats) = if fb = Instance && fb' = Static then (Static, List.tl pats) else (fb, pats) in
+            if fb <> fb' then static_error l "Instance method requires target object";
+            if pure then static_error l "Method call is not allowed in a pure context";
+            check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
+          | _ -> static_error l "Multiple matching overloads"
+          end
+        in
         match fb with
-          Static -> func_call_stmt l xo g targs pats fb cont
+          Static ->
+          begin fun on_fail ->
+            match try_assoc "this" tenv with
+              Some (ObjType cn) ->
+              try_qualified_call cn (LitPat (Var (l, "this", ref (Some LocalVar)))::pats) pats Instance on_fail
+            | _ ->
+            match try_assoc current_class tenv with
+              Some (ClassOrInterfaceName tn) ->
+              try_qualified_call tn pats pats Static on_fail
+            | _ ->
+            on_fail ()
+          end $. fun () ->
+          func_call_stmt l xo g targs pats fb cont
         | Instance ->
-          if pure then static_error l "Method call is not allowed in a pure context";
-          let args = List.map (function LitPat e -> check_expr (pn,ilist) tparams tenv e | _ -> static_error l "Patterns are not allowed here") pats in
-          let (arg0, arg0tp)::args' = args in
+          let LitPat arg0e::argpats = pats in
+          let (_, arg0tp) = check_expr (pn,ilist) tparams tenv arg0e in
           let (tn, pats, fb) =
             match arg0tp with
               ObjType tn -> (tn, pats, Instance)
             | ClassOrInterfaceName tn -> (tn, List.tl pats, Static)
             | _ -> static_error l "Target of method call must be object or class"
           in
-          let argtps = List.map snd args' in
-          let ms = get_methods tn g in
-          let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
-          begin match ms with
-            [] -> static_error l "No matching method"
-          | [(sign, (tn', lm, rt, xmap, pre, post, fb', v))] ->
-            if fb <> fb' then static_error l ("Wrong method binding: " ^ tostring fb ^ " instead of " ^ tostring fb');
-            check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
-          | _ -> static_error l "Multiple matching overloads"
-          end
+          try_qualified_call tn pats argpats fb (fun () -> static_error l "No such method")
     in 
     let check_type h retval =
       begin match (typ0, retval) with
