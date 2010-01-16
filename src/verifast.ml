@@ -6392,7 +6392,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && coef' == real_unit && chunks_match symb targs ts g' targs' ts') h
           in
           let exec_func h targs ts cont =
-            let rules = [] in
+            let rules = !rules_cell in
             let (indices, inputArgs) = take_drop indexCount ts in
             let Some tpenv = zip predinst_tparams targs in
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in

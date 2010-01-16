@@ -34,7 +34,6 @@ struct llist *create_llist()
   //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
-  //@ close llist(l, _);
   return l;
 }
 
@@ -73,20 +72,15 @@ void add(struct llist *list, int x)
   //@ ensures llist(list, append(_v, cons(x, nil)));
 {
   struct node *l = 0;
-  //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) {
     abort();
   }
-  //@ close node(n, _, _);
   l = list->last;
-  //@ open node(l, _, _);
   l->next = n;
   l->value = x;
-  //@ close node(l, _, _);
   list->last = n;
   //@ lseg_add(l);
-  //@ close llist(list, _);
 }
 
 /*@
@@ -111,22 +105,15 @@ void append(struct llist *list1, struct llist *list2)
   //@ requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
   //@ ensures llist(list1, append(_v1, _v2));
 {
-  //@ open llist(list1, _v1);
-  //@ open llist(list2, _v2);
   struct node *l1 = list1->last;
   struct node *f2 = list2->first;
   struct node *l2 = list2->last;
   //@ open lseg(f2, l2, _v2);  // Causes case split.
   if (f2 == l2) {
-    //@ open node(l2, _, _);
     free(l2);
     free(list2);
-    //@ append_nil(_v1);
-    //@ close llist(list1, _v1);
   } else {
     //@ distinct_nodes(l1, l2);
-    //@ open node(l1, _, _);
-    //@ open node(f2, _, _);
     l1->next = f2->next;
     l1->value = f2->value;
     list1->last = l2;
