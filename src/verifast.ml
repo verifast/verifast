@@ -8047,17 +8047,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if n > 1 then static_error l "switch statement can have at most one default clause";
         eval_h h env w $. fun h switch_term ->
         let cs0 = cs in
-        let rec verify_case h env cs =
+        let rec fall_through h env cs =
           match cs with
             [] -> cont h env
           | c::cs ->
-            let tcont _ _ _ h env = verify_case h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) cs in
-            match c with
+            let ss =
+              match c with
+                SwitchStmtIntClause (l, i, ss) -> ss
+              | SwitchStmtDefaultClause (l, ss) -> ss
+              | SwitchStmtClause (l,cn, pats, ss) -> static_error l "Inductive value not allowed in switch over integer"
+            in
+            let tcont _ _ _ h env = fall_through h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) cs in
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+        in
+        let rec verify_cases cs =
+          match cs with
+            [] -> if n = 0 then (* implicit default *) cont h env
+          | c::cs' ->
+            begin match c with
               SwitchStmtIntClause (l, i, ss) ->
               let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
               eval_h h env w2 $. fun h t ->
               assume_eq t switch_term $. fun () ->
-              verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+              fall_through h env cs
             | SwitchStmtDefaultClause (l, ss) ->
               let restr =
                 List.fold_left
@@ -8071,13 +8083,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   ctxt#mk_true cs0
               in
               assume restr $. fun () ->
-              verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+              fall_through h env cs
             | SwitchStmtClause (lc, cn, pats, ss) -> static_error l "inductive value not allowed in switch over integer"
-        in
-        let rec verify_cases cs =
-          match cs with
-            [] -> if n = 0 then (* implicit default *) cont h env
-          | c::cs' as cs -> verify_case h env cs; verify_cases cs'
+            end;
+            verify_cases cs'
         in
         verify_cases cs
       | _ -> static_error l "Switch statement operand is not an inductive value or integer."
@@ -8807,6 +8816,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l "Unexpected break statement"
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
+    | _ -> static_error l "This statement form is not supported."
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with

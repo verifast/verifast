@@ -21,3 +21,16 @@ void break_test(int *i1, int *i2)
     }
     assert(false); //~ should_fail
 }
+
+void fall_through_test(int i)
+    //@ requires true;
+    //@ ensures true;
+{
+    int j = 0;
+    switch (i) {
+        case 1:
+            j = 1;
+        case 2:
+            assert j == 0; //~ should_fail
+    }
+}
