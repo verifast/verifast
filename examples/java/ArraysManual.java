@@ -1,3 +1,15 @@
+class LimitsTest {
+    static void test(byte[] xs, byte[] ys)
+        //@ requires array_slice(xs, 0, 10, _) &*& ys[0] |-> _;
+        //@ ensures true;
+    {
+        int x = xs[0];
+        assert -128 <= x && x <= 127;
+        int y = ys[0];
+        assert -128 <= y && y <= 127;
+    }
+}
+
 class InitTest {
     static void test()
         //@ requires true;

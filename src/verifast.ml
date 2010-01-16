@@ -4237,12 +4237,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 else static_error l ("No such pure function: "^g')
       )
     | ReadArray(l, arr, index) ->
-        let (w1, arr_t) = check arr in
-        let w2 = checkt index intt in
-        (match arr_t with
-          ArrayType(tp) -> (WReadArray(l, w1, tp, w2), tp)
-        | _ -> static_error l "target of array access is not an array"
-        )
+      let (w1, arr_t) = check arr in
+      let w2 = checkt index intt in
+      begin match arr_t with
+        ArrayType tp -> (WReadArray (l, w1, tp, w2), tp)
+      | _ -> static_error l "target of array access is not an array"
+      end
+    | NewArrayWithInitializer (l, te, es) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e t) es in
+      (e, ArrayType t)
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
       let (w2, t) = check e2 in
@@ -5490,17 +5494,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in_temporary_context (fun _ -> cont2())
   in
   
-  let evalpat (pn,ilist) ghostenv env pat tp0 tp cont =
+  let evalpat ghost (pn,ilist) ghostenv env pat tp0 tp cont =
     match pat with
       LitPat e -> cont ghostenv env (prover_convert_term (eval (pn,ilist) None env e) tp0 tp)
-    | VarPat x -> let t = get_unique_var_symb x tp in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
-    | DummyPat -> let t = get_unique_var_symb "dummy" tp in cont ghostenv env t
+    | VarPat x -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
+    | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
   in
   
   let rec evalpats (pn,ilist) ghostenv env pats tps0 tps cont =
     match (pats, tps0, tps) with
       ([], [], []) -> cont ghostenv env []
-    | (pat::pats, tp0::tps0, tp::tps) -> evalpat (pn,ilist) ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats (pn,ilist) ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
+    | (pat::pats, tp0::tps0, tp::tps) -> evalpat true (pn,ilist) ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats (pn,ilist) ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
   in
 
   let real_mul l t1 t2 =
@@ -5618,18 +5622,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WAccess (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
       if fstatic then
         let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
-        evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat (fghost = Ghost) (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
         assume_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
         cont h ghostenv env
       else
         let te = ev e in
-        evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat (fghost = Ghost) (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
         assume_field h fparent fname frange fghost te t coef $. fun h ->
         cont h ghostenv env
     | WAccess (l, WReadArray (la, ea, _, ei), tp, rhs) ->
       let a = ev ea in
       let i = ev ei in
-      evalpat (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+      evalpat false (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb, true), [tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
     | WCallPred (l, g, targs, pats0, pats) ->
@@ -5715,7 +5719,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CoefPred (l, DummyPat, body) ->
       assume_pred_core tpenv (pn,ilist) h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefPred (l, coef', body) ->
-      evalpat (pn,ilist) ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
+      evalpat true (pn,ilist) ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       assume_pred_core tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
     )
   in
@@ -6167,7 +6171,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if g == array_slice_symb then
             let [elems] = args_rest in
             let split_after elems h =
-              let elem = get_unique_var_symb "elem" elem_tp in
+              let elem = get_unique_var_symb_non_ghost "elem" elem_tp in
               let elems_tail = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
               assume (ctxt#mk_eq elems (mk_cons elem_tp elem elems_tail)) $. fun () ->
               let chunk1 = Chunk ((array_element_symb, true), [elem_tp], coef, [arr; index; elem], None) in
@@ -7984,7 +7988,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       iter h tenv ghostenv env xs
     | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
       (* CAVEAT: This is unsound if we allow side-effects in e1 *)
-      let s = ExprStmt (AssignExpr (l, e1, Operation (l, op, [e1; e2], ref None))) in
+	  let (_, t) = check_expr (pn,ilist) tparams tenv e1 in
+      let s = ExprStmt (AssignExpr (l, e1, CastExpr (l, ManifestTypeExpr (l, t), Operation (l, op, [e1; e2], ref None)))) in
       verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
     | ExprStmt (AssignExpr (l, lhs, rhs)) ->
       let (lhs, t) = check_expr (pn,ilist) tparams tenv lhs in

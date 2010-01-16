@@ -11,6 +11,7 @@ void m(int i, short s, char c)
   //@ ensures true;
 {
   short r = 354;
+  r += i;
   int j = s;
   r = (short) i;
   struct myStruct* ms = malloc(sizeof(struct myStruct));

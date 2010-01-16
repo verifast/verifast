@@ -112,6 +112,7 @@ void append(struct llist *list1, struct llist *list2)
   if (f2 == l2) {
     free(l2);
     free(list2);
+    //@ append_nil(_v1);
   } else {
     //@ distinct_nodes(l1, l2);
     l1->next = f2->next;
