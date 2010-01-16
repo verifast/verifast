@@ -5114,7 +5114,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: evaluation *)
   
-  let rec eval_core_cps ev state (pn,ilist) ass_term read_field env e cont =
+  let rec eval_core_cps0 eval_core ev state (pn,ilist) ass_term read_field env e cont =
     (* let ev = eval_core (pn,ilist) ass_term read_field env in *)
     let evs state es cont =
       let rec iter state vs es =
@@ -5422,10 +5422,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let t = check_pure_type (pn,ilist) [] te in
       cont state (sizeof l t)
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
-  and eval_core (pn,ilist) ass_term read_field env e =
-    let rec ev () e cont = eval_core_cps ev () (pn,ilist) ass_term read_field env e cont in
+  in
+  
+  let rec eval_core (pn,ilist) ass_term read_field env e =
+    let rec ev () e cont = eval_core_cps0 eval_core ev () (pn,ilist) ass_term read_field env e cont in
     ev () e $. fun () v -> v
   in
+  
+  let eval_core_cps = eval_core_cps0 eval_core in
   
   let eval (pn,ilist) = eval_core (pn,ilist) None in
 
@@ -7155,10 +7159,27 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
  
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
+  let eval_non_pure_cps ev (pn,ilist) is_ghost_expr h env e cont =
+    let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
+    let read_field =
+      (fun l t f -> read_field h env l t f),
+      (fun l f -> read_static_field h env l f),
+      (fun l p t -> deref_pointer h env l p t),
+      (fun l a i -> read_array h env l a i)
+    in
+    eval_core_cps ev h (pn,ilist) assert_term (Some read_field) env e cont
+  in
+
   let eval_non_pure (pn,ilist) is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
-    eval_core (pn,ilist) assert_term (Some ((fun l t f -> read_field h env l t f), (fun l f -> read_static_field h env l f), (fun l p t -> deref_pointer h env l p t), (fun l a i -> read_array h env l a i))) env e
-  in 
+    let read_field =
+      (fun l t f -> read_field h env l t f),
+      (fun l f -> read_static_field h env l f),
+      (fun l p t -> deref_pointer h env l p t),
+      (fun l a i -> read_array h env l a i)
+    in
+    eval_core (pn,ilist) assert_term (Some read_field) env e
+  in
   
   let rec eval_h (pn,ilist) is_ghost_expr h env e cont =
     let rec iter h e cont =
@@ -7238,7 +7259,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (fun _ -> assume (v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e1 cont))
           (fun _ -> assume (ctxt#mk_not v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e2 cont))
       )
-    | e -> cont h (eval_non_pure (pn,ilist) is_ghost_expr h env e)
+    | e -> eval_non_pure_cps iter (pn,ilist) is_ghost_expr h env e cont
     in
     iter h e cont
   in
