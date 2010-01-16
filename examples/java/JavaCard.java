@@ -41,8 +41,7 @@ public class MyApplet extends Applet {
         // read first applet data byte
         byte bLen = array[(short)(offset + 1)];
         if (bLen != 0) {
-            byte[] tmp = new byte[bLen]; // TODO: Eliminate tmp
-            someByteArray = tmp;
+            someByteArray = new byte[bLen];
             //@ close Applet_(MyApplet.class)(theApplet);
             Applet theApplet_ = theApplet; // TODO: Eliminate this upcast
             theApplet_.register();

@@ -7339,9 +7339,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
-  let rec verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont =
-    let verify_expr h env typ0 xo e cont = verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in
+  let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont =
+    let verify_expr readonly h env typ0 xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in    
     let l = expr_loc e in
+    let has_effects () = if language = CLang && readonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" in
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
     let eval_h0 = eval_h (pn,ilist) in
@@ -7378,7 +7379,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_call l (pn, ilist) xo g targs (List.map (fun pat -> SrcPat pat) pats) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let call_stmt l xo g targs pats fb cont =
-      match file_type path with
+      match language with
       Java ->
       (
         let (class_name,fb,pats,iscons)= 
@@ -7480,6 +7481,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (
       match try_assoc g tenv with
         Some (PtrType (FuncType ftn)) ->
+        has_effects ();
         let fterm = List.assoc g env in
         let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
         if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
@@ -7516,6 +7518,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h (Some (ev w, t))
         end
       | Some (funenv, fterm, lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
+        has_effects ();
         if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
         if body = None then register_prototype_used lg g;
         let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
@@ -7531,7 +7534,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end;
       cont h retval
     in
-    let new_array l elem_tp length elems =
+    let new_array h l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
       let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
       assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
@@ -7541,7 +7544,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match e with
     | CastExpr (l, te, (CallExpr (_, "malloc", _, _, _, _) as e)) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      verify_expr h env (Some t) xo e $. fun h (Some (v, _)) ->
+      verify_expr readonly h env (Some t) xo e $. fun h (Some (v, _)) ->
       check_type h (Some (v, t))
     | CallExpr (l, "malloc", [], [], args,Static) ->
       begin match args with
@@ -7587,14 +7590,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
       let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
       assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
-      new_array l elem_tp lv elems
+      new_array h l elem_tp lv elems
     | NewArrayWithInitializer(l, tp, es) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
       evhs h env ws $. fun h vs ->
       let elems = mk_list elem_tp vs in
       let lv = ctxt#mk_intlit (List.length vs) in
-      new_array l elem_tp lv elems
+      new_array h l elem_tp lv elems
     | e ->
       let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
       eval_h h env w $. fun h v ->
@@ -7642,7 +7645,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission.";
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
-    let verify_expr h env typ0 xo e cont = verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in
+    let verify_expr readonly h env typ0 xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
@@ -7911,7 +7914,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             iter h fds
           )
         | _ ->
-          verify_expr h env None None e (fun h _ -> cont h env)
+          verify_expr false h env None None e (fun h _ -> cont h env)
       end
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments.";
@@ -7957,7 +7960,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin fun cont ->
             match e with
               None -> cont h (get_unique_var_symb_non_ghost x t)
-            | Some e -> verify_expr h env (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
+            | Some e -> verify_expr false h env (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
           end $. fun h v ->
           let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
           iter h ((x, t)::tenv') ghostenv' ((x, v)::env') xs
@@ -7972,22 +7975,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin match lhs with
         Var (lx, x, _) ->
         let (tpx, symb) = vartp l x in
-        verify_expr h env (Some tpx) (Some x) rhs $. fun h (Some (v, _)) ->
+        verify_expr false h env (Some tpx) (Some x) rhs $. fun h (Some (v, _)) ->
         check_assign l x;
         update_local_or_global h env tpx x symb v cont
       | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
         if pure && fghost = Real then static_error l "Cannot write in a pure context";
-        let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
         let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
         if not fstatic then
           eval_h h env w (fun h t ->
+            verify_expr true h env (Some tp) None rhs $. fun h (Some (vrhs, _)) ->
             get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
               if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission.";
-              cont (Chunk ((f_symb, true), [], real_unit, [t; ev wrhs], None)::h) env)
+              cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)
           )
         else
+          verify_expr true h env (Some tp) None rhs $. fun h (Some (vrhs, _)) ->
           assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
-          cont (Chunk ((f_symb, true), [], real_unit, [ev wrhs], None)::h) env
+          cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env
       | WReadArray (_, arr, elem_tp, i) ->
         if pure then static_error l "Cannot write in a pure context.";
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
@@ -8009,7 +8013,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       end
     | ExprStmt (CallExpr (l, g, targs, pats0, es, fb) as e) ->
-      verify_expr h env None None e (fun h _ -> cont h env)
+      verify_expr false h env None None e (fun h _ -> cont h env)
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
