@@ -407,6 +407,8 @@ let big_int_of_hex_string s =
       let digit =
         if int_of_char '0' <= c && c <= int_of_char '9' then
           c - int_of_char '0'
+        else if int_of_char 'a' <= c && c <= int_of_char 'f' then
+          c - int_of_char 'a' + 10
         else
           c - int_of_char 'A' + 10
       in
@@ -9216,7 +9218,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (f, (lf, t, vis, binding, final, init, value))::fds ->
               if binding = Instance then begin
                 if init <> None then static_error lf "Instance field initializers are not yet supported.";
-                assume_field h cn f t Real this (get_unique_var_symb_non_ghost "value" t) real_unit $. fun h ->
+                let default_value t =
+                  match t with
+                    Bool -> ctxt#mk_false
+                  | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+                  | _ -> get_unique_var_symb_non_ghost "value" t
+                in
+                assume_field h cn f t Real this (default_value t) real_unit $. fun h ->
                 iter h fds
               end else
                 iter h fds
