@@ -3189,7 +3189,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (t1, t2) -> t1 = t2
   in
   
-  let rec expect_type_core (pn,ilist) l msg t t0 =
+  let rec expect_type_core l msg t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
@@ -3203,13 +3203,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match zip ts ts0 with
           None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
         | Some tpairs ->
-          List.iter (fun (t, t0) -> expect_type_core (pn,ilist) l msg t t0) tpairs
+          List.iter (fun (t, t0) -> expect_type_core l msg t t0) tpairs
       end
     | (InductiveType _, AnyType) -> ()
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
-  let expect_type (pn,ilist) l t t0 = expect_type_core (pn,ilist) l "" t t0 in
+  let expect_type l t t0 = expect_type_core l "" t t0 in
+  
+  let is_assignable_to t t0 =
+    try expect_type dummy_loc t t0; true with StaticError (l, msg) -> false (* TODO: Consider eliminating this hack *)
+  in
+  
+  let is_assignable_to_sign sign sign0 = for_all2 is_assignable_to sign sign0 in
   
   let convert_provertype_expr e proverType proverType0 =
     if proverType = proverType0 then e else ProverTypeConversion (proverType, proverType0, e)
@@ -3523,7 +3529,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                                           let t0 =
                                             match t0 with
                                               None -> Some t
-                                            | Some t0 -> expect_type (pn,ilist) (expr_loc e) t t0; Some t0
+                                            | Some t0 -> expect_type (expr_loc e) t t0; Some t0
                                           in
                                           let ctors = List.filter (fun (ctorname, _) -> ctorname <> cn) ctors in
                                           iter t0 (SwitchExprClause (lc, cn, xs, w)::wcs) ctors cs
@@ -3539,7 +3545,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
                           | _ ->
                             let (w, t) = check_ tenv e in
-                            expect_type (pn,ilist) (expr_loc e) t t0;
+                            expect_type (expr_loc e) t t0;
                             w
                         in
                         let wbody = checkt_ tenv body rt in
@@ -4281,7 +4287,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let t0 =
                       match t0 with
                         None -> Some t
-                      | Some t0 -> expect_type (pn,ilist) (expr_loc e) t t0; Some t0
+                      | Some t0 -> expect_type (expr_loc e) t t0; Some t0
                     in
                     let ctors = List.filter (fun (ctorname, _) -> ctorname <> cn) ctors in
                     iter t0 (SwitchExprClause (lc, cn, xs, w)::wcs) ctors cs
@@ -4333,7 +4339,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (IntType, ShortType) when isCast -> w
       | (ShortType, Char) when isCast -> w
       | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
-      | _ -> expect_type (pn,ilist) (expr_loc e) t t0; w
+      | _ -> expect_type (expr_loc e) t t0; w
   and check_deref (pn,ilist) l tparams tenv e f =
     let (w, t) = check_expr (pn,ilist) tparams tenv e in
     begin
@@ -4872,7 +4878,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           [] -> List.rev xm
         | (t0, (te, x))::xs -> 
           let t = check_pure_type (pn,ilist) tparams' te in
-          expect_type (pn,ilist) l t (instantiate_type tpenv t0);
+          expect_type l t (instantiate_type tpenv t0);
           if List.mem_assoc x tenv then static_error l ("Parameter '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
           if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
           iter2 ((x, t)::xm) xs
@@ -6563,14 +6569,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin
       match (rt, rt0) with
         (None, None) -> ()
-      | (Some rt, Some rt0) -> expect_type_core (pn,ilist) l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
+      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
       | _ -> static_error l (msg ^ "Return types do not match.")
     end;
     begin
       (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype."));
       List.iter 
         (fun ((x, t), (x0, t0)) ->
-           expect_type_core (pn,ilist) l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
+           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
         )
         (zip2 xmap xmap0)
     end;
@@ -6652,7 +6658,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         None -> static_error larg "No such module"
                       | Some term -> term
                     in
-                    expect_type (pn,ilist) larg IntType tp;
+                    expect_type larg IntType tp;
                     (x, value)
                   end
                   bs
@@ -6729,7 +6735,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               iter [] ps
             in
-            let sign = (n, List.map snd xmap) in
+            let sign = (n, List.map snd (List.tl xmap)) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method";
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
             let (pre, pre_tenv, post) =
@@ -7005,6 +7011,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
       classmap1
   end;
+  
+  let rec get_methods tn mn =
+    if tn = "" then [] else
+    match try_assoc tn classmap with
+      Some (l, meths, fds, constr, super, interfs, pn, ilist) ->
+      let inherited_methods =
+        get_methods super mn @ flatmap (fun ifn -> get_methods ifn mn) interfs
+      in
+      let declared_methods =
+        flatmap
+          begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, ss, fb, v, is_override)) ->
+            if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, fb, v))] else []
+          end
+          meths
+      in
+      declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
+    | None ->
+    let (_, meths, _, _) = List.assoc tn interfmap in
+    flatmap
+      begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, v)) ->
+        if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, Instance, v))] else []
+      end
+      meths
+  in
   
   let _=
   if file_type path=Java then
@@ -7378,107 +7408,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_correct xo g targs pats (lg, callee_tparams, tr, ps, funenv, pre, post, v) cont =
       verify_call l (pn, ilist) xo g targs (List.map (fun pat -> SrcPat pat) pats) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
-    let call_stmt l xo g targs pats fb cont =
-      match language with
-      Java ->
-      (
-        let (class_name,fb,pats,iscons)= 
-          (if fb=Static then 
-            (if startswith g "new " then
-               let id=(String.sub g 4 ((String.length g)-4)) in
-               let cn= match search' id (pn,ilist) classmap with Some s ->s | None -> static_error l ("Constructor wasn't found: "^id) in
-               (cn,Static,pats,true)
-            else ("",Static,pats,false)
-            )
-           else(
-             if (match pats with LitPat(Var(_,cn,_))::_->(search cn (pn,ilist) classmap) |_->false)
-               then match pats with LitPat(Var(_,cn,_))::rest->(cn,Static,rest,false)
-             else
-               match List.hd pats with LitPat (Var(_,x,_)) ->( match vartp l x with (* HACK :) this is altijd 1e argument bij instance method*) (ObjType(class_name), _) ->(class_name,Instance,pats,false))
-            )
-           )
-        in
-        let _ = List.iter (fun (LitPat e) -> let (w, t) = (check_expr (pn, ilist) [] tenv e) in ()) pats in
-        match try_assoc' (pn,ilist) class_name classmap with
-          Some (_, methmap, _, consmap, super, interfs, pn, ilist) -> 
-            (if pure then 
-               static_error l "Cannot call methods in a pure context."
-             else
-             let rec search_meth mmap=
-               match mmap with
-                 [] -> static_error l ("Method "^g^" not found!")
-               | ((n, _),(lm,rt, xmap, pre, pre_tenv, post, body,fbm,v,_))::rest when n=g-> 
-                 let match_args xmap pats =
-                   match zip pats xmap with
-                     None -> false
-                   | Some bs ->
-                       try List.map(function (LitPat e, (x, tp)) -> check_expr_t (pn,ilist) [] tenv e tp) bs; true
-                       with StaticError (l, msg) -> false
-                 in
-                 if(match_args xmap pats) then
-                   if fb <>fbm then static_error l ("Wrong method binding of "^g^" :"^(tostring fb)^" instead of"^(tostring fbm))
-                   else check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
-                 else
-                   search_meth rest
-               | _::rest -> search_meth rest
-             in
-             let rec search_cons clist=
-               match clist with
-                [] -> static_error l ("Constructor "^g^" not found!")
-              | (sign,(lm,xmap,pre,pre_tenv,post,ss,v)) :: rest->
-                let match_args xmap pats =
-                  match zip pats xmap with
-                    None -> false
-                  | Some bs -> 
-                      try List.map(function (LitPat e, (x, tp)) -> check_expr_t (pn,ilist) [] tenv e tp) bs; true
-                      with StaticError (l, msg) -> false
-                in
-                if(match_args xmap pats) then begin
-                  let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType class_name) in
-                  assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
-                  assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc class_name classterms) $. fun () ->
-                  check_correct None (Some g) targs pats (lm, [], None, xmap, ["this", obj], pre, post, Static) $. fun h None ->
-                  cont h (Some (obj, ObjType class_name))
-                end else search_cons rest
-              in
-              if iscons then 
-                search_cons consmap
-              else 
-                search_meth methmap
-            )
-        | None ->
-           (match try_assoc' (pn,ilist) class_name interfmap with
-              Some(_,methmap,pn,ilist) -> 
-                (match flatmap (fun ((n, _), info) -> if n = g then [info] else []) methmap with
-                   (lm,rt, xmap, pre, pre_tenv, post,v)::_ ->
-                    if fb <>Instance 
-                      then static_error l ("Wrong function binding of "^g^" :"^(tostring fb)^" instead of Instance");
-                      let _ = if pure then static_error l "Cannot call regular functions in a pure context." in
-                      check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
-                 | []->  static_error l ("Method "^class_name^" not found!!")
-                )
-            | None ->
-                (match try_assoc' (pn,ilist) g funcmap with (* java probleem*)
-                   None -> 
-                     (match try_assoc' (pn,ilist) g purefuncmap with
-                        None -> static_error l ("No such method: " ^ g)
-                      | Some (lg, callee_tparams, rt, pts, gs) ->
-                        let Some g=search' g (pn,ilist) purefuncmap in
-                        let (w, t) = check_expr (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) in
-                        cont h (Some (ev w, t))
-                     )
-                 | Some (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
-                     let g= match search' g (pn,ilist) funcmap with Some s -> s in
-                     if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
-                     if body = None then register_prototype_used lg g;
-                     let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-                     let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
-                     check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, v) cont
-                )
-            )
-      )
-    | _ ->
-      (
+    let func_call_stmt l xo g targs pats fb cont =
       match try_assoc g tenv with
         Some (PtrType (FuncType ftn)) ->
         has_effects ();
@@ -7509,27 +7439,70 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont (Chunk ((predsymb, true), [], real_unit, [fterm], None)::h) retval
         end
       | _ ->
-      match try_assoc' (pn,ilist) g funcmap with
-        None ->
-        begin match try_assoc' (pn,ilist) g purefuncmap with
-          None -> static_error l ("No such function: " ^ g)
-        | Some (lg, callee_tparams, rt, pts, gs) ->
-          let (w, t) = check_expr (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) in
-          cont h (Some (ev w, t))
-        end
-      | Some (funenv, fterm, lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v) ->
+      match resolve (pn,ilist) l g funcmap with
+        Some (g, (funenv, fterm, lg,k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body,fbf,v)) ->
         has_effects ();
-        if fb <>fbf then static_error l ("Wrong function binding "^(tostring fb)^" instead of "^(tostring fbf));
+        if fb <> fbf then static_error l ("Wrong function binding: " ^ tostring fb ^ " instead of " ^ tostring fbf);
         if body = None then register_prototype_used lg g;
-        let _ = if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." in
-        let _ = if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." in
+        if pure && k = Regular then static_error l "Cannot call regular functions in a pure context.";
+        if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context.";
         check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, v) cont
-      ) 
+      | None ->
+      match try_assoc' (pn,ilist) g purefuncmap with
+      | Some (lg, callee_tparams, rt, pts, gs) ->
+        let (w, t) = check_expr (pn,ilist) tparams tenv (CallExpr (l, g, targs, [], pats,fb)) in
+        cont h (Some (ev w, t))
+      | None ->
+      static_error l (match language with Java -> "No such method or function" | CLang -> "No such function")
+    in
+    let call_stmt l xo g targs pats fb cont =
+      if language = CLang then func_call_stmt l xo g targs pats fb cont else
+      if startswith g "new " then
+        let cn = String.sub g 4 (String.length g - 4) in
+        if pure then static_error l "Object creation is not allowed in a pure context";
+        match resolve (pn,ilist) l cn classmap with
+          None -> static_error l "No such class"
+        | Some (cn, (_, _, _, consmap, _, _, _, _)) ->
+          let args = List.map (function LitPat e -> check_expr (pn,ilist) tparams tenv e | _ -> static_error l "Patterns are not allowed here") pats in
+          let argtps = List.map snd args in
+          let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
+          match consmap' with
+            [] -> static_error l "No matching constructor"
+          | [(sign, (lm, xmap, pre, pre_tenv, post, ss, v))] ->
+            let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
+            assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
+            assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
+            check_correct None (Some g) targs pats (lm, [], None, xmap, ["this", obj], pre, post, Static) $. fun h None ->
+            cont h (Some (obj, ObjType cn))
+          | _ -> static_error l "Multiple matching overloads"
+      else (* startswith g "new " *)
+        match fb with
+          Static -> func_call_stmt l xo g targs pats fb cont
+        | Instance ->
+          if pure then static_error l "Method call is not allowed in a pure context";
+          let args = List.map (function LitPat e -> check_expr (pn,ilist) tparams tenv e | _ -> static_error l "Patterns are not allowed here") pats in
+          let (arg0, arg0tp)::args' = args in
+          let (tn, pats, fb) =
+            match arg0tp with
+              ObjType tn -> (tn, pats, Instance)
+            | ClassOrInterfaceName tn -> (tn, List.tl pats, Static)
+            | _ -> static_error l "Target of method call must be object or class"
+          in
+          let argtps = List.map snd args' in
+          let ms = get_methods tn g in
+          let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
+          begin match ms with
+            [] -> static_error l "No matching method"
+          | [(sign, (tn', lm, rt, xmap, pre, post, fb', v))] ->
+            if fb <> fb' then static_error l ("Wrong method binding: " ^ tostring fb ^ " instead of " ^ tostring fb');
+            check_correct xo (Some g) targs pats (lm, [], rt, xmap, [], pre, post, v) cont
+          | _ -> static_error l "Multiple matching overloads"
+          end
     in 
     let check_type h retval =
       begin match (typ0, retval) with
         (Some _, None) -> static_error l "Call does not return a value"
-      | (Some typ0, Some (term, typ)) -> expect_type (pn,ilist) l typ typ0
+      | (Some typ0, Some (term, typ)) -> expect_type l typ typ0
       | (None, _) -> ()
       end;
       cont h retval
@@ -7729,7 +7702,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin match (rt, rt1) with
           (None, _) -> ()
-        | (Some t, Some t1) -> expect_type_core (pn,ilist) l "Function return type: " t1 t
+        | (Some t, Some t1) -> expect_type_core l "Function return type: " t1 t
         | _ -> static_error l "Return type mismatch: Function does not return a value"
         end;
         begin match zip xmap xmap1 with
@@ -7737,7 +7710,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some bs ->
           List.iter
             begin fun ((x, tp), (x1, tp1)) ->
-              expect_type_core (pn,ilist) l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1
+              expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1
             end
             bs
         end;
@@ -7774,7 +7747,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               begin match rt1 with
                 None -> static_error ld "Function does not return a value"
               | Some rt1 ->
-                expect_type (pn,ilist) ld rt1 t;
+                expect_type ld rt1 t;
                 (List.rev ss_before, lc, Some (x, t), ss_after)
               end
             | s::ss_after -> iter (s::ss_before) ss_after

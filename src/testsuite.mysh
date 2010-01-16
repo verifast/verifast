@@ -130,4 +130,5 @@ verifast_both -c -allow_should_fail redux.c redux2.c redux3.c redux4.c redux5.c 
 verifast_both -c -allow_should_fail switch.c
 verifast_both -c -allow_should_fail override.java
 verifast_both -c -allow_should_fail override2.java
+verifast_both -c -allow_should_fail override3.java
 verifast_both -c -allow_should_fail superctor.java

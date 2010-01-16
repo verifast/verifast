@@ -43,8 +43,7 @@ public class MyApplet extends Applet {
         if (bLen != 0) {
             someByteArray = new byte[bLen];
             //@ close Applet_(MyApplet.class)(theApplet);
-            Applet theApplet_ = theApplet; // TODO: Eliminate this upcast
-            theApplet_.register();
+            theApplet.register();
             return;
         } else
             ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
