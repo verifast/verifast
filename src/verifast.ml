@@ -7339,13 +7339,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
-  (* Region: verification of statements *)
-  
-  let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont =
-    stats#stmtExec;
-    let l = stmt_loc s in
-    if verbose then printff "%s: Executing statement (timestamp: %f)\n" (string_of_loc l) (Sys.time ());
-    check_breakpoint h env l;
+  let rec verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont =
+    let verify_expr h env typ0 xo e cont = verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in
+    let l = expr_loc e in
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
     let eval_h0 = eval_h (pn,ilist) in
@@ -7356,8 +7352,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
     in 
     let ev e = eval env e in
-    let cont= tcont sizemap tenv ghostenv
-    in
     let check_assign l x =
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
     in
@@ -7529,85 +7523,126 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         check_correct xo (Some g) targs pats (lg, tparams, tr, ps, funenv, pre, post, v) cont
       ) 
     in 
-    let rec verify_expr typ0 xo e cont =
-      let l = expr_loc e in
-      let check_type h retval =
-        begin match (typ0, retval) with
-          (Some _, None) -> static_error l "Call does not return a value"
-        | (Some typ0, Some (term, typ)) -> expect_type (pn,ilist) l typ typ0
-        | (None, _) -> ()
-        end;
-        cont h retval
-      in
-      let new_array l elem_tp length elems =
-        let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
-        let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
-        assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
-        assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
-        cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) (Some (at, ArrayType elem_tp))
-      in
-      match e with
-      | CastExpr (l, te, (CallExpr (_, "malloc", _, _, _, _) as e)) ->
-        let t = check_pure_type (pn,ilist) tparams te in
-        verify_expr (Some t) xo e $. fun h (Some (v, _)) ->
-        check_type h (Some (v, t))
-      | CallExpr (l, "malloc", [], [], args,Static) ->
-        begin match args with
-          [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
-          let fds =
-            match try_assoc tn structmap with
-              None -> static_error l "No such struct"
-            | Some (_, None, _) -> static_error l "Argument of sizeof cannot be struct type declared without a body."
-            | Some (_, Some fds, _) -> fds
-          in
-          let resultType = PtrType (StructType tn) in
-          let result = get_unique_var_symb (match xo with None -> tn | Some x -> x) resultType in
-          let cont h = check_type h (Some (result, resultType)) in
-          branch
-            (fun () ->
-               assume_eq result (ctxt#mk_intlit 0) (fun () ->
-                 cont h
-               )
-            )
-            (fun () ->
-               assume_neq result (ctxt#mk_intlit 0) (fun () ->
-                 let rec iter h fds =
-                   match fds with
-                     [] ->
-                     let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-                     cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)])
-                   | (f, (lf, gh, t))::fds ->
-                     assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
-                     iter h fds
-                 in
-                 iter h fds
-               )
-            )
-        | _ -> call_stmt l xo "malloc" [] args Static check_type
-        end
-      | CallExpr (lc, g, targs, [], pats,fb) ->
-        call_stmt lc xo g targs pats fb check_type
-      | NewArray(l, tp, e) ->
-        let elem_tp = check_pure_type (pn,ilist) tparams tp in
-        let w = check_expr_t (pn,ilist) tparams tenv e IntType in
-        eval_h h env w $. fun h lv ->
-        if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative";
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
-        let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
-        assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
-        new_array l elem_tp lv elems
-      | NewArrayWithInitializer(l, tp, es) ->
-        let elem_tp = check_pure_type (pn,ilist) tparams tp in
-        let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
-        evhs h env ws $. fun h vs ->
-        let elems = mk_list elem_tp vs in
-        let lv = ctxt#mk_intlit (List.length vs) in
-        new_array l elem_tp lv elems
-      | e ->
-        let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
-        eval_h h env w $. fun h v ->
-        cont h (Some (v, t))
+    let check_type h retval =
+      begin match (typ0, retval) with
+        (Some _, None) -> static_error l "Call does not return a value"
+      | (Some typ0, Some (term, typ)) -> expect_type (pn,ilist) l typ typ0
+      | (None, _) -> ()
+      end;
+      cont h retval
     in
+    let new_array l elem_tp length elems =
+      let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
+      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
+      assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
+      assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
+      cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) (Some (at, ArrayType elem_tp))
+    in
+    match e with
+    | CastExpr (l, te, (CallExpr (_, "malloc", _, _, _, _) as e)) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      verify_expr h env (Some t) xo e $. fun h (Some (v, _)) ->
+      check_type h (Some (v, t))
+    | CallExpr (l, "malloc", [], [], args,Static) ->
+      begin match args with
+        [LitPat (SizeofExpr (lsoe, StructTypeExpr (ltn, tn)))] ->
+        let fds =
+          match try_assoc tn structmap with
+            None -> static_error l "No such struct"
+          | Some (_, None, _) -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+          | Some (_, Some fds, _) -> fds
+        in
+        let resultType = PtrType (StructType tn) in
+        let result = get_unique_var_symb (match xo with None -> tn | Some x -> x) resultType in
+        let cont h = check_type h (Some (result, resultType)) in
+        branch
+          (fun () ->
+             assume_eq result (ctxt#mk_intlit 0) (fun () ->
+               cont h
+             )
+          )
+          (fun () ->
+             assume_neq result (ctxt#mk_intlit 0) (fun () ->
+               let rec iter h fds =
+                 match fds with
+                   [] ->
+                   let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
+                   cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)])
+                 | (f, (lf, gh, t))::fds ->
+                   assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
+                   iter h fds
+               in
+               iter h fds
+             )
+          )
+      | _ -> call_stmt l xo "malloc" [] args Static check_type
+      end
+    | CallExpr (lc, g, targs, [], pats,fb) ->
+      call_stmt lc xo g targs pats fb check_type
+    | NewArray(l, tp, e) ->
+      let elem_tp = check_pure_type (pn,ilist) tparams tp in
+      let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+      eval_h h env w $. fun h lv ->
+      if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative";
+      let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
+      let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
+      assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
+      new_array l elem_tp lv elems
+    | NewArrayWithInitializer(l, tp, es) ->
+      let elem_tp = check_pure_type (pn,ilist) tparams tp in
+      let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
+      evhs h env ws $. fun h vs ->
+      let elems = mk_list elem_tp vs in
+      let lv = ctxt#mk_intlit (List.length vs) in
+      new_array l elem_tp lv elems
+    | e ->
+      let (w, t) = match typ0 with None -> check_expr (pn,ilist) tparams tenv e | Some tpx -> (check_expr_t (pn,ilist) tparams tenv e tpx, tpx) in
+      eval_h h env w $. fun h v ->
+      cont h (Some (v, t))
+  in
+  
+  (* Region: verification of statements *)
+  
+  let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont =
+    stats#stmtExec;
+    let l = stmt_loc s in
+    if verbose then printff "%s: Executing statement (timestamp: %f)\n" (string_of_loc l) (Sys.time ());
+    check_breakpoint h env l;
+    let eval0 = eval (pn,ilist) in
+    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
+    let eval_h0 = eval_h (pn,ilist) in
+    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont in
+    let rec evhs h env es cont =
+      match es with
+        [] -> cont h []
+      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+    in 
+    let ev e = eval env e in
+    let cont= tcont sizemap tenv ghostenv
+    in
+    let check_assign l x =
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
+    in
+    let vartp l x = 
+      match try_assoc x tenv with
+          None -> 
+        begin
+          match try_assoc' (pn, ilist) x globalmap with
+            None -> static_error l ("No such variable: "^x)
+          | Some((l, tp, symbol)) -> (tp, Some(symbol))
+        end 
+      | Some tp -> (tp, None) 
+    in
+    let update_local_or_global h env tpx x symb w cont =
+      match symb with
+        None -> cont h (update env x w)
+      | Some(symb) -> 
+          let predSymb = pointee_pred_symb l tpx in
+          get_points_to (pn,ilist) h symb predSymb l (fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission.";
+            cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
+    in
+    let verify_expr h env typ0 xo e cont = verify_expr (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env typ0 xo e cont in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
@@ -7853,7 +7888,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
       assume (ctxt#mk_eq (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
-    | ExprStmt (CallExpr (l, "free", [], [], args,Static)) ->
+    | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here") args in
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
@@ -7875,7 +7910,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun _ h coef _ _ _ _ _ ->
             iter h fds
           )
-        | _ -> call_stmt l None "free" [] (List.map (fun e -> LitPat e) args) Static (fun h _ -> cont h env)
+        | _ ->
+          verify_expr h env None None e (fun h _ -> cont h env)
       end
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments.";
@@ -7921,7 +7957,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin fun cont ->
             match e with
               None -> cont h (get_unique_var_symb_non_ghost x t)
-            | Some e -> verify_expr (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
+            | Some e -> verify_expr h env (Some t) (Some x) e $. fun h (Some (v, _)) -> cont h v
           end $. fun h v ->
           let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
           iter h ((x, t)::tenv') ghostenv' ((x, v)::env') xs
@@ -7936,7 +7972,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin match lhs with
         Var (lx, x, _) ->
         let (tpx, symb) = vartp l x in
-        verify_expr (Some tpx) (Some x) rhs $. fun h (Some (v, _)) ->
+        verify_expr h env (Some tpx) (Some x) rhs $. fun h (Some (v, _)) ->
         check_assign l x;
         update_local_or_global h env tpx x symb v cont
       | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
@@ -7972,10 +8008,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont (Chunk ((predSymb, true), [], real_unit, [t; ev wrhs], None)::h) env)
         )
       end
-    | ExprStmt (CallExpr (l, g, targs, pats0, es, fb)) ->
-      if pats0 <> [] then static_error l "Only a single argument list is allowed here";
-      List.iter (function LitPat e -> () | VarPat x -> static_error l "No variable patterns allowed here" | DummyPat -> static_error l "No dummy patterns allowed here") es;
-      call_stmt l None g targs es fb (fun h _ -> cont h env)
+    | ExprStmt (CallExpr (l, g, targs, pats0, es, fb) as e) ->
+      verify_expr h env None None e (fun h _ -> cont h env)
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
