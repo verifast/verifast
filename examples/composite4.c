@@ -323,8 +323,8 @@ fixpoint bool contains_at_path(tree nodes, path path, struct node *node) {
             return
                 switch (path) {
                     case here: return node == rootNode;
-                    case left(path): return contains_at_path(leftNodes, path, node);
-                    case right(path): return contains_at_path(rightNodes, path, node);
+                    case left(path0): return contains_at_path(leftNodes, path0, node);
+                    case right(path0): return contains_at_path(rightNodes, path0, node);
                 };
     }
 }
@@ -387,8 +387,8 @@ fixpoint tree get_subtree_nodes_at_path(tree subtreeNodes, path path) {
             return
                 switch (path) {
                     case here: return subtreeNodes;
-                    case left(path): return get_subtree_nodes_at_path(leftNodes, path);
-                    case right(path): return get_subtree_nodes_at_path(rightNodes, path);
+                    case left(path0): return get_subtree_nodes_at_path(leftNodes, path0);
+                    case right(path0): return get_subtree_nodes_at_path(rightNodes, path0);
                 };
     }
 }
