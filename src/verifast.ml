@@ -541,7 +541,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         start_token();
         text_junk ();
         ident ()
-    | '(' -> text_junk (); Some(ident_or_keyword "(" false)
+    | '(' -> start_token(); text_junk (); Some(ident_or_keyword "(" false)
     | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | ':' | '<' | '=' | '>' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
@@ -8045,13 +8045,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ))
     | SwitchStmt (l, e, cs) ->
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
-      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      verify_expr false h env None None e $. fun h v ->
+      let (v, tp) = match v with None -> static_error l "Type mismatch" | Some (v, tp) -> (v, tp) in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match tp with
         InductiveType (i, targs) ->
         let (tn, targs, Some (_, tparams, ctormap)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip tparams targs in
-        let t = ev w in
         let rec iter ctors cs =
           match cs with
             [] ->
@@ -8092,19 +8092,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let Some (_, _, _, _, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
             let sizemap =
-              match try_assq t sizemap with
+              match try_assq v sizemap with
                 None -> sizemap
               | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
             in
             branch
-              (fun _ -> assume_eq t (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+              (fun _ -> assume_eq v (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
               (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
         in
         iter (List.map (function (cn, _) -> cn) ctormap) cs
       | Char | ShortType | IntType -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
         if n > 1 then static_error l "switch statement can have at most one default clause";
-        eval_h h env w $. fun h switch_term ->
         let cs0 = cs in
         let rec fall_through h env cs =
           match cs with
@@ -8127,7 +8126,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               SwitchStmtIntClause (l, i, ss) ->
               let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
               eval_h h env w2 $. fun h t ->
-              assume_eq t switch_term $. fun () ->
+              assume_eq t v $. fun () ->
               fall_through h env cs
             | SwitchStmtDefaultClause (l, ss) ->
               let restr =
@@ -8136,7 +8135,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     match clause with
                       SwitchStmtIntClause (l, i, ss) -> 
                         let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
-                        ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq switch_term (ev w2))) 
+                        ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
                     | _ -> state
                   end
                   ctxt#mk_true cs0
