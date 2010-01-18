@@ -212,7 +212,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         //@ open room_members(room, _);
         //@ assert lseg(membersList, 0, ?members, @member);
         //@ ghost_list_member_handle_lemma();
-        remove(&room->members, member);
+        lseg_remove(&room->members, member);
         //@ assert pointer(&room->members, ?list);
         //@ close room_members(room, list);
         //@ assert pointer((void *)member, ?memberNext);

@@ -13,7 +13,7 @@ predicate list(struct node *l, list<int> xs) =
 
 @*/
 
-struct node *cons(int value, struct node *next)
+struct node *list_cons(int value, struct node *next)
     //@ requires list(next, ?tail);
     //@ ensures list(result, cons(value, tail));
 {
@@ -84,7 +84,7 @@ struct node *map(struct node *list, mapfunc *f, void *data)
         struct node *fnext = map(list->next, f, data);
         //@ assert list(fnext, ?ftail);
         //@ close list(list, xs);
-        struct node *result = cons(fvalue, fnext);
+        struct node *result = list_cons(fvalue, fnext);
         //@ append_assoc(out, cons(fvalue, nil), ftail);
         return result;
     }
@@ -122,17 +122,17 @@ int main() //@ : main
 {
     struct node *l = 0;
     //@ close list(0, nil);
-    l = cons(3, l);
-    l = cons(2, l);
-    l = cons(1, l);
+    l = list_cons(3, l);
+    l = list_cons(2, l);
+    l = list_cons(1, l);
     //@ close mapfunc(plusOne)(0, cons(1, cons(2, cons(3, nil))), nil, cons(1, cons(2, cons(3, nil))));
     struct node *l2 = map(l, plusOne, 0);
     //@ open mapfunc(plusOne)(0, nil, ?ys, _);
     struct node *l3 = 0;
     //@ close list(0, nil);
-    l3 = cons(4, l3);
-    l3 = cons(3, l3);
-    l3 = cons(2, l3);
+    l3 = list_cons(4, l3);
+    l3 = list_cons(3, l3);
+    l3 = list_cons(2, l3);
     bool tmp = equals(l2, l3);
     //@ append_nil(ys);
     assert(tmp);

@@ -68,7 +68,7 @@ lemma void lseg_add(struct node *n2)
 }
 @*/
 
-void add(struct llist *list, int x)
+void llist_add(struct llist *list, int x)
   //@ requires llist(list, ?_v);
   //@ ensures llist(list, append(_v, cons(x, nil)));
 {
@@ -107,7 +107,7 @@ lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
 }
 @*/
 
-void append(struct llist *list1, struct llist *list2)
+void llist_append(struct llist *list1, struct llist *list2)
   //@ requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
   //@ ensures llist(list1, append(_v1, _v2));
 {
@@ -139,7 +139,7 @@ void append(struct llist *list1, struct llist *list2)
   }
 }
 
-void dispose(struct llist *list)
+void llist_dispose(struct llist *list)
   //@ requires llist(list, _);
   //@ ensures emp;
 {
@@ -205,7 +205,7 @@ lemma void lseg2_to_lseg(struct node *first)
 
 @*/
 
-int length(struct llist *list)
+int llist_length(struct llist *list)
   //@ requires [?frac]llist(list, ?_v);
   //@ ensures [frac]llist(list, _v) &*& result == length(_v);
 {
@@ -237,7 +237,7 @@ int length(struct llist *list)
   return c;
 }
 
-int lookup(struct llist *list, int index)
+int llist_lookup(struct llist *list, int index)
   //@ requires llist(list, ?_v) &*& 0 <= index &*& index < length(_v);
   //@ ensures llist(list, _v) &*& result == nth(index, _v);
 {
@@ -274,7 +274,7 @@ int lookup(struct llist *list, int index)
   return value;
 }
 
-int removeFirst(struct llist *l)
+int llist_removeFirst(struct llist *l)
   //@ requires llist(l, ?v) &*& v != nil;
   //@ ensures llist(l, ?t) &*& v == cons(result, t);
 {
@@ -296,15 +296,15 @@ void main0()
   //@ ensures emp;
 {
   struct llist *l = create_llist();
-  add(l, 10);
-  add(l, 20);
-  add(l, 30);
-  add(l, 40);
-  int x1 = removeFirst(l);
+  llist_add(l, 10);
+  llist_add(l, 20);
+  llist_add(l, 30);
+  llist_add(l, 40);
+  int x1 = llist_removeFirst(l);
   assert(x1 == 10);
-  int x2 = removeFirst(l);
+  int x2 = llist_removeFirst(l);
   assert(x2 == 20);
-  dispose(l);
+  llist_dispose(l);
 }
 
 int main() //@ : main
@@ -313,21 +313,21 @@ int main() //@ : main
 {
   struct llist *l1 = create_llist();
   struct llist *l2 = create_llist();
-  add(l1, 10);
-  add(l1, 20);
-  add(l1, 30);
-  add(l2, 40);
-  add(l2, 50);
-  add(l2, 60);
-  int x = removeFirst(l2); assert(x == 40);
-  append(l1, l2);
-  int n = length(l1); assert(n == 5);
-  int e0 = lookup(l1, 0); assert(e0 == 10);
-  int e1 = lookup(l1, 1); assert(e1 == 20);
-  int e2 = lookup(l1, 2); assert(e2 == 30);
-  int e3 = lookup(l1, 3); assert(e3 == 50);
-  int e4 = lookup(l1, 4); assert(e4 == 60);
-  dispose(l1);
+  llist_add(l1, 10);
+  llist_add(l1, 20);
+  llist_add(l1, 30);
+  llist_add(l2, 40);
+  llist_add(l2, 50);
+  llist_add(l2, 60);
+  int x = llist_removeFirst(l2); assert(x == 40);
+  llist_append(l1, l2);
+  int n = llist_length(l1); assert(n == 5);
+  int e0 = llist_lookup(l1, 0); assert(e0 == 10);
+  int e1 = llist_lookup(l1, 1); assert(e1 == 20);
+  int e2 = llist_lookup(l1, 2); assert(e2 == 30);
+  int e3 = llist_lookup(l1, 3); assert(e3 == 50);
+  int e4 = llist_lookup(l1, 4); assert(e4 == 60);
+  llist_dispose(l1);
   return 0;
 }
 
@@ -424,9 +424,9 @@ int main2()
     //@ ensures emp;
 {
     struct llist *l = create_llist();
-    add(l, 5);
-    add(l, 10);
-    add(l, 15);
+    llist_add(l, 5);
+    llist_add(l, 10);
+    llist_add(l, 15);
     struct iter *i1 = llist_create_iter(l);
     struct iter *i2 = llist_create_iter(l);
     int i1e1 = iter_next(i1); assert(i1e1 == 5);
@@ -435,6 +435,6 @@ int main2()
     int i2e2 = iter_next(i2); assert(i2e2 == 10);
     iter_dispose(i1);
     iter_dispose(i2);
-    dispose(l);
+    llist_dispose(l);
     return 0;
 }
