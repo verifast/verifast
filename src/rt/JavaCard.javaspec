@@ -126,7 +126,7 @@ class Util {
   public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
 	throws ArrayIndexOutOfBoundsException;
     //@ requires true;
-    //@ ensures true;
+    //@ ensures result == destOff + length;
     
   public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
     //@ requires true;

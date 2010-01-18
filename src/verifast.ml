@@ -1206,7 +1206,10 @@ let expr_fold_open iter state e =
   | Deref (l, e0, tp) -> iter state e0
   | CallExpr (l, g, targes, pats0, pats, mb) -> let state = iterpats state pats0 in let state = iterpats state pats in state
   | WPureFunCall (l, g, targs, args) -> iters state args
+  | WFunCall (l, g, targs, args) -> iters state args
+  | WFunPtrCall (l, g, args) -> iters state args
   | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
+  | NewObject (l, cn, args) -> iters state args
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
@@ -1762,7 +1765,7 @@ and
        [< e = parse_expr;
           ss = parser
             [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> [s]
-          | [< es = comma_rep parse_expr; '(_, Kwd ";") >] -> List.map (fun e -> ExprStmt e) es
+          | [< es = comma_rep parse_expr; '(_, Kwd ";") >] -> List.map (fun e -> ExprStmt e) (e::es)
        >] -> ss
      | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te x >] -> [s]
      | [< '(_, Kwd ";") >] -> []
@@ -7112,89 +7115,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     eval_core (pn,ilist) assert_term (Some read_field) env e
   in
   
-  let rec eval_h (pn,ilist) is_ghost_expr h env e cont =
-    let rec iter h e cont =
-    match e with
-      StringLit (l, s)->
-      begin match file_type path with
-        Java ->
-        let value = get_unique_var_symb "stringLiteral" (ObjType "java.lang.String") in
-        assume_neq value (ctxt#mk_intlit 0) (fun () ->
-          cont h value
-        )
-      | _ ->
-        if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead.";
-        let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
-        let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
-        let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-        let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
-        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
-        let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-        let rec string_to_term s = 
-          if String.length s == 0 then
-              ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); ctxt#mk_app nil_symb []]
-          else
-            ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
-        in
-        let coef = get_dummy_frac_term () in
-        assume (ctxt#mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
-          assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
-            assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
-              cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
-            )
-          )
-        )
-      end
-    | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
-      (* Note: we don't even have to evaluate the arguments. *)
-      let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
-      assume_neq value (ctxt#mk_intlit 0) $. fun () ->
-      cont h value
-    | WRead (l, e, fparent, fname, frange, false, fvalue, fghost) ->
-      iter h e $. fun h t ->
-      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
-      begin match lookup_points_to_chunk_core h f_symb t with
-        None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
-        get_points_to (pn,ilist) h t f_symb l $. fun h coef v ->
-        cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
-      | Some v -> cont h v
-      end
-    | WReadArray (l, arr, elem_tp, i) ->
-      iter h arr $. fun h arr ->
-      iter h i $. fun h i ->
-      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-      assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
-      let elem_tp = unfold_inferred_type elem_tp in
-      cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
-    | Operation (l, Not, [e], ts) -> eval_h (pn,ilist) is_ghost_expr h env e (fun h v -> cont h (ctxt#mk_not v))
-    | Operation (l, Eq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
-        eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
-    | Operation (l, Neq, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 (fun h v1 -> 
-        eval_h (pn, ilist) is_ghost_expr h env e2 (fun h v2 -> cont h (ctxt#mk_not (ctxt#mk_eq v1 v2))))
-    | Operation (l, And, [e1; e2], ts) -> eval_h (pn,ilist) is_ghost_expr h env e1 
-      (fun h1 v1 ->
-        branch
-          (fun _ -> assume (v1) (fun _ -> eval_h (pn,ilist) is_ghost_expr h1 env e2 cont))
-          (fun _ -> assume (ctxt#mk_not v1) (fun _ -> cont h1 ctxt#mk_false))
-      )
-    | Operation (l, Or, [e1; e2], ts) -> 
-      eval_h (pn,ilist) is_ghost_expr h env e1 
-      (fun h1 v1 ->
-        branch
-          (fun _ -> assume (v1) (fun _ -> cont h1 ctxt#mk_true))
-          (fun _ -> assume (ctxt#mk_not v1) (fun _ -> eval_h (pn,ilist) is_ghost_expr h1 env e2 cont))
-      )
-    | IfExpr (l, con, e1, e2) ->
-      eval_h (pn, ilist) is_ghost_expr h env con (fun h v ->
-        branch
-          (fun _ -> assume (v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e1 cont))
-          (fun _ -> assume (ctxt#mk_not v) (fun _ -> eval_h (pn,ilist) is_ghost_expr h env e2 cont))
-      )
-    | e -> eval_non_pure_cps iter (pn,ilist) is_ghost_expr h env e cont
-    in
-    iter h e cont
-  in
-  
   let prototypes_used : (string * loc) list ref = ref [] in
   
   let register_prototype_used l g =
@@ -7211,13 +7131,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: verification of calls *)
   
-  let verify_call l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont =
-    let eval0 = eval (pn,ilist) in
-    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
-    let eval_h0 = eval_h (pn,ilist) in
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont =
+    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval_h h env pat cont =
       match pat with
-        SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont
+        SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
       | TermPat t -> cont h t
     in
     let rec evhs h env pats cont =
@@ -7225,11 +7144,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [] -> cont h []
       | pat::pats -> eval_h h env pat (fun h v -> evhs h env pats (fun h vs -> cont h (v::vs)))
     in 
-    let ev e = eval env e in
-    let check_assign l x =
-      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
-    in
-    let vartp l x = match try_assoc x tenv with None -> static_error l ("No such variable: "^x) | Some tp -> tp in
     let tpenv =
       match zip callee_tparams targs with
         None -> static_error l "Incorrect number of type arguments."
@@ -7256,6 +7170,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_false h env l "Target of method call might be null."
     in
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
+    (fun cont -> if language = Java then with_context (Executing (h, env, l, "Verifying call")) cont else cont ()) $. fun () ->
     with_context PushSubcontext (fun () ->
       assert_pred rules tpenv (pn,ilist) h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size ->
         let _ =
@@ -7328,8 +7243,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let has_effects () = if language = CLang && readonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" in
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
-    let eval_h0 = eval_h (pn,ilist) in
-    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont in
+    let eval_h h env e cont = verify_expr true h env None e cont in
     let rec evhs h env es cont =
       match es with
         [] -> cont h []
@@ -7359,7 +7273,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
     let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, v) cont =
-      verify_call l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
+      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let new_array h l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
@@ -7409,7 +7323,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
       let check_call h args0 cont =
-        verify_call l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+        verify_call funcmap eval_h l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
       in
       begin
         match gh with
@@ -7447,7 +7361,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont h obj
       | _ -> static_error l "Multiple matching overloads"
       end
-    | WMethodCall (l, tn, m, pts, args, fb) ->
+    | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, rt, xmap, pre, post, fb', v) =
         match try_assoc tn classmap with
           Some (lc, meths, fds, constr, super, interfs, pn, ilist) ->
@@ -7483,8 +7397,79 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let elems = mk_list elem_tp vs in
       let lv = ctxt#mk_intlit (List.length vs) in
       new_array h l elem_tp lv elems
-    | e ->
-      eval_h h env e cont
+    | StringLit (l, s)->
+      begin match file_type path with
+        Java ->
+        let value = get_unique_var_symb "stringLiteral" (ObjType "java.lang.String") in
+        assume_neq value (ctxt#mk_intlit 0) (fun () ->
+          cont h value
+        )
+      | _ ->
+        if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead.";
+        let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
+        let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
+        let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
+        let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
+        let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
+        let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
+        let rec string_to_term s = 
+          if String.length s == 0 then
+              ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); ctxt#mk_app nil_symb []]
+          else
+            ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
+        in
+        let coef = get_dummy_frac_term () in
+        assume (ctxt#mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
+          assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
+            assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
+              cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
+            )
+          )
+        )
+      end
+    | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
+      eval_h h env e1 $. fun h v1 ->
+      eval_h h env e2 $. fun h v2 ->
+      let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
+      assume_neq value (ctxt#mk_intlit 0) $. fun () ->
+      cont h value
+    | WRead (l, e, fparent, fname, frange, false, fvalue, fghost) ->
+      eval_h h env e $. fun h t ->
+      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+      begin match lookup_points_to_chunk_core h f_symb t with
+        None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
+        get_points_to (pn,ilist) h t f_symb l $. fun h coef v ->
+        cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
+      | Some v -> cont h v
+      end
+    | WReadArray (l, arr, elem_tp, i) ->
+      eval_h h env arr $. fun h arr ->
+      eval_h h env i $. fun h i ->
+      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+      assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
+      let elem_tp = unfold_inferred_type elem_tp in
+      cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
+    | Operation (l, Not, [e], ts) -> eval_h h env e (fun h v -> cont h (ctxt#mk_not v))
+    | Operation (l, Eq, [e1; e2], ts) ->
+      eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
+    | Operation (l, Neq, [e1; e2], ts) ->
+      eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_not (ctxt#mk_eq v1 v2))))
+    | Operation (l, And, [e1; e2], ts) ->
+      eval_h h env e1 $. fun h v1 ->
+      branch
+        (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
+        (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h ctxt#mk_false))
+    | Operation (l, Or, [e1; e2], ts) -> 
+      eval_h h env e1 $. fun h v1 ->
+      branch
+        (fun () -> assume v1 (fun () -> cont h ctxt#mk_true))
+        (fun () -> assume (ctxt#mk_not v1) (fun () -> eval_h h env e2 cont))
+    | IfExpr (l, con, e1, e2) ->
+      eval_h h env con $. fun h v ->
+      branch
+        (fun () -> assume v (fun () -> eval_h h env e1 cont))
+        (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h h env e2 cont))
+    | e -> eval_non_pure_cps (fun h e cont -> eval_h h env e cont) (pn,ilist) pure h env e cont
   in
   
   (* Region: verification of statements *)
@@ -7498,8 +7483,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval0 = eval (pn,ilist) in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
-    let eval_h0 = eval_h (pn,ilist) in
-    let eval_h h env e cont = if not pure then check_ghost ghostenv l e; eval_h (pn,ilist) pure h env e cont in
+    let eval_h h env e cont =
+      if not pure then check_ghost ghostenv l e;
+      verify_expr true (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont
+    in
     let rec evhs h env es cont =
       match es with
         [] -> cont h []
@@ -7530,7 +7517,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission.";
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
-    let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont in
+    let verify_expr readonly h env xo e cont =
+      if not pure then check_ghost ghostenv l e;
+      verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
+    in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
@@ -8791,8 +8781,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Some e ->
         if not pure then check_ghost ghostenv l e;
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " | Some tp -> tp in
-        let w = check_expr_t (pn,ilist) tparams tenv e tp in
-        eval_h (pn,ilist) pure h env w $. fun h v ->
+        let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w $. fun h v ->
         cont h (Some v)
     end $. fun h retval ->
     begin fun cont ->
@@ -9100,7 +9090,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   static_error lm "There is no superclass constructor that matches the implicit superclass constructor call"
                 | Some (lc0, xmap0, pre0, pre_tenv0, post0, _, v0) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
-                  verify_call lm (pn, ilist) None None [] [] ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h _ ->
+                  let eval_h h env e cont = assert false (* There are no arguments to evaluate so this does not get called *) in
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] [] ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h _ ->
                   cont h
             end $. fun h ->
             verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss

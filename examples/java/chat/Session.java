@@ -109,11 +109,9 @@ public class Session implements Runnable {
         try {
             this.runCore();
         } catch (InterruptedException e) {
-            RuntimeException e0 = new RuntimeException(e);
-            throw e0;
+            throw new RuntimeException(e);
         } catch (IOException e) {
-            RuntimeException e0 = new RuntimeException(e);
-            throw e0;
+            throw new RuntimeException(e);
         }
     }
     
@@ -195,8 +193,7 @@ public class Session implements Runnable {
                         roomLock.acquire();
                         //@ open room_ctor(room)();
                         {
-                            boolean hasMember = room.has_member(nick);
-                            if (hasMember) {
+                            if (room.has_member(nick)) {
                                 //@ close room_ctor(room)();
                                 roomLock.release();
                                 writer.write("Error: This nick is already in use.\r\n");

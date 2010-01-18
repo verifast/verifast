@@ -99,20 +99,20 @@ fixpoint list<int> plusOne(list<int> xs) {
     }
 }
 
-predicate_family_instance mapfunc(plusOne)(void *data, list<int> in, list<int> out, list<int> info) =
+predicate_family_instance mapfunc(plusOneFunc)(void *data, list<int> in, list<int> out, list<int> info) =
     plusOne(info) == append(out, plusOne(in));
 
 @*/
 
-int plusOne(void *data, int x) //@ : mapfunc
-    //@ requires mapfunc(plusOne)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
-    //@ ensures mapfunc(plusOne)(data, tail(in), append(out, cons(result, nil)), info);
+int plusOneFunc(void *data, int x) //@ : mapfunc
+    //@ requires mapfunc(plusOneFunc)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
+    //@ ensures mapfunc(plusOneFunc)(data, tail(in), append(out, cons(result, nil)), info);
 {
     if (x == 2147483647) abort();
-    //@ open mapfunc(plusOne)(data, in, out, ?info_);
+    //@ open mapfunc(plusOneFunc)(data, in, out, ?info_);
     //@ append_assoc(out, cons(x + 1, nil), plusOne(tail(in)));
     //@ switch (in) { case nil: case cons(h, t): }
-    //@ close mapfunc(plusOne)(data, tail(in), append(out, cons(x + 1, nil)), info_);
+    //@ close mapfunc(plusOneFunc)(data, tail(in), append(out, cons(x + 1, nil)), info_);
     return x + 1;
 }
 
@@ -125,9 +125,9 @@ int main() //@ : main
     l = list_cons(3, l);
     l = list_cons(2, l);
     l = list_cons(1, l);
-    //@ close mapfunc(plusOne)(0, cons(1, cons(2, cons(3, nil))), nil, cons(1, cons(2, cons(3, nil))));
-    struct node *l2 = map(l, plusOne, 0);
-    //@ open mapfunc(plusOne)(0, nil, ?ys, _);
+    //@ close mapfunc(plusOneFunc)(0, cons(1, cons(2, cons(3, nil))), nil, cons(1, cons(2, cons(3, nil))));
+    struct node *l2 = map(l, plusOneFunc, 0);
+    //@ open mapfunc(plusOneFunc)(0, nil, ?ys, _);
     struct node *l3 = 0;
     //@ close list(0, nil);
     l3 = list_cons(4, l3);
