@@ -1,15 +1,17 @@
 #include "stdlib.h"
 
+enum numbers { zero, one, two };
+
 void m(int i) 
   //@ requires true;
   //@ ensures true;
 {
   int j = 0;
   switch(i) {
-    case 1:
+    case one:
       j = 2;
       break;
-    case 2:
+    case two:
       j = 2;
       break;
     default:

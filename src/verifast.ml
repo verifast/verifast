@@ -958,8 +958,7 @@ and
   | Break of loc
 and
   switch_stmt_clause =
-  | SwitchStmtClause of loc * string * string list * stmt list (* clause die hoort bij switch statement over constructor*)
-  | SwitchStmtIntClause of loc * expr * stmt list
+  | SwitchStmtClause of loc * expr * stmt list
   | SwitchStmtDefaultClause of loc * stmt list
 and
   pred = (* A separation logic assertion *)
@@ -1850,10 +1849,7 @@ and
 | [< >] -> []
 and
   parse_switch_stmt_clause = parser
-  [< '(l, Kwd "case"); clause = parser
-      [< '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, c, pats, ss)
-    | [< '(l2, Int n); '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtIntClause(l, IntLit(l2, n, ref None), ss)
-   >] -> clause
+  [< '(l, Kwd "case"); e = parse_expr; '(_, Kwd ":"); ss = parse_stmts >] -> SwitchStmtClause (l, e, ss)
 | [< '(l, Kwd "default"); '(_, Kwd ":"); ss = parse_stmts; >] -> SwitchStmtDefaultClause(l, ss)
 and
   parse_more_pats = parser
@@ -4308,7 +4304,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               static_error ls ("Missing case: '" ^ cn ^ "'.")
             end;
             wcs
-          | SwitchStmtClause (lc, cn, xs, body)::cs ->
+          | SwitchStmtClause (lc, e, body)::cs ->
+            let (cn, xs) =
+              match e with
+                CallExpr (_, cn, _, _, pats, _) ->
+                let xs = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error lc "Constructor arguments must be variable names") pats in
+                (cn, xs)
+              | Var (_, cn, _) -> (cn, [])
+              | _ -> static_error lc "Case expression must be constructor pattern"
+            in
             let ts =
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor."
@@ -4346,7 +4350,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | _ -> ()
               end
               wbody;
-            check_cs (List.remove_assoc cn ctormap) (SwitchStmtClause (lc, cn, xs, [ReturnStmt (lret, Some wbody)])::wcs) cs
+            check_cs (List.remove_assoc cn ctormap) ((cn, xs, wbody)::wcs) cs
         in
         let wcs = check_cs ctormap [] cs in
         iter ((g, (l, rt, pmap, ls, x, wcs, pn, ilist))::fpm_done) fpm_todo
@@ -5400,7 +5404,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
        let Some(_,_,_,_,fsym) =try_assoc' (pn,ilist) g purefuncmap in
        let clauses =
          List.map
-           (function (SwitchStmtClause (lc, cn, pats, [ReturnStmt (_, Some e)])) ->
+           (function (cn, pats, e) ->
               let (_, tparams, _, ts, ctorsym) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
@@ -6441,7 +6445,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some s -> assigned_variables s
       end
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> []
-    | SwitchStmt (l, e, cs) -> expr_assigned_variables e @ flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, _, ss)) -> block_assigned_variables ss | (SwitchStmtIntClause(_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
+    | SwitchStmt (l, e, cs) -> expr_assigned_variables e @ flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
     | Open (l, g, targs, ps0, ps1, coef) -> []
@@ -7077,7 +7081,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfStmt(_, e, thn, els) -> (locals_address_taken e) @ 
         (List.flatten (List.map (fun s -> locals_address_taken_stmt s) (thn @ els)))
     | SwitchStmt(_, e, clauses) -> (locals_address_taken e) @ 
-        (List.flatten (List.map (fun c -> match c with SwitchStmtClause(_, _, _, stmts) -> 
+        (List.flatten (List.map (fun c -> match c with SwitchStmtClause(_, _, stmts) -> 
           List.flatten (List.map (fun s -> locals_address_taken_stmt s) stmts)
         ) clauses))
     | Assert(_, p) -> [] (* should we look inside predicates as well? *)
@@ -7923,8 +7927,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
             end
           | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype"
-          | SwitchStmtIntClause (l, _, _) :: cs -> static_error l "integer clause not allowed in switch over inductive datatype"
-          | SwitchStmtClause (lc, cn, pats, ss)::cs ->
+          | SwitchStmtClause (lc, e, ss)::cs ->
+            let (cn, pats) =
+              match e with
+                CallExpr (lcall, cn, [], [], args, Static) ->
+                let pats = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error l "Constructor pattern arguments must be variable names") args in
+                (cn, pats)
+              | Var (_, cn, _) -> (cn, [])
+              | _ -> static_error l "Case expression must be constructor pattern"
+            in
             let pts =
               match try_assoc' (pn,ilist) cn ctormap with
                 None -> static_error lc ("Not a constructor of type " ^ tn)
@@ -7973,9 +7984,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | c::cs ->
             let ss =
               match c with
-                SwitchStmtIntClause (l, i, ss) -> ss
-              | SwitchStmtDefaultClause (l, ss) -> ss
-              | SwitchStmtClause (l,cn, pats, ss) -> static_error l "Inductive value not allowed in switch over integer"
+                SwitchStmtDefaultClause (l, ss) -> ss
+              | SwitchStmtClause (l, e, ss) -> ss
             in
             let tcont _ _ _ h env = fall_through h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) cs in
             verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
@@ -7985,7 +7995,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             [] -> if n = 0 then (* implicit default *) cont h env
           | c::cs' ->
             begin match c with
-              SwitchStmtIntClause (l, i, ss) ->
+              SwitchStmtClause (l, i, ss) ->
               let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
               eval_h h env w2 $. fun h t ->
               assume_eq t v $. fun () ->
@@ -7995,7 +8005,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 List.fold_left
                   begin fun state clause -> 
                     match clause with
-                      SwitchStmtIntClause (l, i, ss) -> 
+                      SwitchStmtClause (l, i, ss) -> 
                         let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
                         ctxt#mk_and state (ctxt#mk_not (ctxt#mk_eq v (ev w2))) 
                     | _ -> state
@@ -8004,7 +8014,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               assume restr $. fun () ->
               fall_through h env cs
-            | SwitchStmtClause (lc, cn, pats, ss) -> static_error l "inductive value not allowed in switch over integer"
             end;
             verify_cases cs'
         in
