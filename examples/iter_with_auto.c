@@ -34,7 +34,6 @@ struct llist *create_llist()
   //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
-  //@ close llist(l, _);
   return l;
 }
 
@@ -56,15 +55,10 @@ lemma void lseg_add(struct node *n2)
   distinct_nodes(n2, n3);
   open lseg(n1, n2, _v);
   if (n1 == n2) {
-    close lseg(n3, n3, _);
   } else {
     distinct_nodes(n1, n3);
-    open node(n1, _, _);
     lseg_add(n2);
-    close node(n1, _, _);
   }
-  
-  close lseg(n1, n3, _);
 }
 @*/
 
@@ -73,20 +67,15 @@ void llist_add(struct llist *list, int x)
   //@ ensures llist(list, append(_v, cons(x, nil)));
 {
   struct node *l = 0;
-  //@ open llist(list, _v);
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) {
     abort();
   }
-  //@ close node(n, _, _);
   l = list->last;
-  //@ open node(l, _, _);
   l->next = n;
   l->value = x;
-  //@ close node(l, _, _);
   list->last = n;
   //@ lseg_add(l);
-  //@ close llist(list, _);
 }
 
 /*@
@@ -99,10 +88,8 @@ lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
     case nil:
     case cons(x, v):
       distinct_nodes(n1, n3);
-      open node(n1, _, _);
       lseg_append(n1->next, n2, n3);
       close node(n1, _, _);
-      close lseg(n1, n3, _);
   }
 }
 @*/
@@ -111,29 +98,20 @@ void llist_append(struct llist *list1, struct llist *list2)
   //@ requires llist(list1, ?_v1) &*& llist(list2, ?_v2);
   //@ ensures llist(list1, append(_v1, _v2));
 {
-  //@ open llist(list1, _v1);
-  //@ open llist(list2, _v2);
   struct node *l1 = list1->last;
   struct node *f2 = list2->first;
   struct node *l2 = list2->last;
   //@ open lseg(f2, l2, _v2);  // Causes case split.
   if (f2 == l2) {
-    //@ open node(l2, _, _);
     free(l2);
     free(list2);
-    // //@ append_nil(_v1); // inferred by VeriFast
-    //@ close llist(list1, _v1);
   } else {
     //@ distinct_nodes(l1, l2);
-    //@ open node(l1, _, _);
-    //@ open node(f2, _, _);
     l1->next = f2->next;
     l1->value = f2->value;
     list1->last = l2;
-    //@ close node(l1, l1->next, l1->value);
     //@ close lseg(l1, l2, _v2);
     //@ lseg_append(list1->first, l1, l2);
-    //@ close llist(list1, append(_v1, _v2));
     free(f2);
     free(list2);
   }
@@ -143,13 +121,11 @@ void llist_dispose(struct llist *list)
   //@ requires llist(list, _);
   //@ ensures emp;
 {
-  //@ open llist(list, _);
   struct node *n = list->first;
   struct node *l = list->last;
   while (n != l)
     //@ invariant lseg(n, l, _);
   {
-    //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     struct node *next = n->next;
     free(n);
@@ -162,7 +138,7 @@ void llist_dispose(struct llist *list)
 
 /*@
 
-predicate lseg2(struct node *first, struct node *last, struct node *final, list<int> v)
+predicate lseg2(struct node *first, struct node *last, struct node *final, list<int> v;)
   requires
     switch (v) {
       case nil: return first == last;
@@ -231,7 +207,6 @@ int llist_length(struct llist *list)
     //@ append_assoc(_ls1, cons(value, nil), ls3);
   }
   //@ open lseg(n, l, _ls2);
-  // //@ append_nil(_ls1); // inferred by VeriFast
   //@ lseg2_to_lseg(f);
   //@ close [frac]llist(list, _v);
   return c;
@@ -241,22 +216,17 @@ int llist_lookup(struct llist *list, int index)
   //@ requires llist(list, ?_v) &*& 0 <= index &*& index < length(_v);
   //@ ensures llist(list, _v) &*& result == nth(index, _v);
 {
-  //@ open llist(list, _);
   struct node *f = list->first;
   struct node *l = list->last;
   struct node *n = f;
   int i = 0;
   //@ close lseg(f, n, nil);
-  // //@ drop_0(_v); // inferred by VeriFast
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + length(_ls2) == length(_v);
   {
-    //@ length_drop(i, _v);
-    //@ open lseg(n, l, _);
     //@ open node(n, _, _);
     //@ int value = n->value;
     struct node *next = n->next;
-    //@ close node(n, next, n->value);
     //@ open lseg(next, l, ?ls3); // To produce a witness node for next.
     //@ lseg_add(n);
     //@ close lseg(next, l, ls3);
@@ -265,7 +235,6 @@ int llist_lookup(struct llist *list, int index)
     i = i + 1;
     //@ append_assoc(_ls1, cons(value, nil), ls3);
   }
-  //@ open lseg(n, l, _ls2);
   //@ open node(n, ?nnext, _);
   int value = n->value;
   //@ close lseg(n, l, _ls2);
@@ -278,16 +247,12 @@ int llist_removeFirst(struct llist *l)
   //@ requires llist(l, ?v) &*& v != nil;
   //@ ensures llist(l, ?t) &*& v == cons(result, t);
 {
-  //@ open llist(l, v);
   struct node *nf = l->first;
   //@ open lseg(nf, ?nl, v);
-  //@ open node(nf, _, _);
   struct node *nfn = nf->next;
   int nfv = nf->value;
   free(nf);
   l->first = nfn;
-  //@ assert lseg(nfn, nl, ?t);
-  //@ close llist(l, t);
   return nfv;
 }
 
@@ -351,7 +316,6 @@ struct iter *llist_create_iter(struct llist *l)
 {
     struct iter *i = 0;
     struct node *f = 0;
-    //@ split_fraction llist(l, v) by 1/2;
     i = malloc(sizeof(struct iter));
     if (i == 0) {
       abort();
