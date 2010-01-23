@@ -174,6 +174,7 @@ class stats =
     val mutable definitelyEqualQueryCount = 0
     val mutable proverOtherQueryCount = 0
     val mutable proverStats = ""
+    val mutable overhead: <path: string; nonghost_lines: int; ghost_lines: int; mixed_lines: int> list = []
     
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method stmtExec = stmtExecCount <- stmtExecCount + 1
@@ -184,8 +185,20 @@ class stats =
     method definitelyEqualQuery = definitelyEqualQueryCount <- definitelyEqualQueryCount + 1
     method proverOtherQuery = proverOtherQueryCount <- proverOtherQueryCount + 1
     method appendProverStats s = proverStats <- proverStats ^ s
+    method overhead ~path ~nonGhostLineCount ~ghostLineCount ~mixedLineCount =
+      let (basepath, relpath) = path in
+      let path = Filename.concat basepath relpath in
+      let o = object method path = path method nonghost_lines = nonGhostLineCount method ghost_lines = ghostLineCount method mixed_lines = mixedLineCount end in
+      overhead <- o::overhead
     
     method printStats =
+      print_endline ("Syntactic annotation overhead statistics:");
+      List.iter
+        begin fun o ->
+          Printf.printf "  %20s: lines: code: %4d; annot: %4d; mixed: %4d\n"
+            o#path o#nonghost_lines o#ghost_lines o#mixed_lines
+        end
+        overhead;
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
       print_endline ("Statement executions: " ^ string_of_int stmtExecCount);
       print_endline ("Execution steps (including assertion production/consumption steps): " ^ string_of_int execStepCount);
@@ -446,7 +459,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   in
   let bufpos = ref 0
   in
-
+  
   let reset_buffer () = buffer := initial_buffer; bufpos := 0
   in
 
@@ -478,6 +491,29 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   
   let ignore_eol = ref true in
   
+  (* Statistics *)
+  let non_ghost_line_count = ref 0 in
+  let ghost_line_count = ref 0 in
+  let mixed_line_count = ref 0 in
+  let last_line_with_non_ghost = ref 0 in
+  let last_line_with_ghost = ref 0 in
+  
+  let report_nontrivial_token () =
+    if !ghost_range_start <> None then begin
+      if !last_line_with_ghost < !line then begin
+        last_line_with_ghost := !line;
+        incr ghost_line_count;
+        if !last_line_with_non_ghost = !line then incr mixed_line_count
+      end
+    end else begin
+      if !last_line_with_non_ghost < !line then begin
+        last_line_with_non_ghost := !line;
+        incr non_ghost_line_count;
+        if !last_line_with_ghost = !line then incr mixed_line_count
+      end
+    end
+  in
+
   let error msg =
       raise (Stream.Error msg)
   in
@@ -488,6 +524,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   List.iter (fun s -> Hashtbl.add ghost_kwd_table s (Kwd s)) (keywords @ ghostKeywords);
   let get_kwd_table() = if !ghost_range_start = None then kwd_table else ghost_kwd_table in
   let ident_or_keyword id isAlpha =
+    report_nontrivial_token();
     try
       let t = Hashtbl.find (get_kwd_table()) id in
       if isAlpha then
@@ -570,6 +607,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | '\000' ->
       in_ghost_range := !ghost_range_start <> None;
       ghost_range_end();
+      stats#overhead ~path:path ~nonGhostLineCount:!non_ghost_line_count ~ghostLineCount:!ghost_line_count ~mixedLineCount:!mixed_line_count;
       None
     | c -> start_token(); text_junk (); Some (keyword_or_error c)
   and ident () =
