@@ -195,4 +195,12 @@ fixpoint boolean all_eq<t>(list<t> xs, t x0) {
     }
 }
 
+lemma_auto(all_eq(append(xs1, xs2), x0)) void all_eq_append<t>(list<t> xs1, list<t> xs2, t x0);
+    requires true;
+    ensures all_eq(append(xs1, xs2), x0) == (all_eq(xs1, x0) && all_eq(xs2, x0));
+
+lemma_auto(drop(length(xs1), append(xs1, xs2))) void drop_append<t>(list<t> xs1, list<t> xs2);
+    requires true;
+    ensures drop(length(xs1), append(xs1, xs2)) == xs2;
+
 @*/

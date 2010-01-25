@@ -1237,7 +1237,7 @@ let expr_fold_open iter state e =
   | ClassLit (l, cn) -> state
   | Read (l, e0, f) -> iter state e0
   | ArrayLengthExpr (l, e0) -> iter state e0
-  | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> iter state e0
+  | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state
   | Deref (l, e0, tp) -> iter state e0
@@ -6085,22 +6085,53 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       predinstmap
   in
   
-  let contains_edges =
+  (* Those predicate instances that, under certain conditions on the input parameters, are likely to be closeable. *)
+  let empty_preds =
     flatmap
       begin fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) as predinst) ->
         let (_, _, _, _, symb, _) = List.assoc p predfammap in
-        let indexCount = List.length fns in
         let fsymbs = List.map term_of_pred_index fns in
         match inputParamCount with
           None -> []
         | Some n ->
           let inputVars = List.map fst (take n xs) in
-          let rec iter wbody =
+          let rec iter conds wbody cont =
+            match wbody with
+            | Sep (_, asn1, asn2) ->
+              iter conds asn1 (fun conds -> iter conds asn2 cont)
+            | IfPred (_, cond, asn1, asn2) ->
+              if expr_is_fixed inputVars cond then
+                iter (cond::conds) asn1 cont @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2 cont
+              else
+                []
+            | ExprPred (_, Operation (_, Eq, [Var (_, x, _); e], _)) when not (List.mem x inputVars) && expr_is_fixed inputVars e ->
+              cont conds
+            | ExprPred (_, e) when expr_is_fixed inputVars e ->
+              cont (e::conds)
+            | EmpPred _ -> cont conds
+            | _ -> []
+          in
+          let conds = iter [] wbody (fun conds -> [conds]) in
+          if conds <> [] then [(symb, fsymbs, conds, predinst)] else []
+      end
+      predinstmap
+  in
+  
+  let contains_edges =
+    flatmap
+      begin fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) as predinst) ->
+        let (_, _, _, _, symb, _) = List.assoc p predfammap in
+        let fsymbs = List.map term_of_pred_index fns in
+        match inputParamCount with
+          None -> []
+        | Some n ->
+          let inputVars = List.map fst (take n xs) in
+          let rec iter conds wbody =
             match wbody with
               WAccess (_, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
               if expr_is_fixed inputVars e then
                 let (_, (_, _, _, [tp; _], symb', _)) = List.assoc (fparent, fname) field_pred_map in
-                [(symb, fsymbs, symb', [], [tp], [e], predinst)]
+                [(symb, fsymbs, symb', [], [tp], [e], conds, predinst)]
               else
                 []
             | WCallPred (_, g, targs, pats0, pats) ->
@@ -6114,20 +6145,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   let Some tpenv = zip tparams targs in
                   let inputArgs = List.map (fun (LitPat e) -> e) (take n' pats) in
                   if List.for_all (fun e -> expr_is_fixed inputVars e) inputArgs then
-                    [(symb, fsymbs, symb', targs, List.map (instantiate_type tpenv) (take n' tps), inputArgs, predinst)]
+                    [(symb, fsymbs, symb', targs, List.map (instantiate_type tpenv) (take n' tps), inputArgs, conds, predinst)]
                   else
                     []
                 end
               end
             | Sep (_, asn1, asn2) ->
-              iter asn1 @ iter asn2
-            | IfPred (_, _, asn1, asn2) ->
-              iter asn1 @ iter asn2
+              iter conds asn1 @ iter conds asn2
+            | IfPred (_, cond, asn1, asn2) ->
+              if expr_is_fixed inputVars cond then
+                iter (cond::conds) asn1 @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2
+              else
+                iter conds asn1 @ iter conds asn2
             | SwitchPred (_, _, cs) ->
-              flatmap (fun (SwitchPredClause (_, _, _, _, asn)) -> iter asn) cs
+              flatmap (fun (SwitchPredClause (_, _, _, _, asn)) -> iter conds asn) cs
             | _ -> []
           in
-          iter wbody
+          iter [] wbody
       end
       predinstmap
   in
@@ -6175,6 +6209,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             else
               let elems1 = mk_take (ctxt#mk_sub index istart') elems in
               let elems2 = mk_drop (ctxt#mk_sub index istart') elems in
+              assume (ctxt#mk_eq elems (mk_append elems1 elems2)) $. fun () ->
               let chunk0 = Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart'; index; elems1], None) in
               split_after elems2 (chunk0::h)
           else
@@ -6240,8 +6275,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Chunk ((array_slice_symb, true), [elem_tp], coef, [arr; istart; iend; elems], None)
           in
           let before_length = ctxt#mk_sub istart istart0 in
-          let chunk_before = mk_chunk istart0 istart (mk_take before_length elems0) in
-          let slices = [(istart, iend0, mk_drop before_length elems0)] in
+          let elems0_before = mk_take before_length elems0 in
+          let elems0_notbefore = mk_drop before_length elems0 in
+          assume (ctxt#mk_eq elems0 (mk_append elems0_before elems0_notbefore)) $. fun () ->
+          let chunk_before = mk_chunk istart0 istart elems0_before in
+          let slices = [(istart, iend0, elems0_notbefore)] in
           let rec find_slices slices curr_end h cont' =
             if ctxt#query (ctxt#mk_le iend curr_end) then
               (* found a list of chunks all the way to the end *)
@@ -6254,7 +6292,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           find_slices slices iend0 h $. fun ((istart_last, iend_last, elems_last)::slices, h) ->
           let length_last = ctxt#mk_sub iend istart_last in
-          let slices = List.rev ((istart_last, iend, mk_take length_last elems_last)::slices) in
+          let elems_last_notafter = mk_take length_last elems_last in
+          let elems_last_after = mk_drop length_last elems_last in
+          assume (ctxt#mk_eq elems_last (mk_append elems_last_notafter elems_last_after)) $. fun () ->
+          let slices = List.rev ((istart_last, iend, elems_last_notafter)::slices) in
           let rec mk_concat lists =
             match lists with
               [] -> mk_nil()
@@ -6263,7 +6304,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let target_elems = mk_concat (List.map (fun (istart, iend, elems) -> elems) slices) in
           let target_chunk = mk_chunk istart iend target_elems in
-          let chunk_after = mk_chunk iend iend_last (mk_drop length_last elems_last) in
+          let chunk_after = mk_chunk iend iend_last elems_last_after in
           cont (Some (target_chunk::chunk_before::chunk_after::h))
       in
       let get_slice_deep_rule h [elem_tp; a_tp; v_tp] [arr; istart; iend; p; info] cont = 
@@ -6366,7 +6407,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     end;
     (* auto-open/close rules for chunks that contain other chunks *)
     List.iter
-      begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+      begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
         let g = (symb, true) in
         let indexCount = List.length fns in
         let Some n = inputParamCount in
@@ -6381,7 +6422,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs1 in
           targs2 = List.map (instantiate_type tpenv) targs &&
           let inputArgs2 = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in prover_convert_term (eval (pn,ilist) None env e) tp0 tp) inputExprs inputExprTypes in
-          List.for_all2 definitely_equal (take n' ts2) inputArgs2
+          List.for_all2 definitely_equal (take n' ts2) inputArgs2 &&
+          List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds
         in
         let autoclose_rule =
           let match_func h targs ts =
@@ -6439,6 +6481,43 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         add_rule symb' autoopen_rule
       end
       contains_edges;
+    (* rules for closing empty chunks *)
+    List.iter
+      begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+        let g = (symb, true) in
+        let indexCount = List.length fns in
+        let Some n = inputParamCount in
+        let (inputParams, outputParams) = take_drop n xs in
+        let autoclose_rule =
+          let match_func h targs ts =
+            let (indices, inputArgs) = take_drop indexCount ts in
+            List.for_all2 definitely_equal indices fsymbs &&
+            let Some tpenv = zip predinst_tparams targs in
+            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
+            List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds) conds
+          in
+          let exec_func h targs ts cont =
+            let rules = !rules_cell in
+            let (indices, inputArgs) = take_drop indexCount ts in
+            let Some tpenv = zip predinst_tparams targs in
+            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
+            let ghostenv = [] in
+            let checkDummyFracs = true in
+            let coef = real_unit in
+            with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
+            assert_pred rules tpenv (pn,ilist) h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
+            let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
+            with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
+            cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
+          in
+          let rule h targs ts cont =
+            if match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
+          in
+          rule
+        in
+        add_rule symb autoclose_rule
+      end
+      empty_preds;
     List.map (fun (predSymb, rules) -> (predSymb, !rules)) !rulemap
   in
   

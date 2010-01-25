@@ -31,7 +31,6 @@ struct llist *create_llist()
   if (l == 0) abort();
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) abort();
-  //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
   return l;
@@ -224,7 +223,7 @@ int llist_lookup(struct llist *list, int index)
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + length(_ls2) == length(_v);
   {
-    //@ open node(n, _, _);
+    //@ open lseg(n, l, _);
     //@ int value = n->value;
     struct node *next = n->next;
     //@ open lseg(next, l, ?ls3); // To produce a witness node for next.
@@ -235,7 +234,7 @@ int llist_lookup(struct llist *list, int index)
     i = i + 1;
     //@ append_assoc(_ls1, cons(value, nil), ls3);
   }
-  //@ open node(n, ?nnext, _);
+  //@ open lseg(n, l, _);
   int value = n->value;
   //@ close lseg(n, l, _ls2);
   //@ lseg_append(f, n, l);

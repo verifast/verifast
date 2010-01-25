@@ -56,6 +56,7 @@ verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c Constants.java
 verifast_both -c -disable_overflow_check StaticFields.java
 verifast_both -c -disable_overflow_check ArraysManual.java
+ifnotmac verifast -c -disable_overflow_check ArraysAuto.java
 verifast_both -disable_overflow_check -c map.java
 verifast_both -disable_overflow_check -c Counter.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc

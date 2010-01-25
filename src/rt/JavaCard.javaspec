@@ -36,8 +36,8 @@ class APDU {
     //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 
   public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException, SecurityException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& array_slice(outData, bOff, bOff + len, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& array_slice(outData, bOff, bOff + len, _);
+    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
+    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
 }
 
 //@ predicate_family Applet_(Class c)(Applet applet);
@@ -106,8 +106,8 @@ class AID {
 
 class JCSystem {
   public static AID lookupAID(byte[] buffer, short offset, byte length);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
+    //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
     
   public static void beginTransaction();
     //@ requires true;
@@ -120,21 +120,21 @@ class JCSystem {
 
 class Util {
   public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [?f1]array_slice(src, srcOff, srcOff + length, ?elems1) &*& [?f2]array_slice(dest, destOff, destOff + length, ?elems2);
+    //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
 
   public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
 	throws ArrayIndexOutOfBoundsException;
-    //@ requires true;
-    //@ ensures result == destOff + length;
+    //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
+    //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
     
   public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
+    //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
   
   public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
-    //@ requires true;
-    //@ ensures true;
+    //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
+    //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
 }
 
 class ISO7816 {
