@@ -123,7 +123,8 @@ void llist_dispose(struct llist *list)
   struct node *n = list->first;
   struct node *l = list->last;
   while (n != l)
-    //@ invariant lseg(n, l, _);
+    //@ invariant lseg(n, l, ?vs);
+    //@ decreases length(vs);
   {
     //@ open node(n, _, _);
     struct node *next = n->next;
@@ -192,6 +193,7 @@ int llist_length(struct llist *list)
   //@ close [frac]lseg2(f, f, l, nil);
   while (n != l)
     //@ invariant [frac]lseg2(f, n, l, ?_ls1) &*& [frac]lseg(n, l, ?_ls2) &*& _v == append(_ls1, _ls2) &*& c + length(_ls2) == length(_v);
+    //@ decreases length(_ls2);
   {
     //@ open lseg(n, l, _ls2);
     //@ open node(n, _, _);
@@ -222,6 +224,7 @@ int llist_lookup(struct llist *list, int index)
   //@ close lseg(f, n, nil);
   while (i < index)
     //@ invariant 0 <= i &*& i <= index &*& lseg(f, n, ?_ls1) &*& lseg(n, l, ?_ls2) &*& _v == append(_ls1, _ls2) &*& _ls2 == drop(i, _v) &*& i + length(_ls2) == length(_v);
+    //@ decreases index - i;
   {
     //@ open lseg(n, l, _);
     //@ int value = n->value;

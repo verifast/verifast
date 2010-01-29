@@ -8529,11 +8529,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let p = match p with None -> static_error l "Loop invariant required." | Some p -> p in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
-      let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv e intt)) in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
+      let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
       assert_pred rules [] (pn,ilist) h ghostenv env p true real_unit (fun _ h _ _ _ ->
         let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
         let env = bs @ env in
@@ -8551,19 +8551,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    in
                    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                      let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                     (match (t_dec, dec) with
-                       (None, None) -> ()
-                     | (Some(t_dec), Some(dec)) -> (eval_h h'' env dec (fun _ t_dec2 -> assert_term (ctxt#mk_lt t_dec2 t_dec) h'' env (expr_loc dec) "Cannot prove that loop measure decreases."))
-                     ); 
-                     assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ _ _ ->
-                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
+                     assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ env''' _ ->
+                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
+                       (match (t_dec, dec) with
+                         (None, None) -> ()
+                       | (Some(t_dec), Some(dec)) -> (eval_h h'' env''' dec (fun _ t_dec2 -> 
+                           let dec_check = (ctxt#mk_lt t_dec2 t_dec) in
+                           assert_term dec_check h'' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check))
+                        )));
                      )
                    ) (fun h'' retval -> return_cont (h'' @ h) retval)
                  )))
                ) in 
                (match dec with 
                  None -> verify_loop_body None
-               | Some(dec) -> (eval_h h' env dec (fun _ t_dec -> 
+               | Some(dec) -> (eval_h h' env' dec (fun _ t_dec -> 
                    assert_term (ctxt#mk_le (ctxt#mk_intlit 0) t_dec) h' env (expr_loc dec) "Cannot prove that the loop measure is non-negative from the invariant.";
                    verify_loop_body (Some(t_dec))
                   )
