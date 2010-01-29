@@ -976,7 +976,7 @@ and
       pat option  (* Coefficient for fractional permission *)
   | Close of loc * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
-  | WhileStmt of loc * expr * pred option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
+  | WhileStmt of loc * expr * pred option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
@@ -1182,7 +1182,7 @@ let stmt_loc s =
   | Open (l, _, _, _, _, coef) -> l
   | Close (l, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
-  | WhileStmt (l, _, _, _, _) -> l
+  | WhileStmt (l, _, _, _, _, _) -> l
   | Throw (l, _) -> l
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
@@ -1283,7 +1283,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"
+  "unloadable_module"; "decreases"
 ]
 
 let c_keywords = [
@@ -1795,7 +1795,8 @@ and
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
-     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, b, closeBraceLoc)
+     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr); (* only allows decreases if invariant provided *)
+     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, dec, b, closeBraceLoc)
 | [< '(l, Kwd "for");
      '(_, Kwd "(");
      init_stmts = begin parser
@@ -1812,10 +1813,11 @@ and
      update_exprs = rep_comma parse_expr;
      '(_, Kwd ")");
      inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
+     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr);
      '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
-  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)])
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
@@ -6568,7 +6570,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Open (l, g, targs, ps0, ps1, coef) -> []
     | Close (l, g, targs, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
-    | WhileStmt (l, e, p, ss, _) -> expr_assigned_variables e @ block_assigned_variables ss
+    | WhileStmt (l, e, p, d, ss, _) -> expr_assigned_variables e @ block_assigned_variables ss
     | Throw (l, e) -> expr_assigned_variables e
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
@@ -7206,7 +7208,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Open(_, _, _, _, _, _) -> []
     | Close(_, _, _, _, _, _) -> []
     | ReturnStmt(_, e) -> (match e with None -> [] | Some(e) -> locals_address_taken e)
-    | WhileStmt(_, e, inv, body, _) -> (locals_address_taken e) @ 
+    | WhileStmt(_, e, inv, dec, body, _) -> (locals_address_taken e) @ 
         (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
     | BlockStmt(_, decls, body) -> (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
     | _ -> [] (* todo *)
@@ -8522,11 +8524,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
-    | WhileStmt (l, e, p, ss, closeBraceLoc) ->
+    | WhileStmt (l, e, p, dec, ss, closeBraceLoc) ->
       let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let p = match p with None -> static_error l "Loop invariant required." | Some p -> p in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
+      let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv e intt)) in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
@@ -8537,21 +8540,34 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         branch
           (fun _ ->
              assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
-               (eval_h h' env e (fun h' v -> assume (v) (fun _ ->
-                 let lblenv =
-                   List.map
-                     begin fun (lbl, cont) ->
-                       (lbl, fun blocks_done sizemap tenv ghostenv h'' env -> cont blocks_done sizemap tenv ghostenv (h'' @ h) env)
-                     end
-                     lblenv
-                 in
-                 verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
-                   let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                   assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ _ _ ->
-                     check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
-                   )
-                 ) (fun h'' retval -> return_cont (h'' @ h) retval)
-               )))
+               let verify_loop_body = (fun t_dec ->
+                (eval_h h' env e (fun h' v -> assume (v) (fun _ ->
+                   let lblenv =
+                     List.map
+                       begin fun (lbl, cont) ->
+                         (lbl, fun blocks_done sizemap tenv ghostenv h'' env -> cont blocks_done sizemap tenv ghostenv (h'' @ h) env)
+                       end
+                       lblenv
+                   in
+                   verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
+                     let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
+                     (match (t_dec, dec) with
+                       (None, None) -> ()
+                     | (Some(t_dec), Some(dec)) -> (eval_h h'' env dec (fun _ t_dec2 -> assert_term (ctxt#mk_lt t_dec2 t_dec) h'' env (expr_loc dec) "Cannot prove that loop measure decreases."))
+                     ); 
+                     assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ _ _ ->
+                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks."
+                     )
+                   ) (fun h'' retval -> return_cont (h'' @ h) retval)
+                 )))
+               ) in 
+               (match dec with 
+                 None -> verify_loop_body None
+               | Some(dec) -> (eval_h h' env dec (fun _ t_dec -> 
+                   assert_term (ctxt#mk_le (ctxt#mk_intlit 0) t_dec) h' env (expr_loc dec) "Cannot prove that the loop measure is non-negative from the invariant.";
+                   verify_loop_body (Some(t_dec))
+                  )
+               ));
              )
           )
           (fun _ ->

@@ -15,6 +15,7 @@ verifast_both -disable_overflow_check globals.c
 verifast_both -disable_overflow_check -c gui-app.c
 ifnotmac verifast -disable_overflow_check -c arraylist.c
 verifast_both spouse.c
+verifast_both -c decreases.c
 ifnotmac verifast -c spouse-user.c
 verifast_both Composite.c
 verifast_both composite4.c
