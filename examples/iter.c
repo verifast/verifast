@@ -31,7 +31,6 @@ struct llist *create_llist()
   if (l == 0) abort();
   struct node *n = malloc(sizeof(struct node));
   if (n == 0) abort();
-  //@ close lseg(n, n, _);
   l->first = n;
   l->last = n;
   return l;
@@ -54,9 +53,7 @@ lemma void lseg_add(struct node *n2)
 {
   distinct_nodes(n2, n3);
   open lseg(n1, n2, _v);
-  if (n1 == n2) {
-    close lseg(n3, n3, _);
-  } else {
+  if (n1 != n2) {
     distinct_nodes(n1, n3);
     open node(n1, _, _);
     lseg_add(n2);
