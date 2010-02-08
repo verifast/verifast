@@ -123,7 +123,7 @@ verifastredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe record_backtrace.cmx unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 
 release: test refman
-	-rmdir verifast-$(VFVERSION)
+	-rmdir /s verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)
 	cd verifast-$(VFVERSION)
 	copy $(Z3)\LICENSE.txt z3.LICENSE.txt
@@ -131,7 +131,24 @@ release: test refman
 	cd bin
 	copy ..\..\assume.vfmanifest
 	copy ..\..\crt.vfmanifest
-	xcopy $(GTKLIB)\..\bin\*.dll .
+	copy $(GTKLIB)\..\bin\iconv.dll
+	copy $(GTKLIB)\..\bin\intl.dll
+	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
+	copy $(GTKLIB)\..\bin\libcairo-2.dll
+	copy $(GTKLIB)\..\bin\libgdk-win32-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgdk_pixbuf-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgio-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libglib-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgmodule-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgobject-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgtk-win32-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgtksourceview-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libpango-1.0-0.dll
+	copy $(GTKLIB)\..\bin\libpangocairo-1.0-0.dll
+	copy $(GTKLIB)\..\bin\libpangowin32-1.0-0.dll
+	copy $(GTKLIB)\..\bin\libpng12-0.dll
+	copy $(GTKLIB)\..\bin\libxml2.dll
+	copy $(GTKLIB)\..\bin\zlib1.dll
 	copy ..\..\prelude.h
 	copy ..\..\prelude_core.h
 	copy ..\..\stdlib.h
@@ -149,6 +166,13 @@ release: test refman
 	xcopy /E /I ..\..\rt rt
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
+	cd ..
+	mkdir etc
+	cd etc
+	mkdir gtk-2.0
+	cd gtk-2.0
+	echo > gdk-pixbuf.loaders
+	cd ..
 	cd ..
 	mkdir doc
 	cd doc
