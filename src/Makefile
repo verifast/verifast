@@ -2,7 +2,7 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe mysh.exe dlsymtool.exe
+test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe
 	time < nl.txt
 	cd ..
 	mysh < src\testsuite.mysh
@@ -18,6 +18,9 @@ refman:
 	pdflatex refman.tex
 	pdflatex refman.tex
 	cd ..\..\src
+
+vfstrip.exe: vfstrip.ml
+	ocamlopt.opt -o vfstrip.exe vfstrip.ml
 
 dlsymtool.exe: dlsymtool.ml
 	ocamlopt.opt -o dlsymtool.exe dlsymtool.ml
@@ -161,6 +164,7 @@ release: test refman
 	copy ..\..\threading.c
 	copy ..\..\verifast.exe verifast.exe
 	copy ..\..\vfide.exe vfide.exe
+	copy ..\..\vfstrip.exe vfstrip.exe
 	copy ..\..\mysh.exe mysh.exe
 	copy ..\..\dlsymtool.exe dlsymtool.exe
 	xcopy /E /I ..\..\rt rt
