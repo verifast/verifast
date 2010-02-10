@@ -142,7 +142,9 @@ endif
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
-	cp -R ../tutorial verifast-$(VFVERSION)
+	cp -R ../tutorial_solutions verifast-$(VFVERSION)
+	mkdir verifast-$(VFVERSION)/tutorial
+	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do vfstrip < $f > ../tutorial/$f; done; cd ../..
 	cp testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
 	cp mysh verifast-$(VFVERSION)/bin

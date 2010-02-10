@@ -92,7 +92,7 @@ verifast_both reallittest.c
 verifast_both -allow_assume -disable_overflow_check dyncode.c
 verifast_both -c -disable_overflow_check alt_threading.c
 cd ..
-cd tutorial
+cd tutorial_solutions
 verifast_both -c -disable_overflow_check account.c
 verifast_both -c -disable_overflow_check deposit.c
 verifast_both -c -disable_overflow_check limit.c

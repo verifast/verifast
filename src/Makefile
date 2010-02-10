@@ -184,6 +184,10 @@ release: test refman
 	cd ..
 	xcopy /E /I ..\..\examples examples
 	xcopy /E /I ..\..\tests tests
-	xcopy /E /I ..\..\tutorial tutorial
+	xcopy /E /I ..\..\tutorial_solutions tutorial_solutions
+	mkdir tutorial
+	cd tutorial_solutions
+	for %f in (*.c) do vfstrip < %f > ..\tutorial\%f
+	cd ..
 	copy ..\..\src\testsuite.mysh
 	copy ..\..\test.bat
