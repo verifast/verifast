@@ -1,3 +1,11 @@
+// VeriFast-annotated partial JavaCard API
+// Status:
+// - Should be sound except for card tearing; i.e.: if a program verifies, then in executions where no card tear occurs there should not be assertion failures
+// - Not all API method preconditions specified in the official API docs have been encoded yet; this means an execution of a verified program may throw exceptions
+// TODO:
+// - Support card tearing
+// - Strengthen contracts so that in executions of a verified program, API calls do not throw exceptions
+
 package javacard.framework;
 
 /*@
