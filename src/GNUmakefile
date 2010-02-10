@@ -123,7 +123,9 @@ z3prover.cmx: proverapi.cmx z3prover.ml
 verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 
-release: test
+release: test release_core
+
+release_core:
 	mkdir verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/bin
 ifdef Z3
@@ -144,7 +146,7 @@ endif
 	cp -R ../tests verifast-$(VFVERSION)
 	cp -R ../tutorial_solutions verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/tutorial
-	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do vfstrip < $f > ../tutorial/$f; done; cd ../..
+	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
 	cp mysh verifast-$(VFVERSION)/bin
