@@ -208,6 +208,8 @@ struct socket *server_socket_accept(struct server_socket *serverSocket)
     struct writer *writer = malloc(sizeof(struct writer));
     struct socket *socket = malloc(sizeof(struct socket));
     reader->handle = handle;
+    reader->bufferStart = reader->buffer;
+    reader->bufferEnd = reader->buffer;
     writer->handle = handle;
     socket->handle = handle;
     socket->reader = reader;
