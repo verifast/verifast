@@ -13,15 +13,15 @@ verifast_both -disable_overflow_check wc.c
 verifast_both -disable_overflow_check cp.c
 verifast_both -disable_overflow_check globals.c
 verifast_both -disable_overflow_check -c gui-app.c
-ifnotmac verifast -disable_overflow_check -c arraylist.c
+verifast_both -disable_overflow_check -c arraylist.c
 verifast_both spouse.c
 verifast_both -c decreases.c
-ifnotmac verifast -c spouse-user.c
+verifast_both -c spouse-user.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both sorted_bintree.c
 verifast_both iter.c
-ifnotmac verifast iter_with_auto.c
+verifast_both iter_with_auto.c
 verifast_both -c args.c
 verifast_both swap.c
 verifast_both -c short.c
@@ -57,7 +57,7 @@ verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c Constants.java
 verifast_both -c -disable_overflow_check StaticFields.java
 verifast_both -c -disable_overflow_check ArraysManual.java
-ifnotmac verifast -c -disable_overflow_check ArraysAuto.java
+verifast_both -c -disable_overflow_check ArraysAuto.java
 verifast_both -disable_overflow_check -c map.java
 verifast_both -disable_overflow_check -c Counter.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc

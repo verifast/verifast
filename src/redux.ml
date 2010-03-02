@@ -3,6 +3,8 @@ open Big_int
 open Proverapi
 open Printf
 
+let (|>) x f = f x
+
 let the x = match x with Some x -> x
 
 type assume_result3 = Unsat3 | Unknown3 | Valid3
@@ -46,6 +48,32 @@ type ('symbol, 'termnode) term =
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | True
 | False
+| BoundVar of int
+
+let term_subst bound_env t =
+  let rec iter t =
+    match t with
+      TermNode _ -> t
+    | Iff (t1, t2) -> Iff (iter t1, iter t2)
+    | Eq (t1, t2) -> Eq (iter t1, iter t2)
+    | Le (t1, t2) -> Le (iter t1, iter t2)
+    | Lt (t1, t2) -> Lt (iter t1, iter t2)
+    | Not t -> Not (iter t)
+    | And (t1, t2) -> And (iter t1, iter t2)
+    | Or (t1, t2) -> Or (iter t1, iter t2)
+    | Add (t1, t2) -> Add (iter t1, iter t2)
+    | Sub (t1, t2) -> Sub (iter t1, iter t2)
+    | Mul (t1, t2) -> Mul (iter t1, iter t2)
+    | NumLit n -> t
+    | App (s, args) -> App (s, List.map iter args)
+    | IfThenElse (t1, t2, t3) -> IfThenElse (iter t1, iter t2, iter t3)
+    | RealLe (t1, t2) -> RealLe (iter t1, iter t2)
+    | RealLt (t1, t2) -> RealLt (iter t1, iter t2)
+    | True -> t
+    | False -> t
+    | BoundVar i -> TermNode (List.assoc i bound_env)
+  in
+  iter t
 
 module NumMap = Map.Make (struct type t = num let compare a b = compare_num a b end)
 
@@ -73,6 +101,12 @@ class symbol (kind: symbol_kind) (name: string) =
         )
         cs;
       fpclauses <- Some a
+    val mutable apply_listeners = []
+    method applied term = List.iter (fun listener -> listener term) apply_listeners
+    method add_apply_listener ctxt listener =
+      let listeners = apply_listeners in
+      apply_listeners <- listener::listeners;
+      ctxt#register_popaction (fun () -> apply_listeners <- listeners)
   end
 and termnode (ctxt: context) s initial_children =
   object (self)
@@ -118,6 +152,7 @@ and termnode (ctxt: context) s initial_children =
       in
       iter 0 initial_children;
       value#set_initial_child (self :> termnode);
+      symbol#applied (self :> termnode);
       match symbol#kind with
         Ctor j -> ()
       | Fixpoint k ->
@@ -326,9 +361,14 @@ and valuenode (ctxt: context) =
     val mutable neqs: valuenode list = []
     (* For diagnostics only *)
     val mutable representative = None
+    val mutable child_listeners = []
+    val mutable merge_listeners = []
     initializer begin
       ctxt#register_valuenode (self :> valuenode)
     end
+    method merge_merge_listeners listeners =
+      self#push;
+      merge_listeners <- List.filter (fun listener -> listener ()) (listeners @ merge_listeners)
     method set_initial_child t =
       initial_child <- Some t;
       begin
@@ -341,18 +381,20 @@ and valuenode (ctxt: context) =
     method push =
       if ctxt#pushdepth <> pushdepth then
       begin
-        popstack <- (pushdepth, children, parents, ctorchild, unknown, neqs)::popstack;
+        popstack <- (pushdepth, children, parents, ctorchild, unknown, neqs, child_listeners, merge_listeners)::popstack;
         ctxt#register_popaction (fun () -> self#pop);
         pushdepth <- ctxt#pushdepth
       end
     method pop =
       match popstack with
-        (pushdepth0, children0, parents0, ctorchild0, unknown0, neqs0)::popstack0 ->
+        (pushdepth0, children0, parents0, ctorchild0, unknown0, neqs0, child_listeners0, merge_listeners0)::popstack0 ->
         pushdepth <- pushdepth0;
         children <- children0;
         parents <- parents0;
         ctorchild <- ctorchild0;
         neqs <- neqs0;
+        child_listeners <- child_listeners0;
+        merge_listeners <- merge_listeners0;
         unknown <- unknown0;
         popstack <- popstack0
       | [] -> assert(false)
@@ -373,6 +415,12 @@ and valuenode (ctxt: context) =
         unknown <- Some u;
         u
       | Some u -> u
+    method add_merge_listener listener =
+      self#push;
+      merge_listeners <- listener::merge_listeners
+    method add_child_listener listener =
+      self#push;
+      child_listeners <- listener::child_listeners
     method add_parent p =
       self#push;
       parents <- p::parents
@@ -384,6 +432,7 @@ and valuenode (ctxt: context) =
       unknown <- Some u
     method add_child c =
       self#push;
+      List.iter (fun listener -> listener c) child_listeners;
       children <- c::children
     method neq v =
       match (ctorchild, v#ctorchild) with
@@ -416,11 +465,14 @@ and valuenode (ctxt: context) =
       in
       let vParents = v#parents in
       let vChildren = v#children in
+      List.iter (fun listener -> List.iter (fun child -> listener child) vChildren) child_listeners;
       List.iter (fun n -> n#set_value v) children;
       List.iter (fun n -> v#add_child n) children;
+      List.iter (fun listener -> v#add_child_listener listener) child_listeners;
       List.iter (fun vneq -> vneq#neq_merging_into (self :> valuenode) v) neqs;
       List.iter (fun (n, k) -> n#set_child k v) parents;
       (* At this point self is referenced nowhere. *)
+      v#merge_merge_listeners merge_listeners;
       (* It is possible that some of the nodes in 'parents' are now equivalent with nodes in v.parents. *)
       if v == ctxt#true_node#value then ctxt#report_truenode_childcount (List.length v#children);
       if v == ctxt#false_node#value then ctxt#report_falsenode_childcount (List.length v#children);
@@ -971,6 +1023,7 @@ and context () =
       | NumLit n -> string_of_num n
       | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
+      | BoundVar i -> Printf.sprintf "bound.%i" i
     
     method get_node s vs =
       match vs with
@@ -1141,6 +1194,8 @@ and context () =
         if v1#merge_into fromSimplex v2 = Unsat then Unsat3 else Unknown3
       end
     
+    val mutable reducing = false
+    
     method reduce0 =
       let rec iter result =
         match simplex_eqs with
@@ -1177,10 +1232,14 @@ and context () =
           | (r, Valid3) -> iter r
           | _ -> iter Unknown3
       in
-      iter Valid3
+      reducing <- true;
+      let result = iter Valid3 in
+      reducing <- false;
+      result
     
     method reduce =
-      assert (self#reduce0 <> Unsat3)
+      if not reducing then
+        assert (self#reduce0 <> Unsat3)
 
     method do_and_reduce action =
       match action() with
@@ -1196,6 +1255,102 @@ and context () =
       List.iter (fun v -> if v#initial_child#value = v then (v#dump_state)) values; *)
       ()
       
-    method mk_bound (i: int) (s: unit): (symbol, termnode) term = True
-    method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (t: (symbol, termnode) term): unit = ()
+    method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i
+    method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
+      let pats =
+        if pats = [] then
+          let check_pat pat =
+            let env = Array.create (List.length tps) false in
+            let rec iter pat =
+              match pat with
+                App (s, args) ->
+                List.for_all iter args
+              | BoundVar i ->
+                env.(i) <- true;
+                true
+              | NumLit n -> true
+              | _ -> false
+            in
+            if iter pat && List.for_all (fun b -> b) (Array.to_list env) then
+              [pat]
+            else
+              []
+          in
+          let rec find_terms pat =
+            match pat with
+              TermNode tn -> []
+            | Iff (t1, t2) -> find_terms t1 @ find_terms t2
+            | Eq (t1, t2) -> find_terms t1 @ find_terms t2
+            | Le (t1, t2) -> find_terms t1 @ find_terms t2
+            | Lt (t1, t2) -> find_terms t1 @ find_terms t2
+            | Not t -> find_terms t
+            | And (t1, t2) -> find_terms t1 @ find_terms t2
+            | Or (t1, t2) -> find_terms t1 @ find_terms t2
+            | Add (t1, t2) -> find_terms t1 @ find_terms t2
+            | Sub (t1, t2) -> find_terms t1 @ find_terms t2
+            | Mul (t1, t2) -> find_terms t1 @ find_terms t2
+            | NumLit n -> []
+            | App (s, args) -> check_pat pat
+            | IfThenElse (t1, t2, t3) -> []
+            | RealLe (t1, t2) -> find_terms t1 @ find_terms t2
+            | RealLt (t1, t2) -> find_terms t1 @ find_terms t2
+            | True -> []
+            | False -> []
+            | BoundVar i -> []
+          in
+          find_terms body
+        else
+          pats
+      in
+      if pats = [] then failwith (Printf.sprintf "Redux could not find suitable triggers for axiom %s" (self#pprint body));
+      (* printff "Axiom (%s) %s asserted\n" (String.concat ", " (List.map self#pprint pats)) (self#pprint body); *)
+      pats |> List.iter (fun pat ->
+        match pat with
+          App (symb, args) ->
+          (* We ignore existing applications of this symbol for now. *)
+          symb#add_apply_listener (self :> context) (fun term ->
+            (* printff "Axiom %s: toplevel symbol listener triggered\n" (self#pprint body); *)
+            let rec match_pats bound_env oldvals pats cont =
+              match (oldvals, pats) with
+                ([], []) -> cont bound_env
+              | (oldval::oldvals, pat::pats) ->
+                match_pat bound_env oldval#initial_child#value pat (fun bound_env -> match_pats bound_env oldvals pats cont)
+            and match_pat bound_env value pat cont =
+              let term = value#initial_child in
+              match pat with
+                BoundVar i ->
+                begin match try_assoc i bound_env with
+                  None -> cont ((i, term)::bound_env)
+                | Some term' ->
+                  if term#value = term'#value then
+                    cont bound_env
+                  else
+                    term#value#add_merge_listener (fun () -> if term#value = term'#value then (cont bound_env; false) else true)
+                end
+              | App (symb, args) ->
+                let match_term term =
+                  if term#symbol = symb then
+                    match_pats bound_env term#children args cont
+                in
+                value#children |> List.iter match_term;
+                value#add_child_listener match_term
+              | NumLit n ->
+                let nnode = self#get_numnode n in
+                if nnode#value = term#value then
+                  cont bound_env
+                else
+                  term#value#add_merge_listener (fun () -> if term#value = nnode#value then (cont bound_env; false) else true)
+              | _ -> failwith (Printf.sprintf "Redux does not support subpattern %s; it currently supports only symbol applications and bound variables as subpatterns." (self#pprint pat))
+            in
+            match_pats [] term#children args (fun bound_env ->
+              let body = term_subst bound_env body in
+              (* printff "Axiom %s triggered\n" (self#pprint body); *)
+              self#add_redex (fun () ->
+                (* printff "Asserting axiom body %s\n" (self#pprint body); *)
+                self#assume_core body
+              )
+            )
+          )
+        | _ -> failwith "Redux supports only symbol applications at the top level of axiom triggers."
+      )
   end

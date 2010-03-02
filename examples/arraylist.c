@@ -112,7 +112,7 @@ void list_add(struct arraylist *a, void *v)
   int size = 0;
   void** data = 0;
   //@ open arraylist(a, vs);
-  if(a->capacity == a->size) {
+  if(a->capacity <= a->size) {
     data = a->data;
     size = a->size;
     int capacity = a->capacity;
