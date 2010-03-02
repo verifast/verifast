@@ -76,7 +76,7 @@ fixpoint t nth<t>(int n, list<t> xs) {
     }
 }
 
-lemma_auto(mem(nth(n, xs), xs)) void mem_nth<t>(int n, list<t> xs);
+lemma void mem_nth<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;
 
@@ -106,11 +106,11 @@ lemma_auto(take(length(xs), xs)) void take_length<t>(list<t> xs);
     requires true;
     ensures take(length(xs), xs) == xs;
 
-lemma_auto(length(take(n, xs))) void length_take<t>(int n, list<t> xs);
+lemma void length_take<t>(int n, list<t> xs);
     requires 0 <= n && n <= length(xs);
     ensures length(take(n, xs)) == n;
 
-lemma_auto(nth(i, take(n, xs))) void nth_take<t>(int i, int n, list<t> xs);
+lemma void nth_take<t>(int i, int n, list<t> xs);
     requires 0 <= i && i < n && n <= length(xs);
     ensures nth(i, take(n, xs)) == nth(i, xs);
 
@@ -133,7 +133,7 @@ lemma_auto(drop(length(xs), xs)) void drop_length<t>(list<t> xs);
     requires true;
     ensures drop(length(xs), xs) == nil;
 
-lemma_auto(length(drop(n, xs))) void length_drop<t>(int n, list<t> xs);
+lemma void length_drop<t>(int n, list<t> xs);
     requires 0 <= n && n <= length(xs);
     ensures length(drop(n, xs)) == length(xs) - n;
 
@@ -155,7 +155,7 @@ fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
     }
 }
 
-lemma_auto(append(take(n, xs), tail(drop(n, xs)))) void drop_take_remove_nth<t>(list<t> xs, int n);
+lemma void drop_take_remove_nth<t>(list<t> xs, int n);
   requires 0<=n && n < length(xs);
   ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
 
