@@ -136,7 +136,7 @@ void lock_dispose(struct lock *lock)
 #ifdef WIN32
     DeleteCriticalSection(&(lock->criticalSection));
 #else
-    pthread_mutex_dispose(&(lock->mutex));
+    pthread_mutex_destroy(&(lock->mutex));
 #endif
     free(lock);
 }
@@ -201,7 +201,7 @@ void mutex_dispose(struct mutex *mutex)
 #ifdef WIN32
     DeleteCriticalSection(&(mutex->criticalSection));
 #else
-    pthread_mutex_dispose(&(mutex->mutex));
+    pthread_mutex_destroy(&(mutex->mutex));
 #endif
     free(mutex);
 }
