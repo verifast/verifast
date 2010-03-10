@@ -9646,7 +9646,7 @@ let link_program isLibrary modulepaths emitDllManifest exports =
             try
               read_file_lines (Filename.concat bindir manifest_path)
             with FileNotFound ->
-              failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_manifest option.")
+              failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_vfmanifest option.")
       in
       let rec iter0 impls' lines =
         match lines with
