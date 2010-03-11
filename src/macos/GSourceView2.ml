@@ -19,4 +19,6 @@ class source_view (source_buffer: source_buffer) view () =
 let source_view ?source_buffer ~packing () =
   let buffer = match source_buffer with None -> GText.buffer () | Some sbuf -> (sbuf :> GText.buffer) in
   let view = GText.view ~packing ~buffer () in
+  view#set_pixels_above_lines 1;
+  view#set_pixels_below_lines 1;
   new source_view (new source_buffer buffer) view ()

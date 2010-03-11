@@ -1,9 +1,13 @@
 ifdef Z3
   Z3DEPS = z3prover.cmx verifastPluginZ3.ml
   Z3ARGS = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+  GTKSOURCEVIEW = lablgtksourceview2.cmxa
+  GTKSOURCEVIEW_DEPS =
 else
   Z3DEPS =
   Z3ARGS =
+  GTKSOURCEVIEW = -I macos GSourceView2.cmx
+  GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
 endif
 
 test: mysh verifast vfide dlsymtool vfstrip
@@ -78,8 +82,14 @@ vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.
 mynum.cmx: mynum.ml
 	ocamlopt.opt -c nums.cmxa mynum.ml
 
-vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I +lablgtk2 lablgtk.cmxa lablgtksourceview2.cmxa gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+ifdef Z3
+else
+macos/GSourceView2.cmx: macos/GSourceView2.ml
+	cd macos; ocamlopt.opt -c -I +lablgtk2 GSourceView2.ml
+endif
+
+vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
