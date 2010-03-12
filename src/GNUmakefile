@@ -148,7 +148,10 @@ ifdef Z3
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 else
 	cp verifast verifast-$(VFVERSION)/bin
-	cp vfide verifast-$(VFVERSION)/bin
+	cp vfstrip verifast-$(VFVERSION)/bin
+	cp vfide verifast-$(VFVERSION)/bin/vfide-core
+	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
+	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
 endif
 	cp assume.vfmanifest crt.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
@@ -156,9 +159,8 @@ endif
 	cp -R ../tests verifast-$(VFVERSION)
 	cp -R ../tutorial_solutions verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/tutorial
-	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do vfstrip < $$f > ../tutorial/$$f; done; cd ../..
+	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
 	cp testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
 	cp mysh verifast-$(VFVERSION)/bin
 	cp dlsymtool verifast-$(VFVERSION)/bin
-	cp vfstrip verifast-$(VFVERSION)/bin

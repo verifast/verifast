@@ -1,25 +1,13 @@
 Building VeriFast on MacOS
 ==========================
 
-I successfully built VeriFast on MacOS 10.5.7.
+I successfully built VeriFast on MacOS 10.5.8.
 
 Instructions:
 - Install Xcode
 - Install Ocaml
-- Install pkg-config
-- Install GTK
-- Configure pkg-config for GTK:
-
-export PKG_CONFIG_PATH=\
-/Library/Frameworks/GLib.framework/Resources/dev/lib/pkgconfig:\
-/Library/Frameworks/Cairo.framework/Resources/dev/lib/pkgconfig:\
-/Library/Frameworks/Gtk.framework/Resources/dev/lib/pkgconfig
-
-- Install lablgtk
-- Add the src directory to your PATH:
-
-export PATH=~/verifast/src:$PATH
-
-- Make verifast with MAC=yes:
-
-make MAC=yes
+- Set up the gtk-osx build environment (with the jhbuild tool) as described at http://gtk-osx.sourceforge.net/
+- Inside a jhbuild shell, build lablgtk from source
+- Build VeriFast
+- To isolate the Gtk files that need to be shipped with VeriFast, use the bundling tool (ige-mac-bundler) from http://gtk-osx.sourceforge.net/ to create the example gtk-demo bundle. This will generate an application at ~/Desktop/GtkDemo.app. The VeriFast release build script will get the Gtk libraries and auxiliary files from ~/Desktop/GtkDemo.app/Contents/Resources.
+- Build the VeriFast release
