@@ -5,7 +5,7 @@ OPT_OPTIONS=-g
 test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe
 	time < nl.txt
 	cd ..
-	mysh < src\testsuite.mysh
+	mysh -cpus %NUMBER_OF_PROCESSORS% < src\testsuite.mysh
 	cd src
 	time < nl.txt
 
@@ -30,7 +30,7 @@ Fonts.cmx: Fonts_default.ml
 	ocamlopt.opt -c Fonts.ml
 
 mysh.exe: Fonts.cmx mysh.ml
-	ocamlopt.opt -o mysh.exe unix.cmxa Fonts.cmx mysh.ml
+	ocamlopt.opt -thread -o mysh.exe unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
 Printexc_proxy.cmx:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml

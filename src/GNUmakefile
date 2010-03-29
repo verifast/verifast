@@ -54,7 +54,7 @@ Fonts.cmx: Fonts_default.ml
 endif
 
 mysh: Fonts.cmx mysh.ml
-	ocamlopt.opt -o mysh unix.cmxa Fonts.cmx mysh.ml
+	ocamlopt.opt -thread -o mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
 vfversion.cmi: vfversion.mli
 	ocamlc -c vfversion.mli
