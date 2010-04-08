@@ -6536,7 +6536,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WRead (l, e, fparent, fname, frange, fstatic, fvalue, fghost) -> expr_assigned_variables e
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
     | Deref (l, e, _) -> expr_assigned_variables e
-    | CallExpr (l, g, _, _, pats, _) -> flatmap (fun (LitPat e) -> expr_assigned_variables e) pats
+    | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap expr_assigned_variables args
     | NewArray (l, te, e) -> expr_assigned_variables e
