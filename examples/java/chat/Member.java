@@ -19,7 +19,7 @@ lemma void member_distinct(Member m1,Member m2)
     close member(m1);
 }
 
-lemma void foreach_member_not_contains(list<Object> members, Member member);
+lemma void foreach_member_not_contains(list<Member> members, Member member);
     requires foreach(members, @member) &*& member(member);
     ensures foreach(members, @member) &*& member(member) &*& !mem<Object>(member, members);
 

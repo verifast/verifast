@@ -189,6 +189,13 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys);
     requires foreach(xs, ?p) &*& foreach(ys, p);
     ensures foreach(append(xs, ys), p);
 
+fixpoint list<b> map<a, b>(fixpoint(a, b) f, list<a> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return cons(f(x), map(f, xs0));
+    }
+}
+
 @*/
 
 #endif

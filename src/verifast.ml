@@ -836,6 +836,7 @@ type type_ =
   | FuncType of string   (* The name of a typedef whose body is a C function type. *)
   | InductiveType of string * type_ list
   | PredType of string list * type_ list
+  | PureFuncType of type_ * type_  (* Curried *)
   | ObjType of string
   | ArrayType of type_
   | BoxIdType (* box type, for shared boxes *)
@@ -857,6 +858,7 @@ type type_expr =
   | IdentTypeExpr of loc * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list
+  | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
@@ -881,6 +883,7 @@ type
   | EnumElemName of int
   | GlobalName
   | ModuleName
+  | PureFuncName
 
 type
   operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
@@ -910,6 +913,7 @@ and
       (* oproep van functie/methode/lemma/fixpoint *)
   | WFunPtrCall of loc * string * expr list
   | WPureFunCall of loc * string * type_ list * expr list
+  | WPureFunValueCall of loc * expr * expr list
   | WFunCall of loc * string * type_ list * expr list
   | WMethodCall of loc * string (* declaring class or interface *) * string (* method name *) * type_ list (* parameter types (not including receiver) *) * expr list (* args, including receiver if instance method *) * method_binding
   | NewArray of loc * type_expr * expr
@@ -1139,6 +1143,7 @@ let rec expr_loc e =
   | Deref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
   | WPureFunCall (l, g, targs, args) -> l
+  | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
   | WFunCall (l, g, targs, args) -> l
   | WMethodCall (l, tn, m, pts, args, fb) -> l
@@ -1210,6 +1215,7 @@ let type_expr_loc t =
   | PtrTypeExpr (l, te) -> l
   | ArrayTypeExpr(l,te) -> l
   | PredTypeExpr(l,te) ->l
+  | PureFuncTypeExpr (l, tes) -> l
 
 let expr_fold_open iter state e =
   let rec iters state es =
@@ -1243,6 +1249,7 @@ let expr_fold_open iter state e =
   | Deref (l, e0, tp) -> iter state e0
   | CallExpr (l, g, targes, pats0, pats, mb) -> let state = iterpats state pats0 in let state = iterpats state pats in state
   | WPureFunCall (l, g, targs, args) -> iters state args
+  | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
   | WFunPtrCall (l, g, args) -> iters state args
   | WMethodCall (l, cn, m, pts, args, mb) -> iters state args
@@ -1674,6 +1681,7 @@ and
 | [< '(l, Kwd "char") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Kwd "byte") >] -> ManifestTypeExpr (l, Char)
 | [< '(l, Kwd "predicate"); '(_, Kwd "("); ts = parse_types >] -> PredTypeExpr (l, ts)
+| [< '(l, Kwd "fixpoint"); '(_, Kwd "("); ts = parse_types >] -> PureFuncTypeExpr (l, ts)
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
@@ -2399,6 +2407,16 @@ let rec string_of_type t =
   | PredType (tparams, ts) ->
     let tparamsText = if tparams = [] then "" else "<" ^ String.concat ", " tparams ^ ">" in
     Printf.sprintf "predicate%s(%s)" tparamsText (String.concat ", " (List.map string_of_type ts))
+  | PureFuncType (t1, t2) ->
+    let (pts, rt) =  (* uncurry *)
+      let rec iter pts rt =
+        match rt with
+          PureFuncType (t1, t2) -> iter (t1::pts) t2
+        | _ -> (List.rev pts, rt)
+      in
+      iter [t1] t2
+    in
+    Printf.sprintf "fixpoint(%s, %s)" (String.concat ", " (List.map string_of_type pts)) (string_of_type rt)
   | BoxIdType -> "box"
   | HandleIdType -> "handle"
   | AnyType -> "any"
@@ -2516,14 +2534,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     name
   in
 
-  (** Generate a fresh SMT solver symbol based on string [s]. *)  
-  let mk_symbol s domain range kind =
-    ctxt#mk_symbol (mk_ident s) domain range kind
+  (** Convert term [t] from type [proverType] to type [proverType0]. *)  
+  let apply_conversion proverType proverType0 t =
+    match (proverType, proverType0) with
+    | (ProverBool, ProverInductive) -> ctxt#mk_boxed_bool t
+    | (ProverInt, ProverInductive) -> ctxt#mk_boxed_int t
+    | (ProverReal, ProverInductive) -> ctxt#mk_boxed_real t
+    | (ProverInductive, ProverBool) -> ctxt#mk_unboxed_bool t
+    | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
+    | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
+    | (t1, t2) when t1 = t2 -> t
   in
-  
-  let alloc_nullary_ctor j s = mk_symbol s [] ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j)) in
-
-  (* Region: boxing and unboxing *)
   
   let typenode_of_provertype t =
     match t with
@@ -2532,6 +2553,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ProverReal -> ctxt#type_real
     | ProverInductive -> ctxt#type_inductive
   in
+  
+  let mk_symbol s domain range kind =
+    ctxt#mk_symbol (mk_ident s) domain range kind
+  in
+
+  (** For higher-order function application *)
+  let apply_symbol = ctxt#mk_symbol "@" [ctxt#type_inductive; ctxt#type_inductive] ctxt#type_inductive Uninterp in
+
+  (** Generate a fresh SMT solver symbol based on string [s]. *)  
+  let mk_func_symbol s domain range kind =
+    let s = mk_ident s in
+    let domain_tnodes = List.map typenode_of_provertype domain in
+    let fsymb = ctxt#mk_symbol s domain_tnodes (typenode_of_provertype range) kind in
+    if domain = [] then
+      (fsymb, ctxt#mk_app fsymb [])
+    else
+      let vsymb = ctxt#mk_app (ctxt#mk_symbol ("@" ^ s) [] ctxt#type_inductive Uninterp) [] in
+      (* Emit an axiom saying that @(@f, x) == f(x) / @(@(@f, x), y) == f(x, y) / ... *)
+      let bounds = imap (fun k t -> ctxt#mk_bound k t) domain_tnodes in
+      let app = List.fold_left2 (fun t1 tp t2 -> ctxt#mk_app apply_symbol [t1; apply_conversion tp ProverInductive t2]) vsymb domain bounds in
+      ctxt#assume_forall [app] domain_tnodes (ctxt#mk_eq (apply_conversion ProverInductive range app) (ctxt#mk_app fsymb bounds));
+      (fsymb, vsymb)
+  in
+  
+  let mk_app (fsymb, vsymb) ts =
+    ctxt#mk_app fsymb ts
+  in
+  
+  (* Region: boxing and unboxing *)
   
   let rec provertype_of_type t =
     match t with
@@ -2548,6 +2598,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType t -> ProverInt
     | FuncType _ -> ProverInt
     | PredType (tparams, ts) -> ProverInductive
+    | PureFuncType _ -> ProverInductive
     | BoxIdType -> ProverInt
     | HandleIdType -> ProverInt
     | AnyType -> ProverInductive
@@ -2630,18 +2681,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let current_module_name = Filename.chop_extension (Filename.basename path) in
   let current_module_term = get_unique_var_symb current_module_name IntType in
   let modulemap = [(current_module_name, current_module_term)] in
-
-  (** Convert term [t] from type [proverType] to type [proverType0]. *)  
-  let apply_conversion proverType proverType0 t =
-    match (proverType, proverType0) with
-    | (ProverBool, ProverInductive) -> ctxt#mk_boxed_bool t
-    | (ProverInt, ProverInductive) -> ctxt#mk_boxed_int t
-    | (ProverReal, ProverInductive) -> ctxt#mk_boxed_real t
-    | (ProverInductive, ProverBool) -> ctxt#mk_unboxed_bool t
-    | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
-    | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
-    | (t1, t2) when t1 = t2 -> t
-  in
   
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
@@ -3139,6 +3178,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         StructType sn
     | PtrTypeExpr (l, te) -> PtrType (check_pure_type (pn,ilist) tpenv te)
     | PredTypeExpr (l, tes) -> PredType ([], List.map (check_pure_type (pn,ilist) tpenv) tes )
+    | PureFuncTypeExpr (l, tes) ->
+      let ts = List.map (check_pure_type (pn,ilist) tpenv) tes in
+      let rec iter ts =
+        match ts with
+          [t1; t2] -> PureFuncType (t1, t2)
+        | t1::ts -> PureFuncType (t1, iter ts)
+        | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type"
+      in
+      iter ts
   and check_type_arg (pn,ilist) tpenv te =
     let t = check_pure_type (pn,ilist) tpenv te in
     t
@@ -3151,6 +3199,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType t -> PtrType (instantiate_type tpenv t)
     | InductiveType (i, targs) -> InductiveType (i, List.map (instantiate_type tpenv) targs)
     | PredType ([], pts) -> PredType ([], List.map (instantiate_type tpenv) pts)
+    | PureFuncType (t1, t2) -> PureFuncType (instantiate_type tpenv t1, instantiate_type tpenv t2)
     | InferredType t ->
       begin match !t with
         None -> assert false
@@ -3240,8 +3289,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match (gh, ftps) with
         (Real, []) ->
         let isfuncname = "is_" ^ ftn in
-        let domain = [ctxt#type_int] in
-        let symb = mk_symbol isfuncname domain ctxt#type_bool Uninterp in
+        let domain = [ProverInt] in
+        let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
         [(isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))]
       | _ -> []
     ) functypenames
@@ -3308,9 +3357,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match zip ts ts0 with
           None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
         | Some tpairs ->
-          List.iter (fun (t, t0) -> expect_type_core l msg t t0) tpairs
+          List.iter (fun (t, t0) -> expect_type_core l msg t0 t) tpairs
       end
+    | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
     | (InductiveType _, AnyType) -> ()
+    | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
+      List.iter2 (expect_type_core l msg) args1 args2
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
   in
   
@@ -3364,10 +3416,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             else (
               let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
               let csym =
-                if ts = [] then
-                  alloc_nullary_ctor j full_cn
-                else
-                  mk_symbol full_cn (List.map typenode_of_type ts) ctxt#type_inductive (Proverapi.Ctor (CtorByOrdinal j))
+                mk_func_symbol full_cn (List.map provertype_of_type ts) ProverInductive (Proverapi.Ctor (CtorByOrdinal j))
               in
               let purefunc = (full_cn, (lc, tparams, InductiveType (i, List.map (fun x -> TypeParam x) tparams), ts, csym)) in
               citer (j + 1) ((cn, (lc, ts))::ctormap) (purefunc::pfm) ctors
@@ -3408,10 +3457,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               end
             | _ -> static_error l "Fixpoint function must switch on a parameter."
           in
-          let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) (Proverapi.Fixpoint index) in
+          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) (Proverapi.Fixpoint index) in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, index, body, pn, ilist))::fpm) ds
         | None ->
-          let fsym = mk_symbol g (List.map (fun (p, t) -> typenode_of_type t) pmap) (typenode_of_type rt) Proverapi.Uninterp in
+          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) fpm ds
         | _ -> static_error l "Body of fixpoint function must be switch statement."
         end
@@ -3428,6 +3477,86 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let inductivemap = inductivemap1 @ inductivemap0 in
   
   let () =
+    let welldefined_map = List.map (fun (i, info) -> let ec = ref (`EqClass (0, [])) in let ptr = ref ec in ec := `EqClass (0, [ptr]); (i, (info, ptr))) inductivemap1 in
+    let merge_ecs ec0 ec1 =
+      let `EqClass (ecrank0, ecmems0) = !ec0 in
+      let `EqClass (ecrank1, ecmems1) = !ec1 in
+      if ecrank0 <> ecrank1 then begin
+        assert (ecrank0 < ecrank1);
+        List.iter (fun ptr -> ptr := ec0) ecmems1;
+        ec0 := `EqClass (ecrank0, ecmems1 @ ecmems0)
+      end
+    in
+    let rec check_welldefined rank negative_rank pred_ptrs (i, ((l, _, ctors), ptr)) =
+      (* Invariant:
+         - All nodes reachable from a -1 node are -1
+         - There are no cycles through -1 nodes that go through a negative occurrence.
+         - The ranks of all nodes are less than the current rank [rank]
+         - There are no cycles that go through a negative occurrence in the subgraph that is to the left of the current path.
+         - All nodes reachable from a given node in the subgraph that is to the left of the current path, have either the same rank, a higher rank, or rank -1, but never rank 0
+         - For any two nodes in the subgraph that is to the left of the current path, they are mutually reachable iff they are in the same equivalence class (and consequently have the same rank)
+         - The ranks of the nodes on the current path are always (non-strictly) increasing
+       *)
+      let pred_ptrs = ptr::pred_ptrs in
+      let ec = !ptr in
+      let `EqClass (ecrank, ecmems) = !ec in
+      if ecrank = -1 then
+        ()
+      else
+      begin
+        assert (ecrank = 0 && match ecmems with [ptr'] when ptr' == ptr -> true | _ -> false);
+        ec := `EqClass (rank, ecmems);
+        let rec check_ctor (ctorname, (_, pts)) =
+          let rec check_type negative pt =
+            match pt with
+              Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
+            | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition."
+            | InductiveType (i0, tps) ->
+              List.iter (fun t -> check_type negative t) tps;
+              begin match try_assoc i0 welldefined_map with
+                None -> ()
+              | Some (info0, ptr0) ->
+                let ec0 = !ptr0 in
+                let `EqClass (ecrank0, ecmems0) = !ec0 in
+                let negative_rank = if negative then rank else negative_rank in
+                if ecrank0 > 0 then begin
+                  if ecrank0 <= negative_rank then static_error l "This inductive datatype is not well-defined; it occurs recursively in a negative position.";
+                  let rec merge_preds pred_ptrs =
+                    match pred_ptrs with
+                      [] -> ()
+                    | ptr1::pred_ptrs ->
+                      let ec1 = !ptr1 in
+                      let `EqClass (ecrank1, ecmems1) = !ec1 in
+                      if ecrank0 < ecrank1 then begin
+                        merge_ecs ec0 ec1;
+                        merge_preds pred_ptrs
+                      end
+                  in
+                  merge_preds pred_ptrs
+                end else
+                  check_welldefined (rank + 1) negative_rank pred_ptrs (i0, (info0, ptr0))
+              end
+            | PredType (tps, pts) ->
+              assert (tps = []);
+              List.iter (fun t -> check_type true t) pts
+            | PureFuncType (t1, t2) ->
+              check_type true t1; check_type negative t2
+          in
+          List.iter (check_type false) pts
+        in
+        List.iter check_ctor ctors;
+        (* If this node is the leader of an equivalence class, then this equivalence class has now been proven to be well-defined. *)
+        let ec = !ptr in
+        let `EqClass (ecrank, ecmems) = !ec in
+        if ecrank = rank then
+          ec := `EqClass (-1, ecmems)
+      end
+    in
+    List.iter (check_welldefined 1 0 []) welldefined_map
+    (* Postcondition: there are no cycles in the inductive datatype definition graph that go through a negative occurrence. *)
+  in
+  
+  let () =
     let inhabited_map = List.map (fun (i, info) -> (i, (info, ref 0))) inductivemap1 in
     let rec check_inhabited i l ctors status =
       if !status = 2 then
@@ -3439,30 +3568,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match ctors with
             [] -> static_error l "Inductive datatype is not inhabited."
           | (_, (_, pts))::ctors ->
-            let rec check_paramtypes pts =
-              match pts with
-                [] -> ()
-              | pt::pts ->
-                begin
-                  match pt with
-                    InductiveType (i0, _) ->
-                    begin
-                      if List.mem_assoc i0 inductivemap0 then
-                        check_paramtypes pts
-                      else
-                        let ((l0, _, ctors0), status0) = List.assoc i0 inhabited_map in
-                        if !status0 = 1 then
-                          find_ctor ctors
-                        else
-                        begin
-                          check_inhabited i0 l0 ctors0 status0;
-                          check_paramtypes pts
-                        end
-                    end
-                  | _ -> check_paramtypes pts
+            let rec type_is_inhabited tp =
+              match tp with
+                Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+              | TypeParam _ -> true  (* Should be checked at instantiation site. *)
+              | PredType (tps, pts) -> true
+              | PureFuncType (t1, t2) -> type_is_inhabited t2
+              | InductiveType (i0, tps) ->
+                List.for_all type_is_inhabited tps &&
+                begin match try_assoc i0 inhabited_map with
+                  None -> true
+                | Some ((l0, _, ctors0), status0) ->
+                  !status0 <> 1 &&
+                  (check_inhabited i0 l0 ctors0 status0; true)
                 end
             in
-            check_paramtypes pts
+            if List.for_all type_is_inhabited pts then () else find_ctor ctors
         in
         find_ctor ctors;
         status := 2
@@ -3748,7 +3869,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           iter ps1 [] ps2
         in
-        let funcsym = mk_symbol p (List.map (fun (x, t) -> typenode_of_type t) ps1) ctxt#type_inductive Proverapi.Uninterp in
+        let funcsym = mk_func_symbol p (List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
         let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2), List.map (fun (x, t) -> t) ps1, funcsym)) in
         iter (pn,ilist) ((p, (l, ps1, ps2, body, funcsym,pn,ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
@@ -3908,8 +4029,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc x modulemap with
       | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType)
       | _ ->
-      begin
-      if language <> Java then static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x);
+      begin fun cont ->
+      if language <> Java then cont () else
       let field_of_this =
         match try_assoc "this" tenv with
           None -> None
@@ -3946,14 +4067,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match resolve (pn,ilist) l x interfmap0 with
         Some (cn, _) -> (e, ClassOrInterfaceName cn)
       | None ->
-      (match try_assoc x modulemap with
+      match try_assoc x modulemap with
       | Some _ -> scope := Some ModuleName; (e, IntType)
       | None ->
       if is_package x then
         (e, PackageName x)
       else
-      static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate")
-      end
+        cont ()
+      end $. fun () ->
+      match resolve (pn,ilist) l x purefuncmap with
+        Some (x, (_, tparams, t, pts, _)) ->
+        if tparams <> [] then static_error l "Using a generic fixpoint function as a value is not yet supported.";
+        scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t)
+      | None ->
+      if language = Java then
+        static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate"
+      else
+        static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x)
       end
     | PredNameExpr (l, g) ->
       begin
@@ -4072,7 +4202,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class")
     | CallExpr (l, g, targes, [], pats, fb) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position") pats in
-      let process_targes callee_tparams  =
+      let process_targes callee_tparams =
         if callee_tparams <> [] && targes = [] then
           let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
           let Some tpenv = zip callee_tparams targs in
@@ -4092,6 +4222,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
           let rt = match rt with None -> Void | Some rt -> rt in
           (WFunPtrCall (l, g, es), rt)
+        | Some ((PureFuncType (t1, t2) as t) as tp) ->
+          if targes <> [] then static_error l "Pure function value does not have type parameters.";
+          if es = [] then static_error l "Zero-argument application of pure function value makes no sense.";
+          let box e t = convert_provertype_expr e (provertype_of_type t) ProverInductive in
+          let unbox e t = convert_provertype_expr e ProverInductive (provertype_of_type t) in
+          let (ws, tp) =
+            let rec apply ws t es =
+              match (es, t) with
+                ([], t) -> (List.rev ws, t)
+              | (e::es, PureFuncType (t1, t2)) -> apply (box (checkt e t1) t1::ws) t2 es
+              | (e::es, _) -> static_error l "Too many arguments"
+            in
+            apply [] t es
+          in
+          (unbox (WPureFunValueCall (l, (Var (l, g, ref (Some LocalVar))), ws)) tp, tp)
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
@@ -5025,12 +5170,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-    ctxt#mk_app nil_symb []
+    mk_app nil_symb []
   in
   
   let mk_cons elem_tp head tail =
     let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
-    ctxt#mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+    mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
   in
   
   let rec mk_list elem_tp elems =
@@ -5041,17 +5186,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let mk_take n xs =
     let (_, _, _, _, take_symb) = List.assoc "take" purefuncmap in
-    ctxt#mk_app take_symb [n; xs]
+    mk_app take_symb [n; xs]
   in
   
   let mk_drop n xs =
     let (_, _, _, _, drop_symb) = List.assoc "drop" purefuncmap in
-    ctxt#mk_app drop_symb [n; xs]
+    mk_app drop_symb [n; xs]
   in
   
   let mk_append l1 l2 =
     let (_, _, _, _, append_symb) = List.assoc "append" purefuncmap in
-    ctxt#mk_app append_symb [l1; l2]
+    mk_app append_symb [l1; l2]
   in
   
   let contextStack = ref ([]: 'termnode context list) in
@@ -5147,7 +5292,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (Some scope) = !scope in
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x))
-        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in ctxt#mk_app s []
+        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in mk_app s []
         | FuncName -> List.assoc x funcnameterms
         | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit n
@@ -5160,6 +5305,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               deref_pointer l symbol tp
           end
         | ModuleName -> List.assoc x modulemap
+        | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) g predfammap in cont state symb
     | CastExpr (l, ManifestTypeExpr (_, t), e) ->
@@ -5220,8 +5366,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l ("No such pure function: "^g)
       | Some (lg, tparams, t, pts, s) ->
         evs state args $. fun state vs ->
-        cont state (ctxt#mk_app s vs)
+        cont state (mk_app s vs)
       end
+    | WPureFunValueCall (l, e, es) ->
+      evs state (e::es) $. fun state (f::args) ->
+      cont state (List.fold_left (fun f arg -> ctxt#mk_app apply_symbol [f; arg]) f args)
     | IfExpr (l, e1, e2, e3) ->
       evs state [e1; e2; e3] $. fun state [v1; v2; v3] ->
       cont state (ctxt#mk_ifthenelse v1 v2 v3) (* Only sound if e2 and e3 are side-effect-free *)
@@ -5390,7 +5539,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let fpclauses =
         List.map
           (function (SwitchExprClause (_, cn, ps, e)) ->
-             let Some (_, tparams, _, pts, csym) = try_assoc' (pn,ilist) cn purefuncmap in
+             let Some (_, tparams, _, pts, (csym, _)) = try_assoc' (pn,ilist) cn purefuncmap in
              let apply gvs cvs =
                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
                let Some penv = zip ps cvs in
@@ -5441,11 +5590,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          | (x, tp)::ps -> if x = x0 then (i, tp) else index_of_param (i + 1) x0 ps
        in
        let (i, InductiveType (_, targs)) = index_of_param 0 x pmap in
-       let Some(_,_,_,_,fsym) =try_assoc' (pn,ilist) g purefuncmap in
+       let Some(_,_,_,_,(fsym,_)) =try_assoc' (pn,ilist) g purefuncmap in
        let clauses =
          List.map
            (function (cn, pats, e) ->
-              let (_, tparams, _, ts, ctorsym) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x in
+              let (_, tparams, _, ts, (ctorsym, _)) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
@@ -5640,7 +5789,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | None ->
             let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
-            let g_symb = ctxt#mk_app funcsym ctorargs in
+            let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2, None)
           end
       in
@@ -5704,7 +5853,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      pts
                in
                let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
-               assume_eq t (ctxt#mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred_core tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
+               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> assume_pred_core tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -5829,7 +5978,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
             when g == array_slice_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
-            [apply_conversion ProverInductive (provertype_of_type tp) (ctxt#mk_app nth_symb [ctxt#mk_sub i istart; vs])]
+            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
         | _ -> []
         end
         h
@@ -5982,7 +6131,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | None ->
             let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
-            let g_symb = ctxt#mk_app funcsym ctorargs in
+            let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2)
           end
       in
@@ -6054,7 +6203,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (xs, xenv)
           in
           branch
-            (fun _ -> assume_eq t (ctxt#mk_app ctorsym xs) (fun _ -> assert_pred_core rules tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont))
+            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> assert_pred_core rules tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -6538,6 +6687,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Deref (l, e, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
+    | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap expr_assigned_variables args
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
@@ -6694,7 +6844,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let assume_is_functype fn ftn =
     let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
-    ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
+    ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
   in
   
   let functypes_implemented = ref [] in
@@ -7177,6 +7327,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Deref(_, e, _) -> locals_address_taken e
     | CallExpr(l, name, targs, _, args, binding) ->  List.flatten (List.map (fun pat -> match pat with LitPat(e) -> locals_address_taken e | _ -> []) args)
     | WPureFunCall (l, g, targs, args) -> flatmap locals_address_taken args
+    | WPureFunValueCall (l, e, es) -> flatmap locals_address_taken (e::es)
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap locals_address_taken args
     | IfExpr(_, con, e1, e2) -> (locals_address_taken con) @ (locals_address_taken e1) @ (locals_address_taken e2)
     | SwitchExpr(_, e, clauses, _) -> (locals_address_taken e) @
@@ -7452,7 +7603,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match gh with
           Real when ftxmap = [] ->
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
-          let phi = ctxt#mk_app isfuncsymb [fterm] in
+          let phi = mk_app isfuncsymb [fterm] in
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
           check_call h [] cont
         | Real ->
@@ -7511,7 +7662,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative";
       let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
       let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
-      assume (ctxt#mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
+      assume (mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
       new_array h l elem_tp lv elems
     | NewArrayWithInitializer(l, tp, es) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
@@ -7537,12 +7688,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
         let rec string_to_term s = 
           if String.length s == 0 then
-              ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); ctxt#mk_app nil_symb []]
+            mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); mk_app nil_symb []]
           else
-            ctxt#mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
+            mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
         in
         let coef = get_dummy_frac_term () in
-        assume (ctxt#mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
+        assume (mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
           assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
             assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
               cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
@@ -7852,7 +8003,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let [_; cs] = ts in
       with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
-      if not (definitely_equal (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
+      if not (definitely_equal (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
         assert_false h env l "Could not prove that length of character array equals size of struct.";
       let rec iter h fds =
         match fds with
@@ -7887,7 +8038,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
-      assume (ctxt#mk_eq (ctxt#mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
+      assume (ctxt#mk_eq (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here") args in
@@ -8089,7 +8240,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
             in
             branch
-              (fun _ -> assume_eq v (ctxt#mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+              (fun _ -> assume_eq v (mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
               (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
         in
         iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -8191,7 +8342,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | Some bs ->
                 List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
             in
-            let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
+            let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
             ([], [], (g_symb, false), [], 0, ps2, bs0, body, None)
           end
@@ -8372,7 +8523,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 | Some bs ->
                   List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
               in
-              let g_symb = ctxt#mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
+              let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               if targs <> [] then static_error l "Incorrect number of type arguments.";
               (lpred, [], [], ps2, bs0, (g_symb, false), body, [])
           end

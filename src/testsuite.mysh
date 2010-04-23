@@ -46,6 +46,7 @@ cd ..
 verifast_both -c ifs.c
 verifast_both -shared goto.c
 verifast_both map.c
+verifast_both -c pure_map.c
 verifast_both ghost_field.c
 verifast_both -c lemmafuncptr.c
 verifast_both -c odd_even_lemmas.c
@@ -128,3 +129,5 @@ verifast_both -c -allow_should_fail override.java
 verifast_both -c -allow_should_fail override2.java
 verifast_both -c -allow_should_fail override3.java
 verifast_both -c -allow_should_fail superctor.java
+verifast_both -c -allow_should_fail inhabited_tparams.c
+verifast_both -c -allow_should_fail inductive_welldefined.c
