@@ -131,3 +131,4 @@ verifast_both -c -allow_should_fail override3.java
 verifast_both -c -allow_should_fail superctor.java
 verifast_both -c -allow_should_fail inhabited_tparams.c
 verifast_both -c -allow_should_fail inductive_welldefined.c
+verifast_both -c -allow_should_fail predtype_contra.c

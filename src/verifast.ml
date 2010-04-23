@@ -3355,9 +3355,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (PredType ([], ts), PredType ([], ts0)) ->
       begin
         match zip ts ts0 with
-          None -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
-        | Some tpairs ->
-          List.iter (fun (t, t0) -> expect_type_core l msg t0 t) tpairs
+          Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs -> ()
+        | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
     | (InductiveType _, AnyType) -> ()
