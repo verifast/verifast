@@ -911,6 +911,7 @@ and
       pat list (* arguments *) *
       method_binding
       (* oproep van functie/methode/lemma/fixpoint *)
+  | ExprCallExpr of loc * expr * expr list  (* Call whose callee is an expression instead of a plain identifier *)
   | WFunPtrCall of loc * string * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
@@ -992,7 +993,7 @@ and
   | GotoStmt of loc * string
   | NoopStmt of loc
   | InvariantStmt of loc * pred (* join point *)
-  | ProduceLemmaFunctionPointerChunkStmt of loc * string * stmt option
+  | ProduceLemmaFunctionPointerChunkStmt of loc * expr * (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option * stmt option
   | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc
   | Throw of loc * expr
   | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
@@ -1048,12 +1049,12 @@ and
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
       bool (* atomic *) *
-      (string * (loc * string) list) option (* implemented function type, with function type arguments *) *
+      (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
       (pred * pred) option *  (* contract *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
-  | FuncTypeDecl of loc * ghostness * type_expr option * string * (type_expr * string) list * (type_expr * string) list * (pred * pred)
+  | FuncTypeDecl of loc * ghostness * type_expr option * string * string list * (type_expr * string) list * (type_expr * string) list * (pred * pred)
   | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
@@ -1142,6 +1143,7 @@ let rec expr_loc e =
   | WReadArray (l, _, _, _) -> l
   | Deref (l, e, t) -> l
   | CallExpr (l, g, targs, pats0, pats,_) -> l
+  | ExprCallExpr (l, e, es) -> l
   | WPureFunCall (l, g, targs, args) -> l
   | WPureFunValueCall (l, e, es) -> l
   | WFunPtrCall (l, g, args) -> l
@@ -1202,7 +1204,7 @@ let stmt_loc s =
   | GotoStmt (l, _) -> l
   | NoopStmt l -> l
   | InvariantStmt (l, _) -> l
-  | ProduceLemmaFunctionPointerChunkStmt (l, _, _) -> l
+  | ProduceLemmaFunctionPointerChunkStmt (l, _, _, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
 
@@ -1248,6 +1250,7 @@ let expr_fold_open iter state e =
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state
   | Deref (l, e0, tp) -> iter state e0
   | CallExpr (l, g, targes, pats0, pats, mb) -> let state = iterpats state pats0 in let state = iterpats state pats in state
+  | ExprCallExpr (l, e, es) -> iters state (e::es)
   | WPureFunCall (l, g, targs, args) -> iters state args
   | WPureFunValueCall (l, e, args) -> iters state (e::args)
   | WFunCall (l, g, targs, args) -> iters state args
@@ -1339,7 +1342,7 @@ let peek_in_ghost_range p stream =
 
 type spec_clause =
   AtomicClause
-| FuncTypeClause of string * (loc * string) list
+| FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of pred
 | EnsuresClause of pred
 
@@ -1552,7 +1555,7 @@ and
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >]
-  -> [FuncTypeDecl (l, Real, rt, g, ftps, ps, c)]
+  -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, c)]
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
@@ -1597,8 +1600,9 @@ and
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
-  | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, ftps, ps, c)]
+  | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
+       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >] ->
+    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, c)]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
 and
   parse_action_decls = parser
@@ -1627,8 +1631,15 @@ and
   [< '(l, Kwd "preserved_by"); '(_, Ident an); '(_, Kwd "("); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ")");
      ss = parse_block >] -> PreservedByClause (l, an, xs, ss)
 and
+  parse_type_params_free = parser [< '(_, Kwd "<"); xs = rep_comma (parser [< '(_, Ident x) >] -> x); '(_, Kwd ">") >] -> xs
+and
+  parse_type_params_general = parser
+  [< xs = parse_type_params_free >] -> xs
+| [< xs = peek_in_ghost_range (parser [< xs = parse_type_params_free; '(_, Kwd "@*/") >] -> xs) >] -> xs
+| [< >] -> []
+and
   parse_func_rest k t = parser
-  [< '(l, Ident g); tparams = parse_type_params l; ps = parse_paramlist; f =
+  [< '(l, Ident g); tparams = parse_type_params_general; ps = parse_paramlist; f =
     (parser
        [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, co, None,Static,Public)
      | [< (atomic, ft, co) = parse_spec_clauses;
@@ -1703,7 +1714,7 @@ and
 and
   parse_pure_spec_clause = parser
   [< '(_, Kwd "atomic") >] -> AtomicClause
-| [< '(_, Kwd ":"); '(_, Ident ft); ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, ftargs)
+| [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
 and
@@ -1716,7 +1727,7 @@ and
     let out_count = ref 0 in
     let clause_stream = Stream.from (fun _ -> try let clause = Some (parse_spec_clause token_stream) in in_count := !in_count + 1; clause with Stream.Failure -> None) in
     let atomic = (parser [< 'AtomicClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
-    let ft = (parser [< 'FuncTypeClause (ft, ftargs) >] -> out_count := !out_count + 1; Some (ft, ftargs) | [< >] -> None) clause_stream in
+    let ft = (parser [< 'FuncTypeClause (ft, fttargs, ftargs) >] -> out_count := !out_count + 1; Some (ft, fttargs, ftargs) | [< >] -> None) clause_stream in
     let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
     if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: atomic clause (optional), function type clause (optional), contract (optional).");
     (atomic, ft, pre_post)
@@ -1787,11 +1798,21 @@ and
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, hpn, args));
      '(_, Kwd ";")
      >] -> CreateBoxStmt (l, x, bcn, args, handleClauses)
-| [< '(l, Kwd "produce_lemma_function_pointer_chunk"); '(_, Kwd "("); '(_, Ident x); '(_, Kwd ")");
+| [< '(l, Kwd "produce_lemma_function_pointer_chunk"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
+     ftclause = begin parser
+       [< '(_, Kwd ":");
+          '(li, Ident ftn);
+          targs = parse_type_args li;
+          args = parse_arglist;
+          '(_, Kwd "("); params = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")");
+          '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
+       Some (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)
+     | [< >] -> None
+     end;
      body = parser
        [< '(_, Kwd ";") >] -> None
      | [< s = parse_stmt >] -> Some s
-  >] -> ProduceLemmaFunctionPointerChunkStmt (l, x, body)
+  >] -> ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body)
 | [< '(l, Kwd "produce_function_pointer_chunk"); '(_, Ident ftn);
      '(_, Kwd "("); fpe = parse_expr; '(_, Kwd ")");
      args = parse_arglist;
@@ -2078,6 +2099,7 @@ and
      end; e = parse_expr_suffix_rest e >] -> e
 | [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, ref None), true)) >] -> e
 | [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, ref None), true)) >] -> e
+| [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (ExprCallExpr (l, e0, es)) >] -> e
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
@@ -2938,7 +2960,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [PackageDecl(_,"",[],ds)] -> ds
       | _ when file_type path=Java -> []
     in
-    flatmap (function (FuncTypeDecl (l, gh, _, g, ftps, _, _)) -> [g, (l, gh, ftps)] | _ -> []) ds
+    flatmap (function (FuncTypeDecl (l, gh, _, g, tps, ftps, _, _)) -> [g, (l, gh, tps, ftps)] | _ -> []) ds
   in
   
   let inductivedeclmap=
@@ -3285,9 +3307,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let globalmap = globalmap1 @ globalmap0 in
   
   let isfuncs = if file_type path=Java then [] else
-    flatmap (fun (ftn, (_, gh, ftps)) ->
-      match (gh, ftps) with
-        (Real, []) ->
+    flatmap (fun (ftn, (_, gh, tparams, ftps)) ->
+      match (gh, tparams, ftps) with
+        (Real, [], []) ->
         let isfuncname = "is_" ^ ftn in
         let domain = [ProverInt] in
         let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
@@ -3595,10 +3617,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter functypedeclmap1 ds =
       match ds with
         [] -> List.rev functypedeclmap1
-      | FuncTypeDecl (l, gh, rt, ftn, ftxs, xs, (pre, post))::ds ->
+      | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post))::ds ->
         let (pn,ilist) = ("",[]) in
-        if gh = Ghost && ftxs <> [] then static_error l "Parameterized lemma function types are not supported.";
+        if gh = Real && tparams <> [] then static_error l "Declaring type parameters on non-lemma function types is not supported.";
         let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
+        let rec check_tparams_distinct tparams =
+          match tparams with
+            [] -> ()
+          | x::xs ->
+            if List.mem x xs then static_error l "Duplicate type parameter";
+            check_tparams_distinct xs
+        in
+        check_tparams_distinct tparams;
+        (* The return type cannot mention type parameters. *)
         let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
         let ftxmap =
           let rec iter xm xs =
@@ -3606,7 +3637,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               [] -> List.rev xm
             | (te, x)::xs ->
               if List.mem_assoc x xm then static_error l "Duplicate function type parameter name.";
-              let t = check_pure_type (pn,ilist) [] te in
+              let t = check_pure_type (pn,ilist) tparams te in
               iter ((x, t)::xm) xs
           in
           iter [] ftxs
@@ -3617,12 +3648,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               [] -> List.rev xm
             | (te, x)::xs ->
               if List.mem_assoc x xm || List.mem_assoc x ftxmap then static_error l "Duplicate parameter name.";
-              let t = check_pure_type (pn,ilist) [] te in
+              let t = check_pure_type (pn,ilist) tparams te in
               iter ((x, t)::xm) xs
           in
           iter [] xs
         in
-        iter ((ftn, (l, gh, rt, ftxmap, xmap, pre, post))::functypedeclmap1) ds
+        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::functypedeclmap1) ds
       | _::ds -> iter functypedeclmap1 ds
     in
     if file_type path=Java then [] else
@@ -3643,24 +3674,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       structmap1
   in
   
-  let is_lemmafunctype_pred_map1 =
-    flatmap
-      (function
-         (g, (l, Ghost, _)) ->
-         [(g, mk_predfam ("is_" ^ g) l [] 0 [PtrType (FuncType g)] None)]
-       | _ -> []
-      )
-      functypenames
-  in
-  
-  let islemmafunctypepreds1 = List.map (fun (_, p) -> p) is_lemmafunctype_pred_map1 in
-  
   let is_paramizedfunctype_pred_map1 =
     flatmap
       begin function
-        (g, (l, Real, rt, ftxmap, xmap, pre, post)) when ftxmap <> [] ->
+        (g, (l, gh, tparams, rt, ftxmap, xmap, pre, post)) when gh = Ghost || ftxmap <> [] ->
         let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
-        [(g, mk_predfam ("is_" ^ g) l [] 0 paramtypes (Some (List.length paramtypes)))]
+        [(g, mk_predfam ("is_" ^ g) l tparams 0 paramtypes (Some (List.length paramtypes)))]
       | _ -> []
       end
       functypedeclmap1
@@ -3741,7 +3760,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         PackageDecl(l,pn,il,ds)::rest-> iter' (iter (pn,il) pm ds) rest
       | [] -> pm
     in
-    iter' (islemmafunctypepreds1 @ isparamizedfunctypepreds1 @ structpreds1) ps
+    iter' (isparamizedfunctypepreds1 @ structpreds1) ps
   in
   
   let (boxmap, predfammap1) =
@@ -3981,6 +4000,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (w1, w2, (Char | ShortType | IntType | RealType | PtrType _)) as result -> result
       | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected."
     in
+    let check_pure_fun_value_call l w t es =
+      if es = [] then static_error l "Zero-argument application of pure function value makes no sense.";
+      let box e t = convert_provertype_expr e (provertype_of_type t) ProverInductive in
+      let unbox e t = convert_provertype_expr e ProverInductive (provertype_of_type t) in
+      let (ws, tp) =
+        let rec apply ws t es =
+          match (es, t) with
+            ([], t) -> (List.rev ws, t)
+          | (e::es, PureFuncType (t1, t2)) -> apply (box (checkt e t1) t1::ws) t2 es
+          | (e::es, _) -> static_error l "Too many arguments"
+        in
+        apply [] t es
+      in
+      (unbox (WPureFunValueCall (l, w, ws)) tp, tp)
+    in
     match e with
       True l -> (e, boolt)
     | False l -> (e, boolt)
@@ -4076,7 +4110,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end $. fun () ->
       match resolve (pn,ilist) l x purefuncmap with
         Some (x, (_, tparams, t, pts, _)) ->
-        if tparams <> [] then static_error l "Using a generic fixpoint function as a value is not yet supported.";
+        let (pts, t) =
+          if tparams = [] then
+            (pts, t)
+          else
+            let tpenv = List.map (fun x -> (x, InferredType (ref None))) tparams in
+            (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
+        in
         scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t)
       | None ->
       if language = Java then
@@ -4199,6 +4239,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class")
+    | ExprCallExpr (l, e, es) ->
+      let (w, t) = check e in
+      begin match t with
+        PureFuncType (_, _) -> check_pure_fun_value_call l w t es
+      | _ -> static_error l "The callee of a call of this form must be a pure function value."
+      end
     | CallExpr (l, g, targes, [], pats, fb) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position") pats in
       let process_targes callee_tparams =
@@ -4218,24 +4264,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let func_call () =
         match try_assoc g tenv with
           Some (PtrType (FuncType ftn)) ->
-          let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
-          let rt = match rt with None -> Void | Some rt -> rt in
+          let (_, gh, tparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
+          let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
           (WFunPtrCall (l, g, es), rt)
         | Some ((PureFuncType (t1, t2) as t) as tp) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters.";
-          if es = [] then static_error l "Zero-argument application of pure function value makes no sense.";
-          let box e t = convert_provertype_expr e (provertype_of_type t) ProverInductive in
-          let unbox e t = convert_provertype_expr e ProverInductive (provertype_of_type t) in
-          let (ws, tp) =
-            let rec apply ws t es =
-              match (es, t) with
-                ([], t) -> (List.rev ws, t)
-              | (e::es, PureFuncType (t1, t2)) -> apply (box (checkt e t1) t1::ws) t2 es
-              | (e::es, _) -> static_error l "Too many arguments"
-            in
-            apply [] t es
-          in
-          (unbox (WPureFunValueCall (l, (Var (l, g, ref (Some LocalVar))), ws)) tp, tp)
+          check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
@@ -6685,6 +6719,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReadArray (l, ea, ei) -> expr_assigned_variables ea @ expr_assigned_variables ei
     | Deref (l, e, _) -> expr_assigned_variables e
     | CallExpr (l, g, _, _, pats, _) -> flatmap (function (LitPat e) -> expr_assigned_variables e | _ -> []) pats
+    | ExprCallExpr (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap expr_assigned_variables args
     | WPureFunValueCall (l, e, es) -> flatmap expr_assigned_variables (e::es)
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap expr_assigned_variables args
@@ -6706,7 +6741,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ExprStmt e -> expr_assigned_variables e
     | DeclStmt (l, t, xs) -> flatmap (fun (x, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
     | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
-    | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
+    | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body) ->
+      expr_assigned_variables e @
       begin
         match body with
           None -> []
@@ -6759,15 +6795,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, rt, ftxmap, xmap, pre, post))::ds ->
+      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::ds ->
         let (pn,ilist) = ("",[]) in
         let (pre, post) =
-          let (wpre, tenv) = check_pred (pn,ilist) [] (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
+          let (wpre, tenv) = check_pred (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          let (wpost, tenv) = check_pred (pn,ilist) [] postmap post in
+          let (wpost, tenv) = check_pred (pn,ilist) tparams postmap post in
           (wpre, wpost)
         in
-        iter ((ftn, (l, gh, rt, ftxmap, xmap, pre, post))::functypemap) ds
+        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::functypemap) ds
       | _::ds -> iter functypemap ds
     in
     iter [] functypedeclmap1
@@ -6794,7 +6830,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     check_breakpoint [] env l
   in
   
-  let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, cenv0, pre0, post0) =
+  let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0) =
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.");
@@ -6822,7 +6858,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
-    assume_pred [] (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+    assume_pred tpenv0 (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
       let bs = zip2 xmap env0_0 in
       let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
       assert_pred rules tpenv (pn,ilist) h [] env pre true real_unit (fun _ h _ env _ ->
@@ -6832,7 +6868,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
         in
         assume_pred tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
-          assert_pred rules [] (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
+          assert_pred rules tpenv0 (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
             check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
         )
@@ -6875,15 +6911,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (wpre, pre_tenv, wpost)
     in
     if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported.";
-    begin
+    let functype_opt =
       match functype_opt with
-        None -> ()
-      | Some (ftn, ftargs) ->
+        None -> None
+      | Some (ftn, fttargs, ftargs) ->
         if body = None then static_error l "A function prototype cannot implement a function type.";
         begin
           match try_assoc ftn functypemap with
             None -> static_error l "No such function type."
-          | Some (lft, gh, rt0, ftxmap0, xmap0, pre0, post0) ->
+          | Some (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0) ->
+            let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
+            let fttpenv =
+              match zip fttparams fttargs with
+                None -> static_error l "Incorrect number of function type type arguments"
+              | Some bs -> bs
+            in
             let ftargenv =
               match zip ftxmap0 ftargs with
                 None -> static_error l "Incorrect number of function type arguments"
@@ -6895,7 +6937,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         None -> static_error larg "No such module"
                       | Some term -> term
                     in
-                    expect_type larg IntType tp;
+                    expect_type larg IntType (instantiate_type fttpenv tp);
                     (x, value)
                   end
                   bs
@@ -6903,19 +6945,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let Some fterm = fterm in
             let cenv0 = [("this", fterm)] @ ftargenv in
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
+            let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
             check_func_header_compat (pn,ilist) l "Function type implementation check: " env0
               (k, tparams, rt, xmap, atomic, pre, post)
-              (k', [], rt0, xmap0, false, cenv0, pre0, post0);
+              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0);
             if gh = Real then
             begin
               if ftargs = [] then
                 assume_is_functype fn ftn;
               if not (List.mem_assoc ftn functypemap1) then
                 functypes_implemented := (fn, lft, ftn, List.map snd ftargs, unloadable)::!functypes_implemented
-            end
+            end;
+            Some (ftn, fttargs, ftargs)
         end
-    end;
-    (rt, xmap, pre, pre_tenv, post)
+    in
+    (rt, xmap, functype_opt, pre, pre_tenv, post)
   in
   
   let (funcmap1, prototypes_implemented) =
@@ -6925,7 +6969,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Func (l, k, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
         let fterm = if language = CLang then Some (List.assoc fn funcnameterms) else None in
-        let (rt, xmap, pre, pre_tenv, post) =
+        let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn fterm xs atomic functype_opt contract_opt body
         in
         begin
@@ -6939,7 +6983,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               static_error l "Duplicate function implementation."
           | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype.";
-            check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, [], pre0, post0);
+            check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0);
             iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -7007,7 +7051,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match try_assoc sign meths1 with
                   None-> iter rest (elem::meths1)
                 | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,v1) -> 
-                  check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
+                  check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], [], pre0, post0);
                   iter rest meths1
             in
             iter meths0 meths1
@@ -7094,7 +7138,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
                     check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
                       (Regular, [], rt, xmap, false, pre, post)
-                      (Regular, [], rt', xmap', false, [("this", thisTerm)], pre', post')
+                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post')
                   );
                   pop()
               end
@@ -7197,7 +7241,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match try_assoc sign0 meths1 with
                   None-> iter rest (elem::meths1)
                 | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,ss1,fb1,v1,_) -> 
-                  check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], pre0, post0);
+                  check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], [], pre0, post0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
@@ -7212,7 +7256,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   None-> iter rest (elem::constr1)
                 | Some(lm1,xmap1,pre1,pre_tenv1,post1,ss1,v1) ->
                   let rt= None in
-                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], pre0, post0);
+                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
@@ -7325,6 +7369,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WRead(_, e, _, _, _, _, _, _) -> locals_address_taken e
     | Deref(_, e, _) -> locals_address_taken e
     | CallExpr(l, name, targs, _, args, binding) ->  List.flatten (List.map (fun pat -> match pat with LitPat(e) -> locals_address_taken e | _ -> []) args)
+    | ExprCallExpr (l, e, es) -> flatmap locals_address_taken (e::es)
     | WPureFunCall (l, g, targs, args) -> flatmap locals_address_taken args
     | WPureFunValueCall (l, e, es) -> flatmap locals_address_taken (e::es)
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap locals_address_taken args
@@ -7593,10 +7638,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (PtrType (FuncType ftn)) = List.assoc g tenv in
       has_effects ();
       let fterm = List.assoc g env in
-      let (_, gh, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
+      let (_, gh, fttparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
-      let check_call h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None [] (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) ([], rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+      let check_call targs h args0 cont =
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
       in
       begin
         match gh with
@@ -7604,19 +7649,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
-          check_call h [] cont
+          check_call [] h [] cont
         | Real ->
           let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
-          check_call h args $. fun h retval ->
+          check_call [] h args $. fun h retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) retval
         | Ghost ->
-          let (_, _, _, _, predsymb, _) = List.assoc ("is_" ^ ftn) predfammap in
-          assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat (Some 1) [TermPat fterm] $. fun _ h coef _ _ _ _ _ ->
+          let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
+          let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
+          let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
+          assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required.";
-          check_call h [] $. fun h retval ->
-          cont (Chunk ((predsymb, true), [], real_unit, [fterm], None)::h) retval
+          check_call targs h args $. fun h retval ->
+          cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) retval
       end
     | NewObject (l, cn, args) ->
       if pure then static_error l "Object creation is not allowed in a pure context";
@@ -7794,6 +7841,195 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if not pure then check_ghost ghostenv l e;
       verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
     in
+    let verify_produce_function_pointer_chunk_stmt stmt_ghostness l fpe ftclause_opt scope_opt =
+      if not pure then static_error l "This construct is not allowed in a non-pure context.";
+      let (lfn, fn) =
+        match fpe with
+          Var (lfn, x, _) -> (lfn, x)
+        | _ -> static_error (expr_loc fpe) "Function name expected"
+      in
+      match try_assoc fn funcmap with
+        None -> static_error l "No such function."
+      | Some (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v) ->
+        if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function.";
+        if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected.";
+        if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported.";
+        if body' = None then register_prototype_used l fn;
+        if stmt_ghostness = Ghost then begin
+          match leminfo with
+            None -> ()
+          | Some (lems, g0, indinfo) ->
+            if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas.";
+            if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body."
+        end;
+        let (ftn, fttargs, ftargs) =
+          match ftclause_opt with
+            None ->
+            begin match functype_opt with
+              None -> static_error l "Function does not implement a function type."
+            | Some (ftn, fttargs, ftargs) ->
+              if ftargs <> [] then static_error l "Function header must not specify function type arguments.";
+              (ftn, fttargs, [])
+            end
+          | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
+            let (rt1, xmap1, pre1, post1) = (rt, ps, pre, post) in
+            begin match try_assoc ftn functypemap with
+              None -> static_error l "No such function type"
+            | Some (lft, gh, fttparams, rt, ftxmap, xmap, pre, post) ->
+              begin match stmt_ghostness with
+                Real -> if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types."
+              | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected."
+              end;
+              begin match (rt, rt1) with
+                (None, _) -> ()
+              | (Some t, Some t1) -> expect_type_core l "Function return type: " t1 t
+              | _ -> static_error l "Return type mismatch: Function does not return a value"
+              end;
+              let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
+              let tpenv =
+                match zip fttparams fttargs with
+                  None -> static_error l "Incorrect number of function type type arguments."
+                | Some bs -> bs
+              in
+              begin match zip xmap xmap1 with
+                None -> static_error l "Function type parameter count does not match function parameter count"
+              | Some bs ->
+                List.iter
+                  begin fun ((x, tp), (x1, tp1)) ->
+                    expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) (instantiate_type tpenv tp) tp1
+                  end
+                  bs
+              end;
+              let ftargenv =
+                match zip ftxmap args with
+                  None -> static_error l "Incorrect number of function pointer chunk arguments"
+                | Some bs ->
+                  List.map
+                    begin fun ((x, tp), e) ->
+                      let w = check_expr_t (pn,ilist) tparams tenv e (instantiate_type tpenv tp) in
+                      (x, ev w)
+                    end
+                    bs
+              in
+              let fparams =
+                match zip params xmap with
+                  None -> static_error l "Incorrect number of parameter names"
+                | Some bs ->
+                  List.map
+                    begin fun ((lx, x), (x0, tp0)) ->
+                      if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable";
+                      let tp = instantiate_type tpenv tp0 in
+                      let t = get_unique_var_symb x tp in
+                      (x, x0, tp, t, prover_convert_term t tp tp0)
+                    end
+                    bs
+              in
+              let (ss_before, callLoc, resultvar, ss_after) =
+                let rec iter ss_before ss_after =
+                  match ss_after with
+                    [] -> static_error l "'call();' statement expected"
+                  | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
+                  | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static))])::ss_after ->
+                    if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
+                    let t = check_pure_type (pn,ilist) tparams te in
+                    begin match rt1 with
+                      None -> static_error ld "Function does not return a value"
+                    | Some rt1 ->
+                      expect_type ld rt1 t;
+                      (List.rev ss_before, lc, Some (x, t), ss_after)
+                    end
+                  | s::ss_after -> iter (s::ss_before) ss_after
+                in
+                iter [] ss
+              in
+              begin
+                let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
+                let h = [] in
+                with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
+                with_context PushSubcontext $. fun () ->
+                let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t0)) fparams in
+                assume_pred tpenv ("",[]) h [] pre_env pre real_unit None None $. fun h _ ft_env ->
+                with_context PopSubcontext $. fun () ->
+                let tenv = List.map (fun (x, x0, tp, t, t0) -> (x, tp)) fparams @ tenv in
+                let ghostenv = List.map (fun (x, x0, tp, t, t0) -> x) fparams @ ghostenv in
+                let env = List.map (fun (x, x0, tp, t, t0) -> (x, t)) fparams @ env in
+                let lblenv = [] in
+                let pure = true in
+                let return_cont h t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" in
+                begin fun tcont ->
+                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont
+                end $. fun sizemap tenv ghostenv h env ->
+                with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
+                with_context PushSubcontext $. fun () ->
+                let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t)) fparams in
+                assert_pred rules [] ("",[]) h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
+                let (f_env, ft_env, tenv, ghostenv, env) =
+                  match rt1 with
+                    None -> (f_env, ft_env, tenv, ghostenv, env)
+                  | Some rt1 ->
+                    let result = get_unique_var_symb "result" rt1 in
+                    let f_env = ("result", result)::f_env in
+                    let ft_env =
+                      match rt with
+                        None -> ft_env
+                      | Some rt -> ("result", result)::ft_env
+                    in
+                    let (tenv, ghostenv, env) =
+                      match resultvar with
+                        None -> (tenv, ghostenv, env)
+                      | Some (x, t) ->
+                        ((x, t)::tenv, x::ghostenv, (x, result)::env)
+                    in
+                    (f_env, ft_env, tenv, ghostenv, env)
+                in
+                assume_pred [] ("",[]) h [] f_env post1 real_unit None None $. fun h _ _ ->
+                with_context PopSubcontext $. fun () ->
+                begin fun tcont ->
+                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont
+                end $. fun sizemap tenv ghostenv h env ->
+                with_context (Executing (h, env, closeBraceLoc, "Consuming function type postcondition")) $. fun () ->
+                with_context PushSubcontext $. fun () ->
+                assert_pred rules tpenv ("",[]) h [] ft_env post true real_unit $. fun _ h _ _ _ ->
+                with_context PopSubcontext $. fun () ->
+                check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
+              end;
+              (ftn, fttargs, List.map snd ftargenv)
+            end
+        in
+        let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
+        let coef = match stmt_ghostness with Real -> get_dummy_frac_term () | Ghost -> real_unit in
+        let h = Chunk ((symb, true), fttargs, coef, fterm::ftargs, None)::h in
+        match scope_opt with
+          None -> cont h env
+        | Some s ->
+          let consume_chunk h cont =
+            with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
+            let args = List.map (fun t -> TermPat t) (fterm::ftargs) in
+            assert_chunk rules (pn,ilist) h ghostenv [] [] l (symb, true) fttargs real_unit dummypat (Some 1) args (fun _ h coef ts chunk_size ghostenv env env' ->
+              if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required.";
+              cont h
+            )
+          in
+          let lblenv =
+            List.map
+              begin fun (lbl, cont) ->
+                (lbl,
+                 fun blocks_done sizemap tenv ghostenv h env ->
+                 consume_chunk h (fun h -> cont blocks_done sizemap tenv ghostenv h env)
+                )
+              end
+              lblenv
+          in
+          let tcont _ _ _ h env =
+            consume_chunk h (fun h ->
+              tcont sizemap tenv ghostenv h env
+            )
+          in
+          let return_cont h retval =
+            consume_chunk h (fun h -> return_cont h retval)
+          in
+          verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+    in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
@@ -7805,188 +8041,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_is_of_type l (ev w) tp (fun () -> cont h env)
-    | ProduceLemmaFunctionPointerChunkStmt (l, x, body) ->
-      if not pure then static_error l "This construct is not allowed in a non-pure context.";
-      begin
-        match try_assoc x funcmap with
-          None -> static_error l "No such function."
-        | Some (funenv, fterm, _, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, _,fb,v) ->
-          if not (is_lemma k) then static_error l "Not a lemma function.";
-          begin
-            match leminfo with
-              None -> ()
-            | Some (lems, g0, indinfo) ->
-              if not (List.mem x lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas.";
-              if body = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body."
-          end;
-          let ftn =
-            match functype_opt with
-              None -> static_error l "Function does not implement a function type."
-            | Some (ftn, ftargs) -> ftn
-          in
-          let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
-          let Some funcsym = fterm in
-          let h = Chunk ((symb, true), [], real_unit, [funcsym], None)::h in
-          match body with
-            None -> cont h env
-          | Some s ->
-            let consume_chunk h cont =
-              with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
-              assert_chunk rules (pn,ilist) h ghostenv [] [] l (symb, true) [] real_unit dummypat (Some 1) [TermPat funcsym] (fun _ h coef ts chunk_size ghostenv env env' ->
-                if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required.";
-                cont h
-              )
-            in
-            let lblenv =
-              List.map
-                begin fun (lbl, cont) ->
-                  (lbl,
-                   fun blocks_done sizemap tenv ghostenv h env ->
-                   consume_chunk h (fun h -> cont blocks_done sizemap tenv ghostenv h env)
-                  )
-                end
-                lblenv
-            in
-            let tcont _ _ _ h env =
-              consume_chunk h (fun h ->
-                tcont sizemap tenv ghostenv h env
-              )
-            in
-            let return_cont h retval =
-              consume_chunk h (fun h -> return_cont h retval)
-            in
-            verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
-      end
+    | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
+      verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) ->
-      begin match try_assoc ftn functypemap with
-        None -> static_error l "No such function type"
-      | Some (lft, gh, rt, ftxmap, xmap, pre, post) ->
-        if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types.";
-        let (lfn, fn) =
-          match fpe with
-            Var (lfn, x, _) -> (lfn, x)
-          | _ -> static_error (expr_loc fpe) "Function name expected"
-        in
-        let (fterm, l1, rt1, xmap1, pre1, post1) =
-          match try_assoc fn funcmap with
-            None -> static_error lfn "Function name expected"
-          | Some (fenv, Some fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body', binding, visibility) ->
-            if k <> Regular then static_error lfn "Regular function expected";
-            if body' = None then register_prototype_used l fn;
-            (fterm, l, rt, xmap, pre, post)
-        in
-        begin match (rt, rt1) with
-          (None, _) -> ()
-        | (Some t, Some t1) -> expect_type_core l "Function return type: " t1 t
-        | _ -> static_error l "Return type mismatch: Function does not return a value"
-        end;
-        begin match zip xmap xmap1 with
-          None -> static_error l "Function type parameter count does not match function parameter count"
-        | Some bs ->
-          List.iter
-            begin fun ((x, tp), (x1, tp1)) ->
-              expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1
-            end
-            bs
-        end;
-        let ftargenv =
-          match zip ftxmap args with
-            None -> static_error l "Incorrect number of function pointer chunk arguments"
-          | Some bs ->
-            List.map
-              begin fun ((x, tp), e) ->
-                let w = check_expr_t (pn,ilist) tparams tenv e tp in
-                (x, ev w)
-              end
-              bs
-        in
-        let fparams =
-          match zip params xmap with
-            None -> static_error l "Incorrect number of parameter names"
-          | Some bs ->
-            List.map
-              begin fun ((lx, x), (x0, tp)) ->
-                if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable";
-                (x, x0, tp, get_unique_var_symb x tp)
-              end
-              bs
-        in
-        let (ss_before, callLoc, resultvar, ss_after) =
-          let rec iter ss_before ss_after =
-            match ss_after with
-              [] -> static_error l "'call();' statement expected"
-            | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
-            | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static))])::ss_after ->
-              if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
-              let t = check_pure_type (pn,ilist) tparams te in
-              begin match rt1 with
-                None -> static_error ld "Function does not return a value"
-              | Some rt1 ->
-                expect_type ld rt1 t;
-                (List.rev ss_before, lc, Some (x, t), ss_after)
-              end
-            | s::ss_after -> iter (s::ss_before) ss_after
-          in
-          iter [] ss
-        in
-        let cont () =
-          let coef = get_dummy_frac_term () in
-          let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
-          cont (Chunk ((symb, true), [], coef, fterm::List.map snd ftargenv, None)::h) env
-        in
-        begin
-          let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
-          let h = [] in
-          with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
-          with_context PushSubcontext $. fun () ->
-          let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t) -> (x0, t)) fparams in
-          assume_pred [] ("",[]) h [] pre_env pre real_unit None None $. fun h _ ft_env ->
-          with_context PopSubcontext $. fun () ->
-          let tenv = List.map (fun (x, x0, tp, t) -> (x, tp)) fparams @ tenv in
-          let ghostenv = List.map (fun (x, x0, tp, t) -> x) fparams @ ghostenv in
-          let env = List.map (fun (x, x0, tp, t) -> (x, t)) fparams @ env in
-          let lblenv = [] in
-          let pure = true in
-          let return_cont h t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" in
-          begin fun tcont ->
-            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont
-          end $. fun sizemap tenv ghostenv h env ->
-          with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
-          with_context PushSubcontext $. fun () ->
-          let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t) -> (x0, t)) fparams in
-          assert_pred rules [] ("",[]) h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
-          let (f_env, ft_env, tenv, ghostenv, env) =
-            match rt1 with
-              None -> (f_env, ft_env, tenv, ghostenv, env)
-            | Some rt1 ->
-              let result = get_unique_var_symb "result" rt1 in
-              let f_env = ("result", result)::f_env in
-              let ft_env =
-                match rt with
-                  None -> ft_env
-                | Some rt -> ("result", result)::ft_env
-              in
-              let (tenv, ghostenv, env) =
-                match resultvar with
-                  None -> (tenv, ghostenv, env)
-                | Some (x, t) ->
-                  ((x, t)::tenv, x::ghostenv, (x, result)::env)
-              in
-              (f_env, ft_env, tenv, ghostenv, env)
-          in
-          assume_pred [] ("",[]) h [] f_env post1 real_unit None None $. fun h _ _ ->
-          with_context PopSubcontext $. fun () ->
-          begin fun tcont ->
-            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont
-          end $. fun sizemap tenv ghostenv h env ->
-          with_context (Executing (h, env, closeBraceLoc, "Consuming function type postcondition")) $. fun () ->
-          with_context PushSubcontext $. fun () ->
-          assert_pred rules [] ("",[]) h [] ft_env post true real_unit $. fun _ h _ _ _ ->
-          with_context PopSubcontext $. fun () ->
-          check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
-        end;
-        cont()
-      end
+      verify_produce_function_pointer_chunk_stmt Real l fpe (Some (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)) None
     | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
@@ -8975,7 +9033,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let funcmap' =
         List.map
           begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
-            let (rt, xmap, pre, pre_tenv, post) =
+            let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
             in
             (fn, (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))

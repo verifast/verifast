@@ -46,6 +46,8 @@ cd ..
 verifast_both -c ifs.c
 verifast_both -shared goto.c
 verifast_both map.c
+verifast_both -disable_overflow_check -c full_func_io.c
+verifast_both -disable_overflow_check -c full_func_io_sim.c
 verifast_both -c pure_map.c
 verifast_both ghost_field.c
 verifast_both -c lemmafuncptr.c

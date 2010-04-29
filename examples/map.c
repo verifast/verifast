@@ -69,7 +69,7 @@ typedef int mapfunc(void *data, int x);
     //@ requires mapfunc(this)(data, ?in, ?out, ?info) &*& in != nil &*& x == head(in);
     //@ ensures mapfunc(this)(data, tail(in), append(out, cons(result, nil)), info);
 
-struct node *map(struct node *list, mapfunc *f, void *data)
+struct node *fmap(struct node *list, mapfunc *f, void *data)
     //@ requires list(list, ?xs) &*& is_mapfunc(f) == true &*& mapfunc(f)(data, xs, ?out, ?info);
     //@ ensures list(list, xs) &*& list(result, ?ys) &*& mapfunc(f)(data, nil, append(out, ys), info);
 {
@@ -81,7 +81,7 @@ struct node *map(struct node *list, mapfunc *f, void *data)
         return 0;
     } else {
         int fvalue = f(data, list->value);
-        struct node *fnext = map(list->next, f, data);
+        struct node *fnext = fmap(list->next, f, data);
         //@ assert list(fnext, ?ftail);
         //@ close list(list, xs);
         struct node *result = list_cons(fvalue, fnext);
@@ -92,15 +92,14 @@ struct node *map(struct node *list, mapfunc *f, void *data)
 
 /*@
 
-fixpoint list<int> plusOne(list<int> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(h, t): return cons<int>(h + 1, plusOne(t));
+fixpoint int plusOne(unit u, int x) {
+    switch (u) {
+        case unit: return x + 1;
     }
 }
 
 predicate_family_instance mapfunc(plusOneFunc)(void *data, list<int> in, list<int> out, list<int> info) =
-    plusOne(info) == append(out, plusOne(in));
+    map((plusOne)(unit), info) == append(out, map((plusOne)(unit), in));
 
 @*/
 
@@ -110,7 +109,7 @@ int plusOneFunc(void *data, int x) //@ : mapfunc
 {
     if (x == 2147483647) abort();
     //@ open mapfunc(plusOneFunc)(data, in, out, ?info_);
-    //@ append_assoc(out, cons(x + 1, nil), plusOne(tail(in)));
+    //@ append_assoc(out, cons(x + 1, nil), map((plusOne)(unit), tail(in)));
     //@ switch (in) { case nil: case cons(h, t): }
     //@ close mapfunc(plusOneFunc)(data, tail(in), append(out, cons(x + 1, nil)), info_);
     return x + 1;
@@ -126,7 +125,7 @@ int main() //@ : main
     l = list_cons(2, l);
     l = list_cons(1, l);
     //@ close mapfunc(plusOneFunc)(0, cons(1, cons(2, cons(3, nil))), nil, cons(1, cons(2, cons(3, nil))));
-    struct node *l2 = map(l, plusOneFunc, 0);
+    struct node *l2 = fmap(l, plusOneFunc, 0);
     //@ open mapfunc(plusOneFunc)(0, nil, ?ys, _);
     struct node *l3 = 0;
     //@ close list(0, nil);
