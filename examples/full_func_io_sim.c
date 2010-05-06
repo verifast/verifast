@@ -1,8 +1,6 @@
 /*@
 
-inductive output_action = putchar_action(char);
-inductive input_action = putchar_return_action;
-inductive io_action = output(output_action) | input(input_action);
+inductive io_action = putchar_action(char) | putchar_return_action;
 
 // This state machine might be a projection of another state machine; the id identifies the projection.
 
@@ -13,7 +11,7 @@ typedef lemma void is_sim<s1, s2>(
         fixpoint(s2, io_action, bool) allowed2, fixpoint(s2, io_action, s2) next2,
         fixpoint(s1, s2, bool) sim
     )(s1 s1, s2 s2, io_action a);
-    requires sim(s1, s2) == true &*& switch (a) { case output(ao): return allowed2(s2, a) == true; case input(ai): return allowed1(s1, a) == true; };
+    requires sim(s1, s2) == true &*& switch (a) { case putchar_action(c): return allowed2(s2, a) == true; case putchar_return_action: return allowed1(s1, a) == true; };
     ensures allowed1(s1, a) == true &*& allowed2(s2, a) == true &*& sim(next1(s1, a), next2(s2, a)) == true;
 
 predicate unproject_token<s1, s2>(int id_new, int id_old, fixpoint(s1, io_action, bool) allowed, fixpoint(s1, io_action, s1) next, fixpoint(s1, s2, bool) sim);
@@ -40,14 +38,14 @@ inductive putchar_state = putchar_before(char) | putchar_after;
 
 fixpoint bool putchar_allowed(putchar_state s, io_action a) {
     switch (a) {
-        case output(ao): return switch (ao) { case putchar_action(c): return s == putchar_before(c); };
-        case input(ai): return true;
+        case putchar_action(c): return s == putchar_before(c);
+        case putchar_return_action: return true;
     }
 }
 
 fixpoint putchar_state putchar_next(putchar_state s, io_action a) {
     switch (s) {
-        case putchar_before(c): return switch (a) { case output(ao): return putchar_after; case input(ai): return putchar_before(c); };
+        case putchar_before(c): return switch (a) { case putchar_action(c0): return putchar_after; case putchar_return_action: return putchar_before(c); };
         case putchar_after: return putchar_after;
     }
 }
@@ -62,15 +60,15 @@ void putchar(char c);
 
 fixpoint bool myputn_allowed(int s, io_action a) {
     switch (a) {
-        case output(ao): return 0 < s;
-        case input(ai): return true;
+        case putchar_action(c): return 0 < s;
+        case putchar_return_action: return true;
     }
 }
 
 fixpoint int myputn_next(int s, io_action a) {
     switch (a) {
-        case output(ao): return s - 1;
-        case input(ai): return s;
+        case putchar_action(c): return s - 1;
+        case putchar_return_action: return s;
     }
 }
 
@@ -88,17 +86,13 @@ fixpoint bool myput2_sim(int offset, int s1, putchar_state s2) {
 predicate myput2_offset(int offset) = true;
 
 lemma void myput2_is_sim(int s1, putchar_state s2, io_action a)
-    requires myput2_offset(?offset) &*& 0 <= offset &*& true == (myput2_sim)(offset, s1, s2) &*& switch (a) { case output(ao): return putchar_allowed(s2, a) == true; case input(ai): return myputn_allowed(s1, a) == true; };
+    requires myput2_offset(?offset) &*& 0 <= offset &*& true == (myput2_sim)(offset, s1, s2) &*& switch (a) { case putchar_action(c): return putchar_allowed(s2, a) == true; case putchar_return_action: return myputn_allowed(s1, a) == true; };
     ensures myputn_allowed(s1, a) == true &*& putchar_allowed(s2, a) == true &*& myput2_sim(offset, myputn_next(s1, a), putchar_next(s2, a)) == true;
 {
     open myput2_offset(_);
     switch (s2) {
         case putchar_before(c):
         case putchar_after:
-    }
-    switch (a) {
-        case output(ao): switch (ao) { case putchar_action(c): }
-        case input(ai):
     }
 }
 
