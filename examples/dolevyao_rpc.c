@@ -88,7 +88,7 @@ Defining "pub"
 ==============
 
 The core task of verifying a protocol implementation is defining "pub". "pub" must be sufficiently weak so that
-sends by the protocol function and sends by the attacker are allowed; but sufficiently strong so that when the
+sends by the protocol functions and sends by the attacker are allowed; but sufficiently strong so that when the
 protocol receives an item and the item is valid, the appropriate event predicate follows from it.
 
 */
