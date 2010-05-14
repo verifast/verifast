@@ -1,6 +1,8 @@
 // Dolev-Yao security verification of a simple secure storage protocol
 // Uses an invariant-based approach inspired by the work of Cohen and the work of Gordon et al.
 
+// See explanations in dolevyao_rpc.c
+
 struct item;
 
 /*@

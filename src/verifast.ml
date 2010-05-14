@@ -925,6 +925,7 @@ and
       loc *
       expr *
       switch_expr_clause list *
+      (loc * expr) option * (* default clause *)
       (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
   | CastExpr of loc * type_expr * expr (* cast *)
@@ -1153,7 +1154,7 @@ let rec expr_loc e =
   | NewArray(l, _, _) -> l
   | NewArrayWithInitializer (l, _, _) -> l
   | IfExpr (l, e1, e2, e3) -> l
-  | SwitchExpr (l, e, secs, _) -> l
+  | SwitchExpr (l, e, secs, _, _) -> l
   | SizeofExpr (l, t) -> l
   | PredNameExpr (l, g) -> l
   | CastExpr (l, te, e) -> l
@@ -1260,7 +1261,7 @@ let expr_fold_open iter state e =
   | NewArray (l, te, e0) -> iter state e0
   | NewArrayWithInitializer (l, te, es) -> iters state es
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
-  | SwitchExpr (l, e0, cs, info) -> itercs (iter state e0) cs
+  | SwitchExpr (l, e0, cs, cdef_opt, info) -> let state = itercs (iter state e0) cs in (match cdef_opt with Some (l, e) -> iter state e | None -> state)
   | PredNameExpr (l, p) -> state
   | CastExpr (l, te, e0) -> state
   | SizeofExpr (l, te) -> state
@@ -2067,7 +2068,10 @@ and
      [< e = parse_expr; '(_, Kwd ")") >] -> e
    | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
    >] -> e*)
-| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses; '(_, Kwd "}") >] -> SwitchExpr (l, e, cs, ref None)
+| [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_expr_clauses;
+     cdef_opt = opt (parser [< '(l, Kwd "default"); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> (l, e));
+     '(_, Kwd "}")
+  >] -> SwitchExpr (l, e, cs, cdef_opt, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
@@ -4364,7 +4368,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w2, t) = check e2 in
       let w3 = checkt e3 t in
       (IfExpr (l, w1, w2, w3), t)
-    | SwitchExpr (l, e, cs, tref) ->
+    | SwitchExpr (l, e, cs, cdef_opt, tref) ->
       let (w, t) = check e in
       begin
         match t with
@@ -4375,11 +4379,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter t0 wcs ctors cs =
               match cs with
                 [] ->
-                if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
+                let (t0, wcdef_opt) =
+                  match cdef_opt with
+                    None ->
+                    if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
+                    (t0, None)
+                  | Some (lcdef, edef) ->
+                    if ctors = [] then static_error lcdef "Superfluous default clause";
+                    let (wdef, tdef) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv edef in
+                    let t0 =
+                      match t0 with
+                        None -> Some tdef
+                      | Some t0 -> expect_type (expr_loc edef) tdef t0; Some t0
+                    in
+                    (t0, Some (lcdef, wdef))
+                in
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported."
-                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, tref), t0)
+                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, wcdef_opt, tref), t0)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -4901,7 +4919,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter state e =
       match e with
       | Var (l, x, scope) -> begin match !scope with Some LocalVar -> x::state | Some _ -> state end
-      | SwitchExpr (l, e, cs, _) ->
+      | SwitchExpr (l, e, cs, cdef_opt, _) ->
         vars_used e @
         flatmap
           (fun (SwitchExprClause (l, c, xs, e)) ->
@@ -4909,6 +4927,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
            List.filter (fun x -> not (List.mem x xs)) xs'
           )
           cs @
+        (match cdef_opt with None -> [] | Some (l, e) -> vars_used e) @
         state
       | e -> expr_fold_open iter state e
     in
@@ -5555,7 +5574,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let Some (l, tp, symbol) = try_assoc' (pn, ilist) x globalmap in cont state symbol
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
-    | SwitchExpr (l, e, cs, tref) ->
+    | SwitchExpr (l, e, cs, cdef_opt, tref) ->
       let g = mk_ident "switch_expression" in
       ev state e $. fun state t ->
       let env =
@@ -5569,31 +5588,43 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let (Some (tt, tenv, targs, tp)) = !tref in
       let symbol = ctxt#mk_symbol g (typenode_of_type tt :: List.map (fun (x, _) -> typenode_of_type (List.assoc x tenv)) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
+      let case_clauses = List.map (fun (SwitchExprClause (_, cn, ps, e)) -> (cn, (ps, e))) cs in
+      let InductiveType (i, targs) = tt in
+      let (_, _, ctormap) = List.assoc i inductivemap in
       let fpclauses =
         List.map
-          (function (SwitchExprClause (_, cn, ps, e)) ->
-             let Some (_, tparams, _, pts, (csym, _)) = try_assoc' (pn,ilist) cn purefuncmap in
-             let apply gvs cvs =
-               let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
-               let Some penv = zip ps cvs in
-               let penv =
-                 if tparams = [] then penv else
-                 let Some penv = zip penv pts in
-                 let Some tpenv = zip tparams targs in
-                 List.map
-                   (fun ((pat, term), typ) ->
-                    match unfold_inferred_type typ with
-                      TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
-                    | _ -> (pat, term)
-                   )
-                   penv
-               in
-               let env = penv@genv in
-               eval_core (pn,ilist) None None env e
-             in
-             (csym, apply)
-          )
-          cs
+          begin fun (cn, _) ->
+            let Some (_, tparams, _, pts, (csym, _)) = try_assoc' (pn,ilist) cn purefuncmap in
+            match try_assoc cn case_clauses with
+              Some (ps, e) ->
+              let apply (_::gvs) cvs =
+                let Some genv = zip (List.map (fun (x, t) -> x) env) gvs in
+                let Some penv = zip ps cvs in
+                let penv =
+                  if tparams = [] then penv else
+                  let Some penv = zip penv pts in
+                  let Some tpenv = zip tparams targs in
+                  List.map
+                    (fun ((pat, term), typ) ->
+                     match unfold_inferred_type typ with
+                       TypeParam x -> (pat, convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv)))
+                     | _ -> (pat, term)
+                    )
+                    penv
+                in
+                let env = penv@genv in
+                eval_core (pn,ilist) None None env e
+              in
+              (csym, apply)
+            | None ->
+              let (Some (_, e)) = cdef_opt in
+              let apply gvs cvs =
+                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
+                eval_core (pn,ilist) None None genv e
+              in
+              (csym, apply)
+          end
+          ctormap
       in
       ctxt#set_fpclauses symbol 0 fpclauses;
       cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
@@ -6726,7 +6757,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | NewArray (l, te, e) -> expr_assigned_variables e
     | NewArrayWithInitializer (l, te, es) -> flatmap expr_assigned_variables es
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
-    | SwitchExpr (l, e, cs, _) -> expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs
+    | SwitchExpr (l, e, cs, cdef_opt, _) ->
+      expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
     | CastExpr (l, te, e) -> expr_assigned_variables e
     | AddressOf (l, e) -> expr_assigned_variables e
     | AssignExpr (l, Var (_, x, _), e) -> [x] @ expr_assigned_variables e
@@ -7374,8 +7406,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WPureFunValueCall (l, e, es) -> flatmap locals_address_taken (e::es)
     | WMethodCall (l, cn, m, pts, args, mb) -> flatmap locals_address_taken args
     | IfExpr(_, con, e1, e2) -> (locals_address_taken con) @ (locals_address_taken e1) @ (locals_address_taken e2)
-    | SwitchExpr(_, e, clauses, _) -> (locals_address_taken e) @
-        (List.flatten (List.map (fun clause -> match clause with SwitchExprClause(_, _, _, e) -> locals_address_taken e) clauses))
+    | SwitchExpr(_, e, clauses, cdef_opt, _) ->
+        (locals_address_taken e) @
+        (List.flatten (List.map (fun clause -> match clause with SwitchExprClause(_, _, _, e) -> locals_address_taken e) clauses)) @
+        (match cdef_opt with None -> [] | Some (l, e) -> locals_address_taken e)
     | AddressOf(_, Var(_, x, scope)) when !scope = Some(LocalVar) -> [x]
     | AddressOf(_, e) -> locals_address_taken e
     | PredNameExpr(_, _) -> []
