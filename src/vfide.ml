@@ -608,7 +608,7 @@ let show_ide initialPath prover =
             let r = compare x y in
             if r <> 0 then r else compare_list xs ys
         in
-        let r = compare_list targs targs' in
+        let r = compare (Verifast.string_of_targs targs) (Verifast.string_of_targs targs') in
         if r <> 0 then r else
         let r = compare_list ts ts' in
         if r <> 0 then r else

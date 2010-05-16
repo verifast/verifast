@@ -9160,6 +9160,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
     end
   and verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo epilog return_cont =
+    with_context (Executing (h, env, l, "Executing return statement")) $. fun () ->
+    check_breakpoint h env l;
     if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context.";
     begin fun cont ->
       match eo with
