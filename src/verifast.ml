@@ -2704,7 +2704,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let real_unit_pat = TermPat real_unit in
   
-  let current_module_name = Filename.chop_extension (Filename.basename path) in
+  let current_module_name = if language = Java then "current_module" else Filename.chop_extension (Filename.basename path) in
   let current_module_term = get_unique_var_symb current_module_name IntType in
   let modulemap = [(current_module_name, current_module_term)] in
   
@@ -2775,7 +2775,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       May add symbols and global assumptions to the SMT solver.
     *)      
   let rec check_file include_prelude basedir headers ps =
-  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0) =
+  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
@@ -2789,8 +2789,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap)
-      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0)
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
@@ -2807,7 +2807,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
        append_nodups funcmap funcmap0 id l "function",
        append_nodups boxmap boxmap0 id l "box predicate",
        append_nodups classmap classmap0 id l "class",
-       append_nodups interfmap interfmap0 id l "interface")
+       append_nodups interfmap interfmap0 id l "interface",
+       classterms @ classterms0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -2886,7 +2887,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -3239,10 +3240,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
   in
   
-  let classterms =
+  let classterms1 =
     let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
-    terms_of classmap1 @ terms_of classmap0
+    terms_of classmap1
   in
+  
+  let classterms = classterms1 @ classterms0 in
   
   (* Region: structmap1 *)
   
@@ -7187,13 +7190,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
             if n = "main" then begin
-              match pre with ExprPred(lp,pre) -> match post with ExprPred(lp',post) ->
-                match pre with 
-                  True(_) -> 
-                    match post with
-                      True(_) -> main_meth:=(cn,l)::!main_meth
-                    | _ -> static_error lp' "The postcondition of the main method must be 'true'" 
-                | _ -> static_error lp "The precondition of the main method must be 'true'"
+              match (pre, post) with
+                (ExprPred (_, True _), ExprPred (_, True _)) | (EmpPred _, EmpPred _) -> main_meth := (cn, l)::!main_meth
+              | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'"
             end;
             iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, ss, fb, v, super_specs <> []))::mmap) meths
         in
@@ -7237,6 +7236,55 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter [] ctors
       end
       classmap1
+  in
+
+  (* Default constructor insertion *)
+
+  let classmap1 =
+    let rec iter classmap1_done classmap1_todo =
+      match classmap1_todo with
+        [] -> List.rev classmap1_done
+      | (cn, (l, meths, fds, cmap, super, interfs, pn, ilist)) as c::classmap1_todo ->
+        let c =
+          if cmap <> [] then c else
+          (* Check if superclass has zero-arg ctor *)
+          begin fun cont ->
+            let (l', meths', fds', cmap', super', interfs', pn', ilist') = assoc2 super classmap1_done classmap0 in
+            match try_assoc [] cmap' with
+              Some (l'', xmap, pre, pre_tenv, post, _, _) ->
+              cont pre pre_tenv post
+            | None -> c
+          end $. fun super_pre super_pre_tenv super_post ->
+          let _::super_pre_tenv = super_pre_tenv in (* Chop off the current_class entry *)
+          let post =
+            List.fold_left
+              begin fun post (f, (lf, t, vis, binding, final, init, value)) ->
+                if binding = Static then
+                  post
+                else
+                  let default_value =
+                    match t with
+                      Bool -> False lf
+                    | IntType | ShortType | Char -> IntLit (lf, zero_big_int, ref (Some t))
+                    | ObjType _ | ArrayType _ -> Null lf
+                  in
+                  Sep (l, post, WAccess (lf, WRead (lf, Var (lf, "this", ref (Some LocalVar)), cn, f, t, false, ref (Some None), Real), t, LitPat default_value))
+              end
+              super_post
+              (get fds)
+          in
+          let default_ctor =
+            let sign = [] in
+            let xmap = [] in
+            let ss = Some (Some ([], l)) in
+            let vis = Public in
+            (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, ss, vis))
+          in
+          (cn, (l, meths, fds, [default_ctor], super, interfs, pn, ilist))
+        in
+        iter (c::classmap1_done) classmap1_todo
+    in
+    iter [] classmap1
   in
   
   let classmap= 
@@ -9519,8 +9567,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
           if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
           else static_error l "Constructor specification is only allowed in javaspec files!"
-      | Some(Some (ss, closeBraceLoc)) ->(
-          let _ = push() in
+      | Some (Some (ss, closeBraceLoc)) ->
+        push();
+        let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
+        begin
           let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
           begin fun cont ->
             if fb = Instance then
@@ -9534,24 +9584,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
           let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
-          let (in_pure_context, leminfo, lems', ghostenv) =(false, None, lems, []) in
-          let _ =
-            assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
-            let do_return h env_post = assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->(check_leaks h env closeBraceLoc "Function leaks heap chunks."))
-            in
-            let return_cont h retval =
-              match (rt, retval) with
-                (None, None) -> do_return h env
-              | (Some tp, Some t) -> do_return h (("result", t)::env)
-              | (None, Some _) -> assert_false h env l "Void function returns a value."
-              | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
-            in
-            verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun _ _ _ h _ -> return_cont h None) return_cont
-            )
+          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
+          let do_return h env_post =
+            assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
+            check_leaks h env closeBraceLoc "Function leaks heap chunks."
           in
-          let _ = pop() in
-          verify_meths (pn,ilist) boxes lems' meths
-          )
+          let return_cont h retval =
+            match (rt, retval) with
+              (None, None) -> do_return h env
+            | (Some tp, Some t) -> do_return h (("result", t)::env)
+            | (None, Some _) -> assert_false h env l "Void function returns a value."
+            | (Some _, None) -> assert_false h env l "Non-void function does not return a value."
+          in
+          let cont _ _ _ h _ = return_cont h None in
+          verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
+        end;
+        pop();
+        verify_meths (pn,ilist) boxes lems' meths
   in
   
   let rec verify_classes boxes lems classm=
@@ -9681,7 +9730,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   verify_funcs' [] lems0 ps;
   
-  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1))
+  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1))
   
   in (* let rec check_file *)
   

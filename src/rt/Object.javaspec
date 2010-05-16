@@ -72,8 +72,8 @@ lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate
 
 public class Object {
     public Object();
-        //@ requires true;
-        //@ ensures true;
+        //@ requires emp;
+        //@ ensures emp;
 }
 
 public class InterruptedException {
