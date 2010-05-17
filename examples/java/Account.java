@@ -31,8 +31,8 @@ class Account {
     }
     
     void transferTo(Account target, int amount)
-        //@ requires valid(?b) &*& target.valid(?bt);
-        //@ ensures valid(b - amount) &*& target.valid(bt + amount);
+        //@ requires this.valid(?b) &*& target.valid(?bt);
+        //@ ensures this.valid(b - amount) &*& target.valid(bt + amount);
     {
         deposit(-amount);
         target.deposit(amount);

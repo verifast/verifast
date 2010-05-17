@@ -61,6 +61,7 @@ verifast_both -c DefaultCtor.java
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c Stack.java
 verifast_both -c Spouse.java
+verifast_both -c Spouse2.java
 verifast_both -c JavaCard.java
 verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c Constants.java

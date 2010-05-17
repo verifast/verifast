@@ -1,43 +1,20 @@
 public class Person {
 
-    private Person spouse;
+    protected Person spouse;
 
     /*@
     
-    protected predicate ticket(Person spouse) = [1/2]this.spouse |-> spouse &*& spouse != null;
-    
-    public predicate valid(Person spouse) = [1/2]this.spouse |-> spouse &*& spouse == null ? [1/2]this.spouse |-> null : spouse.ticket(this);
+    predicate valid(Person spouse) =
+        [1/2]this.spouse |-> spouse &*& spouse == null ? [1/2]this.spouse |-> null : [1/2]spouse.spouse |-> this;
     
     @*/
     
-    protected void setSpouse(Person other)
-        //@ requires valid(null) &*& other.ticket(this);
-        //@ ensures valid(other) &*& ticket(other);
-    {
-        //@ open valid(null);
-        spouse = other;
-        //@ close valid(other);
-        //@ close ticket(other);
-    }
-    
-    protected void clearSpouse()
-        //@ requires valid(?s) &*& ticket(_);
-        //@ ensures valid(null) &*& s.ticket(this);
+    protected /*lemma*/ void spouse_symm_helper()
+        //@ requires valid(?s) &*& [1/2]this.spouse |-> ?s0;
+        //@ ensures valid(s) &*& [1/2]this.spouse |-> s0 &*& s == s0;
     {
         //@ open valid(s);
-        //@ open ticket(_);
-        spouse = null;
-        //@ close valid(null);
-    }
-    
-    protected /*lemma*/ void spouse_ticket_lemma()
-        //@ requires valid(?s) &*& ticket(?s0);
-        //@ ensures valid(s) &*& ticket(s0) &*& s == s0;
-    {
-        //@ open valid(s);
-        //@ open ticket(s0);
         //@ close valid(s);
-        //@ close ticket(s0);
     }
     
     public /*lemma*/ void spouse_symm()
@@ -45,7 +22,7 @@ public class Person {
         //@ ensures valid(s) &*& s.valid(ss) &*& ss == this;
     {
         //@ open valid(s);
-        spouse.spouse_ticket_lemma();
+        spouse.spouse_symm_helper();
         //@ close valid(s);
     }
 
@@ -66,25 +43,41 @@ public class Person {
         return result;
     }
     
+    protected void setSpouse(Person other)
+        //@ requires valid(null) &*& other.spouse |-> null;
+        //@ ensures valid(other) &*& [1/2]other.spouse |-> this &*& [1/2]spouse |-> other;
+    {
+        //@ open valid(null);
+        spouse = other;
+        other.spouse = this;
+        //@ close valid(other);
+    }
+    
+    protected void clearSpouse()
+        //@ requires [1/2]spouse |-> ?s &*& valid(?ss) &*& [1/2]s.spouse |-> _;
+        //@ ensures valid(null) &*& s.spouse |-> null &*& ss == s;
+    {
+        //@ open valid(ss);
+        spouse.spouse = null;
+        spouse = null;
+        //@ close valid(null);
+    }
+    
     void marry(Person other)
         //@ requires valid(null) &*& other.valid(null);
         //@ ensures valid(other) &*& other.valid(this);
     {
         //@ open valid(null);
-        spouse = other;
-        //@ close ticket(other);
         other.setSpouse(this);
         //@ close valid(other);
     }
     
     void divorce()
-        //@ requires valid(?other) &*& other.valid(this);
-        //@ ensures valid(null) &*& other.valid(null);
+        //@ requires valid(?other) &*& other.valid(?ss);
+        //@ ensures valid(null) &*& other.valid(null) &*& ss == this;
     {
         //@ open valid(other);
         spouse.clearSpouse();
-        //@ open ticket(other);
-        spouse = null;
         //@ close valid(null);
     }
 
