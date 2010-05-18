@@ -1039,13 +1039,13 @@ and
   | Cons of loc * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * visibility
 and
   instance_pred_decl =
-  | InstancePredDecl of loc * string * (type_expr * string) list * pred
+  | InstancePredDecl of loc * string * (type_expr * string) list * pred option
 and
   decl =
     Struct of loc * string * field list option
   | Inductive of loc * string * string list * ctor list (* inductief data type regel-naam-type parameters-lijst van constructors*)
   | Class of loc * string * meth list * field list *cons list* string (* superclass *) * string list (* itfs *) * instance_pred_decl list
-  | Interface of loc * string * meth_spec list
+  | Interface of loc * string * meth_spec list * instance_pred_decl list
   | PredFamilyDecl of loc * string * string list (* type parameters *) * int (* number of indices *) * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * string list (* type parameters *) * (loc * string) list * (type_expr * string) list * pred
   | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
@@ -1087,6 +1087,8 @@ and
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
 and
   member = FieldMember of field | MethMember of meth | ConsMember of cons | PredMember of instance_pred_decl
+and
+  interface_member = MethSpecMember of meth_spec | PredSpecMember of instance_pred_decl
 
 (* Region: some AST inspector functions *)
 
@@ -1444,9 +1446,9 @@ let rec
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
 | [< '(l, Kwd "public");ds'=parser
     [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s, methods s mem,fields mem,constr mem,super,il, instance_preds mem)::ds
-  | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,mem)::ds
+  | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,methspecs mem,predspecs mem)::ds
   >]-> ds'
-| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,mem)::ds
+| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,methspecs mem,predspecs mem)::ds
 | [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem, fields mem,constr mem,super,il, instance_preds mem)::ds
 | [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
 | [< >] -> []
@@ -1481,13 +1483,23 @@ and
 and
   instance_preds mems = flatmap (function PredMember p -> [p] | _ -> []) mems
 and
+  methspecs ms = flatmap (function MethSpecMember m -> [m] | _ -> []) ms
+and
+  predspecs ms = flatmap (function PredSpecMember p -> [p] | _ -> []) ms
+and
   parse_interface_visibility = parser
   [<'(_, Kwd "public")>] -> Public
 | [<>] -> Public
 and
   parse_interface_members cn=parser
   [<'(_, Kwd "}")>] -> []
-| [<v=parse_interface_visibility;m=parse_interface_meth v cn;mr=parse_interface_members cn>] -> m::mr
+| [< '(_, Kwd "/*@"); ms1 = parse_ghost_interface_members; ms2 = parse_interface_members cn >] -> ms1 @ ms2
+| [<v=parse_interface_visibility;m=parse_interface_meth v cn;mr=parse_interface_members cn>] -> MethSpecMember m::mr
+and
+  parse_ghost_interface_members = parser
+  [< '(_, Kwd "@*/") >] -> []
+| [< v = parse_interface_visibility; '(l, Kwd "predicate"); '(_, Ident p); ps = parse_paramlist; '(_, Kwd ";"); ms = parse_ghost_interface_members >] ->
+  PredSpecMember (InstancePredDecl (l, p, ps, None))::ms
 and
   parse_interface_meth vis cn= parser
 [< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
@@ -1509,7 +1521,7 @@ and
 | [< vis = parse_visibility;
      '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "="); p = parse_pred; '(_, Kwd ";");
      mems = parse_ghost_java_members
-  >] -> PredMember (InstancePredDecl (l, g, ps, p))::mems
+  >] -> PredMember (InstancePredDecl (l, g, ps, Some p))::mems
 and
   parse_qualified_identifier = parser
   [< '(l, Ident x); xs = rep (parser [< '(_, Kwd "."); '(l, Ident x) >] -> (l, x)) >] -> (l, x)::xs
@@ -3096,14 +3108,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
         [] -> (ifdm, classlist)
-      | (Interface (l, i, meth_specs))::ds -> let i= full_name pn i in 
+      | (Interface (l, i, meth_specs, pred_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i)
         else
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i)
         else
-         iter (pn,il) ((i, (l,meth_specs,pn,il))::ifdm) classlist ds
+         iter (pn,il) ((i, (l,meth_specs,pred_specs,pn,il))::ifdm) classlist ds
       | (Class (l, i, meths,fields,constr,super,interfs,preds))::ds -> 
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
@@ -3870,6 +3882,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let predfammap = predfammap1 @ predfammap0 in (* TODO: Check for name clashes here. *)
   
+  let interfmap1 =
+    interfmap1 |> List.map
+      begin fun (tn, (li, methods, preds, pn, ilist)) ->
+        let rec iter predmap preds =
+          match preds with
+            [] -> (tn, (li, methods, List.rev predmap, pn, ilist))
+          | InstancePredDecl (l, g, ps, body)::preds ->
+            if List.mem_assoc g predmap then static_error l "Duplicate predicate name.";
+            let pmap =
+              let rec iter pmap ps =
+                match ps with
+                  [] -> List.rev pmap
+                | (tp, x)::ps ->
+                  if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
+                  let tp = check_pure_type (pn,ilist) [] tp in
+                  iter ((x, tp)::pmap) ps
+              in
+              iter [] ps
+            in
+            iter ((g, (l, pmap, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], []))))::predmap) preds
+        in
+        iter [] preds
+      end
+  in
+  
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
@@ -3893,26 +3930,40 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               iter [] ps
             in
             let (family, symb) =
-              let rec lookup_pred cn =
+              let preds_in_itf tn =
+                let check_itfmap itfmap fallback =
+                  begin match try_assoc tn itfmap with
+                    Some (li, methods, preds, pn, ilist) ->
+                    begin match try_assoc g preds with
+                      Some (l, pmap, symb) -> [(tn, pmap, symb)]
+                    | None -> []
+                    end
+                  | None -> fallback ()
+                  end
+                in
+                check_itfmap interfmap1 (fun () -> check_itfmap interfmap0 (fun () -> []))
+              in
+              let rec preds_in_class cn =
                 if cn = "" then [] else
                 let check_classmap classmap fallback =
                   begin match try_assoc cn classmap with
                     Some (lc, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) ->
                     begin match try_assoc g predmap with
                       Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
-                    | None -> lookup_pred super
+                    | None -> preds_in_class super @ flatmap preds_in_itf interfs
                     end
                   | None -> fallback ()
                   end
                 in
                 check_classmap classmap1_done (fun () -> check_classmap classmap0 (fun () -> []))
               in
-              match lookup_pred super with
+              match preds_in_class super @ flatmap preds_in_itf interfs with
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [])))
               | [(family, pmap0, symb)] ->
                 if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
                   static_error l "Predicate override check: parameter count mismatch";
                 (family, symb)
+              | _ -> static_error l "Ambiguous override: multiple overridden predicates"
             in
             iter ((g, (l, pmap, family, symb, body))::predmap) preds
         in
@@ -4050,7 +4101,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let (_, meths, _, _) = List.assoc tn interfmap in
+      let (_, meths, _, _, _) = List.assoc tn interfmap in
       flatmap
         begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, v)) ->
           if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, Instance, v))] else []
@@ -4876,7 +4927,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         Some (_, pmap, family, symb, body) -> check_call family pmap
                       | None -> error ()
                       end
-                    | None -> error ()
+                    | None ->
+                      begin match try_assoc cn interfmap1 with
+                        Some (_, methods, preds, pn, ilist) ->
+                        begin match try_assoc p#name preds with
+                          Some (_, pmap, symb) -> check_call cn pmap
+                        | None -> error ()
+                        end
+                      | None ->
+                        begin match try_assoc cn interfmap0 with
+                          Some (_, methods, preds, pn, ilist) ->
+                          begin match try_assoc p#name preds with
+                            Some (_, pmap, symb) -> check_call cn pmap
+                          | None -> error ()
+                          end
+                        | None -> assert false
+                        end
+                      end
                     end
                   end
                 end
@@ -4927,7 +4994,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               Some (_, pmap, family, symb, body) -> check_call family pmap
             | None -> error ()
             end
-          | None -> error ()
+          | None ->
+            begin match try_assoc cn interfmap1 with
+              Some (_, methods, preds, pn, ilist) ->
+              begin match try_assoc g preds with
+                Some (_, pmap, symb) -> check_call cn pmap
+              | None -> error ()
+              end
+            | None ->
+              begin match try_assoc cn interfmap0 with
+                Some (_, methods, preds, pn, ilist) ->
+                begin match try_assoc g preds with
+                  Some (_, pmap, symb) -> check_call cn pmap
+                | None -> error ()
+                end
+              | None -> assert false
+              end
+            end
           end
         end
       | _ -> static_error l "Target of instance predicate assertion must be of class type"
@@ -5282,7 +5365,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin fun (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
         let preds =
           preds |> List.map
-            begin fun (g, (l, pmap, family, symb, body)) ->
+            begin fun (g, (l, pmap, family, symb, Some body)) ->
               let tenv = (current_class, ClassOrInterfaceName cn)::("this", ObjType cn)::pmap in
               let (wbody, _) = check_pred (pn,ilist) [] tenv body in
               let fixed = check_pred_precise ["this"] wbody in
@@ -5291,7 +5374,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   if not (List.mem x fixed) then static_error l ("Preciseness check failure: predicate body does not fix parameter '" ^ x ^ "'.")
                 end
                 pmap;
-              (g, (l, pmap, family, symb, wbody))
+              (g, (l, pmap, family, symb, Some wbody))
             end
         in
         (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
@@ -6037,13 +6120,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
       )
     | WInstCallPred (l, e_opt, tn, g, index, pats) ->
-      let (_, pmap, _, pred_symb, _) =
+      let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
           Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-          List.assoc g preds
+          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
-          let (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) = List.assoc tn classmap0 in
-          List.assoc g preds
+          match try_assoc tn classmap0 with
+            Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
+          | None ->
+            match try_assoc tn interfmap1 with
+              Some (li, methods, preds, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+            | None ->
+              let (li, methods, preds, pn, ilist) = List.assoc tn interfmap0 in
+              let (_, pmap, symb) = List.assoc g preds in
+              (pmap, symb)
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
@@ -6376,13 +6467,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     in
     let inst_call_pred l coefpat e_opt tn g index pats =
-      let (_, pmap, _, pred_symb, _) =
+      let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
           Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-          List.assoc g preds
+          let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
-          let (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) = List.assoc tn classmap0 in
-          List.assoc g preds
+          match try_assoc tn classmap0 with
+            Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
+          | None ->
+            match try_assoc tn interfmap1 with
+              Some (li, methods, preds, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+            | None ->
+              let (li, methods, preds, pn, ilist) = List.assoc tn interfmap0 in
+              let (_, pmap, symb) = List.assoc g preds in
+              (pmap, symb)
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
@@ -7220,10 +7319,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let interfmap1 =
     List.map
-      begin fun (ifn, (l, specs, pn, ilist)) ->
+      begin fun (ifn, (l, specs, preds, pn, ilist)) ->
         let rec iter mmap meth_specs =
           match meth_specs with
-            [] -> (ifn, (l, List.rev mmap, pn, ilist))
+            [] -> (ifn, (l, List.rev mmap, preds, pn, ilist))
           | MethSpec (lm, rt, n, ps, co, fb, v)::meths ->
             let xmap =
               let rec iter xm xs =
@@ -7259,10 +7358,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter map0 map1=
       match map0 with
         [] -> map1
-      | (i, (l0,meths0,pn0,ilist0)) as elem::rest->
+      | (i, (l0,meths0,preds0,pn0,ilist0)) as elem::rest->
         match try_assoc i map1 with
           None -> iter rest (elem::map1)
-        | Some (l1,meths1,pn1,ilist1) ->
+        | Some (l1,meths1,preds1,pn1,ilist1) ->
           let match_meths meths0 meths1=
             let rec iter meths0 meths1=
               match meths0 with
@@ -7277,7 +7376,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             iter meths0 meths1
           in
           let meths'= match_meths meths0 meths1 in
-          iter rest ((i,(l1,meths',pn1,ilist1))::map1)
+          iter rest ((i,(l1,meths',preds1,pn1,ilist1))::map1)
     in
     iter interfmap0 interfmap1
   in
@@ -7321,7 +7420,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let (_, meths, _, _) = List.assoc itf interfmap in
+        let (_, meths, _, _, _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -7994,7 +8093,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override) = List.assoc (m, pts) meths in
           (lm, rt, xmap, pre_dyn, post_dyn, fb, v)
         | _ ->
-          let (_, methods, _, _) = List.assoc tn interfmap in
+          let (_, methods, _, _, _) = List.assoc tn interfmap in
           let (lm, rt, xmap, pre, pre_tenv, post, v) = List.assoc (m, pts) methods in
           (lm, rt, xmap, pre, post, Instance, v)
       in
@@ -8705,7 +8804,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 Some (lc, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                 begin match try_assoc g preds with
                   None -> error ()
-                | Some (lpred, pmap, family, symb, body) ->
+                | Some (lpred, pmap, family, symb, Some body) ->
                   let this = List.assoc "this" env in
                   let index = List.assoc cn classterms in
                   let env0 = [("this", this)] in
@@ -8902,7 +9001,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin match try_assoc cn classmap with
                   Some (lcn, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                   begin match try_assoc g preds with
-                    Some (lpred, pmap, family, symb, body) ->
+                    Some (lpred, pmap, family, symb, Some body) ->
                     let this = List.assoc "this" env in
                     let index = List.assoc cn classterms in
                     (lpred, [], [], pmap, [("this", this)], (symb, true), body, [this; index])
