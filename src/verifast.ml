@@ -3871,11 +3871,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let predfammap = predfammap1 @ predfammap0 in (* TODO: Check for name clashes here. *)
   
   let classmap1 =
-    classmap1 |> List.map
-      begin fun (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
+    let rec iter classmap1_done classmap1_todo =
+      match classmap1_todo with
+        [] -> List.rev classmap1_done
+      | (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))::classmap1_todo ->
+        let cont predmap = iter ((cn, (lc, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
         let rec iter predmap preds =
           match preds with
-            [] -> (cn, (lc, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))
+            [] -> cont predmap
           | InstancePredDecl (l, g, ps, body)::preds ->
             if List.mem_assoc g predmap then static_error l "Duplicate predicate name.";
             let pmap =
@@ -3889,11 +3892,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               iter [] ps
             in
-            let symb = get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [])) in
-            iter ((g, (l, pmap, symb, body))::predmap) preds
+            let (family, symb) =
+              let rec lookup_pred cn =
+                if cn = "" then [] else
+                let check_classmap classmap fallback =
+                  begin match try_assoc cn classmap with
+                    Some (lc, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) ->
+                    begin match try_assoc g predmap with
+                      Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
+                    | None -> lookup_pred super
+                    end
+                  | None -> fallback ()
+                  end
+                in
+                check_classmap classmap1_done (fun () -> check_classmap classmap0 (fun () -> []))
+              in
+              match lookup_pred super with
+                [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [])))
+              | [(family, pmap0, symb)] ->
+                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
+                  static_error l "Predicate override check: parameter count mismatch";
+                (family, symb)
+            in
+            iter ((g, (l, pmap, family, symb, body))::predmap) preds
         in
         iter [] preds
-      end
+    in
+    iter [] classmap1
   in
   
   let (predctormap1, purefuncmap1) =
@@ -4832,23 +4857,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin match try_assoc "this" tenv with
                   None -> error ()
                 | Some (ObjType cn) ->
-                  let check_call pmap =
+                  let check_call family pmap =
                     if targs <> [] then static_error l "Incorrect number of type arguments.";
                     if ps0 <> [] then static_error l "Incorrect number of indices.";
                     let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
-                    (WInstCallPred (l, None, cn, p#name, ClassLit (l, cn), wps), tenv, [])
+                    (WInstCallPred (l, None, family, p#name, ClassLit (l, cn), wps), tenv, [])
                   in
                   begin match try_assoc cn classmap1 with
                     Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
                     begin match try_assoc p#name preds with
-                      Some (_, pmap, body, symb) -> check_call pmap
+                      Some (_, pmap, family, symb, body) -> check_call family pmap
                     | None -> error ()
                     end
                   | None ->
                     begin match try_assoc cn classmap0 with
                       Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
                       begin match try_assoc p#name preds with
-                        Some (_, pmap, body, symb) -> check_call pmap
+                        Some (_, pmap, family, symb, body) -> check_call family pmap
                       | None -> error ()
                       end
                     | None -> error ()
@@ -4883,7 +4908,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       begin match t with
         ObjType cn ->
-        let check_call pmap =
+        let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
           let index = WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance) in
           (WInstCallPred (l, Some w, cn, g, index, wpats), tenv, [])
@@ -4892,14 +4917,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin match try_assoc cn classmap1 with
           Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           begin match try_assoc g preds with
-            Some (_, pmap, body, symb) -> check_call pmap
+            Some (_, pmap, family, symb, body) -> check_call family pmap
           | None -> error ()
           end
         | None ->
           begin match try_assoc cn classmap0 with
             Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
             begin match try_assoc g preds with
-              Some (_, pmap, body, symb) -> check_call pmap
+              Some (_, pmap, family, symb, body) -> check_call family pmap
             | None -> error ()
             end
           | None -> error ()
@@ -5257,7 +5282,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin fun (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
         let preds =
           preds |> List.map
-            begin fun (g, (l, pmap, symb, body)) ->
+            begin fun (g, (l, pmap, family, symb, body)) ->
               let tenv = (current_class, ClassOrInterfaceName cn)::("this", ObjType cn)::pmap in
               let (wbody, _) = check_pred (pn,ilist) [] tenv body in
               let fixed = check_pred_precise ["this"] wbody in
@@ -5266,7 +5291,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   if not (List.mem x fixed) then static_error l ("Preciseness check failure: predicate body does not fix parameter '" ^ x ^ "'.")
                 end
                 pmap;
-              (g, (l, pmap, symb, wbody))
+              (g, (l, pmap, family, symb, wbody))
             end
         in
         (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
@@ -6012,7 +6037,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
       )
     | WInstCallPred (l, e_opt, tn, g, index, pats) ->
-      let (_, pmap, pred_symb, _) =
+      let (_, pmap, _, pred_symb, _) =
         match try_assoc tn classmap1 with
           Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           List.assoc g preds
@@ -6351,7 +6376,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       )
     in
     let inst_call_pred l coefpat e_opt tn g index pats =
-      let (_, pmap, pred_symb, _) =
+      let (_, pmap, _, pred_symb, _) =
         match try_assoc tn classmap1 with
           Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           List.assoc g preds
@@ -7550,7 +7575,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec get_overrides cn =
       if cn = "java.lang.Object" then [] else
       let (l, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
-      let overrides = flatmap (fun (sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) -> if is_override then [(cn, sign)] else []) meths in
+      let overrides =
+        flatmap
+          begin fun (sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) ->
+            if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
+          end
+          meths
+      in
       overrides @ get_overrides super
     in
     List.iter
@@ -8674,7 +8705,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 Some (lc, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                 begin match try_assoc g preds with
                   None -> error ()
-                | Some (lpred, pmap, symb, body) ->
+                | Some (lpred, pmap, family, symb, body) ->
                   let this = List.assoc "this" env in
                   let index = List.assoc cn classterms in
                   let env0 = [("this", this)] in
@@ -8871,7 +8902,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 begin match try_assoc cn classmap with
                   Some (lcn, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                   begin match try_assoc g preds with
-                    Some (lpred, pmap, symb, body) ->
+                    Some (lpred, pmap, family, symb, body) ->
                     let this = List.assoc "this" env in
                     let index = List.assoc cn classterms in
                     (lpred, [], [], pmap, [("this", this)], (symb, true), body, [this; index])
