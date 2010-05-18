@@ -123,7 +123,7 @@ struct item *create_key();
     //@ requires principal(?principal, ?keyCount);
     //@ ensures principal(principal, keyCount + 1) &*& key(result, principal, keyCount);
 
-// check_is_key aborts if the item is not a key. A real implementation may always return true.
+// check_is_key aborts if the item is not a key.
 void check_is_key(struct item *item);
     //@ requires item(item, ?i);
     /*@
@@ -140,7 +140,7 @@ struct item *create_data_item(int data);
     //@ requires true;
     //@ ensures item(result, data_item(data));
 
-// item_get_data aborts if the item is not a data item. A real implementation may always return.
+// item_get_data aborts if the item is not a data item.
 int item_get_data(struct item *item);
     //@ requires item(item, ?i);
     /*@
