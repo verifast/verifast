@@ -977,12 +977,13 @@ and
   | Leak of loc * pred (* expliciet lekken van assertie, nuttig op einde van thread*)
   | Open of
       loc *
+      expr option *  (* Target object *)
       string *
       type_expr list *  (* Type arguments *)
       pat list *  (* Indices for predicate family instance, or constructor arguments for predicate constructor *)
       pat list *  (* Arguments *)
       pat option  (* Coefficient for fractional permission *)
-  | Close of loc * string * type_expr list * pat list * pat list * pat option
+  | Close of loc * expr option * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * pred option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list
@@ -1198,8 +1199,8 @@ let stmt_loc s =
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
   | Leak (l, _) -> l
-  | Open (l, _, _, _, _, coef) -> l
-  | Close (l, _, _, _, _, coef) -> l
+  | Open (l, _, _, _, _, _, coef) -> l
+  | Close (l, _, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
   | WhileStmt (l, _, _, _, _, _) -> l
   | Throw (l, _) -> l
@@ -1812,11 +1813,13 @@ and
 | [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, targs, es1, es2,_) -> Open (l, g, targs, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2, Static) -> Open (l, None, g, targs, es1, es2, coef)
+   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) -> Open (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, targs, es1, es2,_) -> Close (l, g, targs, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2, Static) -> Close (l, None, g, targs, es1, es2, coef)
+   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) -> Close (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
@@ -4874,6 +4877,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ([], _) -> static_error l "Too many patterns"
     | (_, []) -> static_error l "Too few patterns"
   in
+    
+  let get_class_of_this =
+    WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance)
+  in
   
   let rec check_pred_core (pn,ilist) tparams tenv p =
     let check_pred = check_pred_core in
@@ -4912,40 +4919,42 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     if targs <> [] then static_error l "Incorrect number of type arguments.";
                     if ps0 <> [] then static_error l "Incorrect number of indices.";
                     let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
-                    (WInstCallPred (l, None, family, p#name, ClassLit (l, cn), wps), tenv, [])
+                    let index =
+                      if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
+                        ClassLit (l, cn)
+                      else
+                        get_class_of_this
+                    in
+                    (WInstCallPred (l, None, family, p#name, index, wps), tenv, [])
                   in
-                  begin match try_assoc cn classmap1 with
-                    Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-                    begin match try_assoc p#name preds with
-                      Some (_, pmap, family, symb, body) -> check_call family pmap
-                    | None -> error ()
-                    end
-                  | None ->
-                    begin match try_assoc cn classmap0 with
-                      Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-                      begin match try_assoc p#name preds with
-                        Some (_, pmap, family, symb, body) -> check_call family pmap
-                      | None -> error ()
-                      end
-                    | None ->
-                      begin match try_assoc cn interfmap1 with
-                        Some (_, methods, preds, pn, ilist) ->
+                  let find_in_interf itf =
+                    let search_interfmap interfmap fallback =
+                      match try_assoc itf interfmap with
+                        Some (li, meths, preds, pn, ilist) ->
                         begin match try_assoc p#name preds with
-                          Some (_, pmap, symb) -> check_call cn pmap
-                        | None -> error ()
+                          Some (_, pmap, symb) -> [(itf, pmap)]
+                        | None -> []
                         end
-                      | None ->
-                        begin match try_assoc cn interfmap0 with
-                          Some (_, methods, preds, pn, ilist) ->
-                          begin match try_assoc p#name preds with
-                            Some (_, pmap, symb) -> check_call cn pmap
-                          | None -> error ()
-                          end
-                        | None -> assert false
+                      | None -> fallback ()
+                    in
+                    search_interfmap interfmap1 (fun () -> search_interfmap interfmap0 (fun () -> []))
+                  in
+                  let rec find_in_class cn =
+                    let search_classmap classmap fallback =
+                      match try_assoc cn classmap with
+                        Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+                        begin match try_assoc p#name preds with
+                          Some (_, pmap, family, symb, body) -> [(family, pmap)]
+                        | None -> find_in_class super @ flatmap find_in_interf interfs
                         end
-                      end
-                    end
-                  end
+                      | None -> fallback ()
+                    in
+                    search_classmap classmap1 (fun () -> search_classmap classmap0 (fun () -> []))
+                  in
+                  match find_in_class cn @ find_in_interf cn with
+                    [] -> error ()
+                  | [(family, pmap)] -> check_call family pmap
+                  | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name)
                 end
               end
             | Some (PredType (callee_tparams, ts)) -> cont (new predref (p#name), callee_tparams, [], ts, None)
@@ -7071,8 +7080,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | SwitchStmt (l, e, cs) -> expr_assigned_variables e @ flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
-    | Open (l, g, targs, ps0, ps1, coef) -> []
-    | Close (l, g, targs, ps0, ps1, coef) -> []
+    | Open (l, target, g, targs, ps0, ps1, coef) -> []
+    | Close (l, target, g, targs, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
     | WhileStmt (l, e, p, d, ss, _) -> expr_assigned_variables e @ block_assigned_variables ss
     | Throw (l, e) -> expr_assigned_variables e
@@ -7384,8 +7393,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let string_of_sign (mn, ts) =
     Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
   in
-  
-  let get_class_of_this = WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance) in
   
   let rec dynamic_of asn =
     match asn with
@@ -7805,8 +7812,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         ) clauses))
     | Assert(_, p) -> [] (* should we look inside predicates as well? *)
     | Leak(_, p) -> []
-    | Open(_, _, _, _, _, _) -> []
-    | Close(_, _, _, _, _, _) -> []
+    | Open(_, _, _, _, _, _, _) -> []
+    | Close(_, _, _, _, _, _, _) -> []
     | ReturnStmt(_, e) -> (match e with None -> [] | Some(e) -> locals_address_taken e)
     | WhileStmt(_, e, inv, dec, body, _) -> (locals_address_taken e) @ 
         (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
@@ -8764,9 +8771,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let chunks = List.map (fun (Chunk (g, targs, _, args, size)) -> Chunk (g, targs, coef, args, size)) chunks in
         tcont sizemap tenv ghostenv (chunks @ h) env
       )
-    | Open (l, g, targs, pats0, pats, coefpat) ->
+    | Open (l, target, g, targs, pats0, pats, coefpat) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (targs, tpenv, g_symb, pats0, dropcount, ps, env0, p, inputParamCount) =
+        match target with
+          Some target ->
+          let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
+          let cn =
+            match targetType with
+              ObjType cn -> cn
+            | _ -> static_error l "Target of predicate instance call must be of class type"
+          in
+          let (pmap, symb, body) =
+            match try_assoc cn classmap with
+              Some (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+              begin match try_assoc g preds with
+                None -> static_error l "No such predicate instance"
+              | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
+              end
+            | None -> static_error l "Target of predicate instance call must be of class type"
+          in
+          let target = ev target in
+          let index = List.assoc cn classterms in
+          let env0 = [("this", target)] in
+          ([], [], (symb, true), [TermPat target; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
+        | None ->
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with
@@ -8966,9 +8995,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       dispose_handles tenv ghostenv h env handleClauses $. fun tenv ghostenv h env ->
       with_context PopSubcontext $. fun () ->
       tcont sizemap tenv ghostenv h env
-    | Close (l, g, targs, pats0, pats, coef) ->
+    | Close (l, target, g, targs, pats0, pats, coef) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (lpred, targs, tpenv, ps, bs0, g_symb, p, ts0) =
+        match target with
+          Some target ->
+          let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
+          let cn =
+            match targetType with
+              ObjType cn -> cn
+            | _ -> static_error l "Target of predicate instance call must be of class type"
+          in
+          let (lpred, pmap, symb, body) =
+            match try_assoc cn classmap with
+              Some (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+              begin match try_assoc g preds with
+                None -> static_error l "No such predicate instance"
+              | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
+              end
+            | None -> static_error l "Target of predicate instance call must be of class type"
+          in
+          let target = ev target in
+          let index = List.assoc cn classterms in
+          (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index])
+        | None ->
         match resolve (pn,ilist) l g predfammap with
           Some (g, (lpred, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with

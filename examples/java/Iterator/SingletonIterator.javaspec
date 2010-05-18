@@ -1,20 +1,11 @@
 package iterator.singleton;
 
 import iterator.it.*;
-import iterator.itutil.*;
 
+public class SingletonIterator implements Iterator {
 
-/*@
+    public SingletonIterator(Object value);
+        //@ requires value != null;
+        //@ ensures valid(cons(value, nil));
 
-predicate_family_instance iterator(SingletonIterator.class)(SingletonIterator i, list<Object> xs) =
-    i.value |-> ?value &*& value!=null &*& i.done |-> ?done &*& (done ? xs == nil : xs == cons(value, nil));
-
-@*/
-
-public class SingletonIterator implements Iterator{
-  Object value;
-  boolean done;
-  public SingletonIterator(Object value);
-      //@ requires value!=null;
-      //@ ensures iterator(SingletonIterator.class)(this, cons(value, nil));
 }

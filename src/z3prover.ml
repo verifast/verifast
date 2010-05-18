@@ -2,6 +2,9 @@ open Proverapi
 open Num
 open Printf
 
+let fprintff format = kfprintf (fun chan -> flush chan) format
+let printff format = fprintff stdout format
+
 type sexpr = Atom of string | List of sexpr list | String of char list
 
 let parse_sexpr text =
@@ -56,7 +59,12 @@ let rec string_of_sexpr e =
   | String cs -> "\"" ^ String.concat "" (List.map string_of_char cs) ^ "\""
 
 class z3_context () =
-  let ctxt = Z3.mk_context (Z3.mk_config ()) in
+  let cfg = Z3.mk_config () in
+(*
+  let _ = Z3.set_param_value cfg "VERBOSE" "1000" in
+  let _ = Z3.set_param_value cfg "STATISTICS" "true" in
+*)
+  let ctxt = Z3.mk_context cfg in
   (* let _ = Z3.trace_to_stdout ctxt in *)
   let bool_type = Z3.mk_bool_type ctxt in
   let int_type = Z3.mk_int_type ctxt in
@@ -198,10 +206,20 @@ class z3_context () =
     method mk_real_le t1 t2 = Z3.mk_le ctxt t1 t2
     method get_type t = Z3.get_type ctxt t
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt t)))
-    method query t = query t
-    method assume t = assert_term t
-    method push = Z3.push ctxt
-    method pop = Z3.pop ctxt 1
+    method query t =
+      (* printf "Z3prover.query (%s)... " (Z3.ast_to_string ctxt t);
+      let t0 = Perf.seconds_since_startup () in *)
+      let result = query t in
+      (* let dt = Perf.seconds_since_startup () -. t0 in
+      printf "(%f seconds)\n" dt; *)
+      result
+    method assume t =
+      (* printf "Z3prover.assume (%s)\n" (Z3.ast_to_string ctxt t); *)
+      assert_term t
+    method push =
+      Z3.push ctxt
+    method pop =
+      Z3.pop ctxt 1
     method perform_pending_splits (cont: Z3.ast list -> bool) = cont []
     method stats = ""
     method mk_bound (i: int) (tp: Z3.type_ast) = Z3.mk_bound ctxt i tp

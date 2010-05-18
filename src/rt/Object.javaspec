@@ -71,18 +71,19 @@ lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate
 @*/
 
 public class Object {
+
     public Object();
         //@ requires emp;
         //@ ensures emp;
+
 }
 
-public class InterruptedException {
-}
+public class InterruptedException {}
 
-public class IOException {
-}
+public class IOException {}
 
 public class RuntimeException {
+
     public RuntimeException();
         //@ requires true;
         //@ ensures true;
@@ -90,9 +91,12 @@ public class RuntimeException {
     public RuntimeException(Object innerException);
         //@ requires true;
         //@ ensures true;
+
 }
 
 public class Integer {
+
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
+
 }

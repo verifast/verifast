@@ -1,10 +1,22 @@
 package iterator.itutil;
 
 import iterator.it.*;
-import iterator.singleton.*;
+
+/*@
+
+fixpoint Object objects_last(list<Object> a) {
+    switch (a) {
+        case nil: return null;
+        case cons(x, xs): return x != null && xs == nil ? x : objects_last(xs);
+    }
+}
+
+@*/
 
 public class IteratorUtil {
-  public static Object getLast(Iterator iterator)
-      //@ requires iterator != null &*& iterator(iterator.getClass())(iterator, ?xs);
-      //@ ensures iterator(iterator.getClass())(iterator, nil) &*& result == objects_last(xs);
+
+    public static Object getLast(Iterator iterator)
+        //@ requires iterator != null &*& iterator.valid(?xs);
+        //@ ensures iterator.valid(nil) &*& result == objects_last(xs);
+
 }
