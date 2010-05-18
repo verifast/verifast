@@ -48,6 +48,7 @@ verifast_both -shared goto.c
 verifast_both map.c
 verifast_both -disable_overflow_check -c full_func_io.c
 verifast_both -disable_overflow_check -c full_func_io_sim.c
+verifast_both -disable_overflow_check -c full_func_io_mod.c
 verifast_both -c pure_map.c
 verifast_both -c dolevyao.c
 verifast_both -c dolevyao_rpc.c
