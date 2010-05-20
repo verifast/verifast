@@ -4702,18 +4702,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | _ -> static_error lc "Body of switch clause must be a return statement with a result expression."
             in
             let wbody = check_expr_t (pn,ilist) tparams tenv body rt in
-            expr_iter
-              begin function
-                WPureFunCall (l, g', targs, args) ->
-                if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text";
-                if g' = g then
-                begin match List.nth args index with
-                  Var (l, x, _) when List.mem_assoc x xmap -> ()
-                | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
-                end
-              | _ -> ()
-              end
-              wbody;
+            let rec iter0 components e =
+              let rec iter () e =
+                let iter1 e = iter () e in
+                match e with
+                  WPureFunCall (l, g', targs, args) ->
+                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text";
+                  if g' = g then begin
+                    match List.nth args index with
+                      Var (l, x, _) when List.mem x components -> ()
+                    | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
+                  end;
+                  List.iter iter1 args
+                | SwitchExpr (l, Var (_, x, _), cs, def_opt, _) when List.mem x components ->
+                  List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
+                  (match def_opt with None -> () | Some (l, e) -> iter1 e)
+                | _ -> expr_fold_open iter () e
+              in
+              iter () e
+            in
+            iter0 (List.map fst xmap) wbody;
             check_cs (List.remove_assoc cn ctormap) ((cn, xs, wbody)::wcs) cs
         in
         let wcs = check_cs ctormap [] cs in
