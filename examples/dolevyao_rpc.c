@@ -307,7 +307,7 @@ struct item *compute_response(struct item *request);
     @*/
 
 void server(int serverId, struct item *key)
-    //@ requires world(mypub) &*& key(key, ?creator, ?id) &*& shared_with(creator, id) == serverId; // BUG
+    //@ requires world(mypub) &*& key(key, ?creator, ?id) &*& shared_with(creator, id) == serverId;
     //@ ensures false;
 {
     for (;;)

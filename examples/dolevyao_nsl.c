@@ -358,6 +358,8 @@ void client(int client, int server, struct item *clientPrivateKey, struct item *
     net_send(i9);
     item_free(i9);
     
+    //@ assert item(clientNonce, ?cn) &*& !mypub(cn) &*& !mypub(sn);
+    
     item_free(clientNonce);
     item_free(serverNonce);
 }
