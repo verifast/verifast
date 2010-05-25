@@ -131,7 +131,6 @@ verifast_both -c -disable_overflow_check leaks.c
 cd ..
 cd tests
 cd bugs
-verifast -c erasure.c
 cd ..
 cd errors
 verifast_both -c -allow_should_fail basics.c
@@ -148,3 +147,6 @@ verifast_both -c -allow_should_fail superctor.java
 verifast_both -c -allow_should_fail inhabited_tparams.c
 verifast_both -c -allow_should_fail inductive_welldefined.c
 verifast_both -c -allow_should_fail predtype_contra.c
+verifast -c -allow_should_fail erasure.c
+verifast -c -allow_should_fail erasure2.c
+verifast -c -allow_should_fail erasure3.c

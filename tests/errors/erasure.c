@@ -1,6 +1,6 @@
 /*@
 
-lemma_auto void map_unit_lemma(fixpoint(int, unit) f, int x, fixpoint(int, unit) g, int y)
+lemma_auto void map_unit_lemma(fixpoint(int, unit) f, int x, fixpoint(int, unit) g, int y) //~ should_fail
     requires true;
     ensures f(x) == g(y);
 {

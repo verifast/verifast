@@ -3194,7 +3194,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let inductive_arities =
     List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivedeclmap
-    @ List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivemap0
+    @ List.map (fun (i, (_, tparams, _, _)) -> (i, List.length tparams)) inductivemap0
   in
   
   (* Region: check_pure_type: checks validity of type expressions *)
@@ -3537,8 +3537,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter' ([],isfuncs,[]) ps
   in
   
-  let inductivemap = inductivemap1 @ inductivemap0 in
-  
   let () =
     let welldefined_map = List.map (fun (i, info) -> let ec = ref (`EqClass (0, [])) in let ptr = ref ec in ec := `EqClass (0, [ptr]); (i, (info, ptr))) inductivemap1 in
     let merge_ecs ec0 ec1 =
@@ -3653,6 +3651,84 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     in
     List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
+  in
+  
+  let inductivemap1 =
+    let infinite_map = List.map (fun (i, info) -> let status = ref (0, []) in (i, (info, status))) inductivemap1 in
+    (* Status: (n, tparams) with n: 0 = not visited; 1 = currently visiting; 2 = infinite if one of tparams is infinite; 3 = unconditionally infinite *)
+    (* Infinite = has infinitely many values *)
+    let rec determine_type_is_infinite (i, ((l, tparams, ctors), status)) =
+      let (n, _) = !status in
+      if n < 2 then begin
+        status := (1, []);
+        let rec fold_cond cond f xs =
+          match xs with
+            [] -> Some cond
+          | x::xs ->
+            begin match f x with
+              None -> None
+            | Some cond' -> fold_cond (cond' @ cond) f xs
+            end
+        in
+        let ctor_is_infinite (cn, (lc, pts)) =
+          let rec type_is_infinite tp =
+            match tp with
+              Bool -> Some []
+            | TypeParam x -> Some [x]
+            | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> None
+            | PureFuncType (_, _) -> None (* CAVEAT: This assumes we do *not* have extensionality *)
+            | InductiveType (i0, targs) ->
+              begin match try_assoc i0 infinite_map with
+                Some (info0, status0) ->
+                let (n, cond) = !status0 in
+                if n = 1 then
+                  None
+                else begin
+                  if n = 0 then determine_type_is_infinite (i0, (info0, status0));
+                  let (n, cond) = !status0 in
+                  if n = 3 then None else
+                  let (_, tparams, _) = info0 in
+                  let Some tpenv = zip tparams targs in
+                  fold_cond [] (fun x -> type_is_infinite (List.assoc x tpenv)) cond
+                end
+              | None ->
+                let (_, tparams, _, cond) = List.assoc i0 inductivemap0 in
+                begin match cond with
+                  None -> None
+                | Some cond ->
+                  let Some tpenv = zip tparams targs in
+                  fold_cond [] (fun x -> type_is_infinite (List.assoc x tpenv)) cond
+                end
+              end
+          in
+          fold_cond [] type_is_infinite pts
+        in
+        match fold_cond [] ctor_is_infinite ctors with
+          None -> status := (3, [])
+        | Some cond -> status := (2, cond)
+      end
+    in
+    List.iter determine_type_is_infinite infinite_map;
+    infinite_map |> List.map
+      begin fun (i, ((l, tparams, ctors), status)) ->
+        let (n, cond) = !status in
+        let cond = if n = 2 then Some cond else None in
+        (i, (l, tparams, ctors, cond))
+      end
+  in
+  
+  let inductivemap = inductivemap1 @ inductivemap0 in
+  
+  (* A universal type is one that is isomorphic to the universe for purposes of type erasure *)
+  let rec is_universal_type tp =
+    match tp with
+      Bool -> false
+    | TypeParam x -> true
+    | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | PredType (_, _) | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
+    | PureFuncType (t1, t2) -> is_universal_type t1 && is_universal_type t2
+    | InductiveType (i0, targs) ->
+      let (_, _, _, cond) = List.assoc i0 inductivemap in
+      cond <> Some [] && List.for_all is_universal_type targs
   in
   
   let functypedeclmap1 =
@@ -4502,7 +4578,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match t with
           InductiveType (i, targs) ->
           begin
-            let (_, inductive_tparams, ctormap) = List.assoc i inductivemap in
+            let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
             let (Some tpenv) = zip inductive_tparams targs in
             let rec iter t0 wcs ctors cs =
               match cs with
@@ -4657,7 +4733,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             InductiveType (i, targs) -> (i, targs)
           | _ -> static_error l "Switch operand is not an inductive value."
         in
-        let (_, inductive_tparams, ctormap) = List.assoc i inductivemap in
+        let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
         let (Some tpenv) = zip inductive_tparams targs in
         let rec check_cs ctormap wcs cs =
           match cs with
@@ -5051,7 +5127,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
         match try_assoc' (pn,ilist) i inductivemap with
           None -> static_error l "Switch operand is not an inductive value."
-        | Some (_, inductive_tparams, ctormap) ->
+        | Some (_, inductive_tparams, ctormap, _) ->
           let (Some tpenv) = zip inductive_tparams targs in
           let rec iter wcs ctormap cs infTps =
             match cs with
@@ -5844,7 +5920,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let symbol = ctxt#mk_symbol g (typenode_of_type tt :: List.map (fun (x, _) -> typenode_of_type (List.assoc x tenv)) env) (typenode_of_type tp) (Proverapi.Fixpoint 0) in
       let case_clauses = List.map (fun (SwitchExprClause (_, cn, ps, e)) -> (cn, (ps, e))) cs in
       let InductiveType (i, targs) = tt in
-      let (_, _, ctormap) = List.assoc i inductivemap in
+      let (_, _, ctormap, _) = List.assoc i inductivemap in
       let fpclauses =
         List.map
           begin fun (cn, _) ->
@@ -8663,7 +8739,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match tp with
         InductiveType (i, targs) ->
-        let (tn, targs, Some (_, tparams, ctormap)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
+        let (tn, targs, Some (_, tparams, ctormap, _)) = (i, targs, try_assoc' (pn,ilist) i inductivemap) in
         let (Some tpenv) = zip tparams targs in
         let rec iter ctors cs =
           match cs with
@@ -9786,6 +9862,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
     match (pre, post) with
     (ExprPred(_, pre), ExprPred(_, post)) ->
+      List.iter
+        begin fun (x, tp) ->
+          if not (is_universal_type tp) then
+            static_error l
+              begin
+                Printf.sprintf
+                  begin
+                    "This auto lemma is not supported because VeriFast currently uses an untyped underlying logic, \
+                     and the type of parameter '%s' is not isomorphic to the logic's universe. A type is isomorphic \
+                     if it is infinite and its type arguments are isomorphic. \
+                     You can work around this limitation by introducing explicit cast functions."
+                  end
+                  x
+              end
+        end
+        ps;
       let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
       let xs = Array.to_list xs in
       let Some(env) = zip (List.map fst ps) xs in
