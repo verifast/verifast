@@ -2553,8 +2553,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest
   } = options in
-  let verbose_print_endline s = if verbose then print_endline s else () in
-  let verbose_print_string s = if verbose then print_string s else () in
 
   (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
   let used_ids = ref [] in

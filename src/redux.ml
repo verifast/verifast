@@ -9,8 +9,6 @@ let the x = match x with Some x -> x
 
 type assume_result3 = Unsat3 | Unknown3 | Valid3
 
-let print_endline_disabled msg = ()
-
 let printff format = kfprintf (fun _ -> flush stdout) stdout format
 
 let ($.) f x = f x
@@ -163,22 +161,20 @@ and termnode (ctxt: context) s initial_children =
         | Some n -> ctxt#add_redex (fun () -> self#reduce)
         end
       | Uninterp ->
-        print_endline_disabled ("Created uninterpreted termnode " ^ symbol#name);
         begin
           match (symbol#name, children) with
             (("=="|"<==>"), [v1; v2]) ->
             begin
                 if v1 = v2 then
                 begin
-                  print_endline_disabled ("Equality termnode: operands are equal");
                   ignore (ctxt#assert_eq value ctxt#true_node#value)
                 end
                 else if v1#neq v2 then
                 begin
-                  print_endline_disabled ("Equality termnode: operands are distinct");
                   ignore (ctxt#assert_eq value ctxt#false_node#value)
                 end
                 else
+                  (*
                   let pprint v =
                     v#initial_child#pprint ^ " (ctorchild: " ^
                     begin
@@ -188,7 +184,9 @@ and termnode (ctxt: context) s initial_children =
                     end
                     ^ ")"
                   in
-                  print_endline_disabled ("Equality termnode: undecided: " ^ pprint v1 ^ ", " ^ pprint v2);
+                  print_endline ("Equality termnode: undecided: " ^ pprint v1 ^ ", " ^ pprint v2);
+                  *)
+                  ()
             end
           | ("||", [v1; v2]) ->
             begin
@@ -217,7 +215,7 @@ and termnode (ctxt: context) s initial_children =
     end
     method set_value v =
       self#push;
-      (* print_endline_disabled (string_of_int (Oo.id self) ^ ".value <- " ^ string_of_int (Oo.id v)); *)
+      (* print_endline (string_of_int (Oo.id self) ^ ".value <- " ^ string_of_int (Oo.id v)); *)
       value <- v
     method set_child k v =
       let rec replace i vs =
@@ -325,7 +323,7 @@ and termnode (ctxt: context) s initial_children =
             let clause = clauses.(j) in
             let vs = n#children in
             let t = clause (List.map (fun v -> TermNode v#initial_child) children) (List.map (fun v -> TermNode v#initial_child) vs) in
-            print_endline_disabled ("Assumed by reduction: " ^ self#pprint ^ " = " ^ ctxt#pprint t);
+            (* print_endline ("Assumed by reduction: " ^ self#pprint ^ " = " ^ ctxt#pprint t); *)
             let tn = ctxt#termnode_of_term t in
             ctxt#assert_eq tn#value value
           | _ -> assert false
@@ -520,9 +518,9 @@ and valuenode (ctxt: context) =
             [] -> Unknown
           | (n, n')::rps ->
             begin
-              (* print_endline_disabled "Doing a recursive assert_eq!"; *)
+              (* print_endline "Doing a recursive assert_eq!"; *)
               let result = context#assert_eq n#value n'#value in
-              (* print_endline_disabled "Returned from recursive assert_eq"; *)
+              (* print_endline "Returned from recursive assert_eq"; *)
               match result with
                 Unsat3 -> Unsat
               | Unknown3|Valid3 -> iter rps
@@ -535,13 +533,13 @@ and valuenode (ctxt: context) =
           (None, _) -> process_redundant_parents()
         | (Some n, None) -> process_redundant_parents()
         | (Some n, Some n') ->
-          (* print_endline_disabled "Adding injectiveness edges..."; *)
+          (* print_endline "Adding injectiveness edges..."; *)
           let rec iter vs =
             match vs with
               [] -> process_redundant_parents()
             | (v, v')::vs ->
               begin
-              print_endline_disabled ("Adding injectiveness edge: " ^ v#pprint ^ " = " ^ v'#pprint);
+              (* print_endline ("Adding injectiveness edge: " ^ v#pprint ^ " = " ^ v'#pprint); *)
               match context#assert_eq v#initial_child#value v'#initial_child#value with
                 Unsat3 -> Unsat
               | Unknown3|Valid3 -> iter vs
@@ -680,13 +678,13 @@ and context () =
         NumMap.find n numnodes
       with
         Not_found ->
-        (* print_endline_disabled ("Creating intlit node for " ^ string_of_int n); *)
+        (* print_endline ("Creating intlit node for " ^ string_of_int n); *)
         let node = self#get_node (new symbol (Ctor (NumberCtor n)) (string_of_num n)) [] in
         numnodes <- NumMap.add n node numnodes;
         node
 
     method get_ifthenelsenode t1 t2 t3 =
-      print_endline_disabled ("Producing ifthenelse termnode");
+      (* print_endline ("Producing ifthenelse termnode"); *)
       let symname = "ifthenelse(" ^ self#pprint t2 ^ ", " ^ self#pprint t3 ^ ")" in
       let s = new symbol (Fixpoint 0) symname in
       s#set_fpclauses [
@@ -858,8 +856,7 @@ and context () =
 
     method pushdepth = pushdepth
     method push =
-      (* print_endline_disabled "Push"; *)
-      print_endline_disabled "Push";
+      (* print_endline "Push"; *)
       self#reduce;
       assert (redexes = []);
       assert (simplex_eqs = []);
@@ -873,8 +870,7 @@ and context () =
       popactionlist <- action::popactionlist
 
     method pop =
-      (* print_endline_disabled "Pop"; *)
-      print_endline_disabled "Pop";
+      (* print_endline "Pop"; *)
       redexes <- [];
       simplex_eqs <- [];
       simplex_consts <- [];
@@ -1031,7 +1027,7 @@ and context () =
         begin
         match s#node with
           None ->
-          print_endline_disabled ("Creating node for nullary symbol " ^ s#name);
+          (* print_endline ("Creating node for nullary symbol " ^ s#name); *)
           let node = new termnode (self :> context) s vs in
           s#set_node node;
           node
@@ -1181,7 +1177,7 @@ and context () =
       (* printff "assert_eq %s %s\n" (v1#pprint) (v2#pprint); *)
       if v1 = v2 then
       begin
-        (* print_endline_disabled "assert_eq: values already the same"; *)
+        (* print_endline "assert_eq: values already the same"; *)
         Valid3
       end
       else if v1#neq v2 then
@@ -1190,7 +1186,7 @@ and context () =
       end
       else
       begin
-        (* print_endline_disabled "assert_eq: merging v1 into v2"; *)
+        (* print_endline "assert_eq: merging v1 into v2"; *)
         if v1#merge_into fromSimplex v2 = Unsat then Unsat3 else Unknown3
       end
     
@@ -1226,7 +1222,7 @@ and context () =
           simplex_eqs <- eqs;
           let Some tn1 = u1#tag in
           let Some tn2 = u2#tag in
-          print_endline_disabled ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")");
+          (* print_endline ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")"); *)
           match (self#assert_eq_core true tn1#value tn2#value, result) with
             (Unsat3, _) -> Unsat3
           | (r, Valid3) -> iter r
