@@ -2630,9 +2630,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     else
       let vsymb = ctxt#mk_app (ctxt#mk_symbol ("@" ^ s) [] ctxt#type_inductive Uninterp) [] in
       (* Emit an axiom saying that @(@f, x) == f(x) / @(@(@f, x), y) == f(x, y) / ... *)
+      ctxt#begin_formal;
       let bounds = imap (fun k t -> ctxt#mk_bound k t) domain_tnodes in
       let app = List.fold_left2 (fun t1 tp t2 -> ctxt#mk_app apply_symbol [t1; apply_conversion tp ProverInductive t2]) vsymb domain bounds in
-      ctxt#assume_forall [app] domain_tnodes (ctxt#mk_eq (apply_conversion ProverInductive range app) (ctxt#mk_app fsymb bounds));
+      let body = ctxt#mk_eq (apply_conversion ProverInductive range app) (ctxt#mk_app fsymb bounds) in
+      ctxt#end_formal;
+      ctxt#assume_forall [app] domain_tnodes body;
       (fsymb, vsymb)
   in
   
@@ -9876,6 +9879,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               end
         end
         ps;
+      ctxt#begin_formal;
       let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
       let xs = Array.to_list xs in
       let Some(env) = zip (List.map fst ps) xs in
@@ -9889,7 +9893,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
           [eval (pn,ilist) None env trigger]
       ) in
-      (ctxt#assume_forall trigger tps (ctxt#mk_or (ctxt#mk_not t_pre) t_post))
+      let body = ctxt#mk_or (ctxt#mk_not t_pre) t_post in
+      ctxt#end_formal;
+      ctxt#assume_forall trigger tps body
   | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))

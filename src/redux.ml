@@ -40,7 +40,7 @@ type ('symbol, 'termnode) term =
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Mul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | NumLit of num
-| App of 'symbol * ('symbol, 'termnode) term list
+| App of 'symbol * ('symbol, 'termnode) term list * 'termnode option
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLe of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | RealLt of ('symbol, 'termnode) term * ('symbol, 'termnode) term
@@ -63,7 +63,8 @@ let term_subst bound_env t =
     | Sub (t1, t2) -> Sub (iter t1, iter t2)
     | Mul (t1, t2) -> Mul (iter t1, iter t2)
     | NumLit n -> t
-    | App (s, args) -> App (s, List.map iter args)
+    | App (s, args, None) -> App (s, List.map iter args, None)
+    | App (s, args, Some _) -> t
     | IfThenElse (t1, t2, t3) -> IfThenElse (iter t1, iter t2, iter t3)
     | RealLe (t1, t2) -> RealLe (iter t1, iter t2)
     | RealLt (t1, t2) -> RealLt (iter t1, iter t2)
@@ -625,6 +626,7 @@ and context () =
     val mutable redexes = []
     val mutable pending_splits_front = initialPendingSplitsFrontNode
     val mutable pending_splits_back = initialPendingSplitsFrontNode
+    val mutable formal_depth = 0  (* If formal_depth = 0, App terms are eagerly turned into E-graph nodes. *)
     (* For diagnostics only. *)
     val mutable values = []
     
@@ -841,7 +843,8 @@ and context () =
       | TermNode t -> t
       | True -> self#true_node
       | False -> self#false_node
-      | App (s, ts) -> get_node s ts
+      | App (s, ts, None) -> get_node s ts
+      | App (s, ts, Some t) -> t
       | IfThenElse (t1, t2, t3) -> self#get_ifthenelsenode t1 t2 t3
       | Iff (t1, t2) -> get_node iff_symbol [t1; t2]
       | Eq (t1, t2) -> get_node eq_symbol [t1; t2]
@@ -997,7 +1000,14 @@ and context () =
     method set_fpclauses (s: symbol) (k: int) (cs: (symbol * ((symbol, termnode) term list -> (symbol, termnode) term list -> (symbol, termnode) term)) list) =
       s#set_fpclauses cs
 
-    method mk_app (s: symbol) (ts: (symbol, termnode) term list): (symbol, termnode) term = App (s, ts)
+    method mk_app (s: symbol) (ts: (symbol, termnode) term list): (symbol, termnode) term =
+      let termnode =
+        if formal_depth = 0 then
+          Some (self#get_node s (List.map (fun t -> (self#termnode_of_term t)#value) ts))
+        else
+          None
+      in
+      App (s, ts, termnode)
     
     method pprint (t: (symbol, termnode) term): string =
       match t with
@@ -1015,7 +1025,7 @@ and context () =
       | Not t -> "!(" ^ self#pprint t ^ ")"
       | Add (t1, t2) -> "(" ^ self#pprint t1 ^ " + " ^ self#pprint t2 ^ ")"
       | Sub (t1, t2) -> "(" ^ self#pprint t1 ^ " - " ^ self#pprint t2 ^ ")"
-      | App (s, ts) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
+      | App (s, ts, _) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
       | NumLit n -> string_of_num n
       | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
@@ -1251,6 +1261,8 @@ and context () =
       List.iter (fun v -> if v#initial_child#value = v then (v#dump_state)) values; *)
       ()
       
+    method begin_formal = formal_depth <- formal_depth + 1
+    method end_formal = formal_depth <- formal_depth - 1
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i
     method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
       let pats =
@@ -1259,7 +1271,7 @@ and context () =
             let env = Array.create (List.length tps) false in
             let rec iter pat =
               match pat with
-                App (s, args) ->
+                App (s, args, _) ->
                 List.for_all iter args
               | BoundVar i ->
                 env.(i) <- true;
@@ -1286,7 +1298,7 @@ and context () =
             | Sub (t1, t2) -> find_terms t1 @ find_terms t2
             | Mul (t1, t2) -> find_terms t1 @ find_terms t2
             | NumLit n -> []
-            | App (s, args) -> check_pat pat
+            | App (s, args, _) -> check_pat pat
             | IfThenElse (t1, t2, t3) -> []
             | RealLe (t1, t2) -> find_terms t1 @ find_terms t2
             | RealLt (t1, t2) -> find_terms t1 @ find_terms t2
@@ -1302,7 +1314,7 @@ and context () =
       (* printff "Axiom (%s) %s asserted\n" (String.concat ", " (List.map self#pprint pats)) (self#pprint body); *)
       pats |> List.iter (fun pat ->
         match pat with
-          App (symb, args) ->
+          App (symb, args, _) ->
           (* We ignore existing applications of this symbol for now. *)
           symb#add_apply_listener (self :> context) (fun term ->
             (* printff "Axiom %s: toplevel symbol listener triggered\n" (self#pprint body); *)
@@ -1323,7 +1335,7 @@ and context () =
                   else
                     term#value#add_merge_listener (fun () -> if term#value = term'#value then (cont bound_env; false) else true)
                 end
-              | App (symb, args) ->
+              | App (symb, args, _) ->
                 let match_term term =
                   if term#symbol = symb then
                     match_pats bound_env term#children args cont
