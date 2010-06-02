@@ -1,18 +1,24 @@
 import javacard.framework.*;
 
 /*@
-predicate_family_instance Applet_(MyApplet.class)(MyApplet applet) =
-    MyApplet.someByteArray |-> ?array &*& array != null &*&
-    array_slice(array, 0, array.length, _) &*& 20 <= array.length;
 
 predicate length_value_record(byte[] array, int start, int end) =
     array[start] |-> ?length &*& 0 <= length &*&
     end == start + 1 + length &*&
     array_slice(array, start + 1, end, _);
+
 @*/
 
-public class MyApplet extends Applet {
+public final class MyApplet extends Applet {
     static byte someByteArray[];
+    
+    /*@
+    
+    predicate valid() =
+        someByteArray |-> ?array &*& array != null &*&
+        array_slice(array, 0, array.length, _) &*& 20 <= array.length;
+    
+    @*/
     
     public static void install(byte[] array, short offset, byte length) throws ISOException
         /*@
@@ -42,33 +48,29 @@ public class MyApplet extends Applet {
         byte bLen = array[(short)(offset + 1)];
         if (bLen != 0) {
             someByteArray = new byte[bLen];
-            //@ close Applet_(MyApplet.class)(theApplet);
+            //@ close theApplet.valid();
             theApplet.register();
             return;
         } else
             ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
     }
     
-    public MyApplet() // TODO: Eliminate this
-        //@ requires true;
-        //@ ensures true;
-    {
-    }
-    
     public boolean select()
-        //@ requires Applet_(MyApplet.class)(this);
-        //@ ensures Applet_(MyApplet.class)(this);
+        //@ requires current_applet(this) &*& [1/2]valid();
+        //@ ensures current_applet(this) &*& [1/2]valid();
     {
         // selection initialization
-        //@ open Applet_(MyApplet.class)(this);
+        JCSystem.beginTransaction();
+        //@ open valid();
         someByteArray[17] = 42; // set selection state
-        //@ close Applet_(MyApplet.class)(this);
+        //@ close valid();
+        JCSystem.commitTransaction();
         return true;
     }
     
     public void process(APDU apdu) throws ISOException
-        //@ requires Applet_(this.getClass())(this) &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
-        //@ ensures Applet_(this.getClass())(this) &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
     {
         byte[] buffer = apdu.getBuffer();
         // .. process the incoming data and reply

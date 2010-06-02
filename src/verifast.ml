@@ -1014,7 +1014,7 @@ and
   | CallPred of loc * predref * type_expr list * pat list (* indices of predicate family instance *) * pat list  (* Predicate assertion, before type checking *)
   | WCallPred of loc * predref * type_ list * pat list * pat list  (* Predicate assertion, after type checking. (W is for well-formed) *)
   | InstCallPred of loc * expr * string * pat list
-  | WInstCallPred of loc * expr option * string (* family type *) * string * expr (* index *) * pat list
+  | WInstCallPred of loc * expr option * string (* static type *) * class_finality (* finality of static type *) * string (* family type *) * string * expr (* index *) * pat list
   | ExprPred of loc * expr (*  uitdrukking regel-expr *)
   | Sep of loc * pred * pred  (* separate conjunction *)
   | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
@@ -1042,10 +1042,12 @@ and
   instance_pred_decl =
   | InstancePredDecl of loc * string * (type_expr * string) list * pred option
 and
+  class_finality = FinalClass | ExtensibleClass
+and
   decl =
     Struct of loc * string * field list option
   | Inductive of loc * string * string list * ctor list (* inductief data type regel-naam-type parameters-lijst van constructors*)
-  | Class of loc * string * meth list * field list *cons list* string (* superclass *) * string list (* itfs *) * instance_pred_decl list
+  | Class of loc * class_finality * string * meth list * field list *cons list* string (* superclass *) * string list (* itfs *) * instance_pred_decl list
   | Interface of loc * string * meth_spec list * instance_pred_decl list
   | PredFamilyDecl of loc * string * string list (* type parameters *) * int (* number of indices *) * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
   | PredFamilyInstanceDecl of loc * string * string list (* type parameters *) * (loc * string) list * (type_expr * string) list * pred
@@ -1181,7 +1183,7 @@ let pred_loc p =
   | CallPred (l, g, targs, ies, es) -> l
   | WCallPred (l, g, targs, ies, es) -> l
   | InstCallPred (l, e, g, pats) -> l
-  | WInstCallPred (l, e_opt, tn, g, index, pats) -> l
+  | WInstCallPred (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprPred (l, e) -> l
   | Sep (l, p1, p2) -> l
   | IfPred (l, e, p1, p2) -> l
@@ -1370,7 +1372,7 @@ module Scala = struct
   let rec
     parse_decl = parser
       [< '(l, Kwd "object"); '(_, Ident cn); '(_, Kwd "{"); ms = rep parse_method; '(_, Kwd "}") >] ->
-      Class (l, cn, ms, [], [], "Object", [], [])
+      Class (l, FinalClass, cn, ms, [], [], "Object", [], [])
   and
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
@@ -1445,14 +1447,17 @@ let parse_decls =
 let rec
   parse_decls = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
-| [< '(l, Kwd "public");ds'=parser
-    [<'(_, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s, methods s mem,fields mem,constr mem,super,il, instance_preds mem)::ds
-  | [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,methspecs mem,predspecs mem)::ds
-  >]-> ds'
-| [<'(l, Kwd "interface");'(_, Ident cn);'(_, Kwd "{");mem=parse_interface_members cn;ds=parse_decls>]-> Interface(l,cn,methspecs mem,predspecs mem)::ds
-| [< '(l, Kwd "class");'(_, Ident s);super=parse_super_class;il=parse_interfaces; mem=parse_java_members s;ds=parse_decls>]->Class(l,s,methods s mem, fields mem,constr mem,super,il, instance_preds mem)::ds
-| [< ds0 = parse_decl; ds = parse_decls >] -> ds0@ds
-| [< >] -> []
+| [< _ = opt (parser [< '(_, Kwd "public") >] -> ());
+     final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
+     ds = begin parser
+       [< '(l, Kwd "class"); '(_, Ident s); super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls >]
+       -> Class (l, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
+     | [< '(l, Kwd "interface"); '(_, Ident cn); '(_, Kwd "{"); mem = parse_interface_members cn; ds = parse_decls >]
+       -> Interface (l, cn, methspecs mem, predspecs mem)::ds
+     | [< d = parse_decl; ds = parse_decls >] -> d@ds
+     | [< >] -> []
+     end
+  >] -> ds
 and
   parse_super_class= parser
     [<'(_, Kwd "extends");'(_, Ident s)>] -> s 
@@ -2783,12 +2788,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter (pn,ilist) classes lemmas ds=
       match ds with
       [] -> (classes,lemmas)
-    | Class(l,cn,meths,fds,cons,super,inames,preds)::rest -> let cn=full_name pn cn in
+    | Class (l, fin, cn, meths, fds, cons, super, inames, preds)::rest -> let cn=full_name pn cn in
       let meths'= List.filter (fun x-> match x with Meth(lm, t, n, ps, co, ss,fb,v) -> match ss with None->true |Some _ -> false) meths 
       in
       let cons'= List.filter (fun x-> match x with Cons (lm,ps,co,ss,v) -> match ss with None->true |Some _ -> false) cons 
       in
-      iter (pn,ilist) (Class(l,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
+      iter (pn,ilist) (Class(l,fin,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
     | Func(l,Lemma(_),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
       let fn=full_name pn fn in iter (pn,ilist) classes (elem::lemmas) rest
     | _::rest -> 
@@ -3120,7 +3125,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           static_error l ("There exists already a class with this name: "^i)
         else
          iter (pn,il) ((i, (l,meth_specs,pred_specs,pn,il))::ifdm) classlist ds
-      | (Class (l, i, meths,fields,constr,super,interfs,preds))::ds -> 
+      | (Class (l, fin, i, meths,fields,constr,super,interfs,preds))::ds -> 
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i)
@@ -3144,7 +3149,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               None-> static_error l ("Superclass wasn't found: "^super)
             | Some super -> super
           in
-          iter (pn,il) ifdm ((i, (l, meths ,fields,constr,super,interfs,preds,pn,il))::classlist) ds
+          iter (pn,il) ifdm ((i, (l,fin,meths,fields,constr,super,interfs,preds,pn,il))::classlist) ds
       | _::ds -> iter (pn,il) ifdm classlist ds
     in
     let rec iter' (ifdm,classlist) ps =
@@ -3157,10 +3162,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classmap1 =
     List.map
-      (fun (sn, (l,meths, fds_opt,constr,super,interfs,preds,pn,ilist)) ->
+      (fun (sn, (l,fin,meths,fds_opt,constr,super,interfs,preds,pn,ilist)) ->
          let rec iter fmap fds =
            match fds with
-             [] -> (sn, (l,meths, Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
+             [] -> (sn, (l,fin,meths,Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
            | Field (lf, _, t, f, binding, vis, final, init)::fds ->
              if List.mem_assoc f fmap then
                static_error lf "Duplicate field name."
@@ -3187,7 +3192,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin
            match fds_opt with
              fds -> iter [] fds
-           | [] -> (sn, (l,meths,None,constr,super,interfs,preds,pn,ilist))
+           | [] -> (sn, (l,fin,meths,None,constr,super,interfs,preds,pn,ilist))
          end
       )
       classmap1
@@ -3365,11 +3370,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     x = y ||
     y = "java.lang.Object" ||
     match try_assoc x classmap1 with
-      Some (_, _, _, _, super, interfaces, _, _, _) ->
+      Some (_, _, _, _, _, super, interfaces, _, _, _) ->
       is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
     | None ->
       match try_assoc x classmap0 with
-        Some (_, _, _, _, super, interfaces, _, _, _) ->
+        Some (_, _, _, _, _, super, interfaces, _, _, _) ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
       | None -> false
   in
@@ -3818,7 +3823,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
     Java-> flatmap
-      (fun (cn, (_,_, fds_opt,_,_,_,_,_,_)) ->
+      (fun (cn, (_,_,_, fds_opt,_,_,_,_,_,_)) ->
          match fds_opt with
            None -> []
          | Some fds ->
@@ -3991,8 +3996,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))::classmap1_todo ->
-        let cont predmap = iter ((cn, (lc, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
+      | (cn, (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))::classmap1_todo ->
+        let cont predmap = iter ((cn, (lc, fin, methods, fds_opt, ctors, super, interfs, List.rev predmap, pn, ilist))::classmap1_done) classmap1_todo in
         let rec iter predmap preds =
           match preds with
             [] -> cont predmap
@@ -4027,7 +4032,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 if cn = "" then [] else
                 let check_classmap classmap fallback =
                   begin match try_assoc cn classmap with
-                    Some (lc, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) ->
+                    Some (lc, fin, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) ->
                     begin match try_assoc g predmap with
                       Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
                     | None -> preds_in_class super @ flatmap preds_in_itf interfs
@@ -4136,9 +4141,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let lookup_class_field cn fn =
     let fds =
       match try_assoc cn classmap1 with
-        Some (_,_, Some fds,_,_,_,_,_,_) -> fds
+        Some (_,_,_, Some fds,_,_,_,_,_,_) -> fds
       | None ->
-        let (_,_, Some fds,_,_,_,_,_,_) = List.assoc cn classmap0 in fds
+        let (_,_,_, Some fds,_,_,_,_,_,_) = List.assoc cn classmap0 in fds
     in
     try_assoc fn fds
   in
@@ -4168,7 +4173,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec get_methods tn mn =
       if tn = "" then [] else
       match try_assoc tn classmap with
-        Some (l, meths, fds, constr, super, interfs, _, pn, ilist) ->
+        Some (l, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
         let inherited_methods =
           get_methods super mn @ flatmap (fun ifn -> get_methods ifn mn) interfs
         in
@@ -4813,7 +4818,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
         let fds_opt =
           match fds_opt with
             None -> fds_opt
@@ -4829,7 +4834,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             Some fds
         in
-        (cn, (l, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
+        (cn, (l, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
       end
       classmap1
   in
@@ -4899,10 +4904,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     and eval_field callers ((cn, fn) as f) =
       if List.mem f callers then raise NotAConstant;
       match try_assoc cn classmap1 with
-        Some (l, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+        Some (l, fin, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
         match try_assoc cn classmap0 with
-          Some (l, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+          Some (l, fin, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
     and eval_field_body callers (l, t, vis, binding, final, init, value) =
       match !value with
         Some None -> raise NotAConstant
@@ -4919,7 +4924,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> value := Some None; raise NotAConstant
     in
     List.iter
-      begin fun (cn, (l, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
         match fds_opt with
           None -> ()
         | Some fds ->
@@ -4967,6 +4972,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance)
   in
   
+  let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
+    match try_assoc tn classmap1 with
+      Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+      fin
+    | None ->
+      match try_assoc tn classmap0 with
+        Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+        fin
+      | None -> ExtensibleClass
+  in
+  
   let rec check_pred_core (pn,ilist) tparams tenv p =
     let check_pred = check_pred_core in
     match p with
@@ -5010,7 +5026,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                       else
                         get_class_of_this
                     in
-                    (WInstCallPred (l, None, family, p#name, index, wps), tenv, [])
+                    (WInstCallPred (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
                   in
                   let find_in_interf itf =
                     let search_interfmap interfmap fallback =
@@ -5027,7 +5043,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   let rec find_in_class cn =
                     let search_classmap classmap fallback =
                       match try_assoc cn classmap with
-                        Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+                        Some (_, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
                         begin match try_assoc p#name preds with
                           Some (_, pmap, family, symb, body) -> [(family, pmap)]
                         | None -> find_in_class super @ flatmap find_in_interf interfs
@@ -5072,18 +5088,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
           let index = WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance) in
-          (WInstCallPred (l, Some w, cn, g, index, wpats), tenv, [])
+          (WInstCallPred (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
         let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) in
         begin match try_assoc cn classmap1 with
-          Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+          Some (_, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           begin match try_assoc g preds with
             Some (_, pmap, family, symb, body) -> check_call family pmap
           | None -> error ()
           end
         | None ->
           begin match try_assoc cn classmap0 with
-            Some (_, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (_, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
             begin match try_assoc g preds with
               Some (_, pmap, family, symb, body) -> check_call family pmap
             | None -> error ()
@@ -5291,7 +5307,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_pats_fixed l fixed inpats;
           assume_pats_fixed fixed outpats
       end
-    | WInstCallPred (l, e_opt, tn, g, index, pats) ->
+    | WInstCallPred (l, e_opt, st, cfin, tn, g, index, pats) ->
       begin match e_opt with None -> () | Some e -> assert_expr_fixed fixed e end;
       assert_expr_fixed fixed index;
       assume_pats_fixed fixed pats
@@ -5456,7 +5472,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classmap1 =
     classmap1 |> List.map
-      begin fun (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
         let preds =
           preds |> List.map
             begin fun (g, (l, pmap, family, symb, Some body)) ->
@@ -5471,7 +5487,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (g, (l, pmap, family, symb, Some wbody))
             end
         in
-        (cn, (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
+        (cn, (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
       end
   in
 
@@ -6213,14 +6229,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | Some(f) ->
             assume_pred_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
       )
-    | WInstCallPred (l, e_opt, tn, g, index, pats) ->
+    | WInstCallPred (l, e_opt, st, cfin, tn, g, index, pats) ->
       let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
-          Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+          Some (lcn, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
-            Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (lcn, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
@@ -6233,6 +6249,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
       let index = ev index in
       assume (ctxt#mk_not (ctxt#mk_eq target (ctxt#mk_intlit 0))) $. fun () ->
+      begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
       let types = List.map snd pmap in
       evalpats (pn,ilist) ghostenv env pats types types $. fun ghostenv env args ->
       assume_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
@@ -6445,7 +6462,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match iter [] h with
         [] ->
         begin fun cont ->
-          if inputParamCount = None || coef != real_unit then cont () else
+          if inputParamCount = None then cont () else
           begin fun cont' ->
             let Some inputParamCount = inputParamCount in
             let rec iter n ts pats tps0 tps =
@@ -6563,11 +6580,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let inst_call_pred l coefpat e_opt tn g index pats =
       let (pmap, pred_symb) =
         match try_assoc tn classmap1 with
-          Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+          Some (lcn, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
-            Some (lcn, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (lcn, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
@@ -6588,7 +6605,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
     | WAccess (l, e, tp, rhs) -> access l real_unit_pat e tp (SrcPat rhs)
     | WCallPred (l, g, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
-    | WInstCallPred (l, e_opt, tn, g, index, pats) ->
+    | WInstCallPred (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
     | ExprPred (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
       begin match try_assoc x env with
@@ -6655,7 +6672,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | EmpPred l -> cont [] h ghostenv env env' None
     | CoefPred (l, coefpat, WAccess (_, e, tp, rhs)) -> access l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefPred (l, coefpat, WCallPred (_, g, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
-    | CoefPred (l, coefpat, WInstCallPred (_, e_opt, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
+    | CoefPred (l, coefpat, WInstCallPred (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     )
   in
   
@@ -7047,15 +7064,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         add_rule symb autoclose_rule;
         let autoopen_rule =
           let match_func h targs ts =
-            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && coef' == real_unit && chunks_match g' targs' ts' symb' targs ts) h
+            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && chunks_match g' targs' ts' symb' targs ts) h
           in
           let exec_func h targs ts cont =
-            let (h, targs, ts) =
+            let (h, targs, coef, ts) =
               let rec iter hdone htodo =
                 match htodo with
                   (Chunk ((g', is_symb), targs', coef', ts', _) as chunk)::htodo ->
-                  if is_symb && coef' == real_unit && chunks_match g' targs' ts' symb' targs ts then
-                    (hdone @ htodo, targs', ts')
+                  if is_symb && chunks_match g' targs' ts' symb' targs ts then
+                    (hdone @ htodo, targs', coef', ts')
                   else
                     iter (chunk::hdone) htodo
               in
@@ -7066,7 +7083,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) xs args in
             let ghostenv = [] in
             with_context (Executing (h, env, l, "Auto-opening predicate")) $. fun () ->
-            assume_pred tpenv (pn,ilist) h ghostenv env wbody real_unit None None $. fun h ghostenv env ->
+            assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h ghostenv env ->
             cont h
           in
           let rule h targs ts cont =
@@ -7481,8 +7498,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let rec dynamic_of asn =
     match asn with
-      WInstCallPred (l, None, tn, g, index, pats) ->
-      WInstCallPred (l, None, tn, g, get_class_of_this, pats)
+      WInstCallPred (l, None, st, cfin, tn, g, index, pats) ->
+      WInstCallPred (l, None, st, cfin, tn, g, get_class_of_this, pats)
     | Sep (l, a1, a2) ->
       let a1' = dynamic_of a1 in
       let a2' = dynamic_of a2 in
@@ -7523,10 +7540,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if cn = "" then [] else
         let (super, interfs, mmap) =
           match try_assoc cn classmap1_done with
-            Some (l, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
+            Some (l, fin, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
           | None ->
             match try_assoc cn classmap0 with
-              Some (l, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
+              Some (l, fin, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
             | None -> assert false
         in
         let specs =
@@ -7538,11 +7555,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (l, meths, fds, constr, super, interfs, preds, pn, ilist))::classmap1_todo ->
+      | (cn, (l, fin, meths, fds, constr, super, interfs, preds, pn, ilist))::classmap1_todo ->
         let cont cl = iter (cl::classmap1_done) classmap1_todo in
         let rec iter mmap meths =
           match meths with
-            [] -> cont (cn, (l, List.rev mmap, fds, constr, super, interfs, preds, pn, ilist))
+            [] -> cont (cn, (l, fin, List.rev mmap, fds, constr, super, interfs, preds, pn, ilist))
           | Meth (lm, rt, n, ps, co, ss, fb, v)::meths ->
             let xmap =
                 let rec iter xm xs =
@@ -7612,10 +7629,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, meths, fds, ctors, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, fin, meths, fds, ctors, super, interfs, preds, pn, ilist)) ->
         let rec iter cmap ctors =
           match ctors with
-            [] -> (cn, (l, meths, fds, List.rev cmap, super, interfs, preds, pn, ilist))
+            [] -> (cn, (l, fin, meths, fds, List.rev cmap, super, interfs, preds, pn, ilist))
             | Cons (lm, ps, co, ss, v)::ctors ->
               let xmap =
                 let rec iter xm xs =
@@ -7653,12 +7670,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (l, meths, fds, cmap, super, interfs, preds, pn, ilist)) as c::classmap1_todo ->
+      | (cn, (l, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) as c::classmap1_todo ->
         let c =
           if cmap <> [] then c else
           (* Check if superclass has zero-arg ctor *)
           begin fun cont ->
-            let (l', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
+            let (l', fin', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
             match try_assoc [] cmap' with
               Some (l'', xmap, pre, pre_tenv, post, _, _) ->
               cont pre pre_tenv post
@@ -7689,21 +7706,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let vis = Public in
             (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, ss, vis))
           in
-          (cn, (l, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
+          (cn, (l, fin, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
         in
         iter (c::classmap1_done) classmap1_todo
     in
     iter [] classmap1
   in
   
-  let classmap= 
+  (* Merge classmap1 into classmap0; check class implementations against specifications. *)
+  let classmap =
     let rec iter map0 map1 =
       match map0 with
         [] -> map1
-      | (cn, (l0,meths0,fds0,constr0,super0,interfs0,preds0,pn0,ilist0)) as elem::rest ->
+      | (cn, (l0,fin0,meths0,fds0,constr0,super0,interfs0,preds0,pn0,ilist0)) as elem::rest ->
         match try_assoc cn map1 with
           None -> iter rest (elem::map1)
-        | Some (l1,meths1,fds1,constr1,super1,interfs1,preds1,pn1,ilist1) ->
+        | Some (l1,fin1,meths1,fds1,constr1,super1,interfs1,preds1,pn1,ilist1) ->
+          if fin1 <> fin0 then static_error l1 "Class finality does not match specification.";
           let match_fds fds0 fds1=
             let rec iter fds0 fds1=
             match fds0 with
@@ -7756,7 +7775,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let meths'= match_meths meths0 meths1 in
           let fds'= match_fds fds0 fds1 in
           let constr'= match_constr constr0 constr1 in
-          iter rest ((cn,(l1,meths',fds',constr',super1,interfs1,preds1,pn1,ilist1))::map1)
+          iter rest ((cn,(l1,fin1,meths',fds',constr',super1,interfs1,preds1,pn1,ilist1))::map1)
     in
     iter classmap0 classmap1
   in
@@ -7765,7 +7784,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     (* Inheritance check *)
     let rec get_overrides cn =
       if cn = "java.lang.Object" then [] else
-      let (l, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
+      let (l, fin, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
       let overrides =
         flatmap
           begin fun (sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) ->
@@ -7776,7 +7795,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       overrides @ get_overrides super
     in
     List.iter
-      begin fun (cn, (l, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, (l, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
         let overrides = get_overrides cn in
         List.iter
           begin fun (cn, sign) ->
@@ -7813,7 +7832,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             []-> ()
           | (n,lm0)::_ -> static_error lm0 ("Method not in specs: "^n)
           )
-      | Class(l,cn,meths,fds,cons,super,inames,preds)::rest ->
+      | Class(l,fin,cn,meths,fds,cons,super,inames,preds)::rest ->
           let check_meths meths meths_impl=
             let rec iter mlist meths_impl=
               match mlist with
@@ -8164,7 +8183,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | NewObject (l, cn, args) ->
       if pure then static_error l "Object creation is not allowed in a pure context";
-      let (_, _, _, consmap, _, _, _, _, _) = List.assoc cn classmap in
+      let (_, _, _, _, consmap, _, _, _, _, _) = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
       let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
@@ -8181,7 +8200,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, rt, xmap, pre, post, fb', v) =
         match try_assoc tn classmap with
-          Some (lc, meths, fds, constr, super, interfs, preds, pn, ilist) ->
+          Some (lc, fin, meths, fds, constr, super, interfs, preds, pn, ilist) ->
           let (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override) = List.assoc (m, pts) meths in
           (lm, rt, xmap, pre_dyn, post_dyn, fb, v)
         | _ ->
@@ -8869,7 +8888,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let (pmap, symb, body) =
             match try_assoc cn classmap with
-              Some (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+              Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
               begin match try_assoc g preds with
                 None -> static_error l "No such predicate instance"
               | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
@@ -8915,7 +8934,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               None -> error ()
             | Some (ObjType cn) ->
               begin match try_assoc cn classmap with
-                Some (lc, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
+                Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                 begin match try_assoc g preds with
                   None -> error ()
                 | Some (lpred, pmap, family, symb, Some body) ->
@@ -9093,7 +9112,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           let (lpred, pmap, symb, body) =
             match try_assoc cn classmap with
-              Some (lc, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+              Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
               begin match try_assoc g preds with
                 None -> static_error l "No such predicate instance"
               | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
@@ -9134,7 +9153,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               begin match try_assoc "this" tenv with
                 Some (ObjType cn) ->
                 begin match try_assoc cn classmap with
-                  Some (lcn, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
+                  Some (lcn, fin, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
                   begin match try_assoc g preds with
                     Some (lpred, pmap, family, symb, Some body) ->
                     let this = List.assoc "this" env in
@@ -9994,11 +10013,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let get_fields (pn,ilist) cn lm=
     match try_assoc' (pn,ilist) cn classmap with
-      Some (_,_,fds_opt,_,_,_,_,_,_)-> (match fds_opt with Some fds -> fds | None -> [])
+      Some (_,_,_,fds_opt,_,_,_,_,_,_)-> (match fds_opt with Some fds -> fds | None -> [])
     | None -> static_error lm ("No class was found: "^cn)
   in
   
-  let rec verify_cons (pn,ilist) cn superctors boxes lems cons =
+  let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
       [] -> ()
     | (sign, (lm, xmap, pre, pre_tenv, post, ss, v))::rest ->
@@ -10006,7 +10025,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None ->
         let (((_, p), _, _), ((_, _), _, _)) = lm in 
         if Filename.check_suffix p ".javaspec" then
-          verify_cons (pn,ilist) cn superctors boxes lems rest
+          verify_cons (pn,ilist) cfin cn superctors boxes lems rest
         else
           static_error lm "Constructor specification is only allowed in javaspec files!"
       | Some (Some (ss, closeBraceLoc)) ->
@@ -10017,6 +10036,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         begin
           assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
+          begin fun cont ->
+            if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
+          end $. fun () ->
           let do_body h ghostenv env =
             let do_return h env_post =
               assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
@@ -10066,16 +10088,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter h fds
         end;
         pop();
-        verify_cons (pn,ilist) cn superctors boxes lems' rest
+        verify_cons (pn,ilist) cfin cn superctors boxes lems' rest
   in
   
-  let rec verify_meths (pn,ilist) boxes lems meths=
+  let rec verify_meths (pn,ilist) cfin boxes lems meths=
     match meths with
       [] -> ()
     | (g, (l,rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _))::meths ->
       match sts with
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
-          if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) boxes lems meths
+          if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) cfin boxes lems meths
           else static_error l "Constructor specification is only allowed in javaspec files!"
       | Some (Some (ss, closeBraceLoc)) ->
         push();
@@ -10089,6 +10111,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let ("this", ObjType cn)::_ = ps in
               (* CAVEAT: Remove this assumption once we allow subclassing. *)
               (* assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) $. fun () -> *)
+              begin fun cont ->
+                if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) cont else cont ()
+              end $. fun () ->
               assume_neq thisTerm (ctxt#mk_intlit 0) (fun _ -> cont (("this", ObjType cn)::pre_tenv))
             end else cont pre_tenv
           end $. fun tenv ->
@@ -10110,20 +10135,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         end;
         pop();
-        verify_meths (pn,ilist) boxes lems' meths
+        verify_meths (pn,ilist) cfin boxes lems' meths
   in
   
   let rec verify_classes boxes lems classm=
     match classm with
       [] -> ()
-    | (cn, (l, meths, _, cons, super, itfs, preds, pn, ilist))::classm ->
+    | (cn, (l, fin, meths, _, cons, super, itfs, preds, pn, ilist))::classm ->
       let superctors =
         if super = "" then [] else
-          let (l, meths, fds, cons, super, itfs, preds, pn, ilist) = List.assoc super classmap in
+          let (l, fin, meths, fds, cons, super, itfs, preds, pn, ilist) = List.assoc super classmap in
           cons
       in
-      verify_cons (pn,ilist) cn superctors boxes lems cons;
-      verify_meths (pn,ilist) boxes lems meths;
+      verify_cons (pn,ilist) fin cn superctors boxes lems cons;
+      verify_meths (pn,ilist) fin boxes lems meths;
       verify_classes boxes lems classm
   in
   

@@ -1,89 +1,95 @@
 // VeriFast-annotated partial JavaCard API
 // Status:
-// - Should be sound except for card tearing; i.e.: if a program verifies, then in executions where no card tear occurs there should not be assertion failures
+// - Should be sound, even in the presence of card tearing. That is, during all executions of verified programs, all assert statements succeed.
 // - Not all API method preconditions specified in the official API docs have been encoded yet; this means an execution of a verified program may throw exceptions
 // TODO:
-// - Support card tearing
 // - Strengthen contracts so that in executions of a verified program, API calls do not throw exceptions
+// - Support transient objects (i.e. the JCSystem.makeTransientXXX methods). (This requires keeping track of them and consuming them during register() and commitTransaction() to ensure they do not end up in applet.valid().)
+// - Support JCSystem.abortTransaction(). (This is difficult because the footprint of this method is all persistent objects modified during the transaction, which might include objects not in currentApplet.valid().)
+// - Support communication with other applets.
 
 package javacard.framework;
 
 /*@
 
+fixpoint boolean is_persistent_object(Object o);
+
 predicate APDU(APDU apdu, byte[] buffer);
 
 lemma_auto void APDU_inv();
     requires APDU(?apdu, ?buffer);
-    ensures APDU(apdu, buffer) &*& apdu != null &*& buffer != null &*& 133 <= buffer.length;
-    
+    ensures APDU(apdu, buffer) &*& apdu != null &*& buffer != null &*& !is_persistent_object(buffer) &*& 133 <= buffer.length;
+
 @*/
 
 class APDU {
-  public byte[] getBuffer();
-    //@ requires APDU(this, ?buffer);
-    //@ ensures APDU(this, buffer) &*& result == buffer;
+    public byte[] getBuffer();
+        //@ requires APDU(this, ?buffer);
+        //@ ensures APDU(this, buffer) &*& result == buffer;
     
-  public short setOutgoing() throws APDUException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    public short setOutgoing() throws APDUException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-  public short setIncomingAndReceive() throws APDUException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    public short setIncomingAndReceive() throws APDUException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-  public void setOutgoingAndSend(short bOff, short len) throws APDUException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    public void setOutgoingAndSend(short bOff, short len) throws APDUException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-  public void setOutgoingLength(short len) throws APDUException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    public void setOutgoingLength(short len) throws APDUException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-  public void sendBytes(short bOff, short len) throws APDUException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
-
-  public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException, SecurityException;
-    //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
-    //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
+    public void sendBytes(short bOff, short len) throws APDUException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    
+    public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException, SecurityException;
+        //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
+        //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
 }
 
-//@ predicate_family Applet_(Class c)(Applet applet);
+//@ predicate current_applet(Applet applet);
 
 class Applet {
-  public Applet();
-    //@ requires true;
-    //@ ensures true;
-  
-  public boolean selectingApplet();
-    //@ requires true;
-    //@ ensures true;
-  
-  public void register();
-    //@ requires Applet_(this.getClass())(this);
-    //@ ensures true;
-  
-  public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException;
-    //@ requires Applet_(this.getClass())(this);
-    //@ ensures true;
-  
-  public boolean select();
-    //@ requires Applet_(this.getClass())(this);
-    //@ ensures Applet_(this.getClass())(this);
-  
-  public void deselect();
-    //@ requires Applet_(this.getClass())(this);
-    //@ ensures Applet_(this.getClass())(this);
-  
-  public void process(APDU apdu);
-    //@ requires Applet_(this.getClass())(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-    //@ ensures Applet_(this.getClass())(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    //@ predicate valid() = false;
+    
+    public Applet();
+        //@ requires true;
+        //@ ensures true;
+    
+    public boolean selectingApplet();
+        //@ requires true;
+        //@ ensures true;
+    
+    public void register();
+        //@ requires this.valid();
+        //@ ensures true;
+    
+    public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException;
+        //@ requires this.valid();
+        //@ ensures true;
+    
+    public boolean select();
+        //@ requires current_applet(this) &*& [1/2]this.valid();
+        //@ ensures current_applet(this) &*& [1/2]this.valid();
+    
+    public void deselect();
+        //@ requires current_applet(this) &*& [1/2]this.valid();
+        //@ ensures current_applet(this) &*& [1/2]this.valid();
+    
+    public void process(APDU apdu);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 }
 
 class ISOException {
-  public static void throwIt(short sw) throws ISOException;
-    //@ requires true;
-    //@ ensures false;
+    public static void throwIt(short sw) throws ISOException;
+        //@ requires true;
+        //@ ensures false;
 }
 
 class OPSystem {
@@ -98,55 +104,56 @@ class OPSystem {
     public static final byte CARD_LOCKED = 127;
     public static final byte CARD_OP_READY = 1;
     public static final byte PACKAGE_LOADED = 1;
-
-
-  public static byte getCardContentState();
-    //@ requires true;
-    //@ ensures true;
     
-  public static boolean setCardContentState(byte state);
-    //@ requires true;
-    //@ ensures true;
+    public static byte getCardContentState();
+        //@ requires true;
+        //@ ensures true;
+    
+    public static boolean setCardContentState(byte state);
+        //@ requires true;
+        //@ ensures true;
 }
 
 class AID {
 }
 
 class JCSystem {
-  public static AID lookupAID(byte[] buffer, short offset, byte length);
-    //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
-    //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
+    public static AID lookupAID(byte[] buffer, short offset, byte length);
+        //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
+        //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
     
-  public static void beginTransaction();
-    //@ requires true;
-    //@ ensures true;
-
-  public static void commitTransaction();
-    //@ requires true;
-    //@ ensures true;
+    public static void beginTransaction();
+        //@ requires current_applet(?applet);
+        //@ ensures current_applet(applet) &*& [1/2]applet.valid();
+    
+    // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
+    // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
+    //       In process(), set b = false, then commit, then throw an exception. Next time you enter process(), you have [1]y |-> _ outside a transaction.
+    public static void commitTransaction();
+        //@ requires current_applet(?applet) &*& applet.valid();
+        //@ ensures current_applet(applet) &*& [1/2]applet.valid();
 }
 
 class Util {
-  public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
-    //@ requires [?f1]array_slice(src, srcOff, srcOff + length, ?elems1) &*& [?f2]array_slice(dest, destOff, destOff + length, ?elems2);
-    //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
-
-  public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-	throws ArrayIndexOutOfBoundsException;
-    //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
-    //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
+    public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+        //@ requires [?f1]array_slice(src, srcOff, srcOff + length, ?elems1) &*& [?f2]array_slice(dest, destOff, destOff + length, ?elems2);
+        //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
     
-  public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
-    //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
-    //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
-  
-  public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
-    //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
-    //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
+    public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
+        throws ArrayIndexOutOfBoundsException;
+        //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _) &*& !is_persistent_object(dest);
+        //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
+      
+    public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+        //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
+        //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
+    
+    public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
+        //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
+        //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
 }
 
 class ISO7816 {
-    
     public static final byte CLA_ISO7816 = 0x00;
     public static final byte INS_EXTERNAL_AUTHENTICATE = (byte) 0x82;
     public static final byte INS_SELECT = (byte) 0xA4;
