@@ -930,7 +930,7 @@ and
       (loc * expr) option * (* default clause *)
       (type_ * (string * type_) list * type_ list * type_) option ref (* used during evaluation when generating an anonymous fixpoint function, to get the prover types right *)
   | PredNameExpr of loc * string (* naam van predicaat en line of code*)
-  | CastExpr of loc * type_expr * expr (* cast *)
+  | CastExpr of loc * bool (* truncating *) * type_expr * expr (* cast *)
   | SizeofExpr of loc * type_expr
   | AddressOf of loc * expr
   | ProverTypeConversion of prover_type * prover_type * expr  (* Generated during type checking in the presence of type parameters, to get the prover types right *)
@@ -1169,7 +1169,7 @@ let rec expr_loc e =
   | SwitchExpr (l, e, secs, _, _) -> l
   | SizeofExpr (l, t) -> l
   | PredNameExpr (l, g) -> l
-  | CastExpr (l, te, e) -> l
+  | CastExpr (l, trunc, te, e) -> l
   | AddressOf (l, e) -> l
   | ArrayTypeExpr' (l, e) -> l
   | AssignExpr (l, lhs, rhs) -> l
@@ -1277,7 +1277,7 @@ let expr_fold_open iter state e =
   | IfExpr (l, e1, e2, e3) -> iters state [e1; e2; e3]
   | SwitchExpr (l, e0, cs, cdef_opt, info) -> let state = itercs (iter state e0) cs in (match cdef_opt with Some (l, e) -> iter state e | None -> state)
   | PredNameExpr (l, p) -> state
-  | CastExpr (l, te, e0) -> state
+  | CastExpr (l, trunc, te, e0) -> state
   | SizeofExpr (l, te) -> state
   | AddressOf (l, e0) -> iter state e0
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
@@ -1298,7 +1298,8 @@ let common_keywords = [
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
   "||"; "!"; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
-  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<"
+  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
+  "truncating"
 ]
 
 let ghost_keywords = [
@@ -2091,16 +2092,18 @@ and
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> StringLit (l, String.concat "" (s::ss))
+| [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
+| [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e
 | [< '(l, Kwd "(");
      e = parser
      [< e0 = parse_expr; '(_, Kwd ")");
          e = parser
            [< '(l', Ident y) >] -> (match e0 with 
-             Var (lt, x, _) ->CastExpr (l, IdentTypeExpr (lt, x), Var (l', y, ref (Some LocalVar)))
+             Var (lt, x, _) ->CastExpr (l, false, IdentTypeExpr (lt, x), Var (l', y, ref (Some LocalVar)))
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
          | [<>] -> e0
      >] -> e
-   | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, te, e)
+   | [< te = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, false, te, e)
    >] -> e
 (*
 | [< '(l, Kwd "(");
@@ -2173,7 +2176,7 @@ and
   apply_type_args e targs args =
   match e with
     Var (lx, x, _) -> CallExpr (lx, x, targs, [], args, Static)
-  | CastExpr (lc, te, e) -> CastExpr (lc, te, apply_type_args e targs args)
+  | CastExpr (lc, trunc, te, e) -> CastExpr (lc, trunc, te, apply_type_args e targs args)
   | Operation (l, Not, [e], ts) -> Operation (l, Not, [apply_type_args e targs args], ts)
   | Operation (l, BitNot, [e], ts) -> Operation (l, BitNot, [apply_type_args e targs args], ts)
   | Deref (l, e, ts) -> Deref (l, apply_type_args e targs args, ts)
@@ -2687,6 +2690,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
   let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
+  let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp in
+  let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp in
   
   ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false); (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
@@ -4434,10 +4439,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | StringLit (l, s) -> (match file_type path with
         Java-> (e, ObjType "java.lang.String")
       | _ -> (e, PtrType Char))
-    | CastExpr (l, te, e) ->
+    | CastExpr (l, truncating, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
-      (CastExpr (l, ManifestTypeExpr (type_expr_loc te, t), w), t)
+      (CastExpr (l, truncating, ManifestTypeExpr (type_expr_loc te, t), w), t)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
     | Deref (l, e, tr) ->
@@ -4875,7 +4880,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | IntLit (l, n, _) -> IntConst n
       | StringLit (l, s) -> StringConst s
       | WRead (l, _, fparent, fname, _, fstatic, _, _) when fstatic -> eval_field callers (fparent, fname)
-      | CastExpr (l, ManifestTypeExpr (_, t), e) ->
+      | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
         let v = ev e in
         begin match (t, v) with
           (Char, IntConst n) ->
@@ -5707,19 +5712,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
     | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) g predfammap in cont state symb
-    | CastExpr (l, ManifestTypeExpr (_, t), e) ->
+    | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
       begin
-        match (e, t) with
-          (IntLit (_, n, _), PtrType _) ->
+        match (e, t, truncating) with
+          (IntLit (_, n, _), PtrType _, _) ->
           if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
-        | (e, Char) ->
+        | (e, Char, false) ->
           ev state e $. fun state t ->
           cont state (check_overflow l min_char_term t max_char_term)
-        | (e, ShortType) ->
+        | (e, ShortType, false) ->
           ev state e $. fun state t ->
           cont state (check_overflow l min_short_term t max_short_term)
-        | _ -> ev state e cont (* BUGBUG: This is fishy *)
+        | (e, Char, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_int8_symbol [t])
+        | (e, ShortType, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_int16_symbol [t])
+        | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end
     | IntLit (l, n, t) ->
       begin match !t with
@@ -7157,7 +7168,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfExpr (l, e1, e2, e3) -> expr_assigned_variables e1 @ expr_assigned_variables e2 @ expr_assigned_variables e3
     | SwitchExpr (l, e, cs, cdef_opt, _) ->
       expr_assigned_variables e @ flatmap (fun (SwitchExprClause (l, ctor, xs, e)) -> expr_assigned_variables e) cs @ (match cdef_opt with None -> [] | Some (l, e) -> expr_assigned_variables e)
-    | CastExpr (l, te, e) -> expr_assigned_variables e
+    | CastExpr (l, trunc, te, e) -> expr_assigned_variables e
     | AddressOf (l, e) -> expr_assigned_variables e
     | AssignExpr (l, Var (_, x, _), e) -> [x] @ expr_assigned_variables e
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
@@ -7895,7 +7906,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | AddressOf(_, Var(_, x, scope)) when !scope = Some(LocalVar) -> [x]
     | AddressOf(_, e) -> locals_address_taken e
     | PredNameExpr(_, _) -> []
-    | CastExpr(_, _, e) -> locals_address_taken e
+    | CastExpr(_, _, _, e) -> locals_address_taken e
     | SizeofExpr(_, _) -> []
     | ProverTypeConversion(_, _, e) -> locals_address_taken e
     | AssignExpr (_, lhs, rhs) -> locals_address_taken lhs @ locals_address_taken rhs
@@ -8117,7 +8128,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) at
     in
     match e with
-    | CastExpr (lc, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
+    | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont
     | WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
@@ -8694,7 +8705,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
       (* CAVEAT: This is unsound if we allow side-effects in e1 *)
       let (_, t) = check_expr (pn,ilist) tparams tenv e1 in
-      let s = ExprStmt (AssignExpr (l, e1, CastExpr (l, ManifestTypeExpr (l, t), Operation (l, op, [e1; e2], ref None)))) in
+      let s = ExprStmt (AssignExpr (l, e1, CastExpr (l, false, ManifestTypeExpr (l, t), Operation (l, op, [e1; e2], ref None)))) in
       verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
     | ExprStmt (AssignExpr (l, lhs, rhs)) ->
       let (lhs, t) = check_expr (pn,ilist) tparams tenv lhs in
