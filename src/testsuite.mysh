@@ -43,6 +43,9 @@ cd ..
 cd MockKernel
 mysh < MockKernel.mysh
 cd ..
+cd BeepDriver
+mysh < BeepKernel.mysh
+cd ..
 verifast_both -c ifs.c
 verifast_both -shared goto.c
 verifast_both map.c

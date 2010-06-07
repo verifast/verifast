@@ -1,0 +1,13 @@
+let verifast_both
+verifast
+verifast -prover redux
+in
+dlsymtool BeepDriver.dlsymspec
+verifast_both -emit_dll_vfmanifest BeepDriver_proxy.o libraries.o Modules.c BeepKernel.c
+dlsymtool BeepDriver.dlsymspec BeepDriver
+verifast_both -shared BeepKernel.dll.vfmanifest BeepDriver.c -export BeepDriver_BeepDriver.vfmanifest
+del BeepDriver_proxy.h
+del BeepDriver_proxy.c
+del BeepDriver_proxy.vfmanifest
+del BeepDriver_BeepDriver.vfmanifest
+del BeepKernel.dll.vfmanifest

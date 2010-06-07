@@ -1,0 +1,4 @@
+EXPORTS
+	pcspeaker_play
+	register_beep_func
+	unregister_beep_func
