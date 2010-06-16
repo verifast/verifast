@@ -4801,6 +4801,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
                   end;
                   List.iter iter1 args
+                | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text";
+                  if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported."
                 | SwitchExpr (l, Var (_, x, _), cs, def_opt, _) when List.mem x components ->
                   List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
                   (match def_opt with None -> () | Some (l, e) -> iter1 e)
