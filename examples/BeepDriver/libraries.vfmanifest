@@ -1,0 +1,3 @@
+.provides .\libraries.h#load_library
+.provides .\libraries.h#library_lookup_symbol
+.provides .\libraries.h#library_free
