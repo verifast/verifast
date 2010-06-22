@@ -3493,7 +3493,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 mk_func_symbol full_cn (List.map provertype_of_type ts) ProverInductive (Proverapi.Ctor (CtorByOrdinal j))
               in
               let purefunc = (full_cn, (lc, tparams, InductiveType (i, List.map (fun x -> TypeParam x) tparams), ts, csym)) in
-              citer (j + 1) ((cn, (lc, ts))::ctormap) (purefunc::pfm) ctors
+              citer (j + 1) ((cn, purefunc)::ctormap) (purefunc::pfm) ctors
             )
         in
         citer 0 [] pfm ctors
@@ -3578,7 +3578,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         assert (ecrank = 0 && match ecmems with [ptr'] when ptr' == ptr -> true | _ -> false);
         ec := `EqClass (rank, ecmems);
-        let rec check_ctor (ctorname, (_, pts)) =
+        let rec check_ctor (ctorname, (_, (_, _, _, pts, _))) =
           let rec check_type negative pt =
             match pt with
               Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
@@ -3639,7 +3639,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let rec find_ctor ctors =
           match ctors with
             [] -> static_error l "Inductive datatype is not inhabited."
-          | (_, (_, pts))::ctors ->
+          | (_, (_, (_, _, _, pts, _)))::ctors ->
             let rec type_is_inhabited tp =
               match tp with
                 Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
@@ -3681,7 +3681,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some cond' -> fold_cond (cond' @ cond) f xs
             end
         in
-        let ctor_is_infinite (cn, (lc, pts)) =
+        let ctor_is_infinite (cn, (_, (lc, _, _, pts, _))) =
           let rec type_is_infinite tp =
             match tp with
               Bool -> Some []
@@ -4616,10 +4616,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
-                  match try_assoc' (pn,ilist) cn ctormap with
+                  match try_assoc cn ctormap with
                     None ->
                     static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.")
-                  | Some (_, ts) ->
+                  | Some (_, (_, _, _, ts, _)) ->
                     if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause.";
                     let xenv =
                       let rec iter2 ts xs xenv =
@@ -4650,7 +4650,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (e, IntType)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType)
     | e -> static_error (expr_loc e) "Expression form not allowed here."
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
@@ -4767,7 +4767,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let ts =
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor."
-              | Some (_, ts) -> ts
+              | Some (_, (_, _, _, ts, _)) -> ts
             in
             let xmap =
               let rec iter xmap ts xs =
@@ -5165,9 +5165,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in (SwitchPred (l, w, wcs), tenv, infTps)
             | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
-              match try_assoc' (pn,ilist) cn ctormap with
+              match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor."
-              | Some (_, ts) ->
+              | Some (_, (_, _, _, ts, _)) ->
                 let (xmap, xsInfo) =
                   let rec iter xmap xsInfo ts xs =
                     match (ts, xs) with
@@ -5668,8 +5668,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
 
   (* Region: evaluation *)
   
-  let rec eval_core_cps0 eval_core ev state (pn,ilist) ass_term read_field env e cont =
-    (* let ev = eval_core (pn,ilist) ass_term read_field env in *)
+  let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
     let evs state es cont =
       let rec iter state vs es =
         match es with
@@ -5699,22 +5698,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (Some scope) = !scope in
         match scope with
           LocalVar -> (try List.assoc x env with Not_found -> assert_false [] env l (Printf.sprintf "Unbound variable '%s'" x))
-        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc' (pn,ilist) x purefuncmap in mk_app s []
+        | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
         | FuncName -> List.assoc x funcnameterms
-        | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) x predfammap in symb
+        | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit n
         | GlobalName ->
           begin
             match read_field with
               None -> static_error l "Cannot mention global variables in this context."
             | Some (read_field, read_static_field, deref_pointer, read_array) ->
-              let Some((_, tp, symbol)) = try_assoc' (pn, ilist) x globalmap in 
+              let Some((_, tp, symbol)) = try_assoc x globalmap in 
               deref_pointer l symbol tp
           end
         | ModuleName -> List.assoc x modulemap
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
       end
-    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc' (pn,ilist) g predfammap in cont state symb
+    | PredNameExpr (l, g) -> let Some (_, _, _, _, symb, _) = try_assoc g predfammap in cont state symb
     | CastExpr (l, truncating, ManifestTypeExpr (_, t), e) ->
       begin
         match (e, t, truncating) with
@@ -5932,7 +5931,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           ev state e $. fun state v ->
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
-          let Some (l, tp, symbol) = try_assoc' (pn, ilist) x globalmap in cont state symbol
+          let Some (l, tp, symbol) = try_assoc x globalmap in cont state symbol
         | _ -> static_error l "Taking the address of this expression is not supported."
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
@@ -5954,8 +5953,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (_, _, ctormap, _) = List.assoc i inductivemap in
       let fpclauses =
         List.map
-          begin fun (cn, _) ->
-            let Some (_, tparams, _, pts, (csym, _)) = try_assoc' (pn,ilist) cn purefuncmap in
+          begin fun (cn, (_, (_, tparams, _, pts, (csym, _)))) ->
             match try_assoc cn case_clauses with
               Some (ps, e) ->
               let apply (_::gvs) cvs =
@@ -5974,14 +5972,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     penv
                 in
                 let env = penv@genv in
-                eval_core (pn,ilist) None None env e
+                eval_core None None env e
               in
               (csym, apply)
             | None ->
               let (Some (_, e)) = cdef_opt in
               let apply gvs cvs =
                 let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
-                eval_core (pn,ilist) None None genv e
+                eval_core None None genv e
               in
               (csym, apply)
           end
@@ -5990,20 +5988,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ctxt#set_fpclauses symbol 0 fpclauses;
       cont state (ctxt#mk_app symbol (t::List.map (fun (x, t) -> t) env))
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
-    | SizeofExpr (l, te) ->
-      let t = check_pure_type (pn,ilist) [] te in
+    | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
       cont state (sizeof l t)
     | _ -> static_error (expr_loc e) "Construct not supported in this position."
   in
   
-  let rec eval_core (pn,ilist) ass_term read_field env e =
-    let rec ev () e cont = eval_core_cps0 eval_core ev () (pn,ilist) ass_term read_field env e cont in
+  let rec eval_core ass_term read_field env e =
+    let rec ev () e cont = eval_core_cps0 eval_core ev () ass_term read_field env e cont in
     ev () e $. fun () v -> v
   in
   
   let eval_core_cps = eval_core_cps0 eval_core in
   
-  let eval (pn,ilist) = eval_core (pn,ilist) None in
+  let eval = eval_core None in
 
   let _ =
     List.iter
@@ -6039,7 +6036,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     )
                     patenv
                 in
-                eval (pn,ilist) None (patenv @ penv) e
+                eval None (patenv @ penv) e
               in
               (ctorsym, eval_body)
            )
@@ -6052,7 +6049,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: production of assertions *)
   
-  let assert_expr (pn,ilist) env e h env l msg = assert_term (eval (pn,ilist) None env e) h env l msg in
+  let assert_expr env e h env l msg = assert_term (eval None env e) h env l msg in
   
   let success() = () in
   
@@ -6062,17 +6059,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in_temporary_context (fun _ -> cont2())
   in
   
-  let evalpat ghost (pn,ilist) ghostenv env pat tp0 tp cont =
+  let evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
-      LitPat e -> cont ghostenv env (prover_convert_term (eval (pn,ilist) None env e) tp0 tp)
+      LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)
     | VarPat x -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
   in
   
-  let rec evalpats (pn,ilist) ghostenv env pats tps0 tps cont =
+  let rec evalpats ghostenv env pats tps0 tps cont =
     match (pats, tps0, tps) with
       ([], [], []) -> cont ghostenv env []
-    | (pat::pats, tp0::tps0, tp::tps) -> evalpat true (pn,ilist) ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats (pn,ilist) ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
+    | (pat::pats, tp0::tps0, tp::tps) -> evalpat true ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
   in
 
   let real_mul l t1 t2 =
@@ -6185,23 +6182,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _ -> with_context (Executing (h, env, pred_loc p, "Producing assertion")) cont
     in
     with_context_helper (fun _ ->
-    let ev = eval (pn,ilist) None env in
+    let ev = eval None env in
     match p with
     | WAccess (l, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, rhs) ->
       if fstatic then
         let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
-        evalpat (fghost = Ghost) (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
         assume_chunk h (symb, true) [] coef (Some 0) [t] None $. fun h ->
         cont h ghostenv env
       else
         let te = ev e in
-        evalpat (fghost = Ghost) (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+        evalpat (fghost = Ghost) ghostenv env rhs tp tp $. fun ghostenv env t ->
         assume_field h fparent fname frange fghost te t coef $. fun h ->
         cont h ghostenv env
     | WAccess (l, WReadArray (la, ea, _, ei), tp, rhs) ->
       let a = ev ea in
       let i = ev ei in
-      evalpat false (pn,ilist) ghostenv env rhs tp tp $. fun ghostenv env t ->
+      evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb, true), [tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
     | WCallPred (l, g, targs, pats0, pats) ->
@@ -6220,7 +6217,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
-      evalpats (pn,ilist) ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
+      evalpats ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
         let do_assume_chunk () = assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env) in
         match
           if assuming then None else
@@ -6265,7 +6262,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume (ctxt#mk_not (ctxt#mk_eq target (ctxt#mk_intlit 0))) $. fun () ->
       begin fun cont -> if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [target]) (List.assoc st classterms)) cont else cont () end $. fun () ->
       let types = List.map snd pmap in
-      evalpats (pn,ilist) ghostenv env pats types types $. fun ghostenv env args ->
+      evalpats ghostenv env pats types types $. fun ghostenv env args ->
       assume_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
       cont h ghostenv env
     | ExprPred (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
@@ -6312,7 +6309,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | CoefPred (l, DummyPat, body) ->
       assume_pred_core tpenv (pn,ilist) h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefPred (l, coef', body) ->
-      evalpat true (pn,ilist) ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
+      evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       assume_pred_core tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
     )
   in
@@ -6340,7 +6337,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | None -> let binding = (x, prover_convert_term t tp tp0) in cont ghostenv (binding::env) (binding::env')
         end
       | (SrcPat (LitPat e), t) ->
-        match_terms (prover_convert_term (eval (pn,ilist) None env e) tp0 tp) t
+        match_terms (prover_convert_term (eval None env e) tp0 tp) t
       | (TermPat t0, t) -> match_terms (prover_convert_term t0 tp0 tp) t
       | (SrcPat (VarPat x), t) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
       | (SrcPat DummyPat, t) -> cont ghostenv env env'
@@ -6372,7 +6369,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0))
       in
       match coefpat with
-        SrcPat (LitPat e) -> match_term_coefpat (eval (pn,ilist) None env e)
+        SrcPat (LitPat e) -> match_term_coefpat (eval None env e)
       | TermPat t -> match_term_coefpat t
       | SrcPat (VarPat x) -> cont chunk (x::ghostenv) (update env x (real_div l coef0 coef)) coef0 []
       | SrcPat DummyPat ->
@@ -6485,7 +6482,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | (pat::pats, tp0::tps0, tp::tps) ->
                 let ok t = iter (n - 1) (prover_convert_term t tp0 tp::ts) pats tps0 tps in
                 match pat with
-                  SrcPat (LitPat e) -> ok (eval (pn,ilist) None env e)
+                  SrcPat (LitPat e) -> ok (eval None env e)
                 | TermPat t -> ok t
                 | _ -> cont ()
             in
@@ -6543,7 +6540,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in
     *)
     with_context_helper (fun _ ->
-    let ev = eval (pn,ilist) None env in
+    let ev = eval None env in
     let check_dummy_coefpat l coefpat coef =
       if language = CLang && checkDummyFracs then
       match coefpat with
@@ -6627,7 +6624,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
     | ExprPred (l, e) ->
-      assert_expr (pn,ilist) env e h env l "Cannot prove condition."; cont [] h ghostenv env env' None
+      assert_expr env e h env l "Cannot prove condition."; cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
       assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size ->
         assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
@@ -7048,9 +7045,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let Some tpenv = zip predinst_tparams targs1 in
           let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs1 in
           targs2 = List.map (instantiate_type tpenv) targs &&
-          let inputArgs2 = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in prover_convert_term (eval (pn,ilist) None env e) tp0 tp) inputExprs inputExprTypes in
+          let inputArgs2 = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in prover_convert_term (eval None env e) tp0 tp) inputExprs inputExprTypes in
           List.for_all2 definitely_equal (take n' ts2) inputArgs2 &&
-          List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds
+          List.for_all (fun cond -> ctxt#query (eval None env cond)) conds
         in
         let autoclose_rule =
           let match_func h targs ts =
@@ -7121,7 +7118,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             List.for_all2 definitely_equal indices fsymbs &&
             let Some tpenv = zip predinst_tparams targs in
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-            List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds) conds
+            List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
           in
           let exec_func h targs ts cont =
             let rules = !rules_cell in
@@ -7263,7 +7260,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_false h env l "Breakpoint reached."
   in
 
-  let is_empty_chunk (pn, ilist) name targs frac args =
+  let is_empty_chunk name targs frac args =
     List.exists
     (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
       predname_eq (symb, true) name &&
@@ -7275,19 +7272,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (inputArgs, outputArgs) = take_drop n real_args in
       List.for_all2 definitely_equal indices fsymbs &&
       let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-      List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds) conds
+      List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
     )
     empty_preds
   in
   
-  let check_leaks (pn,ilist) h env l msg =
+  let check_leaks h env l msg =
     match file_type path with
     Java -> with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () -> check_breakpoint h env l
     | _ ->
     with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
     with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
-    let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk (pn, ilist) name targs frac args -> false | _ -> true) h in
+    let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk name targs frac args -> false | _ -> true) h in
     if h <> [] then assert_false h env l msg;
     check_breakpoint [] env l
   in
@@ -7331,7 +7328,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         assume_pred tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
           assert_pred rules tpenv0 (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
-            check_leaks (pn,ilist) h env0 l (msg ^ "Implementation leaks heap chunks.")
+            check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
         )
       )
@@ -7959,7 +7956,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
  
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
-  let eval_non_pure_cps ev (pn,ilist) is_ghost_expr h env e cont =
+  let eval_non_pure_cps ev is_ghost_expr h env e cont =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
     let read_field =
       (fun l t f -> read_field h env l t f),
@@ -7967,10 +7964,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (fun l p t -> deref_pointer h env l p t),
       (fun l a i -> read_array h env l a i)
     in
-    eval_core_cps ev h (pn,ilist) assert_term (Some read_field) env e cont
+    eval_core_cps ev h assert_term (Some read_field) env e cont
   in
 
-  let eval_non_pure (pn,ilist) is_ghost_expr h env e =
+  let eval_non_pure is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
     let read_field =
       (fun l t f -> read_field h env l t f),
@@ -7978,7 +7975,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (fun l p t -> deref_pointer h env l p t),
       (fun l a i -> read_array h env l a i)
     in
-    eval_core (pn,ilist) assert_term (Some read_field) env e
+    eval_core assert_term (Some read_field) env e
   in
   
   let prototypes_used : (string * loc) list ref = ref [] in
@@ -8107,8 +8104,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let l = expr_loc e in
     let has_effects () = if language = CLang && readonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" in
-    let eval0 = eval (pn,ilist) in
-    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
+    let eval0 = eval in
+    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h h env e cont = verify_expr true h env None e cont in
     let rec evhs h env es cont =
       match es with
@@ -8337,7 +8334,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       branch
         (fun () -> assume v (fun () -> eval_h h env e1 cont))
         (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h h env e2 cont))
-    | e -> eval_non_pure_cps (fun h e cont -> eval_h h env e cont) (pn,ilist) pure h env e cont
+    | e -> eval_non_pure_cps (fun h e cont -> eval_h h env e cont) pure h env e cont
   in
   
   (* Region: verification of statements *)
@@ -8349,8 +8346,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
-    let eval0 = eval (pn,ilist) in
-    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure (pn,ilist) pure h env e in
+    let eval0 = eval in
+    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h h env e cont =
       if not pure then check_ghost ghostenv l e;
       verify_expr true (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont
@@ -8539,7 +8536,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 with_context PushSubcontext $. fun () ->
                 assert_pred rules tpenv ("",[]) h [] ft_env post true real_unit $. fun _ h _ _ _ ->
                 with_context PopSubcontext $. fun () ->
-                check_leaks (pn, ilist) h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
+                check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
               end;
               (ftn, fttargs, List.map snd ftargenv)
             end
@@ -8814,9 +8811,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let pts =
               match try_assoc' (pn,ilist) cn ctormap with
                 None -> static_error lc ("Not a constructor of type " ^ tn)
-              | Some (l, pts) -> pts
+              | Some (_, (l, _, _, pts, _)) -> pts
             in
-            let Some cn= search' cn (pn,ilist) ctormap in
             let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
             let (ptenv, xterms, xenv) =
               let rec iter ptenv xterms xenv pats pts =
@@ -9384,7 +9380,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                      let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                      assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ env''' _ ->
-                       check_leaks (pn,ilist) h''' env closeBraceLoc "Loop leaks heap chunks.";
+                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
                        (match (t_dec, dec) with
                          (None, None) -> ()
                        | (Some(t_dec), Some(dec)) -> (eval_h h'' env''' dec (fun _ t_dec2 -> 
@@ -9743,7 +9739,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (true, None) -> assert_false h env (l()) "Loop invariant required."
       | (_, Some (l, inv, tenv)) ->
         assert_pred rules [] (pn,ilist) h ghostenv env inv true real_unit (fun _ h _ _ _ ->
-          check_leaks (pn,ilist) h env l "Loop leaks heap chunks."
+          check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->
         let blocks_done = block::blocks_done in
@@ -9934,15 +9930,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let xs = Array.init (List.length ps) (fun j -> ctxt#mk_bound j (typenode_of_type (snd (List.nth ps j)))) in
       let xs = Array.to_list xs in
       let Some(env) = zip (List.map fst ps) xs in
-      let t_pre = eval (pn,ilist) None env pre in
-      let t_post = eval (pn,ilist) None env post in
+      let t_pre = eval None env pre in
+      let t_post = eval None env post in
       let tps = (List.map (fun (x, t) -> (typenode_of_type t)) ps) in
       let trigger = (
       match trigger with
         None -> []
       | Some(trigger) -> 
           let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
-          [eval (pn,ilist) None env trigger]
+          [eval None env trigger]
       ) in
       let body = ctxt#mk_or (ctxt#mk_not t_pre) t_post in
       ctxt#end_formal;
@@ -10009,7 +10005,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end $. fun h tenv ghostenv env ->
         let do_return h env_post =
           assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            check_leaks (pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks h env closeBraceLoc "Function leaks heap chunks."
           )
         in
         let return_cont h retval =
@@ -10074,7 +10070,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let do_body h ghostenv env =
             let do_return h env_post =
               assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-              check_leaks(pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
             in
             let return_cont h retval =
               assert (retval = None);
@@ -10154,7 +10150,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
           let do_return h env_post =
             assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-            check_leaks (pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks h env closeBraceLoc "Function leaks heap chunks."
           in
           let return_cont h retval =
             match (rt, retval) with
@@ -10261,15 +10257,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
                     let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
                     let ghostenv = List.map (fun (x, t) -> x) tenv in
-                    assume (eval (pn,ilist) None ([("actionHandle", actionHandle)] @ pre_boxvars @ apre_env) pre) (fun () ->
-                      assume (eval (pn,ilist) None ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) inv) (fun () ->
-                        assume (eval (pn,ilist) None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) (fun () ->
+                    assume (eval None ([("actionHandle", actionHandle)] @ pre_boxvars @ apre_env) pre) (fun () ->
+                      assume (eval None ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) inv) (fun () ->
+                        assume (eval None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) (fun () ->
                           let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                           let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
                             post_boxvars @ old_boxvars @ aarg_env @ hpargs in
                           verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                            assert_term (eval (pn,ilist) None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
+                            assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
                           ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
                         )
                       )
