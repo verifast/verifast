@@ -7262,14 +7262,32 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if line = line0 && Filename.concat basepath relpath = path0 then
         assert_false h env l "Breakpoint reached."
   in
+
+  let is_empty_chunk (pn, ilist) name targs frac args =
+    List.exists
+    (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+      predname_eq (symb, true) name &&
+      let indexCount = List.length fns in
+      let Some n = inputParamCount in
+      let (inputParams, outputParams) = take_drop n xs in
+      let Some tpenv = zip predinst_tparams targs in
+      let (indices, real_args) = take_drop indexCount args in
+      let (inputArgs, outputArgs) = take_drop n real_args in
+      List.for_all2 definitely_equal indices fsymbs &&
+      let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
+      List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval (pn,ilist) None env cond)) conds) conds
+    )
+    empty_preds
+  in
   
-  let check_leaks h env l msg =
+  let check_leaks (pn,ilist) h env l msg =
     match file_type path with
     Java -> with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () -> check_breakpoint h env l
     | _ ->
     with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
     with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
+    let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk (pn, ilist) name targs frac args -> false | _ -> true) h in
     if h <> [] then assert_false h env l msg;
     check_breakpoint [] env l
   in
@@ -7313,7 +7331,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         assume_pred tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
           assert_pred rules tpenv0 (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
-            check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
+            check_leaks (pn,ilist) h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
         )
       )
@@ -8521,7 +8539,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 with_context PushSubcontext $. fun () ->
                 assert_pred rules tpenv ("",[]) h [] ft_env post true real_unit $. fun _ h _ _ _ ->
                 with_context PopSubcontext $. fun () ->
-                check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
+                check_leaks (pn, ilist) h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
               end;
               (ftn, fttargs, List.map snd ftargenv)
             end
@@ -9366,7 +9384,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
                      let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
                      assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ env''' _ ->
-                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
+                       check_leaks (pn,ilist) h''' env closeBraceLoc "Loop leaks heap chunks.";
                        (match (t_dec, dec) with
                          (None, None) -> ()
                        | (Some(t_dec), Some(dec)) -> (eval_h h'' env''' dec (fun _ t_dec2 -> 
@@ -9725,7 +9743,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (true, None) -> assert_false h env (l()) "Loop invariant required."
       | (_, Some (l, inv, tenv)) ->
         assert_pred rules [] (pn,ilist) h ghostenv env inv true real_unit (fun _ h _ _ _ ->
-          check_leaks h env l "Loop leaks heap chunks."
+          check_leaks (pn,ilist) h env l "Loop leaks heap chunks."
         )
       | (false, None) ->
         let blocks_done = block::blocks_done in
@@ -9991,7 +10009,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end $. fun h tenv ghostenv env ->
         let do_return h env_post =
           assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks (pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
           )
         in
         let return_cont h retval =
@@ -10056,7 +10074,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let do_body h ghostenv env =
             let do_return h env_post =
               assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-              check_leaks h env closeBraceLoc "Function leaks heap chunks."
+              check_leaks(pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
             in
             let return_cont h retval =
               assert (retval = None);
@@ -10136,7 +10154,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
           let do_return h env_post =
             assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            check_leaks (pn,ilist) h env closeBraceLoc "Function leaks heap chunks."
           in
           let return_cont h retval =
             match (rt, retval) with
