@@ -6424,6 +6424,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             when g == array_slice_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
+        | Chunk ((g, true), [tp;tp2;tp3], coef, [a'; istart; iend; p; info; elems; vs], _)
+            when g == array_slice_deep_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
+            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
         | _ -> []
         end
         h
@@ -7989,6 +7993,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match tp with
       IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | ShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
+    | Char _ -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
+    | PtrType _ | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp))
   in
   
@@ -8310,10 +8318,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WReadArray (l, arr, elem_tp, i) ->
       eval_h h env arr $. fun h arr ->
       eval_h h env i $. fun h i ->
-      let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-      assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
-      let elem_tp = unfold_inferred_type elem_tp in
-      cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
+      begin
+      (*match elem_tp with
+        IntType _ | ShortType _ | Char _ ->
+          let elem = (read_array h env l arr i) in
+          assume_is_of_type l elem elem_tp (fun () -> cont h elem)
+      | _ ->*)
+        let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+        assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
+        let elem_tp = unfold_inferred_type elem_tp in
+        cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
+      end
     | Operation (l, Not, [e], ts) -> eval_h h env e (fun h v -> cont h (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) ->
       eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
