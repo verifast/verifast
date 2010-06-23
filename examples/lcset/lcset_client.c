@@ -143,8 +143,6 @@ int main() //@ : main
     struct set *set = create_set();
     //@ close set_ctor(set)();
     //@ create_atomic_space(set_ctor(set));
-    //@ split_fraction set(set);
-    //@ split_fraction atomic_space(set_ctor(set));
     //@ close thread_run_pre(session)(set);
     struct thread *thread1 = thread_start(session, set);
     //@ close thread_run_pre(session)(set);
