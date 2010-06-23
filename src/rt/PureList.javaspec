@@ -76,6 +76,15 @@ fixpoint t nth<t>(int n, list<t> xs) {
     }
 }
 
+fixpoint list<t> store<t>(list<t> xs, int index, t v) {
+  switch(xs) {
+    case nil: return xs;
+    case cons(h, t): return index == 0 ? cons(v, t) : cons(h, store(t, index - 1, v)); 
+  }
+}
+
+
+
 lemma void mem_nth<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;

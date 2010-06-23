@@ -81,6 +81,7 @@ verifast_both -disable_overflow_check -c Counter.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -c Tree.java
 verifast_both -c Iterator.java
+verifast_both -c -disable_overflow_check Comprehensions.java
 cd Iterator
 verifast_both -c it.jarsrc
 verifast_both -c prog.jarsrc
