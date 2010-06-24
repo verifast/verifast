@@ -1,48 +1,30 @@
+#include "stdlib.h"
 #include "lcset.h"
+#include "threading.h"
 
-/*@
-
-predicate_family thread_run_pre(void *run)(void *data);
-predicate_family thread_run_post(void *run)(void *data);
-
-predicate thread(struct thread *thread, thread_run *run, void *data);
-
-@*/
-
-typedef void thread_run(void *data);
-    //@ requires thread_run_pre(this)(data);
-    //@ ensures thread_run_post(this)(data);
-
-struct thread;
-
-struct thread *thread_start(thread_run *run, void *data);
-    //@ requires is_thread_run(run) == true &*& thread_run_pre(run)(data);
-    //@ ensures thread(result, run, data);
-
-void thread_join(struct thread *thread);
-    //@ requires thread(thread, ?run, ?data);
-    //@ ensures thread_run_post(run)(data);
-
-int readNumber();
+int readNumber()
     //@ requires true;
     //@ ensures INT_MIN < result &*& result < INT_MAX;
+{
+    abort(); // TODO: Implement this function.
+}
 
 /*@
 inductive set_info = set_info(struct set *);
 
 predicate_ctor set_ctor(struct set *set)() = set_atomic(set, _);
 
-predicate_family_instance thread_run_pre(session)(struct set *set) =
+predicate_family_instance thread_run_pre(session)(struct set *set, any info) =
     [1/2]set(set) &*& [1/2]atomic_space(set_ctor(set));
-predicate_family_instance thread_run_post(session)(struct set *set) =
+predicate_family_instance thread_run_post(session)(struct set *set, any info) =
     [1/2]set(set) &*& [1/2]atomic_space(set_ctor(set));
 @*/
 
-void session(struct set *set) //@ : thread_run
-    //@ requires thread_run_pre(session)(set);
-    //@ ensures thread_run_post(session)(set);
+void session(struct set *set) //@ : thread_run_joinable
+    //@ requires thread_run_pre(session)(set, ?tinfo);
+    //@ ensures thread_run_post(session)(set, tinfo);
 {
-    //@ open thread_run_pre(session)(set);
+    //@ open thread_run_pre(session)(set, _);
     
     // Read a number from the user.
     int x = readNumber();
@@ -133,7 +115,7 @@ void session(struct set *set) //@ : thread_run
         //@ leak is_set_sep(sep);
         //@ leak is_set_unsep(unsep);
     }
-    //@ close thread_run_post(session)(set);
+    //@ close thread_run_post(session)(set, tinfo);
 }
 
 int main() //@ : main
@@ -143,14 +125,14 @@ int main() //@ : main
     struct set *set = create_set();
     //@ close set_ctor(set)();
     //@ create_atomic_space(set_ctor(set));
-    //@ close thread_run_pre(session)(set);
-    struct thread *thread1 = thread_start(session, set);
-    //@ close thread_run_pre(session)(set);
-    struct thread *thread2 = thread_start(session, set);
+    //@ close thread_run_pre(session)(set, unit);
+    struct thread *thread1 = thread_start_joinable(session, set);
+    //@ close thread_run_pre(session)(set, unit);
+    struct thread *thread2 = thread_start_joinable(session, set);
     thread_join(thread1);
-    //@ open thread_run_post(session)(set);
+    //@ open thread_run_post(session)(set, _);
     thread_join(thread2);
-    //@ open thread_run_post(session)(set);
+    //@ open thread_run_post(session)(set, _);
     //@ dispose_atomic_space(set_ctor(set));
     //@ open set_ctor(set)();
     dispose_set(set);
