@@ -1,8 +1,6 @@
 #ifndef ASSOC_LIST_H
 #define ASSOC_LIST_H
 
-#include "pair.h"
-#include "list.h"
 #include "listex.h"
 
 /*@

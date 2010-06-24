@@ -1,6 +1,5 @@
 #ifndef GHOST_LISTS_H#define GHOST_LISTS_H
-#include "list.h"
-/*@predicate ghost_list<t>(int id, list<t> xs);predicate ghost_list_member_handle<t>(int id, t x);
+/*@predicate ghost_list<t>(int id, list<t> xs);predicate ghost_list_member_handle<t>(int id, t x);
 lemma int create_ghost_list<t>();
     requires true;
     ensures ghost_list<t>(result, nil);

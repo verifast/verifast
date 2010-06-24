@@ -32,10 +32,10 @@ verifast_both -disable_overflow_check -c fractions-counting.c
 verifast_both -disable_overflow_check expr.c
 verifast_both -disable_overflow_check -shared stack.c
 cd queue
-verifast_both atomics.o ghost_cells.o threading.o queue.c queue_client.c
+verifast_both atomics.o threading.o queue.c queue_client.c
 cd ..
 cd lcset
-verifast_both -c locks.c lcset.c lcset_client.c
+verifast_both -c ghost_lists.c locks.c lcset.c lcset_client.c
 cd ..
 cd mcas
 verifast_both -c -disable_overflow_check rdcss.c mcas.c mcas_client.c

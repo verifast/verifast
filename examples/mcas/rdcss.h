@@ -2,8 +2,6 @@
 #define RDCSS_H
 
 #include "atomics.h"
-#include "pair.h"
-#include "list.h"
 #include "assoc_list.h"
 
 /*@

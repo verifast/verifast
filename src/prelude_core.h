@@ -7,6 +7,20 @@ fixpoint t default_value<t>();
 
 inductive unit = unit;
 
+inductive pair<a, b> = pair(a, b);
+
+fixpoint a fst<a, b>(pair<a, b> p) {
+    switch (p) {
+        case pair(x, y): return x;
+    }
+}
+
+fixpoint b snd<a, b>(pair<a, b> p) {
+    switch (p) {
+        case pair(x, y): return y;
+    }
+}
+
 inductive boxed_int = boxed_int(int);
 fixpoint int unboxed_int(boxed_int i) { switch (i) { case boxed_int(value): return value; } }
 

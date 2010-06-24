@@ -189,9 +189,10 @@ let _ =
     try
       print_endline "Linking...";
       let mydir = Filename.dirname Sys.executable_name in
-      let crt = Filename.concat mydir "crt.a" in
+      let libs = ["crt.a"; "list.o"; "raw_ghost_lists.o"] in
+      let libs = List.map (Filename.concat mydir) libs in
       let assume_lib = Filename.concat mydir "assume.a" in
-      let modules = crt::List.rev !modules in
+      let modules = libs @ List.rev !modules in
       let modules = if !allowAssume then assume_lib::modules else modules in
       link_program (!isLibrary) modules !emitDllManifest !exports; 
       print_endline "Program linked successfully."

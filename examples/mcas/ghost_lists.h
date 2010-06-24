@@ -1,8 +1,6 @@
 #ifndef GHOST_LISTS_H
 #define GHOST_LISTS_H
 
-#include "pair.h"
-#include "list.h"
 #include "assoc_list.h"
 
 /*@

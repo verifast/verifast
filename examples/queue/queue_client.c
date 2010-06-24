@@ -118,7 +118,7 @@ lemma bool consumer_context(queue_try_dequeue_operation *op) : queue_try_dequeue
             if (success) {
                 open messages(_, _);
                 assert message_id(value, ?id);
-                ghost_cell_set_value(minIdCell, id + 1);
+                ghost_cell_mutate(minIdCell, id + 1);
             }
             close queue_try_dequeue_context_post(consumer_context)(info_, success, value);
             close message_queue(queue, minIdCell, maxIdCell)();
@@ -208,7 +208,7 @@ lemma bool main_context(queue_enqueue_operation *op) : queue_enqueue_context
                 messages_append_lemma(ms1);
                 assert [1/2]ghost_cell<int>(minIdCell, ?minId);
                 ids_ok_append_lemma(minId, maxId, ids1, id, id, cons(id, nil));
-                ghost_cell_set_value(maxIdCell, id);
+                ghost_cell_mutate(maxIdCell, id);
                 split_fraction ghost_cell(maxIdCell, _);
                 close message_queue(queue, minIdCell, maxIdCell)();
                 close queue_enqueue_context_post(main_context)(info_);

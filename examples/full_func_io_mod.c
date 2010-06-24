@@ -72,20 +72,6 @@ lemma void unproject_world<a, s1, s2>();
 
 inductive sum<a, b> = left(a) | right(b);
 
-inductive pair<a, b> = pair(a, b);
-
-fixpoint a fst<a, b>(pair<a, b> p) {
-    switch (p) {
-        case pair(a, b): return a;
-    }
-}
-
-fixpoint b snd<a, b>(pair<a, b> p) {
-    switch (p) {
-        case pair(a, b): return b;
-    }
-}
-
 fixpoint c lift_sum<a, b, c>(fixpoint(a, c) f1, fixpoint(b, c) f2, sum<a, b> x) {
     switch (x) {
         case left(a): return f1(a);

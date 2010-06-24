@@ -3,7 +3,7 @@
 #include "list.h"
 #include "rdcss.h"
 #include "bitops.h"
-#include "ghost_cells.h"
+#include "ghost_cells_ex.h"
 #include "ghost_lists.h"
 
 // A port of the RDCSS [1] proof by Vafeiadis [2] to VeriFast

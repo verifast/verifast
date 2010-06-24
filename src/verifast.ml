@@ -5337,12 +5337,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assert_expr_fixed fixed e;
       let rec iter fixed' cs =
         match cs with
-          [] -> fixed'
+          [] -> get fixed'
         | SwitchPredClause (l, c, xs, _, p)::cs ->
           let fixed = check_pred_precise (xs@fixed) p in
-          iter (intersect fixed' fixed) cs
+          iter (Some (match fixed' with None -> fixed | Some fixed' -> intersect fixed' fixed)) cs
       in
-      iter fixed cs
+      iter None cs
     | EmpPred l -> fixed
     | CoefPred (l, coefpat, p) ->
       begin
@@ -6162,11 +6162,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let h = if List.length hdone < List.length htodo then hdone @ htodo else htodo @ hdone in
             let coef =
               if is_dummy_frac_term coef then
-                coef'
-              else if is_dummy_frac_term coef' then
-                coef
+                if is_dummy_frac_term coef' then
+                  coef'
+                else begin
+                  ctxt#assume (ctxt#mk_lt real_zero coef);
+                  ctxt#mk_real_add coef coef'
+                end
               else
-                ctxt#mk_real_add coef coef'
+                if is_dummy_frac_term coef' then begin
+                  ctxt#assume (ctxt#mk_lt real_zero coef');
+                  ctxt#mk_real_add coef coef'
+                end else
+                  ctxt#mk_real_add coef coef'
             in
             cont (Chunk (g_symb, targs, coef, ts, size)::h)
           else

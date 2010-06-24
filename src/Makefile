@@ -2,12 +2,18 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe
+test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe list.vfmanifest raw_ghost_lists.vfmanifest
 	time < nl.txt
 	cd ..
 	mysh -cpus %NUMBER_OF_PROCESSORS% < src\testsuite.mysh
 	cd src
 	time < nl.txt
+
+list.vfmanifest: list.h list.c
+	verifast -c -emit_vfmanifest list.c
+
+raw_ghost_lists.vfmanifest: raw_ghost_lists.h raw_ghost_lists.c
+	verifast -c -emit_vfmanifest raw_ghost_lists.c
 
 clean:
 	del *.cm* *.obj *.exe
@@ -134,6 +140,8 @@ release: test refman
 	cd bin
 	copy ..\..\assume.vfmanifest
 	copy ..\..\crt.vfmanifest
+	copy ..\..\list.vfmanifest
+	copy ..\..\raw_ghost_lists.vfmanifest
 	copy $(GTKLIB)\..\bin\iconv.dll
 	copy $(GTKLIB)\..\bin\intl.dll
 	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
@@ -154,11 +162,13 @@ release: test refman
 	copy $(GTKLIB)\..\bin\zlib1.dll
 	copy ..\..\prelude.h
 	copy ..\..\prelude_core.h
+	copy ..\..\ghost_cells.h
 	copy ..\..\stdlib.h
 	copy ..\..\stdio.h
 	copy ..\..\malloc.h
 	copy ..\..\string.h
 	copy ..\..\list.h
+	copy ..\..\raw_ghost_lists.h
 	copy ..\..\threading.h
 	copy ..\..\threading.vfmanifest
 	copy ..\..\threading.c

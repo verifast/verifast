@@ -1,7 +1,7 @@
 #include "bool.h"
 #include "stdlib.h"
 #include "rdcss.h"
-#include "ghost_cells.h"
+#include "ghost_cells_ex.h"
 #include "ghost_lists.h"
 #include "assoc_list.h"
 #include "ghost_counters.h"
