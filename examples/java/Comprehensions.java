@@ -52,6 +52,90 @@ lemma void nth_drop<t>(list<t> vs, int index)
   }
 }
 
+lemma void store_take_drop<t>(list<t> xs, int index, t v)
+  requires 0 <= index && index < length(xs);
+  ensures store(xs, index, v) == append(take(index, xs), cons(v, drop(index + 1, xs)));
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t): 
+      if(index == 0) {
+      } else { 
+        store_take_drop(t, index - 1, v);
+      }
+  }
+}
+
+lemma void drop_one_more<t>(list<t> xs, int index)
+  requires 0 <= index && index < length(xs);
+  ensures drop(index, xs) == cons(nth(index, xs), drop(index + 1, xs));
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t): 
+      if(index == 0) {
+      } else { 
+        drop_one_more(t, index - 1);
+      }
+  }
+}
+
+fixpoint list<int> insert_sorted(list<int> vs, int v) {
+  switch(vs) {
+    case nil: return cons(v, nil);
+    case cons(h, t): return v < h ? cons(v, cons(h, t)) : cons(h, insert_sorted(t, v));
+  }
+}
+
+fixpoint list<int> sort(list<int> vs) {
+ switch(vs) {
+   case nil: return nil;
+   case cons(h, t): return insert_sorted(sort(t), h);
+ }
+}
+
+fixpoint boolean is_sorted(list<int> vs) {
+  switch(vs) {
+    case nil: return true;
+    case cons(h, t):
+      return switch(t) { 
+        case nil: return true; 
+        case cons(h0, t0): return h <= h0 && is_sorted(t);
+      };
+  }
+}
+
+lemma void insert_sorted_preserves_is_sorted(list<int> vs, int v)
+  requires is_sorted(vs) == true;
+  ensures is_sorted(insert_sorted(vs, v)) == true;
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(v < h) {
+      } else {
+        switch(t) { case nil: case cons(h0, t0): };
+        insert_sorted_preserves_is_sorted(t, v);
+      }
+  }
+}
+
+lemma_auto(is_sorted(sort(vs))) void sort_sorts(list<int> vs) 
+  requires true;
+  ensures is_sorted(sort(vs)) == true;
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t): 
+      switch(t) {
+        case nil: 
+        case cons(h0, t0):
+          sort_sorts(t);
+          insert_sorted_preserves_is_sorted(sort(t), h);
+      }
+  }
+}
+
 @*/
 
 class Comprehensions {
@@ -82,6 +166,18 @@ class Comprehensions {
     //@ nth_drop(vs, index);
     return tmp;
   }
+  
+  public static void set(int[] a, int index, int v)
+    //@ requires a != null &*& array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
+    //@ ensures array_slice(a, 0, a.length, store(vs, index, v));
+  {
+    a[index] = v;
+    //@ drop_one_more(vs, index);
+    //@ length_drop(index, vs);
+    //@ nth_drop(vs, index);
+    //@ store_take_drop(vs, index, v);
+  }
+
   
   public static int min(int[] a) 
     //@ requires a != null &*& array_slice(a, 0, a.length, ?vs) &*& vs != nil;
@@ -114,5 +210,41 @@ class Comprehensions {
       }
     }
     return min;
+  }
+  
+    
+  public static void insert_sorted(int[] a, int start)
+    //@ requires a != null &*& array_slice(a, start, a.length, ?vs) &*& start < a.length;
+    //@ ensures array_slice(a, start, a.length, insert_sorted(tail(vs), head(vs)));
+  {
+    if(start == a.length - 1) {
+      //@ switch(vs) { case nil: case cons(h, t): }
+      //@ switch(tail(vs)) { case nil: case cons(h, t): }
+    } else {
+      int tmp = a[start];
+      int tmp2 = a[start + 1];
+      if(tmp < tmp2) {
+      } else {
+        a[start + 1] = tmp;
+        insert_sorted(a, start + 1);
+        a[start] = tmp2;
+      }
+    }
+  }
+  
+  public static void my_sort(int[] a, int start)
+    //@ requires a != null &*& array_slice(a, start, a.length, ?vs);
+    //@ ensures array_slice(a, start, a.length, sort(vs));
+  {
+    if(start == a.length) {
+      //@ switch(vs) { case nil: case cons(h, t): }
+    } else {
+      //@ switch(vs) { case nil: case cons(h, t): }
+      my_sort(a, start + 1);
+      insert_sorted(a, start);
+    }
+  }
+  
+  public static void sort(int[] a)     //@ requires a!= null &*& array_slice(a, 0, a.length, ?vs);    //@ ensures a != null &*& array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true;  {    my_sort(a, 0);
   }
 }
