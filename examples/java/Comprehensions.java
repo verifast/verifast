@@ -136,6 +136,61 @@ lemma_auto(is_sorted(sort(vs))) void sort_sorts(list<int> vs)
   }
 }
 
+fixpoint boolean is_perm(list<int> xs, list<int> ys)
+{
+  switch(xs) {
+    case nil: return ys == nil;
+    case cons(h, t):
+      return mem(h, ys) && is_perm(t, remove(h, ys));
+  }
+}
+
+lemma_auto void is_perm_reflexive(list<int> xs) 
+  requires true;
+  ensures is_perm(xs, xs) == true;
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t): 
+      switch(t) {
+        case nil:
+        case cons(h0, t0):
+          is_perm_reflexive(t);
+      }
+  }
+}
+
+lemma void insert_sorted_is_perm(list<int> xs, int v)
+  requires true;
+  ensures is_perm(insert_sorted(xs, v), cons(v, xs)) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(v < h) {
+      } else {
+        insert_sorted_is_perm(t, v);
+      }
+  }
+}
+
+lemma_auto void sort_is_perm(list<int> xs)
+  requires true;
+  ensures is_perm(sort(xs), xs) == true;
+{
+  switch(xs) {
+   case nil:
+   case cons(h, t):
+     switch(t) {
+       case nil:
+       case cons(h0, t0):
+         sort_is_perm(t);
+         int tmp = 0;
+         assume(is_perm(insert_sorted(sort(t), h), xs));
+     }
+  }
+}
+
 @*/
 
 class Comprehensions {
@@ -245,6 +300,6 @@ class Comprehensions {
     }
   }
   
-  public static void sort(int[] a)     //@ requires a!= null &*& array_slice(a, 0, a.length, ?vs);    //@ ensures a != null &*& array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true;  {    my_sort(a, 0);
+  public static void sort(int[] a)     //@ requires a!= null &*& array_slice(a, 0, a.length, ?vs);    //@ ensures a != null &*& array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs2, vs) == true;  {    my_sort(a, 0);
   }
 }
