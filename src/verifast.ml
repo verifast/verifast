@@ -1305,7 +1305,7 @@ let common_keywords = [
 let ghost_keywords = [
   "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
-  "forall"; "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
+  "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
