@@ -199,7 +199,7 @@ lemma void mem_remove(list<int> xs, int x, int y)
   }
 }
 
-lemma void remove_assoc(list<int> xs, int x, int y) 
+lemma void remove_comm(list<int> xs, int x, int y) 
   requires true;
   ensures remove(x, remove(y, xs)) == remove(y, remove(x, xs));
 {
@@ -210,7 +210,7 @@ lemma void remove_assoc(list<int> xs, int x, int y)
       } else {
         if(h == y) {
         } else {
-          remove_assoc(t, x, y);
+          remove_comm(t, x, y);
         }
       }
   }
@@ -252,8 +252,9 @@ lemma void is_perm_remove(list<int> xs, list<int> ys, int x)
     case cons(h, t):
       if(x == h) {
       } else {
-        is_perm_remove(t, remove(h, ys), x);
-        assume(false); // STUCK
+        remove_mem(ys, h, x); 
+        remove_comm(ys, h, x);
+        is_perm_remove(t, remove(h, ys), x);  
       }
   }
 }
