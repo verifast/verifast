@@ -160,6 +160,117 @@ lemma_auto void is_perm_reflexive(list<int> xs)
   }
 }
 
+fixpoint int count<t>(list<t> xs, t x) {
+  switch(xs) {
+    case nil: return 0;
+    case cons(h, t): return h == x ? 1 + count(t, x) : count(t, x);
+  }
+}
+
+lemma void remove_mem(list<int> xs, int x, int y)
+  requires x != y &*& mem(x, xs) == true;
+  ensures mem(x, remove(y, xs)) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+     if(h == x) {
+     } else {
+       assert mem(x, t) == true;
+       remove_mem(t, x, y);
+     }
+  }
+}
+
+lemma void mem_remove(list<int> xs, int x, int y)
+  requires mem(x, remove(y, xs)) == true;
+  ensures mem(x, xs) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+     if(h == x) {
+     } else {
+      if(h == y) {
+      } else {
+        mem_remove(t, x, y);
+      }
+     }
+  }
+}
+
+lemma void remove_assoc(list<int> xs, int x, int y) 
+  requires true;
+  ensures remove(x, remove(y, xs)) == remove(y, remove(x, xs));
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t):
+      if(h == x) {
+      } else {
+        if(h == y) {
+        } else {
+          remove_assoc(t, x, y);
+        }
+      }
+  }
+}
+
+fixpoint boolean subset(list<int> xs, list<int> ys) {
+  switch(xs) {
+    case nil: return true;
+    case cons(h, t): return mem(h, ys) && subset(t, ys);
+  }
+}
+
+lemma void is_perm_mem(list<int> xs, list<int> ys, int x) 
+  requires is_perm(xs, ys) == true &*& mem(x, xs) == true;
+  ensures mem(x, ys) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(h == x) {
+      } else {
+         switch(ys) {
+           case nil:
+           case cons(h0, t0):
+             if(h0 == x) {
+             } else {
+               is_perm_mem(t, remove(h, ys), x);
+               mem_remove(ys, x, h);
+             }
+         }
+      }
+  }
+}
+
+lemma void is_perm_remove(list<int> xs, list<int> ys, int x)
+  requires is_perm(xs, ys) == true;
+  ensures is_perm(remove(x, xs), remove(x, ys)) == true;
+{  switch(xs) {    case nil:
+    case cons(h, t):
+      if(x == h) {
+      } else {
+        is_perm_remove(t, remove(h, ys), x);
+        assume(false); // STUCK
+      }
+  }
+}
+
+lemma void is_perm_transitive(list<int> xs, list<int> ys, list<int> zs)
+  requires is_perm(xs, ys) == true &*& is_perm(ys, zs)== true;
+  ensures is_perm(xs, zs) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      is_perm_mem(ys, zs, h);
+      is_perm_remove(ys, zs, h);
+      is_perm_transitive(t, remove(h, ys), remove(h, zs));
+  }
+}
+
 lemma void insert_sorted_is_perm(list<int> xs, int v)
   requires true;
   ensures is_perm(insert_sorted(xs, v), cons(v, xs)) == true;
@@ -185,12 +296,11 @@ lemma_auto void sort_is_perm(list<int> xs)
        case nil:
        case cons(h0, t0):
          sort_is_perm(t);
-         int tmp = 0;
-         assume(is_perm(insert_sorted(sort(t), h), xs));
+         insert_sorted_is_perm(sort(t), h);
+         is_perm_transitive(insert_sorted(sort(t), h),  cons(h, sort(t)), xs);        
      }
   }
 }
-
 @*/
 
 class Comprehensions {
