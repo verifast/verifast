@@ -47,7 +47,7 @@ let _ =
         let text = readFile path in
         let n = String.length text in
         let outpath = path ^ ".html" in
-        let outfile = open_out outpath in
+        let outfile = open_out_bin outpath in
         output_string outfile "<html><head><title>";
         output_string outfile (Filename.basename path);
         output_string outfile "</title>";
