@@ -11,6 +11,21 @@ blockquote {margin: 0 10pt; padding: 0}
 <p><a href="counter.c.html">counter.c</a> - An introductory example. A simple counter module (without abstraction) and a client program.</p>
 <p><a href="counter_with_pred.c.html">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
 <p><a href="counter_with_pred_auto.c.html">counter_with_pred_auto.c</a> - The same counter, now using the automatic open/close feature.</p>
+<p><b><a name="crt">crt</a></b> - The modules that VeriFast automatically includes when link-checking a C program</p>
+<blockquote>
+<p><a href="crt/prelude_core.h.html">prelude_core.h</a> - Core of the prelude (part that is used by <tt>list.h</tt>)</p>
+<p><a href="crt/list.h">list.h</a> - Mathematical lists</p>
+<p><a href="crt/prelude.h.html">prelude.h</a> - The header file that VeriFast implicitly includes in every C file</p>
+<p><a href="crt/ghost_cells.h.html">ghost_cells.h</a> - Auxiliary heap cells</p>
+<p><a href="crt/raw_ghost_lists.h.html">raw_ghost_lists.h</a> - Raw ghost lists, where each element has an id and a value</p>
+<p><a href="crt/list.c.html">list.c</a> - Implementation (i.e., proof) of the lemmas declared in <tt>list.h</tt></p>
+<p><a href="crt/raw_ghost_lists.c.html">raw_ghost_lists.c</a> - Implementation of raw ghost lists in terms of ghost cells</p>
+<p><a href="crt/malloc.h.html">malloc.h</a> - Partial spec of module <tt>malloc</tt> of the C run-time library</p>
+<p><a href="crt/stdio.h.html">stdio.h</a> - Partial spec of module <tt>stdio</tt> of the C run-time library</p>
+<p><a href="crt/stdlib.h.html">stdlib.h</a> - Partial spec of module <tt>stdlib</tt> of the C run-time library</p>
+<p><a href="crt/string.h.html">string.h</a> - Partial spec of module <tt>string</tt> of the C run-time library</p>
+<p><a href="crt/threading.h.html">threading.h</a> - A wrapper around platform-specific threading and locking APIs; implemented by <tt>threading.c</tt> (not verified; not shown)</p>
+</blockquote>
 <p><a href="enums.c.html">enums.c</a> - An example demonstrating VeriFast's support for enums.</p>
 <p><a href="char.c.html">char.c</a> - An example demonstrating VeriFast's support for character literals.</p>
 <p><a href="cat.c.html">cat.c</a> - A verified implementation of the *nix cat command (copies a file to standard output)</p>
@@ -100,9 +115,14 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="java/Map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
 <p><a href="java/Tree.java.html">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
 </blockquote>
-<p><b>lcset</b> - A concurrent set data structure implemented as a sorted linked list with hand-over-hand locking</p>
+<p><b><a name="lcset">lcset</a></b> - A concurrent set data structure implemented as a sorted linked list with hand-over-hand locking.
+(A more readable full proof outline of the LCSet program is shown in the appendix of
+<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW590.abs.html">CW-590</a>.)</p>
 <blockquote>
-<p><a href="lcset/ghost_lists.h.html">ghost_lists.h</a> - Auxiliary objects that track a list</p>
+<p><a href="lcset/ghost_lists.h.html">ghost_lists.h</a> - Auxiliary objects that track a list; used in lcset.c to keep track of the nodes in the linked list</p>
+<p><a href="lcset/ghost_lists.c.html">ghost_lists.c</a> - Implementation of ghost lists in terms of raw ghost lists (see <a href="#crt">crt/raw_ghost_lists.h</a>)</p>
+<p><a href="lcset/ghost_counters.h.html">ghost_counters.h</a> - Auxiliary objects that track contributions to a number; used in lcset.c to prove that when the set is disposed, no thread is holding the lock of any node</p>
+<p><a href="lcset/ghost_counters.c.html">ghost_counters.c</a> - Implementation of ghost counters in terms of raw ghost lists</p>
 <p><a href="lcset/atomics.h.html">atomics.h</a> - Specification of atomic machine instructions</p>
 <p><a href="lcset/locks.h.html">locks.h</a> - Specification of the spinlocks module. A thin layer over the atomic instructions</p>
 <p><a href="lcset/locks.c.html">locks.c</a> - Implementation and proof of the spinlocks module</p>
@@ -114,7 +134,7 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="map.c.html">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
 <p><b>mcas</b> - Full functional specification and verification of a challenging lock-free algorithm from the literature: Harris et al.'s
 multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspired by the one in Vafeiadis' PhD, but uses the approach described in
-<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW551.abs.html">CW-551</a> instead of rely-guarantee. (TODO: Verification of the many
+<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW590.abs.html">CW-590</a> instead of rely-guarantee. (TODO: Verification of the many
 "trivial" lemmas used in the proof that have not yet been verified.)</p>
 <blockquote>
 <p><a href="mcas/bitops.h.html">bitops.h</a> - A few lemmas about bitwise operations</p>
