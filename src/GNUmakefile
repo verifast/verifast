@@ -154,11 +154,11 @@ ifdef Z3
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 else
 	cp verifast verifast-$(VFVERSION)/bin
-	cp vfstrip verifast-$(VFVERSION)/bin
 	cp vfide verifast-$(VFVERSION)/bin/vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
 	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
 endif
+	cp vfstrip verifast-$(VFVERSION)/bin
 	cp assume.vfmanifest crt.vfmanifest list.vfmanifest raw_ghost_lists.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h ghost_cells.h raw_ghost_lists.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
