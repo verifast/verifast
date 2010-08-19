@@ -985,7 +985,7 @@ and
       pat option  (* Coefficient for fractional permission *)
   | Close of loc * expr option * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
-  | WhileStmt of loc * expr * pred option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
+  | WhileStmt of loc * expr * loop_spec option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
@@ -1003,6 +1003,10 @@ and
   | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
   | TryFinally of loc * stmt list * loc * stmt list
   | Break of loc
+and
+  loop_spec =
+  | LoopInv of pred
+  | LoopSpec of pred * pred
 and
   switch_stmt_clause =
   | SwitchStmtClause of loc * expr * stmt list
@@ -1864,9 +1868,8 @@ and
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
-     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr); (* only allows decreases if invariant provided *)
-     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}") >] -> WhileStmt (l, e, inv, dec, b, closeBraceLoc)
+     (inv, dec, b, closeBraceLoc) = parse_loop_core
+  >] -> WhileStmt (l, e, inv, dec, b, closeBraceLoc)
 | [< '(l, Kwd "for");
      '(_, Kwd "(");
      init_stmts = begin parser
@@ -1882,9 +1885,7 @@ and
      '(_, Kwd ";");
      update_exprs = rep_comma parse_expr;
      '(_, Kwd ")");
-     inv = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> p);
-     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr);
-     '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
+     (inv, dec, b, closeBraceLoc) = parse_loop_core
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
   BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)])
@@ -1932,6 +1933,22 @@ and
   | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> s
   >] -> s
 | [< te = parse_type; '(_, Ident x); s2 = parse_decl_stmt_rest te x >] -> s2
+and
+  parse_loop_core = parser [<
+    inv =
+      opt
+        begin parser
+          [< '(_, Kwd "/*@");
+             inv = begin parser
+               [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
+             | [< '(_, Kwd "requires"); pre = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/");
+                  '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
+             end
+          >] -> inv
+        end;
+    dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr); (* only allows decreases if invariant provided *)
+    '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
+  >] -> (inv, dec, b, closeBraceLoc)
 and
   type_expr_of_expr e =
   match e with
@@ -9377,58 +9394,67 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
     | WhileStmt (l, e, p, dec, ss, closeBraceLoc) ->
-      let _ = if pure then static_error l "Loops are not yet supported in a pure context." in
-      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
-      let p = match p with None -> static_error l "Loop invariant required." | Some p -> p in
+      if pure then static_error l "Loops are not yet supported in a pure context.";
+      let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
+      let p =
+        match p with
+          Some (LoopInv p) -> p
+        | _ -> static_error l "Loop invariant required."
+      in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
-      assert_pred rules [] (pn,ilist) h ghostenv env p true real_unit (fun _ h _ _ _ ->
-        let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
-        let env = bs @ env in
+      assert_pred rules [] (pn,ilist) h ghostenv env p true real_unit $. fun _ h _ _ _ ->
+      let lblenv =
+        List.map
+          begin fun (lbl, cont) ->
+            (lbl, fun blocks_done sizemap tenv ghostenv h'' env -> cont blocks_done sizemap tenv ghostenv (h'' @ h) env)
+          end
+          lblenv
+      in
+      let return_cont h'' retval = return_cont (h'' @ h) retval in
+      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
+      let env = bs @ env in
+      assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
+      begin fun cont ->
+        match dec with
+          None -> cont None
+        | Some dec ->
+          eval_h h' env' dec $. fun _ t_dec ->
+          cont (Some t_dec)
+      end $. fun t_dec ->
+      eval_h h' env' e $. fun h' v ->
+      begin fun cont ->
         branch
-          (fun _ ->
-             assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None (fun h' ghostenv' env' ->
-               let verify_loop_body = (fun t_dec ->
-                (eval_h h' env e (fun h' v -> assume (v) (fun _ ->
-                   let lblenv =
-                     List.map
-                       begin fun (lbl, cont) ->
-                         (lbl, fun blocks_done sizemap tenv ghostenv h'' env -> cont blocks_done sizemap tenv ghostenv (h'' @ h) env)
-                       end
-                       lblenv
-                   in
-                   verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss (fun _ _ _ h'' env ->
-                     let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-                     assert_pred rules [] (pn,ilist) h'' ghostenv env p true real_unit (fun _ h''' _ env''' _ ->
-                       check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
-                       (match (t_dec, dec) with
-                         (None, None) -> ()
-                       | (Some(t_dec), Some(dec)) -> (eval_h h'' env''' dec (fun _ t_dec2 -> 
-                           let dec_check = (ctxt#mk_lt t_dec2 t_dec) in
-                           assert_term dec_check h'' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check))
-                        )));
-                     )
-                   ) (fun h'' retval -> return_cont (h'' @ h) retval)
-                 )))
-               ) in 
-               (match dec with 
-                 None -> verify_loop_body None
-               | Some(dec) -> (eval_h h' env' dec (fun _ t_dec -> 
-                   assert_term (ctxt#mk_le (ctxt#mk_intlit 0) t_dec) h' env (expr_loc dec) "Cannot prove that the loop measure is non-negative from the invariant.";
-                   verify_loop_body (Some(t_dec))
-                  )
-               ));
-             )
-          )
-          (fun _ ->
-             assume_pred [] (pn,ilist) h ghostenv env p real_unit None None (fun h ghostenv' env' ->
-               (eval_h h env e (fun h v -> assume (ctxt#mk_not (v)) (fun _ ->
-                 tcont sizemap tenv' ghostenv' h env')))))
-      )
+          begin fun () ->
+            assume v cont
+          end
+          begin fun () ->
+            assume (ctxt#mk_not v) $. fun () ->
+            tcont sizemap tenv' ghostenv' (h' @ h) env'
+          end
+      end $. fun () ->
+      begin fun continue ->
+        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss
+          (fun _ _ _ h'' env -> continue h'' env)
+          return_cont
+      end $. fun h' env ->
+      let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
+      assert_pred rules [] (pn,ilist) h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
+      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
+      begin match (t_dec, dec) with
+        (None, None) -> ()
+      | (Some t_dec, Some dec) ->
+        eval_h h' env''' dec $. fun _ t_dec2 ->
+        let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
+        assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1));
+        let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
+        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2))
+      end
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context.";
       let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
