@@ -8458,15 +8458,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   None -> static_error l "Incorrect number of function type type arguments."
                 | Some bs -> bs
               in
-              begin match zip xmap xmap1 with
-                None -> static_error l "Function type parameter count does not match function parameter count"
-              | Some bs ->
-                List.iter
-                  begin fun ((x, tp), (x1, tp1)) ->
-                    expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) (instantiate_type tpenv tp) tp1
-                  end
+              let xmap =
+                match zip xmap xmap1 with
+                  None -> static_error l "Function type parameter count does not match function parameter count"
+                | Some bs ->
+                  List.map
+                    begin fun ((x, tp0), (x1, tp1)) ->
+                      let tp = instantiate_type tpenv tp0 in
+                      expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1;
+                      (x, tp, tp0, x1, tp1)
+                    end
                   bs
-              end;
+              in
               let ftargenv =
                 match zip ftxmap args with
                   None -> static_error l "Incorrect number of function pointer chunk arguments"
@@ -8483,11 +8486,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   None -> static_error l "Incorrect number of parameter names"
                 | Some bs ->
                   List.map
-                    begin fun ((lx, x), (x0, tp0)) ->
+                    begin fun ((lx, x), (x0, tp, tp0, x1, tp1)) ->
                       if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable";
-                      let tp = instantiate_type tpenv tp0 in
                       let t = get_unique_var_symb x tp in
-                      (x, x0, tp, t, prover_convert_term t tp tp0)
+                      (x, x0, tp, t, prover_convert_term t tp tp0, x1, tp1)
                     end
                     bs
               in
@@ -8514,12 +8516,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let h = [] in
                 with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
-                let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t0)) fparams in
+                let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x0, t0)) fparams in
                 assume_pred tpenv ("",[]) h [] pre_env pre real_unit None None $. fun h _ ft_env ->
                 with_context PopSubcontext $. fun () ->
-                let tenv = List.map (fun (x, x0, tp, t, t0) -> (x, tp)) fparams @ tenv in
-                let ghostenv = List.map (fun (x, x0, tp, t, t0) -> x) fparams @ ghostenv in
-                let env = List.map (fun (x, x0, tp, t, t0) -> (x, t)) fparams @ env in
+                let tenv = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x, tp)) fparams @ tenv in
+                let ghostenv = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> x) fparams @ ghostenv in
+                let env = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x, t)) fparams @ env in
                 let lblenv = [] in
                 let pure = true in
                 let return_cont h t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" in
@@ -8528,7 +8530,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
-                let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0) -> (x0, t)) fparams in
+                let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams in
                 assert_pred rules [] ("",[]) h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
                 let (f_env, ft_env, tenv, ghostenv, env) =
                   match rt1 with
