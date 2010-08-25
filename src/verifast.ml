@@ -1127,7 +1127,7 @@ let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
   if p1 = p2 then
     if l1 = l2 then
       if c1 = c2 then
-        ""
+        ")"
       else
         "-" ^ string_of_int c2 ^ ")"
     else
@@ -2365,68 +2365,126 @@ let parse_header_file (basePath: string) (relPath: string) (reportRange: range_k
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let rec parse_jarspec_file basePath relPath reportRange =
-  let lexer = make_lexer ["."] [] in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
-  let rec parse_file=
-    parser
-      [< '(l, Ident fname);'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
-        if extension="jar" then
-          match (parse_jarspec_file basePath (fname^".jarspec") reportRange) with
-          (_,allspecs') -> (match e with (jarspecs,allspecs) -> (jarspecs,allspecs@allspecs'))
-        else
-          if extension <> "javaspec" then 
-            raise (ParseException (l, "Only javaspec or jar files can be specified here."))
-          else
-            let filename=fname^".javaspec" in (match e with (jarspecs,allspecs) -> (filename::jarspecs,filename::allspecs))
-    | [< _ = Stream.empty>] -> ([],[])
+let read_file_lines path =
+  let channel = open_in path in
+  let lines =
+    let rec read_lines () =
+      try
+        let line = input_line channel in
+        let lines = read_lines () in
+        line::lines
+      with
+        End_of_file -> []
+    in
+    read_lines ()
   in
-  try
-    parse_file token_stream
-  with
-    Stream.Error msg -> raise (ParseException (loc(), msg))
-  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))  
+  close_in channel;
+  lines
 
-let rec parse_main_class= parser
-  [<'(l, Ident fname); e=parser
-    [<'(_, Kwd ".");(r,_)=parse_main_class>] -> (fname^"."^r,l)
-  | [<>] -> (fname,l)
-  >] -> e
-  
-let rec parse_jarsrc_file basePath relPath reportRange =
-  let lexer = make_lexer [".";"-"] [] in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange (fun _ -> ()) in
-  let main=ref ("",dummy_loc) in
-  let rec parse_file =
-    parser
-      [< '(l, Ident fname);z= parser
-        [<'(_, Kwd ".");'(_, Ident extension);e= parse_file>] ->
-        if extension="jar" then
-          match (parse_jarspec_file basePath (fname^".jarspec") reportRange) with
-          (jarspecs,allspecs)->(match e with (implist,jarlist,jdepds) -> (jarspecs@implist,(List.map (fun n -> (l,n))allspecs)@jarlist,(fname^"."^extension)::jdepds))
-        else
-          if extension <> "java" then 
-            raise (ParseException (l, "Only java or jar files can be specified here."))
-          else
-            (match e with (implist,jarlist,jdepds) -> ((fname^".java")::implist,jarlist,jdepds))
-      | [<'(_, Kwd "-");'(_, Ident cls);(main_class,lm)=parse_main_class;e= parse_file>] ->
-        if fname="main" && cls="class" then
-          begin
-          if !main<>("",dummy_loc) then
-            raise (ParseException (lm, "There can only be one main method"))
-          else
-            main:=(main_class,lm);e
-          end
-        else
-         raise (ParseException (l, "The class containing the main method should be specified as: main-class ClassName"))
-      >] -> z
-    | [< _ = Stream.empty>] -> ([],[],[])
+let file_loc basePath relPath =
+  let pos = ((basePath, relPath), 1, 1) in
+  (pos, pos)
+
+let parse_jarspec_file_core basePath relPath =
+  let path = Filename.concat basePath relPath in
+  let dirPath = Filename.dirname path in
+  let lines = read_file_lines path in
+  let (jarspecs, lines) =
+    let rec iter jarspecs lines =
+      match lines with
+      | line::lines when line = "" ->
+        iter jarspecs lines
+      | line::lines when Filename.check_suffix line ".jarspec" ->
+        iter (line::jarspecs) lines
+      | _ ->
+        (List.rev jarspecs, lines)
+    in
+    iter [] lines
   in
-  try
-    match parse_file token_stream with (implist,jarlist,jdepds) ->(!main,implist,jarlist,jdepds)
-  with
-    Stream.Error msg -> raise (ParseException (loc(), msg))
-  | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+  let javaspecs =
+    flatmap
+      begin fun line ->
+        if line = "" then [] else
+        if not (Filename.check_suffix line ".javaspec") then
+          raise (ParseException (file_loc basePath relPath, "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
+        else
+          [line]
+      end
+      lines
+  in
+  (jarspecs, javaspecs)
+
+let rec parse_jarspec_file basePath relPath reportRange =
+  let (jar_file_paths, direct_javaspec_file_paths) = parse_jarspec_file_core basePath relPath in
+  let transitive_javaspec_file_paths =
+    let rec all_specs jar_file_paths =
+      match jar_file_paths with
+        [] -> direct_javaspec_file_paths
+      | jar_file_path::jar_file_paths ->
+        let (_, all_javaspec_file_paths) = parse_jarspec_file basePath (Filename.concat (Filename.dirname relPath) (jar_file_path ^ "spec")) reportRange in
+        all_javaspec_file_paths @ all_specs jar_file_paths
+    in
+    all_specs jar_file_paths
+  in
+  (direct_javaspec_file_paths, transitive_javaspec_file_paths)
+
+let parse_jarsrc_file_core basePath relPath =
+  let path = Filename.concat basePath relPath in
+  let dirPath = Filename.dirname path in
+  let lines = read_file_lines path in
+  let (jarspecs, lines) =
+    let rec iter jarspecs lines =
+      match lines with
+        line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".jar" ->
+        iter (line::jarspecs) lines
+      | _ ->
+        (List.rev jarspecs, lines)
+    in
+    iter [] lines
+  in
+  let (javas, lines) =
+    let rec iter javas lines =
+      match lines with
+        line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".java" ->
+        iter (line::javas) lines
+      | _ ->
+        (List.rev javas, lines)
+    in
+    iter [] lines
+  in
+  let main_class =
+    match lines with
+      [] -> None
+    | [line] when startswith line "main-class " ->
+      Some (String.sub line (String.length "main-class ") (String.length line - String.length "main-class "))
+    | _ ->
+      raise (ParseException (file_loc basePath relPath, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
+  in
+  (jarspecs, javas, main_class)
+
+let parse_jarsrc_file basePath relPath reportRange =
+  let l = file_loc basePath relPath in
+  let (jar_file_paths, java_file_paths, main_class) = parse_jarsrc_file_core basePath relPath in
+  let main_class =
+    match main_class with
+      None ->
+      ("", dummy_loc)
+    | Some main_class ->
+      (main_class, file_loc basePath relPath)
+  in
+  let (direct_source_files, transitive_javaspec_files) =
+    let rec iter jar_file_paths =
+      match jar_file_paths with
+        [] -> ([], [])
+      | jar_file_path::jar_file_paths ->
+        let (direct_javaspec_file_paths, transitive_javaspec_file_paths) = parse_jarspec_file basePath (Filename.concat (Filename.dirname relPath) (jar_file_path ^ "spec")) reportRange in
+        let transitive_javaspec_file_paths = List.map (fun path -> (l, path)) transitive_javaspec_file_paths in
+        let (direct_source_files, transitive_javaspec_files) = iter jar_file_paths in
+        (direct_javaspec_file_paths @ direct_source_files, transitive_javaspec_file_paths @ transitive_javaspec_files)
+    in
+    iter jar_file_paths
+  in
+  (main_class, java_file_paths @ direct_source_files, transitive_javaspec_files, jar_file_paths)
 
 (* Region: some auxiliary types and functions *)
 
