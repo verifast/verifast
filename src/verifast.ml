@@ -9539,8 +9539,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           eval_h h' env' dec $. fun _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
+      let env' = old_xs_env @ env' in
+      let ghostenv' = List.map (fun (x, _) -> x) old_xs_env @ ghostenv' in
       let check_post h' env' =
-        let env' = old_xs_env @ env' in
         assert_pred rules [] (pn,ilist) h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
         check_leaks h' env' closeBraceLoc "Loop leaks heap chunks"
       in
@@ -9573,8 +9574,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             exit_loop h' env' (tcont sizemap)
           end
       end $. fun () ->
+      let (ss_before, ss_after) =
+        let rec iter ss_before ss =
+          match ss with
+            [] -> (List.rev ss_before, [])
+          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, ss_after)
+          | s::ss_after -> iter (s::ss_before) ss_after
+        in
+        iter [] ss
+      in
       begin fun continue ->
-        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss
+        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
           (fun _ _ _ h' env' -> continue h' env')
           return_cont
       end $. fun h' env' ->
@@ -9602,7 +9612,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       assume_pred [] (pn,ilist) h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
-      check_post h' env'
+      List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call.") ss_after;
+      let ss_after_xs = block_assigned_variables ss_after in
+      List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables") ss_after_xs;
+      verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_after (fun _ _ _ h' env' -> check_post h' env') (fun _ _ -> assert false)
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context.";
       let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
