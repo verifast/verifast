@@ -25,6 +25,7 @@ verifast_both iter_with_auto.c
 verifast_both -c contains.c
 verifast_both -c contains_deep.c
 verifast_both -c equalsmap.c
+verifast_both -c -disable_overflow_check tuerk.c
 verifast_both -c args.c
 verifast_both swap.c
 verifast_both -c short.c

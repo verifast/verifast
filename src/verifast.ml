@@ -1942,7 +1942,7 @@ and
              inv = begin parser
                [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopInv p
              | [< '(_, Kwd "requires"); pre = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/");
-                  '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
+                  '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
              end
           >] -> inv
         end;
@@ -9453,15 +9453,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
-    | WhileStmt (l, e, p, dec, ss, closeBraceLoc) ->
+    | WhileStmt (l, e, None, dec, ss, closeBraceLoc) ->
+      static_error l "Loop invariant required."
+    | WhileStmt (l, e, Some (LoopInv p), dec, ss, closeBraceLoc) ->
       if pure then static_error l "Loops are not yet supported in a pure context.";
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
-      let p =
-        match p with
-          Some (LoopInv p) -> p
-        | _ -> static_error l "Loop invariant required."
-      in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
@@ -9515,6 +9512,97 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2))
       end
+    | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
+      if pure then static_error l "Loops are not yet supported in a pure context.";
+      let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+      let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
+      let e = check_expr_t (pn,ilist) tparams tenv e boolt in
+      check_ghost ghostenv l e;
+      let xs = block_assigned_variables ss in
+      let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+      let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
+      let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
+      let tenv'' = old_xs_tenv @ tenv' in
+      let (post, tenv''') = check_pred (pn,ilist) tparams tenv'' post in
+      let dec = match dec with None -> None | Some e -> Some (check_expr_t (pn,ilist) tparams tenv' e intt) in
+      let ghostenv' = ghostenv in
+      let env' = env in
+      assert_pred rules [] (pn,ilist) h ghostenv env pre true real_unit $. fun _ h ghostenv env _ ->
+      let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
+      let old_xs_env = List.map (fun (x, t) -> ("old_" ^ x, t)) bs in
+      let env' = bs @ env' in
+      assume_pred [] (pn,ilist) [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
+      begin fun cont ->
+        match dec with
+          None -> cont None
+        | Some dec ->
+          eval_h h' env' dec $. fun _ t_dec ->
+          cont (Some t_dec)
+      end $. fun t_dec ->
+      let check_post h' env' =
+        let env' = old_xs_env @ env' in
+        assert_pred rules [] (pn,ilist) h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
+        check_leaks h' env' closeBraceLoc "Loop leaks heap chunks"
+      in
+      let exit_loop h' env' cont =
+        check_post h' env';
+        let env =
+          flatmap
+            begin fun (x, t) ->
+              if List.mem x xs then
+                [(x, List.assoc x env'); ("old_" ^ x, t)]
+              else
+                [(x, t)]
+            end
+            env
+        in
+        let ghostenv = List.map (fun (x, _) -> x) old_xs_tenv @ ghostenv in
+        assume_pred [] (pn,ilist) h ghostenv env post real_unit None None $. fun h ghostenv env ->
+        cont tenv''' ghostenv h env
+      in
+      let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap _ _ h' env' -> exit_loop h' env' (cont blocks_done sizemap))) lblenv in
+      let return_cont h' retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." in
+      eval_h h' env' e $. fun h' v ->
+      begin fun cont ->
+        branch
+          begin fun () ->
+            assume v cont
+          end
+          begin fun () ->
+            assume (ctxt#mk_not v) $. fun () ->
+            exit_loop h' env' (tcont sizemap)
+          end
+      end $. fun () ->
+      begin fun continue ->
+        verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss
+          (fun _ _ _ h' env' -> continue h' env')
+          return_cont
+      end $. fun h' env' ->
+      let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
+      assert_pred rules [] (pn,ilist) h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
+      begin match (t_dec, dec) with
+        (None, None) -> ()
+      | (Some t_dec, Some dec) ->
+        eval_h h' env'' dec $. fun _ t_dec2 ->
+        let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
+        assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1));
+        let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
+        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2))
+      end;
+      let bs' = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
+      let env'' =
+        flatmap
+          begin fun (x, t) ->
+            if List.mem x xs then
+              [("old_" ^ x, t); (x, List.assoc x bs')]
+            else
+              [(x, t)]
+          end
+          env''
+      in
+      assume_pred [] (pn,ilist) h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
+      let env' = bs' @ env' in
+      check_post h' env'
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context.";
       let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
