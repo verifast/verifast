@@ -4223,7 +4223,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match try_assoc cn classmap1 with
         Some (_,_,_, Some fds,_,_,_,_,_,_) -> fds
       | None ->
-        let (_,_,_, Some fds,_,_,_,_,_,_) = List.assoc cn classmap0 in fds
+        match try_assoc cn classmap0 with
+          None -> []
+        | Some (_,_,_, Some fds,_,_,_,_,_,_) -> fds
     in
     try_assoc fn fds
   in
