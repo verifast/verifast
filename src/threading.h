@@ -18,6 +18,7 @@
 struct mutex;
 
 /*@
+predicate uninitialized_mutex(struct mutex *mutex; predicate() p);
 
 predicate mutex(struct mutex *mutex; predicate() p);
 
@@ -30,14 +31,14 @@ predicate create_mutex_ghost_arg(predicate() p) = true;
 struct mutex *create_mutex();
     //@ requires create_mutex_ghost_arg(?p) &*& p();
     //@ ensures mutex(result, p);
-
+    
 void mutex_acquire(struct mutex *mutex);
     //@ requires [?f]mutex(mutex, ?p);
-    //@ ensures mutex_held(mutex, p, currentThread, f) &*& p();
+    //@ ensures [f]mutex(mutex, p) &*& mutex_held(mutex, p, currentThread, f) &*& p();
 
 void mutex_release(struct mutex *mutex);
     //@ requires mutex_held(mutex, ?p, currentThread, ?f) &*& p();
-    //@ ensures [f]mutex(mutex, p);
+    //@ ensures true;
 
 void mutex_dispose(struct mutex *mutex);
     //@ requires mutex(mutex, ?p);
