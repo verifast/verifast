@@ -12,6 +12,19 @@ let index_of_byref x xs =
     | x0::xs -> if x0 == x then k else iter (k + 1) xs
   in
   iter 0 xs
+  
+let string_of_process_status s =
+  match s with
+    Unix.WEXITED n -> Printf.sprintf "WEXITED %d" n
+  | Unix.WSIGNALED n -> Printf.sprintf "WSIGNALED %d" n
+  | Unix.WSTOPPED n -> Printf.sprintf "WSTOPPED %d" n
+  
+let sys cmd =
+  let chan = Unix.open_process_in cmd in
+  let line = input_line chan in
+  let exitStatus = Unix.close_process_in chan in
+  if exitStatus <> Unix.WEXITED 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %s" cmd (string_of_process_status exitStatus));
+  line
 
 let show_ide initialPath prover =
   let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
@@ -19,6 +32,7 @@ let show_ide initialPath prover =
   let tab_srcText (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
   let ctxts_lifo = ref None in
   let msg = ref None in
+  let url = ref None in
   let appTitle = "Verifast " ^ Vfversion.version ^ " IDE" in
   let root = GWindow.window ~width:800 ~height:600 ~title:appTitle ~allow_shrink:true () in
   let codeFont = ref Fonts.code_font in
@@ -134,8 +148,20 @@ let show_ide initialPath prover =
   let separatorToolItem = GButton.separator_tool_item () in
   toolbar#insert separatorToolItem;
   let messageToolItem = GButton.tool_item ~expand:true () in
+  let messageHBox = GPack.hbox ~packing:(messageToolItem#add) () in
   messageToolItem#set_border_width 3;
-  let messageEntry = GEdit.entry ~show:false ~editable:false ~has_frame:false ~packing:(messageToolItem#add) () in
+  let messageEntry = GEdit.entry ~show:false ~editable:false ~has_frame:false ~packing:(messageHBox#add) () in
+  let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
+  let show_help url =
+    if Sys.os_type = "Unix" then
+	  if sys "uname" = "Darwin" then
+	    ignore (Sys.command ("open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+	  else
+	    ignore (Sys.command ("xdg-open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+	else
+	  ignore (Sys.command ("start \"\" " ^ "\"" ^ bindir ^ "\\..\\help\\" ^ url ^ ".html" ^ "\""))
+  in
+  ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
   let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
@@ -335,14 +361,18 @@ let show_ide initialPath prover =
       !buffers
   in
   let updateMessageEntry() =
-    match !msg with
+    (match !msg with
       None -> messageEntry#coerce#misc#hide()
     | Some msg ->
       let (backColor, textColor) = if msg = "0 errors found" then ("green", "black") else ("red", "white") in
       messageEntry#coerce#misc#show();
       messageEntry#set_text msg;
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
-      messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]
+      messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]);
+	(match !url with
+	  None -> helpButton#coerce#misc#hide();
+	| Some(_) -> helpButton#coerce#misc#show();
+	)
   in
   let load ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
     try
@@ -821,7 +851,7 @@ let show_ide initialPath prover =
               handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
             | StaticError (l, emsg) ->
               handleStaticError l emsg
-            | SymbolicExecutionError (ctxts, phi, l, emsg) ->
+            | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
               updateStepListView();
@@ -831,6 +861,9 @@ let show_ide initialPath prover =
                 Executing (_, _, steploc, _)::_ when l = steploc ->
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
+				(match eurl with
+				  None -> url := None;
+				| Some(eurl) -> url := Some(eurl));
                 updateMessageEntry()
               | _ ->
                 handleStaticError l emsg

@@ -9,3 +9,4 @@ Known VeriFast unsoundnesses:
 - casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
 - Java: ClassCastExceptions are currently not prevented
+- ghost variables (which can hide fields) can appear in the argument of the Java assert statement

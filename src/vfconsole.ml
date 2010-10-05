@@ -12,7 +12,7 @@ let _ =
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
     | StaticError (l, msg) -> print_msg l msg; exit 1
-    | SymbolicExecutionError (ctxts, phi, l, msg) ->
+    | SymbolicExecutionError (ctxts, phi, l, msg, url) ->
         (*
         let _ = print_endline "Trace:" in
         let _ = List.iter (fun c -> print_endline (string_of_context c)) (List.rev ctxts) in
