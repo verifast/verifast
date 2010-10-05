@@ -6548,6 +6548,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     lookup_points_to_chunk h env l (pointee_pred_symb l pointeeType) pointerTerm
   in
   
+  let lists_disjoint xs ys =
+    List.for_all (fun x -> not (List.mem x ys)) xs
+  in
+  
   let assert_chunk_core rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
     let rec assert_chunk_core_core h =
       let rec iter hprefix h =
@@ -6595,7 +6599,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | None -> cont ()
             end
           | _ -> cont ()
-        end $. fun () -> assert_false h env l ("No matching heap chunks: " ^ (match g with (g, _) -> ctxt#pprint g)) (Some "nomatchingheapchunks")
+        end $. fun () ->
+        let message =
+          let predname = match g with (g, _) -> ctxt#pprint g in
+          let args =
+            let rec iter patvars pats args =
+              match pats with
+                [] -> List.rev args
+              | TermPat t::pats -> iter patvars pats (ctxt#pprint t::args)
+              | SrcPat (LitPat e)::pats -> iter patvars pats ((if patvars = [] || lists_disjoint patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>")::args)
+              | SrcPat DummyPat::pats -> iter patvars pats ("_"::args)
+              | SrcPat (VarPat x)::pats -> iter (x::patvars) pats ("_"::args)
+            in
+            String.concat ", " (iter [] pats [])
+          in
+          Printf.sprintf "No matching heap chunks: %s(%s)" predname args
+        in
+        assert_false h env l message (Some "nomatchingheapchunks")
   (*      
       | [(h, ts, ghostenv, env)] -> cont h ts ghostenv env
       | _ -> assert_false h env l "Multiple matching heap chunks." None

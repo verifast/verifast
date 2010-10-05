@@ -1,11 +1,34 @@
 <html>
 <head>
-<title>VeriFast error: No Matching Heap Chunks</title>
+<title>VeriFast error: No matching heap chunks</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
 </head>
 <body>
-<h1>No Matching Heap Chunks</h1>
-This error indicates that VeriFast tries to consume a predicate 
-assertion, but does not find a matching chunk in the symbolic heap 
-(shown in the bottom right pane of the VeriFast window). 
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">No matching heap chunks: <i>chunk pattern</i></p>
+<p class="section">Context</p>
+<p>When consuming a field assertion or predicate assertion.</p>
+<p class="section">Cause</p>
+<p>No chunk matching the field assertion or predicate assertion was found in the <a href="symbolicheap.html">symbolic heap</a>.</p>
+<p class="section">Notes</p>
+<ul>
+<li>The program element that causes the error is shown in red, with a double underline.</li>
+<li>The chunk pattern shown in the error message is an evaluated version of the assertion being consumed.</li>
+<li>Consumption of a field assertion or predicate assertion occurs implicitly in the following circumstances:
+<ul>
+<li>a field access consumes (and then produces) the field predicate;</li>
+<li>a <tt>free</tt> statement consumes the field predicates and the malloc block predicate of the struct instance being freed;</li>
+<li>an <tt>open</tt> statement consumes the predicate being opened.</li>
+</ul></li>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Ensure that a matching chunk is present in the symbolic heap. Suggested approaches:</p>
+<ul>
+<li>Force the current function's caller to provide the chunk. To do so, mention the chunk in the current function's <tt>requires</tt> clause.</li>
+<li>If the chunk is a predicate chunk, close the predicate.</li>
+<li>If the chunk is contained within a chunk that is present in the symbolic heap, open the containing chunk.</li>
+<li>If the chunk can be derived from existing chunks, call a lemma function that derives the chunk.</li>
+</ul>
 </body>
 <html>
