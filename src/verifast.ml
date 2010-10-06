@@ -5737,10 +5737,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cs
   in
 
-  let assert_term t h env l msg =
+  let assert_term t h env l msg url =
     stats#proverOtherQuery;
     if not (ctxt#query t) then
-      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, None))
+      raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
   in
 
   let assert_false h env l msg url =
@@ -5762,8 +5762,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
       match ass_term with
         Some assert_term when not disable_overflow_check ->
-        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow.";
-        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow."
+        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
+        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
       | _ -> ()
       end;
       t
@@ -6130,7 +6130,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: production of assertions *)
   
-  let assert_expr env e h env l msg = assert_term (eval None env e) h env l msg in
+  let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url in
   
   let success() = () in
   
@@ -6732,11 +6732,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       inst_call_pred l real_unit_pat e_opt tn g index pats
     | ExprPred (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
       begin match try_assoc x env with
-        Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition."; cont [] h ghostenv env env' None
+        Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
     | ExprPred (l, e) ->
-      assert_expr env e h env l "Cannot prove condition."; cont [] h ghostenv env env' None
+      assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
       assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size ->
         assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
@@ -8069,7 +8069,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
   let eval_non_pure_cps ev is_ghost_expr h env e cont =
-    let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
+    let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
     let read_field =
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
@@ -8080,7 +8080,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
 
   let eval_non_pure is_ghost_expr h env e =
-    let assert_term = if is_ghost_expr then None else Some (fun l t msg -> assert_term t h env l msg) in
+    let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
     let read_field =
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
@@ -8309,7 +8309,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           Real when ftxmap = [] ->
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
-          assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")");
+          assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
           check_call [] h [] cont
         | Real ->
           let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
@@ -9157,8 +9157,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some e ->
           let w = check_expr_t (pn,ilist) tparams tenv e RealType in
           let coef = ev w in
-          assert_term (ctxt#mk_real_lt real_zero coef) h env l "Split coefficient must be positive.";
-          assert_term (ctxt#mk_real_lt coef real_unit) h env l "Split coefficient must be less than one.";
+          assert_term (ctxt#mk_real_lt real_zero coef) h env l "Split coefficient must be positive." None;
+          assert_term (ctxt#mk_real_lt coef real_unit) h env l "Split coefficient must be less than one." None;
           coef
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
@@ -9440,7 +9440,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let handleIdTerm = (List.assoc x env) in
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
-              assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant.";
+              assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant." None;
               let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
                 None-> static_error l ("No such predicate family: "^hpn)
               | Some x -> x
@@ -9532,9 +9532,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (Some t_dec, Some dec) ->
         eval_h h' env''' dec $. fun _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
-        assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1));
+        assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2))
+        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
       if pure then static_error l "Loops are not yet supported in a pure context.";
@@ -9619,9 +9619,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | (Some t_dec, Some dec) ->
         eval_h h' env'' dec $. fun _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
-        assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1));
+        assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2))
+        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end;
       let bs' = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let env'' =
@@ -9802,7 +9802,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
-                 assert_term (eval pre_env pre) h pre_env closeBraceLoc "Action precondition failure.";
+                 assert_term (eval pre_env pre) h pre_env closeBraceLoc "Action precondition failure." None;
                  let post_boxArgMap =
                    match post_bcp_args_opt with
                      None -> pre_boxArgMap
@@ -9817,7 +9817,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  assert_pred rules [] (pn,ilist) h ghostenv post_boxArgMap inv true real_unit $. fun _ h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
-                 assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure.";
+                 assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure." None;
                  let (post_handlePred_parammap, post_handlePred_inv) =
                    if post_hpn = pre_bcn ^ "_handle" then
                      ([], True l)
@@ -9839,7 +9839,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                  in
                  let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
                  with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
-                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure.";
+                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure." None;
                  let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                  let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
                  let h = boxChunk::hpChunk::h in
@@ -10500,7 +10500,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                             post_boxvars @ old_boxvars @ aarg_env @ hpargs in
                           verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                            assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure."
+                            assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
                           ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
                         )
                       )

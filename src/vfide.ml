@@ -362,7 +362,7 @@ let show_ide initialPath prover =
   in
   let updateMessageEntry() =
     (match !msg with
-      None -> messageEntry#coerce#misc#hide()
+      None -> messageEntry#coerce#misc#hide(); helpButton#coerce#misc#hide()
     | Some msg ->
       let (backColor, textColor) = if msg = "0 errors found" then ("green", "black") else ("red", "white") in
       messageEntry#coerce#misc#show();
@@ -674,6 +674,7 @@ let show_ide initialPath prover =
     if !msg <> None then
     begin
       msg := None;
+	  url := None;
       clearStepItems();
       updateMessageEntry();
       clearStepInfo();
