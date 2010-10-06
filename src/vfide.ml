@@ -724,9 +724,14 @@ let show_ide initialPath prover =
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
   (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> saveAs tab; () | None -> ());
   (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> close tab; () | None -> ());
-  let handleStaticError l emsg =
+  let handleStaticError l emsg eurl =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
+	begin
+	match eurl with
+	  None -> url := None
+	| Some(eurl) -> url := Some(eurl)
+	end;
     updateMessageEntry();
     let (start, stop) = l in
     let (path, line, col) = stop in
@@ -849,9 +854,9 @@ let show_ide initialPath prover =
               updateMessageEntry()
             with
               ParseException (l, emsg) ->
-              handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg))
+              handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
             | StaticError (l, emsg) ->
-              handleStaticError l emsg
+              handleStaticError l emsg None 
             | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
@@ -862,12 +867,14 @@ let show_ide initialPath prover =
                 Executing (_, _, steploc, _)::_ when l = steploc ->
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
-				(match eurl with
-				  None -> url := None;
-				| Some(eurl) -> url := Some(eurl));
+				begin
+				match eurl with
+				  None -> url := None
+				| Some(eurl) -> url := Some(eurl)
+				end;
                 updateMessageEntry()
               | _ ->
-                handleStaticError l emsg
+                handleStaticError l emsg eurl
               end
             | e ->
               prerr_endline ("VeriFast internal error: " ^ Printexc.to_string e);

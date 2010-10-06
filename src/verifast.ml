@@ -5737,7 +5737,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cs
   in
 
-  let assert_term t h env l msg url =
+  let assert_term t h env l msg url = 
     stats#proverOtherQuery;
     if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
@@ -5750,7 +5750,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (* Region: evaluation *)
   
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
-    let evs state es cont =
+	let evs state es cont =
       let rec iter state vs es =
         match es with
           [] -> cont state (List.rev vs)
@@ -8176,7 +8176,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                               Some k when k < 0 -> ()
                             | _ ->
                               with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
-                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." None
+                              assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
                             )
                           end
                       | Some x -> (
