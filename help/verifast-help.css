@@ -2,3 +2,8 @@ body {font-family: sans-serif}
 .navbar  {background-color: Lavender; padding: 1mm; font-style: italic}
 .section {font-weight: bold}
 .error {background-color: red; color: white; padding: 1mm}
+.codebox_red {background-color: red}
+.codebox_green {background-color: green}
+.codebox_error {color: white}
+.codebox_code {background-color: white}
+.error_range {color: red; text-decoration: underline}

@@ -1,0 +1,66 @@
+<html>
+<head>
+<title>VeriFast error: Potential arithmetic underflow</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Potential arithmetic underflow</p>
+<p class="section">Context</p>
+<p>When evaluating an arithmetic operation, e.g. an addition or a subtraction, in non-ghost code.</p>
+<p class="section">Cause</p>
+<p>VeriFast cannot infer from the path condition that the result of the arithmetic operation is not less than the minimum representable value.</p>
+<p class="section">Notes</p>
+<ul>
+<li>The operation that causes the error is shown in red, with a double underline.</li>
+<li>Arithmetic underflow and overflow checking can be disabled by deselecting the <tt>Check arithmetic overflow</tt> option in the <tt>Verify</tt> menu.</li>
+<li>The preprocessor symbol <tt>INT_MIN</tt> defined in header file <tt>limits.h</tt> denotes the minimum representable value of type <tt>int</tt>.</li>
+<li>The minimum representable value of type <tt>int</tt> is assumed by VeriFast to be -2<sup>31</sup>, i.e. -2147483648.</li>
+<li>For most variables, VeriFast automatically adds the information that the variable's value is within the limits of the type to the path condition.
+However, for some variables, it does not yet do this automatically. In these cases, one can explicitly add this information using the <tt>produce_limits</tt>
+ghost command. This requires first assigning the value to a local variable, say <tt>x</tt>, and then executing <tt>produce_limits(x);</tt>.</li>
+</ul>
+<p class="section">Suggested solutions</p>
+<ul>
+<li>Disable arithmetic underflow and overflow checking. See above.</li>
+<li>Add code that performs the necessary checks to ensure that the operation does not underflow.</li>
+<li>If the operation involves a function parameter, add a condition to the <tt>requires</tt> clause that limits the value of the parameter.</li>
+<li>See the note on <tt>produce_limits</tt>.</li>
+</ul>
+<p class="section">Example</p>
+<p>Verifying the following program generates a <tt>Potential arithmetic underflow</tt> error at the subtraction operation (assuming arithmetic overflow checking
+is enabled).</p>
+<table class="codebox_red"><tr><td class="codebox_error">Potential arithmetic underflow</td></tr>
+<tr><td class="codebox_code"><pre>int decrement(int x)
+    //@ requires true;
+    //@ ensures true;
+{
+    return x <span class="error_range">-</span> 1;
+}</pre></td></tr></table>
+<p>Here are three ways to eliminate this error.</p>
+<ol>
+<li>Disable arithmetic overflow checking.</li>
+<li>Add a condition to the <tt>requires</tt> clause stating that parameter <tt>x</tt> must be greater than <tt>INT_MIN</tt>:</li>
+<table class="codebox_green"><tr><td>0 errors found</td></tr>
+<tr><td class="codebox_code"><pre>int decrement(int x)
+    //@ requires INT_MIN < x;
+    //@ ensures true;
+{
+    return x - 1;
+}</pre></td></tr></table>
+</li>
+<li>Add code that checks that <tt>x</tt> is greater than <tt>INT_MIN</tt> and calls function <tt>abort()</tt> declared in header file <tt>stdlib.h</tt> otherwise,
+which terminates the program:
+<table class="codebox_green"><tr><td>0 errors found</td></tr>
+<tr><td class="codebox_code"><pre>int decrement(int x)
+    //@ requires true;
+    //@ ensures true;
+{
+    if (x == INT_MIN) abort();
+    return x - 1;
+}</pre></td></tr></table>
+</li>
+</ol>
+</body>
+<html>

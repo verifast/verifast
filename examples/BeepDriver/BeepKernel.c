@@ -17,9 +17,24 @@ struct beep_info { // Using a struct because we don't support ghost globals yet.
 
 static struct beep_info *beepInfo;
 
-//@ predicate kernel_state() = [1/2]pointer(&beepInfo, ?info) &*& info == 0 ? [1/2]pointer(&beepInfo, 0) : beep_info_beepFunc(info, ?f) &*& [1/2]beep_info_beepState(info, ?s) &*& s() &*& [_]is_beep_func(f, s) &*& malloc_block_beep_info(info);
+/*@
 
-//@ predicate beep_func_registration(predicate() beepState) = [1/2]pointer(&beepInfo, ?info) &*& [1/2]beep_info_beepState(info, beepState);
+predicate kernel_state() =
+    [1/2]pointer(&beepInfo, ?info) &*&
+    info == 0 ?
+        [1/2]pointer(&beepInfo, 0)
+    :
+        beep_info_beepFunc(info, ?f) &*&
+        [1/2]beep_info_beepState(info, ?s) &*&
+        s() &*&
+        [_]is_beep_func(f, s) &*&
+        malloc_block_beep_info(info);
+
+predicate beep_func_registration(predicate() beepState) =
+    [1/2]pointer(&beepInfo, ?info) &*&
+    [1/2]beep_info_beepState(info, beepState);
+
+@*/
 
 void register_beep_func(beep_func *f)
     //@ requires kernel_state() &*& [_]is_beep_func(f, ?p) &*& p();
