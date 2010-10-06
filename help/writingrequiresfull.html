@@ -1,0 +1,25 @@
+<html>
+<head>
+<title>VeriFast error: No matching heap chunks</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Writing to a field requires full field permission.</p>
+<p class="section">Context</p>
+<p>When assigning to a field.</p>
+<p class="section">Cause</p>
+<p>The <a href="symbolicheap.html">symbolic heap</a> contains a field chunk for the assigned field, but the fraction of that chunk is smaller than 1.</p>
+<p class="section">Notes</p>
+<ul>
+<li>VeriFast automatically merges two field chunks if it follows from the <a href="pathcondition.html">path condition</a> that their target is equal.</li>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Increase the fraction of the field chunk to 1. Suggested approaches:</p>
+<ul>
+<li>If the code preceding the assertion leaks the heap chunk, remove the leak command.</li>
+<li>Use one of the solutions of <a href="nomatchingheapchunks.html">No matching heap chunks</a>.</li>
+</ul>
+</body>
+<html>

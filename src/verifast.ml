@@ -6454,7 +6454,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             if inputParamCount = None then
               None
             else
-              assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0)) None
+              assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0)) (Some "fractionmismatch")
       in
       match coefpat with
         SrcPat (LitPat e) -> match_term_coefpat (eval None env e)
@@ -7397,7 +7397,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
     with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
     let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk name targs frac args -> false | _ -> true) h in
-    if h <> [] then assert_false h env l msg None;
+    if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l
   in
   
@@ -8867,7 +8867,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
             verify_expr true h env None wrhs $. fun h vrhs ->
             get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
-              if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." None;
+              if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
               cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)
           )
         else

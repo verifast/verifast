@@ -1,0 +1,22 @@
+<html>
+<head>
+<title>VeriFast Help: Symbolic store</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Glossary</p>
+<p class="section">Term</p>
+<p>Symbolic store</p>
+<p class="section">Definition</p>
+<p>A function mapping local variables to their symbolic values. The symbolic value of a variable is a first-order term.</p>
+<p>Shown in the <tt>Locals</tt> pane in the top right corner of the VeriFast window.</p>
+<p class="section">Notes</p>
+<ul>
+<li>To show the symbolic store at a given symbolic execution step, select the step in the <tt>Steps</tt> pane.</li>
+<li>An entry "x=t" in the symbolic store indicates that the local variable x has symbolic value t.</li>
+<li>The initial value of a variable or function parameter "x" is the first-order variable "x".
+<li>The local variable "currentThread" is a ghost variable that represents the id of the current thread.</li>
+<li>The <a href="pathcondition.html">path condition</a>, the symbolic store, and the <a href="symbolicheap.html">symbolic heap</a> together constitute the symbolic state of the symbolic execution.</li>
+</ul>
+</body>
+</html>

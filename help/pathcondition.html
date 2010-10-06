@@ -1,0 +1,23 @@
+<html>
+<head>
+<title>VeriFast Help: Path Condition</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Glossary</p>
+<p class="section">Term</p>
+<p>Path condition</p>
+<p class="section">Definition</p>
+<p>A list of first-order formulas describing assumptions which hold on the path currently being verified.</p>
+<p>Shown in the <tt>Assumptions</tt> pane in the bottom center of the VeriFast window.</p>
+<p class="section">Notes</p>
+<ul>
+<li>To show the path condition at a given symbolic execution step, select the step in the <tt>Steps</tt> pane.</li>
+<li>Producing a pure assertion adds a formula to the path condition.</li>
+<li>Consuming a pure assertion causes VeriFast to check that the assertion follows from the path condition.</li>
+<li>When verifying conditional statements, expressions and assertions, VeriFast adds the condition to the path condition when verifying the then branch and its negation when verifying the else branch.
+<li>VeriFast stops investigating a path when the path condition becomes inconsistent.</li>
+<li>The path condition, the <a href="symbolicstore.html">symbolic store</a>, and the <a href="symbolicheap.html">symbolic heap</a> together constitute the symbolic state of the symbolic execution.</li>
+</ul>
+</body>
+</html>

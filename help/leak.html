@@ -1,0 +1,26 @@
+<html>
+<head>
+<title>VeriFast error: Function/Loop Leaks Heap Chunks</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Function/Loop leaks heap chunks</p>
+<p class="section">Context</p>
+<p>After consuming the postcondition of a function or the invariant of a loop.</p>
+<p class="section">Cause</p>
+<p>The <a href="symbolicheap.html">symbolic heap</a> is not empty at the end of a function or loop.</p>
+<p class="section">Notes</p>
+<ul>
+<li>Heap chunks with a dummy fraction are ignored by the leak check.</li>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Ensure that the symbolic heap is empty. Suggested approaches:</p>
+<ul>
+<li>Add additional conjuncts to the postcondition or loop invariant such that the remaining chunks are consumed.</li>
+<li>If the remaining chunk is predicate assertion which represents an empty heap, open the predicate.</li>
+<li>Leak the remaining chunk using the leak command.</li>
+</ul>
+</body>
+<html>

@@ -1,0 +1,25 @@
+<html>
+<head>
+<title>VeriFast error: Fraction Mismatch</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Fraction mismatch: cannot prove <i>f</i> == <i>g</i> or 0 < <i>f</i> < <i>g</i></p>
+<p class="section">Context</p>
+<p>When consuming a field assertion or predicate assertion.</p>
+<p class="section">Cause</p>
+<p>The <a href="symbolicheap.html">symbolic heap</a> contains a matching chunk, but the fraction required by the assertion is larger than the fraction found in the matching heap chunk.</p>
+<p class="section">Notes</p>
+<ul>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Lower the fraction required by the assertion or increase the fraction of the chunk in the symbolic heap. Suggested approaches:</p>
+<ul>
+<li>Lower the fraction required by the assertion, i.e. replace the assertion's current fraction by a smaller expression, an existential variable or a dummy fraction.</li>
+<li>If the code preceding the assertion leaks the heap chunk, remove the leak command.</li>
+<li>Use one of the solutions of <a href="nomatchingheapchunks.html">No matching heap chunks</a>.</li>
+</ul>
+</body>
+<html>
