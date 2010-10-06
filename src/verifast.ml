@@ -144,6 +144,9 @@ let chop_suffix s s0 =
   let n = String.length s in
   if n0 <= n && String.sub s (n - n0) n0 = s0 then Some (String.sub s 0 (n - n0)) else None
 
+let chop_suffix_opt s s0 =
+  match chop_suffix s s0 with None -> s | Some s -> s
+
 (** Same as [try_assoc x (xys1 @ xys2)] *)
 let try_assoc2 x xys1 xys2 =
   match try_assoc x xys1 with
@@ -2371,6 +2374,7 @@ let read_file_lines path =
     let rec read_lines () =
       try
         let line = input_line channel in
+        let line = chop_suffix_opt line "\r" in
         let lines = read_lines () in
         line::lines
       with

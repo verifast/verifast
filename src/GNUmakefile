@@ -162,6 +162,7 @@ endif
 	cp assume.vfmanifest crt.vfmanifest list.vfmanifest raw_ghost_lists.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h ghost_cells.h raw_ghost_lists.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
+	cp -R ../help verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
 	cp -R ../tutorial_solutions verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/tutorial
