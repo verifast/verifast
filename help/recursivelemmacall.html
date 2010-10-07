@@ -1,0 +1,30 @@
+<html>
+<head>
+<title>VeriFast error: Recursive lemma call does not decrease measure</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter.</p>
+<p class="section">Context</p>
+<p>When a lemma recursively calls itself.</p>
+<p class="section">Cause</p>
+<p>VeriFast cannot find a suitable measure which proves that the lemma terminates.</p>
+<p class="section">Notes</p>
+<ul>
+  <li>To ensure soundness, VeriFast checks that lemma functions terminate. To enforce termination, VeriFast checks that one of the following conditions hold when a lemma recursively calls itself:
+  <ul>
+  <li>After consuming the precondition of the recursive call, the symbolic heap contains a full field chunk.</li>
+  <li>The body of the lemma is a switch statement over one of its inductive arguments, and the size of the inductive argument decreases in the recursive call.</li>
+  <li>The first conjunct of the precondition is a predicate assertion, the lemma's body begins with an open statement opening this predicate assertion, and the first chunk consumed by the precondition of the recursive call is one of the conjuncts produced by opening the first conjunct.</li>
+  </ul>
+  </li>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Suggested approaches:</p>
+<ul>
+<li>Rewrite the body of the lemma such that one of the conditions described above holds.</li>
+</ul>
+</body>
+<html>

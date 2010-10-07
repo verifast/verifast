@@ -1,0 +1,69 @@
+<html>
+<head>
+<title>VeriFast error: Side-effecting expression is not supported in this position</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order</i></p>
+<p class="section">Context</p>
+<p>When symbolically evaluating a side-effecting subexpression.</p>
+<p class="section">Cause</p>
+<p>The C standard does not specify an evaluation order for certain expressions. Therefore, relying on a particular evaluation order might be incorrect for certain C compilers.</p>
+<p class="section">Notes</p>
+<ul>
+  <li>Annex J of the <a href="http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1256.pdf">C99 Standard</a> contains a list unspecified behaviors related to the evaluation order including:</li>
+  <ul>
+  <li>The order in which subexpressions are evaluated and the order in which side effects take place, except as specified for the function-call (), &&, ||, ?:, and comma operators.</li>
+  <li>The order in which the function designator, arguments, and subexpressions within the arguments are evaluated in a function call.</li>
+  <li>The order of side effects among compound literal initialization list expressions.</li>
+  <li>The order in which the operands of an assignment operator are evaluated.</li>
+  </ul>
+  </li>
+  <li>Relying on a specific evaluation order is a portability issue because the program must potentially be changed when switching from one compiler to another.</li>
+</ul>
+<p class="section">Suggested solutions</p>
+<ul>
+<li>Store the side-effecting expression in a local variable and use the local variable instead of the expression itself.</li>
+</ul>
+<p class="section">Example</p>
+<p>Verifying the following program generates a <tt>This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order</tt> error.</p>
+<table class="codebox_red"><tr><td class="codebox_error">This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order</td></tr>
+<tr><td class="codebox_code"><pre>
+int inc(int* x)
+  //@ requires integer(x, ?v);
+  //@ ensures integer(x, v + 1) &*& result == v + 1;
+{
+  (*x)++;
+  return *x;
+}
+
+void problem(int* x) 
+  //@ requires integer(x, 0);
+  //@ ensures integer(x, 2);
+{
+  int y = <span class="error_range">inc(x)</span> - inc(x);
+  //@ assert(y == -1);
+}</pre></td></tr></table>
+<p>The evaluation order for the operands of subtraction is unspecified by the C standard. Therefore, the value of y in the code above is unspecified. If the first operand is evaluated before the second, the assert statement succeeds. However, if the second argument is evaluated before the first, the assert statement fails. Resolve this problem by storing the operands in local variables.</p>
+<table class="codebox_green"><tr><td>0 errors found</td></tr>
+<tr><td class="codebox_code"><pre>int inc(int* x)
+  //@ requires integer(x, ?v);
+  //@ ensures integer(x, v + 1) &*& result == v + 1;
+{
+  (*x)++;
+  return *x;
+}
+
+void problem(int* x) 
+  //@ requires integer(x, 0);
+  //@ ensures integer(x, 2);
+{
+  int tmp1 = inc(x);
+  int tmp2 = inc(x);
+  int y = tmp1 - tmp2;
+  //@ assert(y == -1);
+}</pre></td></tr></table>
+</body>
+<html>

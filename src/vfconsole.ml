@@ -11,7 +11,8 @@ let _ =
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
-    | StaticError (l, msg) -> print_msg l msg; exit 1
+    | CompilationError(msg) -> print_endline (msg); exit 1
+    | StaticError (l, msg, url) -> print_msg l msg; exit 1
     | SymbolicExecutionError (ctxts, phi, l, msg, url) ->
         (*
         let _ = print_endline "Trace:" in
@@ -198,4 +199,5 @@ let _ =
       print_endline "Program linked successfully."
     with
       LinkError msg -> print_endline msg; exit 1
+    | CompilationError msg -> print_endline ("error: " ^ msg); exit 1
   end

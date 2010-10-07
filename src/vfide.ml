@@ -154,12 +154,12 @@ let show_ide initialPath prover =
   let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
   let show_help url =
     if Sys.os_type = "Unix" then
-	  if sys "uname" = "Darwin" then
-	    ignore (Sys.command ("open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-	  else
-	    ignore (Sys.command ("xdg-open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
-	else
-	  ignore (Sys.command ("start \"\" " ^ "\"" ^ bindir ^ "\\..\\help\\" ^ url ^ ".html" ^ "\""))
+     if sys "uname" = "Darwin" then
+        ignore (Sys.command ("open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+      else
+        ignore (Sys.command ("xdg-open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
+    else
+      ignore (Sys.command ("start \"\" " ^ "\"" ^ bindir ^ "\\..\\help\\" ^ url ^ ".html" ^ "\""))
   in
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
@@ -369,10 +369,10 @@ let show_ide initialPath prover =
       messageEntry#set_text msg;
       messageEntry#coerce#misc#modify_base [`NORMAL, `NAME backColor];
       messageEntry#coerce#misc#modify_text [`NORMAL, `NAME textColor]);
-	(match !url with
-	  None -> helpButton#coerce#misc#hide();
-	| Some(_) -> helpButton#coerce#misc#show();
-	)
+    (match !url with
+      None -> helpButton#coerce#misc#hide();
+    | Some(_) -> helpButton#coerce#misc#show();
+    )
   in
   let load ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) newPath =
     try
@@ -674,7 +674,7 @@ let show_ide initialPath prover =
     if !msg <> None then
     begin
       msg := None;
-	  url := None;
+      url := None;
       clearStepItems();
       updateMessageEntry();
       clearStepInfo();
@@ -727,11 +727,7 @@ let show_ide initialPath prover =
   let handleStaticError l emsg eurl =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
-	begin
-	match eurl with
-	  None -> url := None
-	| Some(eurl) -> url := Some(eurl)
-	end;
+    url := eurl;
     updateMessageEntry();
     let (start, stop) = l in
     let (path, line, col) = stop in
@@ -817,10 +813,10 @@ let show_ide initialPath prover =
     clearTrace();
     List.iter (fun tab ->
       let buffer = tab_buffer tab in
-	    match !(tab_path tab) with
+      match !(tab_path tab) with
         None -> ()
       | Some(_) -> (save tab); (* prevents offset errors if files are modified outside of vfide *)
-	    buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
+      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
     ) !buffers;
     match get_current_tab() with
       None -> ()
@@ -855,8 +851,12 @@ let show_ide initialPath prover =
             with
               ParseException (l, emsg) ->
               handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
-            | StaticError (l, emsg) ->
-              handleStaticError l emsg None 
+            | CompilationError(emsg) ->
+              clearTrace();
+              msg := Some(emsg);
+              updateMessageEntry()
+            | StaticError (l, emsg, eurl) ->
+              handleStaticError l emsg eurl 
             | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
@@ -867,11 +867,7 @@ let show_ide initialPath prover =
                 Executing (_, _, steploc, _)::_ when l = steploc ->
                 apply_tag_by_loc "error" l;
                 msg := Some emsg;
-				begin
-				match eurl with
-				  None -> url := None
-				| Some(eurl) -> url := Some(eurl)
-				end;
+                url := eurl;
                 updateMessageEntry()
               | _ ->
                 handleStaticError l emsg eurl

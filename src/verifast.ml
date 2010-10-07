@@ -1329,6 +1329,12 @@ let java_keywords = [
   "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"
 ]
 
+exception StaticError of loc * string * string option
+
+let static_error l msg url = raise (StaticError (l, msg, url))
+
+exception CompilationError of string
+
 let file_type path=
   begin
   if Filename.check_suffix (Filename.basename path) ".c" then CLang
@@ -1338,7 +1344,7 @@ let file_type path=
   else if Filename.check_suffix (Filename.basename path) ".javaspec" then Java
   else if Filename.check_suffix (Filename.basename path) ".scala" then Java
   else if Filename.check_suffix (Filename.basename path) ".h" then CLang
-  else failwith ("unknown extension")
+  else raise (CompilationError ("unknown extension: " ^ (Filename.basename path)))
   end
 let opt p = parser [< v = p >] -> Some v | [< >] -> None
 let rec comma_rep p = parser [< '(_, Kwd ","); v = p; vs = comma_rep p >] -> v::vs | [< >] -> []
@@ -2496,10 +2502,6 @@ let lookup env x = List.assoc x env
 let update env x t = (x, t)::env
 let string_of_env env = String.concat "; " (List.map (function (x, t) -> x ^ " = " ^ t) env)
 
-exception StaticError of loc * string
-
-let static_error l msg = raise (StaticError (l, msg))
-
 let is_lemma k = match k with Lemma(_) -> true | _ -> false
 
 let printff format = kfprintf (fun _ -> flush stdout) stdout format
@@ -2845,7 +2847,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     if allow_should_fail then
       shouldFailLocs := l::!shouldFailLocs
     else
-      static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them."
+      static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
   in
   
   let check_should_fail default body =
@@ -2856,7 +2858,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     try
       body ()
     with
-    | StaticError (l, msg) when should_fail l -> has_failed l
+    | StaticError (l, msg, url) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, phi, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
   in
 
@@ -2907,7 +2909,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match xys with
           [] -> xys0
         | ((x, y) as elem)::xys ->
-          if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'");
+          if List.mem_assoc x xys0 then static_error l ("Duplicate " ^ elementKind ^ " '" ^ string_of_key x ^ "'") None;
           elem::iter xys
       in
       iter xys
@@ -2946,7 +2948,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           merge_header_maps include_prelude maps0 headers_included headers
         else
         begin
-          if Filename.basename header_path <> header_path then static_error l "Include path should not include directory.";
+          if Filename.basename header_path <> header_path then static_error l "Include path should not include directory." None;
           let localpath = Filename.concat basedir header_path in
           let (basedir, relpath, path) =
             if Sys.file_exists localpath then
@@ -2956,7 +2958,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               if Sys.file_exists systempath then
                 (bindir, header_path, systempath)
               else
-                static_error l "No such file."
+                static_error l "No such file." None
           in
           if List.mem path headers_included then
             merge_header_maps include_prelude maps0 headers_included headers
@@ -2987,7 +2989,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               if Sys.file_exists systempath then
                 (bindir, header_path, systempath)
               else
-                static_error l ("No such file: "^systempath)
+                static_error l ("No such file: "^systempath) None
           in
           if List.mem path headers_included then
             merge_header_maps include_prelude maps0 headers_included headers
@@ -3053,12 +3055,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Struct (l, sn, fds_opt)::ds ->
         begin
           match try_assoc sn structmap0 with
-            Some (_, Some _, _) -> static_error l "Duplicate struct name."
+            Some (_, Some _, _) -> static_error l "Duplicate struct name." None
           | Some (_, None, _) | None -> ()
         end;
         begin
           match try_assoc sn sdm with
-            Some (_, Some _) -> static_error l "Duplicate struct name."
+            Some (_, Some _) -> static_error l "Duplicate struct name." None
           | Some (_, None) | None -> iter ((sn, (l, fds_opt))::sdm) ds
         end
       | _::ds -> iter sdm ds
@@ -3075,7 +3077,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | EnumDecl(l, en, elems) :: ds ->
         begin 
           match try_assoc en edm with
-        | Some((l', elems')) -> static_error l "Duplicate enum name."
+        | Some((l', elems')) -> static_error l "Duplicate enum name." None
         | None -> iter ((en, (l, elems)) :: edm) ds
         end
       | _ :: ds -> iter edm ds
@@ -3099,7 +3101,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [] -> idm
       | (Inductive (l, i, tparams, ctors))::ds -> let n=full_name pn i in
         if n = "bool" || n = "boolean" || n = "int" || List.mem_assoc n idm || List.mem_assoc n inductivemap0 then
-          static_error l "Duplicate datatype name."
+          static_error l "Duplicate datatype name." None
         else
           iter pn ((n, (l, tparams, ctors))::idm) ds
       | _::ds -> iter pn idm ds
@@ -3186,7 +3188,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | [xy] -> Some xy
           | _ ->
             let fqns = List.map (fun (x, y) -> "'" ^ x ^ "'") matches in
-            static_error l ("Ambiguous imports for name '" ^ name ^ "': " ^ String.concat ", " fqns ^ ".")
+            static_error l ("Ambiguous imports for name '" ^ name ^ "': " ^ String.concat ", " fqns ^ ".") None
   in
   
   let search2' x (pn,imports) xys1 xys2 =
@@ -3203,19 +3205,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [] -> (ifdm, classlist)
       | (Interface (l, i, meth_specs, pred_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
-          static_error l ("There exists already an interface with this name: "^i)
+          static_error l ("There exists already an interface with this name: "^i) None
         else
         if List.mem_assoc i classlist then
-          static_error l ("There exists already a class with this name: "^i)
+          static_error l ("There exists already a class with this name: "^i) None
         else
          iter (pn,il) ((i, (l,meth_specs,pred_specs,pn,il))::ifdm) classlist ds
       | (Class (l, fin, i, meths,fields,constr,super,interfs,preds))::ds -> 
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
-          static_error l ("There exists already an interface with this name: "^i)
+          static_error l ("There exists already an interface with this name: "^i) None
         else
         if List.mem_assoc i classlist then
-          static_error l ("There exists already a class with this name: "^i)
+          static_error l ("There exists already a class with this name: "^i) None
         else
           let interfs =
             let rec check_interfs ls=
@@ -3223,14 +3225,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   [] -> []
                 | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
                             Some i -> i::check_interfs ls
-                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn)
+                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn) None
             in
             check_interfs interfs
           in
           let super =
             if i = "java.lang.Object" then "" else
             match search2' super (pn,il) classlist classmap0 with
-              None-> static_error l ("Superclass wasn't found: "^super)
+              None-> static_error l ("Superclass wasn't found: "^super) None
             | Some super -> super
           in
           iter (pn,il) ifdm ((i, (l,fin,meths,fields,constr,super,interfs,preds,pn,il))::classlist) ds
@@ -3252,7 +3254,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              [] -> (sn, (l,fin,meths,Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
            | Field (lf, _, t, f, binding, vis, final, init)::fds ->
              if List.mem_assoc f fmap then
-               static_error lf "Duplicate field name."
+               static_error lf "Duplicate field name." None
              else (
                let rec check_type te =
                  match te with
@@ -3267,8 +3269,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      Some s -> ObjType s
                    | None -> match search2' sn (pn,ilist) interfmap1 interfmap0 with
                        Some s -> ObjType s
-                     | None -> static_error lt ("No such class or interface: "^sn)
-                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class."
+                     | None -> static_error lt ("No such class or interface: "^sn) None
+                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
                in
                iter ((f, (lf, check_type t, vis, binding, final, init, ref None))::fmap) fds
              )
@@ -3302,7 +3304,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
       match search' id (pn,ilist) inductive_arities with
         Some s -> let n=List.assoc s inductive_arities in
-        if n > 0 then static_error l "Missing type arguments.";
+        if n > 0 then static_error l "Missing type arguments." None;
         InductiveType (s, [])
       | None ->
         match (search2' id (pn,ilist) classmap1 classmap0) with
@@ -3313,19 +3315,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     if List.mem_assoc id functypenames || List.mem_assoc id functypemap0 then
                       FuncType id
                     else
-                      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id)
+                      static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
       match try_assoc' (pn,ilist) id inductive_arities with
         Some n ->
-        if n <> List.length targs then static_error l "Incorrect number of type arguments.";
+        if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
         InductiveType (id, List.map (check_type_arg (pn,ilist) tpenv) targs)
-      | None -> static_error l "No such inductive datatype."
+      | None -> static_error l "No such inductive datatype." None
       end
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
-        static_error l "No such struct."
+        static_error l "No such struct." None
       else
         StructType sn
     | PtrTypeExpr (l, te) -> PtrType (check_pure_type (pn,ilist) tpenv te)
@@ -3336,7 +3338,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match ts with
           [t1; t2] -> PureFuncType (t1, t2)
         | t1::ts -> PureFuncType (t1, iter ts)
-        | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type"
+        | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type" None
       in
       iter ts
   and check_type_arg (pn,ilist) tpenv te =
@@ -3391,7 +3393,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
            | Field (lf, gh, t, f, Instance, Public, final, init)::fds ->
              if List.mem_assoc f fmap then
-               static_error lf "Duplicate field name."
+               static_error lf "Duplicate field name." None
              else
                iter ((f, (lf, gh, check_pure_type ("", []) [] t))::fmap) fds (has_ghost_fields || gh = Ghost)
          in
@@ -3411,12 +3413,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Global(l, te, x, None) :: ds-> (* typecheck the rhs *)
         begin
           match try_assoc x globalmap0 with
-            Some(_) -> static_error l "Duplicate global variable name."
+            Some(_) -> static_error l "Duplicate global variable name." None
           | None -> ()
         end;
         begin
           match try_assoc x gdm with
-            Some (_) -> static_error l "Duplicate global variable name."
+            Some (_) -> static_error l "Duplicate global variable name." None
           | None -> 
             let tp = check_pure_type ("",[]) [] te in
             let global_symb = get_unique_var_symb x tp in
@@ -3510,19 +3512,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match zip ts ts0 with
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs -> ()
-        | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+        | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
     | (InductiveType _, AnyType) -> ()
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".")
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   in
   
   let expect_type l t t0 = expect_type_core l "" t t0 in
   
   let is_assignable_to t t0 =
-    try expect_type dummy_loc t t0; true with StaticError (l, msg) -> false (* TODO: Consider eliminating this hack *)
+    try expect_type dummy_loc t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
   in
   
   let is_assignable_to_sign sign sign0 = for_all2 is_assignable_to sign sign0 in
@@ -3546,8 +3548,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match tparams with
         [] -> ()
       | x::xs ->
-        if List.mem x tparams0 then static_error l (Printf.sprintf "Type parameter '%s' hides existing type parameter '%s'." x x);
-        if List.mem x xs then static_error l (Printf.sprintf "Duplicate type parameter '%s'." x);
+        if List.mem x tparams0 then static_error l (Printf.sprintf "Type parameter '%s' hides existing type parameter '%s'." x x) None;
+        if List.mem x xs then static_error l (Printf.sprintf "Duplicate type parameter '%s'." x) None;
         iter xs
     in
     iter tparams
@@ -3565,7 +3567,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | Ctor (lc, cn, tes)::ctors ->
             let full_cn = full_name pn cn in
             if List.mem_assoc full_cn pfm || List.mem_assoc full_cn purefuncmap0 then
-              static_error lc ("Duplicate pure function name: " ^ full_cn)
+              static_error lc ("Duplicate pure function name: " ^ full_cn) None
             else (
               let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
               let csym =
@@ -3578,22 +3580,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         citer 0 [] pfm ctors
       | Func (l, Fixpoint, tparams, rto, g, ps, atomic, functype, contract, body_opt,Static,Public)::ds ->
         let g = full_name pn g in
-        if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g);
+        if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
         let rt =
           match rto with
-            None -> static_error l "Return type of fixpoint functions cannot be void."
+            None -> static_error l "Return type of fixpoint functions cannot be void." None
           | Some rt -> (check_pure_type (pn,ilist) tparams rt)
         in
-        if atomic then static_error l "A fixpoint function cannot be atomic.";
-        if functype <> None then static_error l "Fixpoint functions cannot implement a function type.";
-        if contract <> None then static_error l "Fixpoint functions cannot have a contract.";
+        if atomic then static_error l "A fixpoint function cannot be atomic." None;
+        if functype <> None then static_error l "Fixpoint functions cannot implement a function type." None;
+        if contract <> None then static_error l "Fixpoint functions cannot have a contract." None;
         let pmap =
           let rec iter pmap ps =
             match ps with
               [] -> List.rev pmap
             | (te, p)::ps ->
-              let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." in
+              let _ = if List.mem_assoc p pmap then static_error l "Duplicate parameter name." None in
               let t = check_pure_type (pn,ilist) tparams te in
               iter ((p, t)::pmap) ps
           in
@@ -3605,17 +3607,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match e with
               Var (lx, x, _) ->
               begin match try_assoc_i x pmap with
-                None -> static_error lx "Fixpoint function must switch on a parameter."
+                None -> static_error lx "Fixpoint function must switch on a parameter." None
               | Some (index, _) -> index
               end
-            | _ -> static_error l "Fixpoint function must switch on a parameter."
+            | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) (Proverapi.Fixpoint index) in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, index, body, pn, ilist))::fpm) ds
         | None ->
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) fpm ds
-        | _ -> static_error l "Body of fixpoint function must be switch statement."
+        | _ -> static_error l "Body of fixpoint function must be switch statement." None
         end
       | _::ds -> iter (pn,ilist) imap pfm fpm ds
     in
@@ -3661,7 +3663,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rec check_type negative pt =
             match pt with
               Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
-            | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition."
+            | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
               List.iter (fun t -> check_type negative t) tps;
               begin match try_assoc i0 welldefined_map with
@@ -3671,7 +3673,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let `EqClass (ecrank0, ecmems0) = !ec0 in
                 let negative_rank = if negative then rank else negative_rank in
                 if ecrank0 > 0 then begin
-                  if ecrank0 <= negative_rank then static_error l "This inductive datatype is not well-defined; it occurs recursively in a negative position.";
+                  if ecrank0 <= negative_rank then static_error l "This inductive datatype is not well-defined; it occurs recursively in a negative position." None;
                   let rec merge_preds pred_ptrs =
                     match pred_ptrs with
                       [] -> ()
@@ -3717,7 +3719,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         status := 1;
         let rec find_ctor ctors =
           match ctors with
-            [] -> static_error l "Inductive datatype is not inhabited."
+            [] -> static_error l "Inductive datatype is not inhabited." None
           | (_, (_, (_, _, _, pts, _)))::ctors ->
             let rec type_is_inhabited tp =
               match tp with
@@ -3827,13 +3829,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [] -> List.rev functypedeclmap1
       | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post))::ds ->
         let (pn,ilist) = ("",[]) in
-        if gh = Real && tparams <> [] then static_error l "Declaring type parameters on non-lemma function types is not supported.";
-        let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." in
+        if gh = Real && tparams <> [] then static_error l "Declaring type parameters on non-lemma function types is not supported." None;
+        let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." None in
         let rec check_tparams_distinct tparams =
           match tparams with
             [] -> ()
           | x::xs ->
-            if List.mem x xs then static_error l "Duplicate type parameter";
+            if List.mem x xs then static_error l "Duplicate type parameter" None;
             check_tparams_distinct xs
         in
         check_tparams_distinct tparams;
@@ -3844,7 +3846,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match xs with
               [] -> List.rev xm
             | (te, x)::xs ->
-              if List.mem_assoc x xm then static_error l "Duplicate function type parameter name.";
+              if List.mem_assoc x xm then static_error l "Duplicate function type parameter name." None;
               let t = check_pure_type (pn,ilist) tparams te in
               iter ((x, t)::xm) xs
           in
@@ -3855,7 +3857,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match xs with
               [] -> List.rev xm
             | (te, x)::xs ->
-              if List.mem_assoc x xm || List.mem_assoc x ftxmap then static_error l "Duplicate parameter name.";
+              if List.mem_assoc x xm || List.mem_assoc x ftxmap then static_error l "Duplicate parameter name." None;
               let t = check_pure_type (pn,ilist) tparams te in
               iter ((x, t)::xm) xs
           in
@@ -3950,12 +3952,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Some (l0, tparams0, arity0, ts0, symb0, inputParamCount0) ->
             let tpenv =
               match zip tparams0 (List.map (fun x -> TypeParam x) tparams) with
-                None -> static_error l "Predicate family redeclarations declares a different number of type parameters."
+                None -> static_error l "Predicate family redeclarations declares a different number of type parameters." None
               | Some bs -> bs
             in
             let ts0' = List.map (instantiate_type tpenv) ts0 in
             if arity <> arity0 || ts <> ts0' || inputParamCount <> inputParamCount0 then
-              static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.");
+              static_error l ("Predicate family redeclaration does not match original declaration at '" ^ string_of_loc l0 ^ "'.") None;
             iter (pn,ilist) pm ds
           | None ->
             iter (pn,ilist) (mk_predfam p l tparams arity ts inputParamCount::pm) ds
@@ -3976,16 +3978,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match ds with
         [] -> (bm, pfm)
       | BoxClassDecl (l, bcn, ps, inv, ads, hpds)::ds -> let bcn= full_name pn bcn in
-        if List.mem_assoc bcn pfm || List.mem_assoc bcn purefuncmap0 then static_error l "Box class name clashes with existing predicate name.";
+        if List.mem_assoc bcn pfm || List.mem_assoc bcn purefuncmap0 then static_error l "Box class name clashes with existing predicate name." None;
         let default_hpn = bcn ^ "_handle" in
-        if List.mem_assoc default_hpn pfm then static_error l ("Default handle predicate name '" ^ default_hpn ^ "' clashes with existing predicate name.");
+        if List.mem_assoc default_hpn pfm then static_error l ("Default handle predicate name '" ^ default_hpn ^ "' clashes with existing predicate name.") None;
         let boxpmap =
           let rec iter pmap ps =
             match ps with
               [] -> List.rev pmap
             | (te, x)::ps ->
-              if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
-              if startswith x "old_" then static_error l "Box parameter name cannot start with old_.";
+              if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
+              if startswith x "old_" then static_error l "Box parameter name cannot start with old_." None;
               iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
           in
           iter [] ps
@@ -3998,15 +4000,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match ads with
               [] -> List.rev amap
             | ActionDecl (l, an, ps, pre, post)::ads ->
-              if List.mem_assoc an amap then static_error l "Duplicate action name.";
+              if List.mem_assoc an amap then static_error l "Duplicate action name." None;
               let pmap =
                 let rec iter pmap ps =
                   match ps with
                     [] -> List.rev pmap
                   | (te, x)::ps ->
-                    if List.mem_assoc x boxpmap then static_error l "Action parameter clashes with box parameter.";
-                    if List.mem_assoc x pmap then static_error l "Duplicate action parameter name.";
-                    if startswith x "old_" then static_error l "Action parameter name cannot start with old_.";
+                    if List.mem_assoc x boxpmap then static_error l "Action parameter clashes with box parameter." None;
+                    if List.mem_assoc x pmap then static_error l "Duplicate action parameter name." None;
+                    if startswith x "old_" then static_error l "Action parameter name cannot start with old_." None;
                     iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
                 in
                 iter [] ps
@@ -4020,16 +4022,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match hpds with
               [] -> (pfm, List.rev hpm)
             | HandlePredDecl (l, hpn, ps, inv, pbcs)::hpds ->
-              if List.mem_assoc hpn hpm then static_error l "Duplicate handle predicate name.";
-              if List.mem_assoc hpn pfm then static_error l "Handle predicate name clashes with existing predicate name.";
+              if List.mem_assoc hpn hpm then static_error l "Duplicate handle predicate name." None;
+              if List.mem_assoc hpn pfm then static_error l "Handle predicate name clashes with existing predicate name." None;
               let pmap =
                 let rec iter pmap ps =
                   match ps with
                     [] -> List.rev pmap
                   | (te, x)::ps ->
-                    if List.mem_assoc x boxpmap then static_error l "Handle predicate parameter clashes with box parameter.";
-                    if List.mem_assoc x pmap then static_error l "Duplicate handle predicate parameter name.";
-                    if startswith x "old_" then static_error l "Handle predicate parameter name cannot start with old_.";
+                    if List.mem_assoc x boxpmap then static_error l "Handle predicate parameter clashes with box parameter." None;
+                    if List.mem_assoc x pmap then static_error l "Duplicate handle predicate parameter name." None;
+                    if startswith x "old_" then static_error l "Handle predicate parameter name cannot start with old_." None;
                     iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
                 in
                 iter [] ps
@@ -4058,13 +4060,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match preds with
             [] -> (tn, (li, methods, List.rev predmap, pn, ilist))
           | InstancePredDecl (l, g, ps, body)::preds ->
-            if List.mem_assoc g predmap then static_error l "Duplicate predicate name.";
+            if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
               let rec iter pmap ps =
                 match ps with
                   [] -> List.rev pmap
                 | (tp, x)::ps ->
-                  if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
+                  if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
                   let tp = check_pure_type (pn,ilist) [] tp in
                   iter ((x, tp)::pmap) ps
               in
@@ -4086,13 +4088,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match preds with
             [] -> cont predmap
           | InstancePredDecl (l, g, ps, body)::preds ->
-            if List.mem_assoc g predmap then static_error l "Duplicate predicate name.";
+            if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
               let rec iter pmap ps =
                 match ps with
                   [] -> List.rev pmap
                 | (tp, x)::ps ->
-                  if List.mem_assoc x pmap then static_error l "Duplicate parameter name.";
+                  if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
                   let tp = check_pure_type (pn,ilist) [] tp in
                   iter ((x, tp)::pmap) ps
               in
@@ -4130,9 +4132,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [])))
               | [(family, pmap0, symb)] ->
                 if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
-                  static_error l "Predicate override check: parameter count mismatch";
+                  static_error l "Predicate override check: parameter count mismatch" None;
                 (family, symb)
-              | _ -> static_error l "Ambiguous override: multiple overridden predicates"
+              | _ -> static_error l "Ambiguous override: multiple overridden predicates" None
             in
             iter ((g, (l, pmap, family, symb, body))::predmap) preds
         in
@@ -4147,12 +4149,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         PredCtorDecl (l, p, ps1, ps2, body)::ds -> let p=full_name pn p in
         begin
           match try_assoc2' (pn,ilist) p pfm purefuncmap0 with
-            Some _ -> static_error l "Predicate constructor name clashes with existing pure function name."
+            Some _ -> static_error l "Predicate constructor name clashes with existing pure function name." None
           | None -> ()
         end;
         begin
           match try_assoc' (pn,ilist) p predfammap with
-            Some _ -> static_error l "Predicate constructor name clashes with existing predicate or predicate familiy name."
+            Some _ -> static_error l "Predicate constructor name clashes with existing predicate or predicate familiy name." None
           | None -> ()
         end;
         let ps1 =
@@ -4162,7 +4164,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (te, x)::ps ->
               begin
                 match try_assoc x pmap with
-                  Some _ -> static_error l "Duplicate parameter name."
+                  Some _ -> static_error l "Duplicate parameter name." None
                 | _ -> ()
               end;
               let t = check_pure_type (pn,ilist) [] te in
@@ -4177,7 +4179,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (te, x)::ps ->
               begin
                 match try_assoc x psmap with
-                  Some _ -> static_error l "Duplicate parameter name."
+                  Some _ -> static_error l "Duplicate parameter name." None
                 | _ -> ()
               end;
               let t = check_pure_type (pn,ilist) [] te in
@@ -4210,7 +4212,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let check_classname (pn, ilist) (l, c) =
     match search2' c (pn, ilist) classmap1 classmap0 with 
-      None -> static_error l "No such class name."
+      None -> static_error l "No such class name." None
     | Some s -> s
   in
   
@@ -4219,7 +4221,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let check_funcnamelist is =
-    List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name."; i) is 
+    List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name." None; i) is 
   in
   
   let lookup_class_field cn fn =
@@ -4298,10 +4300,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
         (w1, w2, (Char | ShortType | IntType | RealType | PtrType _)) as result -> result
-      | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected."
+      | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected." None
     in
     let check_pure_fun_value_call l w t es =
-      if es = [] then static_error l "Zero-argument application of pure function value makes no sense.";
+      if es = [] then static_error l "Zero-argument application of pure function value makes no sense." None;
       let box e t = convert_provertype_expr e (provertype_of_type t) ProverInductive in
       let unbox e t = convert_provertype_expr e ProverInductive (provertype_of_type t) in
       let (ws, tp) =
@@ -4309,7 +4311,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match (es, t) with
             ([], t) -> (List.rev ws, t)
           | (e::es, PureFuncType (t1, t2)) -> apply (box (checkt e t1) t1::ws) t2 es
-          | (e::es, _) -> static_error l "Too many arguments"
+          | (e::es, _) -> static_error l "Too many arguments" None
         in
         apply [] t es
       in
@@ -4340,13 +4342,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | _ ->
       if List.mem x funcnames then
         match file_type path with
-          Java -> static_error l "In java methods can't be used as pointers"
+          Java -> static_error l "In java methods can't be used as pointers" None
         | _ -> scope := Some FuncName; (e, PtrType Void)
       else
       match resolve (pn,ilist) l x predfammap with
       | Some (x, (_, tparams, arity, ts, _, _)) ->
-        if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
-        if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
+        if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
+        if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
         scope := Some PredFamName;
         (Var (l, x, scope), PredType (tparams, ts))
       | None ->
@@ -4420,18 +4422,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t)
       | None ->
       if language = Java then
-        static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate"
+        static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate" None
       else
-        static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x)
+        static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x) None
       end
     | PredNameExpr (l, g) ->
       begin
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, tparams, arity, ts, _, _)) ->
-          if arity <> 0 then static_error l "Using a predicate family as a value is not supported.";
-          if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported.";
+          if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
+          if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
           (PredNameExpr (l, g), PredType (tparams, ts))
-        | None -> static_error l "No such predicate."
+        | None -> static_error l "No such predicate." None
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote_numeric e1 e2 ts in
@@ -4450,7 +4452,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         ((Char|ShortType|IntType|UintPtrType), (Char|ShortType|IntType|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
         (Operation (l, BitAnd, [w1; w2], ts), t)
-      | _ -> static_error l "Arguments to bitwise operators must be integral types."
+      | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
       let (w1, t1) = check e1 in
@@ -4458,7 +4460,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match t1 with
         (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in (Operation (l, operator, [w1; w2], ts), IntType)
       | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType)
-      | _ -> static_error l "Arguments to bitwise operators must be integral types."
+      | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, Mod, [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
@@ -4470,7 +4472,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match t with
         Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType)
       | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType)
-      | _ -> static_error l "argument to ~ must be char, short, int or uintptr"
+      | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
     | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote l e1 e2 ts in
@@ -4483,8 +4485,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           PtrType pt1 ->
           begin match t2 with
             PtrType pt2 when operator = Sub ->
-            if pt1 <> pt2 then static_error l "Pointers must be of same type";
-            if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported";
+            if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
+            if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             ts:=Some [t1; t2];
             (Operation (l, operator, [w1; w2], ts), IntType)
           | _ ->
@@ -4499,11 +4501,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
           (Operation (l, operator, [w1; w2], ts), t1)
-        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2))
+        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
     | Operation (l, Mul, [e1; e2], ts) ->
       let (w1, w2, t) = promote l e1 e2 ts in
-      begin match t with PtrType _ -> static_error l "Cannot multiply pointers." | _ -> () end;
+      begin match t with PtrType _ -> static_error l "Cannot multiply pointers." None | _ -> () end;
       (Operation (l, Mul, [w1; w2], ts), t)
     | Operation (l, Div, [e1; e2], ts) ->
       let w1 = checkt e1 RealType in
@@ -4531,7 +4533,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match t with
           PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0)
-        | _ -> static_error l "Operand must be pointer."
+        | _ -> static_error l "Operand must be pointer." None
       end
     | AddressOf (l, e) ->
       let (w, t) = check e in
@@ -4543,10 +4545,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (w, t) = check e in
       begin match t with
         PureFuncType (_, _) -> check_pure_fun_value_call l w t es
-      | _ -> static_error l "The callee of a call of this form must be a pure function value."
+      | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end
     | CallExpr (l, g, targes, [], pats, fb) ->
-      let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position") pats in
+      let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position" None) pats in
       let process_targes callee_tparams =
         if callee_tparams <> [] && targes = [] then
           let targs = List.map (fun _ -> InferredType (ref None)) callee_tparams in
@@ -4556,7 +4558,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let targs = List.map (check_pure_type (pn,ilist) tparams) targes in
           let tpenv =
             match zip callee_tparams targs with
-              None -> static_error l "Incorrect number of type arguments."
+              None -> static_error l "Incorrect number of type arguments." None
             | Some bs -> bs
           in
           (targs, tpenv)
@@ -4568,12 +4570,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
           (WFunPtrCall (l, g, es), rt)
         | Some ((PureFuncType (t1, t2) as t) as tp) ->
-          if targes <> [] then static_error l "Pure function value does not have type parameters.";
+          if targes <> [] then static_error l "Pure function value does not have type parameters." None;
           check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
-          if not (List.mem_assoc tn structmap) then static_error lt "No such struct";
+          if not (List.mem_assoc tn structmap) then static_error lt "No such struct" None;
           (WFunCall (l, g, [], es), PtrType (StructType tn))
         | _ ->
         match resolve (pn,ilist) l g funcmap with
@@ -4588,14 +4590,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (targs, tpenv) = process_targes callee_tparams in
           let pts =
             match zip es ts with
-              None -> static_error l "Incorrect argument count."
+              None -> static_error l "Incorrect argument count." None
             | Some pts -> pts
           in
           let args = List.map (fun (e, t0) -> let t = instantiate_type tpenv t0 in box (checkt e t) t t0) pts in
           let t = instantiate_type tpenv t0 in
           (unbox (WPureFunCall (l, g, targs, args)) t0 t, t)
         | None ->
-          static_error l (match language with CLang -> "No such function" | Java -> "No such method or function")
+          static_error l (match language with CLang -> "No such function" | Java -> "No such method or function") None
       in
       if language = CLang || classmap = [] then func_call () else
       let try_qualified_call tn es args fb on_fail =
@@ -4604,13 +4606,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let argtps = List.map (fun e -> snd (check e)) args in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
         begin match ms with
-          [] -> static_error l "No matching method"
+          [] -> static_error l "No matching method" None
         | [(sign, (tn', lm, rt, xmap, pre, post, fb', v))] ->
           let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
-          if fb <> fb' then static_error l "Instance method requires target object";
+          if fb <> fb' then static_error l "Instance method requires target object" None;
           let rt = match rt with None -> Void | Some rt -> rt in
           (WMethodCall (l, tn', g, sign, es, fb), rt)
-        | _ -> static_error l "Multiple matching overloads"
+        | _ -> static_error l "Multiple matching overloads" None
         end
       in
       begin match fb with
@@ -4634,22 +4636,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match arg0tp with
             ObjType tn -> (tn, es, Instance)
           | ClassOrInterfaceName tn -> (tn, List.tl es, Static)
-          | _ -> static_error l "Target of method call must be object or class"
+          | _ -> static_error l "Target of method call must be object or class" None
         in
-        try_qualified_call tn es args fb (fun () -> static_error l "No such method")
+        try_qualified_call tn es args fb (fun () -> static_error l "No such method" None)
       end
     | NewObject (l, cn, args) ->
       begin match resolve (pn,ilist) l cn classmap with
         Some (cn, _) ->
         (NewObject (l, cn, args), ObjType cn)
-      | None -> static_error l "No such class"
+      | None -> static_error l "No such class" None
       end
     | ReadArray(l, arr, index) ->
       let (w1, arr_t) = check arr in
       let w2 = checkt index intt in
       begin match arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp)
-      | _ -> static_error l "target of array access is not an array"
+      | _ -> static_error l "target of array access is not an array" None
       end
     | NewArray (l, te, len) ->
       let t = check_pure_type (pn,ilist) tparams te in
@@ -4678,10 +4680,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let (t0, wcdef_opt) =
                   match cdef_opt with
                     None ->
-                    if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors));
+                    if ctors <> [] then static_error l ("Missing cases: " ^ String.concat ", " (List.map (fun (ctor, _) -> ctor) ctors)) None;
                     (t0, None)
                   | Some (lcdef, edef) ->
-                    if ctors = [] then static_error lcdef "Superfluous default clause";
+                    if ctors = [] then static_error lcdef "Superfluous default clause" None;
                     let (wdef, tdef) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv edef in
                     let t0 =
                       match t0 with
@@ -4692,25 +4694,25 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 in
                 begin
                   match t0 with
-                    None -> static_error l "Switch expressions with zero clauses are not yet supported."
+                    None -> static_error l "Switch expressions with zero clauses are not yet supported." None
                   | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, wcdef_opt, tref), t0)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
                   match try_assoc cn ctormap with
                     None ->
-                    static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.")
+                    static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.") None
                   | Some (_, (_, _, _, ts, _)) ->
-                    if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause.";
+                    if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause." None;
                     let xenv =
                       let rec iter2 ts xs xenv =
                         match (ts, xs) with
                           ([], []) -> List.rev xenv
-                        | (t::ts, []) -> static_error lc "Too few pattern variables."
-                        | ([], _) -> static_error lc "Too many pattern variables."
+                        | (t::ts, []) -> static_error lc "Too few pattern variables." None
+                        | ([], _) -> static_error lc "Too many pattern variables." None
                         | (t::ts, x::xs) ->
-                          if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
-                          if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable.";
+                          if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
+                          if List.mem_assoc x xenv then static_error lc "Duplicate pattern variable." None;
                           iter2 ts xs ((x, instantiate_type tpenv t)::xenv)
                       in
                       iter2 ts xs []
@@ -4727,12 +4729,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             iter None [] ctormap cs
           end
-        | _ -> static_error l "Switch expression operand must be inductive value."
+        | _ -> static_error l "Switch expression operand must be inductive value." None
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType)
-    | e -> static_error (expr_loc e) "Expression form not allowed here."
+    | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 isCast =
@@ -4748,7 +4750,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let n = if 128 <= n then n - 256 else n in
           IntLit (l, big_int_of_int n, t)
         else
-          static_error l "Integer literal used as char must be between -128 and 127."
+          static_error l "Integer literal used as char must be between -128 and 127." None
       else
         e
     | (IntLit (l, n, t), ShortType) ->
@@ -4759,7 +4761,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let n = if 32768 <= n then n - 65536 else n in
           IntLit (l, big_int_of_int n, t)
         else
-          static_error l "Integer literal used as short must be between -32768 and 32767."
+          static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
     | _ ->
@@ -4783,29 +4785,29 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (_, Some fds, _) ->
         begin
           match try_assoc' (pn,ilist) f fds with
-            None -> static_error l ("No such field in struct '" ^ sn ^ "'.")
+            None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
           | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t)
         end
-      | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.")
+      | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
       end
     | ObjType cn ->
       begin
       match lookup_class_field cn f with
-        None -> static_error l ("No such field in class '" ^ cn ^ "'.")
+        None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
       | Some (_, t, vis, binding, final, init, value) ->
-        if binding = Static then static_error l "Accessing a static field via an instance is not supported.";
+        if binding = Static then static_error l "Accessing a static field via an instance is not supported." None;
         (WRead (l, w, cn, f, t, false, ref (Some None), Real), t)
       end
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), IntType)
     | ClassOrInterfaceName cn ->
       begin match lookup_class_field cn f with
-        None -> static_error l "No such field"
+        None -> static_error l "No such field" None
       | Some (_, t, vis, binding, final, init, value) ->
-        if binding = Instance then static_error l "You cannot access an instance field without specifying a target object.";
+        if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
         (WRead (l, w, cn, f, t, true, value, Real), t)
       end
-    | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct."
+    | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
   in
   
@@ -4823,7 +4825,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let (i, targs) =
           match List.assoc x pmap with
             InductiveType (i, targs) -> (i, targs)
-          | _ -> static_error l "Switch operand is not an inductive value."
+          | _ -> static_error l "Switch operand is not an inductive value." None
         in
         let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
         let (Some tpenv) = zip inductive_tparams targs in
@@ -4833,21 +4835,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin match ctormap with
               [] -> ()
             | (cn, _)::_ ->
-              static_error ls ("Missing case: '" ^ cn ^ "'.")
+              static_error ls ("Missing case: '" ^ cn ^ "'.") None
             end;
             wcs
           | SwitchStmtClause (lc, e, body)::cs ->
             let (cn, xs) =
               match e with
                 CallExpr (_, cn, _, _, pats, _) ->
-                let xs = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error lc "Constructor arguments must be variable names") pats in
+                let xs = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error lc "Constructor arguments must be variable names" None) pats in
                 (cn, xs)
               | Var (_, cn, _) -> (cn, [])
-              | _ -> static_error lc "Case expression must be constructor pattern"
+              | _ -> static_error lc "Case expression must be constructor pattern" None
             in
             let ts =
               match try_assoc cn ctormap with
-                None -> static_error lc "No such constructor."
+                None -> static_error lc "No such constructor." None
               | Some (_, (_, _, _, ts, _)) -> ts
             in
             let xmap =
@@ -4855,11 +4857,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match (ts, xs) with
                   ([], []) -> xmap
                 | (t::ts, x::xs) ->
-                  if List.mem_assoc x pmap then static_error lc "Pattern variable hides parameter.";
-                  let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
+                  if List.mem_assoc x pmap then static_error lc "Pattern variable hides parameter." None;
+                  let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." None in
                   iter ((x, instantiate_type tpenv t)::xmap) ts xs
-                | ([], _) -> static_error lc "Too many pattern variables."
-                | _ -> static_error lc "Too few pattern variables."
+                | ([], _) -> static_error lc "Too many pattern variables." None
+                | _ -> static_error lc "Too few pattern variables." None
               in
               iter [] ts xs
             in
@@ -4867,7 +4869,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let (lret, body) =
               match body with
                 [ReturnStmt (lret, Some e)] -> (lret, e)
-              | _ -> static_error lc "Body of switch clause must be a return statement with a result expression."
+              | _ -> static_error lc "Body of switch clause must be a return statement with a result expression." None
             in
             let wbody = check_expr_t (pn,ilist) tparams tenv body rt in
             let rec iter0 components e =
@@ -4875,16 +4877,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let iter1 e = iter () e in
                 match e with
                   WPureFunCall (l, g', targs, args) ->
-                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text";
+                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
                   if g' = g then begin
                     match List.nth args index with
                       Var (l, x, _) when List.mem x components -> ()
-                    | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable."
+                    | _ -> static_error l "Inductive argument of recursive call must be switch clause pattern variable." None
                   end;
                   List.iter iter1 args
                 | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
-                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text";
-                  if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported."
+                  if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
+                  if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
                 | SwitchExpr (l, Var (_, x, _), cs, def_opt, _) when List.mem x components ->
                   List.iter (fun (SwitchExprClause (_, _, pats, e)) -> iter0 (pats @ components) e) cs;
                   (match def_opt with None -> () | Some (l, e) -> iter1 e)
@@ -5028,7 +5030,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     match p with
       LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
     | VarPat x ->
-      if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
+      if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
       (p, [(x, t)])
     | DummyPat -> (p, [])
   in
@@ -5040,7 +5042,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match tenv1 with
         [] -> tenv3
       | ((x, t) as xt)::tenv1 ->
-        if List.mem_assoc x tenv2 then static_error l (Printf.sprintf "Variable name clash: '%s'" x);
+        if List.mem_assoc x tenv2 then static_error l (Printf.sprintf "Variable name clash: '%s'" x) None;
         iter tenv1 (xt::tenv3)
     in
     iter tenv1 tenv2
@@ -5053,8 +5055,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (wpat, tenv) = check_pat (pn,ilist) l tparams tenv t p in
       let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv ts ps in
       (wpat::wpats, tenv)
-    | ([], _) -> static_error l "Too many patterns"
-    | (_, []) -> static_error l "Too few patterns"
+    | ([], _) -> static_error l "Too many patterns" None
+    | (_, []) -> static_error l "Too few patterns" None
   in
     
   let get_class_of_this =
@@ -5079,7 +5081,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
-      | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference or an array element expression."
+      | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference or an array element expression." None
       end;
       let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
       (WAccess (l, wlhs, t, wv), tenv', [])
@@ -5101,13 +5103,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 Some (l, ps1, ps2, body, funcsym, pn, ilist) ->
                 cont (new predref (p#name), [], List.map snd ps1, List.map snd ps2, None)
               | None ->
-                let error () = static_error l ("No such predicate: " ^ p#name) in
+                let error () = static_error l ("No such predicate: " ^ p#name) None in
                 begin match try_assoc "this" tenv with
                   None -> error ()
                 | Some (ObjType cn) ->
                   let check_call family pmap =
-                    if targs <> [] then static_error l "Incorrect number of type arguments.";
-                    if ps0 <> [] then static_error l "Incorrect number of indices.";
+                    if targs <> [] then static_error l "Incorrect number of type arguments." None;
+                    if ps0 <> [] then static_error l "Incorrect number of indices." None;
                     let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
                     let index =
                       if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
@@ -5144,11 +5146,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   match find_in_class cn @ find_in_interf cn with
                     [] -> error ()
                   | [(family, pmap)] -> check_call family pmap
-                  | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name)
+                  | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name) None
                 end
               end
             | Some (PredType (callee_tparams, ts)) -> cont (new predref (p#name), callee_tparams, [], ts, None)
-            | Some _ -> static_error l ("Variable is not of predicate type: " ^ p#name)
+            | Some _ -> static_error l ("Variable is not of predicate type: " ^ p#name) None
           end
       end $. fun (p, callee_tparams, ts0, xs, inputParamCount) ->
       begin
@@ -5160,10 +5162,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              List.map (fun (x, r) -> r) tpenv)
           else
             match zip callee_tparams targs with
-              None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams))
+              None -> static_error l (Printf.sprintf "Predicate requires %d type arguments." (List.length callee_tparams)) None
             | Some bs -> (targs, bs, [])
         in
-        if List.length ps0 <> List.length ts0 then static_error l "Incorrect number of indexes.";
+        if List.length ps0 <> List.length ts0 then static_error l "Incorrect number of indexes." None;
         let (wps0, tenv) = check_pats (pn,ilist) l tparams tenv ts0 ps0 in
         let xs' = List.map (instantiate_type tpenv) xs in
         let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
@@ -5179,7 +5181,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let index = WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance) in
           (WInstCallPred (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
-        let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) in
+        let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
         begin match try_assoc cn classmap1 with
           Some (_, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
           begin match try_assoc g preds with
@@ -5212,7 +5214,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             end
           end
         end
-      | _ -> static_error l "Target of instance predicate assertion must be of class type"
+      | _ -> static_error l "Target of instance predicate assertion must be of class type" None
       end
     | ExprPred (l, e) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprPred (l, w), tenv, [])
@@ -5232,7 +5234,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | InductiveType (i, targs) ->
         begin
         match try_assoc' (pn,ilist) i inductivemap with
-          None -> static_error l "Switch operand is not an inductive value."
+          None -> static_error l "Switch operand is not an inductive value." None
         | Some (_, inductive_tparams, ctormap, _) ->
           let (Some tpenv) = zip inductive_tparams targs in
           let rec iter wcs ctormap cs infTps =
@@ -5242,24 +5244,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match ctormap with
                   [] -> ()
                 | (cn, _)::_ ->
-                  static_error l ("Missing case: '" ^ cn ^ "'.")
+                  static_error l ("Missing case: '" ^ cn ^ "'.") None
               in (SwitchPred (l, w, wcs), tenv, infTps)
             | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
               match try_assoc cn ctormap with
-                None -> static_error lc "No such constructor."
+                None -> static_error lc "No such constructor." None
               | Some (_, (_, _, _, ts, _)) ->
                 let (xmap, xsInfo) =
                   let rec iter xmap xsInfo ts xs =
                     match (ts, xs) with
                       ([], []) -> (xmap, List.rev xsInfo)
                     | (t::ts, x::xs) ->
-                      if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
-                      let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." in
+                      if List.mem_assoc x tenv then static_error lc ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
+                      let _ = if List.mem_assoc x xmap then static_error lc "Duplicate pattern variable." None in
                       let xInfo = match unfold_inferred_type t with TypeParam x -> Some (provertype_of_type (List.assoc x tpenv)) | _ -> None in
                       iter ((x, instantiate_type tpenv t)::xmap) (xInfo::xsInfo) ts xs
-                    | ([], _) -> static_error lc "Too many pattern variables."
-                    | _ -> static_error lc "Too few pattern variables."
+                    | ([], _) -> static_error lc "Too many pattern variables." None
+                    | _ -> static_error lc "Too few pattern variables." None
                   in
                   iter [] [] ts xs
                 in
@@ -5272,7 +5274,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           in
           iter [] ctormap cs []
         end
-      | _ -> static_error l "Switch operand is not an inductive value."
+      | _ -> static_error l "Switch operand is not an inductive value." None
       end
     | EmpPred l -> (p, tenv, [])
     | CoefPred (l, coef, body) ->
@@ -5350,7 +5352,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let nonfixed = List.filter (fun x -> not (List.mem x fixed)) used in
     if nonfixed <> [] then
       let xs = String.concat ", " (List.map (fun x -> "'" ^ x ^ "'") nonfixed) in
-      static_error (expr_loc e) ("Preciseness check failure: non-fixed variable(s) " ^ xs ^ " used in input expression.")
+      static_error (expr_loc e) ("Preciseness check failure: non-fixed variable(s) " ^ xs ^ " used in input expression.") None
   in
   
   let fixed_pat_fixed_vars pat =
@@ -5366,7 +5368,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let assert_pats_fixed l fixed pats =
-    List.iter (function (LitPat e) -> assert_expr_fixed fixed e | _ -> static_error l "Non-fixed pattern used in input position.") pats
+    List.iter (function (LitPat e) -> assert_expr_fixed fixed e | _ -> static_error l "Non-fixed pattern used in input position." None) pats
   in
   
   let assume_pats_fixed fixed pats =
@@ -5389,7 +5391,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WCallPred (l, g, targs, pats0, pats) ->
       begin
         match g#inputParamCount with
-          None -> static_error l "Preciseness check failure: callee is not precise."
+          None -> static_error l "Preciseness check failure: callee is not precise." None
         | Some n ->
           let (inpats, outpats) = take_drop n pats in
           let inpats = pats0 @ inpats in
@@ -5429,7 +5431,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match coefpat with
           LitPat e -> assert_expr_fixed fixed e
-        | VarPat x -> static_error l "Precision check failure: variable patterns not supported as coefficients."
+        | VarPat x -> static_error l "Precision check failure: variable patterns not supported as coefficients." None
         | DummyPat -> ()
       end;
       check_pred_precise fixed p
@@ -5478,19 +5480,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
     let (p, predfam_tparams, arity, ps, inputParamCount) =
       match resolve (pn,ilist) l p predfammap with
-        None -> static_error l ("No such predicate family: "^p)
+        None -> static_error l ("No such predicate family: "^p) None
       | Some (p, (_, predfam_tparams, arity, ps, _, inputParamCount)) -> (p, predfam_tparams, arity, ps, inputParamCount)
     in
     check_tparams l tparams predinst_tparams;
     let tpenv =
       match zip predfam_tparams (List.map (fun x -> TypeParam x) predinst_tparams) with
-        None -> static_error l "Number of type parameters does not match predicate family."
+        None -> static_error l "Number of type parameters does not match predicate family." None
       | Some bs -> bs
     in
-    if List.length fns <> arity then static_error l "Incorrect number of indexes.";
+    if List.length fns <> arity then static_error l "Incorrect number of indexes." None;
     let pxs =
       match zip ps xs with
-        None -> static_error l "Incorrect number of parameters."
+        None -> static_error l "Incorrect number of parameters." None
       | Some pxs -> pxs
     in
     let tparams' = predinst_tparams @ tparams in
@@ -5501,8 +5503,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | (t0, (te, x))::xs -> 
           let t = check_pure_type (pn,ilist) tparams' te in
           expect_type l t (instantiate_type tpenv t0);
-          if List.mem_assoc x tenv then static_error l ("Parameter '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.");
-          if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+          if List.mem_assoc x tenv then static_error l ("Parameter '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
+          if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
           iter2 ((x, t)::xm) xs
       in
       iter2 [] pxs
@@ -5518,7 +5520,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         List.iter
           (fun x ->
            if not (List.mem x fixed) then
-             static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'."))
+             static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'.") None)
           outps
     end;
     ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))
@@ -5533,7 +5535,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | _ -> check_funcnamelist is 
         in
         let (pfns, info) as entry = check_predinst (pn, ilist) [] [] [] l p tparams fns xs body in
-        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." in
+        let _ = if List.mem_assoc pfns pm || List.mem_assoc pfns predinstmap0 then static_error l "Duplicate predicate family instance." None in
         iter (pn,ilist) (entry::pm) ds
       | _::ds -> iter (pn,ilist) pm ds
       | [] -> List.rev pm
@@ -5570,7 +5572,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let fixed = check_pred_precise ["this"] wbody in
               List.iter
                 begin fun (x, t) ->
-                  if not (List.mem x fixed) then static_error l ("Preciseness check failure: predicate body does not fix parameter '" ^ x ^ "'.")
+                  if not (List.mem x fixed) then static_error l ("Preciseness check failure: predicate body does not fix parameter '" ^ x ^ "'.") None
                 end
                 pmap;
               (g, (l, pmap, family, symb, Some wbody))
@@ -5585,7 +5587,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let check_ghost ghostenv l e =
     expr_iter
       begin function
-        Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context."
+        Var (l, x, _) -> if List.mem x ghostenv then static_error l "Cannot read a ghost variable in a non-pure context." None
       | _ -> ()
       end
       e
@@ -5610,7 +5612,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IntType -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
-    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.")
+    | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   in
   
   let field_offsets =
@@ -5634,7 +5636,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let field_offset l fparent fname =
     match try_assoc (fparent, fname) field_offsets with
       Some term -> term
-    | None -> static_error l "Cannot take the address of a ghost field"
+    | None -> static_error l "Cannot take the address of a ghost field" None
   in
   let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname) in
   
@@ -5786,7 +5788,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | GlobalName ->
           begin
             match read_field with
-              None -> static_error l "Cannot mention global variables in this context."
+              None -> static_error l "Cannot mention global variables in this context." None
             | Some (read_field, read_static_field, deref_pointer, read_array) ->
               let Some((_, tp, symbol)) = try_assoc x globalmap in 
               deref_pointer l symbol tp
@@ -5799,7 +5801,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin
         match (e, t, truncating) with
           (IntLit (_, n, _), PtrType _, _) ->
-          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range.";
+          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
         | (e, Char, false) ->
           ev state e $. fun state t ->
@@ -5835,7 +5837,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | ShortType -> (min_short, max_short)
             | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
           in
-          if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range."
+          if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range." None
         end;
         cont state
           begin
@@ -5856,7 +5858,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->
       begin match try_assoc g purefuncmap with
-        None -> static_error l ("No such pure function: "^g)
+        None -> static_error l ("No such pure function: "^g) None
       | Some (lg, tparams, t, pts, s) ->
         evs state args $. fun state vs ->
         cont state (mk_app s vs)
@@ -5875,13 +5877,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       begin match !ts with
         Some [IntType] -> ev state e $. fun state v -> cont state (ctxt#mk_app bitwise_not_symbol [v])
       | _ ->
-        static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)."
+        static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
       end
     | Operation (l, Div, [e1; e2], ts) ->
       let rec eval_reallit e =
         match e with
           IntLit (l, n, t) -> num_of_big_int n
-        | _ -> static_error (expr_loc e) "The denominator of a division must be a literal."
+        | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
       in
       ev state e1 $. fun state v1 ->
       cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2))))
@@ -5910,7 +5912,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
           | Some [Char; Char] ->
             check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
-          | _ -> static_error l "Internal error in eval."
+          | _ -> static_error l "Internal error in eval." None
           end
         | Sub ->
           begin match !ts with
@@ -5954,7 +5956,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Mod -> modulo_symbol
             | ShiftLeft -> shiftleft_symbol
             | ShiftRight -> shiftright_symbol
-            | _ -> static_error l "This operator is not supported in this position"
+            | _ -> static_error l "This operator is not supported in this position" None
           in
           ctxt#mk_app symb [v1; v2]
         end
@@ -5972,33 +5974,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin match v with
               IntConst n -> ctxt#mk_intlit_of_string (string_of_big_int n)
             | BoolConst b -> if b then ctxt#mk_true else ctxt#mk_false
-            | StringConst s -> static_error l "String constants are not yet supported."
+            | StringConst s -> static_error l "String constants are not yet supported." None
             | NullConst -> ctxt#mk_intlit 0
             end
           | _ ->
             match read_field with
-              None -> static_error l "Cannot use field read expression in this context."
+              None -> static_error l "Cannot use field read expression in this context." None
             | Some (read_field, read_static_field, deref_pointer, read_array) -> read_static_field l fparent fname
           end
       else
         ev state e $. fun state v ->
         begin
           match read_field with
-            None -> static_error l "Cannot use field dereference in this context."
+            None -> static_error l "Cannot use field dereference in this context." None
           | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_field l v fparent fname)
         end
     | WReadArray(l, arr, tp, i) ->
       evs state [arr; i] $. fun state [arr; i] ->
       begin
         match read_field with
-          None -> static_error l "Cannot use array indexing in this context."
+          None -> static_error l "Cannot use array indexing in this context." None
         | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_array l arr i)
       end
     | Deref (l, e, t) ->
       ev state e $. fun state v ->
       begin
         match read_field with
-          None -> static_error l "Cannot use field dereference in this context."
+          None -> static_error l "Cannot use field dereference in this context." None
         | Some (read_field, read_static_field, deref_pointer, read_array) ->
           let (Some t) = !t in
           cont state (deref_pointer l v t)
@@ -6013,7 +6015,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
           let Some (l, tp, symbol) = try_assoc x globalmap in cont state symbol
-        | _ -> static_error l "Taking the address of this expression is not supported."
+        | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
       let g = mk_ident "switch_expression" in
@@ -6071,7 +6073,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
       cont state (sizeof l t)
-    | _ -> static_error (expr_loc e) "Construct not supported in this position."
+    | _ -> static_error (expr_loc e) "Construct not supported in this position." None
   in
   
   let rec eval_core ass_term read_field env e =
@@ -6161,7 +6163,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let real_div l t1 t2 =
-    if t2 == real_unit then t1 else static_error l "Real division not yet supported."
+    if t2 == real_unit then t1 else static_error l "Real division not yet supported." None
   in
   
   let definitely_equal t1 t2 =
@@ -6298,7 +6300,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Some term -> ((term, false), pats0, pats, g#domain, None)
           | None ->
             let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
-            let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
+            let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2, None)
           end
@@ -6545,7 +6547,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PtrType _ -> pointer_pred_symb ()
     | IntType -> int_pred_symb ()
     | Char -> char_pred_symb ()
-    | _ -> static_error l "Dereferencing pointers of this type is not yet supported."
+    | _ -> static_error l "Dereferencing pointers of this type is not yet supported." None
   in
   
   let deref_pointer h env l pointerTerm pointeeType =
@@ -6687,7 +6689,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             Some term -> ((term, false), pats0, pats, g#domain)
           | None ->
             let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
-            let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions.") pats0 in
+            let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2)
           end
@@ -7404,27 +7406,27 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0) =
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
-        static_error l (msg ^ "Not the same kind of function.");
+        static_error l (msg ^ "Not the same kind of function.") None;
     let tpenv =
       match zip tparams tparams0 with
-        None -> static_error l (msg ^ "Type parameter counts do not match.")
+        None -> static_error l (msg ^ "Type parameter counts do not match.") None
       | Some bs -> List.map (fun (x, x0) -> (x, TypeParam x0)) bs
     in
     begin
       match (rt, rt0) with
         (None, None) -> ()
       | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
-      | _ -> static_error l (msg ^ "Return types do not match.")
+      | _ -> static_error l (msg ^ "Return types do not match.") None
     end;
     begin
-      (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype."));
+      (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype.") None);
       List.iter 
         (fun ((x, t), (x0, t0)) ->
            expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
         )
         (zip2 xmap xmap0)
     end;
-    if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.");
+    if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.") None;
     push();
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
@@ -7456,7 +7458,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let functypes_implemented = ref [] in
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs atomic functype_opt contract_opt body =
-    if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported.";
+    if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported." None;
     check_tparams l tparams0 tparams;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
     let xmap =
@@ -7464,8 +7466,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match xs with
           [] -> List.rev xm
         | (te, x)::xs ->
-          if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
-          if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.");
+          if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
+          if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.") None;
           let t = check_pure_type (pn,ilist) tparams te in
           iter ((x, t)::xm) xs
       in
@@ -7474,38 +7476,38 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let tenv = [(current_thread_name, current_thread_type)] @ xmap @ tenv0 in
     let (pre, pre_tenv, post) =
       match contract_opt with
-        None -> static_error l "Non-fixpoint function must have contract."
+        None -> static_error l "Non-fixpoint function must have contract." None
       | Some (pre, post) ->
         let (wpre, pre_tenv) = check_pred (pn,ilist) tparams tenv pre in
         let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
         let (wpost, tenv) = check_pred (pn,ilist) tparams postmap post in
         (wpre, pre_tenv, wpost)
     in
-    if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported.";
+    if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported." None;
     let functype_opt =
       match functype_opt with
         None -> None
       | Some (ftn, fttargs, ftargs) ->
-        if body = None then static_error l "A function prototype cannot implement a function type.";
+        if body = None then static_error l "A function prototype cannot implement a function type." None;
         begin
           match try_assoc ftn functypemap with
-            None -> static_error l "No such function type."
+            None -> static_error l "No such function type." None
           | Some (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0) ->
             let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
             let fttpenv =
               match zip fttparams fttargs with
-                None -> static_error l "Incorrect number of function type type arguments"
+                None -> static_error l "Incorrect number of function type type arguments" None
               | Some bs -> bs
             in
             let ftargenv =
               match zip ftxmap0 ftargs with
-                None -> static_error l "Incorrect number of function type arguments"
+                None -> static_error l "Incorrect number of function type arguments" None
               | Some bs ->
                 List.map
                   begin fun ((x, tp), (larg, arg)) ->
                     let value =
                       match try_assoc arg modulemap with
-                        None -> static_error larg "No such module"
+                        None -> static_error larg "No such module" None
                       | Some term -> term
                     in
                     expect_type larg IntType (instantiate_type fttpenv tp);
@@ -7549,11 +7551,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             None -> iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
           | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, _, Some _,Static,Public) ->
             if body = None then
-              static_error l "Function prototype must precede function implementation."
+              static_error l "Function prototype must precede function implementation." None
             else
-              static_error l "Duplicate function implementation."
+              static_error l "Duplicate function implementation." None
           | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public) ->
-            if body = None then static_error l "Duplicate function prototype.";
+            if body = None then static_error l "Duplicate function prototype." None;
             check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0);
             iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
@@ -7581,18 +7583,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 match xs with
                  [] -> List.rev xm
                | (te, x)::xs ->
-                 if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                 if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
                  let t = check_pure_type (pn,ilist) [] te in
                  iter ((x, t)::xm) xs
               in
               iter [] ps
             in
             let sign = (n, List.map snd (List.tl xmap)) in
-            if List.mem_assoc sign mmap then static_error lm "Duplicate method";
+            if List.mem_assoc sign mmap then static_error lm "Duplicate method" None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
             let (pre, pre_tenv, post) =
               match co with
-                None -> static_error lm ("Non-fixpoint function must have contract: "^n)
+                None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
               | Some (pre, post) ->
                 let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
@@ -7706,7 +7708,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let rec iter xm xs =
                   match xs with
                    [] -> List.rev xm
-                 | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                 | (te, x)::xs -> if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
                      let t = check_pure_type (pn,ilist) [] te in
                      iter ((x, t)::xm) xs
                 in
@@ -7714,7 +7716,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             let xmap1 = match fb with Static -> xmap | Instance -> let _::xmap1 = xmap in xmap1 in
             let sign = (n, List.map snd xmap1) in
-            if List.mem_assoc sign mmap then static_error lm "Duplicate method.";
+            if List.mem_assoc sign mmap then static_error lm "Duplicate method." None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
             let co =
               match co with
@@ -7729,7 +7731,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
             List.iter
               begin fun (tn, (lsuper, rt', xmap', pre', pre_tenv', post', vis')) ->
-                if rt <> rt' then static_error lm "Return type does not match overridden method";
+                if rt <> rt' then static_error lm "Return type does not match overridden method" None;
                 match co with
                   None -> ()
                 | Some (pre, pre_tenv, post, pre_dyn, post_dyn) ->
@@ -7751,15 +7753,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | None ->
                 match super_specs with
                   (tn, (_, _, xmap', pre', pre_tenv', post', _))::_ ->
-                  if not (List.for_all2 (fun (x, t) (x', t') -> x = x') xmap xmap') then static_error lm (Printf.sprintf "Parameter names do not match overridden method in %s" tn);
+                  if not (List.for_all2 (fun (x, t) (x', t') -> x = x') xmap xmap') then static_error lm (Printf.sprintf "Parameter names do not match overridden method in %s" tn) None;
                   (pre', pre_tenv', post', pre', post')
-                | [] -> static_error lm "Method must have contract"
+                | [] -> static_error lm "Method must have contract" None
             in
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
             if n = "main" then begin
               match (pre, post) with
                 (ExprPred (_, True _), ExprPred (_, True _)) | (EmpPred _, EmpPred _) -> main_meth := (cn, l)::!main_meth
-              | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'"
+              | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'" None
             end;
             iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, super_specs <> []))::mmap) meths
         in
@@ -7780,17 +7782,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   match xs with
                    [] -> List.rev xm
                  | (te, x)::xs ->
-                   if List.mem_assoc x xm then static_error l "Duplicate parameter name.";
+                   if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
                    let t = check_pure_type (pn,ilist) [] te in
                    iter ((x, t)::xm) xs
                 in
                 iter [] ps
               in
               let sign = List.map snd xmap in
-              if List.mem_assoc sign cmap then static_error lm "Duplicate constructor";
+              if List.mem_assoc sign cmap then static_error lm "Duplicate constructor" None;
               let (pre, pre_tenv, post) =
                 match co with
-                  None -> static_error lm "Constructor must have contract"
+                  None -> static_error lm "Constructor must have contract" None
                 | Some (pre, post) ->
                   let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
@@ -7863,7 +7865,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match try_assoc cn map1 with
           None -> iter rest (elem::map1)
         | Some (l1,fin1,meths1,fds1,constr1,super1,interfs1,preds1,pn1,ilist1) ->
-          if fin1 <> fin0 then static_error l1 "Class finality does not match specification.";
+          if fin1 <> fin0 then static_error l1 "Class finality does not match specification." None;
           let match_fds fds0 fds1=
             let rec iter fds0 fds1=
             match fds0 with
@@ -7874,8 +7876,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               | Some(lf1,t1,vis1,binding1,final1,init1,value1) ->
                 let v1 = ! value0 in
                 let v2 = ! value1 in
-                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 (*|| v1 <> v2*) then static_error lf1 "Duplicate field";
-                if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer.";
+                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 (*|| v1 <> v2*) then static_error lf1 "Duplicate field" None;
+                if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer." None;
                 iter rest fds1
             in
             match fds0 with
@@ -7911,7 +7913,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             in
             iter constr0 constr1
           in
-          if super0<>super1 || interfs0<>interfs1 then static_error l1 "Duplicate class"
+          if super0<>super1 || interfs0<>interfs1 then static_error l1 "Duplicate class" None
           else 
           let meths'= match_meths meths0 meths1 in
           let fds'= match_fds fds0 fds1 in
@@ -7941,7 +7943,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         List.iter
           begin fun (cn, sign) ->
             if not (List.mem_assoc sign meths) then
-              static_error l (Printf.sprintf "This class must override method %s declared in class %s" (string_of_sign sign) cn)
+              static_error l (Printf.sprintf "This class must override method %s declared in class %s" (string_of_sign sign) cn) None
           end
           overrides
       end
@@ -7958,7 +7960,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
             check_spec_lemmas rest impl'
           else
-            static_error l "No implementation found for this lemma."
+            static_error l "No implementation found for this lemma." None
     in
     check_spec_lemmas !spec_lemmas prototypes_implemented
   else
@@ -7971,7 +7973,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match classes with
         [] -> (match meths_impl with
             []-> ()
-          | (n,lm0)::_ -> static_error lm0 ("Method not in specs: "^n)
+          | (n,lm0)::_ -> static_error lm0 ("Method not in specs: "^n) None
           )
       | Class(l,fin,cn,meths,fds,cons,super,inames,preds)::rest ->
           let check_meths meths meths_impl=
@@ -7983,7 +7985,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   let meths_impl'= remove (fun (x,l0) -> x=n && lm=l0) meths_impl in
                   iter rest meths_impl'
                 else
-                static_error lm "No implementation found for this method."
+                static_error lm "No implementation found for this method." None
             in
             iter meths meths_impl
           in
@@ -7996,7 +7998,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   let cons_impl'= remove (fun (x,l0) -> x=cn && lm=l0) cons_impl in
                   iter rest cons_impl'
                 else
-                static_error lm "No implementation found for this constructor."
+                static_error lm "No implementation found for this constructor." None
             in
             iter cons cons_impl
           in
@@ -8105,7 +8107,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Char _ -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
     | PtrType _ | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ObjType _ -> cont ()
-    | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp))
+    | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   in
   
   (* Region: verification of calls *)
@@ -8125,13 +8127,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in 
     let tpenv =
       match zip callee_tparams targs with
-        None -> static_error l "Incorrect number of type arguments."
+        None -> static_error l "Incorrect number of type arguments." None
       | Some tpenv -> tpenv
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
     let ws =
       match zip pats ps with
-        None -> static_error l "Incorrect number of arguments."
+        None -> static_error l "Incorrect number of arguments." None
       | Some bs ->
         List.map
           (function
@@ -8189,7 +8191,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                         )
                     )
                   else
-                    static_error l "A lemma can call only preceding lemmas or itself."
+                    static_error l "A lemma can call only preceding lemmas or itself." None
         in
         let r =
           match tr with
@@ -8219,7 +8221,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let l = expr_loc e in
-    let has_effects () = if language = CLang && readonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" in
+    let has_effects () = if language = CLang && readonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
     let eval0 = eval in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h h env e cont = verify_expr true h env None e cont in
@@ -8230,14 +8232,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     in 
     let ev e = eval env e in
     let check_assign l x =
-      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None
     in
     let vartp l x = 
       match try_assoc x tenv with
           None -> 
         begin
           match try_assoc' (pn, ilist) x globalmap with
-            None -> static_error l ("No such variable: "^x)
+            None -> static_error l ("No such variable: "^x) None
           | Some((l, tp, symbol)) -> (tp, Some(symbol))
         end 
       | Some tp -> (tp, None) 
@@ -8268,8 +8270,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
       let fds =
         match try_assoc tn structmap with
-          None -> static_error l "No such struct"
-        | Some (_, None, _) -> static_error l "Argument of sizeof cannot be struct type declared without a body."
+          None -> static_error l "No such struct" None
+        | Some (_, None, _) -> static_error l "Argument of sizeof cannot be struct type declared without a body." None
         | Some (_, Some fds, _) -> fds
       in
       let resultType = PtrType (StructType tn) in
@@ -8300,7 +8302,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       has_effects ();
       let fterm = List.assoc g env in
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
-      if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context.";
+      if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
         verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
       in
@@ -8327,20 +8329,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) retval
       end
     | NewObject (l, cn, args) ->
-      if pure then static_error l "Object creation is not allowed in a pure context";
+      if pure then static_error l "Object creation is not allowed in a pure context" None;
       let (_, _, _, _, consmap, _, _, _, _, _) = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
       let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
       begin match consmap' with
-        [] -> static_error l "No matching constructor"
+        [] -> static_error l "No matching constructor" None
       | [(sign, (lm, xmap, pre, pre_tenv, post, ss, v))] ->
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
         check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Static) $. fun h _ ->
         cont h obj
-      | _ -> static_error l "Multiple matching overloads"
+      | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, rt, xmap, pre, post, fb', v) =
@@ -8353,14 +8355,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (lm, rt, xmap, pre, pre_tenv, post, v) = List.assoc (m, pts) methods in
           (lm, rt, xmap, pre, post, Instance, v)
       in
-      if pure then static_error l "Method call is not allowed in a pure context";
+      if pure then static_error l "Method call is not allowed in a pure context" None;
       check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, v) cont
     | WFunCall (l, g, targs, es) ->
       let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
       if body = None then register_prototype_used lg g;
-      if pure && k = Regular then static_error l "Cannot call regular functions in a pure context.";
-      if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context.";
+      if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
+      if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, v) cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
@@ -8386,7 +8388,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont h value
         )
       | _ ->
-        if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead.";
+        if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
         let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
         let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
@@ -8484,14 +8486,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let cont= tcont sizemap tenv ghostenv
     in
     let check_assign l x =
-      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context."
+      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None
     in
     let vartp l x = 
       match try_assoc x tenv with
           None -> 
         begin
           match try_assoc' (pn, ilist) x globalmap with
-            None -> static_error l ("No such variable: "^x)
+            None -> static_error l ("No such variable: "^x) None
           | Some((l, tp, symbol)) -> (tp, Some(symbol))
         end 
       | Some tp -> (tp, None) 
@@ -8510,58 +8512,58 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
     in
     let verify_produce_function_pointer_chunk_stmt stmt_ghostness l fpe ftclause_opt scope_opt =
-      if not pure then static_error l "This construct is not allowed in a non-pure context.";
+      if not pure then static_error l "This construct is not allowed in a non-pure context." None;
       let (lfn, fn) =
         match fpe with
           Var (lfn, x, _) -> (lfn, x)
-        | _ -> static_error (expr_loc fpe) "Function name expected"
+        | _ -> static_error (expr_loc fpe) "Function name expected" None
       in
       match try_assoc fn funcmap with
-        None -> static_error l "No such function."
+        None -> static_error l "No such function." None
       | Some (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v) ->
-        if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function.";
-        if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected.";
-        if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported.";
+        if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
+        if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
+        if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
         if body' = None then register_prototype_used l fn;
         if stmt_ghostness = Ghost then begin
           match leminfo with
             None -> ()
           | Some (lems, g0, indinfo) ->
-            if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas.";
-            if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body."
+            if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas." None;
+            if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body." None
         end;
         let (ftn, fttargs, ftargs) =
           match ftclause_opt with
             None ->
             begin match functype_opt with
-              None -> static_error l "Function does not implement a function type."
+              None -> static_error l "Function does not implement a function type." None
             | Some (ftn, fttargs, ftargs) ->
-              if ftargs <> [] then static_error l "Function header must not specify function type arguments.";
+              if ftargs <> [] then static_error l "Function header must not specify function type arguments." None;
               (ftn, fttargs, [])
             end
           | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
             let (rt1, xmap1, pre1, post1) = (rt, ps, pre, post) in
             begin match try_assoc ftn functypemap with
-              None -> static_error l "No such function type"
+              None -> static_error l "No such function type" None
             | Some (lft, gh, fttparams, rt, ftxmap, xmap, pre, post) ->
               begin match stmt_ghostness with
-                Real -> if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types."
-              | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected."
+                Real -> if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types." None
+              | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
               end;
               begin match (rt, rt1) with
                 (None, _) -> ()
               | (Some t, Some t1) -> expect_type_core l "Function return type: " t1 t
-              | _ -> static_error l "Return type mismatch: Function does not return a value"
+              | _ -> static_error l "Return type mismatch: Function does not return a value" None
               end;
               let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
               let tpenv =
                 match zip fttparams fttargs with
-                  None -> static_error l "Incorrect number of function type type arguments."
+                  None -> static_error l "Incorrect number of function type type arguments." None
                 | Some bs -> bs
               in
               let xmap =
                 match zip xmap xmap1 with
-                  None -> static_error l "Function type parameter count does not match function parameter count"
+                  None -> static_error l "Function type parameter count does not match function parameter count" None
                 | Some bs ->
                   List.map
                     begin fun ((x, tp0), (x1, tp1)) ->
@@ -8573,7 +8575,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               let ftargenv =
                 match zip ftxmap args with
-                  None -> static_error l "Incorrect number of function pointer chunk arguments"
+                  None -> static_error l "Incorrect number of function pointer chunk arguments" None
                 | Some bs ->
                   List.map
                     begin fun ((x, tp), e) ->
@@ -8584,11 +8586,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               in
               let fparams =
                 match zip params xmap with
-                  None -> static_error l "Incorrect number of parameter names"
+                  None -> static_error l "Incorrect number of parameter names" None
                 | Some bs ->
                   List.map
                     begin fun ((lx, x), (x0, tp, tp0, x1, tp1)) ->
-                      if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable";
+                      if List.mem_assoc x tenv then static_error lx "Parameter name hides existing local variable" None;
                       let t = get_unique_var_symb x tp in
                       (x, x0, tp, t, prover_convert_term t tp tp0, x1, tp1)
                     end
@@ -8597,13 +8599,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let (ss_before, callLoc, resultvar, ss_after) =
                 let rec iter ss_before ss_after =
                   match ss_after with
-                    [] -> static_error l "'call();' statement expected"
+                    [] -> static_error l "'call();' statement expected" None
                   | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
                   | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static))])::ss_after ->
-                    if List.mem_assoc x tenv then static_error ld "Variable hides existing variable";
+                    if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
                     let t = check_pure_type (pn,ilist) tparams te in
                     begin match rt1 with
-                      None -> static_error ld "Function does not return a value"
+                      None -> static_error ld "Function does not return a value" None
                     | Some rt1 ->
                       expect_type ld rt1 t;
                       (List.rev ss_before, lc, Some (x, t), ss_after)
@@ -8705,10 +8707,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       if allowed then
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
       else
-        static_error l "Non-pure statements are not allowed here."
+        static_error l "Non-pure statements are not allowed here." None
     | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x, _) as e)], Static)) ->
-      if not pure then static_error l "This function may be called only from a pure context.";
-      if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable.";
+      if not pure then static_error l "This function may be called only from a pure context." None;
+      if List.mem x ghostenv then static_error l "The argument for this call must be a non-ghost variable." None;
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       assume_is_of_type l (ev w) tp (fun () -> cont h env)
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
@@ -8716,12 +8718,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) ->
       verify_produce_function_pointer_chunk_stmt Real l fpe (Some (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)) None
     | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." in
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." in
+      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot close a struct that does not declare a body." in
-      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." in
+      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot close a struct that does not declare a body." None in
+      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." None in
       eval_h h env e $. fun h pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
@@ -8741,12 +8743,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       iter h fds
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
-      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." in
+      let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." in
+      let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." in
-      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." in
+      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." None in
+      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." None in
       eval_h h env e $. fun h pointerTerm ->
       begin fun cont ->
         let rec iter h fds =
@@ -8768,15 +8770,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       assume (ctxt#mk_eq (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
       cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
-      let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here") args in
+      let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
           [(arg, PtrType (StructType tn))] ->
-          let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." in
+          let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." None in
           let fds =
             match List.assoc tn structmap with
               (ls, Some fmap, _) -> fmap
-            | _ -> static_error l "Freeing an object of a struct type declared without a body is not supported."
+            | _ -> static_error l "Freeing an object of a struct type declared without a body is not supported." None
           in
           let arg = ev arg in
           let rec iter h fds =
@@ -8794,7 +8796,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           verify_expr false h env None w (fun h _ -> cont h env)
       end
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
-      if args <> [] then static_error l "open_module requires no arguments.";
+      if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       assert_chunk rules (pn,ilist) h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
@@ -8806,7 +8808,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       cont (codeChunks @ globalChunks @ h) env
     | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) ->
-      if args <> [] then static_error l "close_module requires no arguments.";
+      if args <> [] then static_error l "close_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       begin fun cont ->
@@ -8833,7 +8835,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match xs with
           [] -> tcont sizemap tenv' ghostenv' h env'
         | (x, e)::xs ->
-          if List.mem_assoc x tenv' then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
+          if List.mem_assoc x tenv' then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           begin fun cont ->
             match e with
               None -> cont h (get_unique_var_symb_non_ghost x t)
@@ -8860,7 +8862,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         check_assign l x;
         update_local_or_global h env tpx x symb v cont
       | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
-        if pure && fghost = Real then static_error l "Cannot write in a pure context";
+        if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
         let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
         if not fstatic then
           eval_h h env w (fun h t ->
@@ -8876,7 +8878,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
           cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env
       | WReadArray (_, arr, elem_tp, i) ->
-        if pure then static_error l "Cannot write in a pure context.";
+        if pure then static_error l "Cannot write in a pure context." None;
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
         eval_h h env arr $. fun h arr ->
         eval_h h env i $. fun h i ->
@@ -8885,7 +8887,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
         cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
       | Deref (_, w, _) ->
-        if pure then static_error l "Cannot write in a pure context.";
+        if pure then static_error l "Cannot write in a pure context." None;
         let pointeeType = t in
         let wrhs = check_expr_t (pn,ilist) tparams tenv rhs pointeeType in
         eval_h h env w (fun h t ->
@@ -8921,31 +8923,31 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             begin
             match ctors with
               [] -> success()
-            | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors)
+            | _ -> static_error l ("Missing clauses: " ^ String.concat ", " ctors) None
             end
-          | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype"
+          | SwitchStmtDefaultClause (l, _) :: cs -> static_error l "default clause not allowed in switch over inductive datatype" None
           | SwitchStmtClause (lc, e, ss)::cs ->
             let (cn, pats) =
               match e with
                 CallExpr (lcall, cn, [], [], args, Static) ->
-                let pats = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error l "Constructor pattern arguments must be variable names") args in
+                let pats = List.map (function LitPat (Var (_, x, _)) -> x | _ -> static_error l "Constructor pattern arguments must be variable names" None) args in
                 (cn, pats)
               | Var (_, cn, _) -> (cn, [])
-              | _ -> static_error l "Case expression must be constructor pattern"
+              | _ -> static_error l "Case expression must be constructor pattern" None
             in
             let pts =
               match try_assoc' (pn,ilist) cn ctormap with
-                None -> static_error lc ("Not a constructor of type " ^ tn)
+                None -> static_error lc ("Not a constructor of type " ^ tn) None
               | Some (_, (l, _, _, pts, _)) -> pts
             in
-            let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." in
+            let _ = if not (List.mem cn ctors) then static_error lc "Constructor already handled in earlier clause." None in
             let (ptenv, xterms, xenv) =
               let rec iter ptenv xterms xenv pats pts =
                 match (pats, pts) with
                   ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
                 | (pat::pats, tp::pts) ->
-                  if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.");
-                  if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable.";
+                  if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.") None;
+                  if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable." None;
                   let tp' = instantiate_type tpenv tp in
                   let term = get_unique_var_symb pat tp' in
                   let term' =
@@ -8954,8 +8956,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     | _ -> term
                   in
                   iter ((pat, tp')::ptenv) (term'::xterms) ((pat, term)::xenv) pats pts
-                | ([], _) -> static_error lc "Too few arguments."
-                | _ -> static_error lc "Too many arguments."
+                | ([], _) -> static_error lc "Too few arguments." None
+                | _ -> static_error lc "Too many arguments." None
               in
               iter [] [] [] pats pts
             in
@@ -8972,7 +8974,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter (List.map (function (cn, _) -> cn) ctormap) cs
       | Char | ShortType | IntType -> 
         let n = List.length (List.filter (function SwitchStmtDefaultClause (l, _) -> true | _ -> false) cs) in
-        if n > 1 then static_error l "switch statement can have at most one default clause";
+        if n > 1 then static_error l "switch statement can have at most one default clause" None;
         let cs0 = cs in
         let rec fall_through h env cs =
           match cs with
@@ -9014,7 +9016,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             verify_cases cs'
         in
         verify_cases cs
-      | _ -> static_error l "Switch statement operand is not an inductive value or integer."
+      | _ -> static_error l "Switch statement operand is not an inductive value or integer." None
       end
     | Assert (l, p) ->
       let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
@@ -9037,16 +9039,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let cn =
             match targetType with
               ObjType cn -> cn
-            | _ -> static_error l "Target of predicate instance call must be of class type"
+            | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
           let (pmap, symb, body) =
             match try_assoc cn classmap with
               Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
               begin match try_assoc g preds with
-                None -> static_error l "No such predicate instance"
+                None -> static_error l "No such predicate instance" None
               | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
               end
-            | None -> static_error l "Target of predicate instance call must be of class type"
+            | None -> static_error l "Target of predicate instance call must be of class type" None
           in
           let target = ev target in
           let index = List.assoc cn classterms in
@@ -9056,8 +9058,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with
-            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
-          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names.") pats0
+            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
+          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
             let index_term fn =
@@ -9070,19 +9072,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let (targs, tpenv) =
                 let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
                 match zip predinst_tparams targs with
-                  None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams))
+                  None -> static_error l (Printf.sprintf "Predicate expects %d type arguments." (List.length predinst_tparams)) None
                 | Some bs -> (targs, bs)
               in
               let ps = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps in
               let inputParamCount = match inputParamCount with None -> None | Some n -> Some (List.length fns + n) in
               (targs, tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p, inputParamCount)
-            | None -> static_error l "No such predicate instance."
+            | None -> static_error l "No such predicate instance." None
           end
         | None ->
           begin
           match try_assoc' (pn,ilist) g predctormap with
             None ->
-            let error () = static_error l "No such predicate or predicate constructor." in
+            let error () = static_error l "No such predicate or predicate constructor." None in
             begin match try_assoc "this" tenv with
               None -> error ()
             | Some (ObjType cn) ->
@@ -9100,12 +9102,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               end
             end
           | Some (_, ps1, ps2, body, funcsym) ->
-            if targs <> [] then static_error l "Predicate constructor expects 0 type arguments.";
+            if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
             let bs0 =
               match zip pats0 ps1 with
-                None -> static_error l "Incorrect number of predicate constructor arguments."
+                None -> static_error l "Incorrect number of predicate constructor arguments." None
               | Some bs ->
-                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions." None) bs
             in
             let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
@@ -9140,15 +9142,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' (pn,ilist) p predfammap with
-          None -> static_error l "No such predicate."
+          None -> static_error l "No such predicate." None
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
           let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
-              None -> static_error l "Incorrect number of type arguments."
+              None -> static_error l "Incorrect number of type arguments." None
             | Some bs -> bs
           in
-          if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements.";
+          if arity <> 0 then static_error l "Predicate families are not supported in split_fraction statements." None;
           (targs, (g_symb, true), instantiate_types tpenv pts, inputParamCount)
       in
       let splitcoef =
@@ -9172,28 +9174,28 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       let (targs, g_symb, pts, inputParamCount) =
         match try_assoc' (pn,ilist) p predfammap with
-          None -> static_error l "No such predicate."
+          None -> static_error l "No such predicate." None
         | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
           let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
           let tpenv =
             match zip predfam_tparams targs with
-              None -> static_error l "Incorrect number of type arguments."
+              None -> static_error l "Incorrect number of type arguments." None
             | Some bs -> bs
           in
-          if arity <> 0 then static_error l "Predicate families are not supported in merge_fractions statements.";
+          if arity <> 0 then static_error l "Predicate families are not supported in merge_fractions statements." None;
           begin
             match inputParamCount with
               None ->
               static_error l
                 ("Cannot merge this predicate: it is not declared precise. "
                  ^ "To declare a predicate precise, separate the input parameters "
-                 ^ "from the output parameters using a semicolon in the predicate declaration.");
+                 ^ "from the output parameters using a semicolon in the predicate declaration.") None;
             | Some n -> (targs, (g_symb, true), instantiate_types tpenv pts, n)
           end
       in
       let (pats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
       let (inpats, outpats) = take_drop inputParamCount pats in
-      List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions.") inpats;
+      List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions." None) inpats;
       let pats = srcpats pats in
       assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef1 ts1 _ ghostenv env [] ->
         assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef2 ts2 _ _ _ [] ->
@@ -9213,13 +9215,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | DisposeBoxStmt (l, bcn, pats, handleClauses) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) bcn boxmap with
-          None -> static_error l "No such box class."
+          None -> static_error l "No such box class." None
         | Some boxinfo -> boxinfo
       in
       let Some (_, _, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
       assert_chunk rules (pn,ilist) h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun _ h coef ts _ ghostenv env [] ->
-      if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission.";
+      if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission." None;
       let boxId::argts = ts in
       let Some boxArgMap = zip boxpmap argts in
       let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
@@ -9231,7 +9233,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | (l, hpn, pats)::handleClauses ->
           begin
             match try_assoc hpn hpmap with
-              None -> static_error l "No such handle predicate."
+              None -> static_error l "No such handle predicate." None
             | Some (lhp, hpParamMap, hpInv, pbcs) ->
               let hpParamTypes = List.map (fun (x, t) -> t) hpParamMap in
               let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (HandleIdType::hpParamTypes) pats in
@@ -9240,7 +9242,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               let handlePat::argPats = wpats in
               let pats = handlePat::TermPat boxId::argPats in
               assert_chunk rules (pn,ilist) h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun _ h coef ts _ ghostenv env [] ->
-              if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission.";
+              if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission." None;
               let env = List.filter (fun (x, t) -> x <> "#boxId") env in
               let handleId::_::hpArgs = ts in
               let Some hpArgMap = zip (List.map (fun (x, t) -> x) hpParamMap) hpArgs in
@@ -9261,16 +9263,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let cn =
             match targetType with
               ObjType cn -> cn
-            | _ -> static_error l "Target of predicate instance call must be of class type"
+            | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
           let (lpred, pmap, symb, body) =
             match try_assoc cn classmap with
               Some (lc, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
               begin match try_assoc g preds with
-                None -> static_error l "No such predicate instance"
+                None -> static_error l "No such predicate instance" None
               | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
               end
-            | None -> static_error l "Target of predicate instance call must be of class type"
+            | None -> static_error l "Target of predicate instance call must be of class type" None
           in
           let target = ev target in
           let index = List.assoc cn classterms in
@@ -9279,8 +9281,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match resolve (pn,ilist) l g predfammap with
           Some (g, (lpred, _, _, _, g_symb, inputParamCount)) ->
           let fns = match file_type path with
-            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names.") pats0)
-          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names.") pats0
+            Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
+          | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
           match try_assoc (g, fns) predinstmap with
@@ -9288,7 +9290,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
-                None -> static_error l "Incorrect number of type arguments."
+                None -> static_error l "Incorrect number of type arguments." None
               | Some bs -> bs
             in
             let ts0 = match file_type path with
@@ -9296,13 +9298,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
             (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0)
-          | None -> static_error l "No such predicate instance."
+          | None -> static_error l "No such predicate instance." None
           end
         | None ->
           begin
             match try_assoc' (pn,ilist) g predctormap with
               None ->
-              let error () = static_error l ("No such predicate family instance or predicate constructor: "^g) in
+              let error () = static_error l ("No such predicate family instance or predicate constructor: "^g) None in
               begin match try_assoc "this" tenv with
                 Some (ObjType cn) ->
                 begin match try_assoc cn classmap with
@@ -9321,18 +9323,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | Some (lpred, ps1, ps2, body, funcsym) ->
               let bs0 =
                 match zip pats0 ps1 with
-                  None -> static_error l "Incorrect number of predicate constructor arguments."
+                  None -> static_error l "Incorrect number of predicate constructor arguments." None
                 | Some bs ->
-                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions.") bs
+                  List.map (function (LitPat e, (x, t)) -> let w = check_expr_t (pn,ilist) tparams tenv e t in (x, ev w) | _ -> static_error l "Predicate constructor arguments must be expressions." None) bs
               in
               let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
-              if targs <> [] then static_error l "Incorrect number of type arguments.";
+              if targs <> [] then static_error l "Incorrect number of type arguments." None;
               (lpred, [], [], ps2, bs0, (g_symb, false), body, [])
           end
       in
       let ps =
         match zip pats ps with
-          None -> static_error l "Wrong number of arguments."
+          None -> static_error l "Wrong number of arguments." None
         | Some bs ->
           List.map
             begin fun (pat, (p, tp0)) ->
@@ -9350,7 +9352,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match coef with
           None -> real_unit
         | Some (LitPat coef) -> let coef = check_expr_t (pn,ilist) tparams tenv coef RealType in ev coef
-        | _ -> static_error l "Coefficient in close statement must be expression."
+        | _ -> static_error l "Coefficient in close statement must be expression." None
       in
       let env' = flatmap (function (p, pat, tp0, tp, Some t) -> [(p, prover_convert_term t tp tp0)] | _ -> []) ps in
       let env' = bs0 @ env' in
@@ -9385,10 +9387,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         )
       )
     | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
-      if not pure then static_error l "Box creation statements are allowed only in a pure context.";
+      if not pure then static_error l "Box creation statements are allowed only in a pure context." None;
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) bcn boxmap with
-          None -> static_error l "No such box class."
+          None -> static_error l "No such box class." None
         | Some boxinfo -> boxinfo
       in
       let (tenv, ghostenv, env) =
@@ -9396,15 +9398,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           match handleClauses with
             [] -> (tenv, ghostenv, env)
           | (l, x, hpn, args)::handleClauses ->
-            if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+            if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
             iter ((x, HandleIdType)::tenv) (x::ghostenv) ((x, get_unique_var_symb x HandleIdType)::env) handleClauses
         in
         iter tenv ghostenv env handleClauses
       in
-      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
       let boxArgMap =
         match zip args boxpmap with
-          None -> static_error l "Incorrect number of arguments."
+          None -> static_error l "Incorrect number of arguments." None
         | Some bs ->
           List.map
             begin
@@ -9424,11 +9426,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             (l, x, hpn, args)::handleClauses ->
             begin
             match try_assoc hpn hpmap with
-              None -> static_error l "No such handle predicate"
+              None -> static_error l "No such handle predicate" None
             | Some (lhp, hpParamMap, hpInv, pbcs) ->
               let hpArgMap =
                 match zip hpParamMap args with
-                  None -> static_error l "Incorrect number of arguments."
+                  None -> static_error l "Incorrect number of arguments." None
                 | Some bs ->
                   List.map
                     begin fun ((x, t), e) ->
@@ -9442,7 +9444,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               assert_term (eval hpInvEnv hpInv) h hpInvEnv (expr_loc hpInv) "Cannot prove handle predicate invariant." None;
               let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
-                None-> static_error l ("No such predicate family: "^hpn)
+                None-> static_error l ("No such predicate family: "^hpn) None
               | Some x -> x
               in
               iter (Chunk ((hpn_symb, true), [], real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::handleChunks) handleClauses
@@ -9452,35 +9454,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         iter [] handleClauses
       end $. fun handleChunks ->
       let (_, _, _, _, bcn_symb, _) = match try_assoc' (pn,ilist) bcn predfammap with
-        None -> static_error l ("No such predicate family: "^bcn)
+        None -> static_error l ("No such predicate family: "^bcn) None
       | Some x-> x
       in
       with_context PopSubcontext $. fun () ->
       tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (Chunk ((bcn_symb, true), [], real_unit, boxIdTerm::boxArgs, None)::(handleChunks@h)) ((x, boxIdTerm)::env)
     | CreateHandleStmt (l, x, hpn, arg) ->
-      if not pure then static_error l "Handle creation statements are allowed only in a pure context.";
-      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable.";
+      if not pure then static_error l "Handle creation statements are allowed only in a pure context." None;
+      if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
       let bcn =
         match chop_suffix hpn "_handle" with
-          None -> static_error l "Handle creation statement must mention predicate name that ends in '_handle'."
+          None -> static_error l "Handle creation statement must mention predicate name that ends in '_handle'." None
         | Some bcn -> match try_assoc' (pn,ilist) bcn boxmap with
-            None-> static_error l "No such box class."
+            None-> static_error l "No such box class." None
           | Some bcn -> bcn
       in
       let w = check_expr_t (pn,ilist) tparams tenv arg BoxIdType in
       let boxIdTerm = ev w in
       let handleTerm = get_unique_var_symb x HandleIdType in
       let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with
-        None -> static_error l ("No such predicate family: "^hpn)
+        None -> static_error l ("No such predicate family: "^hpn) None
       | Some x-> x
       in
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo [] return_cont
     | WhileStmt (l, e, None, dec, ss, closeBraceLoc) ->
-      static_error l "Loop invariant required."
+      static_error l "Loop invariant required." None
     | WhileStmt (l, e, Some (LoopInv p), dec, ss, closeBraceLoc) ->
-      if pure then static_error l "Loops are not yet supported in a pure context.";
+      if pure then static_error l "Loops are not yet supported in a pure context." None;
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
@@ -9537,7 +9539,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
-      if pure then static_error l "Loops are not yet supported in a pure context.";
+      if pure then static_error l "Loops are not yet supported in a pure context." None;
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
@@ -9636,17 +9638,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       assume_pred [] (pn,ilist) h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
-      List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call.") ss_after;
+      List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
-      List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables") ss_after_xs;
+      List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables" None) ss_after_xs;
       verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_after (fun _ _ _ h' env' -> check_post h' env') (fun _ _ -> assert false)
     | Throw (l, e) ->
-      if pure then static_error l "Throw statements are not allowed in a pure context.";
+      if pure then static_error l "Throw statements are not allowed in a pure context." None;
       let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
       check_ghost ghostenv l e;
       ()
     | TryCatch (l, body, catches) ->
-      if pure then static_error l "Try-catch statements are not allowed in a pure context.";
+      if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
         begin fun () ->
@@ -9665,7 +9667,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             | (l, te, x, body)::catches ->
               branch
                 begin fun () ->
-                  if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.");
+                  if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
                   let t = check_pure_type (pn,ilist) tparams te in
                   let xterm = get_unique_var_symb_non_ghost x t in
                   let tenv = (x, t)::tenv in
@@ -9679,7 +9681,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter catches
         end
     | TryFinally (l, body, lf, finally) ->
-      if pure then static_error l "Try-finally statements are not allowed in a pure context.";
+      if pure then static_error l "Try-finally statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       (* Tricky stuff; I hope this is correct... *)
       branch
@@ -9716,20 +9718,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
-          None -> static_error lcb "No such box class."
+          None -> static_error lcb "No such box class." None
         | Some boxinfo -> boxinfo
       in
       let pre_bcn=
         match search' pre_bcn (pn,ilist) boxmap with
-          None-> static_error lcb "You cannot perform an action on a box class that has not yet been declared."
+          None-> static_error lcb "You cannot perform an action on a box class that has not yet been declared." None
         | Some pre_bcn -> pre_bcn
       in
-      if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared.";
+      if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared." None;
       let (pre_bcp_pats, tenv) = check_pats (pn,ilist) lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let pre_bcp_pats = srcpats pre_bcp_pats in
       let (_, _, _, _, boxpred_symb, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
         Some x->x
-      | None -> static_error lcb ("Box predicate not found: "^pre_bcn)
+      | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
       assert_chunk rules (pn,ilist) h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
         if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement." None;
@@ -9739,13 +9741,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             ([], True lch)
           else
             match try_assoc' (pn,ilist) pre_hpn hpmap with
-              None -> static_error lch "No such handle predicate in box class."
+              None -> static_error lch "No such handle predicate in box class." None
             | Some (_, hppmap, inv, _) ->
               (hppmap, inv)
         in
         let (_, _, _, _, pre_handlepred_symb, _) = match try_assoc' (pn,ilist) pre_hpn predfammap with 
           Some x->x
-        | None -> static_error lcb ("Box predicate not found: "^pre_bcn)
+        | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
         in
         let (pre_hp_pats, tenv) = check_pats (pn,ilist) lch tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = srcpats pre_hp_pats in
@@ -9755,12 +9757,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              let (handleId::_::pre_handlePredArgs) = ts in
              let (apmap, pre, post) =
                match try_assoc an amap with
-                 None -> static_error l "No such action in box class."
+                 None -> static_error l "No such action in box class." None
                | Some (_, apmap, pre, post) -> (apmap, pre, post)
              in
              let aargbs =
                match zip apmap aargs with
-                 None -> static_error lpa "Incorrect number of action arguments."
+                 None -> static_error lpa "Incorrect number of action arguments." None
                | Some bs ->
                  List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
              in
@@ -9785,19 +9787,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                            ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
                          | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
                          | DeclStmt (lcall, xtype, [x, Some(CallExpr (_, g, _, _, _, _))]) -> g
-                         | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call."
+                         | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call." None
                        in
                        match try_assoc funcname funcmap with
-                         None -> static_error l "No such function."
+                         None -> static_error l "No such function." None
                        | Some (funenv, fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v) ->
-                         if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function."
+                         if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function." None
                      end;
                      NonpureStmt (l, true, s)
                    | s -> s
                    end
                    ss
                in
-               if atomic && !nonpureStmtCount <> 1 then static_error lpa "The body of an atomic perform_action statement must include exactly one non-pure statement.";
+               if atomic && !nonpureStmtCount <> 1 then static_error lpa "The body of an atomic perform_action statement must include exactly one non-pure statement." None;
                verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
@@ -9809,7 +9811,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                    | Some (lpb, post_bcp_args) ->
                      begin
                        match zip boxpmap post_bcp_args with
-                         None -> static_error lpb "Incorrect number of post-state box arguments."
+                         None -> static_error lpb "Incorrect number of post-state box arguments." None
                        | Some bs ->
                          List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
                      end
@@ -9823,17 +9825,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                      ([], True l)
                    else
                      match try_assoc post_hpn hpmap with
-                       None -> static_error lph "Post-state handle predicate: No such handle predicate in box class."
+                       None -> static_error lph "Post-state handle predicate: No such handle predicate in box class." None
                      | Some (_, hppmap, inv, _) ->
                        (hppmap, inv)
                  in
                  let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
-                   None-> static_error lph ("No such predicate family: "^post_hpn)
+                   None-> static_error lph ("No such predicate family: "^post_hpn) None
                  | Some x-> x
                  in
                  let post_hpargs =
                    match zip post_handlePred_parammap post_hp_args with
-                     None -> static_error lph "Post-state handle predicate: Incorrect number of arguments."
+                     None -> static_error lph "Post-state handle predicate: Incorrect number of arguments." None
                    | Some bs ->
                      List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
                  in
@@ -9855,15 +9857,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           begin fun (lems, predinsts) decl ->
             match decl with
             | PredFamilyInstanceDecl (l, p, predinst_tparams, is, xs, body) ->
-              let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." in
-              if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance.";
+              let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." None in
+              if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
               (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts)
             | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
-              if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name.";
-              if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name.";
+              if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
+              if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
               ((fn, (auto, trigger, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
-            | _ -> static_error l "Local declarations must be lemmas or predicate family instances."
+            | _ -> static_error l "Local declarations must be lemmas or predicate family instances." None
           end
           ([], [])
           ds
@@ -9880,7 +9882,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let predinstmap' =
         List.map
           begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
-            if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block.";
+            if not (List.mem_assoc i lems) then static_error li "Index of local predicate family instance must be lemma declared in same block." None;
             check_predinst (pn, ilist) tparams tenv env l p predinst_tparams [i] xs body
           end
           predinsts
@@ -9929,21 +9931,21 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end;
       verify_stmt (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
     | GotoStmt (l, lbl) ->
-      if pure then static_error l "goto statements are not allowed in a pure context";
+      if pure then static_error l "goto statements are not allowed in a pure context" None;
       begin
         match try_assoc lbl lblenv with
-          None -> static_error l "No such label."
+          None -> static_error l "No such label." None
         | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
     | NoopStmt l -> cont h env
-    | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position."
-    | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position."
+    | LabelStmt (l, _) -> static_error l "Label statements cannot appear in this position." None
+    | InvariantStmt (l, _) -> static_error l "Invariant statements cannot appear in this position." None
     | Break l ->
       begin match try_assoc "#break" lblenv with
-        None -> static_error l "Unexpected break statement"
+        None -> static_error l "Unexpected break statement" None
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
-    | _ -> static_error l "This statement form is not supported."
+    | _ -> static_error l "This statement form is not supported." None
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
@@ -9983,13 +9985,13 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   and verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env l eo epilog return_cont =
     with_context (Executing (h, env, l, "Executing return statement")) $. fun () ->
     check_breakpoint h env l;
-    if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context.";
+    if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." None;
     begin fun cont ->
       match eo with
         None -> cont h None
       | Some e ->
         if not pure then check_ghost ghostenv l e;
-        let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " | Some tp -> tp in
+        let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
         verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w $. fun h v ->
         cont h (Some v)
@@ -10042,7 +10044,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             match ss with
               (PureStmt (_, InvariantStmt (l, inv)))::ss -> some_inv l inv ss
             | InvariantStmt (l, inv)::ss ->
-              if not pure then static_error l "Invariant statements must be inside an annotation.";
+              if not pure then static_error l "Invariant statements must be inside an annotation." None;
               some_inv l inv ss
             | _ -> (None, ss)
           in
@@ -10079,7 +10081,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               match lbls with
                 [] -> lblenv
               | (l, lbl)::lbls ->
-                if List.mem_assoc lbl lblenv then static_error l "Duplicate label";
+                if List.mem_assoc lbl lblenv then static_error l "Duplicate label" None;
                 iter ((lbl, cont)::lblenv) lbls
             in
             iter lblenv lbls
@@ -10132,7 +10134,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           iter [] ss
         in
         let tcont sizemap tenv ghostenv h env =
-          let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement.") epilog in
+          let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement." None) epilog in
           verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env lr eo epilog return_cont
         in
         (ss, tcont)
@@ -10159,6 +10161,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   end
                   x
               end
+              None
         end
         ps;
       ctxt#begin_formal;
@@ -10184,7 +10187,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
-  | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g)
+  | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g) None
   
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
@@ -10277,7 +10280,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let get_fields (pn,ilist) cn lm=
     match try_assoc' (pn,ilist) cn classmap with
       Some (_,_,_,fds_opt,_,_,_,_,_,_)-> (match fds_opt with Some fds -> fds | None -> [])
-    | None -> static_error lm ("No class was found: "^cn)
+    | None -> static_error lm ("No class was found: "^cn) None
   in
   
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
@@ -10290,7 +10293,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         if Filename.check_suffix p ".javaspec" then
           verify_cons (pn,ilist) cfin cn superctors boxes lems rest
         else
-          static_error lm "Constructor specification is only allowed in javaspec files!"
+          static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
@@ -10318,7 +10321,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               else
                 match try_assoc [] superctors with
                   None ->
-                  static_error lm "There is no superclass constructor that matches the implicit superclass constructor call"
+                  static_error lm "There is no superclass constructor that matches the implicit superclass constructor call" None
                 | Some (lc0, xmap0, pre0, pre_tenv0, post0, _, v0) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   let eval_h h env e cont = assert false (* There are no arguments to evaluate so this does not get called *) in
@@ -10336,7 +10339,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               do_body h ghostenv (("this", this)::env)
             | (f, (lf, t, vis, binding, final, init, value))::fds ->
               if binding = Instance then begin
-                if init <> None then static_error lf "Instance field initializers are not yet supported.";
+                if init <> None then static_error lf "Instance field initializers are not yet supported." None;
                 let default_value t =
                   match t with
                     Bool -> ctxt#mk_false
@@ -10361,7 +10364,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match sts with
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
           if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) cfin boxes lems meths
-          else static_error l "Constructor specification is only allowed in javaspec files!"
+          else static_error l "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         push();
         let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
@@ -10453,24 +10456,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                (fun (PreservedByClause (l, an, xs, ss)) ->
                   begin
                   match try_assoc an amap with
-                    None -> static_error l "No such action."
+                    None -> static_error l "No such action." None
                   | Some (_, apmap, pre, post) ->
                     let _ =
                       let rec iter ys xs =
                         match xs with
                           [] -> ()
                         | x::xs ->
-                          if List.mem_assoc x boxvarmap then static_error l "Action parameter name clashes with box variable.";
-                          if List.mem_assoc x pmap then static_error l "Action parameter name clashes with handle predicate parameter.";
-                          if List.mem x ys then static_error l "Duplicate action parameter.";
-                          if startswith x "old_" then static_error l "Action parameter name cannot start with old_.";
+                          if List.mem_assoc x boxvarmap then static_error l "Action parameter name clashes with box variable." None;
+                          if List.mem_assoc x pmap then static_error l "Action parameter name clashes with handle predicate parameter." None;
+                          if List.mem x ys then static_error l "Duplicate action parameter." None;
+                          if startswith x "old_" then static_error l "Action parameter name cannot start with old_." None;
                           iter (x::ys) xs
                       in
                       iter [] xs
                     in
                     let apbs =
                       match zip xs apmap with
-                        None -> static_error l "Incorrect number of action parameters."
+                        None -> static_error l "Incorrect number of action parameters." None
                       | Some bs -> bs
                     in
                     let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
@@ -10501,7 +10504,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                           verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
                             let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                             assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
-                          ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs.")
+                          ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None)
                         )
                       )
                     )
@@ -10511,7 +10514,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   end)
                pbcs
            in
-           List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.")) amap)
+           List.iter (fun (an, _) -> if not (List.mem an pbcans) then static_error l ("No preserved_by clause for action '" ^ an ^ "'.") None) amap)
         hpmap;
       verify_funcs (pn,ilist)  (bcn::boxes) lems ds
     | _::ds -> verify_funcs (pn,ilist)  boxes lems ds
@@ -10567,7 +10570,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin
       match !shouldFailLocs with
         [] -> ()
-      | l::_ -> static_error l "No error found on line."
+      | l::_ -> static_error l "No error found on line." None
     end;
     result
   in
@@ -10577,7 +10580,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let _=
     let rec iter (file,l) mainlist=
       match mainlist with
-        [] -> static_error l "no main method was found"
+        [] -> static_error l "no main method was found" None
       | (cn,l)::_ when cn=file -> ()
       | _::rest -> iter (file,l) rest
     in
@@ -10726,7 +10729,10 @@ let link_program isLibrary modulepaths emitDllManifest exports =
     match modulepaths with
       [] -> impls
     | modulepath::modulepaths ->
-      let manifest_path = Filename.chop_extension modulepath ^ ".vfmanifest" in
+      let manifest_path = 
+        try Filename.chop_extension modulepath ^ ".vfmanifest" with
+          Invalid_argument  _ -> raise (CompilationError "file without extension")
+      in
       let lines =
         if List.mem_assoc manifest_path !manifest_map then
           List.assoc manifest_path !manifest_map
@@ -10755,7 +10761,7 @@ let link_program isLibrary modulepaths emitDllManifest exports =
   in
   let impls = iter [] modulepaths in
   let mainModulePath = match List.rev modulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
-  let mainModuleName = Filename.chop_extension (Filename.basename mainModulePath) in
+  let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
   let consume msg x xs =
     let rec iter xs' xs =
       match xs with
