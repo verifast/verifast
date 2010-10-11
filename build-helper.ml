@@ -3,7 +3,7 @@
 open Unix;;
 
 let releases = [ (* Add new releases to the front *)
-  "10.4", 558;
+  "10.4", 559;
   "10.3", 534;
   "10.2", 496;
   "10.1.1", 486;

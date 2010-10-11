@@ -906,8 +906,7 @@ let show_ide initialPath prover =
   undoAction#connect#activate undo;
   redoAction#connect#activate redo;
   let _ = root#show() in
-  (* This hack works around the problem that GText.text_view#scroll_to_mark does not seem to work if called before the GUI is running properly. *)
-  Glib.Idle.add (fun () -> stepSelected(); false);
+  Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
 let _ =
