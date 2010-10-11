@@ -195,6 +195,7 @@ release: test refman
 	xcopy /E /I ..\..\examples examples
 	xcopy /E /I ..\..\tests tests
 	xcopy /E /I ..\..\tutorial_solutions tutorial_solutions
+	xcopy /E /I ..\..\help help
 	mkdir tutorial
 	cd tutorial_solutions
 	for %f in (*.c) do vfstrip < %f > ..\tutorial\%f
