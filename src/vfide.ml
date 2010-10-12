@@ -159,7 +159,15 @@ let show_ide initialPath prover =
       else
         ignore (Sys.command ("xdg-open " ^ "'" ^ bindir ^ "/../help/" ^ url ^ ".html" ^ "'"))
     else
-      ignore (Sys.command ("start \"\" " ^ "\"" ^ bindir ^ "\\..\\help\\" ^ url ^ ".html" ^ "\""))
+      (* The below command asynchronously launches a "cmd" process that launches the help topic.
+         Launching the help topic synchronously seems to cause vfide to hang for between 6 and 30 seconds.
+         My hypothesis is that "cmd /C start xyz.html" performs a DDE broadcast to all windows on the desktop,
+         which apparently blocks until a timeout happens if some window is not responding. If the
+         Help topic is launched synchronously inside the GUI event handler thread, the vfide window is not
+         responsive until the Help topic is launched. Ergo the deadlock.
+         This seems to be confirmed here <http://wiki.tcl.tk/996> and here <http://blogs.msdn.com/b/oldnewthing/archive/2007/02/26/1763683.aspx>.
+      *)
+      ignore (Unix.create_process "cmd" [| "/C"; "start"; "Dummy Title"; bindir ^ "\\..\\help\\" ^ url ^ ".html" |] Unix.stdin Unix.stdout Unix.stderr)
   in
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
