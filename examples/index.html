@@ -8,9 +8,43 @@ blockquote {margin: 0 10pt; padding: 0}
 </head>
 <body>
 <h1>VeriFast Examples</h1>
+<p><a href="alt_threading.c.html">alt_threading.c</a> - An alternative threading API that uses parameterized function types instead of function-pointer-indexed predicate families, plus an example of its use.</p>
+<p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</p>
+<p><b>BeepDriver</b> - A DLL that provides "beep" functionality and a program that uses the DLL. Demonstrates VeriFast's support for verification of unloadable modules.</p>
+<blockquote>
+<p><a href="BeepDriver/libraries.h.html">libraries.h</a> - Wrapper around the Windows/*nix DLL loading and unloading APIs.
+Keeps track of loaded DLLs to ensure that it always returns a freshly loaded DLL.</p>
+<p><a href="BeepDriver/modules.h.html">modules.h</a> - Specification of a wrapper around libraries that calls an init function when the library is loaded and
+a dispose function when the library is unloaded. (We do not use the platform-provided library init and finalize functionality because we do not want to run code
+under the OS loader lock.)</p>
+<p><a href="BeepDriver/modules.c.html">modules.c</a> - Implementation of the modules module.</p>
+<p><a href="BeepDriver/BeepKernel.h.html">BeepKernel.h</a> - Specification of the API exposed by BeepKernel to beep drivers.</p>
+<p><a href="BeepDriver/BeepKernel.c.html">BeepKernel.c</a> - Implementation of the beep kernel.</p>
+<p><a href="BeepDriver/BeepDriver.c.html">BeepDriver.c</a> - An example beep driver.</p>
+<p><a href="BeepDriver/BeepDriver.dlsymspec">BeepDriver.dlsymspec</a> - A .dlsymspec file that associates a VeriFast contract with the function symbol exported by beep drivers.
+Used by the dlsymtool tool that ships with VeriFast to generate proxy .c and .h files to be used by the kernel to call the exported function symbol,
+and a .vfmanifest file that is used at driver link
+time to check that the driver does indeed export the correct function symbol with the correct contract.</p>
+<p><a href="BeepDriver/BeepKernel.mysh">BeepKernel.mysh</a> - Command script used to verify the BeepKernel and the BeepDriver</p>
+</blockquote>
+<p><a href="bot.c.html">bot.c</a> - A chat bot (= an automated client for the chat server in chat.c)<p>
+<p><a href="cat.c.html">cat.c</a> - A verified implementation of the *nix cat command (copies a file to standard output)</p>
+<p><a href="char.c.html">char.c</a> - An example demonstrating VeriFast's support for character literals.</p>
+<p><a href="chat.c.html">chat.c</a> - A chat server. Demonstrates the use of threads, locks, sockets, lists.</p>
+<p><a href="composite4.c.html">composite4.c</a> - Demonstrates an approach for verifying instances of the Composite pattern in VeriFast.
+See Bart Jacobs, Jan Smans, and Frank Piessens.
+<a href="http://www.cs.kuleuven.be/~bartj/verifast/composite.pdf">Verifying the Composite Pattern using Separation Logic</a>. SAVCBS 2008 Challenge problem track.</p>
+<p><a href="contains.c.html">contains.c</a> - A collection ADT that compares elements using a user-provided equals function</p>
+<p><a href="contains_deep.c.html">contains_deep.c</a> - A collection ADT that compares elements using a user-provided equals function; this spec facilitates compare-by-value</p>
+<p><a href="contrib.c.html">contrib.c</a> - Starts two threads that share a counter and that each increment the counter; then joins both threads and asserts that the counter's value equals 2.
+Demonstrates shared boxes. Note: This program can be verified more simply using ghost fields.
+See Bart Jacobs and Frank Piessens.
+<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW549.abs.html">Dynamic Owicki-Gries reasoning using ghost fields and fractional permissions</a>.
+Technical Report CW-549, Department of Computer Science, Katholieke Universiteit Leuven, Belgium. June 2009.</p>
 <p><a href="counter.c.html">counter.c</a> - An introductory example. A simple counter module (without abstraction) and a client program.</p>
 <p><a href="counter_with_pred.c.html">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
 <p><a href="counter_with_pred_auto.c.html">counter_with_pred_auto.c</a> - The same counter, now using the automatic open/close feature.</p>
+<p><a href="cp.c.html">cp.c</a> - A verified implementation of the *nix cp command (copies a file)</p>
 <p><b><a name="crt">crt</a></b> - The modules that VeriFast automatically includes when link-checking a C program</p>
 <blockquote>
 <p><a href="crt/prelude_core.h.html">prelude_core.h</a> - Core of the prelude (part that is used by <tt>list.h</tt>)</p>
@@ -26,53 +60,14 @@ blockquote {margin: 0 10pt; padding: 0}
 <p><a href="crt/string.h.html">string.h</a> - Partial spec of module <tt>string</tt> of the C run-time library</p>
 <p><a href="crt/threading.h.html">threading.h</a> - A wrapper around platform-specific threading and locking APIs; implemented by <tt>threading.c</tt> (not verified; not shown)</p>
 </blockquote>
-<p><a href="contains.c.html">contains.c</a> - A collection ADT that compares elements using a user-provided equals function</p>
-<p><a href="contains_deep.c.html">contains_deep.c</a> - A collection ADT that compares elements using a user-provided equals function; this spec facilitates compare-by-value</p>
-<p><a href="equalsmap.c.html">equalsmap.c</a> - A collection ADT that compares elements using a user-provided equals function; alternative approach</p>
-<p><a href="enums.c.html">enums.c</a> - An example demonstrating VeriFast's support for enums.</p>
-<p><a href="char.c.html">char.c</a> - An example demonstrating VeriFast's support for character literals.</p>
-<p><a href="cat.c.html">cat.c</a> - A verified implementation of the *nix cat command (copies a file to standard output)</p>
-<p><a href="wc.c.html">wc.c</a> - A verified implementation of the *nix wc command (counts the number of words in a given file)</p>
-<p><a href="cp.c.html">cp.c</a> - A verified implementation of the *nix cp command (copies a file)</p>
-<p><a href="globals.c.html">globals.c</a> - Demonstrates VeriFast's support for global variables.</p>
-<p><a href="limits.c.html">limits.c</a> - Demonstrates VeriFast's support for C's limits on the size of integers.</p>
-<p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</p>
-<p><b>MockKernel</b> - A small server that allows clients to load, unload, and use modules,
-similar to how operating systems allow dynamic device driver loading and unloading.
-Demonstrates VeriFast's support for verification of unloadable modules and programs that load and unload them.</p>
-<blockquote>
-<p><a href="MockKernel/libraries.h.html">libraries.h</a> - A library loading/unloading API. Always returns a freshly loaded instance of the library.</p>
-<p><a href="MockKernel/MockKernel.h.html">MockKernel.h</a> - The header file defining the interface between the kernel and the modules</p>
-<p><a href="MockKernel/MockKernelModule_proxy.h.html">MockKernelModule_proxy.h</a> - The header file with the contract of the function that is dynamically looked up in the loaded DLL</p>
-<p><a href="MockKernel/MockKernel.c.html">MockKernel.c</a> - The kernel</p>
-<p><a href="MockKernel/AdderModule.c.html">AdderModule.c</a> - The example module</p>
-<p><a href="MockKernel/MockKernel.mysh">MockKernel.mysh</a> - The command-line script for verifying the example</p>
-</blockquote>
-<p><a href="philosophers.c.html">philosophers.c</a> - Demonstrates VeriFast's support for deadlock prevention</p>
-<p><a href="chat.c.html">chat.c</a> - A chat server. Demonstrates the use of threads, locks, sockets, lists.</p>
-<p><a href="lists.h.html">lists.h</a> - Specification of a list module</p>
-<p><a href="lists.c.html">lists.c</a> - Implementation of the list module</p>
-<p><a href="sockets.h.html">sockets.h</a> - Specification of the sockets module (a wrapper around the Win32/*nix sockets API)</p>
-<p><a href="sockets.vfmanifest">sockets.vfmanifest</a> - Manifest file for the sockets module</p>
-<p><a href="stringBuffers.h.html">stringBuffers.h</a> - Specification of the string buffers module</p>
-<p><a href="stringBuffers.c.html">stringBuffers.c</a> - Implementation of the string buffers module. Demonstrates the use of character arrays and strings.</p>
-<p><a href="threading.h.html">threading.h</a> - A specification of a threading module (a wrapper around the Win32/*nix threading API)</p>
-<p><a href="threading.vfmanifest">threading.vfmanifest</a> - Manifest file for the threading module</p>
-<p><a href="bot.c.html">bot.c</a> - A chat bot (= an automated client for the above chat server)<p>
 <p><a href="dyncode.c.html">dyncode.c</a> - An example that writes x86 assembly code for a plusOne function into a malloc'ed char array and then calls the function. Demonstates parameterized function types.</p>
-<p><a href="alt_threading.c.html">alt_threading.c</a> - An alternative threading API that uses parameterized function types instead of function-pointer-indexed predicate families, plus an example of its use.</p>
-<p><a href="composite4.c.html">composite4.c</a> - Demonstrates an approach for verifying instances of the Composite pattern in VeriFast.
-See Bart Jacobs, Jan Smans, and Frank Piessens.
-<a href="http://www.cs.kuleuven.be/~bartj/verifast/composite.pdf">Verifying the Composite Pattern using Separation Logic</a>. SAVCBS 2008 Challenge problem track.</p>
-<p><a href="contrib.c.html">contrib.c</a> - Starts two threads that share a counter and that each increment the counter; then joins both threads and asserts that the counter's value equals 2.
-Demonstrates shared boxes. Note: This program can be verified more simply using ghost fields.
-See Bart Jacobs and Frank Piessens.
-<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW549.abs.html">Dynamic Owicki-Gries reasoning using ghost fields and fractional permissions</a>.
-Technical Report CW-549, Department of Computer Science, Katholieke Universiteit Leuven, Belgium. June 2009.</p>
+<p><a href="enums.c.html">enums.c</a> - An example demonstrating VeriFast's support for enums.</p>
+<p><a href="equalsmap.c.html">equalsmap.c</a> - A collection ADT that compares elements using a user-provided equals function; alternative approach</p>
 <p><a href="expr.c.html">expr.c</a> - Builds a simple expression AST, evaluates it, and disposes it.
 Demonstrates a way to implement inductive datatypes in C and verify them with VeriFast.</p>
 <p><a href="fractions-counting.c.html">fractions-counting.c</a> - Shows how counting permissions can easily be integrated into VeriFast in the form of a library.</p>
 <p><a href="ghost_field.c.html">ghost_field.c</a> - Simple ghost fields test.</p>
+<p><a href="globals.c.html">globals.c</a> - Demonstrates VeriFast's support for global variables.</p>
 <p><a href="goto.c.html">goto.c</a> - Demonstrates VeriFast's support for goto statements.</p>
 <p><a href="ifs.c.html">ifs.c</a> -
 Demonstrates how invariant statements can be used to solve the problem of exponential verification time in the presence of many independent if statements in a function.</p>
@@ -115,7 +110,7 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="java/Iterator/SingletonIterator.javaspec.html">SingletonIterator.javaspec</a> - Source file belonging to the it module specification</p>
 </blockquote>
 <p><a href="java/Iterator.java.html">Iterator.java</a> - Demonstrates dynamic binding in Java</p>
-<p><a href="java/Map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
+<p><a href="java/map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
 <p><a href="java/Tree.java.html">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
 </blockquote>
 <p><b><a name="lcset">lcset</a></b> - A concurrent set data structure implemented as a sorted linked list with hand-over-hand locking.
@@ -134,6 +129,9 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="lcset/lcset_client.c.html">lcset_client.c</a> - A client program</p>
 </blockquote>
 <p><a href="lemmafuncptr.c.html">lemmafuncptr.c</a> - Simple lemma function pointers test</p>
+<p><a href="limits.c.html">limits.c</a> - Demonstrates VeriFast's support for C's limits on the size of integers.</p>
+<p><a href="lists.h.html">lists.h</a> - Specification of a list module</p>
+<p><a href="lists.c.html">lists.c</a> - Implementation of the list module</p>
 <p><a href="map.c.html">map.c</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
 <p><b>mcas</b> - Full functional specification and verification of a challenging lock-free algorithm from the literature: Harris et al.'s
 multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspired by the one in Vafeiadis' PhD, but uses the approach described in
@@ -144,10 +142,8 @@ multiple-compare-and-swap (MCAS) algorithm. The proof approach was heavily inspi
 <p><a href="mcas/atomics.h.html">atomics.h</a> - Specification of atomic machine instructions (atomic loads and atomic (single) compare-and-swaps).
 You can create a "prophecy" [Abadi and Lamport] to know the value that will be read in advance. You can use a "tracked CAS" in order to predict
 the value that will be written by a successful CAS operation.</p>
-<p><a href="mcas/listex.h.html">list.h</a> - Mathematical lists and "iterated star" (foreach) predicates over lists</p>
-<p><a href="mcas/pair.h.html">pair.h</a> - Pairs</p>
+<p><a href="mcas/listex.h.html">listex.h</a> - Mathematical lists and "iterated star" (foreach) predicates over lists</p>
 <p><a href="mcas/assoc_list.h.html">assoc_list.h</a> - Association lists and foreach predicates over association lists</p>
-<p><a href="mcas/ghost_cells.h.html">ghost_cells.h</a> - Dynamically allocated auxiliary variables, including ones that use counting permissions</p>
 <p><a href="mcas/ghost_counters.h.html">ghost_counters.h</a> - An auxiliary object that holds a monotonically increasing integer</p>
 <p><a href="mcas/ghost_lists.h.html">ghost_lists.h</a> - Auxiliary objects holding lists</p>
 <p><a href="mcas/rdcss.h.html">rdcss.h</a> - Specification of a module that implements Harris et al.'s Restricted Double Compare Single Swap algorithm, which is
@@ -155,10 +151,21 @@ part of the MCAS algorithm</p>
 <p><a href="mcas/rdcss.c.html">rdcss.c</a> - Implementation and proof of the RDCSS algorithm</p>
 <p><a href="mcas/mcas.h.html">mcas.h</a> - Specification of the MCAS module</p>
 <p><a href="mcas/mcas.c.html">mcas.c</a> - Implementation and proof of the MCAS module</p>
-<p><a href="mcas/mcas_client.c.html">mcas_client.c</a> - An minimal example client program, that uses MCAS to increment a pair of integers atomically</p>
+<p><a href="mcas/mcas_client.c.html">mcas_client.c</a> - A minimal example client program, that uses MCAS to increment a pair of integers atomically</p>
+</blockquote>
+<p><b>MockKernel</b> - A small server that allows clients to load, unload, and use modules,
+similar to how operating systems allow dynamic device driver loading and unloading.
+Demonstrates VeriFast's support for verification of unloadable modules and programs that load and unload them.</p>
+<blockquote>
+<p><a href="MockKernel/libraries.h.html">libraries.h</a> - A library loading/unloading API. Always returns a freshly loaded instance of the library.</p>
+<p><a href="MockKernel/MockKernel.h.html">MockKernel.h</a> - The header file defining the interface between the kernel and the modules</p>
+<p><a href="MockKernel/MockKernelModule_proxy.h.html">MockKernelModule_proxy.h</a> - The header file with the contract of the function that is dynamically looked up in the loaded DLL</p>
+<p><a href="MockKernel/MockKernel.c.html">MockKernel.c</a> - The kernel</p>
+<p><a href="MockKernel/AdderModule.c.html">AdderModule.c</a> - The example module</p>
+<p><a href="MockKernel/MockKernel.mysh">MockKernel.mysh</a> - The command-line script for verifying the example</p>
 </blockquote>
 <p><a href="odd_even_lemmas.c.html">odd_even_lemmas.c</a> - Demonstrates how mutual lemma recursion is possible</p>
-<p><a href="polytest.c.html">polytest.c</a> - Test of VeriFast's support for abstracting inductive datatypes, fixpoint functions, and lemmas over types</a></p>
+<p><a href="philosophers.c.html">philosophers.c</a> - Demonstrates VeriFast's support for deadlock prevention</p>
 <p><b>queue</b> - Full functional specification and verification of a lock-free queue implementation and an example client program.
 See Bart Jacobs and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW551.abs.html">Modular full functional specification and verification of lock-free data structures</a>.
@@ -175,8 +182,18 @@ Technical Report CW-551, Department of Computer Science, Katholieke Universiteit
 <p><a href="queue/threading.h.html">threading.h</a> - Specification of the threading library</p>
 <p><a href="queue/threading.vfmanifest">threading.vfmanifest</a> - Manifest of the threading library</p>
 </blockquote>
-<p><a href="sorted_bintree.c.html">sorted_bintree.c</a> - Full function specification and verification of a binary search tree (not self-balancing)</p>
+<p><a href="sockets.h.html">sockets.h</a> - Specification of the sockets module (a wrapper around the Win32/*nix sockets API)</p>
+<p><a href="sockets.vfmanifest">sockets.vfmanifest</a> - Manifest file for the sockets module</p>
+<p><a href="sorted_bintree.c.html">sorted_bintree.c</a> - Full functional specification and verification of a binary search tree (not self-balancing)</p>
 <p><a href="stack.c.html">stack.c</a> - Example of a deep collection: a stack which owns its items. Demonstrates predicate families.</p>
+<p><a href="stringBuffers.h.html">stringBuffers.h</a> - Specification of the string buffers module</p>
+<p><a href="stringBuffers.c.html">stringBuffers.c</a> - Implementation of the string buffers module. Demonstrates the use of character arrays and strings.</p>
 <p><a href="swap.c.html">swap.c</a> - Example demonstrating the support for taking the address of a field</p>
+<p><a href="tuerk.c.html">tuerk.c</a> - Example demonstrating VeriFast's support for Thomas Tuerk's loop specs.
+(See Thomas Tuerk. <a href="http://www.cl.cam.ac.uk/~tt291/publications/">Local Reasoning about While-Loops.</a> VSTTE 2010 Theory Workshop.)
+A loop spec consists of a loop precondition and a loop postcondition and is an alternative to loop invariants. Loop specs enable much simpler proofs for loops
+that walk a recursive data structure. The loop is verified just like the corresponding tail-recursive function.</p>
+<p><a href="tuerk_explicit.c.html">tuerk_explicit.c</a> - A version of tuerk.c where the recursive call of the tail-recursive function is written explicitly.</p>
+<p><a href="wc.c.html">wc.c</a> - A verified implementation of the *nix wc command (counts the number of words in a given file)</p>
 </body>
 </html>
