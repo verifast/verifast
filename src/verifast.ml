@@ -8225,6 +8225,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let eval0 = eval in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h h env e cont = verify_expr true h env None e cont in
+    let eval_h_core ro h env e cont = if not pure then check_ghost ghostenv l e; verify_expr ro h env None e cont in
     let rec evhs h env es cont =
       match es with
         [] -> cont h []
@@ -8254,6 +8255,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
     let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, v) cont =
+      let eval_h = if List.length args = 1 then (fun h env e cont -> eval_h_core readonly h env e cont) else eval_h in
       verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
     in
     let new_array h l elem_tp length elems =
@@ -8439,7 +8441,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         let elem_tp = unfold_inferred_type elem_tp in
         cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
       end
-    | Operation (l, Not, [e], ts) -> eval_h h env e (fun h v -> cont h (ctxt#mk_not v))
+    | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h v -> cont h (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) ->
       eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
     | Operation (l, Neq, [e1; e2], ts) ->
@@ -8455,10 +8457,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (fun () -> assume v1 (fun () -> cont h ctxt#mk_true))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> eval_h h env e2 cont))
     | IfExpr (l, con, e1, e2) ->
-      eval_h h env con $. fun h v ->
+      eval_h_core readonly h env con $. fun h v ->
       branch
-        (fun () -> assume v (fun () -> eval_h h env e1 cont))
-        (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h h env e2 cont))
+        (fun () -> assume v (fun () -> eval_h_core readonly h env e1 cont))
+        (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h_core readonly h env e2 cont))
     | e -> eval_non_pure_cps (fun h e cont -> eval_h h env e cont) pure h env e cont
   in
   
