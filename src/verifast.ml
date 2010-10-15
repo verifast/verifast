@@ -8473,9 +8473,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval0 = eval in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
-    let eval_h h env e cont =
+    let eval_h_core sideeffectfree h env e cont =
       if not pure then check_ghost ghostenv l e;
-      verify_expr true (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont
+      verify_expr sideeffectfree (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont
+    in
+    let eval_h h env e cont =
+      eval_h_core true h env e cont
+    in
+    let eval_h_nonpure h env e cont =
+      eval_h_core false h env e cont
     in
     let rec evhs h env es cont =
       match es with
@@ -8903,7 +8909,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      (eval_h h env w ( fun h w ->
+      (eval_h_nonpure h env w ( fun h w ->
         branch
           (fun _ -> assume w (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont))
           (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont))
@@ -9510,7 +9516,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           eval_h h' env' dec $. fun _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
-      eval_h h' env' e $. fun h' v ->
+      eval_h_nonpure h' env' e $. fun h' v ->
       begin fun cont ->
         branch
           begin fun () ->
@@ -9589,7 +9595,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap _ _ h' env' -> exit_loop h' env' (cont blocks_done sizemap))) lblenv in
       let return_cont h' retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
-      eval_h h' env' e $. fun h' v ->
+      eval_h_nonpure h' env' e $. fun h' v ->
       begin fun cont ->
         branch
           begin fun () ->
