@@ -5143,10 +5143,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     in
                     search_classmap classmap1 (fun () -> search_classmap classmap0 (fun () -> []))
                   in
-                  match find_in_class cn @ find_in_interf cn with
+                  begin match find_in_class cn @ find_in_interf cn with
                     [] -> error ()
                   | [(family, pmap)] -> check_call family pmap
                   | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name) None
+                  end
+                | Some(_) -> error ()
                 end
               end
             | Some (PredType (callee_tparams, ts)) -> cont (new predref (p#name), callee_tparams, [], ts, None)
