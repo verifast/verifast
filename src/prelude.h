@@ -60,7 +60,7 @@ lemma void chars_zero(); // There is nothing at address 0.
 
 lemma void char_limits(char *pc);
     requires [?f]character(pc, ?c);
-    ensures [f]character(pc, c) &*& true == ((char *)0 <= pc) &*& pc <= (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
+    ensures [f]character(pc, c) &*& true == ((char *)0 <= pc) &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
 
 lemma void chars_limits(char *array);
     requires [?f]chars(array, ?cs);
