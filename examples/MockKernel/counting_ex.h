@@ -1,5 +1,5 @@
-#ifndef COUNTING_H
-#define COUNTING_H
+#ifndef COUNTING_EX_H
+#define COUNTING_EX_H
 
 /*@
 
@@ -10,7 +10,7 @@ typedef lemma void countable();
     ensures [f1 + f2]p() &*& f1 + f2 <= 1;
 
 predicate counted(predicate() p, int count);
-predicate ticket(predicate() p, real frac);
+predicate counted_ticket(predicate() p, real frac);
 
 lemma void create_counted(predicate() p);
     requires p() &*& countable(?countable)(p) &*& is_countable(countable);
@@ -18,10 +18,10 @@ lemma void create_counted(predicate() p);
 
 lemma void counted_create_ticket(predicate() p);
     requires counted(p, ?count);
-    ensures counted(p, count + 1) &*& ticket(p, ?f) &*& [f]p();
+    ensures counted(p, count + 1) &*& counted_ticket(p, ?f) &*& [f]p();
 
 lemma void counted_ticket_dispose(predicate() p);
-    requires counted(p, ?count) &*& ticket(p, ?f) &*& [f]p();
+    requires counted(p, ?count) &*& counted_ticket(p, ?f) &*& [f]p();
     ensures counted(p, count - 1) &*& 0 < count;
 
 lemma void counted_dispose(predicate() p);

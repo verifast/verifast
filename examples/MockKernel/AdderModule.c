@@ -2,7 +2,7 @@
 #include "malloc.h"
 #include "MockKernel.h"
 #include "stdlib.h"
-//@ #include "counting.h"
+//@ #include "counting_ex.h"
 
 //@ unloadable_module;
 
@@ -156,7 +156,11 @@ lemma void countable_adderDeviceState() : countable
 
 module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule)
     //@ requires module(AdderModule, true) &*& kernel_module_initializing(self, 0);
-    //@ ensures kernel_module_state(?state) &*& state(self, ?deviceCount) &*& [_]is_module_dispose_(result, state, AdderModule) &*& kernel_module_initializing(self, deviceCount);
+    /*@
+    ensures
+        kernel_module_state(?state) &*& state(self, ?deviceCount) &*& [_]is_module_dispose_(result, state, AdderModule) &*&
+        kernel_module_initializing(self, deviceCount);
+    @*/
 {
     //@ open_module();
     adderName = malloc(11);

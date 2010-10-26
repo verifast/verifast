@@ -2,7 +2,7 @@
 #define MOCKKERNEL_H
 
 //@ #include "threading.h"
-//@ #include "counting.h"
+//@ #include "counting_ex.h"
 
 struct module;
 
