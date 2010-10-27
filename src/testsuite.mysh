@@ -3,112 +3,112 @@ ifnotmac verifast
 verifast -prover redux
 in
 cd examples
+verifast_both -c -disable_overflow_check alt_threading.c
+verifast_both -c args.c
+verifast_both -disable_overflow_check array_of_struct.c
+verifast_both -disable_overflow_check -c arraylist.c
+cd BeepDriver
+mysh < BeepKernel.mysh
+cd ..
+ifnotmac verifast stringBuffers.c sockets.o bot.c
+verifast_both -disable_overflow_check cat.c
+verifast_both char.c
+mysh < chat.mysh
+verifast_both Composite.c
+verifast_both composite4.c
+verifast_both -c contains.c
+verifast_both -c contains_deep.c
+verifast_both -c contrib.c
 verifast_both -disable_overflow_check counter.c
 verifast_both -disable_overflow_check counter_with_pred.c
 verifast_both -disable_overflow_check counter_with_pred_auto.c
-verifast_both enums.c
-verifast_both char.c
-verifast_both -disable_overflow_check cat.c
-verifast_both -disable_overflow_check wc.c
 verifast_both -disable_overflow_check cp.c
-verifast_both -disable_overflow_check globals.c
-verifast_both -disable_overflow_check -c gui-app.c
-verifast_both -disable_overflow_check -c arraylist.c
-verifast_both spouse.c
 verifast_both -c decreases.c
-verifast_both -c spouse-user.c
-verifast_both Composite.c
-verifast_both composite4.c
-verifast_both sorted_bintree.c
+verifast_both -c dolevyao.c
+verifast_both -c dolevyao_nsl.c
+verifast_both -c dolevyao_rpc.c
+verifast_both -shared doubly_linked_list.c
+verifast_both -allow_assume -disable_overflow_check dyncode.c
+verifast_both enums.c
+verifast_both -c equalsmap.c
+verifast_both -disable_overflow_check expr.c
+verifast_both -disable_overflow_check -c fractions-counting.c
+verifast_both -disable_overflow_check -c full_func_io.c
+verifast_both -disable_overflow_check -c full_func_io_mod.c
+verifast_both -disable_overflow_check -c full_func_io_sim.c
+verifast_both ghost_field.c
+verifast_both -disable_overflow_check globals.c
+verifast_both -shared goto.c
+verifast_both -disable_overflow_check -c gui-app.c
+verifast_both -c ifs.c
+cd incr_box
+verifast_both -c incr_box.c
+cd ..
 verifast_both iter.c
 verifast_both iter_with_auto.c
-verifast_both -c contains.c
-verifast_both -c contains_deep.c
-verifast_both -c equalsmap.c
-verifast_both -c -disable_overflow_check tuerk.c
-verifast_both -c -disable_overflow_check tuerk_explicit.c
-verifast_both -c args.c
-verifast_both -disable_overflow_check array_of_struct.c
-verifast_both swap.c
-verifast_both -c short.c
-verifast_both -c switch.c
-verifast_both -c limits.c
-verifast_both -c public_invariant.c
-verifast_both -disable_overflow_check -c fractions-counting.c
-verifast_both -disable_overflow_check expr.c
-verifast_both -disable_overflow_check -shared stack.c
-cd queue
-verifast_both atomics.o threading.o queue.c queue_client.c
-cd ..
 cd lcset
 verifast_both atomics.o threading.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
 cd ..
+verifast_both -c lemmafuncptr.c
+verifast_both -c limits.c
+verifast_both map.c
 cd mcas
 verifast_both -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..
 cd MockKernel
 mysh < MockKernel.mysh
 cd ..
-cd BeepDriver
-mysh < BeepKernel.mysh
-cd ..
-verifast_both -c ifs.c
-verifast_both -shared goto.c
-verifast_both map.c
-verifast_both -disable_overflow_check -c full_func_io.c
-verifast_both -disable_overflow_check -c full_func_io_sim.c
-verifast_both -disable_overflow_check -c full_func_io_mod.c
-verifast_both -c pure_map.c
-verifast_both -c dolevyao.c
-verifast_both -c dolevyao_rpc.c
-verifast_both -c dolevyao_nsl.c
-verifast_both ghost_field.c
-verifast_both -c lemmafuncptr.c
 verifast_both -c odd_even_lemmas.c
-verifast_both -shared doubly_linked_list.c
-cd java
-verifast_both -c hello.scala
-verifast_both -c DefaultCtor.java
-verifast_both -c -disable_overflow_check Account.java
-verifast_both -c Stack.java
-verifast_both -c Spouse.java
-verifast_both -c Spouse2.java
-verifast_both -c SpouseFinal.java
-verifast_both -c -disable_overflow_check Recell.java
-verifast_both -c ThreadRun.java
-verifast_both -c JavaCard.java
-verifast_both -c -disable_overflow_check NestedExprTest.java
-verifast_both -c Constants.java
-verifast_both -c -disable_overflow_check StaticFields.java
-verifast_both -c -disable_overflow_check ArraysManual.java
-verifast_both -c -disable_overflow_check ArraysAuto.java
-verifast_both -disable_overflow_check -c map.java
-verifast_both -disable_overflow_check -c Counter.java
-verifast_both -disable_overflow_check -c Contrib.jarsrc
-verifast_both -c Tree.java
-verifast_both -c Iterator.java
-verifast_both -c -disable_overflow_check Comprehensions.java
-cd Iterator
-verifast_both -c it.jarsrc
-verifast_both -c prog.jarsrc
+verifast_both threading.o philosophers.c
+verifast_both -c public_invariant.c
+verifast_both -c pure_map.c
+cd queue
+verifast_both atomics.o threading.o queue.c queue_client.c
 cd ..
+verifast_both reallittest.c
+verifast_both -c short.c
+verifast_both sorted_bintree.c
+verifast_both spouse.c
+verifast_both -c spouse-user.c
+verifast_both -disable_overflow_check -shared stack.c
+verifast_both swap.c
+verifast_both -c switch.c
+verifast_both -c -disable_overflow_check tuerk.c
+verifast_both -c -disable_overflow_check tuerk_explicit.c
+verifast_both -disable_overflow_check wc.c
+cd java
 cd chat
 verifast_both -c chat.jarsrc
 cd ..
 cd chatbot
 verifast_both -disable_overflow_check -c Bot.java
 cd ..
+cd Iterator
+verifast_both -c it.jarsrc
+verifast_both -c prog.jarsrc
 cd ..
-verifast_both threading.o philosophers.c
-mysh < chat.mysh
-ifnotmac verifast stringBuffers.c sockets.o bot.c
-cd incr_box
-verifast_both -c incr_box.c
+verifast_both -c -disable_overflow_check Account.java
+verifast_both -c -disable_overflow_check ArraysAuto.java
+verifast_both -c -disable_overflow_check ArraysManual.java
+verifast_both -c -disable_overflow_check Comprehensions.java
+verifast_both -c Constants.java
+verifast_both -disable_overflow_check -c Contrib.jarsrc
+verifast_both -disable_overflow_check -c Counter.java
+verifast_both -c DefaultCtor.java
+verifast_both -c hello.scala
+verifast_both -c Iterator.java
+verifast_both -c JavaCard.java
+verifast_both -disable_overflow_check -c map.java
+verifast_both -c -disable_overflow_check NestedExprTest.java
+verifast_both -c -disable_overflow_check Recell.java
+verifast_both -c Spouse.java
+verifast_both -c Spouse2.java
+verifast_both -c SpouseFinal.java
+verifast_both -c Stack.java
+verifast_both -c -disable_overflow_check StaticFields.java
+verifast_both -c ThreadRun.java
+verifast_both -c Tree.java
 cd ..
-verifast_both -c contrib.c
-verifast_both reallittest.c
-verifast_both -allow_assume -disable_overflow_check dyncode.c
-verifast_both -c -disable_overflow_check alt_threading.c
 cd ..
 cd tutorial_solutions
 verifast_both -c -disable_overflow_check account.c

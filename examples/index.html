@@ -8,6 +8,7 @@ blockquote {margin: 0 10pt; padding: 0}
 </head>
 <body>
 <h1>VeriFast Examples</h1>
+<h2>C Examples</h2>
 <p><a href="alt_threading.c.html">alt_threading.c</a> - An alternative threading API that uses parameterized function types instead of function-pointer-indexed predicate families, plus an example of its use.</p>
 <p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</p>
 <p><a href="array_of_struct.c.html">array_of_struct.c</a> - Demonstrates how to deal with an array of struct.</p>
@@ -81,39 +82,6 @@ Demonstrates shared boxes.</p>
 </blockquote>
 <p><a href="iter.c.html">iter.c</a> - Linked lists with iterators. There may be many iterators on a given list. Demonstrates fractional permissions and VeriFast's
 support for merging of fractions of precise predicates.</p>
-<p><b>java</b> - Java examples.
-See Cedric Cuypers, Bart Jacobs, and Frank Piessens.
-<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW550.abs.html">Verification of data-race-freedom of a Java chat server with VeriFast</a>.
-Technical Report CW-550, Department of Computer Science, Katholieke Universiteit Leuven, Belgium.</p>
-<blockquote>
-<p><b>chat</b> - Java version of the chat server</p>
-<blockquote>
-<p><a href="java/chat/Member.java.html">Member.java</a></p>
-<p><a href="java/chat/Room.java.html">Room.java</a></p>
-<p><a href="java/chat/Session.java.html">Session.java</a></p>
-<p><a href="java/chat/Program.java.html">Program.java</a></p>
-<p><a href="java/chat/chat.jarsrc">chat.jarsrc</a></p>
-</blockquote>
-<p><a href="java/Contrib.java.html">Contrib.java</a> - Java version of the contrib.c example</p>
-<p><a href="java/Counter.java.html">Counter.java</a> - Simple introductory example</p>
-<p><a href="java/hello.scala.html">hello.scala</a> - A tiny Scala example. Note: VeriFast's support for Scala is currently limited to essentially this example.</p>
-<p><b>Iterator</b> - A Java program consisting of multiple jar files
-<blockquote>
-<p><a href="java/Iterator/it.jarspec">it.jarspec</a> - Specification of the it module</p>
-<p><a href="java/Iterator/it.jarsrc">it.jarsrc</a> - Implementation of the it module</p>
-<p><a href="java/Iterator/Iterator.java.html">Iterator.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/Iterator.javaspec.html">Iterator.javaspec</a> - Source file belonging to the it module specification</p>
-<p><a href="java/Iterator/IteratorUtil.java.html">IteratorUtil.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/IteratorUtil.javaspec.html">IteratorUtil.javaspec</a> - Source file belonging to the it module specification</p>
-<p><a href="java/Iterator/prog.jarsrc">prog.jarsrc</a> - Implementation of the prog module</p>
-<p><a href="java/Iterator/Program.java.html">Program.java</a> - Source file belonging to the prog module implementation</p>
-<p><a href="java/Iterator/SingletonIterator.java.html">SingletonIterator.java</a> - Source file belonging to the it module implementation</p>
-<p><a href="java/Iterator/SingletonIterator.javaspec.html">SingletonIterator.javaspec</a> - Source file belonging to the it module specification</p>
-</blockquote>
-<p><a href="java/Iterator.java.html">Iterator.java</a> - Demonstrates dynamic binding in Java</p>
-<p><a href="java/map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
-<p><a href="java/Tree.java.html">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
-</blockquote>
 <p><b><a name="lcset">lcset</a></b> - A concurrent set data structure implemented as a sorted linked list with hand-over-hand locking.
 (A more readable full proof outline of the LCSet program is shown in the appendix of
 <a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW590.abs.html">CW-590</a>.)</p>
@@ -196,5 +164,52 @@ A loop spec consists of a loop precondition and a loop postcondition and is an a
 that walk a recursive data structure. The loop is verified just like the corresponding tail-recursive function.</p>
 <p><a href="tuerk_explicit.c.html">tuerk_explicit.c</a> - A version of tuerk.c where the recursive call of the tail-recursive function is written explicitly.</p>
 <p><a href="wc.c.html">wc.c</a> - A verified implementation of the *nix wc command (counts the number of words in a given file)</p>
+<h2>Java Examples</h2>
+<p>See Cedric Cuypers, Bart Jacobs, and Frank Piessens.
+<a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW550.abs.html">Verification of data-race-freedom of a Java chat server with VeriFast</a>.
+Technical Report CW-550, Department of Computer Science, Katholieke Universiteit Leuven, Belgium.</p>
+<p><a href="java/Account.java.html">Account.java</a> - Demonstrates instance predicates</p>
+<p><a href="java/ArraysAuto.java.html">AraysAuto.java</a> - Demonstrates the array handling automation</p>
+<p><a href="java/ArraysManual.java.html">ArraysManual.java</a> - Despite the name, demonstrates the array handling automation</p>
+<p><b>chat</b> - Java version of the chat server</p>
+<blockquote>
+<p><a href="java/chat/Member.java.html">Member.java</a></p>
+<p><a href="java/chat/Room.java.html">Room.java</a></p>
+<p><a href="java/chat/Session.java.html">Session.java</a></p>
+<p><a href="java/chat/Program.java.html">Program.java</a></p>
+<p><a href="java/chat/chat.jarsrc">chat.jarsrc</a></p>
+</blockquote>
+<p><a href="java/Comprehensions.java">Comprehensions.java</a> - Array sum, minimum element, sorting</p>
+<p><a href="java/Constants.java">Constants.java</a> - Constant fields</p>
+<p><a href="java/Contrib.java.html">Contrib.java</a> - Java version of the contrib.c example. Uses ThreadingHelper.javaspec.</p>
+<p><a href="java/Counter.java.html">Counter.java</a> - Simple introductory example</p>
+<p><a href="java/DefaultCtor.java.html">DefaultCtor.java</a> - Default constructor</p>
+<p><a href="java/hello.scala.html">hello.scala</a> - A tiny Scala example. Note: VeriFast's support for Scala is currently limited to essentially this example.</p>
+<p><b>Iterator</b> - A Java program consisting of multiple jar files
+<blockquote>
+<p><a href="java/Iterator/it.jarspec">it.jarspec</a> - Specification of the it module</p>
+<p><a href="java/Iterator/it.jarsrc">it.jarsrc</a> - Implementation of the it module</p>
+<p><a href="java/Iterator/Iterator.java.html">Iterator.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/Iterator.javaspec.html">Iterator.javaspec</a> - Source file belonging to the it module specification</p>
+<p><a href="java/Iterator/IteratorUtil.java.html">IteratorUtil.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/IteratorUtil.javaspec.html">IteratorUtil.javaspec</a> - Source file belonging to the it module specification</p>
+<p><a href="java/Iterator/prog.jarsrc">prog.jarsrc</a> - Implementation of the prog module</p>
+<p><a href="java/Iterator/Program.java.html">Program.java</a> - Source file belonging to the prog module implementation</p>
+<p><a href="java/Iterator/SingletonIterator.java.html">SingletonIterator.java</a> - Source file belonging to the it module implementation</p>
+<p><a href="java/Iterator/SingletonIterator.javaspec.html">SingletonIterator.javaspec</a> - Source file belonging to the it module specification</p>
+</blockquote>
+<p><a href="java/Iterator.java.html">Iterator.java</a> - Demonstrates dynamic binding in Java</p>
+<p><a href="java/JavaCard.java.html">JavaCard.java</a> - JavaCard</p>
+<p><a href="java/map.java.html">Map.java</a> - Full functional specification and verification of a higher-order function: the map function known from functional programming</p>
+<p><a href="java/NestedExprTest.java.html">NestedExprTest.java</a> - VeriFast supports nested side-effecting expressions in Java programs</p>
+<p><a href="java/Recell.java.html">Recell.java</a> - The classic example of the power of predicate families for subtyping</p>
+<p><a href="java/Spouse.java.html">Spouse.java</a> - A non-final Person class where persons can marry and divorce. Uses fractional permissions to enforce the bidirectional binding.</p>
+<p><a href="java/Spouse2.java.html">Spouse2.java</a> - A more flexible version, where subclasses do not need to use the <tt>spouse</tt> field of class Person.</p>
+<p><a href="java/SpouseFinal.java.html">SpouseFinal.java</a> - A simple example where class Person is final</p>
+<p><a href="java/Stack.java.html">Stack.java</a> - A simple stack</p>
+<p><a href="java/StaticFields.java.html">StaticFields.java</a> - Static fields</p>
+<p><a href="java/ThreadingHelper.javaspec.html">ThreadingHelper.javaspec</a> - Specification of a small library that enables safe joining of threads. (Thread.join is unsafe since it returns normally even if the thread being joined terminates with an exception.)</p>
+<p><a href="java/ThreadRun.java.html">ThreadRun.java</a> - A simplified Thread spec using instance predicates, with an example client program</p>
+<p><a href="java/Tree.java.html">Tree.java</a> - Full functional specification and verification of binary search tree implementation (not self-balancing)</p>
 </body>
 </html>
