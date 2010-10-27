@@ -32,9 +32,9 @@ struct device {
     //@ list<char> nameChars;
     struct module *owner;
     struct file_ops *ops;
-    //@ int cellFactory;  // ID of the ghost cell factory for this device.
     //@ int useCount;  // Number of threads using this device.
     //@ struct file_ops *ops2;  // Same value as ops.
+    //@ predicate() state;  // Module-provided predicate describing the resources used by the device.
 };
 
 static struct device *directory;
@@ -112,33 +112,6 @@ lemma void countable_integer_module_contrib_sum_id() : countable_integer
     }
 }
 
-predicate_family_instance countable_integer(countable_integer_device_cellFactory)(predicate(void *, int) p) = p == device_cellFactory;
-lemma void countable_integer_device_cellFactory() : countable_integer
-    requires countable_integer(countable_integer_device_cellFactory)(?p) &*& [?f1]p(?a, ?v1) &*& [?f2]p(a, ?v2);
-    ensures [f1 + f2]p(a, v1) &*& v2 == v1 &*& f1 + f2 <= 1;
-{
-    open countable_integer(countable_integer_device_cellFactory)(_);
-    struct device *d = a;
-    {
-        lemma void helper()
-            requires [f1]d->cellFactory |-> v1 &*& [f2]d->cellFactory |-> v2;
-            ensures [f1 + f2]d->cellFactory |-> v1 &*& v2 == v1;
-        {
-        }
-        helper();
-    }
-    if (1 < f1 + f2) {
-        {
-            lemma void helper()
-                requires d->cellFactory |-> v1 &*& [f1 + f2 - 1]d->cellFactory |-> v1;
-                ensures false;
-            {
-            }
-            helper();
-        }
-    }
-}
-
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
     module->name |-> ?name &*& chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, length(nameChars)) &*&
     module->library |-> ?library &*& library(library, ?mainModule) &*&
@@ -185,11 +158,10 @@ predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     [1/2]device->nameChars |-> ?nameChars &*& chars(name, nameChars) &*& mem('\0', nameChars) == true &*&
     [1/2]device->owner |-> ?owner &*& counted_ticket(ghost_set_member_handle_ctor(modulesId, owner), ?f1) &*& [f1]ghost_set_member_handle(modulesId, owner) &*&
     device->useCount |-> ?useCount &*&
-    counted_ghost_cell_factory(device_cellFactory, device, 1) &*&
-    counted_ghost_cell(device_cellFactory, device, 0, 2 + useCount, ?device_) &*& [2]counted_ghost_cell_ticket<predicate()>(device_cellFactory, device, 0, device_) &*&
+    counting(device_state, device, 2 + useCount, ?state) &*& ticket(device_state, device, ?stateFrac) &*& [stateFrac]device->state |-> state &*&
     counting(device_ops2, device, 2 + useCount, ?fileOps) &*& ticket(device_ops2, device, ?ops2Frac) &*& [ops2Frac]device->ops2 |-> fileOps &*&
-    counted(device_, useCount) &*&
-    counted(file_ops_ctor(device, fileOps, device_), useCount) &*&
+    counted(state, useCount) &*&
+    counted(file_ops_ctor(device, fileOps, state), useCount) &*&
     counted_integer_ticket(module_contrib_sum_id, owner, ?f2) &*&
     [f2]owner->contrib_sum_id |-> ?contribSumId &*& contrib(contribSumId, useCount) &*&
     counted(ghost_set_member_handle_ctor(devicesId, device), useCount + 1) &*&
@@ -211,14 +183,14 @@ predicate kernel_module_initializing(struct module *owner, int deviceCount) =
 predicate kernel_device
     (
         struct device *device, struct module *owner, char *name, list<char> nameChars,
-        struct file_ops *ops, predicate() device_
+        struct file_ops *ops, predicate() state
     ) =
     counted_integer_ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
     counted_ticket(ghost_set_member_handle_ctor(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
     [1/2]device->owner |-> owner &*&
     [1/2]device->name |-> name &*&
     [1/2]device->nameChars |-> nameChars &*&
-    [2]counted_ghost_cell_ticket(device_cellFactory, device, 0, device_) &*&
+    ticket(device_state, device, ?deviceFrac) &*& [deviceFrac]device->state |-> state &*&
     ticket(device_ops2, device, ?ops2Frac) &*& [ops2Frac]device->ops2 |-> ops;
 
 predicate kernel_module_disposing(struct module *owner, int deviceCount) =
@@ -256,12 +228,10 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     //@ d->nameChars = nameChars;
     d->ops = ops;
     //@ d->useCount = 0;
-    //@ close countable_integer(countable_integer_device_cellFactory)(device_cellFactory);
-    //@ produce_lemma_function_pointer_chunk(countable_integer_device_cellFactory);
-    //@ create_counted_ghost_cell_factory(device_cellFactory, d);
-    //@ counted_ghost_cell_factory_create_cell(device_cellFactory, d, device);
-    //@ counted_ghost_cell_create_ticket(device_cellFactory, d, 0);
-    //@ counted_ghost_cell_create_ticket(device_cellFactory, d, 0);
+    //@ d->state = device;
+    //@ start_counting(device_state, d);
+    //@ create_ticket(device_state, d);
+    //@ create_ticket(device_state, d);
     //@ d->ops2 = ops;
     //@ start_counting(device_ops2, d);
     //@ create_ticket(device_ops2, d);
@@ -327,10 +297,9 @@ void unregister_device(struct device *device)
     //@ destroy_ticket(device_ops2, device);
     //@ destroy_ticket(device_ops2, device);
     //@ stop_counting(device_ops2, device);
-    //@ counted_ghost_cell_ticket_dispose(device_cellFactory, device, 0);
-    //@ counted_ghost_cell_ticket_dispose(device_cellFactory, device, 0);
-    //@ counted_ghost_cell_dispose(device_cellFactory, device);
-    //@ counted_ghost_cell_factory_dispose(device_cellFactory, device);
+    //@ destroy_ticket(device_state, device);
+    //@ destroy_ticket(device_state, device);
+    //@ stop_counting(device_state, device);
     free(device);
 }
 
@@ -720,13 +689,13 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ close kernel_module(modulesId, devicesId)(owner);
                         //@ lseg_add(modules);
                         //@ lseg_append_final(modules);
-                        //@ assert [2]counted_ghost_cell_ticket<predicate()>(device_cellFactory, d, 0, ?device);
+                        //@ predicate() device = d->state;
                         //@ struct file_ops *ops = d->ops2;
                         //@ counted_create_ticket(device);
                         //@ counted_create_ticket(file_ops_ctor(d, ops, device));
                         //@ counted_create_ticket(ghost_set_member_handle_ctor(devicesId, d));
                         //@ open [?memberHandleFrac]ghost_set_member_handle_ctor(devicesId, d)();
-                        //@ counted_ghost_cell_create_ticket(device_cellFactory, d, 0);
+                        //@ create_ticket(device_state, d);
                         //@ create_ticket(device_ops2, d);
                         //@ close device(modulesId, devicesId)(d);
                         //@ close lseg(d, 0, _, device(modulesId, devicesId));
@@ -771,7 +740,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ close kernel_module(modulesId, devicesId)(owner1);
                         //@ lseg_add(modules1);
                         //@ lseg_append_final(modules1);
-                        //@ counted_ghost_cell_ticket_dispose<predicate()>(device_cellFactory, d, 0);
+                        //@ destroy_ticket(device_state, d);
                         //@ destroy_ticket(device_ops2, d);
                         //@ close device(modulesId, devicesId)(d);
                         //@ close lseg(d, 0, _, device(modulesId, devicesId));
