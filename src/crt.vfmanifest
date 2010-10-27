@@ -30,6 +30,7 @@
 .provides ghost_cells.h#ghost_cell_leak
 .provides ghost_cells.h#ghost_cell_fraction_info
 .provides counting.h#start_counting
+.provides counting.h#counting_match_fraction
 .provides counting.h#create_ticket
 .provides counting.h#destroy_ticket
 .provides counting.h#stop_counting
