@@ -34,7 +34,8 @@ struct device {
     struct file_ops *ops;
     //@ int useCount;  // Number of threads using this device.
     //@ struct file_ops *ops2;  // Same value as ops.
-    //@ predicate() state;  // Module-provided predicate describing the resources used by the device.
+    //@ predicate(;) state;  // Module-provided predicate describing the resources used by the device.
+    //@ predicate(real, void *) fileState;  // Module-provided predicate describing the resources used by a file.
 };
 
 static struct device *directory;
@@ -57,34 +58,9 @@ predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module
     counting(ghost_set_member_handle_wrapper, pair(modulesId, module), deviceCount, unit) &*&
     malloc_block_module(module);
 
-predicate file_ops_args(struct device *device, struct file_ops *ops, predicate() device_) = true;
-predicate_ctor file_ops_ctor(struct device *device, struct file_ops *ops, predicate() device_)() = device->ops |-> ops &*& file_ops(ops, device_, _);
-
-predicate_family_instance countable(countable_file_ops_ctor)(predicate() p) =
-    file_ops_args(?device, ?ops, ?device_) &*& p == file_ops_ctor(device, ops, device_);
-lemma void countable_file_ops_ctor() : countable
-    requires countable(countable_file_ops_ctor)(?p) &*& [?f1]p() &*& [?f2]p();
-    ensures [f1 + f2]p() &*& f1 + f2 <= 1;
-{
-    open countable(countable_file_ops_ctor)(_);
-    open file_ops_args(?device, ?ops, ?device_);
-    open file_ops_ctor(device, ops, device_)();
-    open file_ops(ops, _, ?file);
-    open file_ops_ctor(device, ops, device_)();
-    open file_ops(ops, _, _);
-    if (1 < f1 + f2) {
-        {
-            lemma void helper()
-                requires device->ops |-> ops &*& [?f]device->ops |-> ops;
-                ensures false;
-            {
-            }
-            helper();
-        }
-    }
-    close [f1 + f2]file_ops(ops, device_, file);
-    close [f1 + f2]file_ops_ctor(device, ops, device_)();
-}
+predicate file_ops_wrapper1(struct device *device, predicate(;) state; struct file_ops *ops) =
+    device->ops |-> ops &*& device->fileState |-> ?fileState &*& file_ops(ops, state, fileState) &*& state();predicate file_ops_wrapper2(pair<struct device *, predicate(;)> device_state; struct file_ops *ops) =
+    file_ops_wrapper1(fst(device_state), snd(device_state), ops);
 
 predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     [1/2]device->name |-> ?name &*&
@@ -94,8 +70,7 @@ predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     device->useCount |-> ?useCount &*& 0 <= useCount &*&
     counting(device_state, device, 2 + useCount, ?state) &*& ticket(device_state, device, ?stateFrac) &*& [stateFrac]device->state |-> state &*&
     counting(device_ops2, device, 2 + useCount, ?fileOps) &*& ticket(device_ops2, device, ?ops2Frac) &*& [ops2Frac]device->ops2 |-> fileOps &*&
-    counted(state, useCount) &*&
-    counted(file_ops_ctor(device, fileOps, state), useCount) &*&
+    counting(file_ops_wrapper2, pair(device, state), useCount, fileOps) &*&
     ticket(module_contrib_sum_id, owner, ?f2) &*&
     [f2]owner->contrib_sum_id |-> ?contribSumId &*& contrib(contribSumId, useCount) &*&
     counting(ghost_set_member_handle_wrapper, pair(devicesId, device), useCount + 1, unit) &*&
@@ -118,7 +93,7 @@ predicate kernel_module_initializing(struct module *owner, int deviceCount) =
 predicate kernel_device
     (
         struct device *device, struct module *owner, char *name, list<char> nameChars,
-        struct file_ops *ops, predicate() state
+        struct file_ops *ops, predicate(;) state
     ) =
     ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
     ticket(ghost_set_member_handle_wrapper, pair(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
@@ -145,13 +120,11 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
         chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
-        file_ops(ops, ?device, _) &*& device() &*&
-        is_countable(?countable) &*& countable(countable)(device);
+        file_ops(ops, ?device, ?fileState) &*& device();
     @*/
     //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, device);
 {
     //@ open kernel_module_initializing(owner, deviceCount);
-    //@ create_counted(device);
     //@ create_ticket(ghost_set_member_handle_wrapper, pair(owner->modulesId, owner));
     //@ open ghost_set_member_handle_wrapper(_, _);
     //@ create_ticket(module_contrib_sum_id, owner);
@@ -181,11 +154,10 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     }
     @*/
     directory = d;
-    //@ close file_ops_ctor(d, ops, device)();
-    //@ close file_ops_args(d, ops, device);
-    //@ close countable(countable_file_ops_ctor)(file_ops_ctor(d, ops, device));
-    //@ produce_lemma_function_pointer_chunk(countable_file_ops_ctor);
-    //@ create_counted(file_ops_ctor(d, ops, device));
+    //@ d->fileState = fileState;
+    //@ close file_ops_wrapper1(d, device, ops);
+    //@ close file_ops_wrapper2(pair(d, device), ops);
+    //@ start_counting(file_ops_wrapper2, pair(d, device));
     //@ ghost_set_add(owner->devicesId, d);
     //@ close ghost_set_member_handle_wrapper(pair(owner->devicesId, d), unit);
     //@ start_counting(ghost_set_member_handle_wrapper, pair(owner->devicesId, d));
@@ -224,9 +196,9 @@ void unregister_device(struct device *device)
     //@ close [f1]ghost_set_member_handle_wrapper(pair(owner->modulesId, owner), unit);
     //@ destroy_ticket(ghost_set_member_handle_wrapper, pair(owner->modulesId, owner));
     //@ close kernel_module_disposing(owner, deviceCount - 1);
-    //@ counted_dispose(file_ops_ctor(device, ops, device_));
-    //@ open file_ops_ctor(device, ops, device_)();
-    //@ counted_dispose(device_);
+    //@ stop_counting(file_ops_wrapper2, pair(device, device_));
+    //@ open file_ops_wrapper2(_, _);
+    //@ open file_ops_wrapper1(_, _, _);
     //@ destroy_ticket(device_ops2, device);
     //@ destroy_ticket(device_ops2, device);
     //@ stop_counting(device_ops2, device);
@@ -615,10 +587,9 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ close kernel_module(modulesId, devicesId)(owner);
                         //@ lseg_add(modules);
                         //@ lseg_append_final(modules);
-                        //@ predicate() device = d->state;
+                        //@ predicate(;) device = d->state;
                         //@ struct file_ops *ops = d->ops2;
-                        //@ counted_create_ticket(device);
-                        //@ counted_create_ticket(file_ops_ctor(d, ops, device));
+                        //@ create_ticket(file_ops_wrapper2, pair(d, device));
                         //@ create_ticket(ghost_set_member_handle_wrapper, pair(devicesId, d));
                         //@ open [?memberHandleFrac]ghost_set_member_handle_wrapper(_, _);
                         //@ create_ticket(device_state, d);
@@ -629,9 +600,11 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ close kernel_inv(modulesId, devicesId)();
                         lock_release(kernelLock);
                         
-                        //@ open [?fileOpsFrac]file_ops_ctor(d, ops, device)();
+                        //@ open [?fileOpsFrac]file_ops_wrapper2(_, _);
+                        //@ open file_ops_wrapper1(_, _, _);
                         use_device(reader, writer, d);
-                        //@ close [fileOpsFrac]file_ops_ctor(d, ops, device)();
+                        //@ close [fileOpsFrac]file_ops_wrapper1(d, device, ops);
+                        //@ close [fileOpsFrac]file_ops_wrapper2(pair(d, device), ops);
                         
                         // Put the device state fraction back into the kernel lock
                         
@@ -660,9 +633,17 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ dispose_contrib(contribSumId1);
                         //@ close [memberHandleFrac]ghost_set_member_handle_wrapper(pair(devicesId, d), unit);
                         //@ destroy_ticket(ghost_set_member_handle_wrapper, pair(devicesId, d));
-                        //@ counted_ticket_dispose(device);
+                        /*@
+                        if (useCount1 == 0) {
+                            stop_counting(file_ops_wrapper2, pair(d, device));
+                            open [1]file_ops_wrapper2(_, _);
+                            open [1]file_ops_wrapper1(_, _, _);
+                            open file_ops_wrapper2(_, _);
+                            open file_ops_wrapper1(_, _, _);
+                        }
+                        @*/
                         //@ create_contrib(contribSumId1, useCount1 - 1);
-                        //@ counted_ticket_dispose(file_ops_ctor(d, ops, device));
+                        //@ destroy_ticket(file_ops_wrapper2, pair(d, device));
                         //@ close kernel_module(modulesId, devicesId)(owner1);
                         //@ lseg_add(modules1);
                         //@ lseg_append_final(modules1);

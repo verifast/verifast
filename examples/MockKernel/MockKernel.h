@@ -31,7 +31,7 @@ struct file_ops {
 
 /*@
 
-predicate file_ops(struct file_ops *fileOps, predicate() device, predicate(real, void *) file) =
+predicate file_ops(struct file_ops *fileOps, predicate(;) device, predicate(real, void *) file;) =
     fileOps->open_ |-> ?open_ &*& [_]is_device_open(open_, device, file) &*&
     fileOps->read |-> ?read &*& [_]is_device_read(read, file) &*&
     fileOps->write |-> ?write &*& [_]is_device_write(write, file) &*&
@@ -43,7 +43,7 @@ struct device;
 
 /*@
 
-predicate kernel_device(struct device *device, struct module *owner, char *name, list<char> nameChars, struct file_ops *fileOps, predicate() device);
+predicate kernel_device(struct device *device, struct module *owner, char *name, list<char> nameChars, struct file_ops *fileOps, predicate(;) device);
 
 @*/
 
@@ -52,8 +52,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
         chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
-        file_ops(ops, ?device, _) &*& device() &*&
-        is_countable(?countable) &*& countable(countable)(device);
+        file_ops(ops, ?device, _) &*& device();
     @*/
     //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, device);
 

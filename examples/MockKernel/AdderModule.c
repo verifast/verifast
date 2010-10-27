@@ -12,7 +12,7 @@ static int acc;
 static struct lock *adderLock;
 
 //@ predicate adderLockInv() = integer(&acc, _);
-//@ predicate adderDeviceState() = [1/2]module_code(AdderModule) &*& pointer(&adderLock, ?adderLock_) &*& lock(adderLock_, _, adderLockInv);
+//@ predicate adderDeviceState(;) = [1/2]module_code(AdderModule) &*& pointer(&adderLock, ?adderLock_) &*& lock(adderLock_, _, adderLockInv);
 //@ predicate adderFile(real frac, void *file) = [frac/2]module_code(AdderModule) &*& [frac]pointer(&adderLock, ?adderLock_) &*& [frac]lock(adderLock_, _, adderLockInv);
 
 void *adder_open()
@@ -139,19 +139,6 @@ lemma void chars2_to_chars(char *c0)
     close chars(c0, cs);
 }
 
-predicate_family_instance countable(countable_adderDeviceState)(predicate() p) = p == adderDeviceState;
-
-lemma void countable_adderDeviceState() : countable
-    requires countable(countable_adderDeviceState)(?p) &*& [?f1]p() &*& [?f2]p();
-    ensures [f1 + f2]p() &*& f1 + f2 <= 1;
-{
-    open countable(countable_adderDeviceState)(_);
-    open adderDeviceState();
-    open adderDeviceState();
-    pointer_unique(&adderLock);
-    close [f1 + f2]adderDeviceState();
-}
-
 @*/
 
 module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule)
@@ -207,8 +194,6 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     //@ produce_function_pointer_chunk device_write(adder_write)(adderFile)(file, value) { call(); }
     //@ produce_function_pointer_chunk device_close(adder_close)(adderDeviceState, adderFile)(file) { call(); }
     //@ close file_ops(adderOps, adderDeviceState, adderFile);
-    //@ close countable(countable_adderDeviceState)(adderDeviceState);
-    //@ produce_lemma_function_pointer_chunk(countable_adderDeviceState);
     adderDevice = register_device(self, adderName, adderOps);
     
     //@ close kernel_module_state(adderState);
