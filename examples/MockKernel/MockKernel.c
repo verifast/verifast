@@ -58,33 +58,6 @@ lemma void countable_ghost_set_member_handle_ctor() : countable
     close [f1 + f2]ghost_set_member_handle_ctor(setId, element)();
 }
 
-predicate_family_instance countable_integer(countable_integer_module_devicesId2)(predicate(void *, int) p) = p == module_devicesId2;
-lemma void countable_integer_module_devicesId2() : countable_integer
-    requires countable_integer(countable_integer_module_devicesId2)(?p) &*& [?f1]p(?a, ?v1) &*& [?f2]p(a, ?v2);
-    ensures [f1 + f2]p(a, v1) &*& v2 == v1 &*& f1 + f2 <= 1;
-{
-    open countable_integer(countable_integer_module_devicesId2)(_);
-    struct module *m = a;
-    {
-        lemma void helper()
-            requires [f1]m->devicesId2 |-> v1 &*& [f2]m->devicesId2 |-> v2;
-            ensures [f1 + f2]m->devicesId2 |-> v1 &*& v2 == v1;
-        {
-        }
-        helper();
-    }
-    if (1 < f1 + f2) {
-        {
-            lemma void helper()
-                requires m->devicesId2 |-> v1 &*& [f1 + f2 - 1]m->devicesId2 |-> v1;
-                ensures false;
-            {
-            }
-            helper();
-        }
-    }
-}
-
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
     module->name |-> ?name &*& chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, length(nameChars)) &*&
     module->library |-> ?library &*& library(library, ?mainModule) &*&
@@ -92,7 +65,7 @@ predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module
     module->ref_count |-> ?refCount &*&
     module->modulesId |-> modulesId &*&
     module->devicesId |-> devicesId &*&
-    counted_integer(module_devicesId2, module, devicesId, deviceCount) &*&
+    counting(module_devicesId2, module, deviceCount, devicesId) &*&
     counting(module_contrib_sum_id, module, deviceCount, ?contribSumId) &*&
     contrib_sum(contribSumId, deviceCount, refCount - 1) &*&
     counted(ghost_set_member_handle_ctor(modulesId, module), deviceCount) &*&
@@ -152,7 +125,7 @@ predicate kernel_module_initializing(struct module *owner, int deviceCount) =
     counting(module_contrib_sum_id, owner, deviceCount, ?contribSumId) &*&
     contrib_sum(contribSumId, deviceCount, 0) &*&
     counted(ghost_set_member_handle_ctor(modulesId, owner), deviceCount) &*&
-    counted_integer(module_devicesId2, owner, devicesId, deviceCount) &*&
+    counting(module_devicesId2, owner, deviceCount, devicesId) &*&
     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?devices, device(modulesId, devicesId)) &*& ghost_set(devicesId, devices);
 
 predicate kernel_device
@@ -160,7 +133,7 @@ predicate kernel_device
         struct device *device, struct module *owner, char *name, list<char> nameChars,
         struct file_ops *ops, predicate() state
     ) =
-    counted_integer_ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
+    ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
     counted_ticket(ghost_set_member_handle_ctor(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
     [1/2]device->owner |-> owner &*&
     [1/2]device->name |-> name &*&
@@ -173,7 +146,7 @@ predicate kernel_module_disposing(struct module *owner, int deviceCount) =
     [1/2]owner->devicesId |-> ?devicesId &*&
     counting(module_contrib_sum_id, owner, deviceCount, ?contribSumId) &*& contrib_sum(contribSumId, deviceCount, 0) &*&
     counted(ghost_set_member_handle_ctor(modulesId, owner), deviceCount) &*&
-    counted_integer(module_devicesId2, owner, devicesId, deviceCount) &*&
+    counting(module_devicesId2, owner, deviceCount, devicesId) &*&
     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?devices, device(modulesId, devicesId)) &*& ghost_set(devicesId, devices);
 
 @*/
@@ -196,7 +169,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     //@ open ghost_set_member_handle_ctor(owner->modulesId, owner)();
     //@ create_ticket(module_contrib_sum_id, owner);
     //@ create_contrib(owner->contrib_sum_id, 0);
-    //@ counted_integer_create_ticket(module_devicesId2, owner);
+    //@ create_ticket(module_devicesId2, owner);
     struct device *d = malloc(sizeof(struct device));
     if (d == 0) abort();
     d->name = name;
@@ -247,7 +220,8 @@ void unregister_device(struct device *device)
 {
     //@ open kernel_device(device, owner, name, nameChars, ops, device_);
     //@ open kernel_module_disposing(owner, deviceCount);
-    //@ counted_integer_ticket_dispose(module_devicesId2, owner);
+    //@ if (deviceCount == 0) { stop_counting(module_devicesId2, owner); { lemma void helper() requires [?f1]owner->devicesId2 |-> _ &*& [?f2]owner->devicesId2 |-> _; ensures [f1]owner->devicesId2 |-> _ &*& [f2]owner->devicesId2 |-> _; {} helper(); } }
+    //@ destroy_ticket(module_devicesId2, owner);
     //@ int devicesId = owner->devicesId;
     //@ ghost_set_match_member_handle(devicesId, device);
     linked_list_remove(&directory, device);
@@ -477,9 +451,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
             //@ m->modulesId = modulesId;
             //@ m->devicesId = devicesId;
             //@ m->devicesId2 = devicesId;
-            //@ close countable_integer(countable_integer_module_devicesId2)(module_devicesId2);
-            //@ produce_lemma_function_pointer_chunk(countable_integer_module_devicesId2);
-            //@ create_counted_integer(module_devicesId2, m);
+            //@ start_counting(module_devicesId2, m);
             //@ close kernel_module_initializing(m, 0);
             dispose = init(m);
             //@ open kernel_module_state(?state);
@@ -562,7 +534,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
                             //@ open ghost_set_member_handle_ctor(modulesId, m)();
                             //@ ghost_set_remove(modulesId, m);
                             //@ stop_counting(module_contrib_sum_id, m);
-                            //@ counted_integer_dispose(module_devicesId2, m);
+                            //@ stop_counting(module_devicesId2, m);
                             //@ leak contrib_sum(_, _, _);
                             free(m);
                             writer_write_string(writer, "Module has been unloaded\r\n");

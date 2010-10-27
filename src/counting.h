@@ -19,7 +19,7 @@ lemma real create_ticket<a, b>(predicate(a; b) p, a a);
     ensures counting(p, a, count + 1, b) &*& ticket(p, a, result) &*& [result]p(a, b) &*& 0 < result;
 
 lemma void destroy_ticket<a, b>(predicate(a; b) p, a a);
-    requires counting(p, a, ?count, ?b1) &*& ticket(p, a, ?f) &*& [f]p(a, ?b2) &*& 0 < count;
+    requires counting(p, a, ?count, ?b1) &*& ticket(p, a, ?f) &*& [f]p(a, ?b2) &*& 0 != count;
     ensures counting(p, a, count - 1, b1) &*& b2 == b1;
 
 lemma void stop_counting<a, b>(predicate(a; b) p, a a);
