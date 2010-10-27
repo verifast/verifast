@@ -8,7 +8,6 @@
 #include "MockKernelModule_proxy.h"
 #include "lists.h"
 //@ #include "counting.h"
-//@ #include "counting_ex.h"
 //@ #include "ghost_sets.h"
 //@ #include "contrib.h"
 

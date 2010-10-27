@@ -2,7 +2,6 @@
 #include "malloc.h"
 #include "MockKernel.h"
 #include "stdlib.h"
-//@ #include "counting_ex.h"
 
 //@ unloadable_module;
 
