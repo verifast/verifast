@@ -41,22 +41,8 @@ static struct device *directory;
 
 /*@
 
-predicate_ctor ghost_set_member_handle_ctor(int setId, void *element)() = ghost_set_member_handle(setId, element);
-
-predicate ghost_set_member_handle_args(int setId, void *element) = true;
-predicate_family_instance countable(countable_ghost_set_member_handle_ctor)(predicate() p) =
-    ghost_set_member_handle_args(?setId, ?element) &*& p == ghost_set_member_handle_ctor(setId, element);
-lemma void countable_ghost_set_member_handle_ctor() : countable
-    requires countable(countable_ghost_set_member_handle_ctor)(?p) &*& [?f1]p() &*& [?f2]p();
-    ensures [f1 + f2]p() &*& f1 + f2 <= 1;
-{
-    open countable(countable_ghost_set_member_handle_ctor)(_);
-    open ghost_set_member_handle_args(?setId, ?element);
-    open ghost_set_member_handle_ctor(setId, element)();
-    open ghost_set_member_handle_ctor(setId, element)();
-    ghost_set_member_handle_unique(setId, element);
-    close [f1 + f2]ghost_set_member_handle_ctor(setId, element)();
-}
+predicate ghost_set_member_handle_wrapper(pair<int, void *> input; unit output) =
+    ghost_set_member_handle(fst(input), snd(input)) &*& output == unit;
 
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
     module->name |-> ?name &*& chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, length(nameChars)) &*&
@@ -68,7 +54,7 @@ predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module
     counting(module_devicesId2, module, deviceCount, devicesId) &*&
     counting(module_contrib_sum_id, module, deviceCount, ?contribSumId) &*&
     contrib_sum(contribSumId, deviceCount, refCount - 1) &*&
-    counted(ghost_set_member_handle_ctor(modulesId, module), deviceCount) &*&
+    counting(ghost_set_member_handle_wrapper, pair(modulesId, module), deviceCount, unit) &*&
     malloc_block_module(module);
 
 predicate file_ops_args(struct device *device, struct file_ops *ops, predicate() device_) = true;
@@ -103,15 +89,16 @@ lemma void countable_file_ops_ctor() : countable
 predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     [1/2]device->name |-> ?name &*&
     [1/2]device->nameChars |-> ?nameChars &*& chars(name, nameChars) &*& mem('\0', nameChars) == true &*&
-    [1/2]device->owner |-> ?owner &*& counted_ticket(ghost_set_member_handle_ctor(modulesId, owner), ?f1) &*& [f1]ghost_set_member_handle(modulesId, owner) &*&
-    device->useCount |-> ?useCount &*&
+    [1/2]device->owner |-> ?owner &*&
+    ticket(ghost_set_member_handle_wrapper, pair(modulesId, owner), ?f1) &*& [f1]ghost_set_member_handle(modulesId, owner) &*&
+    device->useCount |-> ?useCount &*& 0 <= useCount &*&
     counting(device_state, device, 2 + useCount, ?state) &*& ticket(device_state, device, ?stateFrac) &*& [stateFrac]device->state |-> state &*&
     counting(device_ops2, device, 2 + useCount, ?fileOps) &*& ticket(device_ops2, device, ?ops2Frac) &*& [ops2Frac]device->ops2 |-> fileOps &*&
     counted(state, useCount) &*&
     counted(file_ops_ctor(device, fileOps, state), useCount) &*&
     ticket(module_contrib_sum_id, owner, ?f2) &*&
     [f2]owner->contrib_sum_id |-> ?contribSumId &*& contrib(contribSumId, useCount) &*&
-    counted(ghost_set_member_handle_ctor(devicesId, device), useCount + 1) &*&
+    counting(ghost_set_member_handle_wrapper, pair(devicesId, device), useCount + 1, unit) &*&
     malloc_block_device(device);
 
 predicate_ctor kernel_inv(int modulesId, int devicesId)() =
@@ -124,7 +111,7 @@ predicate kernel_module_initializing(struct module *owner, int deviceCount) =
     [1/2]owner->devicesId |-> ?devicesId &*&
     counting(module_contrib_sum_id, owner, deviceCount, ?contribSumId) &*&
     contrib_sum(contribSumId, deviceCount, 0) &*&
-    counted(ghost_set_member_handle_ctor(modulesId, owner), deviceCount) &*&
+    counting(ghost_set_member_handle_wrapper, pair(modulesId, owner), deviceCount, unit) &*&
     counting(module_devicesId2, owner, deviceCount, devicesId) &*&
     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?devices, device(modulesId, devicesId)) &*& ghost_set(devicesId, devices);
 
@@ -134,7 +121,7 @@ predicate kernel_device
         struct file_ops *ops, predicate() state
     ) =
     ticket(module_devicesId2, owner, ?f) &*& [f]owner->devicesId2 |-> ?devicesId &*&
-    counted_ticket(ghost_set_member_handle_ctor(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
+    ticket(ghost_set_member_handle_wrapper, pair(devicesId, device), ?f2) &*& [f2]ghost_set_member_handle(devicesId, device) &*&
     [1/2]device->owner |-> owner &*&
     [1/2]device->name |-> name &*&
     [1/2]device->nameChars |-> nameChars &*&
@@ -145,7 +132,7 @@ predicate kernel_module_disposing(struct module *owner, int deviceCount) =
     [1/2]owner->modulesId |-> ?modulesId &*&
     [1/2]owner->devicesId |-> ?devicesId &*&
     counting(module_contrib_sum_id, owner, deviceCount, ?contribSumId) &*& contrib_sum(contribSumId, deviceCount, 0) &*&
-    counted(ghost_set_member_handle_ctor(modulesId, owner), deviceCount) &*&
+    counting(ghost_set_member_handle_wrapper, pair(modulesId, owner), deviceCount, unit) &*&
     counting(module_devicesId2, owner, deviceCount, devicesId) &*&
     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?devices, device(modulesId, devicesId)) &*& ghost_set(devicesId, devices);
 
@@ -165,8 +152,8 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
 {
     //@ open kernel_module_initializing(owner, deviceCount);
     //@ create_counted(device);
-    //@ counted_create_ticket(ghost_set_member_handle_ctor(owner->modulesId, owner));
-    //@ open ghost_set_member_handle_ctor(owner->modulesId, owner)();
+    //@ create_ticket(ghost_set_member_handle_wrapper, pair(owner->modulesId, owner));
+    //@ open ghost_set_member_handle_wrapper(_, _);
     //@ create_ticket(module_contrib_sum_id, owner);
     //@ create_contrib(owner->contrib_sum_id, 0);
     //@ create_ticket(module_devicesId2, owner);
@@ -200,13 +187,10 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     //@ produce_lemma_function_pointer_chunk(countable_file_ops_ctor);
     //@ create_counted(file_ops_ctor(d, ops, device));
     //@ ghost_set_add(owner->devicesId, d);
-    //@ close ghost_set_member_handle_ctor(owner->devicesId, d)();
-    //@ close ghost_set_member_handle_args(owner->devicesId, d);
-    //@ close countable(countable_ghost_set_member_handle_ctor)(ghost_set_member_handle_ctor(owner->devicesId, d));
-    //@ produce_lemma_function_pointer_chunk(countable_ghost_set_member_handle_ctor);
-    //@ create_counted(ghost_set_member_handle_ctor(owner->devicesId, d));
-    //@ counted_create_ticket(ghost_set_member_handle_ctor(owner->devicesId, d));
-    //@ open ghost_set_member_handle_ctor(owner->devicesId, d)();
+    //@ close ghost_set_member_handle_wrapper(pair(owner->devicesId, d), unit);
+    //@ start_counting(ghost_set_member_handle_wrapper, pair(owner->devicesId, d));
+    //@ create_ticket(ghost_set_member_handle_wrapper, pair(owner->devicesId, d));
+    //@ open ghost_set_member_handle_wrapper(_, _);
     //@ close device(owner->modulesId, owner->devicesId)(d);
     //@ close lseg(d, 0, _, device(owner->modulesId, owner->devicesId));
     //@ close kernel_module_initializing(owner, deviceCount + 1);
@@ -227,18 +211,18 @@ void unregister_device(struct device *device)
     linked_list_remove(&directory, device);
     //@ open device(owner->modulesId, owner->devicesId)(device);
     //@ assert [?f]ghost_set_member_handle(devicesId, device);
-    //@ close [f]ghost_set_member_handle_ctor(owner->devicesId, device)();
-    //@ counted_ticket_dispose(ghost_set_member_handle_ctor(owner->devicesId, device));
+    //@ close [f]ghost_set_member_handle_wrapper(pair(owner->devicesId, device), unit);
+    //@ destroy_ticket(ghost_set_member_handle_wrapper, pair(owner->devicesId, device));
     //@ int contribSumId = owner->contrib_sum_id;
     //@ destroy_ticket(module_contrib_sum_id, owner);
     //@ dispose_contrib(contribSumId);
-    //@ counted_dispose(ghost_set_member_handle_ctor(owner->devicesId, device));
-    //@ open ghost_set_member_handle_ctor(owner->devicesId, device)();
+    //@ stop_counting(ghost_set_member_handle_wrapper, pair(owner->devicesId, device));
+    //@ open ghost_set_member_handle_wrapper(_, _);
     //@ ghost_set_remove(owner->devicesId, device);
     //@ int modulesId = owner->modulesId;
     //@ assert [?f1]ghost_set_member_handle(modulesId, owner);
-    //@ close [f1]ghost_set_member_handle_ctor(owner->modulesId, owner)();
-    //@ counted_ticket_dispose(ghost_set_member_handle_ctor(owner->modulesId, owner));
+    //@ close [f1]ghost_set_member_handle_wrapper(pair(owner->modulesId, owner), unit);
+    //@ destroy_ticket(ghost_set_member_handle_wrapper, pair(owner->modulesId, owner));
     //@ close kernel_module_disposing(owner, deviceCount - 1);
     //@ counted_dispose(file_ops_ctor(device, ops, device_));
     //@ open file_ops_ctor(device, ops, device_)();
@@ -443,11 +427,8 @@ void handle_connection(struct socket *socket) //@ : thread_run
             }
             @*/
             //@ ghost_set_add(modulesId, m);
-            //@ close ghost_set_member_handle_ctor(modulesId, m)();
-            //@ close ghost_set_member_handle_args(modulesId, m);
-            //@ close countable(countable_ghost_set_member_handle_ctor)(ghost_set_member_handle_ctor(modulesId, m));
-            //@ produce_lemma_function_pointer_chunk(countable_ghost_set_member_handle_ctor);
-            //@ create_counted(ghost_set_member_handle_ctor(modulesId, m));
+            //@ close ghost_set_member_handle_wrapper(pair(modulesId, m), unit);
+            //@ start_counting(ghost_set_member_handle_wrapper, pair(modulesId, m));
             //@ m->modulesId = modulesId;
             //@ m->devicesId = devicesId;
             //@ m->devicesId2 = devicesId;
@@ -530,8 +511,8 @@ void handle_connection(struct socket *socket) //@ : thread_run
                             //@ open kernel_module_disposing(m, 0);
                             free(m->name);
                             library_free(m->library);
-                            //@ counted_dispose(ghost_set_member_handle_ctor(modulesId, m));
-                            //@ open ghost_set_member_handle_ctor(modulesId, m)();
+                            //@ stop_counting(ghost_set_member_handle_wrapper, pair(modulesId, m));
+                            //@ open ghost_set_member_handle_wrapper(_, _);
                             //@ ghost_set_remove(modulesId, m);
                             //@ stop_counting(module_contrib_sum_id, m);
                             //@ stop_counting(module_devicesId2, m);
@@ -638,8 +619,8 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ struct file_ops *ops = d->ops2;
                         //@ counted_create_ticket(device);
                         //@ counted_create_ticket(file_ops_ctor(d, ops, device));
-                        //@ counted_create_ticket(ghost_set_member_handle_ctor(devicesId, d));
-                        //@ open [?memberHandleFrac]ghost_set_member_handle_ctor(devicesId, d)();
+                        //@ create_ticket(ghost_set_member_handle_wrapper, pair(devicesId, d));
+                        //@ open [?memberHandleFrac]ghost_set_member_handle_wrapper(_, _);
                         //@ create_ticket(device_state, d);
                         //@ create_ticket(device_ops2, d);
                         //@ close device(modulesId, devicesId)(d);
@@ -677,8 +658,8 @@ void handle_connection(struct socket *socket) //@ : thread_run
                         //@ assert contrib(contribSumId1, ?useCount1);
                         //@ counting_match_fraction(module_contrib_sum_id, owner1);
                         //@ dispose_contrib(contribSumId1);
-                        //@ close [memberHandleFrac]ghost_set_member_handle_ctor(devicesId, d)();
-                        //@ counted_ticket_dispose(ghost_set_member_handle_ctor(devicesId, d));
+                        //@ close [memberHandleFrac]ghost_set_member_handle_wrapper(pair(devicesId, d), unit);
+                        //@ destroy_ticket(ghost_set_member_handle_wrapper, pair(devicesId, d));
                         //@ counted_ticket_dispose(device);
                         //@ create_contrib(contribSumId1, useCount1 - 1);
                         //@ counted_ticket_dispose(file_ops_ctor(d, ops, device));
