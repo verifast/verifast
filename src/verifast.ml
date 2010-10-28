@@ -3332,8 +3332,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
-      match try_assoc' (pn,ilist) id inductive_arities with
-        Some n ->
+      match resolve (pn,ilist) l id inductive_arities with
+        Some (id, n) ->
         if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
         InductiveType (id, List.map (check_type_arg (pn,ilist) tpenv) targs)
       | None -> static_error l "No such inductive datatype." None
