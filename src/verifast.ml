@@ -851,6 +851,7 @@ type type_ =
   | InferredType of type_ option ref (* inferred type, is unified during type checking *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
+  | RefType of type_ (* not a real type; used only for locals whose address is taken *)
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
 
@@ -2586,6 +2587,7 @@ let rec string_of_type t =
   | ArrayType(t) -> (string_of_type t) ^ "[]"
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
+  | RefType(t) -> "ref " ^ (string_of_type t)
 
 let string_of_targs targs =
   if targs = [] then "" else "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
@@ -4335,6 +4337,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Var (l, x, scope) ->
       begin
       match try_assoc x tenv with
+      | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t)
       | Some t -> scope := Some LocalVar; (e, t)
       | None ->
       match resolve (pn,ilist) l x purefuncmap with
@@ -4548,7 +4551,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | AddressOf (l, e) ->
       let (w, t) = check e in
-      (AddressOf (l, w), PtrType t)
+      begin
+      match w with
+        Deref(_, Var(l2, x, scope), _) | Var(l2, x, scope) when !scope = Some LocalVar ->
+        begin match try_assoc x tenv with
+          Some(RefType(t)) -> (AddressOf (l, Var(l2, x, scope)), PtrType t)
+        | _ -> static_error l "Taking the address of this expression is not supported." None
+        end
+      | _ -> (AddressOf (l, w), PtrType t)
+      end
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class")
@@ -6013,7 +6024,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       ev state e $. fun state v ->
       begin
         match read_field with
-          None -> static_error l "Cannot use field dereference in this context." None
+          None -> static_error l "Cannot perform dereference in this context." None
         | Some (read_field, read_static_field, deref_pointer, read_array) ->
           let (Some t) = !t in
           cont state (deref_pointer l v t)
@@ -6028,6 +6039,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
           let Some (l, tp, symbol) = try_assoc x globalmap in cont state symbol
+        | Var(l, x, scope) when !scope = Some LocalVar ->
+          begin match try_assoc x env with
+            None -> static_error l ("Variable " ^ x ^ " not found.") None
+          | Some(v) -> cont state v
+          end
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
@@ -8026,61 +8042,74 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (* Region: symbolic execution helpers *)
   
   (* locals whose address is taken in e *)
-  let rec locals_address_taken e =
+  
+    let rec expr_address_taken e =
+    let pat_address_taken pat =
+      match pat with
+        LitPat(e) -> expr_address_taken e
+      | _ -> []
+    in
     match e with
-      True(_) -> []
-    | False(_) -> []
-    | Null(_) -> []
-    | Var(_, _, _) -> []
-    | Operation(l, op, [e1; e2], _) -> List.append (locals_address_taken e1) (locals_address_taken e2)
-    | IntLit(_, _, _) -> []
-    | StringLit(_, _) -> []
-    | ClassLit(_, _) -> []
-    | Read(_, e, _) -> locals_address_taken e
-    | WRead(_, e, _, _, _, _, _, _) -> locals_address_taken e
-    | Deref(_, e, _) -> locals_address_taken e
-    | CallExpr(l, name, targs, _, args, binding) ->  List.flatten (List.map (fun pat -> match pat with LitPat(e) -> locals_address_taken e | _ -> []) args)
-    | ExprCallExpr (l, e, es) -> flatmap locals_address_taken (e::es)
-    | WPureFunCall (l, g, targs, args) -> flatmap locals_address_taken args
-    | WPureFunValueCall (l, e, es) -> flatmap locals_address_taken (e::es)
-    | WMethodCall (l, cn, m, pts, args, mb) -> flatmap locals_address_taken args
-    | IfExpr(_, con, e1, e2) -> (locals_address_taken con) @ (locals_address_taken e1) @ (locals_address_taken e2)
-    | SwitchExpr(_, e, clauses, cdef_opt, _) ->
-        (locals_address_taken e) @
-        (List.flatten (List.map (fun clause -> match clause with SwitchExprClause(_, _, _, e) -> locals_address_taken e) clauses)) @
-        (match cdef_opt with None -> [] | Some (l, e) -> locals_address_taken e)
-    | AddressOf(_, Var(_, x, scope)) when !scope = Some(LocalVar) -> [x]
-    | AddressOf(_, e) -> locals_address_taken e
-    | PredNameExpr(_, _) -> []
-    | CastExpr(_, _, _, e) -> locals_address_taken e
-    | SizeofExpr(_, _) -> []
-    | ProverTypeConversion(_, _, e) -> locals_address_taken e
-    | AssignExpr (_, lhs, rhs) -> locals_address_taken lhs @ locals_address_taken rhs
-    | AssignOpExpr (_, lhs, op, rhs, _) -> locals_address_taken lhs @ locals_address_taken rhs
+      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | StringLit(_, _) | ClassLit(_) -> []
+    | Operation(_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | Read(_, e, _) -> expr_address_taken e
+    | ArrayLengthExpr(_, e) -> expr_address_taken e
+    | WRead(_, e, _, _, _, _, _, _) -> expr_address_taken e
+    | ReadArray(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | WReadArray(_, e1, _, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | Deref(_, e, _) -> (expr_address_taken e)
+    | CallExpr(_, _, _, ps1, ps2, _) -> List.flatten (List.map (fun pat -> pat_address_taken pat) (ps1 @ ps2))
+    | ExprCallExpr(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
+    | WFunPtrCall(_, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | WPureFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | WPureFunValueCall(_, e, es) -> List.flatten (List.map (fun e -> expr_address_taken e) (e :: es))
+    | WFunCall(_, _, _, es) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
+    | WMethodCall _ -> []
+    | NewArray _ -> []
+    | NewObject _ -> []
+    | NewArrayWithInitializer _ -> []
+    | IfExpr(_, e1, e2, e3) -> (expr_address_taken e1) @ (expr_address_taken e2) @ (expr_address_taken e3)
+    | SwitchExpr(_, e, cls, dcl, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
+    | PredNameExpr _ -> []
+    | CastExpr(_, _, _, e) -> expr_address_taken e
+    | SizeofExpr _ -> []
+    | AddressOf(_, Var(_, x, scope)) -> [x]
+    | AddressOf(_, e) -> expr_address_taken e
+    | ProverTypeConversion(_, _, e) -> expr_address_taken e
+    | ArrayTypeExpr'(_, e) -> expr_address_taken e
+    | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | AssignOpExpr(_, e1, _, e2, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
   in
   
-  let rec locals_address_taken_stmt s =
+  let rec stmt_address_taken s =
     match s with
-      PureStmt(_, s) -> locals_address_taken_stmt s (* can we take the address of a local in here? *)
-    | NonpureStmt(_, _, s) -> locals_address_taken_stmt s
-    | ExprStmt e -> locals_address_taken e
-    | DeclStmt(_, _, xs) -> flatmap (fun (x, e) -> begin match e with None -> [] | Some(e) -> locals_address_taken e end) xs
-    | IfStmt(_, e, thn, els) -> (locals_address_taken e) @ 
-        (List.flatten (List.map (fun s -> locals_address_taken_stmt s) (thn @ els)))
-    | SwitchStmt(_, e, clauses) -> (locals_address_taken e) @ 
-        (List.flatten (List.map (fun c -> match c with SwitchStmtClause(_, _, stmts) -> 
-          List.flatten (List.map (fun s -> locals_address_taken_stmt s) stmts)
-        ) clauses))
-    | Assert(_, p) -> [] (* should we look inside predicates as well? *)
+      PureStmt(_, s) -> stmt_address_taken s
+    | NonpureStmt(_, _, s) -> stmt_address_taken s
+    | DeclStmt(_, _, inits) -> List.flatten (List.map (fun (_, e) -> match e with None -> [] | Some(e) -> expr_address_taken e) inits)
+    | ExprStmt(e) -> expr_address_taken e
+    | IfStmt(_, e, ss1, ss2) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) (ss1 @ ss2)))
+    | SwitchStmt(_, e, cls) -> (expr_address_taken e) @ (List.flatten (List.map (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) | SwitchStmtDefaultClause(_, ss) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))) cls))
+    | Assert(_, p) -> []
     | Leak(_, p) -> []
-    | Open(_, _, _, _, _, _, _) -> []
-    | Close(_, _, _, _, _, _, _) -> []
-    | ReturnStmt(_, e) -> (match e with None -> [] | Some(e) -> locals_address_taken e)
-    | WhileStmt(_, e, inv, dec, body, _) -> (locals_address_taken e) @ 
-        (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
-    | BlockStmt(_, decls, body) -> (List.flatten (List.map (fun s -> locals_address_taken_stmt s) body))
-    | _ -> [] (* todo *)
+    | Open _ | Close _ -> []
+    | ReturnStmt(_, Some(e)) -> expr_address_taken e
+    | ReturnStmt(_, None) -> []
+    | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
+    | BlockStmt(_, decls, ss) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
+    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
+    | _ -> []
+  (*| PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
+  | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
+  | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
+  | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
+  | CreateHandleStmt of loc * string * string * expr
+  | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
+  | InvariantStmt of loc * pred (* join point *)
+  | ProduceLemmaFunctionPointerChunkStmt of loc * expr * (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option * stmt option
+  | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc*)
   in
+  
+
  
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
@@ -10210,11 +10239,35 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
   | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g) None
-  
+  and heapify_params h tenv env ps =
+    begin match ps with
+      [] -> (h, tenv, env)
+    | (l, x, t, addr) :: ps -> 
+      let xvalue = List.assoc x env in
+      let tenv' = update tenv x (RefType (List.assoc x tenv)) in
+      let predsym = pointee_pred_symb l t in
+      let h' = Chunk ((predsym, true), [], real_unit, [addr; xvalue], None) :: h in
+      let env' = update env x addr in
+      heapify_params h' tenv' env' ps
+    end
+  and cleanup_heapy_locals (pn, ilist) h ps cont =
+    match ps with
+      [] -> cont h
+    | (l, x, t, addr) :: ps ->
+      assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l t, true) [] real_unit dummypat (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals (pn, ilist) h ps cont)
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
     let _ = push() in
     let penv = get_unique_var_symbs_ ps (match k with Regular -> false | _ -> true) in (* actual params invullen *)
+    let heapy_vars = list_remove_dups (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) in
+    let heapy_ps = List.flatten (List.map (fun (x,tp) -> 
+      if List.mem x heapy_vars then 
+        let addr = get_unique_var_symb_non_ghost x (PtrType tp) in
+        [(l, x, tp, addr)] 
+      else 
+       []
+      ) pre_tenv)
+    in
     let (sizemap, indinfo) =
       match ss with
         [SwitchStmt (_, Var (_, x, _), _)] -> (
@@ -10265,7 +10318,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end $. fun h tenv ghostenv env ->
         let do_return h env_post =
           assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            cleanup_heapy_locals (pn, ilist) h heapy_ps (fun h ->
+              check_leaks h env closeBraceLoc "Function leaks heap chunks."
+            )
           )
         in
         let return_cont h retval =
@@ -10276,6 +10331,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
         in
         begin fun tcont ->
+          let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env closeBraceLoc None [] return_cont

@@ -1,20 +1,44 @@
 // doesn't verify yet
 
-void swap(int* a, int* b)
-  //@ requires integer(a, ?av) &*& integer(b, ?bv);
-  //@ ensures integer(a, bv) &*& integer(b, av);
+void inc(int* i)
+  //@ requires integer(i, ?v);
+  //@ ensures integer(i, v+1);
 {
-  int tmp = *a;
-  *a = *b;
-  *b = tmp;
+  (*i) = (*i) + 1;
 }
 
-void test() 
+void inc_char(char* i)
+  //@ requires character(i, ?v);
+  //@ ensures character(i, (char)(v+1));
+{
+  (*i) = (char) ((*i) + 1);
+}
+
+bool myfunc() 
+  //@ requires true;
+  //@ ensures result == true;
+{
+  return true;
+}
+
+void address_of_param(int x) 
   //@ requires true;
   //@ ensures true;
 {
-    int x = 5; 
-    int y = 10;
-    swap(&x, &y);
-    assert(x == 10);
+    x = 5;
+    int* ptr = &x; 
+    inc(ptr);
+    int z = x;
+    assert(z == 6);
+}
+
+void address_of_param2(char* x) 
+  //@ requires character(x, ?v);
+  //@ ensures character(x, (char)(v + 1));
+{
+    char** ptr = &x; 
+    char y = *x;
+    inc_char(*ptr);
+    int z = *x;
+    assert(z == y+1);
 }
