@@ -86,6 +86,8 @@ let show_ide initialPath prover =
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
+      a "Window" ~label:"_Window";
+      a "Stub";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" (Verifast.banner ()))
     ]
@@ -121,6 +123,9 @@ let show_ide initialPath prover =
           <separator />
           <menuitem action='CheckOverflow' />
         </menu>
+        <menu action='Window'>
+           <menuitem action='Stub' />
+        </menu>
         <menu action='Help'>
           <menuitem action='About'/>
         </menu>
@@ -139,6 +144,7 @@ let show_ide initialPath prover =
   ");
   let undoAction = actionGroup#get_action "Undo" in
   let redoAction = actionGroup#get_action "Redo" in
+  let windowMenuItem = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/Window")#as_widget) in
   let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
   rootVbox#pack (ui#get_widget "/MenuBar");
@@ -183,6 +189,19 @@ let show_ide initialPath prover =
   let textNotebook = GPack.notebook ~scrollable:true ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let subNotebook = GPack.notebook ~scrollable:true ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let buffers = ref [] in
+  let goto_tab tab =
+    textNotebook#goto_page (index_of_byref tab !buffers)
+  in
+  let updateBufferMenu () =
+    let menu = GMenu.menu () in
+    let items = !buffers |> List.map (fun tab -> (match !(tab_path tab) with None -> "(Untitled)" | Some path -> path), tab) in
+    let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
+    items |> List.iter begin fun (name, tab) ->
+      let item = GMenu.menu_item ~label:name ~packing:(menu#add) () in
+      ignore (item#connect#activate (fun () -> goto_tab tab))
+    end;
+    windowMenuItem#set_submenu menu
+  in
   let updateBufferTitle (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) =
     let text = (match !path with None -> "(New buffer)" | Some path -> Filename.basename path) ^ (if buffer#modified then "*" else "") in
     textLabel#set_text text;
@@ -410,10 +429,20 @@ let show_ide initialPath prover =
       updateBufferTitle tab
     with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg)
   in
+  let open_path path =
+    let tab = add_buffer () in
+    load tab path;
+    updateBufferMenu ();
+    tab
+  in
+  let new_buffer () =
+    let tab = add_buffer () in
+    updateBufferMenu ();
+    tab
+  in
   begin
-    let tab = add_buffer() in
-    set_current_tab (Some tab);
-    match initialPath with None -> () | Some path -> load tab path
+    let tab = match initialPath with None -> new_buffer () | Some path -> open_path path in
+    set_current_tab (Some tab)
   end;
   let store ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) thePath =
     path := Some thePath;
@@ -498,7 +527,7 @@ let show_ide initialPath prover =
         tab::tabs ->
         if !(tab_path tab) = Some path0 then (k, tab) else iter (k + 1) tabs
       | [] ->
-        let tab = add_buffer() in load tab path0; (k, tab)
+        let tab = open_path path0 in (k, tab)
     in
     iter 0 !buffers
   in
@@ -605,9 +634,8 @@ let show_ide initialPath prover =
             textPaned#set_position 0;
           apply_tag_at_marks "currentLine" l;
           let (tab, mark1, _) = l in
-          let k = index_of_byref tab !buffers in
           let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
-          textNotebook#goto_page k;
+          goto_tab tab;
           buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
           Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
           append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
@@ -627,9 +655,8 @@ let show_ide initialPath prover =
           begin
             apply_tag_at_marks "currentCaller" caller_loc;
             let (tab, mark1, _) = caller_loc in
-            let k = index_of_byref tab !buffers in
             let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
-            textNotebook#goto_page k;
+            goto_tab tab;
             buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
             Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
             append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env caller_env)
@@ -696,16 +723,13 @@ let show_ide initialPath prover =
   bufferChangeListener := (fun tab ->
     ()
   );
-  let _ = root#event#connect#delete ~callback:(fun _ ->
+  root#event#connect#delete ~callback:(fun _ ->
     let rec iter tabs =
       match tabs with
         [] -> false
       | tab::tabs -> ensureSaved tab || iter tabs
     in
     iter !buffers
-  ) in
-  (actionGroup#get_action "New")#connect#activate (fun _ ->
-    ignore (add_buffer())
   );
   let get_current_tab() =
     match !current_tab with
@@ -721,6 +745,7 @@ let show_ide initialPath prover =
       subNotebook#remove subScroll#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
       begin match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None end;
+      updateBufferMenu ();
       false
     end
   in
@@ -731,13 +756,15 @@ let show_ide initialPath prover =
     | tab::_ ->
       close tab || close_all ()
   in
+  (actionGroup#get_action "New")#connect#activate (fun _ ->
+    ignore (close_all () || (new_buffer (); false))
+  );
   (actionGroup#get_action "Open")#connect#activate (fun _ ->
     match GToolbox.select_file ~title:"Open" () with
       None -> ()
     | Some thePath ->
       if not (close_all ()) then
-      let tab = add_buffer() in
-      load tab thePath
+      ignore (open_path thePath)
   );
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
   (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> saveAs tab; () | None -> ());
