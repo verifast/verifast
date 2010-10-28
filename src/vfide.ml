@@ -707,28 +707,38 @@ let show_ide initialPath prover =
   (actionGroup#get_action "New")#connect#activate (fun _ ->
     ignore (add_buffer())
   );
-  (actionGroup#get_action "Open")#connect#activate (fun _ ->
-    match GToolbox.select_file ~title:"Open" () with
-      None -> ()
-    | Some thePath ->
-      let tab = add_buffer() in
-      load tab thePath
-  );
   let get_current_tab() =
     match !current_tab with
       Some tab -> Some tab
     | None -> GToolbox.message_box "VeriFast IDE" ("Please select a buffer."); None
   in
   let close ((_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
-    if not (ensureSaved tab) then
+    (* Returns true if canceled *)
+    ensureSaved tab ||
     begin
       clearTrace();
       textNotebook#remove textScroll#coerce;
       subNotebook#remove subScroll#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
-      match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None
+      begin match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None end;
+      false
     end
   in
+  let rec close_all () =
+    (* Returns true if canceled *)
+    match !buffers with
+      [] -> false
+    | tab::_ ->
+      close tab || close_all ()
+  in
+  (actionGroup#get_action "Open")#connect#activate (fun _ ->
+    match GToolbox.select_file ~title:"Open" () with
+      None -> ()
+    | Some thePath ->
+      if not (close_all ()) then
+      let tab = add_buffer() in
+      load tab thePath
+  );
   (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
   (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> saveAs tab; () | None -> ());
   (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> close tab; () | None -> ());
@@ -826,9 +836,9 @@ let show_ide initialPath prover =
       | Some(_) -> (save tab); (* prevents offset errors if files are modified outside of vfide *)
       buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
     ) !buffers;
-    match get_current_tab() with
-      None -> ()
-    | Some tab ->
+    match !buffers with
+      [] -> ()
+    | tab::_ ->
       begin
         match ensureHasPath tab with
           None -> ()
