@@ -1,5 +1,4 @@
-#/bin/bash
-MYRELDIR=`dirname $0`
-MYABSDIR=`cd $MYRELDIR; pwd`
+#/bin/sh
+MYABSDIR=$(dirname $(readlink -f $0))
 export LD_LIBRARY_PATH=$MYABSDIR:$LD_LIBRARY_PATH
 "$MYABSDIR/vfide-core" $*
