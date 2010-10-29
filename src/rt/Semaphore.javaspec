@@ -9,11 +9,11 @@ predicate create_semaphore_ghost_arg(predicate() inv) = true;
 predicate n_times(int p, predicate() inv) = p == 0 ? emp : (inv() &*& n_times(p - 1, inv));
 
 lemma void semaphore_dispose(Semaphore s);
-    requires semaphore(?f, s, ?p, ?inv);
+    requires semaphore(?f, s, ?p, ?inv) &*& f == 1;
     ensures n_times(p, inv);
     
 lemma void semaphore_split(Semaphore s, real f1, int p1);
-    requires semaphore(?f, s, ?p, ?inv);
+    requires semaphore(?f, s, ?p, ?inv) &*& f1 > 0;
     ensures semaphore(f1, s, p1, inv) &*& semaphore(f - f1, s, p - p1, inv);
     
 lemma void semaphore_join();
