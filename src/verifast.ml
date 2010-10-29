@@ -8115,6 +8115,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         (match loopspecopt with 
           Some(LoopInv(a)) -> ass_mark_addr_taken a locals;
         | Some(LoopSpec(a1, a2)) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals;
+        | None -> ()
         );
         stmts_mark_addr_taken ss locals (fun _ -> cont locals); 
     | SplitFractionStmt(_, _, _, pats, eopt) -> 
@@ -10065,10 +10066,17 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec free_locals h tenv env locals cont =
         match locals with
           [] -> cont h env
-        | x :: locals -> assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit dummypat (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
+        | x :: locals when not (List.mem_assoc x env) -> free_locals h tenv env locals cont
+        | x :: locals ->
+          assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
       in
-      let cont h tenv env = free_locals h tenv env !locals_to_free cont in
-      let return_cont h tenv env retval = free_locals h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
+      let free_locals0 h tenv env locals cont = 
+        match locals with
+          [] -> cont h env
+        | _ -> with_context (Executing (h, env, stmt_loc s, "Freeing locals.")) (fun _ -> free_locals h tenv env locals cont)
+      in
+      let cont h tenv env = free_locals0 h tenv env !locals_to_free cont in
+      let return_cont h tenv env retval = free_locals0 h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
       verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont
     | PureStmt (l, s) ->
       begin
@@ -10346,11 +10354,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let env' = update env x addr in
       heapify_params h' tenv' env' ps
     end
-  and cleanup_heapy_locals (pn, ilist) h ps cont =
+  and cleanup_heapy_locals (pn, ilist) l h env ps cont =
+    let rec cleanup_heapy_locals_core (pn, ilist) l h env ps cont= 
     match ps with
       [] -> cont h
-    | (l, x, t, addr) :: ps ->
-      assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l t, true) [] real_unit dummypat (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals (pn, ilist) h ps cont)
+    | (_, x, t, addr) :: ps ->
+      assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l t, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
+    in
+    match ps with
+      [] -> cont h
+    | _ -> with_context (Executing (h, env, l, "Freeing parameters.")) (fun _ -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
   and verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc =
     let tparams = tparams' @ tparams in
     let _ = push() in
@@ -10414,7 +10427,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         end $. fun h tenv ghostenv env ->
         let do_return h env_post =
           assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
-            cleanup_heapy_locals (pn, ilist) h heapy_ps (fun h ->
+            cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
               check_leaks h env closeBraceLoc "Function leaks heap chunks."
             )
           )
@@ -10430,7 +10443,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in
           stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
-          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env [BlockStmt(l, [], ss, outerlocals)] tcont return_cont
+          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env [BlockStmt(closeBraceLoc, [], ss, outerlocals)] tcont return_cont
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env closeBraceLoc None [] return_cont
       )
