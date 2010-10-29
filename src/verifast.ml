@@ -973,7 +973,7 @@ and
   stmt =
     PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
   | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
-  | DeclStmt of loc * type_expr * (string * expr option) list (* enkel declaratie *)
+  | DeclStmt of loc * type_expr * (string * expr option * bool ref (* indicates whether address is taken *)) list (* enkel declaratie *)
   | ExprStmt of expr
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
@@ -990,7 +990,7 @@ and
   | Close of loc * expr option * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * loop_spec option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
-  | BlockStmt of loc * decl list * stmt list
+  | BlockStmt of loc * decl list * stmt list * (string) list ref
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
   | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
@@ -1216,7 +1216,7 @@ let stmt_loc s =
   | Throw (l, _) -> l
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
-  | BlockStmt (l, ds, ss) -> l
+  | BlockStmt (l, ds, ss, _) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _, _, _) -> l
@@ -1449,7 +1449,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = parser
-      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, [x, Some(e)])
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, [x, Some(e), ref false])
     | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
@@ -1807,10 +1807,10 @@ and
      b = (parser
        [< '((sp1, _), Kwd "/*@");
           b = parser
-            [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, [], PureStmt ((sp1, sp2), s)::ss)
-          | [< ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, ds, ss)
+            [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
+          | [< ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, ds, ss, ref [])
        >] -> b
-     | [< ds = parse_pure_decls; ss = parse_stmts >] -> BlockStmt (l, ds, ss));
+     | [< ds = parse_pure_decls; ss = parse_stmts >] -> BlockStmt (l, ds, ss, ref []));
      '(_, Kwd "}")
   >] -> b
 and
@@ -1901,7 +1901,7 @@ and
      (inv, dec, b, closeBraceLoc) = parse_loop_core
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
-  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)])
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)], ref [])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
@@ -1939,7 +1939,7 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), [x, Some(rhs)])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), [x, Some(rhs), ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
@@ -1978,11 +1978,11 @@ and
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
          CreateHandleStmt (l, x, hpn, e)
-       | [< rhs = parse_expr; xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e)); '(_, Kwd ";") >] ->
-         DeclStmt (l, te, (x, Some(rhs))::xs)
+       | [< rhs = parse_expr; xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e, ref false)); '(_, Kwd ";") >] ->
+         DeclStmt (l, te, (x, Some(rhs), ref false)::xs)
     >] -> s
-  | [< xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e)); '(l, Kwd ";") >] ->
-    DeclStmt(l, te, (x, None)::xs)
+  | [< xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e, ref false)); '(l, Kwd ";") >] ->
+    DeclStmt(l, te, (x, None, ref false)::xs)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -4549,17 +4549,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0)
         | _ -> static_error l "Operand must be pointer." None
       end
-    | AddressOf (l, e) ->
-      let (w, t) = check e in
-      begin
-      match w with
-        Deref(_, Var(l2, x, scope), _) | Var(l2, x, scope) when !scope = Some LocalVar ->
-        begin match try_assoc x tenv with
-          Some(RefType(t)) -> (AddressOf (l, Var(l2, x, scope)), PtrType t)
-        | _ -> static_error l "Taking the address of this expression is not supported." None
-        end
-      | _ -> (AddressOf (l, w), PtrType t)
-      end
+    | AddressOf (l, Var(l2, x, scope)) when List.mem_assoc x tenv ->
+      scope := Some(LocalVar); (Var(l2, x, scope), PtrType(match List.assoc x tenv with RefType(t) -> t | _ -> static_error l "Taking the address of this expression is not supported." None))
+    | AddressOf (l, e) -> let (w, t) = check e in (AddressOf (l, w), PtrType t)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class")
@@ -6039,11 +6031,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
           let Some (l, tp, symbol) = try_assoc x globalmap in cont state symbol
-        | Var(l, x, scope) when !scope = Some LocalVar ->
-          begin match try_assoc x env with
-            None -> static_error l ("Variable " ^ x ^ " not found.") None
-          | Some(v) -> cont state v
-          end
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
@@ -7324,7 +7311,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       PureStmt (l, s) -> assigned_variables s
     | NonpureStmt (l, _, s) -> assigned_variables s
     | ExprStmt e -> expr_assigned_variables e
-    | DeclStmt (l, t, xs) -> flatmap (fun (x, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
+    | DeclStmt (l, t, xs) -> flatmap (fun (x, e, _) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
     | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body) ->
       expr_assigned_variables e @
@@ -7344,7 +7331,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Throw (l, e) -> expr_assigned_variables e
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
-    | BlockStmt (l, ds, ss) -> block_assigned_variables ss
+    | BlockStmt (l, ds, ss, _) -> block_assigned_variables ss
     | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
@@ -8041,6 +8028,117 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   (* Region: symbolic execution helpers *)
   
+  let rec mark_if_local locals x =
+    match locals with
+      [] -> ()
+    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; block := x :: (!block);
+  in
+  let rec expr_mark_addr_taken e locals = 
+    match e with
+      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | StringLit(_, _) | ClassLit(_) -> ()
+    | Operation(_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | AddressOf(_, Var(_, x, scope)) -> mark_if_local locals x
+    | Read(_, e, _) -> expr_mark_addr_taken e locals
+    | ArrayLengthExpr(_, e) -> expr_mark_addr_taken e locals
+    | WRead(_, e, _, _, _, _, _, _) -> expr_mark_addr_taken e locals
+    | ReadArray(_, e1, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
+    | WReadArray(_, e1, _, e2) -> (expr_mark_addr_taken e1 locals); (expr_mark_addr_taken e2 locals)
+    | Deref(_, e, _) -> expr_mark_addr_taken e locals
+    | CallExpr(_, _, _, ps1, ps2, _) -> List.iter (fun pat -> pat_expr_mark_addr_taken pat locals) (ps1 @ ps2)
+    | ExprCallExpr(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
+    | WFunPtrCall(_, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | WPureFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | WPureFunValueCall(_, e, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) (e :: es)
+    | WFunCall(_, _, _, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
+    | WMethodCall _ -> ()
+    | NewArray _ -> ()
+    | NewObject _ -> ()
+    | NewArrayWithInitializer _ -> ()
+    | IfExpr(_, e1, e2, e3) -> List.iter (fun e -> expr_mark_addr_taken e locals) [e1;e2;e3]
+    | SwitchExpr(_, e, cls, dcl, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
+    | PredNameExpr _ -> ()
+    | CastExpr(_, _, _, e) ->  expr_mark_addr_taken e locals
+    | SizeofExpr _ -> ()
+    | AddressOf(_, e) ->  expr_mark_addr_taken e locals
+    | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
+    | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
+    | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | AssignOpExpr(_, e1, _, e2, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+  and pat_expr_mark_addr_taken pat locals = 
+    match pat with
+      LitPat(e) -> expr_mark_addr_taken e locals
+    | _ -> ()
+  in
+  let rec ass_mark_addr_taken a locals = 
+    match a with
+      Access(_, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
+    | WAccess(_, e, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
+    | CallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
+    | WCallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
+    | InstCallPred(_, e, _, pats) -> expr_mark_addr_taken e locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
+    | WInstCallPred(_, eopt, _, _, _, _, e, pats) -> 
+      (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
+      expr_mark_addr_taken e locals; 
+      List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
+    | ExprPred(_, e) -> expr_mark_addr_taken e locals; 
+    | Sep(_, a1, a2) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
+    | IfPred(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
+    | SwitchPred(_, e, cls) -> expr_mark_addr_taken e locals;
+        List.iter (fun (SwitchPredClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+    | EmpPred _ -> ()
+    | CoefPred(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals;
+  in
+  let rec stmt_mark_addr_taken s locals cont =
+    match s with
+      DeclStmt(_, tp, inits) -> 
+      (List.iter (fun (_, e, _) -> match e with None -> () | Some(e) -> expr_mark_addr_taken e locals) inits); 
+      let ((block, locals) :: rest) = locals in
+      cont ((block, (List.map (fun (x, e, addrtaken) -> (x, addrtaken)) inits) @ locals) :: rest)
+    | BlockStmt(_, _, ss, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
+    | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
+    | PureStmt(_, s) ->  stmt_mark_addr_taken s locals cont
+    | NonpureStmt(_, _, s) -> stmt_mark_addr_taken s locals cont
+    | IfStmt(l, e, ss1, ss2) -> 
+        expr_mark_addr_taken e locals; 
+        stmts_mark_addr_taken ss1 locals (fun locals -> stmts_mark_addr_taken ss2 locals (fun _ -> ())); cont locals
+    | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> cont locals
+    | ReturnStmt(_, Some(e)) ->  expr_mark_addr_taken e locals; cont locals
+    | ReturnStmt(_, None) -> cont locals
+    | Assert(_, p) -> ass_mark_addr_taken p locals; cont locals
+    | Leak(_, p) -> ass_mark_addr_taken p locals; cont locals
+    | Open(_, eopt, _, _, pats1, pats2, patopt) | Close(_, eopt, _, _, pats1, pats2, patopt) ->
+      (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
+      List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2);
+      (match patopt with None -> () | Some(p) -> pat_expr_mark_addr_taken p locals); 
+      cont locals
+    | SwitchStmt(_, e, cls) -> expr_mark_addr_taken e locals; List.iter (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_mark_addr_taken e locals); stmts_mark_addr_taken ss locals (fun _ -> ()); | SwitchStmtDefaultClause(_, ss) -> stmts_mark_addr_taken ss locals (fun _ -> ())) cls; cont locals
+    | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> 
+        expr_mark_addr_taken e1 locals; 
+        (match e2 with None -> () | Some(e2) -> expr_mark_addr_taken e2 locals);
+        (match loopspecopt with 
+          Some(LoopInv(a)) -> ass_mark_addr_taken a locals;
+        | Some(LoopSpec(a1, a2)) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals;
+        );
+        stmts_mark_addr_taken ss locals (fun _ -> cont locals); 
+    | SplitFractionStmt(_, _, _, pats, eopt) -> 
+        List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats;
+        (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
+        cont locals
+    | MergeFractionsStmt(_, _, _, pats) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats;
+    | CreateHandleStmt(_, _, _, e) -> expr_mark_addr_taken e locals; cont locals
+    | DisposeBoxStmt(_, _, pats, clauses) -> 
+        List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats;
+        List.iter (fun (l, s, pats) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats) clauses;
+        cont locals
+    | InvariantStmt(_, a) -> ass_mark_addr_taken a locals; cont locals
+    | _ -> cont locals
+  and
+  stmts_mark_addr_taken ss locals cont =
+    match ss with
+      [] -> cont locals
+    | s :: ss -> stmt_mark_addr_taken s locals (fun locals -> stmts_mark_addr_taken ss locals cont)
+  in
+  
   (* locals whose address is taken in e *)
   
     let rec expr_address_taken e =
@@ -8082,10 +8180,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   in
   
   let rec stmt_address_taken s =
+    (* incomplete: might miss &x expressions *)
     match s with
       PureStmt(_, s) -> stmt_address_taken s
     | NonpureStmt(_, _, s) -> stmt_address_taken s
-    | DeclStmt(_, _, inits) -> List.flatten (List.map (fun (_, e) -> match e with None -> [] | Some(e) -> expr_address_taken e) inits)
+    | DeclStmt(_, _, inits) -> List.flatten (List.map (fun (_, e, _) -> match e with None -> [] | Some(e) -> expr_address_taken e) inits)
     | ExprStmt(e) -> expr_address_taken e
     | IfStmt(_, e, ss1, ss2) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) (ss1 @ ss2)))
     | SwitchStmt(_, e, cls) -> (expr_address_taken e) @ (List.flatten (List.map (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) | SwitchStmtDefaultClause(_, ss) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))) cls))
@@ -8095,22 +8194,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReturnStmt(_, Some(e)) -> expr_address_taken e
     | ReturnStmt(_, None) -> []
     | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
-    | BlockStmt(_, decls, ss) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
+    | BlockStmt(_, decls, ss, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
-  (*| PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
-  | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
-  | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
-  | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
-  | CreateHandleStmt of loc * string * string * expr
-  | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
-  | InvariantStmt of loc * pred (* join point *)
-  | ProduceLemmaFunctionPointerChunkStmt of loc * expr * (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option * stmt option
-  | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc*)
   in
   
-
- 
   let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
   
   let eval_non_pure_cps ev is_ghost_expr h env e cont =
@@ -8652,7 +8740,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   match ss_after with
                     [] -> static_error l "'call();' statement expected" None
                   | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
-                  | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static))])::ss_after ->
+                  | DeclStmt (ld, te, [x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                     if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
                     let t = check_pure_type (pn,ilist) tparams te in
                     begin match rt1 with
@@ -8678,7 +8766,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 let env = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x, t)) fparams @ env in
                 let lblenv = [] in
                 let pure = true in
-                let return_cont h t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
+                let return_cont h tenv env t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
                 begin fun tcont ->
                   verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont
                 end $. fun sizemap tenv ghostenv h env ->
@@ -8748,8 +8836,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               tcont sizemap tenv ghostenv h env
             )
           in
-          let return_cont h retval =
-            consume_chunk h (fun h -> return_cont h retval)
+          let return_cont h tenv env retval =
+            consume_chunk h (fun h -> return_cont h tenv env retval)
           in
           verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
     in
@@ -8885,17 +8973,22 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec iter h tenv' ghostenv' env' xs =
         match xs with
           [] -> tcont sizemap tenv' ghostenv' h env'
-        | (x, e)::xs ->
+        | (x, e, address_taken)::xs ->
           if List.mem_assoc x tenv' then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           begin fun cont ->
             match e with
-              None -> cont h (get_unique_var_symb_non_ghost x t)
+              None -> cont h (get_unique_var_symb_non_ghost x t) !address_taken
             | Some e ->
               let w = check_expr_t (pn,ilist) tparams tenv e t in
-              verify_expr false h env (Some x) w cont
-          end $. fun h v ->
+              verify_expr false h env (Some x) w (fun h v -> cont h v !address_taken)
+          end $. fun h v address_taken ->
           let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
-          iter h ((x, t)::tenv') ghostenv' ((x, v)::env') xs
+          if address_taken then
+            let addr = get_unique_var_symb_non_ghost x (PtrType t) in 
+            let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
+            iter h ((x, RefType(t)) :: tenv') ghostenv' ((x, addr)::env') xs
+          else
+            iter h ((x, t) :: tenv') ghostenv' ((x, v)::env') xs
       in
       iter h tenv ghostenv env xs
     | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
@@ -9550,7 +9643,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
           lblenv
       in
-      let return_cont h'' retval = return_cont (h'' @ h) retval in
+      let return_cont h'' tenv env retval = return_cont (h'' @ h) tenv env retval in
       let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let env = bs @ env in
       assume_pred [] (pn,ilist) [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
@@ -9639,7 +9732,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         cont tenv''' ghostenv h env
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap _ _ h' env' -> exit_loop h' env' (cont blocks_done sizemap))) lblenv in
-      let return_cont h' retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
+      let return_cont h' tenv env retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
       eval_h_nonpure h' env' e $. fun h' v ->
       begin fun cont ->
         branch
@@ -9751,8 +9844,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let tcont _ _ _ h env =
             verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
           in
-          let return_cont h retval =
-            let tcont _ _ _ h _ = return_cont h retval in
+          let return_cont h tenv env retval =
+            let tcont _ _ _ h _ = return_cont h tenv env retval in
             verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
           in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
@@ -9837,7 +9930,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                          match s with
                            ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
                          | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
-                         | DeclStmt (lcall, xtype, [x, Some(CallExpr (_, g, _, _, _, _))]) -> g
+                         | DeclStmt (lcall, xtype, [x, Some(CallExpr (_, g, _, _, _, _)), _]) -> g
                          | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call." None
                        in
                        match try_assoc funcname funcmap with
@@ -9902,7 +9995,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
           )
       )
-    | BlockStmt (l, ds, ss) ->
+    | BlockStmt (l, ds, ss, locals_to_free) ->
       let (lems, predinsts) =
         List.fold_left
           begin fun (lems, predinsts) decl ->
@@ -9971,8 +10064,15 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some (lems, g, indinfo) ->
           Some (verify_lems lems, g, indinfo)
       in
-      let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h env) return_cont
+      let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in      
+      let rec free_locals h tenv env locals cont =
+        match locals with
+          [] -> cont h env
+        | x :: locals -> assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit dummypat (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
+      in
+      let cont h tenv env = free_locals h tenv env !locals_to_free cont in
+      let return_cont h tenv env retval = free_locals h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
+      verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont
     | PureStmt (l, s) ->
       begin
         match s with
@@ -10058,7 +10158,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     begin fun cont ->
       verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false)
     end $. fun sizemap tenv ghostenv h env ->
-    return_cont h retval
+    return_cont h tenv env retval
   and
     verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     let (decls, ss) =
@@ -10245,8 +10345,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | (l, x, t, addr) :: ps -> 
       let xvalue = List.assoc x env in
       let tenv' = update tenv x (RefType (List.assoc x tenv)) in
-      let predsym = pointee_pred_symb l t in
-      let h' = Chunk ((predsym, true), [], real_unit, [addr; xvalue], None) :: h in
+      let h' = Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; xvalue], None) :: h in
       let env' = update env x addr in
       heapify_params h' tenv' env' ps
     end
@@ -10266,7 +10365,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         [(l, x, tp, addr)] 
       else 
        []
-      ) pre_tenv)
+      ) (List.filter (fun (x, tp) -> List.mem_assoc x ps) pre_tenv))
     in
     let (sizemap, indinfo) =
       match ss with
@@ -10323,7 +10422,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             )
           )
         in
-        let return_cont h retval =
+        let return_cont h tenv2 env2 retval =
           match (rt, retval) with
             (None, None) -> do_return h env
           | (Some tp, Some t) -> do_return h (("result", t)::env)
@@ -10332,7 +10431,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         in
         begin fun tcont ->
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
-          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+          let outerlocals = ref [] in
+          stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
+          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env [BlockStmt(l, [], ss, outerlocals)] tcont return_cont
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env closeBraceLoc None [] return_cont
       )
@@ -10388,7 +10489,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
               check_leaks h env closeBraceLoc "Function leaks heap chunks."
             in
-            let return_cont h retval =
+            let return_cont h tenv2 env2 retval =
               assert (retval = None);
               do_return h env
             in
@@ -10407,7 +10508,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                   cont h
             end $. fun h ->
             verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
-              (fun _ _ _ h _ -> return_cont h None) return_cont
+              (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont
           in
           assume_neq this (ctxt#mk_intlit 0) $. fun() ->
           let fds = get_fields (pn,ilist) cn lm in
@@ -10468,14 +10569,14 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
           in
-          let return_cont h retval =
+          let return_cont h tenv2 env2 retval =
             match (rt, retval) with
               (None, None) -> do_return h env
             | (Some tp, Some t) -> do_return h (("result", t)::env)
             | (None, Some _) -> assert_false h env l "Void function returns a value." None
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
           in
-          let cont _ _ _ h _ = return_cont h None in
+          let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
           verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         end;
         pop();
