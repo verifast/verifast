@@ -2,36 +2,28 @@ package java.util.concurrent;
 
 /*@
 
-predicate semaphore(real f, Semaphore s, int p, predicate() inv);
+predicate lock(Semaphore l; predicate() inv);
 
-predicate create_semaphore_ghost_arg(predicate() inv) = true;
+predicate locked(Semaphore l, predicate() inv, real frac);
 
-predicate n_times(int p, predicate() inv) = p == 0 ? emp : (inv() &*& n_times(p - 1, inv));
+predicate create_lock_ghost_arg(predicate() inv) = true;
 
-lemma void semaphore_dispose(Semaphore s);
-    requires semaphore(?f, s, ?p, ?inv) &*& f == 1;
-    ensures n_times(p, inv);
-    
-lemma void semaphore_split(Semaphore s, real f1, int p1);
-    requires semaphore(?f, s, ?p, ?inv) &*& f1 > 0;
-    ensures semaphore(f1, s, p1, inv) &*& semaphore(f - f1, s, p - p1, inv);
-    
-lemma void semaphore_join();
-    requires semaphore(?f1, ?s, ?p1, ?inv) &*& semaphore(?f2, s, ?p2, inv);
-    ensures semaphore(f1 + f2, s, p1 + p2, inv);
+lemma void lock_dispose(Semaphore l);
+    requires lock(l, ?a);
+    ensures a();
 
 @*/
 
 public class Semaphore {
-    Semaphore(int p);
-        //@ requires p >= 0 &*& n_times(p, ?inv);
-        //@ ensures semaphore(1, this, p, inv);
+    Semaphore(int n);
+        //@ requires n == 1 &*& create_lock_ghost_arg(?a) &*& a();
+        //@ ensures lock(this, a);
 
     void acquire();
-        //@ requires semaphore(?f, this, ?p, ?inv);
-        //@ ensures semaphore(f, this, p - 1, inv) &*& inv();
+        //@ requires [?f]lock(this, ?a);
+        //@ ensures locked(this, a, f) &*& a();
 
     void release();
-        //@ requires semaphore(?f, this, ?p, ?inv) &*& inv();
-        //@ ensures semaphore(f, this, p + 1, inv);
+        //@ requires locked(this, ?a, ?f) &*& a();
+        //@ ensures [f]lock(this, a);
 }

@@ -53,13 +53,13 @@ void destroy(int* i)
   //@ assume(false);
 }
 
-void dispose_local() 
+void dispose_local() //~ should_fail
   //@ requires true;
   //@ ensures true;
 {
   int x = 0;
   destroy(&x);
-} //~ should_fail
+}
 
 void destroy_half(int* i) 
   //@ requires [1/2]integer(i, _);
@@ -68,14 +68,14 @@ void destroy_half(int* i)
   //@ assume(false);
 }
 
-void dispose_half_local(int y) 
+void dispose_half_local(int y) //~ should_fail
   //@ requires true;
   //@ ensures true;
 {
   int x = 0;
   destroy_half(&x);
   destroy_half(&y);
-} //~ should_fail
+} 
 
 void break_statement()
   //@ requires true;
