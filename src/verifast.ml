@@ -4340,44 +4340,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t)
       | Some t -> scope := Some LocalVar; (e, t)
       | None ->
-      match resolve (pn,ilist) l x purefuncmap with
-      | Some (x, (_, tparams, t, [], _)) ->
-        if tparams <> [] then
-        begin
-          let targs = List.map (fun _ -> InferredType (ref None)) tparams in
-          let Some tpenv = zip tparams targs in
-          scope := Some PureCtor;
-          (Var (l, x, scope), instantiate_type tpenv t)
-        end
-        else
-        begin
-          scope := Some PureCtor; (Var (l, x, scope), t)
-        end
-      | _ ->
-      if List.mem x funcnames then
-        match file_type path with
-          Java -> static_error l "In java methods can't be used as pointers" None
-        | _ -> scope := Some FuncName; (e, PtrType Void)
-      else
-      match resolve (pn,ilist) l x predfammap with
-      | Some (x, (_, tparams, arity, ts, _, inputParamCount)) ->
-        if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
-        if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
-        scope := Some PredFamName;
-        (Var (l, x, scope), PredType (tparams, ts, inputParamCount))
-      | None ->
-      let enumElems = flatmap (fun (name, (l, elems)) -> imap (fun i x -> (x, i)) elems) enummap in
-      match try_assoc x enumElems with
-      | Some i ->
-        scope := Some (EnumElemName i);
-        (e, IntType)
-      | None ->
-      match try_assoc' (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp)
-      | None ->
-      match try_assoc x modulemap with
-      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType)
-      | _ ->
       begin fun cont ->
       if language <> Java then cont () else
       let field_of_this =
@@ -4416,14 +4378,49 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       match resolve (pn,ilist) l x interfmap0 with
         Some (cn, _) -> (e, ClassOrInterfaceName cn)
       | None ->
-      match try_assoc x modulemap with
-      | Some _ -> scope := Some ModuleName; (e, IntType)
-      | None ->
       if is_package x then
         (e, PackageName x)
       else
         cont ()
       end $. fun () ->
+      match resolve (pn,ilist) l x purefuncmap with
+      | Some (x, (_, tparams, t, [], _)) ->
+        if tparams <> [] then
+        begin
+          let targs = List.map (fun _ -> InferredType (ref None)) tparams in
+          let Some tpenv = zip tparams targs in
+          scope := Some PureCtor;
+          (Var (l, x, scope), instantiate_type tpenv t)
+        end
+        else
+        begin
+          scope := Some PureCtor; (Var (l, x, scope), t)
+        end
+      | _ ->
+      if List.mem x funcnames then
+        match file_type path with
+          Java -> static_error l "In java methods can't be used as pointers" None
+        | _ -> scope := Some FuncName; (e, PtrType Void)
+      else
+      match resolve (pn,ilist) l x predfammap with
+      | Some (x, (_, tparams, arity, ts, _, inputParamCount)) ->
+        if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
+        if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
+        scope := Some PredFamName;
+        (Var (l, x, scope), PredType (tparams, ts, inputParamCount))
+      | None ->
+      let enumElems = flatmap (fun (name, (l, elems)) -> imap (fun i x -> (x, i)) elems) enummap in
+      match try_assoc x enumElems with
+      | Some i ->
+        scope := Some (EnumElemName i);
+        (e, IntType)
+      | None ->
+      match try_assoc' (pn, ilist) x globalmap with
+      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp)
+      | None ->
+      match try_assoc x modulemap with
+      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType)
+      | _ ->
       match resolve (pn,ilist) l x purefuncmap with
         Some (x, (_, tparams, t, pts, _)) ->
         let (pts, t) =
