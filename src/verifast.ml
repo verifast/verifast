@@ -990,7 +990,7 @@ and
   | Close of loc * expr option * string * type_expr list * pat list * pat list * pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
   | WhileStmt of loc * expr * loop_spec option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
-  | BlockStmt of loc * decl list * stmt list * (string) list ref
+  | BlockStmt of loc * decl list * stmt list * loc * (string) list ref
   | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
   | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
@@ -1216,7 +1216,7 @@ let stmt_loc s =
   | Throw (l, _) -> l
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
-  | BlockStmt (l, ds, ss, _) -> l
+  | BlockStmt (l, ds, ss, _, _) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _, _, _) -> l
@@ -1804,15 +1804,15 @@ and
 and
   parse_block_stmt = parser
   [< '(l, Kwd "{");
-     b = (parser
+     (l, ds, ss, locals_to_free) = (parser
        [< '((sp1, _), Kwd "/*@");
           b = parser
-            [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
-          | [< ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> BlockStmt (l, ds, ss, ref [])
+            [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
+          | [< ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> (l, ds, ss, ref [])
        >] -> b
-     | [< ds = parse_pure_decls; ss = parse_stmts >] -> BlockStmt (l, ds, ss, ref []));
-     '(_, Kwd "}")
-  >] -> b
+     | [< ds = parse_pure_decls; ss = parse_stmts >] -> (l, ds, ss, ref []));
+     '(closeBraceLoc, Kwd "}")
+  >] -> BlockStmt(l, ds, ss, closeBraceLoc, locals_to_free)
 and
   parse_stmts = parser
   [< s = parse_stmt; ss = parse_stmts >] -> s::ss
@@ -1901,7 +1901,7 @@ and
      (inv, dec, b, closeBraceLoc) = parse_loop_core
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
-  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)], ref [])
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)], closeBraceLoc, ref [])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
@@ -1960,8 +1960,8 @@ and
           >] -> inv
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr); (* only allows decreases if invariant provided *)
-    '(_, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
-  >] -> (inv, dec, b, closeBraceLoc)
+    '(entryBraceLoc, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
+  >] -> (inv, dec, [BlockStmt(entryBraceLoc, [], b, closeBraceLoc, ref [])], closeBraceLoc)
 and
   type_expr_of_expr e =
   match e with
@@ -7328,7 +7328,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Throw (l, e) -> expr_assigned_variables e
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
-    | BlockStmt (l, ds, ss, _) -> block_assigned_variables ss
+    | BlockStmt (l, ds, ss, _, _) -> block_assigned_variables ss
     | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
@@ -8091,7 +8091,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       (List.iter (fun (_, e, _) -> match e with None -> () | Some(e) -> expr_mark_addr_taken e locals) inits); 
       let ((block, locals) :: rest) = locals in
       cont ((block, (List.map (fun (x, e, addrtaken) -> (x, addrtaken)) inits) @ locals) :: rest)
-    | BlockStmt(_, _, ss, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
+    | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
     | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
     | PureStmt(_, s) ->  stmt_mark_addr_taken s locals cont
     | NonpureStmt(_, _, s) -> stmt_mark_addr_taken s locals cont
@@ -8192,7 +8192,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | ReturnStmt(_, Some(e)) -> expr_address_taken e
     | ReturnStmt(_, None) -> []
     | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
-    | BlockStmt(_, decls, ss, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
+    | BlockStmt(_, decls, ss, _, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
   in
@@ -8647,6 +8647,19 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let verify_expr readonly h env xo e cont =
       if not pure then check_ghost ghostenv l e;
       verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
+    in
+    let rec stmt_contains_lbl lbl s =
+      match s with 
+        BlockStmt(_, _, ss, _, _) -> stmts_contains_lbl lbl ss
+      | PureStmt(_, s) -> stmt_contains_lbl lbl s
+      | NonpureStmt(_, _, s) -> stmt_contains_lbl lbl s
+      | IfStmt(_, _, ss1, ss2) -> (stmts_contains_lbl lbl ss1) || (stmts_contains_lbl lbl ss2)
+      | LabelStmt(_, lbl2) -> lbl = lbl2
+      | SwitchStmt(_, e, cls) -> List.exists (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> stmts_contains_lbl lbl ss | SwitchStmtDefaultClause(_, ss) -> stmts_contains_lbl lbl ss) cls
+      | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> stmts_contains_lbl lbl ss
+      | _ -> false
+    and stmts_contains_lbl lbl ss =
+      List.exists (fun s -> stmt_contains_lbl lbl s) ss
     in
     let verify_produce_function_pointer_chunk_stmt stmt_ghostness l fpe ftclause_opt scope_opt =
       if not pure then static_error l "This construct is not allowed in a non-pure context." None;
@@ -9681,11 +9694,27 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
-      if pure then static_error l "Loops are not yet supported in a pure context." None;
+      if pure then static_error l "Loops are not supported yet in a pure context." None;
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
+      let rec check_after_initial_declarations ss = 
+        match ss with
+          [] -> ()
+        |  DeclStmt(l, _, inits) :: rest -> 
+        (List.iter (fun (_, _, addresstaken) -> if !addresstaken then begin static_error l "A local variable whose address is taken must be declared at the start of a block." None; () end else ()) inits); check_after_initial_declarations rest
+        | _ :: rest -> check_after_initial_declarations rest
+      in
+      let rec check_block_declarations ss =
+        match ss with
+          [] -> ()
+        | PureStmt _ :: rest -> check_block_declarations rest
+        | DeclStmt _ :: rest -> check_block_declarations rest
+        | _ :: rest -> check_after_initial_declarations rest
+      in
+      check_block_declarations ss;
+      let [BlockStmt(_, _, ss, _, locals_to_free)] = ss in
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
@@ -9713,6 +9742,18 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assert_pred rules [] (pn,ilist) h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
         check_leaks h' env' closeBraceLoc "Loop leaks heap chunks"
       in
+      let rec free_locals h tenv env locals cont =
+        match locals with
+          [] -> cont h env
+        | x :: locals when not (List.mem_assoc x env) -> free_locals h tenv env locals cont
+        | x :: locals ->
+          assert_chunk rules (pn,ilist) h [] [] [] closeBraceLoc (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
+      in
+      let free_locals0 h tenv env locals cont =
+        match locals with
+          [] -> cont h env
+        | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals h tenv env locals cont)
+      in
       let exit_loop h' env' cont =
         check_post h' env';
         let env =
@@ -9729,7 +9770,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         assume_pred [] (pn,ilist) h ghostenv env post real_unit None None $. fun h ghostenv env ->
         cont tenv''' ghostenv h env
       in
-      let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap _ _ h' env' -> exit_loop h' env' (cont blocks_done sizemap))) lblenv in
+      let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals0 h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
       let return_cont h' tenv env retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
       eval_h_nonpure h' env' e $. fun h' v ->
       begin fun cont ->
@@ -9739,7 +9780,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end
           begin fun () ->
             assume (ctxt#mk_not v) $. fun () ->
-            exit_loop h' env' (tcont sizemap)
+            free_locals0 h' tenv env !locals_to_free (fun h' _ -> exit_loop h' env' (tcont sizemap))
           end
       end $. fun () ->
       let (ss_before, ss_after) =
@@ -9753,9 +9794,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       in
       begin fun continue ->
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
-          (fun _ _ _ h' env' -> continue h' env')
+          (fun _ tenv''' _ h' env' -> continue h' tenv''' env')
           return_cont
-      end $. fun h' env' ->
+      end $. fun h' tenv''' env' ->
       let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
       assert_pred rules [] (pn,ilist) h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
       begin match (t_dec, dec) with
@@ -9783,7 +9824,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
       List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables" None) ss_after_xs;
-      verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_after (fun _ _ _ h' env' -> check_post h' env') (fun _ _ -> assert false)
+      verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' ss_after (fun _ tenv _ h' env' -> free_locals0 h' tenv env' !locals_to_free (fun h' _ -> check_post h' env')) (fun _ _ -> assert false)
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context." None;
       let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
@@ -9993,7 +10034,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
              )
           )
       )
-    | BlockStmt (l, ds, ss, locals_to_free) ->
+    | BlockStmt (l, ds, ss, closeBraceLoc, locals_to_free) ->
       let (lems, predinsts) =
         List.fold_left
           begin fun (lems, predinsts) decl ->
@@ -10062,21 +10103,37 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         | Some (lems, g, indinfo) ->
           Some (verify_lems lems, g, indinfo)
       in
+      let rec check_after_initial_declarations ss = 
+        match ss with
+          [] -> ()
+        |  DeclStmt(l, _, inits) :: rest -> 
+        (List.iter (fun (_, _, addresstaken) -> if !addresstaken then begin static_error l "A local variable whose address is taken must be declared at the start of a block." None; () end else ()) inits); check_after_initial_declarations rest
+        | _ :: rest -> check_after_initial_declarations rest
+      in
+      let rec check_block_declarations ss =
+        match ss with
+          [] -> ()
+        | PureStmt _ :: rest -> check_block_declarations rest
+        | DeclStmt _ :: rest -> check_block_declarations rest
+        | _ :: rest -> check_after_initial_declarations rest
+      in
+      check_block_declarations ss;
       let cont h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in      
       let rec free_locals h tenv env locals cont =
         match locals with
           [] -> cont h env
         | x :: locals when not (List.mem_assoc x env) -> free_locals h tenv env locals cont
         | x :: locals ->
-          assert_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
+          assert_chunk rules (pn,ilist) h [] [] [] closeBraceLoc (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals h tenv env locals cont)
       in
       let free_locals0 h tenv env locals cont = 
         match locals with
           [] -> cont h env
-        | _ -> with_context (Executing (h, env, stmt_loc s, "Freeing locals.")) (fun _ -> free_locals h tenv env locals cont)
+        | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals h tenv env locals cont)
       in
       let cont h tenv env = free_locals0 h tenv env !locals_to_free cont in
       let return_cont h tenv env retval = free_locals0 h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
+      let lblenv = List.map (fun (lbl, lblcont) -> if not (stmts_contains_lbl lbl ss) then (lbl, (fun blocksdone sizemap tenv ghostenv h env -> free_locals0 h tenv env !locals_to_free (fun h env -> lblcont blocksdone sizemap tenv ghostenv h env))) else (lbl, lblcont)) lblenv in
       verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont
     | PureStmt (l, s) ->
       begin
@@ -10443,7 +10500,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (h,tenv,env) = heapify_params h tenv env heapy_ps in
           let outerlocals = ref [] in
           stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
-          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env [BlockStmt(l, [], ss, outerlocals)] tcont return_cont
+          let body = if List.length !outerlocals = 0 then ss else [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
+          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
         end $. fun sizemap tenv ghostenv h env ->
         verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont
       )
