@@ -8997,6 +8997,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           if address_taken then
             let addr = get_unique_var_symb_non_ghost x (PtrType t) in 
             let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
+            if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
             iter h ((x, RefType(t)) :: tenv') ghostenv' ((x, addr)::env') xs
           else
             iter h ((x, t) :: tenv') ghostenv' ((x, v)::env') xs

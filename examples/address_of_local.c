@@ -40,10 +40,64 @@ void test_goto()
   //@ ensures true;
 {
   goto end;
+  {
     int x = 5;
     int *p = &x;
     abort();
+  }
   end:
+}
+
+void test_goto2()
+  //@ requires true;
+  //@ ensures true;
+{
+  {
+    int x = 0;
+    int* ptr = &x;
+    goto end;
+  }
+  end:
+}
+
+void test_goto3()
+  //@ requires true;
+  //@ ensures true;
+{
+  {
+    int x = 0;
+    int* ptr = &x;
+    goto next;
+    next:
+    x = 3;
+  }
+}
+
+void test_break()
+  //@ requires true;
+  //@ ensures true;
+{
+  while(true) 
+    //@ invariant true;
+  {
+    int x = 0;
+    int* ptr = &x;
+    break;
+  }
+}
+
+void test_break2()
+  //@ requires true;
+  //@ ensures true;
+{
+  while(true) 
+    //@ requires true;
+    //@ ensures true;
+  {
+      int x = 0;
+      int* ptr = &x;
+      break;
+  }
 }
 
 void destroy(int* i) 
@@ -53,13 +107,13 @@ void destroy(int* i)
   //@ assume(false);
 }
 
-void dispose_local() //~ should_fail
+void dispose_local()
   //@ requires true;
   //@ ensures true;
 {
   int x = 0;
   destroy(&x);
-}
+} //~ should_fail
 
 void destroy_half(int* i) 
   //@ requires [1/2]integer(i, _);
@@ -68,14 +122,27 @@ void destroy_half(int* i)
   //@ assume(false);
 }
 
-void dispose_half_local(int y) //~ should_fail
+void dispose_half_local(int y) 
   //@ requires true;
   //@ ensures true;
 {
   int x = 0;
   destroy_half(&x);
   destroy_half(&y);
-} 
+} //~ should_fail
+
+void dispose_half_local2()
+  //@ requires true;
+  //@ ensures true;
+{
+  while(true) 
+    //@ invariant true;
+  { 
+    int x = 0;
+    destroy(&x);
+  } //~ should_fail
+}
+ 
 
 void break_statement()
   //@ requires true;
@@ -85,9 +152,9 @@ void break_statement()
   while(i < 1)
     //@ invariant 0<=i && i<=1;
   {
-    break;
     int x = 0;
     int* ptr = &x;    
+    break;
   }
 }
 
@@ -101,17 +168,20 @@ void looptrouble()
   //@ close nodes(0);
 loop:
   //@ invariant nodes(head);
-  void *x = head;
-  //@ assume(&x != 0);
-  if (head != 0) {
-      //@ open nodes(head);
-      //@ pointer_distinct(head, &x);
-      assert(head != &x); // Unsound! TODO!
-      //@ close nodes(head);
-  }
-  head = &x;
   
-  //@ close nodes(head);
+  {
+    void *x = head;
+    //@ assume(&x != 0);
+    if (head != 0) {
+        //@ open nodes(head);
+        //@ pointer_distinct(head, &x);
+        assert(head != &x); // Unsound! TODO!
+        //@ close nodes(head);
+    }
+    head = &x;
   
-  goto loop;
+    //@ close nodes(head);
+  
+    goto loop;
+  } //~ should_fail
 }
