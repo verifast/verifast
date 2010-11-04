@@ -8028,7 +8028,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec mark_if_local locals x =
     match locals with
       [] -> ()
-    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; block := x :: (!block);
+    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; (if(not (List.mem x !block)) then block := x :: (!block));
   in
   let rec expr_mark_addr_taken e locals = 
     match e with
@@ -8995,7 +8995,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           end $. fun h v address_taken ->
           let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
           if address_taken then
-            let addr = get_unique_var_symb_non_ghost x (PtrType t) in 
+            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in 
             let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
             if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
             iter h ((x, RefType(t)) :: tenv') ghostenv' ((x, addr)::env') xs
@@ -10429,7 +10429,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let heapy_vars = list_remove_dups (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) in
     let heapy_ps = List.flatten (List.map (fun (x,tp) -> 
       if List.mem x heapy_vars then 
-        let addr = get_unique_var_symb_non_ghost x (PtrType tp) in
+        let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType tp) in
         [(l, x, tp, addr)] 
       else 
        []
