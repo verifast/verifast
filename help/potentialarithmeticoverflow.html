@@ -24,7 +24,7 @@ ghost command. This requires first assigning the value to a local variable, say 
 <p class="section">Suggested solutions</p>
 <ul>
 <li>Disable arithmetic underflow and overflow checking. See above.</li>
-<li>Add code that performs the necessary checks to ensure that the operation does not underflow.</li>
+<li>Add code that performs the necessary checks to ensure that the operation does not overflow.</li>
 <li>If the operation involves a function parameter, add a condition to the <tt>requires</tt> clause that limits the value of the parameter.</li>
 <li>See the note on <tt>produce_limits</tt>.</li>
 </ul>

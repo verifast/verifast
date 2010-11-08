@@ -1,5 +1,7 @@
+open Unix
 open Verifast
 open GMain
+open Pervasives
 
 type undo_action =
   Insert of int * string
@@ -25,6 +27,20 @@ let sys cmd =
   let exitStatus = Unix.close_process_in chan in
   if exitStatus <> Unix.WEXITED 0 then failwith (Printf.sprintf "Command '%s' failed with exit status %s" cmd (string_of_process_status exitStatus));
   line
+
+let path_last_modification_time path =
+  (Unix.stat path).st_mtime
+
+let file_has_changed path mtime =
+  try
+    path_last_modification_time path <> mtime
+  with Unix.Unix_error (_, _, _) -> true
+
+let in_channel_last_modification_time chan =
+  (Unix.fstat (Unix.descr_of_in_channel chan)).st_mtime
+
+let out_channel_last_modification_time chan =
+  (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
 let show_ide initialPath prover =
   let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
@@ -194,7 +210,7 @@ let show_ide initialPath prover =
   in
   let updateBufferMenu () =
     let menu = GMenu.menu () in
-    let items = !buffers |> List.map (fun tab -> (match !(tab_path tab) with None -> "(Untitled)" | Some path -> path), tab) in
+    let items = !buffers |> List.map (fun tab -> (match !(tab_path tab) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
     let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
     items |> List.iter begin fun (name, tab) ->
       let item = GMenu.menu_item ~label:name ~packing:(menu#add) () in
@@ -203,7 +219,7 @@ let show_ide initialPath prover =
     windowMenuItem#set_submenu menu
   in
   let updateBufferTitle (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) =
-    let text = (match !path with None -> "(New buffer)" | Some path -> Filename.basename path) ^ (if buffer#modified then "*" else "") in
+    let text = (match !path with None -> "(New buffer)" | Some (path, mtime) -> Filename.basename path) ^ (if buffer#modified then "*" else "") in
     textLabel#set_text text;
     subLabel#set_text text
   in
@@ -267,7 +283,7 @@ let show_ide initialPath prover =
     in
     match !path with
       None -> ()
-    | Some path ->
+    | Some (path, mtime) ->
       if Filename.check_suffix path ".c" then highlight (common_keywords @ c_keywords)
       else if Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
       else if Filename.check_suffix path ".java" then highlight (common_keywords @ java_keywords)
@@ -411,7 +427,8 @@ let show_ide initialPath prover =
       in
       let chunks = iter() in
       let text = String.concat "" chunks in
-      let _ = close_in chan in
+      let mtime = in_channel_last_modification_time chan in
+      close_in chan;
       let text = file_to_utf8 text in
       ignore_text_changes := true;
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
@@ -424,10 +441,12 @@ let show_ide initialPath prover =
       undoList := [];
       redoList := [];
       buffer#set_modified false;
-      path := Some (Filename.concat (Filename.dirname newPath) (Filename.basename newPath));
+      let thePath = Filename.concat (Filename.dirname newPath) (Filename.basename newPath) in
+      path := Some (thePath, mtime);
       perform_syntax_highlighting tab buffer#start_iter buffer#end_iter;
-      updateBufferTitle tab
-    with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg)
+      updateBufferTitle tab;
+      Some thePath
+    with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg); None
   in
   let open_path path =
     let tab = add_buffer () in
@@ -445,12 +464,14 @@ let show_ide initialPath prover =
     set_current_tab (Some tab)
   end;
   let store ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) thePath =
-    path := Some thePath;
     let chan = open_out_bin thePath in
     let gBuf = buffer in
     let text = (gBuf: GSourceView2.source_buffer)#get_text () in
     output_string chan (utf8_to_file text);
+    flush chan;
+    let mtime = out_channel_last_modification_time chan in
     close_out chan;
+    path := Some (thePath, mtime);
     buffer#set_modified false;
     updateBufferTitle tab;
     Some thePath
@@ -467,11 +488,20 @@ let show_ide initialPath prover =
       else
         store tab thePath
   in
+  let save_core tab thePath mtime =
+    if file_has_changed thePath mtime then begin
+      match GToolbox.question_box ~title:thePath ~buttons:["Save As"; "Overwrite"; "Cancel"] "This file has been modified by another program." with
+        1 -> saveAs tab
+      | 2 -> store tab thePath
+      | 3 -> None
+    end else
+      store tab thePath
+  in
   let save ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) =
     match !path with
       None -> saveAs tab
-    | Some thePath ->
-      store tab thePath
+    | Some (thePath, mtime) ->
+      save_core tab thePath mtime
   in
   let bottomTable = GPack.paned `HORIZONTAL () in
   let bottomTable2 = GPack.paned `HORIZONTAL () in
@@ -525,7 +555,7 @@ let show_ide initialPath prover =
     let rec iter k tabs =
       match tabs with
         tab::tabs ->
-        if !(tab_path tab) = Some path0 then (k, tab) else iter (k + 1) tabs
+        begin match !(tab_path tab) with Some (path1, mtime) when path1 = path0 -> (k, tab) | _ -> iter (k + 1) tabs end
       | [] ->
         let tab = open_path path0 in (k, tab)
     in
@@ -791,8 +821,13 @@ let show_ide initialPath prover =
   let ensureHasPath tab =
     match !(tab_path tab) with
       None -> save tab
-    | Some path ->
-      if (tab_buffer tab)#modified then store tab path else Some path
+    | Some (path, mtime) ->
+      if (tab_buffer tab)#modified then
+        save_core tab path mtime
+      else if file_has_changed path mtime then begin
+        load tab path
+      end else
+        Some path
   in
   let undo () =
     match get_current_tab() with
@@ -854,22 +889,33 @@ let show_ide initialPath prover =
           srcText#scroll_to_mark ~within_margin:0.2 `INSERT
       end
   in
+  let sync_with_disk tab =
+    (* Ensure the buffer contents are equal to the file contents. Returns true on cancellation. *)
+    match !(tab_path tab) with
+      None -> false
+    | Some (path, mtime) ->
+      if (tab_buffer tab)#modified then
+        match save_core tab path mtime with Some _ -> false | None -> true
+      else
+        file_has_changed path mtime && close tab
+  in
+  let clearSyntaxHighlighting () =
+    !buffers |> List.iter begin fun tab ->
+      let buffer = tab_buffer tab in
+      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter
+    end
+  in
   let verifyProgram runToCursor () =
     clearTrace();
-    List.iter (fun tab ->
-      let buffer = tab_buffer tab in
-      match !(tab_path tab) with
-        None -> ()
-      | Some(_) -> (save tab); (* prevents offset errors if files are modified outside of vfide *)
-      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
-    ) !buffers;
     match !buffers with
       [] -> ()
-    | tab::_ ->
+    | tab::tabs ->
       begin
         match ensureHasPath tab with
           None -> ()
         | Some path ->
+          clearSyntaxHighlighting();
+          if not (List.exists sync_with_disk tabs) then
           begin
             let breakpoint =
               if runToCursor then
@@ -950,7 +996,7 @@ let show_ide initialPath prover =
   (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
   undoAction#connect#activate undo;
   redoAction#connect#activate redo;
-  let _ = root#show() in
+  root#show();
   Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
