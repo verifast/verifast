@@ -825,7 +825,8 @@ let show_ide initialPath prover =
       if (tab_buffer tab)#modified then
         save_core tab path mtime
       else if file_has_changed path mtime then begin
-        load tab path
+       print_endline (Printf.sprintf "File '%s' has been changed by another program; reloading from disk..." path);
+       load tab path
       end else
         Some path
   in
@@ -996,6 +997,18 @@ let show_ide initialPath prover =
   (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
   undoAction#connect#activate undo;
   redoAction#connect#activate redo;
+  root#event#connect#focus_in begin fun _ ->
+    !buffers |> List.iter begin fun tab ->
+      match !(tab_path tab) with
+        None -> ()
+      | Some (path, mtime) ->
+        if not (tab_buffer tab)#modified && Sys.file_exists path && file_has_changed path mtime then begin
+          print_endline (Printf.sprintf "File '%s' has been changed by another program; reloading from disk..." path);
+          ignore (load tab path)
+        end
+    end;
+    false
+  end;
   root#show();
   Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
