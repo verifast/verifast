@@ -684,7 +684,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         store c; string ()
     | c when c < ' ' -> raise Stream.Failure
     | c -> text_junk (); store c; string ()
-    | _ -> raise Stream.Failure
   and char () =
     match text_peek () with
       '\\' ->
@@ -694,7 +693,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         end
     | c when c < ' ' -> raise Stream.Failure
     | c -> text_junk (); c
-    | _ -> raise Stream.Failure
   and escape () =
     match text_peek () with
       'n' -> text_junk (); '\n'
@@ -717,7 +715,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         end
     | c when c < ' ' -> raise Stream.Failure
     | c -> text_junk (); c
-    | _ -> raise Stream.Failure
   and ghost_range_end_at srcpos =
     match !ghost_range_start with
       None -> ()
@@ -769,7 +766,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     match text_peek () with
       '\010' | '\013' | '\000' -> reportRange CommentRange (current_loc())
     | c -> text_junk (); single_line_comment_rest ()
-    | _ -> raise Stream.Failure
   and multiline_comment () =
     match text_peek () with
       '*' ->
@@ -3261,39 +3257,36 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let classmap1 =
     List.map
-      (fun (sn, (l,fin,meths,fds_opt,constr,super,interfs,preds,pn,ilist)) ->
-         let rec iter fmap fds =
-           match fds with
-             [] -> (sn, (l,fin,meths,Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
-           | Field (lf, _, t, f, binding, vis, final, init)::fds ->
-             if List.mem_assoc f fmap then
-               static_error lf "Duplicate field name." None
-             else (
-               let rec check_type te =
-                 match te with
-                   ManifestTypeExpr (_, IntType) -> IntType
-                 | ManifestTypeExpr (_, Char) -> Char
-                 | ManifestTypeExpr (_, Bool) -> Bool
-                 | ManifestTypeExpr (_, ShortType) -> ShortType
-                 | ArrayTypeExpr (l, tp) -> 
-                     let elem_tp = check_type tp in ArrayType(elem_tp)
-                 | IdentTypeExpr(lt, sn) ->
-                   match search2' sn (pn,ilist) classmap1 classmap0 with
-                     Some s -> ObjType s
-                   | None -> match search2' sn (pn,ilist) interfmap1 interfmap0 with
-                       Some s -> ObjType s
-                     | None -> static_error lt ("No such class or interface: "^sn) None
-                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
-               in
-               iter ((f, (lf, check_type t, vis, binding, final, init, ref None))::fmap) fds
-             )
-         in
-          begin
-           match fds_opt with
-             fds -> iter [] fds
-           | [] -> (sn, (l,fin,meths,None,constr,super,interfs,preds,pn,ilist))
-         end
-      )
+      begin fun (sn, (l,fin,meths,fds,constr,super,interfs,preds,pn,ilist)) ->
+        let rec iter fmap fds =
+          match fds with
+            [] -> (sn, (l,fin,meths,Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
+          | Field (lf, _, t, f, binding, vis, final, init)::fds ->
+            if List.mem_assoc f fmap then
+              static_error lf "Duplicate field name." None
+            else
+              let rec check_type te =
+                match te with
+                  ManifestTypeExpr (_, IntType) -> IntType
+                | ManifestTypeExpr (_, Char) -> Char
+                | ManifestTypeExpr (_, Bool) -> Bool
+                | ManifestTypeExpr (_, ShortType) -> ShortType
+                | ArrayTypeExpr (l, tp) -> 
+                    let elem_tp = check_type tp in ArrayType(elem_tp)
+                | IdentTypeExpr(lt, sn) ->
+                  begin match search2' sn (pn,ilist) classmap1 classmap0 with
+                    Some s -> ObjType s
+                  | None ->
+                    match search2' sn (pn,ilist) interfmap1 interfmap0 with
+                      Some s -> ObjType s
+                    | None -> static_error lt ("No such class or interface: "^sn) None
+                  end
+                | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
+              in
+              iter ((f, (lf, check_type t, vis, binding, final, init, ref None))::fmap) fds
+        in
+        iter [] fds
+      end
       classmap1
   in
   
@@ -7373,7 +7366,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           (wpre, wpost)
         in
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::functypemap) ds
-      | _::ds -> iter functypemap ds
     in
     iter [] functypedeclmap1
   in
@@ -8234,7 +8226,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
     | Char _ -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
-    | PtrType _ | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
+    | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
   in
@@ -9703,8 +9695,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec check_after_initial_declarations ss = 
         match ss with
           [] -> ()
-        |  DeclStmt(l, _, inits) :: rest -> 
-        (List.iter (fun (_, _, addresstaken) -> if !addresstaken then begin static_error l "A local variable whose address is taken must be declared at the start of a block." None; () end else ()) inits); check_after_initial_declarations rest
+        | DeclStmt(l, _, inits) :: rest -> 
+          inits |> List.iter begin fun (_, _, addresstaken) ->
+              if !addresstaken then
+                static_error l "A local variable whose address is taken must be declared at the start of a block." None
+            end;
+          check_after_initial_declarations rest
         | _ :: rest -> check_after_initial_declarations rest
       in
       let rec check_block_declarations ss =
@@ -10099,7 +10095,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
               (function (fn, (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
               funcmap
           in
-          verify_lems lems0;
+          ignore $. verify_lems lems0;
           None
         | Some (lems, g, indinfo) ->
           Some (verify_lems lems, g, indinfo)
@@ -10107,8 +10103,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let rec check_after_initial_declarations ss = 
         match ss with
           [] -> ()
-        |  DeclStmt(l, _, inits) :: rest -> 
-        (List.iter (fun (_, _, addresstaken) -> if !addresstaken then begin static_error l "A local variable whose address is taken must be declared at the start of a block." None; () end else ()) inits); check_after_initial_declarations rest
+        | DeclStmt(l, _, inits) :: rest -> 
+          inits |> List.iter begin fun (_, _, addresstaken) ->
+              if !addresstaken then
+                static_error l "A local variable whose address is taken must be declared at the start of a block." None
+            end;
+          check_after_initial_declarations rest
         | _ :: rest -> check_after_initial_declarations rest
       in
       let rec check_block_declarations ss =
@@ -10159,7 +10159,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         None -> static_error l "Unexpected break statement" None
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
-    | _ -> static_error l "This statement form is not supported." None
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
