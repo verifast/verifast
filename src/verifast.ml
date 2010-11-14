@@ -579,7 +579,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk ();
         if text_peek () = '\010' then text_junk ();
         new_line ()
-    |('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255' as c) ->
+    |('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255') ->
         start_token();
         text_junk ();
         ident ()
@@ -617,7 +617,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | c -> start_token(); text_junk (); Some (keyword_or_error c)
   and ident () =
     match text_peek () with
-      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'' as c) ->
+      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') ->
       text_junk (); ident ()
     | _ -> Some (ident_or_keyword (String.sub text !tokenpos (!textpos - !tokenpos)) true)
   and ident2 () =
@@ -1515,7 +1515,7 @@ and
 and
   parse_ghost_interface_members = parser
   [< '(_, Kwd "@*/") >] -> []
-| [< v = parse_interface_visibility; '(l, Kwd "predicate"); '(_, Ident p); ps = parse_paramlist; '(_, Kwd ";"); ms = parse_ghost_interface_members >] ->
+| [< parse_interface_visibility; '(l, Kwd "predicate"); '(_, Ident p); ps = parse_paramlist; '(_, Kwd ";"); ms = parse_ghost_interface_members >] ->
   PredSpecMember (InstancePredDecl (l, p, ps, None))::ms
 and
   parse_interface_meth vis cn= parser
@@ -1535,7 +1535,7 @@ and
 and
   parse_ghost_java_members = parser
   [< '(_, Kwd "@*/") >] -> []
-| [< vis = parse_visibility;
+| [< _ = parse_visibility;
      '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "="); p = parse_pred; '(_, Kwd ";");
      mems = parse_ghost_java_members
   >] -> PredMember (InstancePredDecl (l, g, ps, Some p))::mems
@@ -2883,16 +2883,33 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     let rec iter (pn,ilist) classes lemmas ds=
       match ds with
       [] -> (classes,lemmas)
-    | Class (l, fin, cn, meths, fds, cons, super, inames, preds)::rest -> let cn=full_name pn cn in
-      let meths'= List.filter (fun x-> match x with Meth(lm, t, n, ps, co, ss,fb,v) -> match ss with None->true |Some _ -> false) meths 
-      in
-      let cons'= List.filter (fun x-> match x with Cons (lm,ps,co,ss,v) -> match ss with None->true |Some _ -> false) cons 
-      in
+    | Class (l, fin, cn, meths, fds, cons, super, inames, preds)::rest ->
+      let cn = full_name pn cn in
+      let meths' = meths |> List.filter begin
+	fun x ->
+	  match x with
+	    | Meth(lm, t, n, ps, co, ss,fb,v) ->
+	      match ss with
+		| None -> true
+		| Some _ -> false
+      end in
+      (* TODO: cons' is not used anywhere, and should probably be used
+         in the line after the definition. Changing it has no effect on the test results,
+         clearly meaning that more tests should be written. I left it unchanged so that a warning still reminds us of this issue. *)
+      let cons' = cons |> List.filter begin
+	fun x ->
+	  match x with
+	    | Cons (lm, ps, co, ss, v) ->
+	      match ss with
+		| None -> true
+		| Some _ -> false
+      end in
       iter (pn,ilist) (Class(l,fin,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
     | Func(l,Lemma(_),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
-      let fn=full_name pn fn in iter (pn,ilist) classes (elem::lemmas) rest
+      let fn = full_name pn fn in
+      iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
-      iter (pn,ilist) classes lemmas rest
+      iter (pn, ilist) classes lemmas rest
     in
     let rec iter' (classes,lemmas) ps=
       match ps with
@@ -4573,7 +4590,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           let (_, gh, tparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
           (WFunPtrCall (l, g, es), rt)
-        | Some ((PureFuncType (t1, t2) as t) as tp) ->
+        | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
           check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
         | _ ->
@@ -7999,7 +8016,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             let rec iter clist cons_impl=
               match clist with
                 [] -> cons_impl
-              | Cons (lm,ps, co,None,v) as elem::rest ->
+              | Cons (lm,ps, co,None,v)::rest ->
                 if List.mem (cn,lm) cons_impl then
                   let cons_impl'= remove (fun (x,l0) -> x=cn && lm=l0) cons_impl in
                   iter rest cons_impl'
@@ -10668,7 +10685,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
      [] -> (boxes, lems)
-    | Func (l, (Lemma(auto, trigger) as k), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
+    | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
       let f_file_name = Filename.chop_extension g_file_name in
