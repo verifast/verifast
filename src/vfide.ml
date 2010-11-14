@@ -73,12 +73,12 @@ let show_ide initialPath prover =
   in
   let showLineNumbersAction =
     let a = GAction.toggle_action ~name:"ShowLineNumbers" () in
-    a#set_label "Show _line numbers"; a#connect#toggled (fun () -> showLineNumbers a#get_active);
+    a#set_label "Show _line numbers"; ignore $. a#connect#toggled (fun () -> showLineNumbers a#get_active);
     a
   in
   let showWhitespaceAction =
     let a = GAction.toggle_action ~name:"ShowWhitespace" () in
-    a#set_label "Show _whitespace"; a#connect#toggled (fun () -> showWhitespace a#get_active);
+    a#set_label "Show _whitespace"; ignore $. a#connect#toggled (fun () -> showWhitespace a#get_active);
     a
   in
   let _ =
@@ -257,9 +257,9 @@ let show_ide initialPath prover =
   let rec perform_syntax_highlighting ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) start stop =
     let firstLine = buffer#start_iter#get_text ~stop:buffer#start_iter#forward_to_line_end in
     let {file_opt_annot_char=annotChar} = get_file_options firstLine in
-    let Some commentTag = GtkText.TagTable.lookup buffer#tag_table "comment" in
+    let commentTag = get $. GtkText.TagTable.lookup buffer#tag_table "comment" in
     let commentTag = new GText.tag commentTag in
-    let Some ghostRangeTag = GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
+    let ghostRangeTag = get $. GtkText.TagTable.lookup buffer#tag_table "ghostRange" in
     let ghostRangeTag = new GText.tag ghostRangeTag in
     let start = start#backward_line in
     let start = if start#line_index <> 0 then buffer#start_iter else start in (* Works around an apparent bug in backward_line *)
@@ -298,9 +298,9 @@ let show_ide initialPath prover =
     let srcText = (*GText.view*) GSourceView2.source_view ~packing:textScroll#add () in
     let buffer = srcText#source_buffer in
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
-    let ghostRangeTag = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
+    let _ = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
     let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
-    let commentTag = buffer#create_tag ~name:"comment" [`FOREGROUND "#008000"] in
+    let _ = buffer#create_tag ~name:"comment" [`FOREGROUND "#008000"] in
     let _ = buffer#create_tag ~name:"ghostRangeDelimiter" [`FOREGROUND "Gray"] in
     let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
     let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
@@ -317,10 +317,10 @@ let show_ide initialPath prover =
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
-    buffer#connect#modified_changed (fun () ->
+    ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
     );
-    srcText#event#connect#key_press (fun key ->
+    ignore $. srcText#event#connect#key_press (fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._Return then
       begin
         let cursor = buffer#get_iter `INSERT in
@@ -347,7 +347,7 @@ let show_ide initialPath prover =
       else
         false
     );
-    buffer#connect#insert_text (fun iter text ->
+    ignore $. buffer#connect#insert_text (fun iter text ->
       if not !ignore_text_changes then
       begin
         let offset = iter#offset in
@@ -363,14 +363,14 @@ let show_ide initialPath prover =
         redoAction#set_sensitive false
       end
     );
-    buffer#connect#after#insert_text (fun iter text ->
+    ignore $. buffer#connect#after#insert_text (fun iter text ->
       let start = iter#backward_chars (Glib.Utf8.length text) in
       perform_syntax_highlighting tab start iter
     );
-    buffer#connect#after#delete_range (fun ~start:start ~stop:stop ->
+    ignore $. buffer#connect#after#delete_range (fun ~start:start ~stop:stop ->
       perform_syntax_highlighting tab start stop
     );
-    buffer#connect#delete_range (fun ~start:start ~stop:stop ->
+    ignore $. buffer#connect#delete_range (fun ~start:start ~stop:stop ->
       if not !ignore_text_changes then
       begin
         let offset = start#offset in
@@ -387,10 +387,10 @@ let show_ide initialPath prover =
         redoAction#set_sensitive false
       end
     );
-    buffer#connect#changed (fun () -> !bufferChangeListener tab);
+    ignore $. buffer#connect#changed (fun () -> !bufferChangeListener tab);
     let focusIn _ = set_current_tab (Some tab); false in
-    srcText#event#connect#focus_in ~callback:focusIn;
-    subText#event#connect#focus_in ~callback:focusIn;
+    ignore $. srcText#event#connect#focus_in ~callback:focusIn;
+    ignore $. subText#event#connect#focus_in ~callback:focusIn;
     buffers := !buffers @ [tab];
     tab
   in
@@ -450,7 +450,7 @@ let show_ide initialPath prover =
   in
   let open_path path =
     let tab = add_buffer () in
-    load tab path;
+    ignore $. load tab path;
     updateBufferMenu ();
     tab
   in
@@ -494,6 +494,7 @@ let show_ide initialPath prover =
         1 -> saveAs tab
       | 2 -> store tab thePath
       | 3 -> None
+      | _ -> failwith "cannot happen"
     end else
       store tab thePath
   in
@@ -587,7 +588,7 @@ let show_ide initialPath prover =
   in
   let updateStepItems() =
     clearStepItems();
-    let ctxts_fifo = List.rev (match !ctxts_lifo with Some l -> l) in
+    let ctxts_fifo = List.rev (get !ctxts_lifo) in
     let rec iter k itstack last_it ass locstack last_loc last_env ctxts =
       match ctxts with
         [] -> []
@@ -618,7 +619,7 @@ let show_ide initialPath prover =
     iter 0 items
   in
   let clearStepInfo() =
-    List.iter (fun ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) as tab) ->
+    List.iter (fun ((path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark)) ->
       buffer#remove_tag_by_name "currentLine" ~start:buffer#start_iter ~stop:buffer#end_iter;
       buffer#remove_tag_by_name "currentCaller" ~start:buffer#start_iter ~stop:buffer#end_iter
     ) !buffers;
@@ -655,7 +656,7 @@ let show_ide initialPath prover =
       None -> ()
     | Some stepItems ->
       clearStepInfo();
-      let [selpath] = stepList#selection#get_selected_rows in
+      let selpath = List.hd stepList#selection#get_selected_rows in
       let (ass, h, env, l, msg, locstack) = get_step_of_path selpath in
       begin
         match locstack with
@@ -667,7 +668,7 @@ let show_ide initialPath prover =
           let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
           goto_tab tab;
           buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-          Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
+          ignore $. Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
           append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
         | (caller_loc, caller_env)::_ ->
           if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
@@ -679,7 +680,7 @@ let show_ide initialPath prover =
             let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
             subNotebook#goto_page k;
             buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-            Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
+            ignore $. Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
             append_items subEnvStore subEnvKCol subEnvCol (strings_of_env env)
           end;
           begin
@@ -688,12 +689,12 @@ let show_ide initialPath prover =
             let (_, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = tab in
             goto_tab tab;
             buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-            Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
+            ignore $. Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
             append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env caller_env)
           end
       end;
       append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass);
-      let compare_chunks (Chunk ((g, literal), targs, coef, ts, size) as ch1) (Chunk ((g', literal'), targs', coef', ts', size') as ch2) =
+      let compare_chunks (Chunk ((g, literal), targs, coef, ts, size)) (Chunk ((g', literal'), targs', coef', ts', size')) =
         let r = compare g g' in
         if r <> 0 then r else
         let rec compare_list xs ys =
@@ -753,7 +754,7 @@ let show_ide initialPath prover =
   bufferChangeListener := (fun tab ->
     ()
   );
-  root#event#connect#delete ~callback:(fun _ ->
+  ignore $. root#event#connect#delete ~callback:(fun _ ->
     let rec iter tabs =
       match tabs with
         [] -> false
@@ -786,19 +787,19 @@ let show_ide initialPath prover =
     | tab::_ ->
       close tab || close_all ()
   in
-  (actionGroup#get_action "New")#connect#activate (fun _ ->
-    ignore (close_all () || (new_buffer (); false))
+  ignore $. (actionGroup#get_action "New")#connect#activate (fun _ ->
+    ignore (close_all () || (ignore $. new_buffer (); false))
   );
-  (actionGroup#get_action "Open")#connect#activate (fun _ ->
+  ignore $. (actionGroup#get_action "Open")#connect#activate (fun _ ->
     match GToolbox.select_file ~title:"Open" () with
       None -> ()
     | Some thePath ->
       if not (close_all ()) then
       ignore (open_path thePath)
   );
-  (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> save tab; () | None -> ());
-  (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> saveAs tab; () | None -> ());
-  (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> close tab; () | None -> ());
+  ignore $. (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. save tab | None -> ());
+  ignore $. (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. saveAs tab | None -> ());
+  ignore $. (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. close tab | None -> ());
   let handleStaticError l emsg eurl =
     apply_tag_by_loc "error" l;
     msg := Some emsg;
@@ -811,7 +812,7 @@ let show_ide initialPath prover =
     let buffer = tab_buffer tab in
     let it = srcpos_iter buffer (line, col) in
     buffer#place_cursor ~where:it;
-    Glib.Idle.add (fun () -> (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
+    ignore $. Glib.Idle.add (fun () -> ignore $. (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
     ()
   in
   let loc_path ((path, _, _), _) = path in
@@ -952,7 +953,7 @@ let show_ide initialPath prover =
             | SymbolicExecutionError (ctxts, phi, l, emsg, eurl) ->
               ctxts_lifo := Some ctxts;
               updateStepItems();
-              updateStepListView();
+              ignore $. updateStepListView();
               stepSelected();
               (* let (ass, h, env, steploc, stepmsg, locstack) = get_step_of_path (get_last_step_path()) in *)
               begin match ctxts with
@@ -976,28 +977,28 @@ let show_ide initialPath prover =
     let dialog = GWindow.dialog ~title:"Preferences" ~parent:root () in
     let vbox = dialog#vbox in
     let itemsTable = GPack.table ~rows:2 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
-    GMisc.label ~text:"Code font:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
+    ignore $. GMisc.label ~text:"Code font:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
     let codeFontButton = GButton.font_button ~font_name:!codeFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) () in
-    GMisc.label ~text:"Trace font:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
+    ignore $. GMisc.label ~text:"Trace font:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
     let traceFontButton = GButton.font_button ~font_name:!traceFont ~show:true ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
-    okButton#connect#clicked (fun () ->
+    ignore $. okButton#connect#clicked (fun () ->
       setCodeFont codeFontButton#font_name;
       setTraceFont traceFontButton#font_name;
       dialog#response `DELETE_EVENT
     );
     let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
-    cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
-    dialog#run();
+    ignore $. cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
+    ignore $. dialog#run();
     dialog#destroy()
   in
-  (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
-  (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
-  (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
-  undoAction#connect#activate undo;
-  redoAction#connect#activate redo;
-  root#event#connect#focus_in begin fun _ ->
+  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
+  ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
+  ignore $. undoAction#connect#activate undo;
+  ignore $. redoAction#connect#activate redo;
+  ignore $. root#event#connect#focus_in begin fun _ ->
     !buffers |> List.iter begin fun tab ->
       match !(tab_path tab) with
         None -> ()
@@ -1010,7 +1011,7 @@ let show_ide initialPath prover =
     false
   end;
   root#show();
-  Glib.Idle.add (fun () -> textPaned#set_position 0; false);
+  ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
 let _ =
