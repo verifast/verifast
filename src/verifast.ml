@@ -2783,7 +2783,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp in
   let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp in
   
-  ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false); (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
+  ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false); (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
   let boolt = Bool in
   let intt = IntType in
@@ -2813,10 +2813,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let get_unique_var_symb_non_ghost x t = 
     let res = get_unique_var_symb x t in
     match t with
-      Char -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term res) (ctxt#mk_le res max_char_term)); res
-    | ShortType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term res) (ctxt#mk_le res max_short_term)); res  
-    | IntType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term res) (ctxt#mk_le res max_int_term)); res
-    | PtrType _ | UintPtrType -> ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) res) (ctxt#mk_le res max_ptr_term)); res
+      Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term res) (ctxt#mk_le res max_char_term)); res
+    | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term res) (ctxt#mk_le res max_short_term)); res  
+    | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term res) (ctxt#mk_le res max_int_term)); res
+    | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) res) (ctxt#mk_le res max_ptr_term)); res
     | _ -> res
   in
   let get_unique_var_symb_ x t ghost = 
@@ -4659,7 +4659,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       end
     | NewArray (l, te, len) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      checkt len IntType;
+      ignore $. checkt len IntType;
       (e, ArrayType t)
     | NewArrayWithInitializer (l, te, es) ->
       let t = check_pure_type (pn,ilist) tparams te in
@@ -5023,7 +5023,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
         match fds_opt with
           None -> ()
         | Some fds ->
-          List.iter (fun (f, fbody) -> try eval_field_body [] fbody; () with NotAConstant -> ()) fds
+          List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> ()) fds
       end
       classmap1
   end;
@@ -5300,7 +5300,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let check_pred (pn,ilist) tparams tenv p =
     let (wpred, tenv, infTypes) = check_pred_core (pn,ilist) tparams tenv p in
-    fix_inferred_types infTypes;
+    ignore $. fix_inferred_types infTypes;
     (wpred, tenv)
   in
   
@@ -5606,7 +5606,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     List.map
       begin fun (sn, _) ->
         let s = get_unique_var_symb ("struct_" ^ sn ^ "_size") IntType in
-        ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
+        ignore $. ctxt#assume (ctxt#mk_lt (ctxt#mk_intlit 0) s);
         (sn, s)
       end
       structmap
@@ -6255,12 +6255,12 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                 if is_dummy_frac_term coef' then
                   coef'
                 else begin
-                  ctxt#assume (ctxt#mk_lt real_zero coef);
+                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef);
                   ctxt#mk_real_add coef coef'
                 end
               else
                 if is_dummy_frac_term coef' then begin
-                  ctxt#assume (ctxt#mk_lt real_zero coef');
+                  ignore $. ctxt#assume (ctxt#mk_lt real_zero coef');
                   ctxt#mk_real_add coef coef'
                 end else
                   ctxt#mk_real_add coef coef'
