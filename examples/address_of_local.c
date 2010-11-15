@@ -100,6 +100,22 @@ void test_break2()
   }
 }
 
+void test_requires_ensures_loop()
+  //@ requires true;
+  //@ ensures true;
+{
+  int i = 0;
+  while(i < 5) 
+    //@ requires i <= 5;
+    //@ ensures i <= 5;
+  {
+      int x = 0;
+      int* ptr = &x;
+      i = i + 1;
+  }
+  //@ assert i == 5;
+}
+
 void destroy(int* i) 
   //@ requires integer(i, _);
   //@ ensures true;
