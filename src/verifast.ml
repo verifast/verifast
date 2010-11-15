@@ -8608,16 +8608,16 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     stats#stmtExec;
     let l = stmt_loc s in
     let free_locals closeBraceLoc h tenv env locals cont =
-      let rec free_locals_core closeBraceLoc h tenv env locals cont =
+      let rec free_locals_core h locals cont =
         match locals with
           [] -> cont h env
-        | x :: locals when not (List.mem_assoc x env) -> free_locals_core closeBraceLoc h tenv env locals cont
+        | x :: locals when not (List.mem_assoc x env) -> free_locals_core h locals cont
         | x :: locals ->
-          assert_chunk rules (pn, ilist) h [] [] [] closeBraceLoc (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun chunk h coef [_; t] size ghostenv _ _ -> free_locals_core closeBraceLoc h tenv env locals cont)
+          assert_chunk rules (pn, ilist) h [] [] [] closeBraceLoc (pointee_pred_symb l (match List.assoc x tenv with RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1) [TermPat (List.assoc x env); dummypat] (fun _ h _ _ _ _ _ _ -> free_locals_core h locals cont)
       in
       match locals with
         [] -> cont h env
-      | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals_core closeBraceLoc h tenv env locals cont)
+      | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals_core h locals cont)
     in
     let rec check_block_declarations ss =
       let rec check_after_initial_declarations ss = 
@@ -9726,8 +9726,8 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       check_ghost ghostenv l e;
-      check_block_declarations ss;
       let [BlockStmt(_, _, ss, _, locals_to_free)] = ss in
+      check_block_declarations ss;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
