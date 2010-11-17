@@ -81,6 +81,9 @@ cd java
 cd chat
 verifast_both -c chat.jarsrc
 cd ..
+cd gameserver
+verifast_both -c gameserver.jarsrc
+cd ..
 cd chatbot
 verifast_both -disable_overflow_check -c Bot.java
 cd ..

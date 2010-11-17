@@ -11,7 +11,7 @@ predicate_ctor room_ctor(Room room)() = room(room);
 
 predicate session(Session session) =
     session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo)
-    &*& roomLock != null &*& [?f]lock(roomLock, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+    &*& roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
 
 predicate_family_instance thread_run_pre(Session.class)(Session session, any info) = session(session);
 
@@ -27,7 +27,7 @@ public class Session implements Runnable {
     public Session(Room room, Semaphore roomLock, Socket socket)
         /*@
         requires
-            roomLock != null &*& [?f]lock(roomLock, room_ctor(room)) &*&
+            roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*&
             socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
         @*/
         //@ ensures session(this);
@@ -41,11 +41,11 @@ public class Session implements Runnable {
     public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException, IOException
         /*@
         requires
-            roomLock != null &*& locked(roomLock, room_ctor(room), ?f) &*& room!= null &*& room(room) &*&
+            roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*& room!= null &*& room(room) &*&
             reader != null &*& BufferedReader(reader, ?reader0, ?reader0Info) &*&
             writer != null &*& Writer(writer.getClass())(writer, ?writerInfo);
         @*/
-        //@ ensures [f]lock(roomLock, room_ctor(room)) &*& BufferedReader(reader, reader0, reader0Info) &*& Writer(writer.getClass())(writer, writerInfo);
+        //@ ensures semaphore(f, roomLock, p + 1, room_ctor(room)) &*& BufferedReader(reader, reader0, reader0Info) &*& Writer(writer.getClass())(writer, writerInfo);
     {
         Member member = null;
         String joinMessage = nick + " has joined the room.";
@@ -69,7 +69,7 @@ public class Session implements Runnable {
         {
             String message = reader.readLine();
             while (message != null)
-                //@ invariant BufferedReader(reader, reader0, reader0Info) &*& [f]lock(roomLock, room_ctor(room));
+                //@ invariant BufferedReader(reader, reader0, reader0Info) &*& semaphore(f, roomLock, p+1, room_ctor(room)) ;
             {
                 roomLock.acquire();
                 //@ open room_ctor(room)();
@@ -181,7 +181,7 @@ public class Session implements Runnable {
         {
             boolean done = false;
             while (!done)
-                //@ invariant Writer(writer.getClass())(writer, writerInfo) &*& BufferedReader(reader, reader0, readerInfo) &*& [?f]lock(roomLock, room_ctor(room));
+                //@ invariant Writer(writer.getClass())(writer, writerInfo) &*& BufferedReader(reader, reader0, readerInfo) &*& semaphore(?f, roomLock, ?p, room_ctor(room));
             {
                 writer.write("Please enter your nick: \r\n");
                 writer.flush();

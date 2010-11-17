@@ -1,6 +1,12 @@
 package java.lang;
 
 public class String{
+  //public String(String str);
+
+  public String(byte[] src);
+    //@ requires src != null;
+    //@ ensures this != null;
+
   public boolean equals(String other);
     //@ requires true;
     //@ ensures true;
@@ -13,4 +19,10 @@ public class String{
   public int length();
     //@ requires true;
     //@ ensures result>=0;
+  public boolean matches(String regex);
+    //@ requires true;
+    //@ ensures true;
+  public static String valueOf(int value);
+    //@ requires true;
+    //@ ensures true;
 }

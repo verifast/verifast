@@ -1,8 +1,11 @@
 package java.lang;
 
+import java.util.*;
+
 /*@
 
 inductive unit = unit;
+
 
 fixpoint t default_value<t>();
 
@@ -98,5 +101,10 @@ public class Integer {
 
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
+    
+    public static int parseInt(String s);
+    	//@ requires s != null;
+        //@ ensures true;
+    
 
 }
