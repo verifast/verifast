@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/sh
 MYRELDIR=`dirname $0`
 MYABSDIR=`cd $MYRELDIR; pwd`
 export DYLD_LIBRARY_PATH=$MYABSDIR/../lib:$DYLD_LIBRARY_PATH
