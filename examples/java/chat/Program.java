@@ -12,7 +12,6 @@ public class Program {
     {
         Room room = new Room();
         //@ close room_ctor(room)();
-        ////@ close create_lock_ghost_arg(room_ctor(room));
         //@ close n_times(0, room_ctor(room));
         //@ close n_times(1, room_ctor(room));
         Semaphore roomLock = new Semaphore(1);

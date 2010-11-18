@@ -1,11 +1,9 @@
 package java.lang;
 
 public class String{
-  //public String(String str);
-
   public String(byte[] src);
     //@ requires src != null;
-    //@ ensures this != null;
+    //@ ensures true;
 
   public boolean equals(String other);
     //@ requires true;

@@ -28,7 +28,7 @@ lemma void semaphore_join();
 
 public class Semaphore {
     Semaphore(int p);
-        //@ requires p >= 0 &*& n_times(p, ?inv);
+        //@ requires n_times(p, ?inv);
         //@ ensures semaphore(1, this, p, inv);
 
     void acquire();
