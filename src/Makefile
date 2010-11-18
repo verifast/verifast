@@ -169,6 +169,7 @@ release: test refman
 	copy ..\..\string.h
 	copy ..\..\list.h
 	copy ..\..\raw_ghost_lists.h
+	copy ..\..\counting.h
 	copy ..\..\threading.h
 	copy ..\..\threading.vfmanifest
 	copy ..\..\threading.c
