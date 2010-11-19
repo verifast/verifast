@@ -351,8 +351,8 @@ let readFile path =
   iter2 chunks 0;
   file_to_utf8 s
 
-type token =
-    Kwd of string
+type token = (* ?token *)
+  | Kwd of string
   | Ident of string
   | Int of big_int
   | Float of float
@@ -363,9 +363,10 @@ type token =
   | ErrorToken
 
 (** Base path, relative path, line (1-based), column (1-based) *)
-type srcpos = ((string * string) * int * int)
+type srcpos = ((string * string) * int * int) (* ?srcpos *)
+
 (** A range of source code: start position, end position *)
-type loc = (srcpos * srcpos)
+type loc = (srcpos * srcpos) (* ?loc *)
 
 exception ParseException of loc * string
 
@@ -435,7 +436,7 @@ let big_int_of_hex_string s =
   iter (String.length s - 1) unit_big_int zero_big_int
 
 (** For syntax highlighting. *)
-type range_kind =
+type range_kind = (* ?range_kind *)
     KeywordRange
   | GhostKeywordRange
   | GhostRange
@@ -814,7 +815,7 @@ let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
 
 (* Some types for dealing with constants *)
 
-type constant_value =
+type constant_value = (* ?constant_value *)
   IntConst of big_int
 | BoolConst of bool
 | StringConst of string
@@ -824,7 +825,7 @@ exception NotAConstant
 
 (* Region: ASTs *)
 
-type type_ =
+type type_ = (* ?type_ *)
     Bool
   | Void
   | IntType
@@ -849,10 +850,10 @@ type type_ =
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
 
-type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive
+type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
 (** Types as they appear in source code, before validity checking and resolution. *)
-type type_expr =
+type type_expr = (* ?type_expr *)
     StructTypeExpr of loc * string
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
@@ -877,7 +878,7 @@ class predref (name: string) =
   end
 
 type
-  ident_scope =
+  ident_scope = (* ?ident_scope *)
     LocalVar
   | PureCtor
   | FuncName
@@ -888,9 +889,10 @@ type
   | PureFuncName
 
 type
-  operator = Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  operator =  (* ?operator *)
+  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
-  expr =
+  expr = (* ?expr *)
     True of loc
   | False of loc
   | Null of loc
@@ -901,24 +903,37 @@ and
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
   | ArrayLengthExpr of loc * expr
-  | WRead of loc * expr * string (* parent *) * string (* field name *) * type_ (* range *) * bool (* static *) * constant_value option option ref * ghostness
+  | WRead of
+      loc *
+      expr *
+      string (* parent *) *
+      string (* field name *) *
+      type_ (* range *) *
+      bool (* static *) *
+      constant_value option option ref *
+      ghostness
   | ReadArray of loc * expr * expr
   | WReadArray of loc * expr * type_ * expr
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
-  | CallExpr of
+  | CallExpr of (* oproep van functie/methode/lemma/fixpoint *)
       loc *
       string *
       type_expr list (* type arguments *) *
       pat list (* indices, in case this is really a predicate assertion *) *
       pat list (* arguments *) *
       method_binding
-      (* oproep van functie/methode/lemma/fixpoint *)
   | ExprCallExpr of loc * expr * expr list  (* Call whose callee is an expression instead of a plain identifier *)
   | WFunPtrCall of loc * string * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list
   | WFunCall of loc * string * type_ list * expr list
-  | WMethodCall of loc * string (* declaring class or interface *) * string (* method name *) * type_ list (* parameter types (not including receiver) *) * expr list (* args, including receiver if instance method *) * method_binding
+  | WMethodCall of
+      loc *
+      string (* declaring class or interface *) *
+      string (* method name *) *
+      type_ list (* parameter types (not including receiver) *) *
+      expr list (* args, including receiver if instance method *) *
+      method_binding
   | NewArray of loc * type_expr * expr
   | NewObject of loc * string * expr list
   | NewArrayWithInitializer of loc * type_expr * expr list
@@ -938,38 +953,41 @@ and
   | AssignExpr of loc * expr * expr
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
 and
-  pat =
+  pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
   | VarPat of string (* var pattern, aangeduid met ? in code *)
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
 and
-  switch_expr_clause =
+  switch_expr_clause = (* ?switch_expr_clause *)
     SwitchExprClause of loc * string * string list * expr (* switch uitdrukking *)
 and
-  language =
+  language = (* ?language *)
     Java
   | CLang
 and
-  method_binding =
+  method_binding = (* ?method_binding *)
     Static
   | Instance
 and
-  visibility =
+  visibility = (* ?visibility *)
     Public
   | Protected
   | Private
   | Package
 and
-  package =
+  package = (* ?package *)
     PackageDecl of loc * string * import list * decl list
 and
-  import =
+  import = (* ?import *)
     Import of loc * string * string option (* None betekent heel package, Some string betekent 1 ding eruit *)
 and
-  stmt =
+  stmt = (* ?stmt *)
     PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
   | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
-  | DeclStmt of loc * type_expr * (string * expr option * bool ref (* indicates whether address is taken *)) list (* enkel declaratie *)
+  | DeclStmt of
+      loc *
+      type_expr *
+      (string * expr option * bool ref (* indicates whether address is taken *)) list (* enkel declaratie *)
   | ExprStmt of expr
   | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
   | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
@@ -983,11 +1001,41 @@ and
       pat list *  (* Indices for predicate family instance, or constructor arguments for predicate constructor *)
       pat list *  (* Arguments *)
       pat option  (* Coefficient for fractional permission *)
-  | Close of loc * expr option * string * type_expr list * pat list * pat list * pat option
+  | Close of
+      loc *
+      expr option *
+      string *
+      type_expr list *
+      pat list *
+      pat list *
+      pat option
   | ReturnStmt of loc * expr option (*return regel-return value (optie) *)
-  | WhileStmt of loc * expr * loop_spec option * expr option * stmt list * loc (* while regel-conditie-lus invariant- lus body - close brace location *)
+  | WhileStmt of
+      loc *
+      expr *
+      loop_spec option *
+      expr option *
+      stmt list *
+      loc (* while regel-conditie-lus invariant- lus body - close brace location *)
   | BlockStmt of loc * decl list * stmt list * loc * (string) list ref
-  | PerformActionStmt of loc * bool ref (* in non-pure context *) * string * pat list * loc * string * pat list * loc * string * expr list * bool (* atomic *) * stmt list * loc (* close brace of body *) * (loc * expr list) option * loc * string * expr list
+  | PerformActionStmt of
+      loc *
+      bool ref (* in non-pure context *) *
+      string *
+      pat list *
+      loc *
+      string *
+      pat list *
+      loc *
+      string *
+      expr list *
+      bool (* atomic *) *
+      stmt list *
+      loc (* close brace of body *) *
+      (loc * expr list) option *
+      loc *
+      string *
+      expr list
   | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
   | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
   | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
@@ -1004,11 +1052,11 @@ and
   | TryFinally of loc * stmt list * loc * stmt list
   | Break of loc
 and
-  loop_spec =
+  loop_spec = (* ?loop_spec *)
   | LoopInv of pred
   | LoopSpec of pred * pred
 and
-  switch_stmt_clause =
+  switch_stmt_clause = (* ?switch_stmt_clause *)
   | SwitchStmtClause of loc * expr * stmt list
   | SwitchStmtDefaultClause of loc * stmt list
 and
@@ -1026,36 +1074,68 @@ and
   | EmpPred of loc (* als "emp" bij requires/ensures staat -regel-*)
   | CoefPred of loc * pat * pred (* fractional permission met coeff-predicate*)
 and
-  switch_pred_clause =
+  switch_pred_clause = (* ?switch_pred_clause *)
   | SwitchPredClause of loc * string * string list * prover_type option list option ref (* Boxing info *) * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
 and
-  func_kind =
+  func_kind = (* ?func_kind *)
   | Regular
   | Fixpoint
   | Lemma of bool (* indicates whether an axiom should be generated for this lemma *) * expr option (* trigger *)
 and
-  meth =
+  meth = (* ?meth *)
   | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * method_binding * visibility
 and
-  meth_spec =
+  meth_spec = (* ?meth_spec *)
   | MethSpec of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option* method_binding * visibility
 and
-  cons =
+  cons = (* ?cons *)
   | Cons of loc * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * visibility
 and
-  instance_pred_decl =
+  instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * pred option
 and
-  class_finality = FinalClass | ExtensibleClass
+  class_finality =
+  | FinalClass
+  | ExtensibleClass
 and
-  decl =
+  decl = (* ?decl *)
     Struct of loc * string * field list option
-  | Inductive of loc * string * string list * ctor list (* inductief data type regel-naam-type parameters-lijst van constructors*)
-  | Class of loc * class_finality * string * meth list * field list *cons list* string (* superclass *) * string list (* itfs *) * instance_pred_decl list
+  | Inductive of  (* inductief data type regel-naam-type parameters-lijst van constructors*)
+      loc *
+      string *
+      string list *
+      ctor list
+  | Class of
+      loc *
+      class_finality *
+      string *
+      meth list *
+      field list *
+      cons list *
+      string (* superclass *) *
+      string list (* itfs *) *
+      instance_pred_decl list
   | Interface of loc * string * meth_spec list * instance_pred_decl list
-  | PredFamilyDecl of loc * string * string list (* type parameters *) * int (* number of indices *) * type_expr list * int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
-  | PredFamilyInstanceDecl of loc * string * string list (* type parameters *) * (loc * string) list * (type_expr * string) list * pred
-  | PredCtorDecl of loc * string * (type_expr * string) list * (type_expr * string) list * pred
+  | PredFamilyDecl of
+      loc *
+      string *
+      string list (* type parameters *) *
+      int (* number of indices *) *
+      type_expr list *
+      int option (* (Some n) means the predicate is precise and the first n parameters are input parameters *)
+  | PredFamilyInstanceDecl of
+      loc *
+      string *
+      string list (* type parameters *) *
+      (loc * string) list *
+      (type_expr * string) list *
+      pred
+  | PredCtorDecl of
+      loc *
+      string *
+      (type_expr * string) list *
+      (type_expr * string) list *
+      pred
   | Func of
       loc *
       func_kind *
@@ -1076,26 +1156,42 @@ and
   | Global of loc * type_expr * string * (expr option)
   | UnloadableModuleDecl of loc
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
-  action_decl =
+  action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
 and (* action, kan value van shared box wijzigen*)
-  handle_pred_decl =
+  handle_pred_decl = (* ?handle_pred_decl *)
   | HandlePredDecl of loc * string * (type_expr * string) list * expr * preserved_by_clause list
 and (* handle predicate geeft info over ghost state van shared box, zelfs als er geen volledige eigendom is vd box*)
-  preserved_by_clause =
+  preserved_by_clause = (* ?preserved_by_clause *)
   | PreservedByClause of loc * string * string list * stmt list
 and
-  ghostness = Ghost | Real
+  ghostness = (* ?ghostness *)
+  | Ghost
+  | Real
 and
-  field =
-  | Field of loc * ghostness * type_expr * string * method_binding * visibility * bool (* final *) * expr option
+  field = (* ?field *)
+  | Field of
+      loc *
+      ghostness *
+      type_expr *
+      string *
+      method_binding *
+      visibility *
+      bool (* final *) *
+      expr option
 and
-  ctor =
+  ctor = (* ?ctor *)
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
 and
-  member = FieldMember of field | MethMember of meth | ConsMember of cons | PredMember of instance_pred_decl
+  member = (* ?member *)
+  | FieldMember of field
+  | MethMember of meth
+  | ConsMember of cons
+  | PredMember of instance_pred_decl
 and
-  interface_member = MethSpecMember of meth_spec | PredSpecMember of instance_pred_decl
+  interface_member = (* ?interface_member *)
+  | MethSpecMember of meth_spec
+  | PredSpecMember of instance_pred_decl
 
 (* Region: some AST inspector functions *)
 
@@ -1366,7 +1462,7 @@ let peek_in_ghost_range p stream =
     end
   | _ -> raise Stream.Failure
 
-type spec_clause =
+type spec_clause = (* ?spec_clause *)
   AtomicClause
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of pred
@@ -2342,7 +2438,7 @@ let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_
 in
   parse_include_directives
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) = (* ?parse_c_file *)
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
   let parse_c_file =
@@ -2629,7 +2725,7 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool}
+type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool} (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
@@ -2639,8 +2735,13 @@ type options = {option_verbose: bool; option_disable_overflow_check: bool; optio
     Stops at source line [breakpoint], if not None.
     This function is generic in the types of SMT solver types, symbols, and terms.
     *)
-let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context) options path reportRange breakpoint =
-
+let verify_program_core (* ?verify_program_core *)
+    ?(packages : package list option ref = ref None)
+    (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context)
+    (options : options)
+    (path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (breakpoint : (string * int) option) : unit =
   let language = file_type path in
   
   let auto_lemmas = Hashtbl.create 10 in
@@ -2840,7 +2941,11 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let real_unit_pat = TermPat real_unit in
   
-  let current_module_name = if language = Java then "current_module" else Filename.chop_extension (Filename.basename path) in
+  let current_module_name =
+    match language with
+      | Java -> "current_module"
+      | CLang -> Filename.chop_extension (Filename.basename path)
+  in
   let current_module_term = get_unique_var_symb current_module_name IntType in
   let modulemap = [(current_module_name, current_module_term)] in
   
@@ -2886,23 +2991,23 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     | Class (l, fin, cn, meths, fds, cons, super, inames, preds)::rest ->
       let cn = full_name pn cn in
       let meths' = meths |> List.filter begin
-	fun x ->
-	  match x with
-	    | Meth(lm, t, n, ps, co, ss,fb,v) ->
-	      match ss with
-		| None -> true
-		| Some _ -> false
+        fun x ->
+          match x with
+            | Meth(lm, t, n, ps, co, ss,fb,v) ->
+              match ss with
+                | None -> true
+                | Some _ -> false
       end in
       (* TODO: cons' is not used anywhere, and should probably be used
          in the line after the definition. Changing it has no effect on the test results,
          clearly meaning that more tests should be written. I left it unchanged so that a warning still reminds us of this issue. *)
       let cons' = cons |> List.filter begin
-	fun x ->
-	  match x with
-	    | Cons (lm, ps, co, ss, v) ->
-	      match ss with
-		| None -> true
-		| Some _ -> false
+        fun x ->
+          match x with
+            | Cons (lm, ps, co, ss, v) ->
+              match ss with
+                | None -> true
+                | Some _ -> false
       end in
       iter (pn,ilist) (Class(l,fin,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
     | Func(l,Lemma(_),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
@@ -2927,7 +3032,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       Returns the elements declared directly in the current file.
       May add symbols and global assumptions to the SMT solver.
     *)      
-  let rec check_file include_prelude basedir headers ps =
+  let rec check_file (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
   let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
@@ -3044,20 +3149,20 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     
     let (maps0, headers_included) =
       if include_prelude then
-        if file_type path =Java then
-        begin
-        match try_assoc rtpath !headermap with
-          None -> 
-            let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
-            let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail)) allspecs) in
-            let (_, maps0) = check_file false bindir [] ds in
-            headermap := (rtpath, ([], maps0))::!headermap;
-            (maps0, [])
-        | Some ([], maps0) ->
-          (maps0, [])
-        end
-        else
-        merge_header_maps false maps0 [] [(dummy_loc, "prelude.h")]
+        match file_type path with
+          | Java -> begin
+            match try_assoc rtpath !headermap with
+              | None -> 
+                let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
+                let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail)) allspecs) in
+                let (_, maps0) = check_file false bindir [] ds in
+                headermap := (rtpath, ([], maps0))::!headermap;
+                (maps0, [])
+              | Some ([], maps0) ->
+                (maps0, [])
+          end
+          | CLang ->
+            merge_header_maps false maps0 [] [(dummy_loc, "prelude.h")]
       else
         (maps0, [])
     in
@@ -3070,8 +3175,10 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   
   let unloadable =
     match language with
-      CLang -> let [PackageDecl (_, _, _, ds)] = ps in List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
-    | _ -> false
+      | CLang ->
+        let [PackageDecl (_, _, _, ds)] = ps in
+        List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
+      | Java -> false
   in
   
   let structdeclmap =
@@ -5775,7 +5882,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   (* Region: evaluation *)
   
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
-	let evs state es cont =
+        let evs state es cont =
       let rec iter state vs es =
         match es with
           [] -> cont state (List.rev vs)
@@ -7973,8 +8080,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
       classmap1
   end;
   
-  let _=
-  if file_type path=Java then
+  if file_type path=Java then begin
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
@@ -7986,12 +8092,9 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
             static_error l "No implementation found for this lemma." None
     in
     check_spec_lemmas !spec_lemmas prototypes_implemented
-  else
-    ()
-  in
+  end;
   
-  let _=
-  if file_type path=Java then
+  if file_type path=Java then begin
     let rec check_spec_classes classes meths_impl cons_impl=
       match classes with
         [] -> (match meths_impl with
@@ -8028,9 +8131,7 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
           check_spec_classes rest (check_meths meths meths_impl) (check_cons cons cons_impl)
     in
     check_spec_classes !spec_classes !meths_impl !cons_impl
-  else
-    ()
-  in
+  end;
   
   (* Region: symbolic execution helpers *)
   
@@ -10702,33 +10803,30 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
                     let currentThread = get_unique_var_symb "currentThread" IntType in
                     let actionHandle = get_unique_var_symb "actionHandle" HandleIdType in
                     let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
-                    assume (ctxt#mk_not (ctxt#mk_eq actionHandle predicateHandle)) (fun () ->
-                    let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
-                    with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
-                    with_context PushSubcontext $. fun () ->
-                    assume_pred [] (pn,ilist) [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
-                    let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
-                    let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
-                    assume_pred [] (pn,ilist) [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
-                    with_context PopSubcontext $. fun () ->
-                    let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
-                    let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
-                    let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
-                    let ghostenv = List.map (fun (x, t) -> x) tenv in
-                    assume (eval None ([("actionHandle", actionHandle)] @ pre_boxvars @ apre_env) pre) (fun () ->
-                      assume (eval None ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) inv) (fun () ->
-                        assume (eval None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) (fun () ->
-                          let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
-                          let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
-                            post_boxvars @ old_boxvars @ aarg_env @ hpargs in
-                          verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss (fun _ _ _ _ _ ->
-                            let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                            assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
-                          ) (fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None)
-                        )
-                      )
-                    )
-                    );
+                    assume (ctxt#mk_not (ctxt#mk_eq actionHandle predicateHandle)) begin fun () ->
+                      let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
+                      with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
+                        with_context PushSubcontext $. fun () ->
+                          assume_pred [] (pn,ilist) [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
+                            let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
+                            let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
+                            assume_pred [] (pn,ilist) [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
+                              with_context PopSubcontext $. fun () ->
+                                let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
+                                let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
+                                let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
+                                let ghostenv = List.map (fun (x, t) -> x) tenv in
+                                assume (eval None ([("actionHandle", actionHandle)] @ pre_boxvars @ apre_env) pre) $. fun () ->
+                                  assume (eval None ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) inv) $. fun () ->
+                                    assume (eval None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) $. fun () ->
+                                      let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
+                                      let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
+                                        post_boxvars @ old_boxvars @ aarg_env @ hpargs in
+                                      verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss begin fun _ _ _ _ _ ->
+                                        let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
+                                        assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
+                                      end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
+                    end;
                     pop();
                     an
                   end)
@@ -10764,24 +10862,26 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
   let (prototypes_used, prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type basepath with
-      Java->if Filename.check_suffix path ".jarsrc" then
-              let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
-              let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange reportShouldFail)impllist)in
-              let specpath = (Filename.chop_extension basepath)^".jarspec" in
-              main_file:= main;
-              jardeps:= jdeps;
-              if Sys.file_exists (Filename.concat dirpath specpath) then
-                (jarlist@[(dummy_loc,specpath)],ds)
-              else
-                ([],ds)
+        | Java -> 
+          if Filename.check_suffix path ".jarsrc" then
+            let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
+            let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange reportShouldFail)impllist)in
+            let specpath = (Filename.chop_extension basepath)^".jarspec" in
+            main_file:= main;
+            jardeps:= jdeps;
+            if Sys.file_exists (Filename.concat dirpath specpath) then
+              (jarlist@[(dummy_loc,specpath)],ds)
             else
-              ([],[parse_java_file path reportRange reportShouldFail])
-      | _->
-        if Filename.check_suffix (Filename.basename path) ".h" then
-          parse_header_file "" path reportRange reportShouldFail
-        else
-          parse_c_file path reportRange reportShouldFail
+              ([],ds)
+          else
+            ([],[parse_java_file path reportRange reportShouldFail])
+        | CLang ->
+          if Filename.check_suffix (Filename.basename path) ".h" then
+            parse_header_file "" path reportRange reportShouldFail
+          else
+            parse_c_file path reportRange reportShouldFail
     in
+    packages := Some ds;
     let result =
       check_should_fail ([], [], []) $. fun () ->
       let (linker_info, _) = check_file true programDir headers ds in
@@ -10808,7 +10908,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     iter !main_file !main_meth
   in
   
-  
   let create_jardeps_file() =
     let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
     if emit_manifest then
@@ -10819,7 +10918,6 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     else
       jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
   in
-  
   
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
@@ -10852,16 +10950,24 @@ let verify_program_core (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context
     else
       manifest_map := (manifest_filename, lines)::!manifest_map
   in
-  if file_type path <>Java then
-  create_manifest_file()
+  if file_type path <> Java then
+    create_manifest_file()
   else
-    if Filename.check_suffix path ".jarsrc" then create_jardeps_file()
+    if Filename.check_suffix path ".jarsrc" then
+      create_jardeps_file()
 
 (* Region: prover selection *)
 
-let verify_program_with_stats ctxt print_stats verbose path reportRange breakpoint =
+let verify_program_with_stats (* ?verify_program_with_stats *)
+    ?(packages : package list option ref = ref None)
+    ctxt
+    (print_stats : bool)
+    (verbose : options)
+    (path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (breakpoint : (string * int) option) : unit =
   do_finally
-    (fun () -> verify_program_core ctxt verbose path reportRange breakpoint)
+    (fun () -> verify_program_core ~packages:packages ctxt verbose path reportRange breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -10896,11 +11002,18 @@ let lookup_prover prover =
       | Some (banner, f) -> f
     end
       
-let verify_program prover print_stats options path reportRange breakpoint =
+let verify_program (* ?verify_program *)
+    ?(packages : package list option ref = ref None)
+    (prover : string option)
+    (print_stats : bool)
+    (options : options)
+    (path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (breakpoint : (string * int) option) : unit =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ctxt print_stats options path reportRange breakpoint
+         fun ctxt -> verify_program_with_stats ~packages:packages ctxt print_stats options path reportRange breakpoint
      end)
 
 (* Region: linker *)

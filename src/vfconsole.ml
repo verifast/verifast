@@ -1,13 +1,14 @@
 open Verifast
+open Arg
 
 let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify stats options prover path emitHighlightedSourceFiles =
-    let verify reportRange =
+  let verify ?(packages = ref None) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
+    let verify range_callback =
     try
-      verify_program prover stats options path reportRange None;
+      verify_program ~packages:packages prover stats options path range_callback None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
@@ -26,8 +27,8 @@ let _ =
     in
     if emitHighlightedSourceFiles then
     begin
-      let sourceFiles = ref [] in
-      let reportRange kind ((path1, line1, col1), (path2, line2, col2)) =
+      let sourceFiles : (string * (((int * int) * (int * int)) * range_kind) list ref) list ref = ref [] in
+      let range_callback kind ((path1, line1, col1), (path2, line2, col2)) =    
         assert (path1 = path2);
         let path = string_of_path path1 in
         let ranges =
@@ -35,14 +36,14 @@ let _ =
             List.assoc path !sourceFiles
           else
           begin
-            let ranges = ref [] in
+            let ranges : (((int * int) * (int * int)) * range_kind) list ref = ref [] in
             sourceFiles := (path, ranges)::!sourceFiles;
             ranges
           end
         in
         ranges := (((line1, col1), (line2, col2)), kind)::!ranges
       in
-      verify reportRange;
+      verify range_callback;
       print_endline "Emitting highlighted source files...";
       let emit_source_file (path, ranges) =
         let text = readFile path in
@@ -129,13 +130,6 @@ let _ =
     else
       verify (fun _ _ -> ())
   in
-  let n = Array.length Sys.argv in
-  if n = 1 then
-  begin
-    print_endline (Verifast.banner ());
-    print_endline "Usage: verifast [-stats] [-verbose] [-disable_overflow_check] [-prover z3|redux] [-c] [-shared] [-allow_assume] [-emit_vfmanifest] [-emit_dll_vfmanifest] [-emit_highlighted_source_files] {sourcefile|objectfile} {-export exportmanifest}"
-  end
-  else
   let stats = ref false in
   let verbose = ref false in
   let disable_overflow_check = ref false in
@@ -149,29 +143,24 @@ let _ =
   let modules: string list ref = ref [] in
   let emitHighlightedSourceFiles = ref false in
   let exports: string list ref = ref [] in
-  let i = ref 1 in
-  while !i < n do
-    let arg = Sys.argv.(!i) in
-    i := !i + 1;
-    if String.length arg > 0 && String.get arg 0 = '-' then
-      match arg with
-        "-stats" -> stats := true
-      | "-verbose" -> verbose := true
-      | "-disable_overflow_check" -> disable_overflow_check := true
-      | "-prover" -> prover := Some Sys.argv.(!i); i := !i + 1
-      | "-c" -> compileOnly := true
-      | "-shared" -> isLibrary := true
-      | "-allow_assume" -> allowAssume := true
-      | "-allow_should_fail" -> allowShouldFail := true
-      | "-emit_vfmanifest" -> emitManifest := true
-      | "-emit_dll_vfmanifest" -> emitDllManifest := true
-      | "-emit_highlighted_source_files" -> emitHighlightedSourceFiles := true
-      | "-export" -> if !i = n then failwith "-export option requires an argument"; exports := Sys.argv.(!i)::!exports; i := !i + 1
-      | _ -> failwith ("unknown command-line option '" ^ arg ^ "'")
-    else
-    begin
-      if Filename.check_suffix arg ".c" || Filename.check_suffix arg ".java" || Filename.check_suffix arg ".scala" || Filename.check_suffix arg ".jarsrc" || Filename.check_suffix arg ".javaspec"
-      then
+  let outputSExpressions : string option ref = ref None in
+  let cla = [ "-stats", Set stats, ""
+            ; "-verbose", Set verbose, ""
+            ; "-disable_overflow_check", Set disable_overflow_check, ""
+            ; "-prover", String (fun str -> prover := Some str), ""
+            ; "-c", Set compileOnly, ""
+            ; "-shared", Set isLibrary, ""
+            ; "-allow_assume", Set allowAssume, ""
+            ; "-allow_should_fail", Set allowShouldFail, ""
+            ; "-emit_vfmanifest", Set emitManifest, ""
+            ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
+            ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, ""
+            ; "-emit_sexpr", String (fun str -> outputSExpressions := Some str), "Emits the ast as an s-expression to the specified file"
+            ; "-export", String (fun str -> exports := str :: !exports), "" ]
+  in
+  let process_file filename =
+    if List.exists (Filename.check_suffix filename) [ ".c"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
+    then
       begin
         let options = {
           option_verbose = !verbose;
@@ -179,25 +168,37 @@ let _ =
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest
         } in
-        print_endline arg;
-        verify !stats options !prover arg !emitHighlightedSourceFiles
+        print_endline filename;
+        let packages = ref None in
+        verify ~packages:packages !stats options !prover filename !emitHighlightedSourceFiles;
+        match !outputSExpressions, !packages with
+          | Some target_file, Some packages -> SExpressionEmitter.emit target_file packages          
+          | Some _, None -> failwith "Bug: verifier didn't generate necessary data for some reason"
+          | None, _ -> ()
       end;
-      modules := arg::!modules
-    end
-  done;
-  if not !compileOnly then
-  begin
-    try
-      print_endline "Linking...";
-      let mydir = Filename.dirname Sys.executable_name in
-      let libs = ["crt.a"; "list.o"; "raw_ghost_lists.o"] in
-      let libs = List.map (Filename.concat mydir) libs in
-      let assume_lib = Filename.concat mydir "assume.a" in
-      let modules = libs @ List.rev !modules in
-      let modules = if !allowAssume then assume_lib::modules else modules in
-      link_program (!isLibrary) modules !emitDllManifest !exports; 
-      print_endline "Program linked successfully."
-    with
-      LinkError msg -> print_endline msg; exit 1
-    | CompilationError msg -> print_endline ("error: " ^ msg); exit 1
+      modules := filename::!modules
+  in
+  let usage_string =
+    Verifast.banner () ^ "\nUsage: verifast [options] {sourcefile|objectfile}\n"
+  in
+  if Array.length Sys.argv = 1
+  then usage cla usage_string
+  else begin
+    parse cla process_file usage_string;
+    if not !compileOnly then
+      begin
+        try
+          print_endline "Linking...";
+          let mydir = Filename.dirname Sys.executable_name in
+          let libs = ["crt.a"; "list.o"; "raw_ghost_lists.o"] in
+          let libs = List.map (Filename.concat mydir) libs in
+          let assume_lib = Filename.concat mydir "assume.a" in
+          let modules = libs @ List.rev !modules in
+          let modules = if !allowAssume then assume_lib::modules else modules in
+          link_program (!isLibrary) modules !emitDllManifest !exports; 
+          print_endline "Program linked successfully."
+        with
+            LinkError msg -> print_endline msg; exit 1
+          | CompilationError msg -> print_endline ("error: " ^ msg); exit 1
+      end
   end
