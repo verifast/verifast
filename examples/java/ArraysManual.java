@@ -15,7 +15,7 @@ class InitTest {
         //@ requires true;
         //@ ensures true;
     {
-        int[] xs = new int { 1, 2, 3 };
+        int[] xs = new int[] { 1, 2, 3 };
         assert xs.length == 3;
         int x = xs[0];
         assert x == 1;

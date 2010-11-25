@@ -1,3 +1,6 @@
+C Programs
+==========
+
 Target soundness statement:
 If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./program.exe" does not throw any assertion failures.
 
@@ -6,7 +9,22 @@ Known VeriFast unsoundnesses:
 - linking correctness: ensure header files have the same meaning in all modules
 - linking correctness: prevent duplicate struct definitions and duplicate predicate definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
-- casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
+
+Java Programs
+=============
+
+Target soundness statement:
+If "javac A.java B.java C.java" succeeds, and program.jarsrc contains the following lines:
+
+A.java
+B.java
+C.java
+main-class A
+
+then "java A" does not throw any assertion failures.
+
+Known VeriFast unsoundnesses:
+- casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
 - Java: ClassCastExceptions are currently not prevented
 - ghost variables (which can hide fields) can appear in the argument of the Java assert statement

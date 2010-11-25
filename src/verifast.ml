@@ -1550,6 +1550,9 @@ end
    The difference is in the scanner: when parsing a C file, the scanner treats "class" like an identifier, not a keyword.
    And Kwd "class" does not match Ident "class".
    *)
+
+type modifier = StaticModifier | FinalModifier
+
 let parse_decls =
 let rec
   parse_decls = parser
@@ -1646,9 +1649,12 @@ and
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
 and
+  parse_java_modifier = parser [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier
+and
   parse_java_member vis cn = parser
-  [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance);
-     final = (parser [< '(_, Kwd "final") >] -> true | [< >] -> false);
+  [< modifiers = rep parse_java_modifier;
+     binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
+     final = (fun _ -> List.mem FinalModifier modifiers);
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
@@ -2169,8 +2175,11 @@ and
   | [< >] -> []
 and
   parse_new_array_expr_rest l elem_typ = parser
-  [< '(_, Kwd "["); length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, elem_typ, length)
-| [< '(_, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> NewArrayWithInitializer (l, elem_typ, es)
+  [< '(_, Kwd "[");
+     e = parser
+       [< length = parse_expr; '(_, Kwd "]"); >] -> NewArray(l, elem_typ, length)
+     | [< '(_, Kwd "]"); '(_, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> NewArrayWithInitializer (l, elem_typ, es)
+  >] -> e
 and
   parse_expr_primary = parser
   [< '(l, Kwd "true") >] -> True l

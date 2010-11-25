@@ -143,16 +143,16 @@ z3prover.cmx: proverapi.cmx z3prover.ml
 verifastredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe record_backtrace.cmx unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 
-SExpressions.cmi: SExpressions.mli
-	ocamlc -warn-error F -c SExpressions.mli
+SExpressions.cmi: verifast.cmx SExpressions.mli
+	ocamlopt.opt -warn-error F -c SExpressions.mli
 
-SExpressions.cmo: SExpressions.ml SExpressions.cmi
-	ocamlc -warn-error F -c nums.cma SExpressions.ml
+SExpressions.cmo: verifast.cmo SExpressions.ml SExpressions.cmi
+	ocamlopt.opt -warn-error F -c nums.cma SExpressions.ml
 
-SExpressions.cmx: SExpressions.ml SExpressions.cmi
+SExpressions.cmx: verifast.cmx SExpressions.ml SExpressions.cmi
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c nums.cmxa SExpressions.ml
 
-SExpressionEmitter.cmi: SExpressionEmitter.mli
+SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
 	ocamlc -warn-error F -c SExpressionEmitter.mli
 
 SExpressionEmitter.cmo: SExpressions.cmo verifast.cmo SExpressionEmitter.ml SExpressionEmitter.cmi
