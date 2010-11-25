@@ -121,8 +121,20 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifast unix.cmxa nums.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) vfconsole.ml
+SExpressions.cmi: SExpressions.mli
+	ocamlopt.opt -c SExpressions.mli
+
+SExpressions.cmx: SExpressions.cmi SExpressions.ml
+	ocamlopt.opt -c nums.cmxa SExpressions.ml
+
+SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
+	ocamlopt.opt -c SExpressionEmitter.mli
+
+SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
+	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
+
+verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o verifast unix.cmxa nums.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
