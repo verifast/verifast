@@ -42,7 +42,7 @@ let in_channel_last_modification_time chan =
 let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
-let show_ide initialPath prover =
+let show_ide initialPath prover codeFont traceFont =
   let tab_path (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = path in
   let tab_buffer (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = buffer in
   let tab_srcText (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) = srcText in
@@ -51,8 +51,20 @@ let show_ide initialPath prover =
   let url = ref None in
   let appTitle = "Verifast " ^ Vfversion.version ^ " IDE" in
   let root = GWindow.window ~width:800 ~height:600 ~title:appTitle ~allow_shrink:true () in
-  let codeFont = ref Fonts.code_font in
-  let traceFont = ref Fonts.trace_font in
+  let fontScalePower = ref 0 in
+  let getScaledFont fontName =
+    if !fontScalePower = 0 then fontName else
+    let fontDescription = new GPango.font_description (GPango.font_description fontName) in
+    let size = float_of_int fontDescription#size in
+    let size = size *. (1.3 ** float_of_int !fontScalePower) in
+    let size = int_of_float size in
+    fontDescription#modify ~size ();
+    fontDescription#to_string
+  in
+  let codeFont = ref codeFont in
+  let scaledCodeFont = ref !codeFont in
+  let traceFont = ref traceFont in
+  let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let current_tab = ref None in
@@ -96,6 +108,10 @@ let show_ide initialPath prover =
       a "Preferences" ~label:"_Preferences...";
       a "View" ~label:"Vie_w";
       a "ClearTrace" ~label:"_Clear trace" ~accel:"<Ctrl>L";
+      a "TextSize" ~label:"_Text size";
+      a "TextLarger" ~label:"_Larger" ~accel:"<Alt>Up";
+      a "TextSmaller" ~label:"_Smaller" ~accel:"<Alt>Down";
+      a "TextSizeDefault" ~label:"_Default";
       (fun group -> group#add_action showLineNumbersAction);
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
@@ -129,6 +145,13 @@ let show_ide initialPath prover =
         </menu>
         <menu action='View'>
           <menuitem action='ClearTrace' />
+          <separator />
+          <menu action='TextSize'>
+            <menuitem action='TextLarger' />
+            <menuitem action='TextSmaller' />
+            <separator />
+            <menuitem action='TextSizeDefault' />
+          </menu>
           <separator />
           <menuitem action='ShowLineNumbers' />
           <menuitem action='ShowWhitespace' />
@@ -173,6 +196,7 @@ let show_ide initialPath prover =
   let messageHBox = GPack.hbox ~packing:(messageToolItem#add) () in
   messageToolItem#set_border_width 3;
   let messageEntry = GEdit.entry ~show:false ~editable:false ~has_frame:false ~packing:(messageHBox#add) () in
+  messageEntry#coerce#misc#modify_font_by_name !scaledTraceFont;
   let helpButton = GButton.button ~show:false ~label:" ? " ~packing:(messageHBox#pack) () in
   let show_help url =
     if Sys.os_type = "Unix" then
@@ -195,13 +219,13 @@ let show_ide initialPath prover =
   toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
   let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
-  let _ = rootTable#set_position 350 in
+  rootTable#set_position 400;
   let textPaned = GPack.paned `VERTICAL ~packing:(rootTable#pack1 ~resize:true ~shrink:true) () in
   textPaned#set_position 0;
   let srcPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack2 ~resize:true ~shrink:true) () in
-  srcPaned#set_position 500;
+  srcPaned#set_position 650;
   let subPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack1 ~resize:true ~shrink:true) () in
-  subPaned#set_position 500;
+  subPaned#set_position 650;
   let textNotebook = GPack.notebook ~scrollable:true ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let subNotebook = GPack.notebook ~scrollable:true ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let buffers = ref [] in
@@ -312,8 +336,8 @@ let show_ide initialPath prover =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
     let subText = (*GText.view ~buffer:buffer*) GSourceView2.source_view ~source_buffer:buffer ~packing:subScroll#add () in
-    srcText#misc#modify_font_by_name !codeFont;
-    subText#misc#modify_font_by_name !codeFont;
+    srcText#misc#modify_font_by_name !scaledCodeFont;
+    subText#misc#modify_font_by_name !scaledCodeFont;
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
@@ -396,10 +420,12 @@ let show_ide initialPath prover =
   in
   let setCodeFont fontName =
     codeFont := fontName;
+    let scaledFont = getScaledFont fontName in
+    scaledCodeFont := scaledFont;
     List.iter
       begin fun (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) ->
-        srcText#misc#modify_font_by_name !codeFont;
-        subText#misc#modify_font_by_name !codeFont
+        srcText#misc#modify_font_by_name scaledFont;
+        subText#misc#modify_font_by_name scaledFont
       end
       !buffers
   in
@@ -515,7 +541,7 @@ let show_ide initialPath prover =
     let store = GTree.tree_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name !traceFont;
+    lb#coerce#misc#modify_font_by_name !scaledTraceFont;
     let col = GTree.view_column ~title:"Steps" ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
@@ -527,7 +553,7 @@ let show_ide initialPath prover =
     let store = GTree.list_store collist in
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
-    lb#coerce#misc#modify_font_by_name !traceFont;
+    lb#coerce#misc#modify_font_by_name !scaledTraceFont;
     let col = GTree.view_column ~title:title ~renderer:(GTree.cell_renderer_text [], ["text", col_text]) () in
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
@@ -544,13 +570,24 @@ let show_ide initialPath prover =
   let _ = subPaned#pack2 ~resize:true ~shrink:true (subEnvFrame#coerce) in
   let setTraceFont fontName =
     traceFont := fontName;
-    let setFont widget = widget#coerce#misc#modify_font_by_name !traceFont in
+    let scaledFont = getScaledFont fontName in
+    scaledTraceFont := scaledFont;
+    let setFont widget = widget#coerce#misc#modify_font_by_name scaledFont in
     setFont stepList;
     setFont assumptionsList;
     setFont chunksList;
     setFont srcEnvList;
-    setFont subEnvList
+    setFont subEnvList;
+    setFont messageEntry
   in
+  let setFontScalePower power =
+    fontScalePower := power;
+    setCodeFont !codeFont;
+    setTraceFont !traceFont
+  in
+  ignore $. (actionGroup#get_action "TextLarger")#connect#activate (fun () -> setFontScalePower (!fontScalePower + 1));
+  ignore $. (actionGroup#get_action "TextSmaller")#connect#activate (fun () -> setFontScalePower (!fontScalePower - 1));
+  ignore $. (actionGroup#get_action "TextSizeDefault")#connect#activate (fun () -> setFontScalePower 0);
   let get_tab_for_path path0 =
     (* This function is called only at a time when no buffers are modified. *)
     let rec iter k tabs =
@@ -1014,12 +1051,19 @@ let show_ide initialPath prover =
   ignore $. Glib.Idle.add (fun () -> textPaned#set_position 0; false);
   GMain.main()
 
-let _ =
-  try
-    match Sys.argv with
-      [| _ |] -> show_ide None "z3"
-    | [| _; path |] -> show_ide (Some path) "z3"
-    | [| _; "-prover"; prover; path |] -> show_ide (Some path) prover
-    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line."
-  with
-    e -> GToolbox.message_box "VeriFast IDE" ("Exception during startup: " ^ Printexc.to_string e)
+let () =
+  let path = ref None in
+  let prover = ref "z3" in
+  let codeFont = ref Fonts.code_font in
+  let traceFont = ref Fonts.trace_font in
+  let rec iter args =
+    match args with
+      "-prover"::arg::args -> prover := arg; iter args
+    | "-codeFont"::arg::args -> codeFont := arg; iter args
+    | "-traceFont"::arg::args -> traceFont := arg; iter args
+    | arg::args when not (startswith arg "-") -> path := Some arg; iter args
+    | [] -> show_ide !path !prover !codeFont !traceFont
+    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line.\n\nUsage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] [-traceFont fontSpec]"
+  in
+  let _::args = Array.to_list (Sys.argv) in
+  iter args
