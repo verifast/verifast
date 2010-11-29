@@ -865,7 +865,7 @@ type type_expr = (* ?type_expr *)
 
 (** An object used in predicate assertion ASTs. Created by the parser and filled in by the type checker.
     TODO: Since the type checker now generates a new AST anyway, we can eliminate this hack. *)
-class predref (name: string) =
+class predref (name: string) = (* ?predref *)
   object
     val mutable tparamcount: int option = None  (* Number of type parameters. *)
     val mutable domain: type_ list option = None  (* Parameter types. *)
@@ -897,7 +897,11 @@ and
   | False of loc
   | Null of loc
   | Var of loc * string * ident_scope option ref  (* An identifier. *)
-  | Operation of loc * operator * expr list * type_ list option ref (* voor operaties met bovenstaande operators*)
+  | Operation of (* voor operaties met bovenstaande operators*)
+      loc *
+      operator *
+      expr list *
+      type_ list option ref
   | IntLit of loc * big_int * type_ option ref (* int literal*)
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
@@ -979,18 +983,33 @@ and
     PackageDecl of loc * string * import list * decl list
 and
   import = (* ?import *)
-    Import of loc * string * string option (* None betekent heel package, Some string betekent 1 ding eruit *)
+    Import of
+        loc *
+        string *
+        string option (* None betekent heel package, Some string betekent 1 ding eruit *)
 and
   stmt = (* ?stmt *)
-    PureStmt of loc * stmt (* Statement of the form /*@ ... @*/ *)
-  | NonpureStmt of loc * bool (* allowed *) * stmt  (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
-  | DeclStmt of
+    PureStmt of (* Statement of the form /*@ ... @*/ *)
+        loc *
+        stmt
+  | NonpureStmt of (* Nested non-pure statement; used for perform_action statements on shared boxes. *)
+      loc *
+      bool (* allowed *) *
+      stmt
+  | DeclStmt of (* enkel declaratie *)
       loc *
       type_expr *
-      (string * expr option * bool ref (* indicates whether address is taken *)) list (* enkel declaratie *)
+      (string * expr option * bool ref (* indicates whether address is taken *)) list
   | ExprStmt of expr
-  | IfStmt of loc * expr * stmt list * stmt list (* if  regel-conditie-branch1-branch2  *)
-  | SwitchStmt of loc * expr * switch_stmt_clause list (* switch over inductief type regel-expr- constructor)*)
+  | IfStmt of (* if  regel-conditie-branch1-branch2  *)
+      loc *
+      expr *
+      stmt list *
+      stmt list
+  | SwitchStmt of (* switch over inductief type regel-expr- constructor)*)
+      loc *
+      expr *
+      switch_stmt_clause list
   | Assert of loc * pred (* assert regel-predicate *)
   | Leak of loc * pred (* expliciet lekken van assertie, nuttig op einde van thread*)
   | Open of
@@ -1017,7 +1036,12 @@ and
       expr option *
       stmt list *
       loc (* while regel-conditie-lus invariant- lus body - close brace location *)
-  | BlockStmt of loc * decl list * stmt list * loc * (string) list ref
+  | BlockStmt of
+      loc *
+      decl list *
+      stmt list *
+      loc *
+      string list ref
   | PerformActionStmt of
       loc *
       bool ref (* in non-pure context *) *
@@ -1036,20 +1060,63 @@ and
       loc *
       string *
       expr list
-  | SplitFractionStmt of loc * string * type_expr list * pat list * expr option (* split_fraction ... by ... *)
-  | MergeFractionsStmt of loc * string * type_expr list * pat list (* merge_fraction ...*)
-  | CreateBoxStmt of loc * string * string * expr list * (loc * string * string * expr list) list (* and_handle clauses *)
-  | CreateHandleStmt of loc * string * string * expr
-  | DisposeBoxStmt of loc * string * pat list * (loc * string * pat list) list (* and_handle clauses *)
+  | SplitFractionStmt of (* split_fraction ... by ... *)
+      loc *
+      string *
+      type_expr list *
+      pat list *
+      expr option
+  | MergeFractionsStmt of (* merge_fraction ...*)
+      loc *
+      string *
+      type_expr list *
+      pat list
+  | CreateBoxStmt of
+      loc *
+      string *
+      string *
+      expr list *
+      (loc * string * string * expr list) list (* and_handle clauses *)
+  | CreateHandleStmt of
+      loc *
+      string *
+      string *
+      expr
+  | DisposeBoxStmt of
+      loc *
+      string *
+      pat list *
+      (loc * string * pat list) list (* and_handle clauses *)
   | LabelStmt of loc * string
   | GotoStmt of loc * string
   | NoopStmt of loc
-  | InvariantStmt of loc * pred (* join point *)
-  | ProduceLemmaFunctionPointerChunkStmt of loc * expr * (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option * stmt option
-  | ProduceFunctionPointerChunkStmt of loc * string * expr * expr list * (loc * string) list * loc * stmt list * loc
+  | InvariantStmt of
+      loc *
+      pred (* join point *)
+  | ProduceLemmaFunctionPointerChunkStmt of
+      loc *
+      expr *
+      (string * type_expr list * expr list * (loc * string) list * loc * stmt list * loc) option *
+      stmt option
+  | ProduceFunctionPointerChunkStmt of
+      loc *
+      string *
+      expr *
+      expr list *
+      (loc * string) list *
+      loc *
+      stmt list *
+      loc
   | Throw of loc * expr
-  | TryCatch of loc * stmt list * (loc * type_expr * string * stmt list) list
-  | TryFinally of loc * stmt list * loc * stmt list
+  | TryCatch of
+      loc *
+      stmt list *
+      (loc * type_expr * string * stmt list) list
+  | TryFinally of
+      loc *
+      stmt list *
+      loc *
+      stmt list
   | Break of loc
 and
   loop_spec = (* ?loop_spec *)
@@ -1060,19 +1127,64 @@ and
   | SwitchStmtClause of loc * expr * stmt list
   | SwitchStmtDefaultClause of loc * stmt list
 and
-  pred = (* A separation logic assertion *)
-    Access of loc * expr * pat (*  toegang tot veld regel-expr-veld-pattern*)
-  | WAccess of loc * expr * type_ * pat
-  | CallPred of loc * predref * type_expr list * pat list (* indices of predicate family instance *) * pat list  (* Predicate assertion, before type checking *)
-  | WCallPred of loc * predref * type_ list * pat list * pat list  (* Predicate assertion, after type checking. (W is for well-formed) *)
-  | InstCallPred of loc * expr * string * pat list
-  | WInstCallPred of loc * expr option * string (* static type *) * class_finality (* finality of static type *) * string (* family type *) * string * expr (* index *) * pat list
-  | ExprPred of loc * expr (*  uitdrukking regel-expr *)
-  | Sep of loc * pred * pred  (* separate conjunction *)
-  | IfPred of loc * expr * pred * pred (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
-  | SwitchPred of loc * expr * switch_pred_clause list (* switch over cons van inductive type regel-expr-clauses*)
-  | EmpPred of loc (* als "emp" bij requires/ensures staat -regel-*)
-  | CoefPred of loc * pat * pred (* fractional permission met coeff-predicate*)
+  pred = (* A separation logic assertion *) (* ?pred *)
+    Access of (* toegang tot veld regel-expr-veld-pattern *)
+        loc *
+        expr *
+        pat
+  | WAccess of
+      loc *
+      expr *
+      type_ *
+      pat
+  | CallPred of (* Predicate assertion, before type checking *)
+      loc *
+      predref *
+      type_expr list *
+      pat list (* indices of predicate family instance *) *
+      pat list
+  | WCallPred of (* Predicate assertion, after type checking. (W is for well-formed) *)
+      loc *
+      predref *
+      type_ list *
+      pat list *
+      pat list
+  | InstCallPred of
+      loc *
+      expr *
+      string *
+      pat list
+  | WInstCallPred of
+      loc *
+      expr option *
+      string (* static type *) *
+      class_finality (* finality of static type *) *
+      string (* family type *) *
+      string *
+      expr (* index *) *
+      pat list
+  | ExprPred of (* uitdrukking regel-expr *)
+      loc *
+      expr
+  | Sep of (* separate conjunction *)
+      loc *
+      pred *
+      pred
+  | IfPred of (* if-predicate in de vorm expr? p1:p2 regel-expr-p1-p2 *)
+      loc *
+      expr *
+      pred *
+      pred
+  | SwitchPred of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      switch_pred_clause list
+  | EmpPred of  (* als "emp" bij requires/ensures staat -regel-*)
+      loc
+  | CoefPred of (* fractional permission met coeff-predicate*)
+      loc *
+      pat *
+      pred
 and
   switch_pred_clause = (* ?switch_pred_clause *)
   | SwitchPredClause of loc * string * string list * prover_type option list option ref (* Boxing info *) * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
@@ -1149,8 +1261,22 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
-  | FuncTypeDecl of loc * ghostness * type_expr option * string * string list * (type_expr * string) list * (type_expr * string) list * (pred * pred)
-  | BoxClassDecl of loc * string * (type_expr * string) list * pred * action_decl list * handle_pred_decl list
+  | FuncTypeDecl of
+      loc *
+      ghostness *
+      type_expr option *
+      string *
+      string list *
+      (type_expr * string) list *
+      (type_expr * string) list *
+      (pred * pred)
+  | BoxClassDecl of
+      loc *
+      string *
+      (type_expr * string) list *
+      pred *
+      action_decl list *
+      handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string list)
   | Global of loc * type_expr * string * (expr option)
@@ -1169,12 +1295,12 @@ and
   | Ghost
   | Real
 and
-  field = (* ?field *)
-  | Field of
+  field =
+  | Field of (* ?field *)
       loc *
       ghostness *
       type_expr *
-      string *
+      string (* name of the field *) *
       method_binding *
       visibility *
       bool (* final *) *
@@ -2745,7 +2871,7 @@ type options = {option_verbose: bool; option_disable_overflow_check: bool; optio
     This function is generic in the types of SMT solver types, symbols, and terms.
     *)
 let verify_program_core (* ?verify_program_core *)
-    ?(packages : package list option ref = ref None)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
     (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context)
     (options : options)
     (path : string)
@@ -7530,7 +7656,7 @@ let verify_program_core (* ?verify_program_core *)
     empty_preds
   in
   
-  let check_leaks h env l msg =
+  let check_leaks h env l msg = (* ?check_leaks *)
     match file_type path with
     Java -> with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () -> check_breakpoint h env l
     | _ ->
@@ -10890,7 +11016,7 @@ let verify_program_core (* ?verify_program_core *)
           else
             parse_c_file path reportRange reportShouldFail
     in
-    packages := Some ds;
+    emitter_callback ds;
     let result =
       check_should_fail ([], [], []) $. fun () ->
       let (linker_info, _) = check_file true programDir headers ds in
@@ -10968,7 +11094,7 @@ let verify_program_core (* ?verify_program_core *)
 (* Region: prover selection *)
 
 let verify_program_with_stats (* ?verify_program_with_stats *)
-    ?(packages : package list option ref = ref None)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
     ctxt
     (print_stats : bool)
     (verbose : options)
@@ -10976,7 +11102,7 @@ let verify_program_with_stats (* ?verify_program_with_stats *)
     (reportRange : range_kind -> loc -> unit)
     (breakpoint : (string * int) option) : unit =
   do_finally
-    (fun () -> verify_program_core ~packages:packages ctxt verbose path reportRange breakpoint)
+    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -11012,7 +11138,7 @@ let lookup_prover prover =
     end
       
 let verify_program (* ?verify_program *)
-    ?(packages : package list option ref = ref None)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
     (prover : string option)
     (print_stats : bool)
     (options : options)
@@ -11022,7 +11148,7 @@ let verify_program (* ?verify_program *)
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ~packages:packages ctxt print_stats options path reportRange breakpoint
+         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange breakpoint
      end)
 
 (* Region: linker *)

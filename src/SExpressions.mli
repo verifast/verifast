@@ -9,4 +9,4 @@ type sexpression =
 
 val format_sexpression : Format.formatter -> sexpression -> unit
 
-val string_of_sexpression : sexpression -> string
+val string_of_sexpression : ?margin:int -> sexpression -> string

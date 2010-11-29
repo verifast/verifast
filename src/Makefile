@@ -29,6 +29,12 @@ cmo: Fonts.cmo Printexc_proxy.cmo record_backtrace.cmo vfversion_cmo Fonts.cmo v
 
 cmx: Fonts.cmx Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx Fonts.cmx verifast.cmx simplex.cmx proverapi.cmx redux.cmx z3prover.cmx SExpressions.cmx SExpressionEmitter.cmx
 
+tabhunter.exe: tabhunter.ml
+	ocamlc -o tabhunter.exe tabhunter.ml
+
+tabhunt: tabhunter.exe
+	tabhunter.exe
+
 vfstrip.exe: vfstrip.ml
 	ocamlopt.opt -o vfstrip.exe vfstrip.ml
 
@@ -123,7 +129,7 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastz3redux_opt.exe -I $(Z3)\ocaml record_backtrace.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
+verifast.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifast.exe -I $(Z3)\ocaml record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
 	time < nl.txt
@@ -163,8 +169,8 @@ SExpressionEmitter.cmx: SExpressions.cmx verifast.cmx SExpressionEmitter.ml SExp
 
 # For testing purposes, ignore this
 fred: verifast.exe
-	verifast -shared -emit_sexpr test.txt test.c
-	type test.txt
+	-verifast -shared -emit_sexpr test.lisp test.c
+	copy test.lisp ..\..\..\..\shape-analysis\src\
 
 # Builds necessary files for REPL-use (needed due to .cmo files not being necessary for verifast.exe)
 repl: cmo verifast.exe

@@ -5,10 +5,10 @@ let _ =
   let print_msg l msg =
     print_endline (string_of_loc l ^ ": " ^ msg)
   in
-  let verify ?(packages = ref None) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
+  let verify ?(emitter_callback = fun _ -> ()) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     try
-      verify_program ~packages:packages prover stats options path range_callback None;
+      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
@@ -169,12 +169,14 @@ let _ =
           option_emit_manifest = !emitManifest
         } in
         print_endline filename;
-        let packages = ref None in
-        verify ~packages:packages !stats options !prover filename !emitHighlightedSourceFiles;
-        match !outputSExpressions, !packages with
-          | Some target_file, Some packages -> SExpressionEmitter.emit target_file packages          
-          | Some _, None -> failwith "Bug: verifier didn't generate necessary data for some reason"
-          | None, _ -> ()
+        let emitter_callback (packages : package list) =
+          match !outputSExpressions with
+            | Some target_file ->
+              Printf.printf "Emitting s-expressions to %s\n" target_file;
+              SExpressionEmitter.emit target_file packages          
+            | None             -> ()
+        in
+        verify ~emitter_callback:emitter_callback !stats options !prover filename !emitHighlightedSourceFiles
       end;
       modules := filename::!modules
   in
