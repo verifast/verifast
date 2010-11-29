@@ -153,7 +153,7 @@ SExpressions.cmi: verifast.cmx SExpressions.mli
 	ocamlopt.opt -warn-error F -c SExpressions.mli
 
 SExpressions.cmo: verifast.cmo SExpressions.ml SExpressions.cmi
-	ocamlopt.opt -warn-error F -c nums.cma SExpressions.ml
+	ocamlc -warn-error F -c nums.cma SExpressions.ml
 
 SExpressions.cmx: verifast.cmx SExpressions.ml SExpressions.cmi
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c nums.cmxa SExpressions.ml
@@ -170,7 +170,7 @@ SExpressionEmitter.cmx: SExpressions.cmx verifast.cmx SExpressionEmitter.ml SExp
 # For testing purposes, ignore this
 fred: verifast.exe
 	-verifast -shared -emit_sexpr test.lisp test.c
-	copy test.lisp ..\..\..\..\shape-analysis\src\
+	copy test.lisp $(SHAPEANALYSIS)\src\
 
 # Builds necessary files for REPL-use (needed due to .cmo files not being necessary for verifast.exe)
 repl: cmo verifast.exe
