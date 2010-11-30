@@ -43,28 +43,26 @@ predicate_ctor sum(Counter c, box box1, handle handle1, box box2, handle handle2
         0 <= contrib1 &*& contrib1 <= 1 &*&
         0 <= sum - contrib1 &*& sum - contrib1 <= 1;
 
-inductive contribute_info = contribute_info(box, handle, box, handle, box, Counter, Semaphore);
+inductive contribute_info = contribute_info(box, handle, box, handle, box, Counter, Semaphore, int p);
 
 predicate_family_instance thread_run_pre(Session.class)(Session session, contribute_info info)
     requires
         switch (info) {
-            case contribute_info(box1, handle1, box2, handle2, thisBox, c, lock):
-                return contribute_pre(session, box1, handle1, box2, handle2, thisBox, c, lock);
+            case contribute_info(box1, handle1, box2, handle2, thisBox, c, lock, p):
+                return contribute_pre(session, box1, handle1, box2, handle2, thisBox, c, lock, p);
         };
 
-predicate contribute_pre(Session session, box box1, handle handle1, box box2, handle handle2, box thisBox, Counter c, Semaphore l)
+predicate contribute_pre(Session session, box box1, handle handle1, box box2, handle handle2, box thisBox, Counter c, Semaphore l, int p)
     requires
-        session.counter |-> c &*& session.lock |-> l &*& l!= null &*&
-        [1/2]lock(l, sum(c,box1,handle1,box2,handle2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
+        session.counter |-> c &*& session.lock |-> l &*& l != null &*&
+        semaphore(1/2, l, p, sum(c, box1, handle1, box2, handle2)) &*& (thisBox == box1 || thisBox == box2) &*& contrib_box(thisBox, 0, _);
 
 predicate_family_instance thread_run_post(Session.class)(Session session, contribute_info info)
     requires
         switch (info) {
-            case contribute_info(box1, handle1, box2, handle2, thisBox, c, lock):
-                return [1/2]lock(lock, sum(c, box1, handle1, box2, handle2)) &*& contrib_box(thisBox, 1, _);
+            case contribute_info(box1, handle1, box2, handle2, thisBox, c, lock, p):
+                return semaphore(1/2, lock, p, sum(c, box1, handle1, box2, handle2)) &*& contrib_box(thisBox, 1, _);
         };
-
-
 @*/
 
 class Session implements Runnable {
@@ -96,7 +94,7 @@ class Session implements Runnable {
         //@ ensures thread_run_post(Session.class)(this, info);
     {
         //@ open thread_run_pre(Session.class)(this, _);
-        //@ open contribute_pre(this, ?box1, ?handle1, ?box2, ?handle2, ?thisBox, _, _);
+        //@ open contribute_pre(this, ?box1, ?handle1, ?box2, ?handle2, ?thisBox, _, _, ?p);
         Semaphore lock = this.lock;
         Counter c = this.counter;
         lock.acquire();
@@ -117,7 +115,7 @@ class Session implements Runnable {
         @*/
         //@ close sum(c, box1, handle1, box2, handle2)();
         lock.release();
-        //@ close thread_run_post(Session.class)(this, contribute_info(box1, handle1, box2, handle2, thisBox, c, lock));
+        //@ close thread_run_post(Session.class)(this, contribute_info(box1, handle1, box2, handle2, thisBox, c, lock, p));
     }
 }
 
@@ -136,31 +134,35 @@ class Program {
         and_handle handle2 = contrib_handle(0);
         @*/
         //@ close sum(c, box1, handle1, box2, handle2)();
-        //@ close create_lock_ghost_arg(sum(c, box1, handle1, box2, handle2));
+        ////@ close create_lock_ghost_arg(sum(c, box1, handle1, box2, handle2));
+        //@ close n_times(0, sum(c, box1, handle1, box2, handle2));
+        //@ close n_times(1, sum(c, box1, handle1, box2, handle2));
         Semaphore lock = new Semaphore(1);
-        //@ split_fraction lock(lock, _) by 1/2;
+        //@ semaphore_split_detailed(lock, 1/2, 1);
         
         Session session1 = new Session(c, lock);
-        //@ close contribute_pre(session1, box1, handle1, box2, handle2, box1, c, lock);
-        //@ close thread_run_pre(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock));
+        //@ close contribute_pre(session1, box1, handle1, box2, handle2, box1, c, lock, 1);
+        //@ close thread_run_pre(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock, 1));
         JoinableRunnable session1Joinable = ThreadingHelper.createJoinableRunnable(session1);
         //@ close_joinable_runnable(session1Joinable);
         Thread thread1 = new Thread(session1Joinable);
         thread1.start();
         Session session2 = new Session(c, lock);
-        //@ close contribute_pre(session2, box1, handle1, box2, handle2, box2, c, lock);
-        //@ close thread_run_pre(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock));
+        //@ close contribute_pre(session2, box1, handle1, box2, handle2, box2, c, lock, 0);
+        //@ close thread_run_pre(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock, 0));
         JoinableRunnable session2Joinable = ThreadingHelper.createJoinableRunnable(session2);
         //@ close_joinable_runnable(session2Joinable);
         Thread thread2 = new Thread(session2Joinable);
         thread2.start();
         ThreadingHelper.join(thread1, session1Joinable);
-        //@ open thread_run_post(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock));
+        //@ open thread_run_post(Session.class)(session1, contribute_info(box1, handle1, box2, handle2, box1, c, lock, 1));
         
         ThreadingHelper.join(thread2, session2Joinable);
-        //@ open thread_run_post(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock));
+        //@ open thread_run_post(Session.class)(session2, contribute_info(box1, handle1, box2, handle2, box2, c, lock, 0));
         
-        //@ lock_dispose(lock);
+        //@ semaphore_join();
+        //@ semaphore_dispose(lock);
+        //@ open n_times(?p, sum(c, box1, handle1, box2, handle2));
         //@ open sum(c, box1, handle1, box2, handle2)();
         
         // The following perform_action statement is only to show contrib_handle(_, box1, 1)
