@@ -1,18 +1,16 @@
 package gameserver;
 
-import java.net.*;
 import java.io.*;
+import java.net.*;
 
 /*@
-predicate RPSSession(RPSSession session, set<InputStream, any, OutputStream, any> inout) = 
-	session == null ? emp : session.result |-> ?result &*& 0 <= result &*& result <= 2 
-	&*& [1/2]session.socket |-> ?socket &*& socket != null 
-	&*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) 
-	&*& OutputStream(out.getClass())(out, outInfo) &*& in == fst(inout) &*& inInfo == snd(inout) 
-	&*& out == thd(inout) &*& outInfo == fth(inout);
+predicate RPSSession(RPSSession session, BufferedReader r, BufferedWriter w) = 
+        session == null ? emp : session.result |-> ?result &*& 0 <= result &*& result <= 2
+        &*& [1/2]session.socket |-> ?socket &*& socket != null
+        &*& bufferedsocket(socket, r, w);
 @*/
 
 public class RPSSession {
-    Socket socket;
+    BufferedSocket socket;
     int result;
 }
