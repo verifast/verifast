@@ -39,7 +39,7 @@ let sexpr_of_option
     | Some x -> if_some x
     | None   -> if_none ()
 
-let sexpr_of_list ?(head : sexpression option = None) func xs =
+let sexpr_of_list ?(head : sexpression option = None) func xs : sexpression =
   let xs = List.map func xs
   in
   match head with
@@ -157,7 +157,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | Operation (loc, op, exprs, types) -> 
       build_list [ Symbol "expr-op"
                  ; sexpr_of_op op ]
-                 [ "expressions", List (List.map sexpr_of_expr exprs)
+                 [ "operands", List (List.map sexpr_of_expr exprs)
                  ; "types",
                    match !types with
                    | Some types -> List (List.map sexpr_of_type_ types)
@@ -173,21 +173,27 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | False loc  -> Symbol "expr-false"
     | Null loc   -> Symbol "expr-null"
     | Var (loc, name, scope) ->
-      List ( Symbol "expr-var" ::
-               Symbol name ::
-               match !scope with
-                 | Some scope -> [ sexpr_of_ident_scope scope ]
-                 | None       -> [] )
+      let scope_kw =
+        match !scope with
+                 | Some scope -> [ "scope", sexpr_of_ident_scope scope ]
+                 | None       -> []
+      in
+      build_list [ Symbol "expr-var"
+                 ; Symbol name ]
+                 scope_kw
     | Read (loc, expr, str) ->
       List [ Symbol "expr-read"
            ; sexpr_of_expr expr
-           ; quoted_symbol str ]
+           ; Symbol str ]
     | IntLit (loc, n, t) ->
-      List [ Symbol "expr-int"
-           ; Number n
-           ; match !t with
-             | Some t -> sexpr_of_type_ t
-             | None   -> Symbol "nil" ]
+        let kw_args =
+          match !t with
+            | Some t -> [ "type", sexpr_of_type_ t ]
+            | None   -> []
+        in
+        build_list [ Symbol "expr-int"
+                   ; Number n ]
+                   kw_args
     | AssignExpr (loc, lhs, rhs) ->
       List [ Symbol "expr-assign"
            ; sexpr_of_expr lhs
@@ -300,14 +306,14 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "unknown", sexpr_of_option sexpr_of_expr expr
                  ; "body", sexpr_of_list sexpr_of_stmt body ]
     | DeclStmt (loc, type_expr, xs) ->
-      let aux (str, expr, address) =
+      let sexpr_of_local (str, expr, address) =
         List [ Symbol str
              ; sexpr_of_option sexpr_of_expr expr
              ; sexpr_of_bool !address ]
       in
       build_list [ Symbol "stmt-declaration" ]
-                 [ "type-expression", sexpr_of_type_expr type_expr
-                 ; "triplets", sexpr_of_list aux xs ]
+                 [ "type", sexpr_of_type_expr type_expr
+                 ; "locals", sexpr_of_list sexpr_of_local xs ]
     | NonpureStmt _                               -> unsupported "NonpureStmt"
     | SwitchStmt _                                -> unsupported "SwitchStmt"
     | Assert _                                    -> unsupported "Assert"
@@ -337,13 +343,15 @@ and sexpr_of_decl (decl : decl) : sexpression =
   match decl with
     | Struct (loc,
               name,
-              None)        -> List [ Symbol "declare-struct"
-                                   ; Symbol name ]
+              None) ->
+        List [ Symbol "declare-struct"
+             ; Symbol name ]
     | Struct (loc,
               name,
-              Some fields) -> List ( Symbol "define-struct" ::
-                                     Symbol name ::
-                                     List.map sexpr_of_field fields )
+              Some fields) ->
+        build_list [ Symbol "define-struct"
+                   ; Symbol name ]
+                   [ "fields", sexpr_of_list ~head:(Some (Symbol "fields")) sexpr_of_field fields ]
     | Func (loc,
             kind,
             tparams,
@@ -393,7 +401,7 @@ and sexpr_of_decl (decl : decl) : sexpression =
              ; sexpr_of_type_expr t ]
       in
       build_list [ Symbol "declare-predicate-family-instance"
-                 ; Symbol "name" ]
+                 ; Symbol name ]
                  [ "type-parameters", List (List.map symbol tparams)
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]

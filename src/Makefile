@@ -170,7 +170,8 @@ SExpressionEmitter.cmx: SExpressions.cmx verifast.cmx SExpressionEmitter.ml SExp
 # For testing purposes, ignore this
 fred: verifast.exe
 	-verifast -shared -emit_sexpr test.lisp test.c
-	copy test.lisp $(SHAPEANALYSIS)\src\
+	-verifast -shared -emit_sexpr test2.lisp test2.c
+	copy *.lisp $(SHAPEANALYSIS)\src\
 
 # Builds necessary files for REPL-use (needed due to .cmo files not being necessary for verifast.exe)
 repl: cmo verifast.exe

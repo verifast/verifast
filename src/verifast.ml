@@ -1187,7 +1187,12 @@ and
       pred
 and
   switch_pred_clause = (* ?switch_pred_clause *)
-  | SwitchPredClause of loc * string * string list * prover_type option list option ref (* Boxing info *) * pred (*  clauses bij switch  regel-cons-lijst v var in cons- body*)
+  | SwitchPredClause of
+      loc * 
+      string * 
+      string list * 
+      prover_type option list option ref (* Boxing info *) *
+      pred (* clauses bij switch  regel-cons-lijst v var in cons-body *)
 and
   func_kind = (* ?func_kind *)
   | Regular
@@ -1195,13 +1200,33 @@ and
   | Lemma of bool (* indicates whether an axiom should be generated for this lemma *) * expr option (* trigger *)
 and
   meth = (* ?meth *)
-  | Meth of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * method_binding * visibility
+  | Meth of
+      loc * 
+      type_expr option * 
+      string * 
+      (type_expr * string) list * 
+      (pred * pred) option * 
+      (stmt list * loc (* Close brace *)) option * 
+      method_binding * 
+      visibility
 and
   meth_spec = (* ?meth_spec *)
-  | MethSpec of loc * type_expr option * string * (type_expr * string) list * (pred * pred) option* method_binding * visibility
+  | MethSpec of
+      loc * 
+      type_expr option * 
+      string * 
+      (type_expr * string) list * 
+      (pred * pred) option * 
+      method_binding * 
+      visibility
 and
   cons = (* ?cons *)
-  | Cons of loc * (type_expr * string) list * (pred * pred) option * (stmt list * loc (* Close brace *)) option * visibility
+  | Cons of
+      loc * 
+      (type_expr * string) list * 
+      (pred * pred) option * 
+      (stmt list * loc (* Close brace *)) option * 
+      visibility
 and
   instance_pred_decl = (* ?instance_pred_decl *)
   | InstancePredDecl of loc * string * (type_expr * string) list * pred option
