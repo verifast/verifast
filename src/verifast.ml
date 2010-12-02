@@ -926,7 +926,10 @@ and
       pat list (* indices, in case this is really a predicate assertion *) *
       pat list (* arguments *) *
       method_binding
-  | ExprCallExpr of loc * expr * expr list  (* Call whose callee is an expression instead of a plain identifier *)
+  | ExprCallExpr of (* Call whose callee is an expression instead of a plain identifier *)
+      loc *
+      expr *
+      expr list
   | WFunPtrCall of loc * string * expr list
   | WPureFunCall of loc * string * type_ list * expr list
   | WPureFunValueCall of loc * expr * expr list

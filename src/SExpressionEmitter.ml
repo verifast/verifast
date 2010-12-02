@@ -224,12 +224,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | ArrayTypeExpr' _          -> unsupported "ArrayTypeExpr'"
     | AssignOpExpr _            -> unsupported "AssignOpExpr"
 
-
 and sexpr_of_pat (pat : pat) : sexpression =
   match pat with
-    | LitPat expr  -> List [ Symbol "literal-pattern"; sexpr_of_expr expr ]
-    | VarPat str   -> List [ Symbol "?"; Symbol str ]
-    | DummyPat     -> Symbol "_"
+    | LitPat expr  -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
+    | VarPat str   -> List [ Symbol "pat-variable"; Symbol str ]
+    | DummyPat     -> List [ Symbol "pat-dummy" ]
 
 let rec sexpr_of_pred (pred : pred) : sexpression =
   match pred with
@@ -249,7 +248,7 @@ let rec sexpr_of_pred (pred : pred) : sexpression =
            ; sexpr_of_expr expr
            ; sexpr_of_pat pat ]
     | EmpPred loc ->
-      Symbol "pred-empty"
+      List [ Symbol "pred-empty" ]
     | Sep (loc, l, r) ->
       List [ Symbol "pred-&*&"
            ; sexpr_of_pred l
@@ -263,7 +262,6 @@ let rec sexpr_of_pred (pred : pred) : sexpression =
     | WInstCallPred _ -> unsupported "WInstCallPred"
     | SwitchPred _    -> unsupported "SwitchPred"
     | CoefPred _      -> unsupported "CoefPred"
-
 
 let sexpr_of_loop_spec (spec : loop_spec) : sexpression =
   match spec with
@@ -314,28 +312,35 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
       build_list [ Symbol "stmt-declaration" ]
                  [ "type", sexpr_of_type_expr type_expr
                  ; "locals", sexpr_of_list sexpr_of_local xs ]
-    | NonpureStmt _                               -> unsupported "NonpureStmt"
-    | SwitchStmt _                                -> unsupported "SwitchStmt"
-    | Assert _                                    -> unsupported "Assert"
-    | Leak _                                      -> unsupported "Leak"
-    | Close _                                     -> unsupported "Close"
-    | ReturnStmt _                                -> unsupported "ReturnStmt"
-    | PerformActionStmt _                         -> unsupported "PerformActionStmt"
-    | SplitFractionStmt _                         -> unsupported "SplitFractionStmt"
-    | MergeFractionsStmt _                        -> unsupported "MergeFractionsStmt"
-    | CreateBoxStmt _                             -> unsupported "CreateBoxStmt"
-    | CreateHandleStmt _                          -> unsupported "CreateHandleStmt"
-    | DisposeBoxStmt _                            -> unsupported "DisposeBoxStmt"
-    | LabelStmt _                                 -> unsupported "LabelStmt"
-    | GotoStmt _                                  -> unsupported "GotoStmt"
-    | NoopStmt _                                  -> unsupported "NoopStmt"
-    | InvariantStmt _                             -> unsupported "InvariantStmt"
-    | ProduceLemmaFunctionPointerChunkStmt _      -> unsupported "ProduceLemmaFunctionPointerChunkStmt"
-    | ProduceFunctionPointerChunkStmt _           -> unsupported "ProduceFunctionPointerChunkStmt"
-    | Throw _                                     -> unsupported "Throw"
-    | TryCatch _                                  -> unsupported "TryCatch"
-    | TryFinally _                                -> unsupported "TryFinally"
-    | Break _                                     -> unsupported "Break"
+    | ReturnStmt (loc, expr) ->
+      let expr =
+        match expr with
+          | Some expr -> [ "value", sexpr_of_expr expr ]
+          | None      -> []
+      in
+        build_list [ Symbol "stmt-return" ]
+                   expr
+    | NonpureStmt _                          -> unsupported "NonpureStmt"
+    | SwitchStmt _                           -> unsupported "SwitchStmt"
+    | Assert _                               -> unsupported "Assert"
+    | Leak _                                 -> unsupported "Leak"
+    | Close _                                -> unsupported "Close"
+    | PerformActionStmt _                    -> unsupported "PerformActionStmt"
+    | SplitFractionStmt _                    -> unsupported "SplitFractionStmt"
+    | MergeFractionsStmt _                   -> unsupported "MergeFractionsStmt"
+    | CreateBoxStmt _                        -> unsupported "CreateBoxStmt"
+    | CreateHandleStmt _                     -> unsupported "CreateHandleStmt"
+    | DisposeBoxStmt _                       -> unsupported "DisposeBoxStmt"
+    | LabelStmt _                            -> unsupported "LabelStmt"
+    | GotoStmt _                             -> unsupported "GotoStmt"
+    | NoopStmt _                             -> unsupported "NoopStmt"
+    | InvariantStmt _                        -> unsupported "InvariantStmt"
+    | ProduceLemmaFunctionPointerChunkStmt _ -> unsupported "ProduceLemmaFunctionPointerChunkStmt"
+    | ProduceFunctionPointerChunkStmt _      -> unsupported "ProduceFunctionPointerChunkStmt"
+    | Throw _                                -> unsupported "Throw"
+    | TryCatch _                             -> unsupported "TryCatch"
+    | TryFinally _                           -> unsupported "TryFinally"
+    | Break _                                -> unsupported "Break"
 
 and sexpr_of_decl (decl : decl) : sexpression =
   let symbol s = Symbol s
@@ -364,21 +369,28 @@ and sexpr_of_decl (decl : decl) : sexpression =
             body,
             binding,
             visibility) ->
-      let arg_pair (t, id) =
+      let sexpr_of_arg (t, id) =
         List [ Symbol id; sexpr_of_type_expr t ]
       in
       let body =
         match body with
-          | None           -> Symbol "nil"
-          | Some (body, _) -> List (List.map sexpr_of_stmt body)
+          | None           -> [ ]
+          | Some (body, _) -> [ "body", List (List.map sexpr_of_stmt body) ]
       in
-      build_list [ Symbol "declare-function"
-                 ; Symbol name ]
-                 [ "kind", sexpr_of_func_kind kind
-                 ; "type-parameters", List (List.map symbol tparams)
-                 ; "return-type", sexpr_of_type_expr_option rtype
-                 ; "parameters", List (List.map arg_pair params)
-                 ; "body", body ]
+      let contract =
+        match contract with
+          | None -> []
+          | Some (pre, post) -> [ "precondition", sexpr_of_pred pre
+                                ; "postcondition", sexpr_of_pred post ]
+      in
+      let kw = List.concat [ [ "kind", sexpr_of_func_kind kind
+                             ; "type-parameters", List (List.map symbol tparams)
+                             ; "return-type", sexpr_of_type_expr_option rtype
+                             ; "parameters", List (List.map sexpr_of_arg params) ]
+                           ; body
+                           ; contract ]
+      in
+        build_list [ Symbol "declare-function"; Symbol name ] kw
     | PredFamilyDecl (loc,
                       name,
                       tparams,
