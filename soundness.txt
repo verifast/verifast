@@ -28,3 +28,4 @@ Known VeriFast unsoundnesses:
 - casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
 - Java: ClassCastExceptions are currently not prevented
 - ghost variables (which can hide fields) can appear in the argument of the Java assert statement
+- Lemma "assume" in Object.javaspec should be available only if -allow_assume is specified on the command line.
