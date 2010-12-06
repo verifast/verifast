@@ -959,6 +959,7 @@ and
   | ArrayTypeExpr' of loc * expr (* horrible hack --- for well-formed programs, this exists only during parsing *)
   | AssignExpr of loc * expr * expr
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
+  | InstanceOfExpr of loc * expr * type_expr
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -1429,6 +1430,7 @@ let rec expr_loc e =
   | AssignExpr (l, lhs, rhs) -> l
   | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
+  | InstanceOfExpr(l, e, tp) -> l
 
 let pred_loc p =
   match p with
@@ -1537,6 +1539,7 @@ let expr_fold_open iter state e =
   | ProverTypeConversion (pt, pt0, e0) -> iter state e0
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
   | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs
+  | InstanceOfExpr(l, e, tp) -> iter state e
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
@@ -1573,7 +1576,7 @@ let c_keywords = [
 
 let java_keywords = [
   "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"
+  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"; "instanceof"
 ]
 
 exception StaticError of loc * string * string option
@@ -2450,12 +2453,14 @@ and
 | [< '(l, Kwd ">>"); e1 = parse_expr_arith; e = parse_shift_rest (Operation (l, ShiftRight, [e0; e1], ref None)) >] -> e
 | [< >] -> e0
 and
+
   parse_expr_rel_rest e0 = parser
   [< '(l, Kwd "=="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Eq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "!="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Neq, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd "<="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e0; e1], ref None)) >] -> e
 | [< '(l, Kwd ">"); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Lt, [e1; e0], ref None)) >] -> e
 | [< '(l, Kwd ">="); e1 = parse_expr_arith; e = parse_expr_rel_rest (Operation (l, Le, [e1; e0], ref None)) >] -> e
+| [< '(l, Kwd "instanceof"); tp = parse_expr; e = parse_expr_rel_rest (InstanceOfExpr (l, e0, type_expr_of_expr tp)) >] -> e
 | [< e = parse_expr_lt_rest e0 parse_expr_rel_rest >] -> e
 and
   apply_type_args e targs args =
@@ -3051,7 +3056,9 @@ let verify_program_core (* ?verify_program_core *)
 
   let boolt = Bool in
   let intt = IntType in
-
+  let instanceof_symbol = ctxt#mk_symbol "instanceof" [ctxt#type_int; ctxt#type_int] ctxt#type_bool Uninterp in
+  let array_type_symbol = ctxt#mk_symbol "array_type"  [ctxt#type_int] ctxt#type_int Uninterp in
+  
   let real_zero = ctxt#mk_reallit 0 in
   let real_unit = ctxt#mk_reallit 1 in
   let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
@@ -3196,7 +3203,7 @@ let verify_program_core (* ?verify_program_core *)
       May add symbols and global assumptions to the SMT solver.
     *)      
   let rec check_file (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
-  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0) =
+  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
@@ -3210,8 +3217,8 @@ let verify_program_core (* ?verify_program_core *)
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms)
-      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0)
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
@@ -3229,7 +3236,8 @@ let verify_program_core (* ?verify_program_core *)
        append_nodups boxmap boxmap0 id l "box predicate",
        append_nodups classmap classmap0 id l "class",
        append_nodups interfmap interfmap0 id l "interface",
-       classterms @ classterms0)
+       classterms @ classterms0, 
+       interfaceterms @ interfaceterms0)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -3308,7 +3316,7 @@ let verify_program_core (* ?verify_program_core *)
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -3660,12 +3668,12 @@ let verify_program_core (* ?verify_program_core *)
     if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
   in
   
-  let classterms1 =
-    let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
-    terms_of classmap1
-  in
-  
+  let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
+  let classterms1 = terms_of classmap1 in
+  let interfaceterms1 = terms_of interfmap1 in
+ 
   let classterms = classterms1 @ classterms0 in
+  let interfaceterms = interfaceterms1 @ interfaceterms0 in
   
   (* Region: structmap1 *)
   
@@ -5025,6 +5033,10 @@ let verify_program_core (* ?verify_program_core *)
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType)
+    | InstanceOfExpr(l, e, te) ->
+      let t = check_pure_type (pn,ilist) tparams te in
+      let w = checkt e (ObjType "java.lang.Object") in
+      (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt)
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
@@ -5098,6 +5110,7 @@ let verify_program_core (* ?verify_program_core *)
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
         (WRead (l, w, cn, f, t, true, value, Real), t)
       end
+        
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
   in
@@ -6041,6 +6054,17 @@ let verify_program_core (* ?verify_program_core *)
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
   in
+  
+  let rec prover_type_term l tp = 
+    match tp with
+      ObjType(n) -> 
+      begin match try_assoc n classterms with
+        None -> (match try_assoc n interfaceterms with None -> static_error l ("unknown prover_type_expr for: " ^ (string_of_type tp)) None | Some(t) -> t)
+      | Some(t) -> t
+      end
+    | ArrayType(tp) -> (ctxt#mk_app array_type_symbol [prover_type_term l tp])
+    | _ -> static_error l ("unknown prover_type_expr for: " ^ (string_of_type tp)) None
+  in
 
   (* Region: evaluation *)
   
@@ -6366,6 +6390,9 @@ let verify_program_core (* ?verify_program_core *)
     | ProverTypeConversion (tfrom, tto, e) -> ev state e $. fun state v -> cont state (convert_provertype v tfrom tto)
     | SizeofExpr (l, ManifestTypeExpr (_, t)) ->
       cont state (sizeof l t)
+    | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
+      ev state e $. fun state v ->
+        cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
   in
   
@@ -7582,6 +7609,7 @@ let verify_program_core (* ?verify_program_core *)
     | AssignExpr (l, e1, e2) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | AssignOpExpr (l, Var (_, x, _), op, e, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
+    | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
     | _ -> []
   and assigned_variables s =
     match s with
@@ -8328,6 +8356,7 @@ let verify_program_core (* ?verify_program_core *)
     | SwitchExpr(_, e, cls, dcl, _) -> List.iter (fun (SwitchExprClause(_, _, _, e)) -> expr_mark_addr_taken e locals) cls; (match dcl with None -> () | Some((_, e)) -> expr_mark_addr_taken e locals)
     | PredNameExpr _ -> ()
     | CastExpr(_, _, _, e) ->  expr_mark_addr_taken e locals
+    | InstanceOfExpr(_, e, _) ->  expr_mark_addr_taken e locals
     | SizeofExpr _ -> ()
     | AddressOf(_, e) ->  expr_mark_addr_taken e locals
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
@@ -8441,6 +8470,7 @@ let verify_program_core (* ?verify_program_core *)
     | SwitchExpr(_, e, cls, dcl, _) -> List.flatten (List.map (fun (SwitchExprClause(_, _, _, e)) -> expr_address_taken e) cls) @ (match dcl with None -> [] | Some((_, e)) -> expr_address_taken e)
     | PredNameExpr _ -> []
     | CastExpr(_, _, _, e) -> expr_address_taken e
+    | InstanceOfExpr(_, e, _) -> expr_address_taken e
     | SizeofExpr _ -> []
     | AddressOf(_, Var(_, x, scope)) -> [x]
     | AddressOf(_, e) -> expr_address_taken e
@@ -11012,7 +11042,7 @@ let verify_program_core (* ?verify_program_core *)
   in
   verify_funcs' [] lems0 ps;
   
-  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1))
+  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
   
   in (* let rec check_file *)
   

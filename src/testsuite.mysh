@@ -7,7 +7,6 @@ verifast_both -c -disable_overflow_check alt_threading.c
 verifast_both -c args.c
 verifast_both -disable_overflow_check array_of_struct.c
 verifast_both -disable_overflow_check -c arraylist.c
-verifast_both -disable_overflow_check threading.o barrier.c
 cd BeepDriver
 mysh < BeepKernel.mysh
 cd ..
@@ -96,6 +95,7 @@ verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check ArraysAuto.java
 verifast_both -c -disable_overflow_check ArraysManual.java
 verifast_both -c -disable_overflow_check Comprehensions.java
+verifast_both -c -disable_overflow_check InstanceOf.java
 verifast_both -c Constants.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -disable_overflow_check -c Contrib_box.jarsrc
