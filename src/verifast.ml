@@ -10828,7 +10828,7 @@ let verify_program_core (* ?verify_program_core *)
               assert (retval = None);
               do_return h env
             in
-            let tenv = ("this", ObjType cn)::pre_tenv in
+            let tenv = ("this", ObjType cn):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
               if cn = "java.lang.Object" then
                 cont h
