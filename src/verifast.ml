@@ -3145,7 +3145,14 @@ let verify_program_core (* ?verify_program_core *)
     | StaticError (l, msg, url) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, phi, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
   in
-
+ 
+  let prototypes_used : (string * loc) list ref = ref [] in
+  
+  let register_prototype_used l g =
+    if not (List.mem (g, l) !prototypes_used) then
+      prototypes_used := (g, l)::!prototypes_used
+  in
+  
   (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
   let headermap = ref [] in
   let spec_classes= ref [] in
@@ -8524,13 +8531,6 @@ let verify_program_core (* ?verify_program_core *)
     eval_core assert_term (Some read_field) env e
   in
   
-  let prototypes_used : (string * loc) list ref = ref [] in
-  
-  let register_prototype_used l g =
-    if not (List.mem (g, l) !prototypes_used) then
-      prototypes_used := (g, l)::!prototypes_used
-  in
-  
   let assume_is_of_type l t tp cont =
     match tp with
       IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
@@ -10938,7 +10938,7 @@ let verify_program_core (* ?verify_program_core *)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
-      let f_file_name = Filename.chop_extension g_file_name in
+      let f_file_name = Filename.chop_extension (Filename.basename g_file_name) in
       let c_file_name = Filename.chop_extension (Filename.basename path) in
       let _ = 
       (if auto && (
@@ -10949,6 +10949,7 @@ let verify_program_core (* ?verify_program_core *)
           (g_file_name = "Object.javaspec")) 
         then 
           let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
+          register_prototype_used l g;
           create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       ) in 
       verify_funcs (pn,ilist)  boxes (g::lems) ds
@@ -11042,7 +11043,7 @@ let verify_program_core (* ?verify_program_core *)
   in
   verify_funcs' [] lems0 ps;
   
-  ((!prototypes_used, prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
+  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
   
   in (* let rec check_file *)
   
@@ -11052,7 +11053,7 @@ let verify_program_core (* ?verify_program_core *)
   let jardeps= ref [] in
   let basepath=(Filename.basename path) in
   let dirpath= (Filename.dirname path) in
-  let (prototypes_used, prototypes_implemented, functypes_implemented) =
+  let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type basepath with
         | Java -> 
@@ -11076,7 +11077,7 @@ let verify_program_core (* ?verify_program_core *)
     in
     emitter_callback ds;
     let result =
-      check_should_fail ([], [], []) $. fun () ->
+      check_should_fail ([], []) $. fun () ->
       let (linker_info, _) = check_file true programDir headers ds in
       linker_info
     in
@@ -11119,7 +11120,7 @@ let verify_program_core (* ?verify_program_core *)
       List.sort compare lines
     in
     let lines =
-      List.map (fun line -> ".requires " ^ line) (sorted_lines prototypes_used)
+      List.map (fun line -> ".requires " ^ line) (sorted_lines !prototypes_used)
       @
       List.map (fun line -> ".provides " ^ line) (sorted_lines prototypes_implemented)
       @

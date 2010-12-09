@@ -2,7 +2,7 @@
 
 /*@
 
-lemma void length_nonnegative<t>(list<t> xs)
+lemma_auto void length_nonnegative<t>(list<t> xs)
     requires true;
     ensures 0 <= length(xs);
 {
@@ -208,6 +208,18 @@ lemma void drop_take_remove_nth<t>(list<t> xs, int n)
         drop_take_remove_nth(t, n - 1);
       }
   }
+}
+
+lemma void mem_index_of<t>(t x, list<t> xs)
+    requires mem(x, xs) == true;
+    ensures 0 <= index_of(x, xs) && index_of(x, xs) < length(xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x != x0)
+                mem_index_of(x, xs0);
+    }
 }
 
 lemma void foreach_remove<t>(t x, list<t> xs)
