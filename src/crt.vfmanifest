@@ -38,3 +38,5 @@
 .provides counting.h#create_ticket
 .provides counting.h#destroy_ticket
 .provides counting.h#stop_counting
+.provides nat.h#int_of_nat_of_int
+.provides nat.h#int_of_nat_nonnegative

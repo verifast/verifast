@@ -45,6 +45,7 @@ verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
 cd incr_box
 verifast_both -c incr_box.c
 cd ..
+verifast_both -shared -disable_overflow_check inverse.c
 verifast_both iter.c
 verifast_both iter_with_auto.c
 cd lcset

@@ -169,7 +169,7 @@ fixpoint int index_of<t>(t x, list<t> xs) {
 
 lemma_auto(index_of(x, xs)) void mem_index_of<t>(t x, list<t> xs);
     requires mem(x, xs) == true;
-    ensures mem(x, xs) == (0 <= index_of(x, xs)) && index_of(x, xs) <= length(xs);
+    ensures 0 <= index_of(x, xs) && index_of(x, xs) < length(xs);
 
 predicate foreach<t>(list<t> xs, predicate(t) p) =
     switch (xs) {

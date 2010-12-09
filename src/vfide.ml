@@ -975,7 +975,7 @@ let show_ide initialPath prover codeFont traceFont =
                 option_emit_manifest = false
               }
               in
-              verify_program None false options path reportRange breakpoint;
+              verify_program prover false options path reportRange breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with
@@ -1053,12 +1053,12 @@ let show_ide initialPath prover codeFont traceFont =
 
 let () =
   let path = ref None in
-  let prover = ref "z3" in
+  let prover = ref None in
   let codeFont = ref Fonts.code_font in
   let traceFont = ref Fonts.trace_font in
   let rec iter args =
     match args with
-      "-prover"::arg::args -> prover := arg; iter args
+      "-prover"::arg::args -> prover := Some arg; iter args
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
