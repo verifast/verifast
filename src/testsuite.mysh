@@ -106,6 +106,7 @@ verifast_both -c JavaCard.java
 verifast_both -disable_overflow_check -c map.java
 verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c -disable_overflow_check Recell.java
+verifast_both -c -disable_overflow_check AmortizedQueue.java
 verifast_both -c Spouse.java
 verifast_both -c Spouse2.java
 verifast_both -c SpouseFinal.java
