@@ -119,6 +119,10 @@ lemma void length_take<t>(int n, list<t> xs);
     requires 0 <= n && n <= length(xs);
     ensures length(take(n, xs)) == n;
 
+lemma_auto(length(take(n, xs))) void length_take_n<t>(int n, list<t> xs);
+    requires 0 <= n && n < length(xs);
+    ensures length(take(n, xs)) == n;
+
 lemma void nth_take<t>(int i, int n, list<t> xs);
     requires 0 <= i && i < n && n <= length(xs);
     ensures nth(i, take(n, xs)) == nth(i, xs);
@@ -149,13 +153,21 @@ lemma_auto(length(drop(n, xs))) void length_drop<t>(int n, list<t> xs);
 lemma_auto(drop(n, take(n, xs))) void drop_n_take_n<t>(int n, list<t> xs);
     requires true;
     ensures drop(n, take(n, xs)) == nil;
+    
+lemma_auto(append(take(n, xs), drop(n, xs))) void append_take_drop<t>(int n, list<t> xs);
+    requires 0 <= n && n < length(xs);
+    ensures append(take(n, xs), drop(n, xs)) == xs;
+
+lemma_auto void nth_drop<t>(list<t> vs, int i);
+  requires 0 <= i && i < length(vs);
+  ensures nth(i, vs) == head(drop(i, vs));
 
 fixpoint list<t> remove<t>(t x, list<t> xs) {
     switch (xs) {
         case nil: return nil;
         case cons(x0, xs0): return x0 == x ? xs0 : cons(x0, remove(x, xs0));
     }
-}
+}
 
 fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
     switch(xs) {

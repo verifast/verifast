@@ -38,20 +38,6 @@ fixpoint boolean forall_le(list<int> vs, int v) {
   }
 }
 
-lemma void nth_drop<t>(list<t> vs, int index) 
-  requires 0 <= index && index < length(vs);
-  ensures nth(index, vs) == head(drop(index, vs));
-{
-  switch(vs) {
-    case nil: 
-    case cons(h, t):
-      if(index == 0) {
-      } else {
-        nth_drop(t, index - 1);
-      }
-  }
-}
-
 lemma void store_take_drop<t>(list<t> xs, int index, t v)
   requires 0 <= index && index < length(xs);
   ensures store(xs, index, v) == append(take(index, xs), cons(v, drop(index + 1, xs)));
