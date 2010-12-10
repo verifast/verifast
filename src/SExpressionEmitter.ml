@@ -58,18 +58,18 @@ let sexpr_of_ghostness (g : ghostness) : sexpression =
 let rec sexpr_of_type_ (t : type_) : sexpression =
   let aux s = quoted_symbol s in
   match t with
-    | Bool                    -> aux "bool"
-    | Void                    -> aux "void"
-    | IntType                 -> aux "int"
-    | ShortType               -> aux "short"
-    | UintPtrType             -> aux "uint-ptr"
-    | RealType                -> aux "real"
-    | Char                    -> aux "char"
-    | StructType s            -> List [ Symbol "struct"; quoted_symbol s ]
-    | PtrType t               -> List [ Symbol "pointer-to"; sexpr_of_type_ t ]
-    | FuncType s              -> List [ Symbol "function"; Symbol s ]
-    | InductiveType (s, ts)   -> List ( Symbol "inductive-type" ::
-                                        Symbol "s" ::
+    | Bool                    -> aux "type-bool"
+    | Void                    -> aux "type-void"
+    | IntType                 -> aux "type-int"
+    | ShortType               -> aux "type-short"
+    | UintPtrType             -> aux "type-uint-ptr"
+    | RealType                -> aux "type-real"
+    | Char                    -> aux "type-char"
+    | StructType s            -> List [ Symbol "type-struct"; Symbol s ]
+    | PtrType t               -> List [ Symbol "type-pointer-to"; sexpr_of_type_ t ]
+    | FuncType s              -> List [ Symbol "type-function"; Symbol s ]
+    | InductiveType (s, ts)   -> List ( Symbol "type-inductive" ::
+                                        Symbol s ::
                                         List.map sexpr_of_type_ ts )
     | PredType _              -> unsupported "PredType"
     | PureFuncType _          -> unsupported "PureFuncType"
@@ -85,13 +85,13 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | RefType _               -> unsupported "RefType"
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
-  | StructTypeExpr (_, name)   -> List [ Symbol "struct"
-                                       ; quoted_symbol name ]
-  | PtrTypeExpr (_, te)        -> List [ Symbol "pointer-to"
+  | StructTypeExpr (_, name)   -> List [ Symbol "type-expr-struct"
+                                       ; Symbol name ]
+  | PtrTypeExpr (_, te)        -> List [ Symbol "type-expr-pointer-to"
                                        ; sexpr_of_type_expr te ]
-  | ArrayTypeExpr _            -> failwith "not supported yet : ArrayTypeExpr"
-  | ManifestTypeExpr (_, t)    -> List [ Symbol "manifest"
+  | ManifestTypeExpr (_, t)    -> List [ Symbol "type-expr-manifest"
                                        ; sexpr_of_type_ t ]
+  | ArrayTypeExpr _            -> unsupported "ArrayTypeExpr"
   | IdentTypeExpr _            -> unsupported "IdentTypeExpr"
   | ConstructedTypeExpr _      -> unsupported "ConstructedTypeExpr"
   | PredTypeExpr _             -> unsupported "PredTypeExpr"
@@ -198,6 +198,9 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
       List [ Symbol "expr-assign"
            ; sexpr_of_expr lhs
            ; sexpr_of_expr rhs ]
+    | SizeofExpr (loc, texpr) ->
+      List [ Symbol "expr-sizeof"
+           ; sexpr_of_type_expr texpr ]
     | StringLit _               -> unsupported "StringLit"
     | ClassLit _                -> unsupported "ClassLit"
     | ArrayLengthExpr _         -> unsupported "ArrayLengthExpr"
@@ -218,11 +221,11 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | SwitchExpr _              -> unsupported "SwitchExpr"
     | PredNameExpr _            -> unsupported "PredNameExpr"
     | CastExpr _                -> unsupported "CastExpr"
-    | SizeofExpr _              -> unsupported "SizeofExpr"
     | AddressOf _               -> unsupported "AddressOf"
     | ProverTypeConversion _    -> unsupported "ProverTypeConversion"
     | ArrayTypeExpr' _          -> unsupported "ArrayTypeExpr'"
     | AssignOpExpr _            -> unsupported "AssignOpExpr"
+    | InstanceOfExpr _          -> unsupported "InstanceOfExpr"
 
 and sexpr_of_pat (pat : pat) : sexpression =
   match pat with
@@ -305,9 +308,17 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "body", sexpr_of_list sexpr_of_stmt body ]
     | DeclStmt (loc, type_expr, xs) ->
       let sexpr_of_local (str, expr, address) =
-        List [ Symbol str
-             ; sexpr_of_option sexpr_of_expr expr
-             ; sexpr_of_bool !address ]
+        let initialization =
+          match expr with
+            | Some expr -> [ "init", sexpr_of_expr expr ]
+            | None      -> []
+        in
+        let address =
+          [ "pointer", sexpr_of_bool !address ]
+        in
+        build_list [ Symbol "local"
+                   ; Symbol str ]
+                   ( initialization @ address )
       in
       build_list [ Symbol "stmt-declaration" ]
                  [ "type", sexpr_of_type_expr type_expr
