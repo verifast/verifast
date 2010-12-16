@@ -1,0 +1,9 @@
+package java.lang;
+
+/*@
+
+lemma void assume(boolean b);
+    requires true;
+    ensures b;
+
+@*/
