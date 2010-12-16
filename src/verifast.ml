@@ -444,6 +444,14 @@ type range_kind = (* ?range_kind *)
   | CommentRange
   | ErrorRange
 
+let string_of_range_kind = function
+  | KeywordRange        -> "KeywordRange"
+  | GhostKeywordRange   -> "GhostKeywordRange"
+  | GhostRange          -> "GhostRange"
+  | GhostRangeDelimiter -> "GhostRangeDelimiter"
+  | CommentRange        -> "CommentRange"
+  | ErrorRange          -> "ErrorRange"
+
 (** The lexer.
     @param reportShouldFail Function that will be called whenever a should-fail directive is found in the source code.
       Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.

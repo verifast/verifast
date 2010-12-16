@@ -3,15 +3,6 @@ open SExpressions
 
 
 (*
-  Used as placeholders
-*)
-exception Unsupported of string
-
-let unsupported str = raise (Unsupported str)
-
-
-
-(*
   Utility functions
 *)
 let build_list (items : sexpression list) (keyword_pairs : (string * sexpression) list) =
@@ -49,6 +40,16 @@ let sexpr_of_list ?(head : sexpression option = None) func xs : sexpression =
 (*
   Verifast-specific sexpr_of_* functions
 *)
+exception Unsupported of string
+
+let unsupported_exception = ref true
+
+let unsupported str =
+  if !unsupported_exception
+  then raise (Unsupported str)
+  else List [ Symbol "unsupported"; Symbol str ]
+
+
 let sexpr_of_ghostness (g : ghostness) : sexpression =
   let aux s = quoted_symbol s in
   match g with
@@ -56,7 +57,7 @@ let sexpr_of_ghostness (g : ghostness) : sexpression =
     | Real  -> aux "real"
 
 let rec sexpr_of_type_ (t : type_) : sexpression =
-  let aux s = quoted_symbol s in
+  let aux s = List [ Symbol s ] in
   match t with
     | Bool                    -> aux "type-bool"
     | Void                    -> aux "type-void"
@@ -126,7 +127,7 @@ let sexpr_of_ident_scope (scope : ident_scope) : sexpression =
     | ModuleName         -> Symbol "module"
     | PureFuncName       -> Symbol "pure-function"
 
-let sexpr_of_op (op : operator) : sexpression =
+let sexpr_of_operator (op : operator) : sexpression =
   match op with
     | Add         -> Symbol "+"
     | Sub         -> Symbol "-"
@@ -156,7 +157,7 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
   match expr with
     | Operation (loc, op, exprs, types) -> 
       build_list [ Symbol "expr-op"
-                 ; sexpr_of_op op ]
+                 ; sexpr_of_operator op ]
                  [ "operands", List (List.map sexpr_of_expr exprs)
                  ; "types",
                    match !types with
@@ -201,6 +202,12 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | SizeofExpr (loc, texpr) ->
       List [ Symbol "expr-sizeof"
            ; sexpr_of_type_expr texpr ]
+    | AssignOpExpr (loc, lhs, op, rhs, post) ->
+      build_list [ Symbol "expr-assign-op" ]
+                 [ "lhs", sexpr_of_expr lhs
+                 ; "rhs", sexpr_of_expr rhs
+                 ; "op", sexpr_of_operator op
+                 ; "post", sexpr_of_bool post ]
     | StringLit _               -> unsupported "StringLit"
     | ClassLit _                -> unsupported "ClassLit"
     | ArrayLengthExpr _         -> unsupported "ArrayLengthExpr"
@@ -224,7 +231,6 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
     | AddressOf _               -> unsupported "AddressOf"
     | ProverTypeConversion _    -> unsupported "ProverTypeConversion"
     | ArrayTypeExpr' _          -> unsupported "ArrayTypeExpr'"
-    | AssignOpExpr _            -> unsupported "AssignOpExpr"
     | InstanceOfExpr _          -> unsupported "InstanceOfExpr"
 
 and sexpr_of_pat (pat : pat) : sexpression =
@@ -278,16 +284,32 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
   match stmt with
     | PureStmt (loc, stmt) -> List [ Symbol "stmt-pure"
                                    ; sexpr_of_stmt stmt ]
-    | Open (loc, expr, str, types, pats, args, frac) ->
-      build_list [ Symbol "stmt-open" ]
-                 [ ("expression",
-                    match expr with
-                      | None -> Symbol "nil"
-                      | Some expr -> sexpr_of_expr expr)                   
-                 ; "name", Symbol str
-                 ; "types", List (List.map sexpr_of_type_expr types)
-                 ; "patters", List (List.map sexpr_of_pat pats)
-                 ; "arguments", List (List.map sexpr_of_pat args) ]
+    | Open (loc, expr, name, types, pats, args, frac) ->
+      let expr =
+        match expr with
+          | Some expr -> [ "expression", sexpr_of_expr expr ]
+          | None      -> []
+      in
+      let kwargs =
+        [ "name", Symbol name
+        ; "types", List (List.map sexpr_of_type_expr types)
+        ; "patterns", List (List.map sexpr_of_pat pats)
+        ; "arguments", List (List.map sexpr_of_pat args) ] @ expr
+      in
+      build_list [ Symbol "stmt-open" ] kwargs
+    | Close (loc, expr, name, types, pats, args, frac) ->
+      let expr =
+        match expr with
+          | Some expr -> [ "expression", sexpr_of_expr expr ]
+          | None      -> []
+      in
+      let kwargs =
+        [ "name", Symbol name
+        ; "types", List (List.map sexpr_of_type_expr types)
+        ; "patterns", List (List.map sexpr_of_pat pats)
+        ; "arguments", List (List.map sexpr_of_pat args) ] @ expr
+      in
+      build_list [ Symbol "stmt-close" ] kwargs                 
     | IfStmt (loc, cond, then_stmt, else_stmt) ->
       List [ Symbol "stmt-if"
            ; sexpr_of_expr cond
@@ -331,27 +353,28 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
       in
         build_list [ Symbol "stmt-return" ]
                    expr
-    | NonpureStmt _                          -> unsupported "NonpureStmt"
-    | SwitchStmt _                           -> unsupported "SwitchStmt"
-    | Assert _                               -> unsupported "Assert"
-    | Leak _                                 -> unsupported "Leak"
-    | Close _                                -> unsupported "Close"
-    | PerformActionStmt _                    -> unsupported "PerformActionStmt"
-    | SplitFractionStmt _                    -> unsupported "SplitFractionStmt"
-    | MergeFractionsStmt _                   -> unsupported "MergeFractionsStmt"
-    | CreateBoxStmt _                        -> unsupported "CreateBoxStmt"
-    | CreateHandleStmt _                     -> unsupported "CreateHandleStmt"
-    | DisposeBoxStmt _                       -> unsupported "DisposeBoxStmt"
-    | LabelStmt _                            -> unsupported "LabelStmt"
-    | GotoStmt _                             -> unsupported "GotoStmt"
-    | NoopStmt _                             -> unsupported "NoopStmt"
-    | InvariantStmt _                        -> unsupported "InvariantStmt"
-    | ProduceLemmaFunctionPointerChunkStmt _ -> unsupported "ProduceLemmaFunctionPointerChunkStmt"
-    | ProduceFunctionPointerChunkStmt _      -> unsupported "ProduceFunctionPointerChunkStmt"
-    | Throw _                                -> unsupported "Throw"
-    | TryCatch _                             -> unsupported "TryCatch"
-    | TryFinally _                           -> unsupported "TryFinally"
-    | Break _                                -> unsupported "Break"
+    | Assert (loc, pred) ->
+      List [ Symbol "stmt-assert"
+           ; sexpr_of_pred pred ]
+    | NonpureStmt _                          -> unsupported "stmt-NonpureStmt"
+    | SwitchStmt _                           -> unsupported "stmt-SwitchStmt"
+    | Leak _                                 -> unsupported "stmt-Leak"
+    | PerformActionStmt _                    -> unsupported "stmt-PerformActionStmt"
+    | SplitFractionStmt _                    -> unsupported "stmt-SplitFractionStmt"
+    | MergeFractionsStmt _                   -> unsupported "stmt-MergeFractionsStmt"
+    | CreateBoxStmt _                        -> unsupported "stmt-CreateBoxStmt"
+    | CreateHandleStmt _                     -> unsupported "stmt-CreateHandleStmt"
+    | DisposeBoxStmt _                       -> unsupported "stmt-DisposeBoxStmt"
+    | LabelStmt _                            -> unsupported "stmt-LabelStmt"
+    | GotoStmt _                             -> unsupported "stmt-GotoStmt"
+    | NoopStmt _                             -> unsupported "stmt-NoopStmt"
+    | InvariantStmt _                        -> unsupported "stmt-InvariantStmt"
+    | ProduceLemmaFunctionPointerChunkStmt _ -> unsupported "stmt-ProduceLemmaFunctionPointerChunkStmt"
+    | ProduceFunctionPointerChunkStmt _      -> unsupported "stmt-ProduceFunctionPointerChunkStmt"
+    | Throw _                                -> unsupported "stmt-Throw"
+    | TryCatch _                             -> unsupported "stmt-TryCatch"
+    | TryFinally _                           -> unsupported "stmt-TryFinally"
+    | Break _                                -> unsupported "stmt-Break"
 
 and sexpr_of_decl (decl : decl) : sexpression =
   let symbol s = Symbol s

@@ -155,7 +155,18 @@ let _ =
             ; "-emit_vfmanifest", Set emitManifest, ""
             ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, ""
-            ; "-emit_sexpr", String (fun str -> outputSExpressions := Some str), "Emits the ast as an s-expression to the specified file"
+            ; "-emit_sexpr",
+              String begin fun str ->
+                outputSExpressions := Some str;
+                SExpressionEmitter.unsupported_exception := false
+              end,
+              "Emits the ast as an s-expression to the specified file"
+            ; "-emit_sexpr_fail",
+              String begin fun str ->
+                outputSExpressions := Some str;
+                SExpressionEmitter.unsupported_exception := true
+              end,
+              "Emits the ast as an s-expression to the specified file; raises exception on unsupported constructs"
             ; "-export", String (fun str -> exports := str :: !exports), "" ]
   in
   let process_file filename =

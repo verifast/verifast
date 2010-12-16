@@ -1,3 +1,5 @@
+val unsupported_exception : bool ref
+
 val emit : ?margin:int -> string -> Verifast.package list -> unit
 
 
