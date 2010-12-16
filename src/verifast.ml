@@ -2663,12 +2663,48 @@ let read_file_lines path =
   close_in channel;
   lines
 
-let file_loc basePath relPath =
-  let pos = ((basePath, relPath), 1, 1) in
+let file_loc path =
+  let pos = ((Filename.dirname path, Filename.basename path), 1, 1) in
   (pos, pos)
 
-let parse_jarspec_file_core basePath relPath =
-  let path = Filename.concat basePath relPath in
+let expand_macros macros text =
+  if not (String.contains text '%') then text else
+  let n = String.length text in
+  let buffer = Buffer.create n in
+  let rec iter i =
+    if i < n then
+    let c = text.[i] in
+    let add_char () =
+      Buffer.add_char buffer c;
+      iter (i + 1)
+    in
+    if c = '%' then
+      let j = String.index_from text (i + 1) '%' in
+      if j <= i then begin
+      end else begin
+        let symbol = String.sub text (i + 1) (j - i - 1) in
+        match try_assoc symbol macros with
+          None -> add_char ()
+        | Some value -> Buffer.add_string buffer value; iter (j + 1)
+      end
+    else
+      add_char ()
+  in
+  iter 0;
+  Buffer.contents buffer
+
+let path_macros = [("VERIFAST", rtdir)]
+
+let expand_path path =
+  expand_macros path_macros path
+
+let concat_if_relative path1 path2 =
+  if Filename.is_relative path2 then
+    Filename.concat path1 path2
+  else
+    path2
+
+let parse_jarspec_file_core path =
   let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
   let (jarspecs, lines) =
@@ -2677,7 +2713,7 @@ let parse_jarspec_file_core basePath relPath =
       | line::lines when line = "" ->
         iter jarspecs lines
       | line::lines when Filename.check_suffix line ".jarspec" ->
-        iter (line::jarspecs) lines
+        iter (concat_if_relative dirPath (expand_path line)::jarspecs) lines
       | _ ->
         (List.rev jarspecs, lines)
     in
@@ -2688,37 +2724,36 @@ let parse_jarspec_file_core basePath relPath =
       begin fun line ->
         if line = "" then [] else
         if not (Filename.check_suffix line ".javaspec") then
-          raise (ParseException (file_loc basePath relPath, "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
+          raise (ParseException (file_loc path, "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
         else
-          [line]
+          [Filename.concat dirPath line]
       end
       lines
   in
   (jarspecs, javaspecs)
 
-let rec parse_jarspec_file basePath relPath reportRange =
-  let (jar_file_paths, direct_javaspec_file_paths) = parse_jarspec_file_core basePath relPath in
+let rec parse_jarspec_file path =
+  let (jar_file_paths, direct_javaspec_file_paths) = parse_jarspec_file_core path in
   let transitive_javaspec_file_paths =
     let rec all_specs jar_file_paths =
       match jar_file_paths with
         [] -> direct_javaspec_file_paths
       | jar_file_path::jar_file_paths ->
-        let (_, all_javaspec_file_paths) = parse_jarspec_file basePath (Filename.concat (Filename.dirname relPath) (jar_file_path ^ "spec")) reportRange in
+        let (_, all_javaspec_file_paths) = parse_jarspec_file (jar_file_path ^ "spec") in
         all_javaspec_file_paths @ all_specs jar_file_paths
     in
     all_specs jar_file_paths
   in
   (direct_javaspec_file_paths, transitive_javaspec_file_paths)
 
-let parse_jarsrc_file_core basePath relPath =
-  let path = Filename.concat basePath relPath in
+let parse_jarsrc_file_core path =
   let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
   let (jarspecs, lines) =
     let rec iter jarspecs lines =
       match lines with
         line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".jar" ->
-        iter (line::jarspecs) lines
+        iter (concat_if_relative dirPath (expand_path line)::jarspecs) lines
       | _ ->
         (List.rev jarspecs, lines)
     in
@@ -2728,7 +2763,7 @@ let parse_jarsrc_file_core basePath relPath =
     let rec iter javas lines =
       match lines with
         line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".java" ->
-        iter (line::javas) lines
+        iter (Filename.concat dirPath line::javas) lines
       | _ ->
         (List.rev javas, lines)
     in
@@ -2740,26 +2775,26 @@ let parse_jarsrc_file_core basePath relPath =
     | [line] when startswith line "main-class " ->
       Some (String.sub line (String.length "main-class ") (String.length line - String.length "main-class "))
     | _ ->
-      raise (ParseException (file_loc basePath relPath, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
+      raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in
   (jarspecs, javas, main_class)
 
-let parse_jarsrc_file basePath relPath reportRange =
-  let l = file_loc basePath relPath in
-  let (jar_file_paths, java_file_paths, main_class) = parse_jarsrc_file_core basePath relPath in
+let parse_jarsrc_file path =
+  let l = file_loc path in
+  let (jar_file_paths, java_file_paths, main_class) = parse_jarsrc_file_core path in
   let main_class =
     match main_class with
       None ->
       ("", dummy_loc)
     | Some main_class ->
-      (main_class, file_loc basePath relPath)
+      (main_class, file_loc path)
   in
   let (direct_source_files, transitive_javaspec_files) =
     let rec iter jar_file_paths =
       match jar_file_paths with
         [] -> ([], [])
       | jar_file_path::jar_file_paths ->
-        let (direct_javaspec_file_paths, transitive_javaspec_file_paths) = parse_jarspec_file basePath (Filename.concat (Filename.dirname relPath) (jar_file_path ^ "spec")) reportRange in
+        let (direct_javaspec_file_paths, transitive_javaspec_file_paths) = parse_jarspec_file (jar_file_path ^ "spec") in
         let transitive_javaspec_file_paths = List.map (fun path -> (l, path)) transitive_javaspec_file_paths in
         let (direct_source_files, transitive_javaspec_files) = iter jar_file_paths in
         (direct_javaspec_file_paths @ direct_source_files, transitive_javaspec_file_paths @ transitive_javaspec_files)
@@ -2901,7 +2936,7 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool} (* ?options *)
+type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool} (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
@@ -3318,10 +3353,10 @@ let verify_program_core (* ?verify_program_core *)
           else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
           begin
             let headers_included = path::headers_included in
-            let (jarspecs,allspecs)= parse_jarspec_file basedir relpath reportRange in
+            let (jarspecs,allspecs)= parse_jarspec_file path in
             let allspecs= remove (fun x -> List.mem x headers_included)(list_remove_dups allspecs) in
-            let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange reportShouldFail)) jarspecs))in
-            let (headers',ds) = ([],(List.map (fun x -> (parse_java_file (Filename.concat basedir x) reportRange reportShouldFail)) allspecs)) in
+            let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) jarspecs))in
+            let (headers',ds) = ([],(List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) allspecs)) in
             let (_, maps) = check_file include_prelude basedir [] ds in
             headermap := (path, (headers', maps))::!headermap;
             spec_classes:=classes;
@@ -3339,8 +3374,11 @@ let verify_program_core (* ?verify_program_core *)
           | Java -> begin
             match try_assoc rtpath !headermap with
               | None -> 
-                let (_,allspecs)= parse_jarspec_file rtdir "rt.jarspec" reportRange in
-                let ds = (List.map (fun x -> (parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail)) allspecs) in
+                let (_,allspecs)= parse_jarspec_file rtpath in
+                let allspecs =
+                  if options.option_allow_assume then Filename.concat rtdir "assume.javaspec"::allspecs else allspecs
+                in
+                let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) allspecs in
                 let (_, maps0) = check_file false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
@@ -10946,6 +10984,8 @@ let verify_program_core (* ?verify_program_core *)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
+      if language = Java && not (Filename.check_suffix g_file_name "javaspec") then
+        static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       let f_file_name = Filename.chop_extension (Filename.basename g_file_name) in
       let c_file_name = Filename.chop_extension (Filename.basename path) in
       let _ = 
@@ -11057,28 +11097,26 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: top-level stuff *)
   
-  let main_file= ref ("",dummy_loc) in
-  let jardeps= ref [] in
-  let basepath=(Filename.basename path) in
-  let dirpath= (Filename.dirname path) in
+  let main_file = ref ("",dummy_loc) in
+  let jardeps = ref [] in
   let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
-      match file_type basepath with
+      match file_type path with
         | Java -> 
           if Filename.check_suffix path ".jarsrc" then
-            let (main,impllist,jarlist,jdeps)=parse_jarsrc_file dirpath basepath reportRange in
-            let ds = (List.map(fun x->parse_java_file(Filename.concat dirpath x)reportRange reportShouldFail)impllist)in
-            let specpath = (Filename.chop_extension basepath)^".jarspec" in
-            main_file:= main;
-            jardeps:= jdeps;
-            if Sys.file_exists (Filename.concat dirpath specpath) then
+            let (main,impllist,jarlist,jdeps) = parse_jarsrc_file path in
+            let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) impllist in
+            let specpath = Filename.chop_extension path ^ ".jarspec" in
+            main_file := main;
+            jardeps := jdeps;
+            if Sys.file_exists specpath then
               (jarlist@[(dummy_loc,specpath)],ds)
             else
               ([],ds)
           else
             ([],[parse_java_file path reportRange reportShouldFail])
         | CLang ->
-          if Filename.check_suffix (Filename.basename path) ".h" then
+          if Filename.check_suffix path ".h" then
             parse_header_file "" path reportRange reportShouldFail
           else
             parse_c_file path reportRange reportShouldFail

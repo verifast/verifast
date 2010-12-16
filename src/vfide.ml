@@ -972,7 +972,8 @@ let show_ide initialPath prover codeFont traceFont =
                 option_verbose = false;
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_allow_should_fail = true;
-                option_emit_manifest = false
+                option_emit_manifest = false;
+                option_allow_assume = true
               }
               in
               verify_program prover false options path reportRange breakpoint;

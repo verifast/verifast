@@ -27,10 +27,6 @@ fixpoint int unboxed_int(boxed_int i) { switch (i) { case boxed_int(value): retu
 inductive boxed_bool = boxed_bool(boolean);
 fixpoint boolean unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): return value; } }
 
-lemma void assume(boolean b);
-    requires true;
-    ensures b;
-
 predicate array_element<T>(T[] array, int index; T value);
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
 predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T; V) p, A info; list<T> elements, list<V> values);

@@ -177,7 +177,8 @@ let _ =
           option_verbose = !verbose;
           option_disable_overflow_check = !disable_overflow_check;
           option_allow_should_fail = !allowShouldFail;
-          option_emit_manifest = !emitManifest
+          option_emit_manifest = !emitManifest;
+          option_allow_assume = !allowAssume
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =
