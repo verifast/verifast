@@ -1,0 +1,5 @@
+.provides vf_mutex.h#vf_mutex_create
+.provides vf_mutex.h#vf_mutex_dispose
+.provides vf_mutex.h#vf_mutex_lock
+.provides vf_mutex.h#vf_mutex_unlock
+.provides vf_mutex.h#vf_mutex_is_locked

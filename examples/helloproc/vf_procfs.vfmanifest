@@ -1,0 +1,8 @@
+.provides vf_procfs.h#vf_procfs_mkdir
+.provides vf_procfs.h#vf_procfs_create_file
+.provides vf_procfs.h#vf_procfs_remove_file
+.provides vf_procfs.h#vf_procfs_rmdir
+.provides vf_procfs.h#vf_procfs_put_char
+.provides vf_procfs.h#vf_procfs_put_string
+.provides vf_procfs.h#vf_procfs_put_int
+.provides vf_procfs.h#vf_procfs_is_buffer_full

@@ -1,0 +1,5 @@
+.provides vf_mem.h#vf_kfree
+.provides vf_mem.h#vf_kmalloc
+.provides vf_mem.h#vf_kzalloc
+.provides vf_mem.h#vf_copy_from_user
+.provides vf_mem.h#vf_memcpy
