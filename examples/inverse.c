@@ -1,6 +1,7 @@
 // VSTTE 2010 Competition Problem 2. Problem statement by P. Mueller and N. Shankar.
 
 #include "nat.h"
+#include "listex.h"
 
 /*@
 
@@ -18,17 +19,6 @@ lemma_auto void ints_inv()
     if (n != 0)
         ints_inv();
     close ints(array, n, elems);
-}
-
-lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p)
-    requires true;
-    ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            forall_append(xs0, ys, p);
-    }
 }
 
 fixpoint bool between(unit u, int lower, int upper, int x) {
@@ -101,13 +91,6 @@ lemma void ints_merge(int *array)
     }
 }
 
-fixpoint list<t> update<t>(int i, t y, list<t> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(x, xs0): return i == 0 ? cons(y, xs0) : cons(x, update(i - 1, y, xs0));
-    }
-}
-
 lemma void ints_unseparate(int *array, int i, list<int> xs)
     requires ints(array, i, take(i, xs)) &*& integer(array + i, ?y) &*& ints(array + i + 1, length(xs) - i - 1, tail(drop(i, xs)));
     ensures ints(array, length(xs), update(i, y, xs));
@@ -120,55 +103,6 @@ lemma void ints_unseparate(int *array, int i, list<int> xs)
         ints_unseparate(array + 1, i - 1, tail(xs));
     }
     close ints(array, length(xs), update(i, y, xs));
-}
-
-lemma void forall_drop<t>(list<t> xs, fixpoint(t, bool) p, int i)
-    requires forall(xs, p) == true;
-    ensures forall(drop(i, xs), p) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            forall_drop(xs0, p, i - 1);
-    }
-}
-
-lemma void take_plus_one<t>(int i, list<t> xs)
-    requires 0 <= i &*& i < length(xs);
-    ensures take(i + 1, xs) == append(take(i, xs), cons(nth(i, xs), nil));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            if (i != 0) {
-                take_plus_one(i - 1, xs0);
-            }
-    }
-}
-
-lemma void distinct_mem_nth_take<t>(list<t> xs, int i)
-    requires distinct(xs) == true &*& 0 <= i &*& i < length(xs);
-    ensures !mem(nth(i, xs), take(i, xs));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            if (i != 0) {
-                distinct_mem_nth_take(xs0, i - 1);
-            }
-    }
-}
-
-lemma void nth_update<t>(int i, int j, t y, list<t> xs)
-    requires 0 <= i &*& i < length(xs) &*& 0 <= j &*& j < length(xs);
-    ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            if (i != 0 && j != 0)
-                nth_update(i - 1, j - 1, y, xs0);
-    }
 }
 
 lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<int> bs, int ai, int k)
@@ -188,77 +122,6 @@ lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<int> bs, 
     }
 }
 
-lemma void mem_remove_diff<t>(t x, t y, list<t> xs)
-    requires x != y;
-    ensures mem(x, remove(y, xs)) == mem(x, xs);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            mem_remove_diff(x, y, xs0);
-    }
-}
-
-lemma void mem_mem_remove<t>(t x, t y, list<t> xs)
-    requires mem(x, remove(y, xs)) == true;
-    ensures mem(x, xs) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 != x && x0 != y)
-                mem_mem_remove(x, y, xs0);
-    }
-}
-
-lemma void distinct_mem_remove<t>(t x, list<t> xs)
-    requires distinct(xs) == true;
-    ensures !mem(x, remove(x, xs));
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            distinct_mem_remove(x, xs0);
-    }
-}
-
-lemma void distinct_remove<t>(t x, list<t> xs)
-    requires distinct(xs) == true;
-    ensures distinct(remove(x, xs)) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 == x) {
-            } else {
-                distinct_remove(x, xs0);
-                mem_remove_diff(x0, x, xs0);
-            }
-    }
-}
-
-fixpoint int max(int x, list<int> xs) {
-    switch (xs) {
-        case nil: return x;
-        case cons(x0, xs0): return x < x0 ? max(x0, xs0) : max(x, xs0);
-    }
-}
-
-lemma void mem_max(int x, list<int> xs)
-    requires true;
-    ensures mem(max(x, xs), cons(x, xs)) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x < x0) {
-                mem_max(x0, xs0);
-            } else {
-                mem_max(x, xs0);
-            }
-    }
-}
-
 lemma void forall_between_remove_max(int n, int x, list<int> xs)
     requires forall(cons(x, xs), (between)(unit, 0, n)) == true &*& distinct(cons(x, xs)) == true;
     ensures 0 <= max(x, xs) &*& max(x, xs) <= n &*& forall(remove(max(x, xs), cons(x, xs)), (between)(unit, 0, max(x, xs) - 1)) == true;
@@ -271,18 +134,6 @@ lemma void forall_between_remove_max(int n, int x, list<int> xs)
             } else {
                 forall_between_remove_max(n, x, xs0);
             }
-    }
-}
-
-lemma void length_remove(int x, list<int> xs)
-    requires mem(x, xs) == true;
-    ensures length(remove(x, xs)) == length(xs) - 1;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x != x0)
-                length_remove(x, xs0);
     }
 }
 
@@ -321,19 +172,7 @@ lemma void forall_between_distinct(nat n, list<int> xs)
     }
 }
 
-lemma void mem_nth_index_of<t>(t x, list<t> xs)
-    requires mem(x, xs) == true;
-    ensures nth(index_of(x, xs), xs) == x;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 != x)
-                mem_nth_index_of(x, xs0);
-    }
-}
-
-lemma void lt_le_conflict(int x, int y)
+lemma void lt_le_conflict(int x, int y) // Needed for Redux, not for Z3
     requires x < y &*& y <= x;
     ensures false;
 {
@@ -369,7 +208,7 @@ lemma void forall_between_distinct_mem(nat n, list<int> xs, int i)
                         mem_max(x0, xs0);
                         length_remove(max(x0, xs0), xs);
                         forall_between_distinct_mem(n0, remove(max(x0, xs0), xs), i);
-                        mem_mem_remove(i, max(x0, xs0), xs);
+                        mem_remove_mem(i, max(x0, xs0), xs);
                     }
             }
     }
@@ -387,18 +226,6 @@ lemma void nth_with_index<t>(int n, int i, list<t> xs)
     }
 }
 
-lemma void mem_forall<t>(t x, list<t> xs, fixpoint(t, bool) p)
-    requires forall(xs, p) == true &*& mem(x, xs) == true;
-    ensures p(x) == true;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x0 != x)
-                mem_forall(x, xs0, p);
-    }
-}
-
 lemma void length_with_index<t>(int k, list<t> xs)
     requires true;
     ensures length(with_index(k, xs)) == length(xs);
@@ -407,20 +234,6 @@ lemma void length_with_index<t>(int k, list<t> xs)
         case nil:
         case cons(x0, xs0):
             length_with_index(k + 1, xs0);
-    }
-}
-
-lemma void nth_drop<t>(int n, int k, list<t> xs)
-    requires 0 <= n &*& 0 <= k &*& n + k < length(xs);
-    ensures nth(n, drop(k, xs)) == nth(n + k, xs);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (k != 0) {
-                drop_n_plus_one(k, xs);
-                nth_drop(n, k - 1, xs0);
-            }
     }
 }
 
@@ -445,7 +258,7 @@ lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
             nth_with_index(k, 0, as);
             length_with_index(0, as);
             mem_nth(k, with_index(0, as));
-            mem_forall(pair(k, i), with_index(0, as), (is_inverse)(bs));
+            forall_mem(pair(k, i), with_index(0, as), (is_inverse)(bs));
             if (mem(k, drop(i + 1, bs))) {
                 int kk = index_of(k, drop(i + 1, bs));
                 mem_nth_index_of(k, drop(i + 1, bs));
@@ -454,7 +267,7 @@ lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
                 length_with_index(i + 1, drop(i + 1, bs));
                 mem_nth(kk, with_index(i + 1, drop(i + 1, bs)));
                 nth_with_index(kk, i + 1, drop(i + 1, bs));
-                mem_forall(pair(kkk, k), with_index(i + 1, drop(i + 1, bs)), (is_inverse)(as));
+                forall_mem(pair(kkk, k), with_index(i + 1, drop(i + 1, bs)), (is_inverse)(as));
             }
     }
 }

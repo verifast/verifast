@@ -10,11 +10,14 @@ else
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
 endif
 
-test: mysh verifast vfide dlsymtool vfstrip list.vfmanifest raw_ghost_lists.vfmanifest
+test: mysh verifast vfide dlsymtool vfstrip list.vfmanifest raw_ghost_lists.vfmanifest listex.vfmanifest
 	export PATH=`pwd`:$PATH; cd ..; src/mysh < src/testsuite.mysh
 
 list.vfmanifest: list.c list.h
 	verifast -c -emit_vfmanifest list.c
+
+listex.vfmanifest: listex.c listex.h
+	verifast -c -emit_vfmanifest listex.c
 
 raw_ghost_lists.vfmanifest: raw_ghost_lists.c raw_ghost_lists.h
 	verifast -c -emit_vfmanifest raw_ghost_lists.c
@@ -171,7 +174,7 @@ else
 	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
 endif
 	cp vfstrip verifast-$(VFVERSION)/bin
-	cp assume.vfmanifest crt.vfmanifest list.vfmanifest raw_ghost_lists.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h nat.h ghost_cells.h raw_ghost_lists.h counting.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
+	cp assume.vfmanifest crt.vfmanifest list.vfmanifest listex.vfmanifest raw_ghost_lists.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h listex.h nat.h ghost_cells.h raw_ghost_lists.h counting.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
 	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)

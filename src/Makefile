@@ -2,7 +2,7 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe list.vfmanifest raw_ghost_lists.vfmanifest
+test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe list.vfmanifest raw_ghost_lists.vfmanifest listex.vfmanifest
 	time < nl.txt
 	cd ..
 	mysh -cpus %NUMBER_OF_PROCESSORS% < src\testsuite.mysh
@@ -14,6 +14,9 @@ list.vfmanifest: list.h list.c
 
 raw_ghost_lists.vfmanifest: raw_ghost_lists.h raw_ghost_lists.c
 	verifast -c -emit_vfmanifest raw_ghost_lists.c
+
+listex.vfmanifest: listex.h listex.c
+	verifast -c -emit_vfmanifest listex.c
 
 clean:
 	del *.cm* *.obj *.exe
@@ -197,6 +200,7 @@ release: test refman
 	copy ..\..\crt.vfmanifest
 	copy ..\..\list.vfmanifest
 	copy ..\..\raw_ghost_lists.vfmanifest
+	copy ..\..\listex.vfmanifest
 	copy $(GTKLIB)\..\bin\iconv.dll
 	copy $(GTKLIB)\..\bin\intl.dll
 	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
@@ -225,6 +229,7 @@ release: test refman
 	copy ..\..\list.h
 	copy ..\..\nat.h
 	copy ..\..\raw_ghost_lists.h
+	copy ..\..\listex.h
 	copy ..\..\counting.h
 	copy ..\..\threading.h
 	copy ..\..\threading.vfmanifest

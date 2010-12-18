@@ -3,6 +3,7 @@ ifnotmac verifast
 verifast -prover redux
 in
 cd examples
+verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
 verifast_both -c -disable_overflow_check alt_threading.c
 verifast_both -c args.c
 verifast_both -disable_overflow_check array_of_struct.c
@@ -42,15 +43,14 @@ verifast_both -disable_overflow_check globals.c
 verifast_both -shared goto.c
 verifast_both -disable_overflow_check -c gui-app.c
 verifast_both -c ifs.c
-verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
 cd incr_box
 verifast_both -c incr_box.c
 cd ..
-verifast_both -shared -disable_overflow_check inverse.c
+verifast_both -shared -disable_overflow_check listex.o inverse.c
 verifast_both iter.c
 verifast_both iter_with_auto.c
 cd lcset
-verifast_both atomics.o threading.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
+verifast_both listex.o atomics.o threading.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
 cd ..
 verifast_both -c lemmafuncptr.c
 verifast_both -c limits.c

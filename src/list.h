@@ -3,6 +3,19 @@
 
 #include "prelude_core.h"
 
+/*
+
+Contents:
+- inductive list
+- fixpoints head, tail, length, append, reverse, mem, nth, distinct, take, drop, remove, index_of
+- predicate foreach
+- fixpoints map, forall, exists
+and various lemmas.
+
+See listex.h for additional lemmas about these definitions, and for additional definitions.
+
+*/
+
 /*@
 
 inductive list<t> = nil | cons(t, list<t>);
@@ -50,7 +63,6 @@ lemma void append_assoc<t>(list<t> xs, list<t> ys, list<t> zs);
 lemma_auto(length(append<t>(xs, ys))) void length_append<t>(list<t> xs, list<t> ys);
   requires true;
   ensures length(append(xs, ys)) == length(xs) + length(ys);
-
 
 fixpoint list<t> reverse<t>(list<t> xs) {
     switch (xs) {
