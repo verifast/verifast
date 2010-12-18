@@ -196,6 +196,20 @@ fixpoint list<b> map<a, b>(fixpoint(a, b) f, list<a> xs) {
     }
 }
 
+fixpoint bool forall<t>(list<t> xs, fixpoint(t, bool) fp) {
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return forall(xs0, fp) && fp(x);
+    }
+}
+
+fixpoint bool exists<t>(list<t> xs, fixpoint(t, bool) fp) {
+    switch (xs) {
+        case nil: return false;
+        case cons(x, xs0): return exists(xs0, fp) || fp(x);
+    }
+}
+
 @*/
 
 #endif

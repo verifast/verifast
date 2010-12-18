@@ -20,13 +20,6 @@ lemma_auto void ints_inv()
     close ints(array, n, elems);
 }
 
-fixpoint bool forall<t>(list<t> xs, fixpoint(t, bool) p) {
-    switch (xs) {
-        case nil: return true;
-        case cons(x, xs0): return p(x) && forall(xs0, p);
-    }
-}
-
 lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p)
     requires true;
     ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));

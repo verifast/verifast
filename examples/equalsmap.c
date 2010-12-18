@@ -53,13 +53,6 @@ typedef bool equalsFuncType/*@ (list<void *> keys, void *key00, list<void *> eqK
 
 /*@
 
-fixpoint bool exists<t>(fixpoint (t, bool) p, list<t> xs) {
-    switch (xs) {
-        case nil: return false;
-        case cons(x, xs0): return p(x) || exists(p, xs0);
-    }
-}
-
 fixpoint bool eq<t>(unit u, t x, t y) {
     switch (u) {
         case unit: return x == y;
@@ -125,7 +118,7 @@ lemma_auto void is_suffix_of_refl<t>(list<t> xs)
 
 bool map_contains_key(struct node *map, void *key, equalsFuncType *equalsFunc)
     //@ requires [_]is_equalsFuncType(equalsFunc, ?keys, key, ?eqKeys, ?p) &*& p() &*& map(map, ?entries) &*& is_suffix_of(map((fst), entries), keys) == true;
-    //@ ensures p() &*& map(map, entries) &*& result == exists((contains)(eqKeys), map((fst), entries));
+    //@ ensures p() &*& map(map, entries) &*& result == exists(map((fst), entries), (contains)(eqKeys));
 {
     //@ open map(map, _);
     if (map == 0)

@@ -124,13 +124,6 @@ lemma void mem_sorted_remove_sorted(int x00, int x0, int x1, list<int> xs)
     }
 }
 
-fixpoint bool forall<t>(list<t> xs, fixpoint(t, bool) p) {
-    switch (xs) {
-        case nil: return true;
-        case cons(h, t): return p(h) && forall(t, p);
-    }
-}
-
 lemma void forall_ge_add_sorted(list<int> xs, int u1, int u2)
     requires forall(xs, (ge)(unit, u1)) == true &*& u1 <= u2;
     ensures forall(add_sorted(u2, xs), (ge)(unit, u2)) == true;
