@@ -27,6 +27,8 @@ Only verify
 -----------
 Just type "make verify_only".
 
+Alternatively you can use helloproc.mysh, read that file for more information.
+
 
 Files
 =====
@@ -35,4 +37,7 @@ Files
 
 -   Makefile
     The configuration for building and verifying helloproc.
+
+-   helloproc.mysh
+    Alternative verification launcher.
 

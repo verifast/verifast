@@ -12,9 +12,15 @@
 # might help.
 
 
-VERIFAST := verifast
-LNXMOD_PROXY_AUTOGEN := lnxmod_proxy_autogen
-LNXMOD_PROXY_AUTOGEN_SOURCE := $(LNXMOD_PROXY_AUTOGEN).ml
+#---------------------------- Tool locations ---------------------------#
+
+# Use "?=" instead of ":=" such that environment variables are not
+# overwritten such that the user can specify the filename and/or path if
+# he/she wishes to do so.
+VERIFAST ?= verifast
+LNXMOD_PROXY_AUTOGEN ?= lnxmod_proxy_autogen
+LNXMOD_PROXY_AUTOGEN_SOURCE := lnxmod_proxy_autogen.ml
+
 
 #---------------------------- Check user config ------------------------#
 

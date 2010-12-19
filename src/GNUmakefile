@@ -10,8 +10,15 @@ else
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
 endif
 
+ifdef MAC
+  numcpu := $(shell sysctl -n hw.ncpu)
+else
+  # Also works under cygwin (tested).
+  numcpu := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
+endif
+
 test: mysh verifast vfide dlsymtool vfstrip list.vfmanifest raw_ghost_lists.vfmanifest listex.vfmanifest
-	export PATH=`pwd`:$PATH; cd ..; src/mysh < src/testsuite.mysh
+	export PATH=`pwd`:$$PATH; cd ..; src/mysh -cpus $(numcpu) < src/testsuite.mysh
 
 list.vfmanifest: list.c list.h
 	verifast -c -emit_vfmanifest list.c

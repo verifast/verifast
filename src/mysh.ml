@@ -64,6 +64,11 @@ let rec exec_lines filepath file lineno =
         ["cd"; dir] -> Sys.chdir dir
       | ["del"; file] -> while !processes > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
+      (* Lines starting with "# " are comments, ignore them.
+       * Don't pass comments to the shell because it is not portable.
+       * (Unix uses "#", Windows uses "rem")
+       *)
+      | ["#"; line] -> () 
       | ["let"; macroName] ->
         let lines =
           let rec read_macro_lines () =

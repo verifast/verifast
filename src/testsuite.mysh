@@ -79,6 +79,11 @@ verifast_both -c switch.c
 verifast_both -c -disable_overflow_check tuerk.c
 verifast_both -c -disable_overflow_check tuerk_explicit.c
 verifast_both -disable_overflow_check wc.c
+cd helloproc
+# Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
+# the default number of cpus forever, so we explicitly specify it to be 1.  
+mysh -cpus 1 < helloproc.mysh
+cd ..
 cd java
 cd chat
 verifast_both -c -allow_assume chat.jarsrc
