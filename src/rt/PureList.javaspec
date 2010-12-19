@@ -123,7 +123,7 @@ lemma_auto(length(take(n, xs))) void length_take_n<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures length(take(n, xs)) == n;
 
-lemma void nth_take<t>(int i, int n, list<t> xs);
+lemma_auto(nth(i, take(n, xs))) void nth_take<t>(int i, int n, list<t> xs);
     requires 0 <= i && i < n && n <= length(xs);
     ensures nth(i, take(n, xs)) == nth(i, xs);
 
