@@ -69,6 +69,7 @@ let rec exec_lines filepath file lineno =
        * (Unix uses "#", Windows uses "rem")
        *)
       | ["#"; line] -> () 
+      | ["#"] -> () (* Also when "#" is the only contents of the line. *)
       | ["let"; macroName] ->
         let lines =
           let rec read_macro_lines () =
