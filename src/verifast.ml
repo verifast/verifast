@@ -200,8 +200,11 @@ class stats =
       print_endline ("Syntactic annotation overhead statistics:");
       List.iter
         begin fun o ->
-          Printf.printf "  %20s: lines: code: %4d; annot: %4d; mixed: %4d\n"
-            o#path o#nonghost_lines o#ghost_lines o#mixed_lines
+          let total = o#nonghost_lines + o#ghost_lines + o#mixed_lines in            
+          let code_percentage = (float_of_int o#nonghost_lines /. float_of_int total) *. 100.0
+          and annot_percentage = (float_of_int (o#ghost_lines + o#mixed_lines) /. float_of_int total) *. 100.0 in
+          Printf.printf "  %40s: lines: code: %4d; annot: %4d; mixed: %4d; %%code: %2.1f; %%annot: %2.1f\n"
+            o#path o#nonghost_lines o#ghost_lines o#mixed_lines code_percentage annot_percentage
         end
         overhead;
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
