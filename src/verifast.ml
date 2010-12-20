@@ -4568,9 +4568,9 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let check_classname (pn, ilist) (l, c) =
-    match search2' c (pn, ilist) classmap1 classmap0 with 
+    match resolve (pn, ilist) l c classmap1 with 
       None -> static_error l "No such class name." None
-    | Some s -> s
+    | Some (s, _) -> s
   in
   
   let check_classnamelist (pn,ilist) is =
