@@ -958,11 +958,16 @@ let show_ide initialPath prover codeFont traceFont =
           begin
             let breakpoint =
               if runToCursor then
-              begin
-                let buffer = tab_buffer tab in
-                let insert_iter = buffer#get_iter_at_mark `INSERT in
-                let insert_line = insert_iter#line in
-                Some (path, insert_line + 1)
+              begin match !current_tab with
+                None -> None
+              | Some tab ->
+                match !(tab_path tab) with
+                  None -> None
+                | Some (path, mtime) ->
+                  let buffer = tab_buffer tab in
+                  let insert_iter = buffer#get_iter_at_mark `INSERT in
+                  let insert_line = insert_iter#line in
+                  Some (path, insert_line + 1)
               end
               else
                 None
