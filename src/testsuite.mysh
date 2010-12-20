@@ -101,7 +101,7 @@ cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check ArraysAuto.java
 verifast_both -c -disable_overflow_check ArraysManual.java
-verifast_both -c -disable_overflow_check Comprehensions.java
+ifnotmac verifast -c -disable_overflow_check Comprehensions.java
 verifast_both -c -disable_overflow_check InstanceOf.java
 verifast_both -c Constants.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
