@@ -4,7 +4,7 @@ fixpoint boolean consistent(list<int> vs, nat i, int pos) {
     case zero: return true;
     case succ(j): return nth(int_of_nat(j), vs) != nth(pos, vs) &&
                   pos - int_of_nat(j) != ((int)nth(pos, vs)) - ((int) nth(int_of_nat(j), vs)) &&
-                  int_of_nat(j) - pos  != ((int) nth(int_of_nat(j), vs)) - nth(pos, vs) &&
+                  pos - int_of_nat(j) != ((int) nth(int_of_nat(j), vs)) - nth(pos, vs) &&
                   consistent(vs, j, pos);
   }
 }
@@ -42,7 +42,6 @@ lemma void nth_append<t>(list<t> vs1, list<t> vs2, int n)
       }
   }  
 }
-  
 
 lemma void append_consistent(list<int> vs, nat n, int pos, list<int> vs2)
   requires int_of_nat(n) < length(vs) && 0<= pos &*& pos < length(vs);
@@ -56,7 +55,6 @@ lemma void append_consistent(list<int> vs, nat n, int pos, list<int> vs2)
       append_consistent(vs, n0, pos, vs2);
   }
 }
-  
 
 lemma void append_allconsistent(list<int> vs, nat n, list<int> vs2)
   requires allconsistent(vs, n) == true &*& int_of_nat(n) <= length(vs);
@@ -112,14 +110,6 @@ lemma void take_append<t>(list<t> vs1, list<t> vs2, int n)
       }
   }
 }
-
-lemma void not_consistent_successor(list<int> vs, nat n, int pos) 
-  requires !consistent(vs, n, pos) &*& int_of_nat(n) < pos;
-  ensures ! consistent(vs, succ(n), pos);
-{
-}
-
-
 
 lemma void not_consistent_monotonic(list<int> vs, int pos, nat m)
   requires ! consistent(vs, nat_of_int(pos - int_of_nat(m)), pos) &*& 0 <= int_of_nat(m) &*& int_of_nat(m) <= pos;
@@ -195,16 +185,6 @@ predicate inconsistent(list<int> vs, nat i, int pos) =
     return pos < length(vs) &*& inconsistent(vs, i0, pos) &*& 
     (consistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos) == true ? 
       inconsistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1) : true); }) ;
-
-/*fixpoint boolean inconsistent(list<int> vs, nat i, int pos) {
-  switch(i) {
-    case zero: 
-      return true;
-    case succ(i0):
-      return (! consistent(update(unit, vs, int_of_nat(i0), pos), i0, pos) || inconsistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1)) &&
-      inconsistent(vs, i0, pos);
-  }
-}*/
 
 lemma void duplicate_inconsistent(list<int> vs, nat i, int pos) 
   requires inconsistent(vs, i, pos);
@@ -288,6 +268,37 @@ lemma void inconsistent_take(list<int> vs, nat i, int pos, list<int> vs2)
   inconsistent_take_core(vs, i, pos, vs2);
 }
 
+fixpoint boolean inrange(list<int> vs, int max) {
+  switch(vs) {
+    case nil: return true;
+    case cons(h, t): return 0 <= h && h < max && inrange(t, max);
+  }
+}
+
+lemma void inrange_update(list<int> vs, int max, int v, int pos)
+  requires 0 <= pos && pos < length(vs) && 0 <= v && v < max && inrange(vs, max);
+  ensures inrange(update(unit, vs, v, pos), max) == true; 
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(pos == 0) {
+      } else {
+        inrange_update(t, max, v, pos - 1);
+      }
+  }
+}
+
+lemma void inrange_all_eq(list<int> vs, int max, int i)
+  requires 0 < max && 0 <= i && i < max && all_eq(vs, i);
+  ensures inrange(vs, max) == true; 
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      inrange_all_eq(t, max, i);
+  }
+}
 @*/
 
 class NQueens {
@@ -301,7 +312,7 @@ class NQueens {
     {
       int bi = board[i];
       //@ succ_int(i);
-      if(bi == bp || pos - i == bp - bi || i - pos == bi - bp) {
+      if(bi == bp || pos - i == bp - bi || pos - i == bi - bp) {
         //@ not_consistent_monotonic(vs, pos, nat_of_int(pos - i - 1));
         return false;
       }
@@ -310,8 +321,8 @@ class NQueens {
   }
   
   static int[] search(int[] board, int pos)
-    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& 0 <= pos && pos <= board.length &*& allconsistent(vs, nat_of_int(pos)) == true;
-    /*@ ensures array_slice(board, 0, board.length, ?vs2) &*& result == null  ? 
+    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true &*& 0 <= pos && pos <= board.length &*& allconsistent(vs, nat_of_int(pos)) == true;
+    /*@ ensures array_slice(board, 0, board.length, ?vs2) &*& inrange(vs2, board.length) == true &*& result == null  ? 
                   take(pos, vs) == take(pos, vs2) &*&
                   allconsistent(vs2, nat_of_int(pos)) == true &*&
                   inconsistent(vs2, nat_of_int(board.length), pos): 
@@ -322,7 +333,7 @@ class NQueens {
     } else {
       //@ close inconsistent(vs, zero, pos);
       for(int i = 0; i < board.length; i++) 
-        //@ invariant 0 <= i &*& i <= board.length &*& array_slice(board, 0, board.length, ?vs2) &*& take(pos, vs) == take(pos, vs2) &*& allconsistent(vs2, nat_of_int(pos)) == true &*& inconsistent(vs2, nat_of_int(i), pos);
+        //@ invariant 0 <= i &*& i <= board.length &*& array_slice(board, 0, board.length, ?vs2) &*& inrange(vs2, board.length) == true &*& take(pos, vs) == take(pos, vs2) &*& allconsistent(vs2, nat_of_int(pos)) == true &*& inconsistent(vs2, nat_of_int(i), pos);
       {
         board[pos] = i;
         //@ assert array_slice(board, 0, board.length, ?vs3);
@@ -330,6 +341,7 @@ class NQueens {
         //@ take_allconsistent(vs2, nat_of_int(pos));
         //@ append_allconsistent(take(pos, vs2), nat_of_int(pos), append(cons(i, nil), take(length(vs2) - pos - 1, tail(drop(pos, vs2)))));
         //@ inconsistent_take(vs2, nat_of_int(i), pos, vs3);
+        //@ inrange_update(vs2, board.length, i, pos);
         if(isConsistent(board, pos)) {
           //@ succ_int(pos);
           int[] s = search(board, pos + 1);
@@ -354,9 +366,35 @@ class NQueens {
   }
   
   static int[] startsearch(int[] board) 
-    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs);
-    //@ ensures array_slice(board, 0, board.length, ?vs2) &*& result == null ? inconsistent(vs2, nat_of_int(board.length), 0) : result == board &*& allconsistent(vs2, nat_of_int(length(vs2))) == true;
+    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true;
+    //@ ensures array_slice(board, 0, board.length, ?vs2) &*& inrange(vs2, board.length) == true &*& result == null ? inconsistent(vs2, nat_of_int(board.length), 0) : result == board &*& allconsistent(vs2, nat_of_int(length(vs2))) == true;
   {
     return search(board, 0);
+  }
+  
+  public static void main(String[] args) 
+    //@ requires true;
+    //@ ensures true;
+  {
+    int[] board = new int[2];
+    //@ int length = board.length;
+    //@ assert array_slice(board, 0, board.length, ?vs);
+    //@ inrange_all_eq(vs, 2, 0);
+    int[] res = startsearch(board);
+      //@ assert array_slice(board, 0, length, ?vs2);
+    if(res == null) {
+      // we can prove from startsearch's postcondition that any board of size 2 is inconsistent
+      int[] myboard = new int[2];
+      myboard[0] = 0;
+      myboard[1] = 1;
+      //@ assert array_slice(board, 0, board.length, ?myvs);
+      //@ inconsistent_take(vs2, nat_of_int(board.length), 0, myvs);
+      //@ assert inconsistent(myvs, nat_of_int(myboard.length), 0);
+    } else {
+      //@ switch(vs2) { case nil: assert false; case cons(h, t): switch(t) { case nil: assert false; case cons(h0, t0):  }}
+      //@ succ_int(1);
+      //@ succ_int(0);
+      assert false; // not reachable
+    }
   }
 }
