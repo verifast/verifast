@@ -115,6 +115,7 @@ verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c -disable_overflow_check Recell.java
 verifast_both -c -disable_overflow_check AmortizedQueue.java
 verifast -c -disable_overflow_check NQueens.java
+verifast_both -c -disable_overflow_check SuperCalls.java
 verifast_both -c Spouse.java
 verifast_both -c Spouse2.java
 verifast_both -c SpouseFinal.java

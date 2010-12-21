@@ -971,6 +971,8 @@ and
   | AssignExpr of loc * expr * expr
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
   | InstanceOfExpr of loc * expr * type_expr
+  | SuperMethodCall of loc * string * expr list
+  | WSuperMethodCall of loc * string * expr list * (loc * (type_ option) * (string * type_) list * pred * pred * visibility)
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -1443,6 +1445,8 @@ let rec expr_loc e =
   | AssignOpExpr (l, lhs, op, rhs, postOp) -> l
   | ProverTypeConversion (t1, t2, e) -> expr_loc e
   | InstanceOfExpr(l, e, tp) -> l
+  | SuperMethodCall(l, _, _) -> l
+  | WSuperMethodCall(l, _, _, _) -> l
 
 let pred_loc p =
   match p with
@@ -1553,6 +1557,8 @@ let expr_fold_open iter state e =
   | AssignExpr (l, lhs, rhs) -> iter (iter state lhs) rhs
   | AssignOpExpr (l, lhs, op, rhs, post) -> iter (iter state lhs) rhs
   | InstanceOfExpr(l, e, tp) -> iter state e
+  | SuperMethodCall(_, _, args) -> iters state args
+  | WSuperMethodCall(_, _, args, _) -> iters state args
 
 (* Postfix fold *)
 let expr_fold f state e = let rec iter state e = f (expr_fold_open iter state e) e in iter state e
@@ -2204,7 +2210,10 @@ and
      end;
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< '(l, Kwd ";") >] -> NoopStmt l
-| [< '(l, Kwd "super"); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] -> SuperConstructorCall (l, es)
+| [< '(l, Kwd "super"); s = parser 
+     [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))
+   | [<'(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] -> SuperConstructorCall (l, es)
+  >] -> s
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
@@ -2418,6 +2427,7 @@ and
      '(_, Kwd "}")
   >] -> SwitchExpr (l, e, cs, cdef_opt, ref None)
 | [< '(l, Kwd "sizeof"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")") >] -> SizeofExpr (l, t)
+| [< '(l, Kwd "super"); '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> SuperMethodCall (l, n, es)
 | [< '(l, Kwd "!"); e = parse_expr_suffix >] -> Operation(l, Not, [e], ref None)
 | [< '(l, Kwd "@"); '(_, Ident g) >] -> PredNameExpr (l, g)
 | [< '(l, Kwd "*"); e = parse_expr_suffix >] -> Deref (l, e, ref None)
@@ -5104,6 +5114,33 @@ let verify_program_core (* ?verify_program_core *)
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
       (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt)
+    | SuperMethodCall(l, mn, args) ->
+      let rec get_implemented_instance_method cn mn argtps =
+        if cn = "java.lang.Object" then None else
+        match try_assoc cn classmap with 
+        | Some (l, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+            if (List.exists (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) -> mn = mn' &&  is_assignable_to_sign argtps sign) meths) then
+              Some((List.find (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) -> mn = mn' &&  is_assignable_to_sign argtps sign) meths))
+            else
+              get_implemented_instance_method super mn argtps
+        | None -> None
+      in
+      let argtps = List.map (fun e -> snd (check e)) args in
+      let wargs = List.map (fun e -> fst (check e)) args in
+      let thistype = try_assoc "this" tenv in
+      begin match thistype with
+        None -> static_error l "super calls not allowed in static context." None
+      | Some(ObjType(cn)) -> 
+        begin match try_assoc cn classmap with
+          None -> static_error l "No matching method." None
+        | Some (l, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+            begin match get_implemented_instance_method super mn argtps with
+              None -> static_error l "No matching method." None
+            | Some(((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override))) -> 
+             (WSuperMethodCall(l, mn,(Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, rt, xmap, pre, post, v)), match rt with Some(tp) -> tp | _ -> Void)
+            end
+        end
+      end 
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
@@ -7677,6 +7714,8 @@ let verify_program_core (* ?verify_program_core *)
     | AssignOpExpr (l, Var (_, x, _), op, e, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
+    | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args
+    | WSuperMethodCall(_, _, args, _) -> flatmap expr_assigned_variables args
     | _ -> []
   and assigned_variables s =
     match s with
@@ -8852,6 +8891,9 @@ let verify_program_core (* ?verify_program_core *)
       in
       if pure then static_error l "Method call is not allowed in a pure context" None;
       check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, v) cont
+    | WSuperMethodCall(l, m, args, (lm, rt, xmap, pre, post, v)) ->
+      if pure then static_error l "Method call is not allowed in a pure context" None;
+      check_correct None None [] args (lm, [], rt, xmap, ["this", List.assoc "this" env], pre, post, Static) cont
     | WFunCall (l, g, targs, es) ->
       let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
