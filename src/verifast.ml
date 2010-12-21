@@ -1133,6 +1133,7 @@ and
       loc *
       stmt list
   | Break of loc
+  | SuperConstructorCall of loc * expr list
 and
   loop_spec = (* ?loop_spec *)
   | LoopInv of pred
@@ -1489,6 +1490,7 @@ let stmt_loc s =
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _, _) -> l
   | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
+  | SuperConstructorCall(l, _) -> l
 
 let type_expr_loc t =
   match t with
@@ -1587,7 +1589,7 @@ let c_keywords = [
 
 let java_keywords = [
   "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
-  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"; "instanceof"
+  "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"; "instanceof"; "super"
 ]
 
 exception StaticError of loc * string * string option
@@ -2202,6 +2204,7 @@ and
      end;
      PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< '(l, Kwd ";") >] -> NoopStmt l
+| [< '(l, Kwd "super"); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] -> SuperConstructorCall (l, es)
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
@@ -7713,6 +7716,7 @@ let verify_program_core (* ?verify_program_core *)
     | LabelStmt _ -> []
     | InvariantStmt _ -> []
     | Break _ -> []
+    | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es
   in
 
   let dummypat = SrcPat DummyPat in
@@ -10483,6 +10487,7 @@ let verify_program_core (* ?verify_program_core *)
         None -> static_error l "Unexpected break statement" None
       | Some cont -> cont blocks_done sizemap tenv ghostenv h env
       end
+    | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
   and
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
     match ss with
@@ -10869,6 +10874,7 @@ let verify_program_core (* ?verify_program_core *)
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
+        let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
         let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
         begin
           assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
@@ -10890,13 +10896,19 @@ let verify_program_core (* ?verify_program_core *)
               if cn = "java.lang.Object" then
                 cont h
               else
-                match try_assoc [] superctors with
+                let (argtypes, args) = match explicitsupercall with
+                  None -> ([], [])
+                | Some(SuperConstructorCall(l, es)) -> 
+                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv e in tp) es), es)
+                in
+                match try_assoc argtypes superctors with
                   None ->
-                  static_error lm "There is no superclass constructor that matches the implicit superclass constructor call" None
+                  static_error lm "There is no superclass constructor that matches the superclass constructor call" None
                 | Some (lc0, xmap0, pre0, pre_tenv0, post0, _, v0) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
-                  let eval_h h env e cont = assert false (* There are no arguments to evaluate so this does not get called *) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] [] ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h _ ->
+                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont in
+                  let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h _ ->
                   cont h
             end $. fun h ->
             verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss

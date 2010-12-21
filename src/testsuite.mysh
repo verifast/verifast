@@ -122,6 +122,7 @@ verifast_both -c Stack.java
 verifast_both -c -disable_overflow_check StaticFields.java
 verifast_both -c ThreadRun.java
 verifast_both -c Tree.java
+verifast_both -c SuperConstructorCall.java
 cd ..
 cd ..
 cd tutorial_solutions
