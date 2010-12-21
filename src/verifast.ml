@@ -4581,18 +4581,26 @@ let verify_program_core (* ?verify_program_core *)
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name." None; i) is 
   in
   
-  let lookup_class_field cn fn =
-    let fds =
-      match try_assoc cn classmap1 with
-        Some (_,_,_, Some fds,_,_,_,_,_,_) -> fds
-      | None ->
-        match try_assoc cn classmap0 with
-          None -> []
-        | Some (_,_,_, Some fds,_,_,_,_,_,_) -> fds
-    in
-    try_assoc fn fds
+  let rec lookup_class_field cn fn =
+    match try_assoc cn (classmap1) with
+      Some (_,_,_, Some fds,_, super ,_,_,_,_) ->
+      begin match try_assoc fn fds with
+        None when cn = "java.lang.Object" -> None
+      | None -> lookup_class_field super fn
+      | Some(f) -> Some((f, cn))
+      end
+    | None -> 
+    begin match try_assoc cn (classmap0) with
+      Some (_,_,_, Some fds,_, super ,_,_,_,_) ->
+      begin match try_assoc fn fds with
+        None when cn = "java.lang.Object" -> None
+      | None -> lookup_class_field super fn
+      | Some(f) -> Some((f, cn))
+      end
+    | None -> None
+    end
   in
-  
+
   let is_package x =
     let x = x ^ "." in
     let has_package map = List.exists (fun (cn, _) -> startswith cn x) map in
@@ -4692,8 +4700,8 @@ let verify_program_core (* ?verify_program_core *)
         | Some ObjType cn ->
           match lookup_class_field cn x with
             None -> None
-          | Some (lf, t, vis, binding, final, init, value) ->
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), cn, x, t, binding = Static, value, Real), t)
+          | Some ((lf, t, vis, binding, final, init, value), fclass) ->
+            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, t, binding = Static, value, Real), t)
       in
       match field_of_this with
         Some result -> result
@@ -4704,8 +4712,8 @@ let verify_program_core (* ?verify_program_core *)
         | Some (ClassOrInterfaceName cn) ->
           match lookup_class_field cn x with
             None -> None
-          | Some (lf, t, vis, binding, final, init, value) when binding = Static ->
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), cn, x, t, true, value, Real), t)
+          | Some ((lf, t, vis, binding, final, init, value), fclass) when binding = Static ->
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t)
       in
       match field_of_class with
         Some result -> result
@@ -5153,18 +5161,18 @@ let verify_program_core (* ?verify_program_core *)
       begin
       match lookup_class_field cn f with
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
-      | Some (_, t, vis, binding, final, init, value) ->
+      | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Static then static_error l "Accessing a static field via an instance is not supported." None;
-        (WRead (l, w, cn, f, t, false, ref (Some None), Real), t)
+        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t)
       end
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), IntType)
     | ClassOrInterfaceName cn ->
       begin match lookup_class_field cn f with
         None -> static_error l "No such field" None
-      | Some (_, t, vis, binding, final, init, value) ->
+      | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
-        (WRead (l, w, cn, f, t, true, value, Real), t)
+        (WRead (l, w, fclass, f, t, true, value, Real), t)
       end
         
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
