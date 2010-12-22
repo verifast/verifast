@@ -5137,7 +5137,7 @@ let verify_program_core (* ?verify_program_core *)
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override))) -> 
-             (WSuperMethodCall(l, mn,(Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, rt, xmap, pre, post, v)), match rt with Some(tp) -> tp | _ -> Void)
+             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, rt, xmap, pre, post, v)), match rt with Some(tp) -> tp | _ -> Void)
             end
         end
       end 
@@ -8893,7 +8893,7 @@ let verify_program_core (* ?verify_program_core *)
       check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, v) cont
     | WSuperMethodCall(l, m, args, (lm, rt, xmap, pre, post, v)) ->
       if pure then static_error l "Method call is not allowed in a pure context" None;
-      check_correct None None [] args (lm, [], rt, xmap, ["this", List.assoc "this" env], pre, post, Static) cont
+      check_correct None None [] args (lm, [], rt, xmap, [], pre, post, v) cont
     | WFunCall (l, g, targs, es) ->
       let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
