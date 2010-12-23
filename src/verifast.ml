@@ -1226,7 +1226,8 @@ and
       (pred * pred) option * 
       (stmt list * loc (* Close brace *)) option * 
       method_binding * 
-      visibility
+      visibility *
+      bool (* is declared abstract? *)
 and
   meth_spec = (* ?meth_spec *)
   | MethSpec of
@@ -1661,7 +1662,7 @@ module Scala = struct
     parse_method = parser
       [< '(l, Kwd "def"); '(_, Ident mn); ps = parse_paramlist; t = parse_type_ann; co = parse_contract; '(_, Kwd "=");'(_, Kwd "{"); ss = rep parse_stmt; '(closeBraceLoc, Kwd "}")>] ->
       let rt = match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t in
-      Meth (l, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public)
+      Meth (l, rt, mn, ps, Some co,Some (ss, closeBraceLoc), Static, Public, false)
   and
     parse_paramlist = parser
       [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
@@ -1728,7 +1729,7 @@ end
    And Kwd "class" does not match Ident "class".
    *)
 
-type modifier = StaticModifier | FinalModifier
+type modifier = StaticModifier | FinalModifier | AbstractModifier
 
 let parse_decls =
 let rec
@@ -1759,7 +1760,7 @@ and
 and
   methods cn m=
   match m with
-    MethMember (Meth (l, t, n, ps, co, ss,s,v))::ms -> Meth (l, t, n, ps, co, ss,s,v)::(methods cn ms)
+    MethMember (Meth (l, t, n, ps, co, ss,s,v,abstract))::ms -> Meth (l, t, n, ps, co, ss,s,v,abstract)::(methods cn ms)
     |_::ms -> methods cn ms
     | []->[]
 and
@@ -1827,19 +1828,20 @@ and
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
 and
-  parse_java_modifier = parser [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier
+  parse_java_modifier = parser [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
 and
   parse_java_member vis cn = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
+     abstract = (fun _ -> List.mem AbstractModifier modifiers);
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, cn), "this")::ps else ps in
-            MethMember (Meth (l, t, x, ps, co, ss, binding, vis))
+            MethMember (Meth (l, t, x, ps, co, ss, binding, vis, abstract))
           | [< t = parse_array_dims (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some t -> t);
                init = begin parser
                  [< '(_, Kwd "="); e = parser
@@ -3231,7 +3233,7 @@ let verify_program_core (* ?verify_program_core *)
       let meths' = meths |> List.filter begin
         fun x ->
           match x with
-            | Meth(lm, t, n, ps, co, ss,fb,v) ->
+            | Meth(lm, t, n, ps, co, ss,fb,v,abstract) ->
               match ss with
                 | None -> true
                 | Some _ -> false
@@ -4647,8 +4649,8 @@ let verify_program_core (* ?verify_program_core *)
         in
         let declared_methods =
           flatmap
-            begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) ->
-              if mn' = mn then [(sign, (tn, lm, rt, xmap, pre_dyn, post_dyn, fb, v))] else []
+            begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) ->
+              if mn' = mn then [(sign, (tn, lm, rt, xmap, pre_dyn, post_dyn, fb, v, abstract))] else []
             end
             meths
         in
@@ -4656,8 +4658,8 @@ let verify_program_core (* ?verify_program_core *)
       | None ->
       let (_, meths, _, _, _) = List.assoc tn interfmap in
       flatmap
-        begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, v)) ->
-          if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, Instance, v))] else []
+        begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, v, abstract)) ->
+          if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, Instance, v, abstract))] else []
         end
         meths
     in
@@ -4985,7 +4987,7 @@ let verify_program_core (* ?verify_program_core *)
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
         begin match ms with
           [] -> static_error l "No matching method" None
-        | [(sign, (tn', lm, rt, xmap, pre, post, fb', v))] ->
+        | [(sign, (tn', lm, rt, xmap, pre, post, fb', v, abstract))] ->
           let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
           if fb <> fb' then static_error l "Instance method requires target object" None;
           let rt = match rt with None -> Void | Some rt -> rt in
@@ -5124,8 +5126,8 @@ let verify_program_core (* ?verify_program_core *)
         if cn = "java.lang.Object" then None else
         match try_assoc cn classmap with 
         | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
-            if (List.exists (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) -> mn = mn' &&  is_assignable_to_sign argtps sign) meths) then
-              Some((List.find (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) -> mn = mn' &&  is_assignable_to_sign argtps sign) meths))
+            if (List.exists (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths) then
+              Some((List.find (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths))
             else
               get_implemented_instance_method super mn argtps
         | None -> None
@@ -5141,7 +5143,7 @@ let verify_program_core (* ?verify_program_core *)
         | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
-            | Some(((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override))) -> 
+            | Some(((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract))) -> 
              (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, rt, xmap, pre, post, v)), match rt with Some(tp) -> tp | _ -> Void)
             end
         end
@@ -8034,7 +8036,7 @@ let verify_program_core (* ?verify_program_core *)
                 let (post, _) = check_pred (pn,ilist) [] postmap post in
                 (pre, tenv, post)
             in
-            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, v))::mmap) meths
+            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, v, true))::mmap) meths
         in
         iter [] specs
       end
@@ -8053,10 +8055,10 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (sign, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,v0)) as elem::rest ->
+              | (sign, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,v0,abstract0)) as elem::rest ->
                 match try_assoc sign meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,v1) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,v1,abstract1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], [], pre0, post0);
                   iter rest meths1
             in
@@ -8124,7 +8126,7 @@ let verify_program_core (* ?verify_program_core *)
         in
         let specs =
           match try_assoc sign mmap with
-          | Some (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, Instance, v, _) -> [(cn, (lm, rt, xmap, pre_dyn, pre_tenv, post_dyn, v))]
+          | Some (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, Instance, v, _, abstract) -> [(cn, (lm, rt, xmap, pre_dyn, pre_tenv, post_dyn, v, abstract))]
           | _ -> []
         in
         specs @ super_specs_for_sign sign super interfs
@@ -8136,7 +8138,7 @@ let verify_program_core (* ?verify_program_core *)
         let rec iter mmap meths =
           match meths with
             [] -> cont (cn, (l, abstract, fin, List.rev mmap, fds, constr, super, interfs, preds, pn, ilist))
-          | Meth (lm, rt, n, ps, co, ss, fb, v)::meths ->
+          | Meth (lm, rt, n, ps, co, ss, fb, v,abstract)::meths ->
             let xmap =
                 let rec iter xm xs =
                   match xs with
@@ -8163,7 +8165,7 @@ let verify_program_core (* ?verify_program_core *)
             in
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
             List.iter
-              begin fun (tn, (lsuper, rt', xmap', pre', pre_tenv', post', vis')) ->
+              begin fun (tn, (lsuper, rt', xmap', pre', pre_tenv', post', vis', abstract')) ->
                 if rt <> rt' then static_error lm "Return type does not match overridden method" None;
                 match co with
                   None -> ()
@@ -8185,7 +8187,7 @@ let verify_program_core (* ?verify_program_core *)
                 Some spec -> spec
               | None ->
                 match super_specs with
-                  (tn, (_, _, xmap', pre', pre_tenv', post', _))::_ ->
+                  (tn, (_, _, xmap', pre', pre_tenv', post', _, _))::_ ->
                   if not (List.for_all2 (fun (x, t) (x', t') -> x = x') xmap xmap') then static_error lm (Printf.sprintf "Parameter names do not match overridden method in %s" tn) None;
                   (pre', pre_tenv', post', pre', post')
                 | [] -> static_error lm "Method must have contract" None
@@ -8196,7 +8198,7 @@ let verify_program_core (* ?verify_program_core *)
                 (ExprPred (_, True _), ExprPred (_, True _)) | (EmpPred _, EmpPred _) -> main_meth := (cn, l)::!main_meth
               | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'" None
             end;
-            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, super_specs <> []))::mmap) meths
+            iter ((sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, super_specs <> [], abstract))::mmap) meths
         in
         iter [] meths
     in
@@ -8321,10 +8323,10 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (sign0, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,pre_dyn0,post_dyn0,ss0,fb0,v0,_)) as elem::rest ->
+              | (sign0, (lm0,rt0,xmap0,pre0,pre_tenv0,post0,pre_dyn0,post_dyn0,ss0,fb0,v0,_,abstract0)) as elem::rest ->
                 match try_assoc sign0 meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,pre_dyn1,post_dyn1,ss1,fb1,v1,_) -> 
+                | Some(lm1,rt1,xmap1,pre1,pre_tenv1,post1,pre_dyn1,post_dyn1,ss1,fb1,v1,_,abstract1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (Regular,[],rt1, xmap1,false, pre1, post1) (Regular, [], rt0, xmap0, false, [], [], pre0, post0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
@@ -8363,7 +8365,7 @@ let verify_program_core (* ?verify_program_core *)
       let (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
       let overrides =
         flatmap
-          begin fun (sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override)) ->
+          begin fun (sign, (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) ->
             if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
           end
           meths
@@ -8409,7 +8411,7 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter mlist meths_impl=
               match mlist with
                 [] -> meths_impl
-              | Meth(lm,rt,n,ps,co,None,fb,v) as elem::rest ->
+              | Meth(lm,rt,n,ps,co,None,fb,v,abstract) as elem::rest ->
                 if List.mem (n,lm) meths_impl then
                   let meths_impl'= remove (fun (x,l0) -> x=n && lm=l0) meths_impl in
                   iter rest meths_impl'
@@ -8887,11 +8889,11 @@ let verify_program_core (* ?verify_program_core *)
       let (lm, rt, xmap, pre, post, fb', v) =
         match try_assoc tn classmap with
           Some (lc, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) ->
-          let (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override) = List.assoc (m, pts) meths in
+          let (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, rt, xmap, pre_dyn, post_dyn, fb, v)
         | _ ->
           let (_, methods, _, _, _) = List.assoc tn interfmap in
-          let (lm, rt, xmap, pre, pre_tenv, post, v) = List.assoc (m, pts) methods in
+          let (lm, rt, xmap, pre, pre_tenv, post, v, abstract) = List.assoc (m, pts) methods in
           (lm, rt, xmap, pre, post, Instance, v)
       in
       if pure then static_error l "Method call is not allowed in a pure context" None;
@@ -10987,15 +10989,17 @@ let verify_program_core (* ?verify_program_core *)
         verify_cons (pn,ilist) cfin cn superctors boxes lems' rest
   in
   
-  let rec verify_meths (pn,ilist) cfin boxes lems meths=
+  let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
     match meths with
       [] -> ()
-    | (g, (l,rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _))::meths ->
+    | (g, (l,rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _,abstract))::meths ->
+      if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
-          if Filename.check_suffix p ".javaspec" then verify_meths (pn,ilist) cfin boxes lems meths
-          else static_error l "Constructor specification is only allowed in javaspec files!" None
+          if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
+          else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
+        if abstract then static_error l "Abstract method cannot have implementation." None;
         push();
         let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
         begin
@@ -11031,7 +11035,7 @@ let verify_program_core (* ?verify_program_core *)
           verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         end;
         pop();
-        verify_meths (pn,ilist) cfin boxes lems' meths
+        verify_meths (pn,ilist) cfin cabstract boxes lems' meths
   in
   
   let rec verify_classes boxes lems classm=
@@ -11045,7 +11049,7 @@ let verify_program_core (* ?verify_program_core *)
       in
       if superfinal = FinalClass then static_error l "Cannot extend final class." None;
       verify_cons (pn,ilist) fin cn superctors boxes lems cons;
-      verify_meths (pn,ilist) fin boxes lems meths;
+      verify_meths (pn,ilist) fin abstract boxes lems meths;
       verify_classes boxes lems classm
   in
   

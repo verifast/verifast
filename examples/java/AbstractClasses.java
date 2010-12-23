@@ -1,15 +1,31 @@
 public abstract class A {
-  void m()
-    //@ requires true;
-    //@ ensures true;
-  {
-  }
+  //@ predicate valid() = true;
+
+  public abstract void m();
+    //@ requires valid();
+    //@ ensures valid();
 }
 
 class B extends A {
+  int x;
+  
+  //@ predicate valid() = x |-> ?v;
+
   public void m()
-    //@ requires true;
+    //@ requires valid();
+    //@ ensures valid();
+  {
+    //@ open valid();
+    x = 0;
+    //@ close valid();
+  }
+}
+
+class Program {
+  public void test(A a) 
+    //@ requires a != null &*& a.valid();
     //@ ensures true;
   {
+    a.m();
   }
 }
