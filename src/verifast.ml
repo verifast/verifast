@@ -8374,13 +8374,15 @@ let verify_program_core (* ?verify_program_core *)
     in
     List.iter
       begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
-        let overrides = get_overrides cn in
-        List.iter
-          begin fun (cn, sign) ->
-            if not (List.mem_assoc sign meths) then
-              static_error l (Printf.sprintf "This class must override method %s declared in class %s" (string_of_sign sign) cn) None
-          end
-          overrides
+        if not abstract then begin
+          let overrides = get_overrides cn in
+          List.iter
+            begin fun (cn, sign) ->
+              if not (List.mem_assoc sign meths) then
+                static_error l (Printf.sprintf "This class must override method %s declared in class %s or must be declared abstract." (string_of_sign sign) cn) None
+            end
+            overrides
+         end
       end
       classmap1
   end;

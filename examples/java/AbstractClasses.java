@@ -21,6 +21,9 @@ class B extends A {
   }
 }
 
+abstract class B2 extends A {
+}
+
 class Program {
   public void test(A a) 
     //@ requires a != null &*& a.valid();
