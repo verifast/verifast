@@ -46,16 +46,21 @@ struct vf_procfs_dir *vf_procfs_mkdir(char *name)
 	 * vf_procfs_mkdir.  The copy happens with memcpy in
 	 * __proc_create.
 	 */
-	struct proc_dir_entry *dir = proc_mkdir(name, 0);
-	if (dir == 0){
+	
+	/*
+	 * First kmalloc, then proc_mkdir.  Otherwise we could end
+	 * up with an unwanted proc-directory after kmalloc failed.
+	 */
+	struct vf_procfs_dir *entry = vf_kmalloc(
+					sizeof(struct vf_procfs_dir));
+	if (entry == 0){
 		return 0;
 	}else{
-		struct vf_procfs_dir *entry = vf_kmalloc(
-					sizeof(struct vf_procfs_dir));
-		if (entry == 0){
+		entry->proc = proc_mkdir(name, 0);
+		if (entry->proc == 0){
+			vf_kfree(entry);
 			return 0;
 		}else{
-			entry->proc = dir;
 			return entry;
 		}
 	}
