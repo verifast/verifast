@@ -113,9 +113,10 @@ typedef	int vf_procfs_read_callback_t(struct vf_procfs_callback_handle *cb_handl
  */
 struct vf_procfs_dir *vf_procfs_mkdir(char *name);
 	/*@ requires
-		[?frac]chars(name, ?cs) &*& mem('\0', cs) == true
+		[?frac]chars(name, ?cs) 
 		&*& mem('/', cs) == false
-		&*& length(cs) > 1
+		// filename is not empty and is null-terminated:
+		&*& head(cs) != '\0' &*& mem('\0', cs) == true
 		&*& vf_cleanup_debt(?debtCount);
 	@*/
 	/*@ ensures 
@@ -153,9 +154,10 @@ predicate vf_procfs_create_file_ghost_arg(predicate() p) = p();
 struct vf_procfs_file *vf_procfs_create_file(char *name,
 	struct vf_procfs_dir *parent, vf_procfs_read_callback_t *callback);
 	/*@ requires
-		[?frac]chars(name, ?cs) &*& mem('\0', cs) == true
+		[?frac]chars(name, ?cs)
 		&*& mem('/', cs) == false
-		&*& length(cs) > 1
+		// filename is not empty and is null-terminated:
+		&*& head(cs) != '\0' &*& mem('\0', cs) == true
 		&*& vf_procfs_dir(parent, ?parentName, ?nbFiles)
 		&*& is_vf_procfs_read_callback_t(callback) == true
 		&*& vf_procfs_read_callback_data(callback)()
@@ -163,7 +165,7 @@ struct vf_procfs_file *vf_procfs_create_file(char *name,
 	@*/
 	/*@ ensures
 		[frac]chars(name, cs)
-		&*& result == 0 ? // failure.
+		&*& result == 0 ? // failure
 			vf_procfs_dir(parent, parentName, nbFiles)
 			&*& vf_procfs_read_callback_data(callback)()
 			&*& vf_cleanup_debt(debtCount)
