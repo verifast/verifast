@@ -6913,6 +6913,7 @@ let verify_program_core (* ?verify_program_core *)
       match h with
         [] -> None
       | Chunk ((g, true), targs, coef, [t0; v], _)::_ when g == f_symb && definitely_equal t0 t -> Some v
+      | Chunk ((g, false), targs, coef, [t0; v], _):: _ when definitely_equal g f_symb && definitely_equal t0 t -> Some v
       | _::h -> iter h
     in
     iter h0
@@ -6920,7 +6921,7 @@ let verify_program_core (* ?verify_program_core *)
 
   let lookup_points_to_chunk h0 env l f_symb t =
     match lookup_points_to_chunk_core h0 f_symb t with
-      None -> assert_false h0 env l ("No matching heap chunk: " ^ ctxt#pprint f_symb) None
+      None -> assert_false h0 env l ("No matching pointsto chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
   in
 
