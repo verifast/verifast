@@ -212,4 +212,18 @@ lemma void fold_left_append<a, b>(a x0, fixpoint(a, b, a) f, list<b> xs1, list<b
     }
 }
 
+lemma void append_drop_take<t>(list<t> vs, int i)
+  requires 0 <= i && i <= length(vs);
+  ensures append(take(i, vs), drop(i, vs)) == vs;
+{
+  switch(vs) {
+    case nil: 
+    case cons(h, t):
+      if(i == 0) {
+      } else {
+        append_drop_take(t, i - 1);
+      }
+  }
+}
+
 @*/

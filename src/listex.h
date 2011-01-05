@@ -93,6 +93,10 @@ lemma void fold_left_append<a, b>(a x0, fixpoint(a, b, a) f, list<b> xs1, list<b
     requires true;
     ensures fold_left(x0, f, append(xs1, xs2)) == fold_left(fold_left(x0, f, xs1), f, xs2);
 
+lemma_auto void append_drop_take<t>(list<t> vs, int i);
+  requires 0 <= i && i <= length(vs);
+  ensures append(take(i, vs), drop(i, vs)) == vs;
+
 @*/
 
 #endif
