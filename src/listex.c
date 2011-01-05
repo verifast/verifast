@@ -201,4 +201,15 @@ lemma void mem_max(int x, list<int> xs)
     }
 }
 
+lemma void fold_left_append<a, b>(a x0, fixpoint(a, b, a) f, list<b> xs1, list<b> xs2)
+    requires true;
+    ensures fold_left(x0, f, append(xs1, xs2)) == fold_left(fold_left(x0, f, xs1), f, xs2);
+{
+    switch (xs1) {
+        case nil:
+        case cons(x, xs10):
+            fold_left_append(f(x0, x), f, xs10, xs2);
+    }
+}
+
 @*/

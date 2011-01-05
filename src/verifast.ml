@@ -2240,8 +2240,9 @@ and
                   '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> LoopSpec (pre, post)
              end
           >] -> inv
+        | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
         end;
-    dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr); (* only allows decreases if invariant provided *)
+    dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
     '(entryBraceLoc, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
   >] -> (inv, dec, [BlockStmt(entryBraceLoc, [], b, closeBraceLoc, ref [])], closeBraceLoc)
 and
@@ -10070,11 +10071,11 @@ let verify_program_core (* ?verify_program_core *)
     | WhileStmt (l, e, None, dec, ss, closeBraceLoc) ->
       static_error l "Loop invariant required." None
     | WhileStmt (l, e, Some (LoopInv p), dec, ss, closeBraceLoc) ->
-      if pure then static_error l "Loops are not yet supported in a pure context." None;
+      if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
-      check_ghost ghostenv l e;
+      if not pure then check_ghost ghostenv l e;
       let xs = block_assigned_variables ss in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
@@ -10127,11 +10128,11 @@ let verify_program_core (* ?verify_program_core *)
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
-      if pure then static_error l "Loops are not supported yet in a pure context." None;
+      if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
-      check_ghost ghostenv l e;
+      if not pure then check_ghost ghostenv l e;
       let [BlockStmt(_, _, ss, _, locals_to_free)] = ss in
       check_block_declarations ss;
       let xs = block_assigned_variables ss in
