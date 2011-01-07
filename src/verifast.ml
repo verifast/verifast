@@ -1577,7 +1577,7 @@ let common_keywords = [
   "||"; "!"; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
-  "truncating"
+  "truncating"; "typedef"
 ]
 
 let ghost_keywords = [
@@ -1591,7 +1591,7 @@ let ghost_keywords = [
 ]
 
 let c_keywords = [
-  "struct"; "bool"; "char"; "->"; "sizeof"; "typedef"; "#"; "include"; "ifndef";
+  "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"; "static"
 ]
 
@@ -4199,11 +4199,12 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let functypedeclmap1 =
-    let rec iter functypedeclmap1 ds =
+    let rec iter (pn,ilist) functypedeclmap1 ds =
       match ds with
-        [] -> List.rev functypedeclmap1
+        [] -> functypedeclmap1
       | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post))::ds ->
-        let (pn,ilist) = ("",[]) in
+        let ftn0 = ftn in
+        let ftn = full_name pn ftn in
         if gh = Real && tparams <> [] then static_error l "Declaring type parameters on non-lemma function types is not supported." None;
         let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." None in
         let rec check_tparams_distinct tparams =
@@ -4238,13 +4239,15 @@ let verify_program_core (* ?verify_program_core *)
           in
           iter [] xs
         in
-        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::functypedeclmap1) ds
-      | _::ds -> iter functypedeclmap1 ds
+        iter (pn,ilist) ((ftn, (l, gh, tparams, rt, ftxmap, xmap, ftn0, pn, ilist, pre, post))::functypedeclmap1) ds
+      | _::ds -> iter (pn,ilist) functypedeclmap1 ds
     in
-    if file_type path=Java then [] else
-    (match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    )
+    let rec iter' functypedeclmap1 ps =
+      match ps with
+        [] -> List.rev functypedeclmap1
+      | PackageDecl (_, pn, ilist, ds)::ps -> iter' (iter (pn,ilist) functypedeclmap1 ds) ps
+    in
+    iter' [] ps
   in
   
   (* Region: predicate families *)
@@ -4259,18 +4262,22 @@ let verify_program_core (* ?verify_program_core *)
       structmap1
   in
   
-  let is_paramizedfunctype_pred_map1 =
-    flatmap
-      begin function
-        (g, (l, gh, tparams, rt, ftxmap, xmap, pre, post)) when gh = Ghost || ftxmap <> [] ->
-        let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
-        [(g, mk_predfam ("is_" ^ g) l tparams 0 paramtypes (Some (List.length paramtypes)))]
-      | _ -> []
+  let functypedeclmap1 =
+    List.map
+      begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post)) ->
+        let predfammaps =
+          if gh = Ghost || ftxmap <> [] then
+            let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
+            [mk_predfam (full_name pn ("is_" ^ g0)) l tparams 0 paramtypes (Some (List.length paramtypes))]
+          else
+            []
+        in
+        (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))
       end
       functypedeclmap1
   in
   
-  let isparamizedfunctypepreds1 = List.map snd is_paramizedfunctype_pred_map1 in
+  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1 in
   
   let malloc_block_pred_map1 = 
     match file_type path with
@@ -4580,9 +4587,19 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: The type checker *)
   
-  let funcnames = if file_type path=Java then [] else
-  let ds= (match ps with[PackageDecl(_,"",[],ds)] ->ds) in
-  list_remove_dups (flatmap (function (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [g] | _ -> []) ds) 
+  let funcnames =
+    list_remove_dups
+      begin flatmap
+        begin fun (PackageDecl (_, pn, _, ds)) ->
+          flatmap
+            begin function
+              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [full_name pn g]
+            | _ -> []
+            end
+            ds
+        end
+        ps
+      end
   in
   
   let check_classname (pn, ilist) (l, c) =
@@ -4947,7 +4964,7 @@ let verify_program_core (* ?verify_program_core *)
       let func_call () =
         match try_assoc g tenv with
           Some (PtrType (FuncType ftn)) ->
-          let (_, gh, tparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
+          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, ft_predfammap) = List.assoc ftn functypemap in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
           (WFunPtrCall (l, g, es), rt)
         | Some ((PureFuncType (t1, t2) as t)) ->
@@ -7788,15 +7805,14 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter functypemap ds =
       match ds with
         [] -> List.rev functypemap
-      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::ds ->
-        let (pn,ilist) = ("",[]) in
+      | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))::ds ->
         let (pre, post) =
           let (wpre, tenv) = check_pred (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
           let (wpost, tenv) = check_pred (pn,ilist) tparams postmap post in
           (wpre, wpost)
         in
-        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post))::functypemap) ds
+        iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, predfammaps))::functypemap) ds
     in
     iter [] functypedeclmap1
   in
@@ -7927,9 +7943,9 @@ let verify_program_core (* ?verify_program_core *)
       | Some (ftn, fttargs, ftargs) ->
         if body = None then static_error l "A function prototype cannot implement a function type." None;
         begin
-          match try_assoc ftn functypemap with
+          match resolve (pn,ilist) l ftn functypemap with
             None -> static_error l "No such function type." None
-          | Some (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0) ->
+          | Some (ftn, (lft, gh, fttparams, rt0, ftxmap0, xmap0, pre0, post0, ft_predfammaps)) ->
             let fttargs = List.map (check_pure_type (pn,ilist) []) fttargs in
             let fttpenv =
               match zip fttparams fttargs with
@@ -7966,7 +7982,7 @@ let verify_program_core (* ?verify_program_core *)
               if not (List.mem_assoc ftn functypemap1) then
                 functypes_implemented := (fn, lft, ftn, List.map snd ftargs, unloadable)::!functypes_implemented
             end;
-            Some (ftn, fttargs, ftargs)
+            Some (ftn, ft_predfammaps, fttargs, ftargs)
         end
     in
     (rt, xmap, functype_opt, pre, pre_tenv, post)
@@ -7978,7 +7994,7 @@ let verify_program_core (* ?verify_program_core *)
         [] -> (funcmap, List.rev prototypes_implemented)
       | Func (l, k, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
-        let fterm = if language = CLang then Some (List.assoc fn funcnameterms) else None in
+        let fterm = Some (List.assoc fn funcnameterms) in
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
           check_func_header pn ilist [] [] [] l k tparams rt fn fterm xs atomic functype_opt contract_opt body
         in
@@ -8688,7 +8704,7 @@ let verify_program_core (* ?verify_program_core *)
     in
     evhs h env ws $. fun h ts ->
     let Some env' = zip ys ts in
-    let _ = if file_type path = Java && (List.mem "this" ys) then 
+    let _ = if file_type path = Java && match try_assoc "this" ps with Some ObjType _ -> true | _ -> false then 
       let this_term = List.assoc "this" env' in
       if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq this_term (ctxt#mk_intlit 0)))) then
         assert_false h env l "Target of method call might be null." None
@@ -8846,7 +8862,7 @@ let verify_program_core (* ?verify_program_core *)
       let (PtrType (FuncType ftn)) = List.assoc g tenv in
       has_effects ();
       let fterm = List.assoc g env in
-      let (_, gh, fttparams, rt, ftxmap, xmap, pre, post) = List.assoc ftn functypemap in
+      let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
         verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
@@ -8859,13 +8875,13 @@ let verify_program_core (* ?verify_program_core *)
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
           check_call [] h [] cont
         | Real ->
-          let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
+          let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           check_call [] h args $. fun h retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) retval
         | Ghost ->
-          let (_, _, _, _, predsymb, inputParamCount) = List.assoc ("is_" ^ ftn) predfammap in
+          let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
@@ -9102,9 +9118,9 @@ let verify_program_core (* ?verify_program_core *)
           Var (lfn, x, _) -> (lfn, x)
         | _ -> static_error (expr_loc fpe) "Function name expected" None
       in
-      match try_assoc fn funcmap with
+      match resolve (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v) ->
+      | Some (fn, (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -9116,20 +9132,20 @@ let verify_program_core (* ?verify_program_core *)
             if not (List.mem fn lems) then static_error l "Function pointer chunks can only be produced for preceding lemmas." None;
             if scope_opt = None then static_error l "produce_lemma_function_pointer_chunk statement must have a body." None
         end;
-        let (ftn, fttargs, ftargs) =
+        let (ftn, ft_predfammaps, fttargs, ftargs) =
           match ftclause_opt with
             None ->
             begin match functype_opt with
               None -> static_error l "Function does not implement a function type." None
-            | Some (ftn, fttargs, ftargs) ->
+            | Some (ftn, ft_predfammaps, fttargs, ftargs) ->
               if ftargs <> [] then static_error l "Function header must not specify function type arguments." None;
-              (ftn, fttargs, [])
+              (ftn, ft_predfammaps, fttargs, [])
             end
           | Some (ftn, fttargs, args, params, openBraceLoc, ss, closeBraceLoc) ->
             let (rt1, xmap1, pre1, post1) = (rt, ps, pre, post) in
-            begin match try_assoc ftn functypemap with
+            begin match resolve (pn,ilist) l ftn functypemap with
               None -> static_error l "No such function type" None
-            | Some (lft, gh, fttparams, rt, ftxmap, xmap, pre, post) ->
+            | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
               begin match stmt_ghostness with
                 Real -> if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types." None
               | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
@@ -9249,10 +9265,10 @@ let verify_program_core (* ?verify_program_core *)
                 with_context PopSubcontext $. fun () ->
                 check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
               end;
-              (ftn, fttargs, List.map snd ftargenv)
+              (ftn, ft_predfammaps, fttargs, List.map snd ftargenv)
             end
         in
-        let (_, _, _, _, symb, _) = List.assoc ("is_" ^ ftn) predfammap in
+        let [(_, (_, _, _, _, symb, _))] = ft_predfammaps in
         let coef = match stmt_ghostness with Real -> get_dummy_frac_term () | Ghost -> real_unit in
         let h = Chunk ((symb, true), fttargs, coef, fterm::ftargs, None)::h in
         match scope_opt with
