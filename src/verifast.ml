@@ -2957,7 +2957,7 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool} (* ?options *)
+type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool; option_simplify_terms: bool} (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
@@ -6156,20 +6156,27 @@ let verify_program_core (* ?verify_program_core *)
   
   let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont in
   let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont in
-
+  
+  let pprint_context_term t = 
+    if options.option_simplify_terms then
+      match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
+    else
+      ctxt#pprint t
+  in
+  
   let pprint_context_stack cs =
     List.map
       (function
-         Assuming t -> Assuming (ctxt#pprint t)
+         Assuming t -> Assuming (pprint_context_term t)
        | Executing (h, env, l, msg) ->
          let h' =
            List.map
              begin fun (Chunk ((g, literal), targs, coef, ts, size)) ->
-               Chunk ((ctxt#pprint g, literal), targs, ctxt#pprint coef, List.map (fun t -> ctxt#pprint t) ts, size)
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
              end
              h
          in
-         let env' = List.map (fun (x, t) -> (x, ctxt#pprint t)) env in
+         let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
          Executing (h', env', l, msg)
        | PushSubcontext -> PushSubcontext
        | PopSubcontext -> PopSubcontext)
@@ -9533,7 +9540,7 @@ let verify_program_core (* ?verify_program_core *)
         eval_h h env i $. fun h i ->
         eval_h h env rhs $. fun h rhs ->
         let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l2 elem_tp); TermPat predsym; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
+        assert_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
         assert_term (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)) h env l2 ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i size)))) None;
         let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive rhs; vs] in
         cont (Chunk ((c_array_symb, true), [elem_tp], real_unit, [a; n; size; q; updated], None) :: h) env

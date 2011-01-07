@@ -67,6 +67,7 @@ let show_ide initialPath prover codeFont traceFont =
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
+  let simplifyTerms = ref true in
   let current_tab = ref None in
   let showLineNumbers enable =
     match !current_tab with
@@ -116,6 +117,7 @@ let show_ide initialPath prover codeFont traceFont =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
+      GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
       a "Window" ~label:"_Window";
@@ -161,6 +163,7 @@ let show_ide initialPath prover codeFont traceFont =
           <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='CheckOverflow' />
+          <menuitem action='SimplifyTerms' />
         </menu>
         <menu action='Window'>
            <menuitem action='Stub' />
@@ -978,7 +981,8 @@ let show_ide initialPath prover codeFont traceFont =
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
-                option_allow_assume = true
+                option_allow_assume = true;
+                option_simplify_terms = !simplifyTerms
               }
               in
               verify_program prover false options path reportRange breakpoint;

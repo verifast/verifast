@@ -285,4 +285,17 @@ lemma void nth_update<t>(int i, int j, t y, list<t> xs)
   }
 }
 
+lemma void length_update<t>(int i, t y, list<t> xs)
+    requires true;
+    ensures length(update(i, y, xs)) == length(xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i != 0) {
+        length_update(i - 1, y, t);
+      }
+  }
+}
+
 @*/

@@ -234,4 +234,5 @@ class z3_context () =
       let quant = (Z3.mk_forall ctxt 0 pats (Array.of_list tps) (Array.init (List.length tps) (Z3.mk_int_symbol ctxt)) (body)) in
       (* printf "%s\n" (string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt quant)))); *)
       Z3.assert_cnstr ctxt quant
+   method simplify (t: Z3.ast): Z3.ast option = Some(Z3.simplify ctxt t)
   end

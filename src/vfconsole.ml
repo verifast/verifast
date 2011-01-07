@@ -137,6 +137,7 @@ let _ =
   let compileOnly = ref false in
   let isLibrary = ref false in
   let allowAssume = ref false in
+  let simplifyTerms = ref false in
   let allowShouldFail = ref false in
   let emitManifest = ref false in
   let emitDllManifest = ref false in
@@ -178,7 +179,8 @@ let _ =
           option_disable_overflow_check = !disable_overflow_check;
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
-          option_allow_assume = !allowAssume
+          option_allow_assume = !allowAssume;
+          option_simplify_terms = !simplifyTerms
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =
