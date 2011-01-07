@@ -52,23 +52,12 @@ lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p);
     ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
 
 lemma void forall_mem<t>(t x, list<t> xs, fixpoint(t, bool) p);
-    requires forall(xs, p) == true &*& mem(x, xs) == true;
+    requires forall(xs, p) == true && mem(x, xs) == true;
     ensures p(x) == true;
 
 lemma void forall_drop<t>(list<t> xs, fixpoint(t, bool) p, int i);
     requires forall(xs, p) == true;
     ensures forall(drop(i, xs), p) == true;
-
-fixpoint list<t> update<t>(int i, t y, list<t> xs) {
-    switch (xs) {
-        case nil: return nil;
-        case cons(x, xs0): return i == 0 ? cons(y, xs0) : cons(x, update(i - 1, y, xs0));
-    }
-}
-
-lemma void nth_update<t>(int i, int j, t y, list<t> xs);
-    requires 0 <= i &*& i < length(xs) &*& 0 <= j &*& j < length(xs);
-    ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
 
 fixpoint int max(int x, list<int> xs) {
     switch (xs) {

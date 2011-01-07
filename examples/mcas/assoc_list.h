@@ -36,12 +36,12 @@ fixpoint b assoc<a, b>(a x, list<pair<a, b> > xys) {
     }
 }
 
-fixpoint list<pair<a, b> > update<a, b>(list<pair<a, b> > xys, a x, b y) {
+fixpoint list<pair<a, b> > update_pairlist<a, b>(list<pair<a, b> > xys, a x, b y) {
     switch (xys) {
         case nil: return nil;
         case cons(xy, xys0): return
             switch (xy) {
-                case pair(x0, y0): return x0 == x ? cons(pair(x0, y), xys0) : cons(pair(x0, y0), update(xys0, x, y));
+                case pair(x0, y0): return x0 == x ? cons(pair(x0, y), xys0) : cons(pair(x0, y0), update_pairlist(xys0, x, y));
             };
     }
 }
@@ -90,7 +90,7 @@ lemma void foreach_assoc_separate(list<pair<void *, void *> > xys, void **x);
 
 lemma void foreach_assoc_unseparate(list<pair<void *, void *> > xys, void **x);
     requires mem_assoc(x, xys) == true &*& foreach_assoc(before_assoc(x, xys), ?p) &*& p(x, ?y) &*& foreach_assoc(after_assoc(x, xys), p);
-    ensures foreach_assoc(update(xys, x, y), p);
+    ensures foreach_assoc(update_pairlist(xys, x, y), p);
 
 lemma void foreach_assoc_unseparate_nochange(list<pair<void *, void *> > xys, void **x);
     requires mem_assoc(x, xys) == true &*& foreach_assoc(before_assoc(x, xys), ?p) &*& p(x, assoc(x, xys)) &*& foreach_assoc(after_assoc(x, xys), p);
@@ -149,7 +149,7 @@ lemma void foreach_assoc2_unseparate(list<pair<void *, void *> > xys, list<pair<
         foreach_assoc2(before_assoc(x, xys), before_assoc(x, xzs), ?p) &*&
         p(x, ?y, ?z) &*&
         foreach_assoc2(after_assoc(x, xys), after_assoc(x, xzs), p);
-    ensures foreach_assoc2(update(xys, x, y), update(xzs, x, z), p);
+    ensures foreach_assoc2(update_pairlist(xys, x, y), update_pairlist(xzs, x, z), p);
 
 lemma void foreach_assoc2_unseparate_1changed(list<pair<void *, void *> > xys, list<pair<void *, void *> > xzs, void *x);
     requires
@@ -158,7 +158,7 @@ lemma void foreach_assoc2_unseparate_1changed(list<pair<void *, void *> > xys, l
         foreach_assoc2(before_assoc(x, xys), before_assoc(x, xzs), ?p) &*&
         p(x, ?y, assoc(x, xzs)) &*&
         foreach_assoc2(after_assoc(x, xys), after_assoc(x, xzs), p);
-    ensures foreach_assoc2(update(xys, x, y), xzs, p);
+    ensures foreach_assoc2(update_pairlist(xys, x, y), xzs, p);
 
 fixpoint list<pair<a, b> > map_assoc<a, b>(list<pair<a, b> > xys, list<a> xs) {
     switch (xs) {
@@ -179,7 +179,7 @@ lemma void lt_drop_take_map_assoc_mapfst<a, b, c>(int k, int i, list<pair<a, b> 
 
 lemma void update_same<a, b>(list<pair<a, b> > xys, a x);
     requires mem_assoc(x, xys) == true;
-    ensures update(xys, x, assoc(x, xys)) == xys;
+    ensures update_pairlist(xys, x, assoc(x, xys)) == xys;
 
 lemma void foreach3_separate(void *x);
     requires foreach3(?xs, ?ys, ?zs, ?p) &*& mem(x, xs) == true;

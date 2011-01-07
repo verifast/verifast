@@ -79,6 +79,7 @@ verifast_both -c switch.c
 verifast_both -c -disable_overflow_check tuerk.c
 verifast_both -c -disable_overflow_check tuerk_explicit.c
 verifast_both -disable_overflow_check wc.c
+verifast_both -c -allow_should_fail carrays.c
 cd helloproc
 # Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
 # the default number of cpus forever, so we explicitly specify it to be 1.  
@@ -126,6 +127,13 @@ verifast_both -c -disable_overflow_check StaticFields.java
 verifast_both -c ThreadRun.java
 verifast_both -c Tree.java
 verifast_both -c SuperConstructorCall.java
+cd ..
+cd vstte2010
+verifast -c -disable_overflow_check Problem1.c
+verifast -c -disable_overflow_check Problem2.c
+verifast_both -c -disable_overflow_check Problem3.java
+verifast -c -disable_overflow_check Problem4.java
+verifast_both -c -disable_overflow_check Problem5.java
 cd ..
 cd ..
 cd tutorial_solutions

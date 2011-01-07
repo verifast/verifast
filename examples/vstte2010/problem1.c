@@ -21,20 +21,6 @@ fixpoint int plus(unit u, int x, int y) {
         case unit: return x + y;
     }
 }
-
-lemma void take_drop_plus_1<t>(int i, list<t> xs)
-    requires 0 <= i &*& i < length(xs);
-    ensures take(i + 1, xs) == append(take(i, xs), cons(head(drop(i, xs)), nil));
-{
-    switch (xs) {
-        case nil:
-        case cons(x, xs0):
-            if (i == 0) {
-            } else {
-                take_drop_plus_1(i - 1, xs0);
-            }
-    }
-}
 lemma void le_mult_compat(int x, int y1, int y2)
     requires 0 <= x &*& y1 <= y2;
     ensures x * y1 <= x * y2;
@@ -72,8 +58,8 @@ lemma void mult_congr_l(int x1, int x2, int y)
 }
 @*/
 void problem1(int *a, int N)
-    //@ requires ints(a, N, ?elems) &*& forall(elems, (le)(unit, 0)) == true;
-    //@ ensures ints(a, N, elems);
+   //@ requires ints(a, N, ?elems) &*& forall(elems, (le)(unit, 0)) == true;
+   //@ ensures ints(a, N, elems);
 {
     int sum = 0;
     int max = 0;
@@ -81,7 +67,7 @@ void problem1(int *a, int N)
     for (; i < N; i++)
         /*@
         invariant
-            ints(a, N, elems) &*&
+            array<int>(a, N, sizeof(int), integer, elems) &*&
             0 <= i &*& i <= N &*&
             0 <= max &*&
             sum == fold_left(0, (plus)(unit), take(i, elems)) &*&
@@ -89,18 +75,14 @@ void problem1(int *a, int N)
             sum <= i * max;
         @*/
     {
-        //@ ints_split(a, i);
-        //@ open array<int>(a+i, N - i, sizeof(int), integer, drop(i, elems));
-        int x = *(a + i);
+        int x = a[i];
         int oldMax = max;
         if (max < x) {
             max = x;
         }
         //@ le_mult_compat(i, oldMax, max);
-        sum += *(a + i);
-        //@ close ints(a + i, N - i, _);
-        //@ ints_merge(a);
-        //@ take_drop_plus_1(i, elems);
+        sum += a[i];
+        //@ take_plus_one(i, elems);
         //@ fold_left_append(0, (plus)(unit), take(i, elems), cons(x, nil));
         //@ fold_left_append(0, (max_func)(unit), take(i, elems), cons(x, nil));
     }

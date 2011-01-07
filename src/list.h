@@ -222,6 +222,29 @@ fixpoint bool exists<t>(list<t> xs, fixpoint(t, bool) fp) {
     }
 }
 
+fixpoint list<t> update<t>(int i, t y, list<t> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return i == 0 ? cons(y, xs0) : cons(x, update(i - 1, y, xs0));
+    }
+}
+
+lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<t> xs);
+  requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
+  ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
+    
+lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> xs)
+  requires true;
+  ensures length(update(i, y, xs)) == length(xs);
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t):
+      if (i != 0) {
+        length_update(i - 1, y, t);      }
+  }
+}
+
 @*/
 
 #endif

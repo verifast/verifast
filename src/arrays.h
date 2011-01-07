@@ -5,16 +5,6 @@
 
 /*@
 
-predicate array<t>(void* a, int n, int elemsize, predicate(t*; t) q; list<t> elems) =
-  n == 0 ?
-    elems == nil
-  :
-    q(a, ?elem) &*& array<t>(a + elemsize, n - 1, elemsize, q, ?elems0) &*& elems == cons(elem, elems0);
-
-lemma_auto void array_inv<t>();
-    requires array<t>(?a, ?n, ?size, ?q, ?elems);
-    ensures array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
-
 lemma void array_split<t>(void *a, int offset);
     requires array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
     ensures array<t>(a, offset, size, q, take(offset, as)) &*& array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));

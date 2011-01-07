@@ -834,7 +834,7 @@ start:
                         rdcss_operation_post(rop)(result) &*&
                         mem((void *)a1, aas) == true &*& mem_assoc(a2, bs) == true &*& result == assoc(a2, bs) &*&
                         assoc(a1, zip(aas, avs)) == o1 && assoc(a2, bs) == o2 ?
-                            rdcss_unseparate_lemma(rdcssUnsep)(info, rdcssId_, inv_, rdcssSep, aas, avs, update(bs, a2, n2))
+                            rdcss_unseparate_lemma(rdcssUnsep)(info, rdcssId_, inv_, rdcssSep, aas, avs, update_pairlist(bs, a2, n2))
                         :
                             rdcss_unseparate_lemma(rdcssUnsep)(info, rdcssId_, inv_, rdcssSep, aas, avs, bs);
                 {
@@ -945,7 +945,7 @@ start:
                                 close cdext(rcsList, unsep_, mcasInfo)(cd, &cd->status, status_);
                                 foreach3_unseparate_nochange(ds, sas, svs, cd);
                                 foreach3_mem_x_mem_assoc_x_ys(cd);
-                                close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update(bs, a2, n2));
+                                close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update_pairlist(bs, a2, n2));
                             } else {
                                 close committed_copy(true, cd, counter, i + 1);
                                 close mcas_cell(rcsList, dsList)(a2, realCellValue, abstractCellValue);
@@ -1309,7 +1309,7 @@ start:
                         rdcss_cas_post(casOp)(casSuccess) &*& mem_assoc(a2, bs) == true &*&
                         rdcss_unseparate_lemma(rdcssUnsep)(info, rdcssId_, inv_, rdcssSep_, aas, avs, ?bs1) &*&
                         casSuccess ?
-                            bs1 == update(bs, a2, n2)
+                            bs1 == update_pairlist(bs, a2, n2)
                         :
                             bs1 == bs;
                 {
@@ -1334,7 +1334,7 @@ start:
                         foreach_assoc2_unseparate_1changed(rcs, cs, a2);
                         close cdext(rcsList, unsep, mcasInfo)(cd, &cd->status, status_);
                         foreach3_unseparate_nochange(ds, sas, svs, cd);
-                        close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update(bs, a2, n2));
+                        close rdcss_unseparate_lemma(mcas_rdcss_unsep)(boxed_int(id), rdcssId_, inv_, mcas_rdcss_sep, aas, avs, update_pairlist(bs, a2, n2));
                     }
                     close rdcss_cas_post(casOp)(casSuccess);
                 }

@@ -265,4 +265,24 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys)
     }
 }
 
+lemma void nth_update<t>(int i, int j, t y, list<t> xs)
+    requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
+    ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(j == 0) {
+        if(i == 0) {
+        } else {
+        }
+      } else {
+        if(i == 0) {
+        } else {
+          nth_update<t>(i-1,j-1,y,t);
+        }
+      }
+  }
+}
+
 @*/

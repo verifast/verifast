@@ -37,7 +37,7 @@ lemma void ghost_assoc_list_add(int id, void *x, void *y);
 
 lemma void ghost_assoc_list_update(int id, void **x, void *y);
     requires ghost_assoc_list(id, ?xys) &*& mem_assoc(x, xys) == true;
-    ensures ghost_assoc_list(id, update(xys, x, y));
+    ensures ghost_assoc_list(id, update_pairlist(xys, x, y));
 
 lemma void ghost_assoc_list_create_member_handle(int id, void **x);
     requires [?f1]ghost_assoc_list(id, ?xys) &*& mem_assoc(x, xys) == true;
@@ -61,7 +61,7 @@ lemma void strong_ghost_assoc_list_add(int id, void *x, void *y);
 
 lemma void strong_ghost_assoc_list_update(int id, void *x, void *y1);
     requires strong_ghost_assoc_list(id, ?xys) &*& strong_ghost_assoc_list_member_handle(id, x, _);
-    ensures strong_ghost_assoc_list(id, update(xys, x, y1)) &*& strong_ghost_assoc_list_member_handle(id, x, y1);
+    ensures strong_ghost_assoc_list(id, update_pairlist(xys, x, y1)) &*& strong_ghost_assoc_list_member_handle(id, x, y1);
 
 lemma void strong_ghost_assoc_list_key_handle_lemma();
     requires strong_ghost_assoc_list(?id, ?xys) &*& [?f]strong_ghost_assoc_list_key_handle(id, ?x);

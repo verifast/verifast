@@ -5052,7 +5052,9 @@ let verify_program_core (* ?verify_program_core *)
       let w2 = checkt index intt in
       begin match arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp)
-      | _ -> static_error l "target of array access is not an array" None
+      | PtrType tp -> (WReadArray (l, w1, tp, w2), tp)
+      | _ when language = Java -> static_error l "target of array access is not an array" None
+      | _ when language = CLang -> static_error l "target of array access is not an array or pointer" None
       end
     | NewArray (l, te, len) ->
       let t = check_pure_type (pn,ilist) tparams te in
@@ -6092,7 +6094,7 @@ let verify_program_core (* ?verify_program_core *)
     else
       (get_unique_var_symb "#array_element" (PredType ([], [], None)), get_unique_var_symb "#array_slice" (PredType ([], [], None)), get_unique_var_symb "#array_slice_deep" (PredType ([], [], None)))
   in
-
+  
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
     mk_app nil_symb []
@@ -6440,7 +6442,7 @@ let verify_program_core (* ?verify_program_core *)
       begin
         match read_field with
           None -> static_error l "Cannot use array indexing in this context." None
-        | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_array l arr i)
+        | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_array l arr i tp)
       end
     | Deref (l, e, t) ->
       ev state e $. fun state v ->
@@ -6954,7 +6956,7 @@ let verify_program_core (* ?verify_program_core *)
     | Some (v, _) -> v
   in
   
-  let read_array h env l a i =
+  let read_java_array h env l a i tp =
     let slices =
       head_flatmap
         begin function
@@ -6999,6 +7001,36 @@ let verify_program_core (* ?verify_program_core *)
     | IntType -> int_pred_symb ()
     | Char -> char_pred_symb ()
     | _ -> static_error l "Dereferencing pointers of this type is not yet supported." None
+  in
+  
+  let read_c_array h env l a i tp =
+    let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+    let predsym = pointee_pred_symb l tp in
+    let slices =
+      head_flatmap
+        begin function
+          Chunk ((g, _), [tp2], coef, [a'; n'; size'; q'; vs'], _)
+            when definitely_equal g c_array_symb && tp = tp2 && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
+            ctxt#query (ctxt#mk_eq size' (sizeof l tp)) ->
+            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
+            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [i; vs'])]
+        | _ -> []
+        end
+        h
+    in
+    match slices with
+      None -> 
+        begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
+          None -> assert_false h env l "No matching array chunk" None
+        | Some v -> v
+        end
+    | Some v -> v
+  in
+  
+  let read_array h env l a i tp = 
+    match language with 
+      Java -> read_java_array h env l a i tp
+    | CLang -> read_c_array h env l a i tp
   in
   
   let deref_pointer h env l pointerTerm pointeeType =
@@ -8642,7 +8674,7 @@ let verify_program_core (* ?verify_program_core *)
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
       (fun l p t -> deref_pointer h env l p t),
-      (fun l a i -> read_array h env l a i)
+      (fun l a i -> read_java_array h env l a i)
     in
     eval_core_cps ev h assert_term (Some read_field) env e cont
   in
@@ -8653,7 +8685,7 @@ let verify_program_core (* ?verify_program_core *)
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
       (fun l p t -> deref_pointer h env l p t),
-      (fun l a i -> read_array h env l a i)
+      (fun l a i -> read_java_array h env l a i)
     in
     eval_core assert_term (Some read_field) env e
   in
@@ -8989,20 +9021,19 @@ let verify_program_core (* ?verify_program_core *)
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
       | Some v -> cont h v
       end
-    | WReadArray (l, arr, elem_tp, i) ->
+    | WReadArray (l, arr, elem_tp, i) when language = Java ->
       eval_h h env arr $. fun h arr ->
       eval_h h env i $. fun h i ->
       begin
-      (*match elem_tp with
-        IntType _ | ShortType _ | Char _ ->
-          let elem = (read_array h env l arr i) in
-          assume_is_of_type l elem elem_tp (fun () -> cont h elem)
-      | _ ->*)
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
         let elem_tp = unfold_inferred_type elem_tp in
         cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
       end
+    | WReadArray (l, arr, elem_tp, i) when language = CLang ->
+      eval_h h env arr $. fun h arr ->
+      eval_h h env i $. fun h i ->
+      cont h (read_c_array h env l arr i elem_tp)
     | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h v -> cont h (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) ->
       eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
@@ -9483,7 +9514,7 @@ let verify_program_core (* ?verify_program_core *)
           verify_expr true h env None wrhs $. fun h vrhs ->
           assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
           cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env
-      | WReadArray (_, arr, elem_tp, i) ->
+      | WReadArray (_, arr, elem_tp, i) when language = Java ->
         if pure then static_error l "Cannot write in a pure context." None;
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
         eval_h h env arr $. fun h arr ->
@@ -9492,6 +9523,20 @@ let verify_program_core (* ?verify_program_core *)
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
         cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
+      | WReadArray(l2, arr, elem_tp, i) when language = CLang ->
+        if pure then static_error l "Cannot write in a pure context." None;
+        let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+        let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
+        let predsym = pointee_pred_symb l elem_tp in
+        let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
+        eval_h h env arr $. fun h arr ->
+        eval_h h env i $. fun h i ->
+        eval_h h env rhs $. fun h rhs ->
+        let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l2 elem_tp); TermPat predsym; SrcPat DummyPat] in
+        assert_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
+        assert_term (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)) h env l2 ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i size)))) None;
+        let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive rhs; vs] in
+        cont (Chunk ((c_array_symb, true), [elem_tp], real_unit, [a; n; size; q; updated], None) :: h) env
       | Deref (_, w, _) ->
         if pure then static_error l "Cannot write in a pure context." None;
         let pointeeType = t in

@@ -2,16 +2,6 @@
 
 /*@
 
-lemma_auto void array_inv<t>()
-    requires array<t>(?a, ?n, ?size, ?q, ?elems);
-    ensures array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
-{
-    open array<t>(a, n, size, q, elems);
-    if (n != 0)
-        array_inv();
-    close array<t>(a, n, size, q, elems);
-}
-
 lemma void array_split<t>(void *a, int offset)
     requires array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
     ensures array<t>(a, offset, size, q, take(offset, as)) &*& array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));

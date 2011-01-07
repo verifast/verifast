@@ -66,7 +66,7 @@ fixpoint bool es_success(list<pair<void *, pair<void *, void *> > > es, list<pai
 fixpoint list<pair<void *, void *> > es_apply(list<pair<void *, pair<void *, void *> > > es, list<pair<void *, void *> > cs) {
     switch (es) {
         case nil: return cs;
-        case cons(e, es0): return es_apply(es0, update(cs, fst(e), snd(snd(e))));
+        case cons(e, es0): return es_apply(es0, update_pairlist(cs, fst(e), snd(snd(e))));
     }
 }
 

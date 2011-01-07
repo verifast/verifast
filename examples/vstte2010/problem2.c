@@ -207,27 +207,18 @@ void invert(int *A, int N, int *B)
 {
     for (int i = 0; i < N; i++)
         /*@
-        invariant ints(A, N, as) &*& ints(B, N, ?bs) &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
+        invariant array<int>(A, N, sizeof(int), integer, as) &*& array<int>(B, N, sizeof(int), integer, ?bs) &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
         @*/
     {
-        //@ ints_split(A, i);
-        //@ open ints(A + i, N - i, drop(i, as));
-        //@ open array<int>(A + i, N - i, sizeof(int), integer, drop(i, as)); 
-        int ai = *(A + i);
+        int ai = A[i];
         //@ nth_drop(0, i, as);
-        //@ close ints(A + i, N - i, drop(i, as));
-        //@ ints_merge(A);
         //@ forall_drop(as, (between)(unit, 0, N - 1), i);
-        //@ ints_split(B, ai);
-        //@ open array<int>(B + ai, N - ai, sizeof(int), integer, drop(ai, bs)); 
-        *(B + ai) = i;
-        //@ ints_unseparate(B, ai, bs);
+        //@ forall_mem(ai, as, (between)(unit, 0, N - 1));
+        B[ai] = i;
         //@ take_plus_one(i, as);
         //@ with_index_append(0, take(i, as), cons(nth(i, as), nil));
         //@ forall_append(with_index(0, take(i, as)), with_index(i, cons(nth(i, as), nil)), (is_inverse)(update(ai, i, bs)));
-        //@ assert ai == nth(i, as);
         //@ distinct_mem_nth_take(as, i);
-        //@ assert !mem(ai, take(i, as));
         //@ forall_with_index_take_is_inverse(as, i, bs, ai, 0);
         //@ nth_update(ai, ai, i, bs);
     }

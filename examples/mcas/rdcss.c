@@ -683,7 +683,7 @@ bool rdcss_compare_and_store(void **a2, void *o2, void *n2)
                 close rdcss_cell(dsList)(a2, n2);
                 foreach_assoc_unseparate(bs, a2);
                 ghost_assoc_list_update(bsList, a2, n2);
-                close rdcss(id, unsep, info, aas, update(bs, a2, n2));
+                close rdcss(id, unsep, info, aas, update_pairlist(bs, a2, n2));
             } else {
                 close rdcss_cell(dsList)(a2, oldValue);
                 foreach_assoc_unseparate_nochange(bs, a2);
