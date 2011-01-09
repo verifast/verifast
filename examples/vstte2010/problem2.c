@@ -46,7 +46,6 @@ lemma void forall_with_index_take_is_inverse(list<int> as, int i, list<int> bs, 
         case cons(a, as0):
             if (k != i)
                 forall_with_index_take_is_inverse(as0, i, bs, ai, k + 1);
-            nth_update(a, ai, i, bs);
     }
 }
 
@@ -118,7 +117,6 @@ lemma void forall_between_distinct_mem(nat n, list<int> xs, int i)
                             mem_max(x0, xs0);
                         } else {
                             distinct_remove(max(x0, xs0), xs);
-                            int_of_nat_of_int(max(x0, xs0));
                             forall_between_distinct(nat_of_int(max(x0, xs0)), remove(max(x0, xs0), xs));
                             mem_max(x0, xs0);
                             length_remove(max(x0, xs0), xs);
@@ -135,8 +133,8 @@ lemma void forall_between_distinct_mem(nat n, list<int> xs, int i)
     }
 }
 
-lemma void nth_with_index<t>(int n, int i, list<t> xs)
-    requires 0 <= n &*& n < length(xs);
+lemma_auto(nth(n, with_index(i, xs))) void nth_with_index<t>(int n, int i, list<t> xs)
+    requires 0 <= n && n < length(xs);
     ensures nth(n, with_index(i, xs)) == pair(i + n, nth(n, xs));
 {
     switch (xs) {
@@ -147,7 +145,7 @@ lemma void nth_with_index<t>(int n, int i, list<t> xs)
     }
 }
 
-lemma void length_with_index<t>(int k, list<t> xs)
+lemma_auto(length(with_index(k, xs))) void length_with_index<t>(int k, list<t> xs)
     requires true;
     ensures length(with_index(k, xs)) == length(xs);
 {
@@ -168,26 +166,19 @@ lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
 {
     switch (n) {
         case zero:
-            drop_0(bs);
         case succ(n0):
             drop_n_plus_one(i, bs);
             is_inverse_symm(as, n0, bs, i + 1);
-            int_of_nat_of_int(length(as));
             forall_between_distinct_mem(nat_of_int(length(as)), as, i);
             mem_nth_index_of(i, as);
             int k = index_of(i, as);
-            nth_with_index(k, 0, as);
-            length_with_index(0, as);
             mem_nth(k, with_index(0, as));
             forall_mem(pair(k, i), with_index(0, as), (is_inverse)(bs));
             if (mem(k, drop(i + 1, bs))) {
                 int kk = index_of(k, drop(i + 1, bs));
                 mem_nth_index_of(k, drop(i + 1, bs));
-                nth_drop(kk, i + 1, bs);
                 int kkk = i + 1 + kk;
-                length_with_index(i + 1, drop(i + 1, bs));
                 mem_nth(kk, with_index(i + 1, drop(i + 1, bs)));
-                nth_with_index(kk, i + 1, drop(i + 1, bs));
                 forall_mem(pair(kkk, k), with_index(i + 1, drop(i + 1, bs)), (is_inverse)(as));
             }
     }
@@ -211,8 +202,6 @@ void invert(int *A, int N, int *B)
         @*/
     {
         int ai = A[i];
-        //@ nth_drop(0, i, as);
-        //@ forall_drop(as, (between)(unit, 0, N - 1), i);
         //@ forall_mem(ai, as, (between)(unit, 0, N - 1));
         B[ai] = i;
         //@ take_plus_one(i, as);
@@ -220,9 +209,7 @@ void invert(int *A, int N, int *B)
         //@ forall_append(with_index(0, take(i, as)), with_index(i, cons(nth(i, as), nil)), (is_inverse)(update(ai, i, bs)));
         //@ distinct_mem_nth_take(as, i);
         //@ forall_with_index_take_is_inverse(as, i, bs, ai, 0);
-        //@ nth_update(ai, ai, i, bs);
     }
     //@ assert ints(B, N, ?bs);
-    //@ int_of_nat_of_int(N);
     //@ is_inverse_symm(as, nat_of_int(N), bs, 0);
 }

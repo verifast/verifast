@@ -30,13 +30,9 @@ lemma void Lseg_add(Node ll)
     open Lseg(ll, jj, elems0);
     if (ll == jj) {
         open List(next, elems1);
-        close List(next, elems1);
-        close Lseg(ll, next, _);
     } else {
         open List(next, elems1);
-        close List(next, elems1);
         Lseg_add(ll.next);
-        close Lseg(ll, next, _);
     }
 }
 
@@ -81,8 +77,6 @@ class Problem3 {
         }
         //@ open List(null, _);
         //@ Lseg_to_List(ll);
-        //@ append_nil(elems);
         return i;
     }
-
 }

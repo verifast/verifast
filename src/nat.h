@@ -14,7 +14,7 @@ fixpoint int int_of_nat(nat n) {
 
 fixpoint nat nat_of_int(int n);
 
-lemma void int_of_nat_of_int(int n);
+lemma_auto(int_of_nat(nat_of_int(n))) void int_of_nat_of_int(int n);
     requires 0 <= n;
     ensures int_of_nat(nat_of_int(n)) == n;
 
