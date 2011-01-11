@@ -25,7 +25,7 @@ verifast_both -disable_overflow_check counter.c
 verifast_both -disable_overflow_check counter_with_pred.c
 verifast_both -disable_overflow_check counter_with_pred_auto.c
 verifast_both -disable_overflow_check cp.c
-verifast -c decreases.c
+ifnotmac verifast -c decreases.c
 verifast_both -c dolevyao.c
 verifast_both -c dolevyao_nsl.c
 verifast_both -c dolevyao_rpc.c
@@ -117,7 +117,7 @@ verifast_both -allow_assume -disable_overflow_check -c map.java
 verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c -disable_overflow_check Recell.java
 verifast_both -c -disable_overflow_check AmortizedQueue.java
-verifast -c -disable_overflow_check NQueens.java
+ifnotmac verifast -c -disable_overflow_check NQueens.java
 verifast_both -c -disable_overflow_check SuperCalls.java
 verifast_both -c Spouse.java
 verifast_both -c Spouse2.java
@@ -129,10 +129,10 @@ verifast_both -c Tree.java
 verifast_both -c SuperConstructorCall.java
 cd ..
 cd vstte2010
-verifast -c -disable_overflow_check Problem1.c
-verifast -c -disable_overflow_check Problem2.c
+ifnotmac verifast -c -disable_overflow_check Problem1.c
+ifnotmac verifast -c -disable_overflow_check Problem2.c
 verifast_both -c -disable_overflow_check Problem3.java
-verifast -c -disable_overflow_check Problem4.java
+ifnotmac verifast -c -disable_overflow_check Problem4.java
 verifast_both -c -disable_overflow_check Problem5.java
 cd ..
 cd ..

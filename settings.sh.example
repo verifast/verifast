@@ -1,15 +1,6 @@
-export PATH=~/verifast/trunk/src:$PATH
+export PATH=~/verifast/trunk/bin:$PATH
 
 export OCAMLLIB=/usr/lib/ocaml/3.10.2
-#set PATH=%PATH%;C:\Ocaml\bin
-
-#set GTKLIB=C:\gtk+-bundle-2.12.11\lib
-#set PATH=C:\gtk+-bundle-2.12.11\bin;%PATH%
 
 export Z3=~/z3
 export LD_LIBRARY_PATH=~/z3/lib:$LD_LIBRARY_PATH
-
-#set PATH=C:\svn-win32-1.5.5\bin;%PATH%
-
-#set VERIFAST_REPOSITORY_URL=https://aramis.cs.kuleuven.be/svn/verifast/verifast/trunk
-#set PATH=C:\Program Files\7-Zip;%PATH%

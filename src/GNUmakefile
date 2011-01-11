@@ -17,23 +17,23 @@ else
   numcpu := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
-test: mysh verifast vfide dlsymtool vfstrip list.vfmanifest raw_ghost_lists.vfmanifest listex.vfmanifest
-	export PATH=`pwd`:$$PATH; cd ..; src/mysh -cpus $(numcpu) < src/testsuite.mysh
+test: ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool ../bin/vfstrip ../bin/list.vfmanifest ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest
+	export PATH=`pwd`:$$PATH; cd ..; bin/mysh -cpus $(numcpu) < testsuite.mysh
 
-list.vfmanifest: list.c list.h
-	verifast -c -emit_vfmanifest list.c
+../bin/list.vfmanifest: ../bin/list.c ../bin/list.h
+	cd ../bin; verifast -c -emit_vfmanifest list.c
 
-listex.vfmanifest: listex.c listex.h
-	verifast -c -emit_vfmanifest listex.c
+../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.h
+	cd ../bin; verifast -c -emit_vfmanifest listex.c
 
-raw_ghost_lists.vfmanifest: raw_ghost_lists.c raw_ghost_lists.h
-	verifast -c -emit_vfmanifest raw_ghost_lists.c
+../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c ../bin/raw_ghost_lists.h
+	cd ../bin; verifast -c -emit_vfmanifest raw_ghost_lists.c
 
-vfstrip: vfstrip.ml
-	ocamlopt.opt -o vfstrip vfstrip.ml
+../bin/vfstrip: vfstrip.ml
+	ocamlopt.opt -o ../bin/vfstrip vfstrip.ml
 
-dlsymtool: dlsymtool.ml
-	ocamlopt.opt -o dlsymtool dlsymtool.ml
+../bin/dlsymtool: dlsymtool.ml
+	ocamlopt.opt -o ../bin/dlsymtool dlsymtool.ml
 
 reduxtest: verifastredux.opt
 	cd ../examples
@@ -69,8 +69,8 @@ Fonts.cmx: Fonts_default.ml
 	ocamlopt -c Fonts.ml
 endif
 
-mysh: Fonts.cmx mysh.ml
-	ocamlopt.opt -thread -o mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+../bin/mysh: Fonts.cmx mysh.ml
+	ocamlopt.opt -thread -o ../bin/mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
 vfversion.cmi: vfversion.mli
 	ocamlc -c vfversion.mli
@@ -104,8 +104,8 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 	cd macos; ocamlopt.opt -c -I +lablgtk2 GSourceView2.ml
 endif
 
-vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -143,8 +143,8 @@ SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
 SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
 	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
 
-verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifast unix.cmxa nums.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+../bin/verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
@@ -165,31 +165,25 @@ release: test release_core
 
 release_core:
 	mkdir verifast-$(VFVERSION)
-	mkdir verifast-$(VFVERSION)/bin
+	cp -R ../bin verifast-$(VFVERSION)
 ifdef Z3
-	cp verifast verifast-$(VFVERSION)/bin/verifast-core
-	cp vfide verifast-$(VFVERSION)/bin/vfide-core
+	cd verifast-$(VFVERSION)/bin; mv verifast verifast-core
+	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp verifast.sh verifast-$(VFVERSION)/bin/verifast
 	cp vfide.sh verifast-$(VFVERSION)/bin/vfide
 	cp $(Z3)/lib/libz3-gmp.so verifast-$(VFVERSION)/bin
 	cp /usr/lib/libgtksourceview-2.0.so.0.0.0 verifast-$(VFVERSION)/bin/libgtksourceview-2.0.so.0
 	cp ../Z3.LICENSE.txt verifast-$(VFVERSION)
 else
-	cp verifast verifast-$(VFVERSION)/bin
-	cp vfide verifast-$(VFVERSION)/bin/vfide-core
+	cd verifast-$(VFVERSION)/bin; mv vfide vfide-core
 	cp vfide-mac.sh verifast-$(VFVERSION)/bin/vfide
 	cp -R ~/Desktop/GtkDemo.app/Contents/Resources/* verifast-$(VFVERSION)
 endif
-	cp vfstrip verifast-$(VFVERSION)/bin
-	cp assume.vfmanifest crt.vfmanifest list.vfmanifest listex.vfmanifest raw_ghost_lists.vfmanifest prelude.h prelude_core.h stdlib.h stdio.h malloc.h string.h list.h listex.h nat.h ghost_cells.h raw_ghost_lists.h counting.h threading.h threading.vfmanifest threading.c verifast-$(VFVERSION)/bin
-	cp -R rt verifast-$(VFVERSION)/bin
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
 	cp -R ../tutorial_solutions verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/tutorial
 	cd verifast-$(VFVERSION)/tutorial_solutions; for f in *.c; do ../bin/vfstrip < $$f > ../tutorial/$$f; done; cd ../..
-	cp testsuite.mysh verifast-$(VFVERSION)
+	cp ../testsuite.mysh verifast-$(VFVERSION)
 	cp ../test.sh verifast-$(VFVERSION)
-	cp mysh verifast-$(VFVERSION)/bin
-	cp dlsymtool verifast-$(VFVERSION)/bin
