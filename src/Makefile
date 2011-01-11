@@ -2,24 +2,30 @@
 
 OPT_OPTIONS=-g
 
-test: verifast.exe vfide.exe mysh.exe dlsymtool.exe vfstrip.exe list.vfmanifest raw_ghost_lists.vfmanifest listex.vfmanifest
+test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest
 	time < nl.txt
 	cd ..
-	mysh -cpus %NUMBER_OF_PROCESSORS% < src\testsuite.mysh
+	mysh -cpus %NUMBER_OF_PROCESSORS% < testsuite.mysh
 	cd src
 	time < nl.txt
 
-list.vfmanifest: list.h list.c
+..\bin\list.vfmanifest: ..\bin\list.h ..\bin\list.c
+	cd ..\bin
 	verifast -c -emit_vfmanifest list.c
+	cd ..\src
 
-raw_ghost_lists.vfmanifest: raw_ghost_lists.h raw_ghost_lists.c
+..\bin\raw_ghost_lists.vfmanifest: ..\bin\raw_ghost_lists.h ..\bin\raw_ghost_lists.c
+	cd ..\bin
 	verifast -c -emit_vfmanifest raw_ghost_lists.c
+	cd ..\src
 
-listex.vfmanifest: listex.h listex.c
+..\bin\listex.vfmanifest: ..\bin\listex.h ..\bin\listex.c
+	cd ..\bin
 	verifast -c -emit_vfmanifest listex.c
+	cd ..\src
 
 clean:
-	del *.cm* *.obj *.exe
+	del *.cm* *.obj ..\bin\*.exe
 
 refman:
 	cd ..\doc\refman
@@ -38,11 +44,11 @@ tabhunter.exe: tabhunter.ml
 tabhunt: tabhunter.exe
 	tabhunter.exe
 
-vfstrip.exe: vfstrip.ml
-	ocamlopt.opt -o vfstrip.exe vfstrip.ml
+..\bin\vfstrip.exe: vfstrip.ml
+	ocamlopt.opt -o ..\bin\vfstrip.exe vfstrip.ml
 
-dlsymtool.exe: dlsymtool.ml
-	ocamlopt.opt -o dlsymtool.exe dlsymtool.ml
+..\bin\dlsymtool.exe: dlsymtool.ml
+	ocamlopt.opt -o ..\bin\dlsymtool.exe dlsymtool.ml
 
 Fonts.cmo: Fonts_default.ml
 	copy Fonts_default.ml Fonts.ml
@@ -52,8 +58,8 @@ Fonts.cmx: Fonts_default.ml
 	copy Fonts_default.ml Fonts.ml
 	ocamlopt.opt -c Fonts.ml
 
-mysh.exe: Fonts.cmx mysh.ml
-	ocamlopt.opt -thread -o mysh.exe unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+..\bin\mysh.exe: Fonts.cmx mysh.ml
+	ocamlopt.opt -thread -o ..\bin\mysh.exe unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
 Printexc_proxy.cmo:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml
@@ -99,9 +105,9 @@ vfide.cmx: vfversion.cmi verifast.cmx Fonts.cmx vfide.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I +lablgtk2 Fonts.cmx vfide.ml
 	time < nl.txt
 
-vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
+..\bin\vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\vfide.exe -I $(Z3)\ocaml -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
 vfideredux.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml Fonts.cmx vfide.cmx
@@ -132,9 +138,9 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastz3redux_opt.exe -I $(Z3)\ocaml record_backtrace.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-verifast.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
+..\bin\verifast.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifast.exe -I $(Z3)\ocaml record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\verifast.exe -I $(Z3)\ocaml record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
 	time < nl.txt
 
 proverapi.cmx: proverapi.ml
@@ -171,7 +177,7 @@ SExpressionEmitter.cmx: SExpressions.cmx verifast.cmx SExpressionEmitter.ml SExp
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c nums.cmxa SExpressions.cmx verifast.cmx SExpressionEmitter.ml
 
 # For testing purposes, ignore this
-fred: verifast.exe
+fred: ..\bin\verifast.exe
 #	-verifast -shared -emit_sexpr_fail test.lisp test.c
 #	-verifast -shared -emit_sexpr_fail test2.lisp test2.c
 #	-verifast -shared -emit_sexpr_fail test3.lisp test3.c
@@ -182,11 +188,11 @@ fred: verifast.exe
 	@copy shape-* $(SHAPEANALYSIS)\src\vf > ignore.txt
 	@copy *.lisp $(SHAPEANALYSIS)\src\vf > ignore.txt
 
-fred2: verifast.exe
+fred2: ..\bin\verifast.exe
 	verifast -c -shared -emit_highlighted_source_files test3.c
 
 # Builds necessary files for REPL-use (needed due to .cmo files not being necessary for verifast.exe)
-repl: cmo verifast.exe
+repl: cmo ..\bin\verifast.exe
 
 
 release: test refman
@@ -194,13 +200,8 @@ release: test refman
 	mkdir verifast-$(VFVERSION)
 	cd verifast-$(VFVERSION)
 	copy $(Z3)\LICENSE.txt z3.LICENSE.txt
-	mkdir bin
+	xcopy /E /I ..\..\bin bin
 	cd bin
-	copy ..\..\assume.vfmanifest
-	copy ..\..\crt.vfmanifest
-	copy ..\..\list.vfmanifest
-	copy ..\..\raw_ghost_lists.vfmanifest
-	copy ..\..\listex.vfmanifest
 	copy $(GTKLIB)\..\bin\iconv.dll
 	copy $(GTKLIB)\..\bin\intl.dll
 	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
@@ -219,27 +220,6 @@ release: test refman
 	copy $(GTKLIB)\..\bin\libpng12-0.dll
 	copy $(GTKLIB)\..\bin\libxml2.dll
 	copy $(GTKLIB)\..\bin\zlib1.dll
-	copy ..\..\prelude.h
-	copy ..\..\prelude_core.h
-	copy ..\..\ghost_cells.h
-	copy ..\..\stdlib.h
-	copy ..\..\stdio.h
-	copy ..\..\malloc.h
-	copy ..\..\string.h
-	copy ..\..\list.h
-	copy ..\..\nat.h
-	copy ..\..\raw_ghost_lists.h
-	copy ..\..\listex.h
-	copy ..\..\counting.h
-	copy ..\..\threading.h
-	copy ..\..\threading.vfmanifest
-	copy ..\..\threading.c
-	copy ..\..\verifast.exe verifast.exe
-	copy ..\..\vfide.exe vfide.exe
-	copy ..\..\vfstrip.exe vfstrip.exe
-	copy ..\..\mysh.exe mysh.exe
-	copy ..\..\dlsymtool.exe dlsymtool.exe
-	xcopy /E /I ..\..\rt rt
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
 	cd ..
@@ -262,5 +242,5 @@ release: test refman
 	cd tutorial_solutions
 	for %f in (*.c) do vfstrip < %f > ..\tutorial\%f
 	cd ..
-	copy ..\..\src\testsuite.mysh
+	copy ..\..\testsuite.mysh
 	copy ..\..\test.bat
