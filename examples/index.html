@@ -8,10 +8,28 @@ blockquote {margin: 0 10pt; padding: 0}
 </head>
 <body>
 <h1>VeriFast Examples</h1>
+<h2>C Run-Time Library</h2>
+<p>The modules that VeriFast automatically includes when link-checking a C program</p>
+<p><a href="crt/prelude_core.h.html">prelude_core.h</a> - Core of the prelude (part that is used by <tt>list.h</tt>)</p>
+<p><a href="crt/list.h.html">list.h</a> - Mathematical lists</p>
+<p><a href="crt/prelude.h.html">prelude.h</a> - The header file that VeriFast implicitly includes in every C file</p>
+<p><a href="crt/ghost_cells.h.html">ghost_cells.h</a> - Auxiliary heap cells</p>
+<p><a href="crt/raw_ghost_lists.h.html">raw_ghost_lists.h</a> - Raw ghost lists, where each element has an id and a value</p>
+<p><a href="crt/nat.h.html">nat.h</a> - An inductive datatype to enable natural induction on integers</p>
+<p><a href="crt/listex.h.html">listex.h</a> - Extra definitions and lemmas about inductive datatype <tt>list</tt></p>
+<p><a href="crt/arrays.h.html">arrays.h</a> - Useful lemmas for dealing with arrays</p>
+<p><a href="crt/list.c.html">list.c</a> - Implementation (i.e., proof) of the lemmas declared in <tt>list.h</tt></p>
+<p><a href="crt/raw_ghost_lists.c.html">raw_ghost_lists.c</a> - Implementation of raw ghost lists in terms of ghost cells</p>
+<p><a href="crt/malloc.h.html">malloc.h</a> - Partial spec of module <tt>malloc</tt> of the C run-time library</p>
+<p><a href="crt/stdio.h.html">stdio.h</a> - Partial spec of module <tt>stdio</tt> of the C run-time library</p>
+<p><a href="crt/stdlib.h.html">stdlib.h</a> - Partial spec of module <tt>stdlib</tt> of the C run-time library</p>
+<p><a href="crt/string.h.html">string.h</a> - Partial spec of module <tt>string</tt> of the C run-time library</p>
+<p><a href="crt/threading.h.html">threading.h</a> - A wrapper around platform-specific threading and locking APIs; implemented by <tt>threading.c</tt> (not verified; not shown)</p>
 <h2>C Examples</h2>
 <p><a href="alt_threading.c.html">alt_threading.c</a> - An alternative threading API that uses parameterized function types instead of function-pointer-indexed predicate families, plus an example of its use.</p>
 <p><a href="args.c.html">args.c</a> - Prints the command-line arguments to the console. Shows a way to deal with arrays.</p>
 <p><a href="array_of_struct.c.html">array_of_struct.c</a> - Demonstrates how to deal with an array of struct.</p>
+<p><a href="barrier.c.html">barrier.c</a> - A multithreaded program that uses a barrier for synchronization.</p>
 <p><b>BeepDriver</b> - A DLL that provides "beep" functionality and a program that uses the DLL. Demonstrates VeriFast's support for verification of unloadable modules.</p>
 <blockquote>
 <p><a href="BeepDriver/libraries.h.html">libraries.h</a> - Wrapper around the Windows/*nix DLL loading and unloading APIs.
@@ -47,21 +65,6 @@ Technical Report CW-549, Department of Computer Science, Katholieke Universiteit
 <p><a href="counter_with_pred.c.html">counter_with_pred.c</a> - The same counter, now using abstraction.</p>
 <p><a href="counter_with_pred_auto.c.html">counter_with_pred_auto.c</a> - The same counter, now using the automatic open/close feature.</p>
 <p><a href="cp.c.html">cp.c</a> - A verified implementation of the *nix cp command (copies a file)</p>
-<p><b><a name="crt">crt</a></b> - The modules that VeriFast automatically includes when link-checking a C program</p>
-<blockquote>
-<p><a href="crt/prelude_core.h.html">prelude_core.h</a> - Core of the prelude (part that is used by <tt>list.h</tt>)</p>
-<p><a href="crt/list.h.html">list.h</a> - Mathematical lists</p>
-<p><a href="crt/prelude.h.html">prelude.h</a> - The header file that VeriFast implicitly includes in every C file</p>
-<p><a href="crt/ghost_cells.h.html">ghost_cells.h</a> - Auxiliary heap cells</p>
-<p><a href="crt/raw_ghost_lists.h.html">raw_ghost_lists.h</a> - Raw ghost lists, where each element has an id and a value</p>
-<p><a href="crt/list.c.html">list.c</a> - Implementation (i.e., proof) of the lemmas declared in <tt>list.h</tt></p>
-<p><a href="crt/raw_ghost_lists.c.html">raw_ghost_lists.c</a> - Implementation of raw ghost lists in terms of ghost cells</p>
-<p><a href="crt/malloc.h.html">malloc.h</a> - Partial spec of module <tt>malloc</tt> of the C run-time library</p>
-<p><a href="crt/stdio.h.html">stdio.h</a> - Partial spec of module <tt>stdio</tt> of the C run-time library</p>
-<p><a href="crt/stdlib.h.html">stdlib.h</a> - Partial spec of module <tt>stdlib</tt> of the C run-time library</p>
-<p><a href="crt/string.h.html">string.h</a> - Partial spec of module <tt>string</tt> of the C run-time library</p>
-<p><a href="crt/threading.h.html">threading.h</a> - A wrapper around platform-specific threading and locking APIs; implemented by <tt>threading.c</tt> (not verified; not shown)</p>
-</blockquote>
 <p><a href="dyncode.c.html">dyncode.c</a> - An example that writes x86 assembly code for a plusOne function into a malloc'ed char array and then calls the function. Demonstates parameterized function types.</p>
 <p><a href="enums.c.html">enums.c</a> - An example demonstrating VeriFast's support for enums.</p>
 <p><a href="equalsmap.c.html">equalsmap.c</a> - A collection ADT that compares elements using a user-provided equals function; alternative approach</p>
@@ -71,6 +74,18 @@ Demonstrates a way to implement inductive datatypes in C and verify them with Ve
 <p><a href="ghost_field.c.html">ghost_field.c</a> - Simple ghost fields test.</p>
 <p><a href="globals.c.html">globals.c</a> - Demonstrates VeriFast's support for global variables.</p>
 <p><a href="goto.c.html">goto.c</a> - Demonstrates VeriFast's support for goto statements.</p>
+<p><b>helloproc</b> - The VeriFast Linux Kernel Module Verification Kit (under construction), and an example verified kernel module called helloproc, that implements a /proc file.</p>
+<blockquote>
+<p><a href="helloproc/vf_README.txt">vf_README.txt</a> - Explains the VeriFast Linux Kernel Module Verification Kit</p>
+<p><a href="helloproc/vf_cleanup_debt.h.html">vf_cleanup_debt.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/vf_initexit.h.html">vf_initexit.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/vf_mem.h.html">vf_mem.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/vf_mutex.h.html">vf_mutex.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/vf_printk.h.html">vf_printk.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/vf_procfs.h.html">vf_procfs.h</a> - A VLKMVK API header file</p>
+<p><a href="helloproc/helloproc_README.txt">helloproc_README.txt</a> - Explains the example verified kernel module</p>
+<p><a href="helloproc/helloproc_main.c.html">helloproc_main.c</a> - The example verified kernel module</p>
+</blockquote>
 <p><a href="ifs.c.html">ifs.c</a> -
 Demonstrates how invariant statements can be used to solve the problem of exponential verification time in the presence of many independent if statements in a function.</p>
 <p><b>incr_box</b> - A program where one thread continually increments a shared counter and another reads the counter twice and asserts that the second value is not less than the first value.
@@ -164,6 +179,20 @@ A loop spec consists of a loop precondition and a loop postcondition and is an a
 that walk a recursive data structure. The loop is verified just like the corresponding tail-recursive function.</p>
 <p><a href="tuerk_explicit.c.html">tuerk_explicit.c</a> - A version of tuerk.c where the recursive call of the tail-recursive function is written explicitly.</p>
 <p><a href="wc.c.html">wc.c</a> - A verified implementation of the *nix wc command (counts the number of words in a given file)</p>
+<h2>Java Run-Time Library</h2>
+<p><a href="rt/assume.javaspec.html">assume.javaspec</a></p>
+<p><a href="rt/Class.javaspec.html">Class.javaspec</a></p>
+<p><a href="rt/Io.javaspec.html">Io.javaspec</a></p>
+<p><a href="rt/JavaCard.javaspec.html">JavaCard.javaspec</a></p>
+<p><a href="rt/List.javaspec.html">List.javaspec</a></p>
+<p><a href="rt/Nat.javaspec.html">Nat.javaspec</a></p>
+<p><a href="rt/Object.javaspec.html">Object.javaspec</a></p>
+<p><a href="rt/PureList.javaspec.html">PureList.javaspec</a></p>
+<p><a href="rt/Runnable.javaspec.html">Runnable.javaspec</a></p>
+<p><a href="rt/Semaphore.javaspec.html">Semaphore.javaspec</a></p>
+<p><a href="rt/Socket.javaspec.html">Socket.javaspec</a></p>
+<p><a href="rt/String.javaspec.html">String.javaspec</a></p>
+<p><a href="rt/StringBuffer.javaspec.html">StringBuffer.javaspec</a></p>
 <h2>Java Examples</h2>
 <p>See Cedric Cuypers, Bart Jacobs, and Frank Piessens.
 <a href="http://www.cs.kuleuven.be/publicaties/rapporten/cw/CW550.abs.html">Verification of data-race-freedom of a Java chat server with VeriFast</a>.
@@ -184,6 +213,17 @@ Technical Report CW-550, Department of Computer Science, Katholieke Universiteit
 <p><a href="java/Contrib.java.html">Contrib.java</a> - Java version of the contrib.c example. Uses ThreadingHelper.javaspec.</p>
 <p><a href="java/Counter.java.html">Counter.java</a> - Simple introductory example</p>
 <p><a href="java/DefaultCtor.java.html">DefaultCtor.java</a> - Default constructor</p>
+<p><b>gameserver</b> - A multithreaded rock-paper-scissors game server</p>
+<blockquote>
+<p><a href="java/gameserver/BufferedSocket.java.html">BufferedSocket.java</a></p>
+<p><a href="java/gameserver/Game.java.html">Game.java</a></p>
+<p><a href="java/gameserver/Games.java.html">Games.java</a></p>
+<p><a href="java/gameserver/GameServer.java.html">GameServer.java</a></p>
+<p><a href="java/gameserver/GetRockPaperScissorsAsync.java.html">GetRockPaperScissorsAsync.java</a></p>
+<p><a href="java/gameserver/Main.java.html">Main.java.html</a></p>
+<p><a href="java/gameserver/RPSSession.java.html">RPSSession.java</a></p>
+<p><a href="java/gameserver/StartSession.java.html">StartSession.java</a></p>
+</blockquote>
 <p><a href="java/hello.scala.html">hello.scala</a> - A tiny Scala example. Note: VeriFast's support for Scala is currently limited to essentially this example.</p>
 <p><b>Iterator</b> - A Java program consisting of multiple jar files
 <blockquote>
