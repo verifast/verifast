@@ -41,3 +41,6 @@
 .provides counting.h#stop_counting
 .provides nat.h#int_of_nat_of_int
 .provides nat.h#int_of_nat_nonnegative
+.provides nat.h#nat_of_int_of_nat
+.provides nat.h#nat_of_zero
+.provides nat.h#succ_int

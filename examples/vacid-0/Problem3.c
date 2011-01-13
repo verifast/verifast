@@ -135,17 +135,27 @@ lemma void is_heap_remove_except(nat i, list<int> h, nat exception)
   }
 }
 
-lemma void is_heap_swap(nat i, list<int> h, int exc, int j);
-  requires is_heap(i, h, cons(nat_of_int(exc), nil)) == true; // more assumptions needed here
-  //((j == 2 * exc && nth(j, h) < nth(j + 1, h)) || (j == 2 * exc + 1 &&  nth(j -1, h) < nth(j, h))) &*& 0 + nth(j, h) < 0 + nth(exc, h);
-  ensures is_heap(i, update(j, nth(exc, h), update(exc, nth(j, h), h)), cons(nat_of_int(j), nil)) == true;
-/*{
+lemma void is_heap_swap(nat i, list<int> h, int k, int prevk)
+  requires is_heap(i, h, cons(nat_of_int(k), nil)) == true &*& int_of_nat(i) <= length(h) &*& 1 <= k &*& 2*k < length(h) &*& (2*k >= length(h)-1 || nth<int>(2*k, h) <= nth<int>(2*k + 1, h)) &*& nth<int>(2*k, h) <= nth(k, h) &*& k == 1 || 2 * prevk == k || 2 * prevk  + 1 == k &*&  k == 1 ? true : nth<int>(prevk, h) <= nth(2*k, h);
+  ensures is_heap(i, update(2*k, nth(k, h), update(k, nth(2*k, h), h)), cons(nat_of_int(2*k), nil)) == true;
+{
   switch(i) {
     case zero:
-    case succ(i0):
-      is_heap_swap(i0, h, exc, j);
+    case succ(i0): 
+      is_heap_swap(i0, h, k, prevk);
   }
-}*/
+}
+
+lemma void is_heap_swap2(nat i, list<int> h, int k, int prevk)
+  requires is_heap(i, h, cons(nat_of_int(k), nil)) == true &*& int_of_nat(i) <= length(h) &*& 1 <= k &*& 2*k +1< length(h) &*& (nth<int>(2*k+1, h) <= nth<int>(2*k, h)) &*& nth<int>(2*k+1, h) <= nth(k, h) &*& k == 1 || 2 * prevk == k || 2 * prevk  + 1 == k &*&  k == 1 || 2 * k + 1 >= length(h) ? true : nth<int>(prevk, h) <= nth(2*k+1, h); 
+  ensures is_heap(i, update(2*k + 1, nth(k, h), update(k, nth(2*k + 1, h), h)), cons(nat_of_int(2*k + 1), nil)) == true;
+{
+  switch(i) {
+    case zero:
+    case succ(i0): 
+      is_heap_swap2(i0, h, k, prevk);
+  }
+}
 
 lemma void is_heap_remove_excep(nat i, list<int> h, int exc)
   requires is_heap(i, h, cons(nat_of_int(exc), nil)) == true &*&  2 * exc >= length(h);
@@ -186,8 +196,36 @@ lemma void is_heap_smaller(nat i, list<int> h, int j)
   }
 }
 
+lemma void is_heap_e_smaller(nat i, list<int> h, int e, int j)
+  requires is_heap(i, h, cons(nat_of_int(e), nil)) == true &*& 1 <= e &*& e <= length(h) &*& 2*j < length(h) &*& 1 <= j&*& j <= int_of_nat(i) &*& e < j ;
+  ensures 0 +nth(j, h) <= 0 +nth(2*j, h);
+{
+  switch(i) {
+    case zero:
+    case succ(i0):
+      if(nat_of_int(j) == i) {
+      } else {
+        is_heap_e_smaller(i0, h, e, j);
+      }
+  }
+}
+
+lemma void is_heap_e_smaller2(nat i, list<int> h, int e, int j)
+  requires is_heap(i, h, cons(nat_of_int(e), nil)) == true &*& 1 <= e &*& e <= length(h) &*& 2*j + 1 < length(h) &*& 1 <= j&*& j <= int_of_nat(i) &*& e < j ;
+  ensures 0 +nth(j, h) <= 0 +nth(2*j + 1, h);
+{
+  switch(i) {
+    case zero:
+    case succ(i0):
+      if(nat_of_int(j) == i) {
+      } else {
+        is_heap_e_smaller2(i0, h, e, j);
+      }
+  }
+}
+
 lemma void is_heap_smaller2(nat i, list<int> h, int j)
-  requires is_heap(i, h, nil) == true &*& 2*j + 1 < length(h) &*& 1 <= j &*& j <= int_of_nat(i);
+  requires is_heap(i, h, nil) == true &*& 2*j + 1 < length(h) &*& 1 <= j &*& j <= int_of_nat(i) ;
   ensures 0 +nth(j, h) <= 0 +nth(2*j + 1, h);
 {
   switch(i) {
@@ -221,24 +259,37 @@ lemma void minimum_of_heap(nat i, list<int> h, int n)
 @*/
 
 void sink(int* arr, int size, int k)
-  //@ requires array<int>(arr, ?capacity, sizeof(int), integer, ?vs2) &*& 1 <= k &*& k <= size+1 &*& size < capacity &*& is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), cons(nat_of_int(k), nil)) == true;
+  //@ requires array<int>(arr, ?capacity, sizeof(int), integer, ?vs2) &*& k == 1 &*& 1 <= k &*& k <= size+1 &*& size < capacity &*& is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), cons(nat_of_int(k), nil)) == true;
   //@ ensures array<int>(arr, capacity, sizeof(int), integer, ?vs2b) &*& is_heap(nat_of_int(length(take(size + 1, vs2b))), take(size + 1, vs2b), nil) == true;
 {
+  //@ int prevk = div2(k); 
   //@ int oldk = k;
   while(2*k <= size)
-    //@ invariant oldk <= k &*& k <= size+1 &*& array<int>(arr, capacity, sizeof(int), integer, ?vs3) &*& is_heap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), cons(nat_of_int(k), nil)) == true;
+    //@ invariant k == 1 || 2* prevk ==k || 2*prevk+1 == k &*& oldk <= k &*& k <= size+1 &*& array<int>(arr, capacity, sizeof(int), integer, ?vs3) &*& (1 < k && 2*k < size + 1 ? nth<int>(prevk, vs3) <= nth(2*k, vs3) : true) &*& (1 < k && 2*k +1< size + 1 ? nth<int>(prevk, vs3) <= nth(2*k+1, vs3) : true) &*& is_heap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), cons(nat_of_int(k), nil)) == true;
   {
     int j = 2 * k;
     if(j < size && arr[j] > arr[j + 1]) {
       j++;
+    } 
+    if (2*j < size + 1) {
+      //@ is_heap_e_smaller(nat_of_int(size + 1), take(size + 1, vs3), k, j); 
+    }
+    if(2*j + 1 < size + 1) {
+      //@ is_heap_e_smaller(nat_of_int(size + 1), take(size + 1, vs3), k, j); 
+      //@ is_heap_e_smaller2(nat_of_int(size + 1), take(size + 1, vs3), k, j);
     }
     if(! (arr[k] > arr[j])) {
       //@ is_heap_remove_except(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), nat_of_int(k));
       return;
     }
     exch(arr, k, j);
-    //@ is_heap_swap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, j);
+    //@ assert array<int>(arr, capacity, sizeof(int), integer, ?myvs);
+    if(j == 2 * k) {       //@ is_heap_swap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, prevk);
+    } else {
+       //@ is_heap_swap2(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, prevk);
+    }
     k = j;
+    //@ prevk = div2(k);
   }
   //@ is_heap_remove_excep(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k);
 }
@@ -253,11 +304,9 @@ int extract_min(struct heap* h)
   int res = h->elems[1];
   h->elems[1] = h->elems[h->size];
   //@  minimum_of_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), size);
-  //@ int last = nth(size, vs2);
   //@ is_heap_update(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), 1, nth(h->size, vs2));
   //@ update_take(vs2, 1, nth(h->size, vs2), size + 1);
   h->size--;
-  //@ assert length(take(size + 1, vs2)) == length(take(size, vs2)) + 1;
   //@ succ_int(length(take(size, vs2)));
   //@ assert array<int>(arr, cap + 1, sizeof(int), integer, ?vs3);
   //@ is_heap_shrink_list(nat_of_int(length(take(size, vs3))), take(size + 1, vs3), cons(succ(zero), nil));
