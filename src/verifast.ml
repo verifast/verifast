@@ -11371,7 +11371,7 @@ let prover_banners () = String.concat "" (List.map (fun (_, (banner, _)) -> bann
 
 let banner () =
   "Verifast " ^ Vfversion.version ^ " for C and Java (released " ^ Vfversion.release_date ^ ") <http://www.cs.kuleuven.be/~bartj/verifast/>\n" ^
-  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, Jan Smans <http://www.cs.kuleuven.be/~jans/>, and Frank Piessens, with contributions by Cedric Cuypers, Frederic Vogels, and Lieven Desmet" ^
+  "By Bart Jacobs <http://www.cs.kuleuven.be/~bartj/>, Jan Smans <http://www.cs.kuleuven.be/~jans/>, and Frank Piessens, with contributions by Cedric Cuypers, Lieven Desmet, Willem Penninckx, Thomas Van Eyck, and Frederic Vogels" ^
   prover_banners ()
 
 let lookup_prover prover =
