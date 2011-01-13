@@ -129,11 +129,11 @@ verifast_both -c Tree.java
 verifast_both -c SuperConstructorCall.java
 cd ..
 cd vstte2010
-ifnotmac verifast -c -disable_overflow_check Problem1.c
-ifnotmac verifast -c -disable_overflow_check Problem2.c
-verifast_both -c -disable_overflow_check Problem3.java
-ifnotmac verifast -c -disable_overflow_check Problem4.java
-verifast_both -c -disable_overflow_check Problem5.java
+ifnotmac verifast -c -disable_overflow_check problem1.c
+ifnotmac verifast -c -disable_overflow_check problem2.c
+verifast_both -c -disable_overflow_check problem3.java
+ifnotmac verifast -c -disable_overflow_check problem4.java
+verifast_both -c -disable_overflow_check problem5.java
 cd ..
 cd ..
 cd tutorial_solutions

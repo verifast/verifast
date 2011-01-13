@@ -22,6 +22,8 @@ Z3
 Lablgtk with lablgtksourceview2
 ===============================
 
+Note: on Ubuntu 10.4 (Lucid Lynx), simply sudo apt-get install liblablgtksourceview2-ocaml-dev instead. (If apt-get gives you Bad package errors, first install all updates recommended by Update Manager.)
+
 - Download lablgtk-2.14.0.tar.gz from the lablgtk website
 - ./configure --with-gtksourceview2
 - make world    # This will fail due to compiler errors; fix these by replacing SourceViewEnums by SourceView2Enums in the relevant source files
