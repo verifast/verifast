@@ -134,6 +134,18 @@ lemma void take_length<t>(list<t> xs)
     }
 }
 
+lemma void length_remove<t>(t x, list<t> xs)
+    requires true;
+    ensures length(remove(x, xs)) == (mem(x, xs) ?  length(xs) - 1 : length(xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x != x0)
+                length_remove(x, xs0);
+    }
+}
+
 lemma void drop_length<t>(list<t> xs)
     requires true;
     ensures drop(length(xs), xs) == nil;

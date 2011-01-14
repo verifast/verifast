@@ -42,18 +42,6 @@ lemma void nth_drop<t>(int n, int k, list<t> xs)
     }
 }
 
-lemma void length_remove(int x, list<int> xs)
-    requires mem(x, xs) == true;
-    ensures length(remove(x, xs)) == length(xs) - 1;
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (x != x0)
-                length_remove(x, xs0);
-    }
-}
-
 lemma void neq_mem_remove<t>(t x, t y, list<t> xs)
     requires x != y;
     ensures mem(x, remove(y, xs)) == mem(x, xs);

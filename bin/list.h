@@ -161,6 +161,10 @@ fixpoint list<t> remove<t>(t x, list<t> xs) {
     }
 }
 
+lemma_auto(length(remove(x, xs))) void length_remove<t>(t x, list<t> xs);
+  requires true;
+  ensures length(remove(x, xs)) == (mem(x, xs) ?  length(xs) - 1 : length(xs));
+
 fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
     switch(xs) {
         case nil: return nil;
