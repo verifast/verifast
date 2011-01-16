@@ -319,9 +319,13 @@ let show_ide initialPath prover codeFont traceFont =
   let add_buffer() =
     let path = ref None in
     let textLabel = GMisc.label ~text:"(untitled)" () in
+    let textVbox = GPack.vbox ~spacing:2 ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
+    let textFindBox = GPack.hbox ~show:false ~border_width:2 ~spacing:2 ~packing:(textVbox#pack ~expand:false) () in
+    GMisc.label ~text:"Find:" ~packing:(textFindBox#pack ~expand:false) ();
+    let textFindEntry = GEdit.entry ~packing:textFindBox#add () in
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
-        ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
+        ~packing:textVbox#add () in
     let srcText = (*GText.view*) GSourceView2.source_view ~packing:textScroll#add () in
     let buffer = srcText#source_buffer in
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
@@ -347,8 +351,23 @@ let show_ide initialPath prover codeFont traceFont =
     ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
     );
+    ignore $. textFindEntry#event#connect#key_press (fun key ->
+      if GdkEvent.Key.keyval key = GdkKeysyms._Escape then begin
+        (new GObj.misc_ops srcText#as_widget)#grab_focus (); textFindBox#misc#hide (); true
+      end else false
+    );
+    ignore $. textFindEntry#connect#activate (fun () ->
+      let cursor = buffer#get_iter `INSERT in
+      match cursor#forward_char#forward_search textFindEntry#text with
+        None -> GToolbox.message_box "VeriFast" "Text not found"
+      | Some (iter1, iter2) ->
+        buffer#select_range iter1 iter2;
+        srcText#scroll_to_mark ~within_margin:0.2 `INSERT
+    );
     ignore $. srcText#event#connect#key_press (fun key ->
-      if GdkEvent.Key.keyval key = GdkKeysyms._Return then
+      if GdkEvent.Key.keyval key = GdkKeysyms._f && List.mem `CONTROL (GdkEvent.Key.state key) then begin
+        textFindBox#misc#show (); (new GObj.misc_ops textFindEntry#as_widget)#grab_focus (); true
+      end else if GdkEvent.Key.keyval key = GdkKeysyms._Return then
       begin
         let cursor = buffer#get_iter `INSERT in
         let lineStart = cursor#set_line_offset 0 in
