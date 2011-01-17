@@ -316,8 +316,7 @@ let show_ide initialPath prover codeFont traceFont =
       else if Filename.check_suffix path ".java" then highlight (common_keywords @ java_keywords)
       else ()
   in
-  let add_buffer() =
-    let path = ref None in
+  let create_editor (textNotebook: GPack.notebook) buffer =
     let textLabel = GMisc.label ~text:"(untitled)" () in
     let textVbox = GPack.vbox ~spacing:2 ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
     let textFindBox = GPack.hbox ~show:false ~border_width:2 ~spacing:2 ~packing:(textVbox#pack ~expand:false) () in
@@ -326,31 +325,8 @@ let show_ide initialPath prover codeFont traceFont =
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
         ~packing:textVbox#add () in
-    let srcText = (*GText.view*) GSourceView2.source_view ~packing:textScroll#add () in
-    let buffer = srcText#source_buffer in
-    let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
-    let _ = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
-    let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
-    let _ = buffer#create_tag ~name:"comment" [`FOREGROUND "#008000"] in
-    let _ = buffer#create_tag ~name:"ghostRangeDelimiter" [`FOREGROUND "Gray"] in
-    let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
-    let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
-    let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
-    let currentStepMark = buffer#create_mark (buffer#start_iter) in
-    let currentCallerMark = buffer#create_mark (buffer#start_iter) in
-    let subLabel = GMisc.label ~text:"(untitled)" () in
-    let subScroll =
-      GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
-        ~packing:(fun widget -> ignore (subNotebook#append_page ~tab_label:subLabel#coerce widget)) () in
-    let subText = (*GText.view ~buffer:buffer*) GSourceView2.source_view ~source_buffer:buffer ~packing:subScroll#add () in
+    let srcText = (*GText.view*) GSourceView2.source_view ~source_buffer:buffer ~packing:textScroll#add () in
     srcText#misc#modify_font_by_name !scaledCodeFont;
-    subText#misc#modify_font_by_name !scaledCodeFont;
-    let undoList: undo_action list ref = ref [] in
-    let redoList: undo_action list ref = ref [] in
-    let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
-    ignore $. buffer#connect#modified_changed (fun () ->
-      updateBufferTitle tab
-    );
     ignore $. textFindEntry#event#connect#key_press (fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._Escape then begin
         (new GObj.misc_ops srcText#as_widget)#grab_focus (); textFindBox#misc#hide (); true
@@ -359,7 +335,7 @@ let show_ide initialPath prover codeFont traceFont =
     ignore $. textFindEntry#connect#activate (fun () ->
       let cursor = buffer#get_iter `INSERT in
       match cursor#forward_char#forward_search textFindEntry#text with
-        None -> GToolbox.message_box "VeriFast" "Text not found"
+        None -> GToolbox.message_box "VeriFast IDE" "Text not found"
       | Some (iter1, iter2) ->
         buffer#select_range iter1 iter2;
         srcText#scroll_to_mark ~within_margin:0.2 `INSERT
@@ -392,6 +368,29 @@ let show_ide initialPath prover codeFont traceFont =
       end
       else
         false
+    );
+    (textLabel, textScroll, srcText)
+  in
+  let add_buffer() =
+    let path = ref None in
+    let buffer = GSourceView2.source_buffer () in
+    let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
+    let _ = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
+    let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
+    let _ = buffer#create_tag ~name:"comment" [`FOREGROUND "#008000"] in
+    let _ = buffer#create_tag ~name:"ghostRangeDelimiter" [`FOREGROUND "Gray"] in
+    let _ = buffer#create_tag ~name:"error" [`UNDERLINE `DOUBLE; `FOREGROUND "Red"] in
+    let _ = buffer#create_tag ~name:"currentLine" [`BACKGROUND "Yellow"] in
+    let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
+    let currentStepMark = buffer#create_mark (buffer#start_iter) in
+    let currentCallerMark = buffer#create_mark (buffer#start_iter) in
+    let (textLabel, textScroll, srcText) = create_editor textNotebook buffer in
+    let (subLabel, subScroll, subText) = create_editor subNotebook buffer in
+    let undoList: undo_action list ref = ref [] in
+    let redoList: undo_action list ref = ref [] in
+    let tab = (path, buffer, undoList, redoList, (textLabel, textScroll, srcText), (subLabel, subScroll, subText), currentStepMark, currentCallerMark) in
+    ignore $. buffer#connect#modified_changed (fun () ->
+      updateBufferTitle tab
     );
     ignore $. buffer#connect#insert_text (fun iter text ->
       if not !ignore_text_changes then
