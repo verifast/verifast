@@ -4855,7 +4855,7 @@ let verify_program_core (* ?verify_program_core *)
       end
     | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
       let (w1, t1) = check e1 in
-      let (_, t2) = check e1 in
+      let (_, t2) = check e2 in
       begin
       match t1 with
         (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType)
