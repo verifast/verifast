@@ -4855,10 +4855,10 @@ let verify_program_core (* ?verify_program_core *)
       end
     | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
       let (w1, t1) = check e1 in
-      let (w2, t2) = check e2 in
+      let (_, t2) = check e1 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1; t2]; (Operation (l, operator, [w1; w2], ts), IntType)
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType)
       | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
@@ -6404,30 +6404,37 @@ let verify_program_core (* ?verify_program_core *)
             Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt v1 v2
           | Some [RealType; RealType] -> ctxt#mk_real_lt v1 v2
           end
-        | _ ->
+        | BitAnd | BitXor | BitOr ->
           let bounds = match !ts with
-          | Some([UintPtrType; _] | [_; UintPtrType]) -> None
-          | Some([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
-          | Some([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
-          | Some([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
+            Some ([UintPtrType; _] | [_; UintPtrType]) -> None
+          | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
+          | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
+          | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
           | _ -> None
           in
           let symb = match op with
               BitAnd -> bitwise_and_symbol
             | BitXor -> bitwise_xor_symbol
             | BitOr -> bitwise_or_symbol
-            | Mod -> modulo_symbol
-            | ShiftLeft -> shiftleft_symbol
-            | ShiftRight -> shiftright_symbol
-            | _ -> static_error l "This operator is not supported in this position" None
           in
           let app = ctxt#mk_app symb [v1;v2] in
-          begin match bounds with 
+          begin match bounds with
             None -> ()
-          | Some (min_term, max_term) ->
-              ignore (ctxt#assume (ctxt#mk_or (ctxt#mk_not (ctxt#mk_and (ctxt#mk_and (ctxt#mk_le min_term v1) (ctxt#mk_le v1 max_term)) (ctxt#mk_and (ctxt#mk_le min_term v2) (ctxt#mk_le v2 max_term)))) (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term))));
+          | Some(min_term, max_term) -> 
+            ignore (ctxt#assume (ctxt#mk_or (ctxt#mk_not (ctxt#mk_and (ctxt#mk_and (ctxt#mk_le min_term v1) (ctxt#mk_le v1 max_term)) (ctxt#mk_and (ctxt#mk_le min_term v2) (ctxt#mk_le v2 max_term)))) (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term))));
           end;
           app
+        | ShiftRight ->
+          let app = ctxt#mk_app shiftright_symbol [v1;v2] in
+          ignore (ctxt#assume (ctxt#mk_or (ctxt#mk_not (ctxt#mk_and (ctxt#mk_lt (ctxt#mk_intlit 0) v1) (ctxt#mk_lt (ctxt#mk_intlit 0) v2))) (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) app) (ctxt#mk_lt app v1))));
+          app
+        | _ ->
+          let symb = match op with
+            | Mod -> modulo_symbol
+            | ShiftLeft -> shiftleft_symbol
+            | _ -> static_error l "This operator is not supported in this position" None
+          in
+          ctxt#mk_app symb [v1;v2]
         end
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
