@@ -1272,7 +1272,7 @@ and
       string (* superclass *) *
       string list (* itfs *) *
       instance_pred_decl list
-  | Interface of loc * string * meth_spec list * instance_pred_decl list
+  | Interface of loc * string * string list * meth_spec list * instance_pred_decl list
   | PredFamilyDecl of
       loc *
       string *
@@ -1741,8 +1741,8 @@ let rec
      ds = begin parser
        [< '(l, Kwd "class"); '(_, Ident s); super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); '(_, Kwd "{"); mem = parse_interface_members cn; ds = parse_decls >]
-       -> Interface (l, cn, methspecs mem, predspecs mem)::ds
+     | [< '(l, Kwd "interface"); '(_, Ident cn); il = parse_extended_interfaces;  mem = parse_interface_members cn; ds = parse_decls >]
+       -> Interface (l, cn, il, methspecs mem, predspecs mem)::ds
      | [< d = parse_decl; ds = parse_decls >] -> d@ds
      | [< >] -> []
      end
@@ -1754,6 +1754,12 @@ and
 and
   parse_interfaces= parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 
+    [< '(l, Ident i); e=parser
+      [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
+| [<'(_, Kwd "{")>]-> []
+and
+  parse_extended_interfaces= parser
+  [< '(_, Kwd "extends"); is = rep_comma (parser 
     [< '(l, Ident i); e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
@@ -3581,14 +3587,24 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
         [] -> (ifdm, classlist)
-      | (Interface (l, i, meth_specs, pred_specs))::ds -> let i= full_name pn i in 
+      | (Interface (l, i, interfs, meth_specs, pred_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
         else
         if List.mem_assoc i classlist then
           static_error l ("There exists already a class with this name: "^i) None
         else
-         iter (pn,il) ((i, (l,meth_specs,pred_specs,pn,il))::ifdm) classlist ds
+          let interfs =
+            let rec check_interfs ls=
+                match ls with
+                  [] -> []
+                | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
+                            Some i -> i::check_interfs ls
+                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn) None
+            in
+            check_interfs interfs
+          in
+          iter (pn,il) ((i, (l,meth_specs,pred_specs,interfs,pn,il))::ifdm) classlist ds
       | (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds))::ds -> 
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
@@ -3837,7 +3853,13 @@ let verify_program_core (* ?verify_program_core *)
       match try_assoc x classmap0 with
         Some (_, _, _, _, _, _, super, interfaces, _, _, _) ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
-      | None -> false
+      | None -> begin match try_assoc x interfmap1 with
+          Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+        | None -> begin match try_assoc x interfmap0 with
+            Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+          | None -> false 
+          end
+        end
   in
 
   (* Region: type compatibility checker *)
@@ -4437,10 +4459,10 @@ let verify_program_core (* ?verify_program_core *)
   
   let interfmap1 =
     interfmap1 |> List.map
-      begin fun (tn, (li, methods, preds, pn, ilist)) ->
+      begin fun (tn, (li, methods, preds, interfs, pn, ilist)) ->
         let rec iter predmap preds =
           match preds with
-            [] -> (tn, (li, methods, List.rev predmap, pn, ilist))
+            [] -> (tn, (li, methods, List.rev predmap, interfs, pn, ilist))
           | InstancePredDecl (l, g, ps, body)::preds ->
             if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
@@ -4486,7 +4508,7 @@ let verify_program_core (* ?verify_program_core *)
               let preds_in_itf tn =
                 let check_itfmap itfmap fallback =
                   begin match try_assoc tn itfmap with
-                    Some (li, methods, preds, pn, ilist) ->
+                    Some (li, methods, preds, interfs, pn, ilist) ->
                     begin match try_assoc g preds with
                       Some (l, pmap, symb) -> [(tn, pmap, symb)]
                     | None -> []
@@ -4674,12 +4696,15 @@ let verify_program_core (* ?verify_program_core *)
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let (_, meths, _, _, _) = List.assoc tn interfmap in
-      flatmap
+      let (_, meths, _, interfs, _, _) = List.assoc tn interfmap in
+      let declared_methods = flatmap
         begin fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, v, abstract)) ->
           if mn' = mn then [(sign, (tn, lm, rt, xmap, pre, post, Instance, v, abstract))] else []
         end
         meths
+      in
+      let inherited_methods = flatmap (fun ifn -> get_methods ifn mn) interfs in
+      declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
     in
     let promote_numeric e1 e2 ts =
       let (w1, t1) = check e1 in
@@ -5559,7 +5584,7 @@ let verify_program_core (* ?verify_program_core *)
                   let find_in_interf itf =
                     let search_interfmap interfmap fallback =
                       match try_assoc itf interfmap with
-                        Some (li, meths, preds, pn, ilist) ->
+                        Some (li, meths, preds, interfs, pn, ilist) ->
                         begin match try_assoc p#name preds with
                           Some (_, pmap, symb) -> [(itf, pmap)]
                         | None -> []
@@ -5636,14 +5661,14 @@ let verify_program_core (* ?verify_program_core *)
             end
           | None ->
             begin match try_assoc cn interfmap1 with
-              Some (_, methods, preds, pn, ilist) ->
+              Some (_, methods, preds, intefs, pn, ilist) ->
               begin match try_assoc g preds with
                 Some (_, pmap, symb) -> check_call cn pmap
               | None -> error ()
               end
             | None ->
               begin match try_assoc cn interfmap0 with
-                Some (_, methods, preds, pn, ilist) ->
+                Some (_, methods, preds, interfs, pn, ilist) ->
                 begin match try_assoc g preds with
                   Some (_, pmap, symb) -> check_call cn pmap
                 | None -> error ()
@@ -6821,9 +6846,9 @@ let verify_program_core (* ?verify_program_core *)
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, methods, preds, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let (li, methods, preds, pn, ilist) = List.assoc tn interfmap0 in
+              let (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -7224,9 +7249,9 @@ let verify_program_core (* ?verify_program_core *)
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, methods, preds, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let (li, methods, preds, pn, ilist) = List.assoc tn interfmap0 in
+              let (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8086,10 +8111,10 @@ let verify_program_core (* ?verify_program_core *)
   
   let interfmap1 =
     List.map
-      begin fun (ifn, (l, specs, preds, pn, ilist)) ->
+      begin fun (ifn, (l, specs, preds, interfs, pn, ilist)) ->
         let rec iter mmap meth_specs =
           match meth_specs with
-            [] -> (ifn, (l, List.rev mmap, preds, pn, ilist))
+            [] -> (ifn, (l, List.rev mmap, preds, interfs, pn, ilist))
           | MethSpec (lm, rt, n, ps, co, fb, v)::meths ->
             let xmap =
               let rec iter xm xs =
@@ -8125,10 +8150,10 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter map0 map1=
       match map0 with
         [] -> map1
-      | (i, (l0,meths0,preds0,pn0,ilist0)) as elem::rest->
+      | (i, (l0,meths0,preds0,interfs0, pn0,ilist0)) as elem::rest->
         match try_assoc i map1 with
           None -> iter rest (elem::map1)
-        | Some (l1,meths1,preds1,pn1,ilist1) ->
+        | Some (l1,meths1,preds1,interfs1, pn1,ilist1) ->
           let match_meths meths0 meths1=
             let rec iter meths0 meths1=
               match meths0 with
@@ -8143,7 +8168,7 @@ let verify_program_core (* ?verify_program_core *)
             iter meths0 meths1
           in
           let meths'= match_meths meths0 meths1 in
-          iter rest ((i,(l1,meths',preds1,pn1,ilist1))::map1)
+          iter rest ((i,(l1,meths',preds1,interfs1,pn1,ilist1))::map1)
     in
     iter interfmap0 interfmap1
   in
@@ -8185,7 +8210,7 @@ let verify_program_core (* ?verify_program_core *)
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let (_, meths, _, _, _) = List.assoc itf interfmap in
+        let (_, meths, _,  _, _, _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -8972,7 +8997,7 @@ let verify_program_core (* ?verify_program_core *)
           let (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, rt, xmap, pre_dyn, post_dyn, fb, v)
         | _ ->
-          let (_, methods, _, _, _) = List.assoc tn interfmap in
+          let (_, methods, _, _, _, _) = List.assoc tn interfmap in
           let (lm, rt, xmap, pre, pre_tenv, post, v, abstract) = List.assoc (m, pts) methods in
           (lm, rt, xmap, pre, post, Instance, v)
       in
