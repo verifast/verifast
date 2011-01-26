@@ -109,6 +109,7 @@ verifast_both -c Constants.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -disable_overflow_check -c Contrib_box.jarsrc
 verifast_both -c DefaultCtor.java
+verifast_both -c Downcast.java
 verifast_both -c hello.scala
 verifast_both -c Iterator.java
 verifast_both -c JavaCard.java

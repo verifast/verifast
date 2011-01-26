@@ -1171,6 +1171,7 @@ and
       loc *
       expr *
       string *
+      expr * (* index *)
       pat list
   | WInstCallPred of
       loc *
@@ -1456,7 +1457,7 @@ let pred_loc p =
   | WAccess (l, e, tp, rhs) -> l
   | CallPred (l, g, targs, ies, es) -> l
   | WCallPred (l, g, targs, ies, es) -> l
-  | InstCallPred (l, e, g, pats) -> l
+  | InstCallPred (l, e, g, index, pats) -> l
   | WInstCallPred (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprPred (l, e) -> l
   | Sep (l, p1, p2) -> l
@@ -2303,7 +2304,14 @@ and
   | [< >] ->
     (match e with
      | CallExpr (l, g, targs, pats0, pats, Static) -> CallPred (l, new predref g, targs, pats0, pats)
-     | CallExpr (l, g, [], [], LitPat e::pats, Instance) -> InstCallPred (l, e, g, pats)
+     | CallExpr (l, g, [], pats0, LitPat e::pats, Instance) ->
+       let index =
+         match pats0 with
+           [] -> CallExpr (l, "getClass", [], [], [LitPat e], Instance)
+         | [LitPat e] -> e
+         | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
+       in
+       InstCallPred (l, e, g, index, pats)
      | _ -> ExprPred (expr_loc e, e)
     )
   >] -> p
@@ -2403,7 +2411,8 @@ and
         | [<
             '(lf, Ident f);
             e = parser
-              [<args0 = parse_patlist>] -> CallExpr (lf, f, [], [], LitPat(Var(lx,x,ref None))::args0,Instance)
+              [<args0 = parse_patlist; (args0, args) = (parser [< args = parse_patlist >] -> (args0, args) | [< >] -> ([], args0)) >] ->
+              CallExpr (lf, f, [], args0, LitPat(Var(lx,x,ref None))::args,Instance)
             | [<>] -> Read (ldot, Var(lx,x, ref None), f)
           >]->e 
       >]-> r
@@ -5636,13 +5645,13 @@ let verify_program_core (* ?verify_program_core *)
         p#set_domain (ts0 @ xs'); p#set_inputParamCount inputParamCount;
         (WCallPred (l, p, targs, wps0, wps), tenv, inferredTypes)
       end
-    | InstCallPred (l, e, g, pats) ->
+    | InstCallPred (l, e, g, index, pats) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       begin match t with
         ObjType cn ->
         let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
-          let index = WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance) in
+          let index = check_expr_t (pn,ilist) tparams tenv index (ObjType "java.lang.Class") in
           (WInstCallPred (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
         let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
@@ -8593,7 +8602,7 @@ let verify_program_core (* ?verify_program_core *)
     | WAccess(_, e, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
     | CallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
     | WCallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
-    | InstCallPred(_, e, _, pats) -> expr_mark_addr_taken e locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
+    | InstCallPred(_, e, _, index, pats) -> expr_mark_addr_taken e locals; expr_mark_addr_taken index locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | WInstCallPred(_, eopt, _, _, _, _, e, pats) -> 
       (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
       expr_mark_addr_taken e locals; 
