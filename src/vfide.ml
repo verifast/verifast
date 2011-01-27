@@ -43,9 +43,6 @@ let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
 let show_ide initialPath prover codeFont traceFont =
-  let tab_path (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = path in
-  let tab_buffer (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = buffer in
-  let tab_srcText (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = srcText in
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -72,17 +69,17 @@ let show_ide initialPath prover codeFont traceFont =
   let showLineNumbers enable =
     match !current_tab with
       None -> ()
-    | Some (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
-      srcText#set_show_line_numbers enable;
-      subText#set_show_line_numbers enable
+    | Some tab ->
+      tab#mainView#view#set_show_line_numbers enable;
+      tab#subView#view#set_show_line_numbers enable
   in
   let showWhitespace enable =
     match !current_tab with
       None -> ()
-    | Some (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
+    | Some tab ->
       let flags = if enable then [`SPACE; `TAB] else [] in
-      srcText#set_draw_spaces flags;
-      subText#set_draw_spaces flags
+      tab#mainView#view#set_draw_spaces flags;
+      tab#subView#view#set_draw_spaces flags
   in
   let showLineNumbersAction =
     let a = GAction.toggle_action ~name:"ShowLineNumbers" () in
@@ -237,7 +234,7 @@ let show_ide initialPath prover codeFont traceFont =
   in
   let updateBufferMenu () =
     let menu = GMenu.menu () in
-    let items = !buffers |> List.map (fun tab -> (match !(tab_path tab) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
+    let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
     let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
     items |> List.iter begin fun (name, tab) ->
       let item = GMenu.menu_item ~label:name ~packing:(menu#add) () in
@@ -245,10 +242,10 @@ let show_ide initialPath prover codeFont traceFont =
     end;
     windowMenuItem#set_submenu menu
   in
-  let updateBufferTitle (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) =
-    let text = (match !path with None -> "(New buffer)" | Some (path, mtime) -> Filename.basename path) ^ (if buffer#modified then "*" else "") in
-    textLabel#set_text text;
-    subLabel#set_text text
+  let updateBufferTitle tab =
+    let text = (match !(tab#path) with None -> "(New buffer)" | Some (path, mtime) -> Filename.basename path) ^ (if tab#buffer#modified then "*" else "") in
+    tab#mainView#label#set_text text;
+    tab#subView#label#set_text text
   in
   let bufferChangeListener = ref (fun _ -> ()) in
   let set_current_tab tab =
@@ -259,13 +256,13 @@ let show_ide initialPath prover codeFont traceFont =
       redoAction#set_sensitive false;
       showLineNumbersAction#set_sensitive false;
       showWhitespaceAction#set_sensitive false
-    | Some (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
-      undoAction#set_sensitive (!undoList <> []);
-      redoAction#set_sensitive (!redoList <> []);
+    | Some tab ->
+      undoAction#set_sensitive (!(tab#undoList) <> []);
+      redoAction#set_sensitive (!(tab#redoList) <> []);
       showLineNumbersAction#set_sensitive true;
-      showLineNumbersAction#set_active (srcText#show_line_numbers);
+      showLineNumbersAction#set_active (tab#mainView#view#show_line_numbers);
       showWhitespaceAction#set_sensitive true;
-      showWhitespaceAction#set_active (srcText#draw_spaces <> [])
+      showWhitespaceAction#set_active (tab#subView#view#draw_spaces <> [])
   in
   let tag_name_of_range_kind kind =
     match kind with
@@ -281,7 +278,8 @@ let show_ide initialPath prover codeFont traceFont =
     (* buffer#get_iter (`LINEBYTE (line - 1, col - 1)) *)
   in
   let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
-  let rec perform_syntax_highlighting ((path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) as tab) start stop =
+  let rec perform_syntax_highlighting tab start stop =
+    let buffer = tab#buffer in
     let firstLine = buffer#start_iter#get_text ~stop:buffer#start_iter#forward_to_line_end in
     let {file_opt_annot_char=annotChar} = get_file_options firstLine in
     let commentTag = get $. GtkText.TagTable.lookup buffer#tag_table "comment" in
@@ -308,7 +306,7 @@ let show_ide initialPath prover codeFont traceFont =
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter
     in
-    match !path with
+    match !(tab#path) with
       None -> ()
     | Some (path, mtime) ->
       if Filename.check_suffix path ".c" then highlight (common_keywords @ c_keywords)
@@ -369,7 +367,7 @@ let show_ide initialPath prover codeFont traceFont =
       else
         false
     );
-    (textLabel, textVbox, srcText)
+    object method label = textLabel method page = textVbox method view = srcText end
   in
   let add_buffer() =
     let path = ref None in
@@ -384,11 +382,20 @@ let show_ide initialPath prover codeFont traceFont =
     let _ = buffer#create_tag ~name:"currentCaller" [`BACKGROUND "Green"] in
     let currentStepMark = buffer#create_mark (buffer#start_iter) in
     let currentCallerMark = buffer#create_mark (buffer#start_iter) in
-    let (textLabel, textVbox, srcText) = create_editor textNotebook buffer in
-    let (subLabel, subVbox, subText) = create_editor subNotebook buffer in
+    let mainView = create_editor textNotebook buffer in
+    let subView = create_editor subNotebook buffer in
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
-    let tab = (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) in
+    let tab = object
+      method path = path
+      method buffer = buffer
+      method undoList = undoList
+      method redoList = redoList
+      method mainView = mainView
+      method subView = subView
+      method currentStepMark = currentStepMark
+      method currentCallerMark = currentCallerMark
+    end in
     ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
     );
@@ -434,8 +441,8 @@ let show_ide initialPath prover codeFont traceFont =
     );
     ignore $. buffer#connect#changed (fun () -> !bufferChangeListener tab);
     let focusIn _ = set_current_tab (Some tab); false in
-    ignore $. srcText#event#connect#focus_in ~callback:focusIn;
-    ignore $. subText#event#connect#focus_in ~callback:focusIn;
+    ignore $. mainView#view#event#connect#focus_in ~callback:focusIn;
+    ignore $. subView#view#event#connect#focus_in ~callback:focusIn;
     buffers := !buffers @ [tab];
     tab
   in
@@ -444,9 +451,9 @@ let show_ide initialPath prover codeFont traceFont =
     let scaledFont = getScaledFont fontName in
     scaledCodeFont := scaledFont;
     List.iter
-      begin fun (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
-        srcText#misc#modify_font_by_name scaledFont;
-        subText#misc#modify_font_by_name scaledFont
+      begin fun tab ->
+        tab#mainView#view#misc#modify_font_by_name scaledFont;
+        tab#subView#view#misc#modify_font_by_name scaledFont
       end
       !buffers
   in
@@ -464,7 +471,7 @@ let show_ide initialPath prover codeFont traceFont =
     | Some(_) -> helpButton#coerce#misc#show();
     )
   in
-  let load ((path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) as tab) newPath =
+  let load tab newPath =
     try
       let chan = open_in_bin newPath in
       let rec iter () =
@@ -478,18 +485,19 @@ let show_ide initialPath prover codeFont traceFont =
       close_in chan;
       let text = file_to_utf8 text in
       ignore_text_changes := true;
+      let buffer = tab#buffer in
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
       (buffer: GSourceView2.source_buffer)#insert ~iter:gIter text;
       let {file_opt_tab_size=tabSize} = get_file_options text in
-      srcText#set_tab_width tabSize;
-      subText#set_tab_width tabSize;
+      tab#mainView#view#set_tab_width tabSize;
+      tab#subView#view#set_tab_width tabSize;
       ignore_text_changes := false;
-      undoList := [];
-      redoList := [];
+      tab#undoList := [];
+      tab#redoList := [];
       buffer#set_modified false;
       let thePath = Filename.concat (Filename.dirname newPath) (Filename.basename newPath) in
-      path := Some (thePath, mtime);
+      tab#path := Some (thePath, mtime);
       perform_syntax_highlighting tab buffer#start_iter buffer#end_iter;
       updateBufferTitle tab;
       Some thePath
@@ -510,16 +518,15 @@ let show_ide initialPath prover codeFont traceFont =
     let tab = match initialPath with None -> new_buffer () | Some path -> open_path path in
     set_current_tab (Some tab)
   end;
-  let store ((path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) as tab) thePath =
+  let store tab thePath =
     let chan = open_out_bin thePath in
-    let gBuf = buffer in
-    let text = (gBuf: GSourceView2.source_buffer)#get_text () in
+    let text = (tab#buffer: GSourceView2.source_buffer)#get_text () in
     output_string chan (utf8_to_file text);
     flush chan;
     let mtime = out_channel_last_modification_time chan in
     close_out chan;
-    path := Some (thePath, mtime);
-    buffer#set_modified false;
+    tab#path := Some (thePath, mtime);
+    tab#buffer#set_modified false;
     updateBufferTitle tab;
     Some thePath
   in
@@ -545,8 +552,8 @@ let show_ide initialPath prover codeFont traceFont =
     end else
       store tab thePath
   in
-  let save ((path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) as tab) =
-    match !path with
+  let save tab =
+    match !(tab#path) with
       None -> saveAs tab
     | Some (thePath, mtime) ->
       save_core tab thePath mtime
@@ -614,7 +621,7 @@ let show_ide initialPath prover codeFont traceFont =
     let rec iter k tabs =
       match tabs with
         tab::tabs ->
-        begin match !(tab_path tab) with Some (path1, mtime) when path1 = path0 -> (k, tab) | _ -> iter (k + 1) tabs end
+        begin match !(tab#path) with Some (path1, mtime) when path1 = path0 -> (k, tab) | _ -> iter (k + 1) tabs end
       | [] ->
         let tab = open_path path0 in (k, tab)
     in
@@ -625,7 +632,7 @@ let show_ide initialPath prover codeFont traceFont =
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
     let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
-    let buffer = tab_buffer tab in
+    let buffer = tab#buffer in
     let mark1 = buffer#create_mark (srcpos_iter buffer (line1, col1)) in
     let mark2 = buffer#create_mark (srcpos_iter buffer (line2, col2)) in
     (tab, mark1, mark2)
@@ -637,7 +644,7 @@ let show_ide initialPath prover codeFont traceFont =
     | Some items ->
       List.iter
         begin fun (ass, h, env, (tab, mark1, mark2), msg, locstack) ->
-          let buffer = tab_buffer tab in
+          let buffer = tab#buffer in
           buffer#delete_mark (`MARK mark1);
           buffer#delete_mark (`MARK mark2)
         end
@@ -677,7 +684,8 @@ let show_ide initialPath prover codeFont traceFont =
     iter 0 items
   in
   let clearStepInfo() =
-    List.iter (fun ((path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark)) ->
+    List.iter (fun tab ->
+      let buffer = tab#buffer in
       buffer#remove_tag_by_name "currentLine" ~start:buffer#start_iter ~stop:buffer#end_iter;
       buffer#remove_tag_by_name "currentCaller" ~start:buffer#start_iter ~stop:buffer#end_iter
     ) !buffers;
@@ -687,7 +695,7 @@ let show_ide initialPath prover codeFont traceFont =
     subEnvStore#clear()
   in
   let apply_tag_at_marks name (tab, mark1, mark2) =
-    let buffer = tab_buffer tab in
+    let buffer = tab#buffer in
     buffer#apply_tag_by_name name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
@@ -695,7 +703,7 @@ let show_ide initialPath prover codeFont traceFont =
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
     let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
-    let buffer = tab_buffer tab in
+    let buffer = tab#buffer in
     buffer#apply_tag_by_name name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
   let get_step_of_path selpath =
@@ -723,10 +731,9 @@ let show_ide initialPath prover codeFont traceFont =
             textPaned#set_position 0;
           apply_tag_at_marks "currentLine" l;
           let (tab, mark1, _) = l in
-          let (_, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = tab in
           goto_tab tab;
-          buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-          ignore $. Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false);
+          tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
+          ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false);
           append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
         | (caller_loc, caller_env)::_ ->
           if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
@@ -735,19 +742,17 @@ let show_ide initialPath prover codeFont traceFont =
             apply_tag_at_marks "currentLine" l;
             let (tab, mark1, _) = l in
             let k = index_of_byref tab !buffers in
-            let (_, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = tab in
             subNotebook#goto_page k;
-            buffer#move_mark (`MARK currentStepMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-            ignore $. Glib.Idle.add (fun () -> subText#scroll_to_mark ~within_margin:0.2 (`MARK currentStepMark); false); 
+            tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
+            ignore $. Glib.Idle.add (fun () -> tab#subView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false); 
             append_items subEnvStore subEnvKCol subEnvCol (strings_of_env env)
           end;
           begin
             apply_tag_at_marks "currentCaller" caller_loc;
             let (tab, mark1, _) = caller_loc in
-            let (_, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) = tab in
             goto_tab tab;
-            buffer#move_mark (`MARK currentCallerMark) ~where:(buffer#get_iter_at_mark (`MARK mark1));
-            ignore $. Glib.Idle.add(fun () -> srcText#scroll_to_mark ~within_margin:0.2 (`MARK currentCallerMark); false);
+            tab#buffer#move_mark (`MARK tab#currentCallerMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
+            ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentCallerMark); false);
             append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env caller_env)
           end
       end;
@@ -785,7 +790,7 @@ let show_ide initialPath prover codeFont traceFont =
     Glib.Idle.add (fun () -> stepList#scroll_to_cell lastStepRowPath stepViewCol; false)
   in
   let ensureSaved tab =
-    if (tab_buffer tab)#modified then
+    if tab#buffer#modified then
       match GToolbox.question_box ~title:"VeriFast" ~buttons:["Save"; "Discard"; "Cancel"] "There are unsaved changes." with
         1 -> (match save tab with None -> true | Some _ -> false)
       | 2 -> false
@@ -804,7 +809,7 @@ let show_ide initialPath prover codeFont traceFont =
       clearStepInfo();
       stepStore#clear();
       List.iter (fun tab ->
-        let buffer = tab_buffer tab in
+        let buffer = tab#buffer in
         buffer#remove_tag_by_name "error" ~start:buffer#start_iter ~stop:buffer#end_iter
       ) !buffers
     end
@@ -825,13 +830,13 @@ let show_ide initialPath prover codeFont traceFont =
       Some tab -> Some tab
     | None -> GToolbox.message_box "VeriFast IDE" ("Please select a buffer."); None
   in
-  let close ((_, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) as tab) =
+  let close tab =
     (* Returns true if canceled *)
     ensureSaved tab ||
     begin
       clearTrace();
-      textNotebook#remove textVbox#coerce;
-      subNotebook#remove subVbox#coerce;
+      textNotebook#remove tab#mainView#page#coerce;
+      subNotebook#remove tab#subView#page#coerce;
       buffers := List.filter (fun tab0 -> not (tab0 == tab)) !buffers;
       begin match !current_tab with None -> () | Some tab0 -> if tab == tab0 then set_current_tab None end;
       updateBufferMenu ();
@@ -867,10 +872,10 @@ let show_ide initialPath prover codeFont traceFont =
     let (path, line, col) = stop in
     let (k, tab) = get_tab_for_path (string_of_path path) in
     textNotebook#goto_page k;
-    let buffer = tab_buffer tab in
+    let buffer = tab#buffer in
     let it = srcpos_iter buffer (line, col) in
     buffer#place_cursor ~where:it;
-    ignore $. Glib.Idle.add (fun () -> ignore $. (tab_srcText tab)#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
+    ignore $. Glib.Idle.add (fun () -> ignore $. tab#mainView#view#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
     ()
   in
   let loc_path ((path, _, _), _) = path in
@@ -878,10 +883,10 @@ let show_ide initialPath prover codeFont traceFont =
     apply_tag_by_loc (tag_name_of_range_kind kind) l
   in
   let ensureHasPath tab =
-    match !(tab_path tab) with
+    match !(tab#path) with
       None -> save tab
     | Some (path, mtime) ->
-      if (tab_buffer tab)#modified then
+      if tab#buffer#modified then
         save_core tab path mtime
       else if file_has_changed path mtime then begin
        print_endline (Printf.sprintf "File '%s' has been changed by another program; reloading from disk..." path);
@@ -892,9 +897,10 @@ let show_ide initialPath prover codeFont traceFont =
   let undo () =
     match get_current_tab() with
       None -> ()
-    | Some (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
+    | Some tab ->
+      let buffer = tab#buffer in
       begin
-        match !undoList with
+        match !(tab#undoList) with
           [] -> ()
         | ac::acs ->
           ignore_text_changes := true;
@@ -911,20 +917,21 @@ let show_ide initialPath prover codeFont traceFont =
               offset + String.length text
           in
           ignore_text_changes := false;
-          undoList := acs;
-          redoList := ac::!redoList;
+          tab#undoList := acs;
+          tab#redoList := ac::!(tab#redoList);
           undoAction#set_sensitive (acs <> []);
           redoAction#set_sensitive true;
           buffer#place_cursor ~where:(buffer#get_iter (`OFFSET offset));
-          srcText#scroll_to_mark ~within_margin:0.2 `INSERT 
+          tab#mainView#view#scroll_to_mark ~within_margin:0.2 `INSERT 
       end
   in
   let redo () =
     match get_current_tab() with
       None -> ()
-    | Some (path, buffer, undoList, redoList, (textLabel, textVbox, srcText), (subLabel, subVbox, subText), currentStepMark, currentCallerMark) ->
+    | Some tab ->
+      let buffer = tab#buffer in
       begin
-        match !redoList with
+        match !(tab#redoList) with
           [] -> ()
         | ac::acs ->
           ignore_text_changes := true;
@@ -941,27 +948,27 @@ let show_ide initialPath prover codeFont traceFont =
               offset
           in
           ignore_text_changes := false;
-          redoList := acs;
-          undoList := ac::!undoList;
+          tab#redoList := acs;
+          tab#undoList := ac::!(tab#undoList);
           undoAction#set_sensitive true;
           redoAction#set_sensitive (acs <> []);
           buffer#place_cursor ~where:(buffer#get_iter (`OFFSET offset));
-          srcText#scroll_to_mark ~within_margin:0.2 `INSERT
+          tab#mainView#view#scroll_to_mark ~within_margin:0.2 `INSERT
       end
   in
   let sync_with_disk tab =
     (* Ensure the buffer contents are equal to the file contents. Returns true on cancellation. *)
-    match !(tab_path tab) with
+    match !(tab#path) with
       None -> false
     | Some (path, mtime) ->
-      if (tab_buffer tab)#modified then
+      if tab#buffer#modified then
         match save_core tab path mtime with Some _ -> false | None -> true
       else
         file_has_changed path mtime && close tab
   in
   let clearSyntaxHighlighting () =
     !buffers |> List.iter begin fun tab ->
-      let buffer = tab_buffer tab in
+      let buffer = tab#buffer in
       buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter
     end
   in
@@ -982,10 +989,10 @@ let show_ide initialPath prover codeFont traceFont =
               begin match !current_tab with
                 None -> None
               | Some tab ->
-                match !(tab_path tab) with
+                match !(tab#path) with
                   None -> None
                 | Some (path, mtime) ->
-                  let buffer = tab_buffer tab in
+                  let buffer = tab#buffer in
                   let insert_iter = buffer#get_iter_at_mark `INSERT in
                   let insert_line = insert_iter#line in
                   Some (path, insert_line + 1)
@@ -1065,10 +1072,10 @@ let show_ide initialPath prover codeFont traceFont =
   ignore $. redoAction#connect#activate redo;
   ignore $. root#event#connect#focus_in begin fun _ ->
     !buffers |> List.iter begin fun tab ->
-      match !(tab_path tab) with
+      match !(tab#path) with
         None -> ()
       | Some (path, mtime) ->
-        if not (tab_buffer tab)#modified && Sys.file_exists path && file_has_changed path mtime then begin
+        if not tab#buffer#modified && Sys.file_exists path && file_has_changed path mtime then begin
           print_endline (Printf.sprintf "File '%s' has been changed by another program; reloading from disk..." path);
           ignore (load tab path)
         end
