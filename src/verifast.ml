@@ -2478,7 +2478,7 @@ and
      end; e = parse_expr_suffix_rest e >] -> e
 | [< '(l, Kwd "++"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Add, IntLit (l, unit_big_int, ref None), true)) >] -> e
 | [< '(l, Kwd "--"); e = parse_expr_suffix_rest (AssignOpExpr (l, e0, Sub, IntLit (l, unit_big_int, ref None), true)) >] -> e
-| [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (ExprCallExpr (l, e0, es)) >] -> e
+| [< '(l, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")"); e = parse_expr_suffix_rest (match e0 with Read(l', e0', f') -> CallExpr (l', f', [], [], LitPat(e0'):: (List.map (fun e -> LitPat(e)) es), Instance) | _ -> ExprCallExpr (l, e0, es)) >] -> e
 | [< >] -> e0
 and
   parse_expr_mul_rest e0 = parser
@@ -4718,7 +4718,7 @@ let verify_program_core (* ?verify_program_core *)
     let promote_numeric e1 e2 ts =
       let (w1, t1) = check e1 in
       let (w2, t2) = check e2 in
-      match (t1, t2) with
+      match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (IntType, RealType) ->
         let w1 = checkt e1 RealType in
         ts := Some [RealType; RealType];
@@ -5067,7 +5067,7 @@ let verify_program_core (* ?verify_program_core *)
         let arg0e::args = es in
         let (_, arg0tp) = check arg0e in
         let (tn, es, fb) =
-          match arg0tp with
+          match unfold_inferred_type arg0tp with
             ObjType tn -> (tn, es, Instance)
           | ClassOrInterfaceName tn -> (tn, List.tl es, Static)
           | _ -> static_error l "Target of method call must be object or class" None
@@ -5086,7 +5086,7 @@ let verify_program_core (* ?verify_program_core *)
     | ReadArray(l, arr, index) ->
       let (w1, arr_t) = check arr in
       let w2 = checkt index intt in
-      begin match arr_t with
+      begin match unfold_inferred_type arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp)
       | PtrType tp -> (WReadArray (l, w1, tp, w2), tp)
       | _ when language = Java -> static_error l "target of array access is not an array" None
@@ -5248,7 +5248,7 @@ let verify_program_core (* ?verify_program_core *)
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     begin
-    match t with
+    match unfold_inferred_type t with
     | PtrType (StructType sn) ->
       begin
       match List.assoc sn structmap with
@@ -5277,7 +5277,6 @@ let verify_program_core (* ?verify_program_core *)
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
         (WRead (l, w, fclass, f, t, true, value, Real), t)
       end
-        
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
   in
@@ -5647,7 +5646,7 @@ let verify_program_core (* ?verify_program_core *)
       end
     | InstCallPred (l, e, g, index, pats) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
-      begin match t with
+      begin match unfold_inferred_type t with
         ObjType cn ->
         let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
