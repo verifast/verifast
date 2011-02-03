@@ -586,15 +586,30 @@ let show_ide initialPath prover codeFont traceFont =
     let _ = lb#append_column col in
     (scrollWin, lb, col_k, col_text, col, store)
   in
+  let create_assoc_list_box title1 title2 =
+    let collist = new GTree.column_list in
+    let col_k = collist#add Gobject.Data.int in
+    let col_text1 = collist#add Gobject.Data.string in
+    let col_text2 = collist#add Gobject.Data.string in
+    let store = GTree.list_store collist in
+    let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
+    let lb = GTree.view ~model:store ~packing:scrollWin#add () in
+    lb#coerce#misc#modify_font_by_name !scaledTraceFont;
+    let col1 = GTree.view_column ~title:title1 ~renderer:(GTree.cell_renderer_text [], ["text", col_text1]) () in
+    lb#append_column col1;
+    let col2 = GTree.view_column ~title:title2 ~renderer:(GTree.cell_renderer_text [], ["text", col_text2]) () in
+    lb#append_column col2;
+    (scrollWin, lb, col_k, col_text1, col_text2, col1, col2, store)
+  in
   let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
   let _ = bottomTable#pack1 ~resize:true ~shrink:true (steplistFrame#coerce) in
   let (assumptionsFrame, assumptionsList, assumptionsKCol, assumptionsCol, _, assumptionsStore) = create_listbox "Assumptions" in
   let _ = bottomTable2#pack1 ~resize:true ~shrink:true (assumptionsFrame#coerce) in
   let (chunksFrame, chunksList, chunksKCol, chunksCol, _, chunksStore) = create_listbox "Heap chunks" in
   let _ = bottomTable2#pack2 ~resize:true ~shrink:true (chunksFrame#coerce) in
-  let (srcEnvFrame, srcEnvList, srcEnvKCol, srcEnvCol, _, srcEnvStore) = create_listbox "Locals" in
+  let (srcEnvFrame, srcEnvList, srcEnvKCol, srcEnvCol1, srcEnvCol2, _, _, srcEnvStore) = create_assoc_list_box "Local" "Value" in
   let _ = srcPaned#pack2 ~resize:true ~shrink:true (srcEnvFrame#coerce) in
-  let (subEnvFrame, subEnvList, subEnvKCol, subEnvCol, _, subEnvStore) = create_listbox "Locals" in
+  let (subEnvFrame, subEnvList, subEnvKCol, subEnvCol1, subEnvCol2, _, _, subEnvStore) = create_assoc_list_box "Local" "Value" in
   let _ = subPaned#pack2 ~resize:true ~shrink:true (subEnvFrame#coerce) in
   let setTraceFont fontName =
     traceFont := fontName;
@@ -683,6 +698,19 @@ let show_ide initialPath prover codeFont traceFont =
     in
     iter 0 items
   in
+  let append_assoc_items (store:GTree.list_store) kcol col1 col2 items =
+    let rec iter k items =
+      match items with
+        [] -> ()
+      | (item1, item2)::items ->
+        let gIter = store#append() in
+        store#set ~row:gIter ~column:kcol k;
+        store#set ~row:gIter ~column:col1 item1;
+        store#set ~row:gIter ~column:col2 item2;
+        iter (k + 1) items
+    in
+    iter 0 items
+  in
   let clearStepInfo() =
     List.iter (fun tab ->
       let buffer = tab#buffer in
@@ -715,7 +743,7 @@ let show_ide initialPath prover codeFont traceFont =
     let env = remove_dups env in
     let compare_bindings (x1, v1) (x2, v2) = compare x1 x2 in
     let env = List.sort compare_bindings env in
-    List.map (fun (x, v) -> Printf.sprintf "%s=%s" x v) env
+    List.filter (fun entry -> entry <> ("currentThread", "currentThread")) env
   in
   let stepSelected _ =
     match !stepItems with
@@ -734,7 +762,7 @@ let show_ide initialPath prover codeFont traceFont =
           goto_tab tab;
           tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
           ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false);
-          append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env env)
+          append_assoc_items srcEnvStore srcEnvKCol srcEnvCol1 srcEnvCol2 (strings_of_env env)
         | (caller_loc, caller_env)::_ ->
           if textPaned#max_position >= 300 && textPaned#position < 10 || textPaned#max_position - textPaned#position < 10 then
             textPaned#set_position 150;
@@ -745,7 +773,7 @@ let show_ide initialPath prover codeFont traceFont =
             subNotebook#goto_page k;
             tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
             ignore $. Glib.Idle.add (fun () -> tab#subView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false); 
-            append_items subEnvStore subEnvKCol subEnvCol (strings_of_env env)
+            append_assoc_items subEnvStore subEnvKCol subEnvCol1 subEnvCol2 (strings_of_env env)
           end;
           begin
             apply_tag_at_marks "currentCaller" caller_loc;
@@ -753,7 +781,7 @@ let show_ide initialPath prover codeFont traceFont =
             goto_tab tab;
             tab#buffer#move_mark (`MARK tab#currentCallerMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
             ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentCallerMark); false);
-            append_items srcEnvStore srcEnvKCol srcEnvCol (strings_of_env caller_env)
+            append_assoc_items srcEnvStore srcEnvKCol srcEnvCol1 srcEnvCol2 (strings_of_env caller_env)
           end
       end;
       append_items assumptionsStore assumptionsKCol assumptionsCol (List.rev ass);
