@@ -180,6 +180,7 @@ class stats =
     val mutable proverOtherQueryCount = 0
     val mutable proverStats = ""
     val mutable overhead: <path: string; nonghost_lines: int; ghost_lines: int; mixed_lines: int> list = []
+    val mutable functionTimings: (string * float) list = []
     
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method stmtExec = stmtExecCount <- stmtExecCount + 1
@@ -195,6 +196,11 @@ class stats =
       let path = Filename.concat basepath relpath in
       let o = object method path = path method nonghost_lines = nonGhostLineCount method ghost_lines = ghostLineCount method mixed_lines = mixedLineCount end in
       overhead <- o::overhead
+    method recordFunctionTiming funName seconds = functionTimings <- (funName, seconds)::functionTimings
+    method getFunctionTimings =
+      let compare (_, t1) (_, t2) = compare t1 t2 in
+      let timingsSorted = List.sort compare functionTimings in
+      String.concat "" (List.map (fun (funName, seconds) -> Printf.sprintf "    %s: %f seconds\n" funName seconds) timingsSorted)
     
     method printStats =
       print_endline ("Syntactic annotation overhead statistics:");
@@ -216,7 +222,8 @@ class stats =
       print_endline ("Term equality tests -- prover query: " ^ string_of_int definitelyEqualQueryCount);
       print_endline ("Term equality tests -- total: " ^ string_of_int (definitelyEqualSameTermCount + definitelyEqualQueryCount));
       print_endline ("Other prover queries: " ^ string_of_int proverOtherQueryCount);
-      print_endline ("Prover statistics:\n" ^ proverStats)
+      print_endline ("Prover statistics:\n" ^ proverStats);
+      print_endline ("Function timings:\n" ^ self#getFunctionTimings)
   end
 
 let stats = new stats
@@ -11034,6 +11041,13 @@ let verify_program_core (* ?verify_program_core *)
     | None -> static_error lm ("No class was found: "^cn) None
   in
   
+  let record_fun_timing l funName body =
+    let time0 = Sys.time() in
+    let result = body () in
+    stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Sys.time() -. time0);
+    result
+  in
+  
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
       [] -> ()
@@ -11046,11 +11060,12 @@ let verify_program_core (* ?verify_program_core *)
         else
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
+        record_fun_timing lm (cn ^ "." ^ cn) begin fun () ->
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
-        let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
+        let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
         begin
           assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
@@ -11111,23 +11126,25 @@ let verify_program_core (* ?verify_program_core *)
           in
           iter h fds
         end;
-        pop();
-        verify_cons (pn,ilist) cfin cn superctors boxes lems' rest
+        pop()
+        end;
+        verify_cons (pn,ilist) cfin cn superctors boxes lems rest
   in
   
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
     match meths with
       [] -> ()
-    | (g, (l,rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _,abstract))::meths ->
+    | ((g,sign), (l,rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _,abstract))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
           if (Filename.check_suffix p ".javaspec") || abstract then verify_meths (pn,ilist) cfin cabstract boxes lems meths
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
+        record_fun_timing l g begin fun () ->
         if abstract then static_error l "Abstract method cannot have implementation." None;
         push();
-        let (in_pure_context, leminfo, lems', ghostenv) = (false, None, lems, []) in
+        let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
         begin
           let env = get_unique_var_symbs_non_ghost (ps @ [(current_thread_name, current_thread_type)]) in (* actual params invullen *)
           begin fun cont ->
@@ -11160,8 +11177,9 @@ let verify_program_core (* ?verify_program_core *)
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
           verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         end;
-        pop();
-        verify_meths (pn,ilist) cfin cabstract boxes lems' meths
+        pop()
+        end;
+        verify_meths (pn,ilist) cfin cabstract boxes lems meths
   in
   
   let rec verify_classes boxes lems classm=
@@ -11202,12 +11220,15 @@ let verify_program_core (* ?verify_program_core *)
           create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       ) in 
       verify_funcs (pn,ilist)  boxes (g::lems) ds
-    | Func (_, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
+    | Func (l, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
+      let lems' =
+      record_fun_timing l g begin fun () ->
       let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
-      let lems' = verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc in
+      verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc
+      end in
       verify_funcs (pn, ilist) boxes lems' ds
     | BoxClassDecl (l, bcn, _, _, _, _)::ds -> let bcn=full_name pn bcn in
       let (Some (l, boxpmap, boxinv, boxvarmap, amap, hpmap)) = try_assoc' (pn,ilist) bcn boxmap in
