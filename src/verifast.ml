@@ -170,6 +170,7 @@ let rtdir = Filename.concat bindir "rt"
 
 class stats =
   object (self)
+    val startTime = Sys.time()
     val mutable stmtsParsedCount = 0
     val mutable stmtExecCount = 0
     val mutable execStepCount = 0
@@ -196,21 +197,21 @@ class stats =
       let path = Filename.concat basepath relpath in
       let o = object method path = path method nonghost_lines = nonGhostLineCount method ghost_lines = ghostLineCount method mixed_lines = mixedLineCount end in
       overhead <- o::overhead
-    method recordFunctionTiming funName seconds = functionTimings <- (funName, seconds)::functionTimings
+    method recordFunctionTiming funName seconds = if seconds > 0.1 then functionTimings <- (funName, seconds)::functionTimings
     method getFunctionTimings =
       let compare (_, t1) (_, t2) = compare t1 t2 in
       let timingsSorted = List.sort compare functionTimings in
-      String.concat "" (List.map (fun (funName, seconds) -> Printf.sprintf "    %s: %f seconds\n" funName seconds) timingsSorted)
+      let max_funName_length = List.fold_left (fun m (n, _) -> max m (String.length n)) 0 timingsSorted in
+      String.concat "" (List.map (fun (funName, seconds) -> Printf.sprintf "  %-*s: %3.2f seconds\n" max_funName_length funName seconds) timingsSorted)
     
     method printStats =
       print_endline ("Syntactic annotation overhead statistics:");
+      let max_path_size = List.fold_left (fun m o -> max m (String.length o#path)) 0 overhead in
       List.iter
         begin fun o ->
-          let total = o#nonghost_lines + o#ghost_lines + o#mixed_lines in            
-          let code_percentage = (float_of_int o#nonghost_lines /. float_of_int total) *. 100.0
-          and annot_percentage = (float_of_int (o#ghost_lines + o#mixed_lines) /. float_of_int total) *. 100.0 in
-          Printf.printf "  %40s: lines: code: %4d; annot: %4d; mixed: %4d; %%code: %2.1f; %%annot: %2.1f\n"
-            o#path o#nonghost_lines o#ghost_lines o#mixed_lines code_percentage annot_percentage
+          let overhead = float_of_int (o#ghost_lines + o#mixed_lines) *. 100.0 /. float_of_int o#nonghost_lines in
+          Printf.printf "  %-*s: lines: code: %4d; annot: %4d; mixed: %4d; overhead: %4.0f%%\n"
+            max_path_size o#path o#nonghost_lines o#ghost_lines o#mixed_lines overhead
         end
         overhead;
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
@@ -223,7 +224,8 @@ class stats =
       print_endline ("Term equality tests -- total: " ^ string_of_int (definitelyEqualSameTermCount + definitelyEqualQueryCount));
       print_endline ("Other prover queries: " ^ string_of_int proverOtherQueryCount);
       print_endline ("Prover statistics:\n" ^ proverStats);
-      print_endline ("Function timings:\n" ^ self#getFunctionTimings)
+      print_endline ("Function timings (> 0.1s):\n" ^ self#getFunctionTimings);
+      print_endline (Printf.sprintf "Total time: %.2f seconds" (Sys.time() -. startTime))
   end
 
 let stats = new stats
@@ -9160,7 +9162,7 @@ let verify_program_core (* ?verify_program_core *)
       | DeclStmt _ :: rest -> check_block_declarations rest
       | _ :: rest -> check_after_initial_declarations rest
     in
-    if verbose then printff "%s: Executing statement (timestamp: %f)\n" (string_of_loc l) (Sys.time ());
+    if verbose then printff "%10.6fs: %s: Executing statement\n" (Sys.time ()) (string_of_loc l);
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
@@ -10676,9 +10678,7 @@ let verify_program_core (* ?verify_program_core *)
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
-        let time0 = Sys.time() in
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          if verbose then printff "%s: %f seconds\n" (string_of_loc (stmt_loc s)) (Sys.time() -. time0);
           verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         ) return_cont
       )
@@ -11060,7 +11060,7 @@ let verify_program_core (* ?verify_program_core *)
         else
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
-        record_fun_timing lm (cn ^ "." ^ cn) begin fun () ->
+        record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
