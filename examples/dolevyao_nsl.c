@@ -105,7 +105,7 @@ struct item;
 
 inductive item =
   | key_item(int creator, int id, bool isPublicKey, int info)
-  | data_item(int id)
+  | data_item(int data)
   | encrypted_item(int keyCreator, int id, int info, item payload)
   | pair_item(item first, item second);
 

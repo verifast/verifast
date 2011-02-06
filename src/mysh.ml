@@ -16,8 +16,9 @@ let read_line_canon file =
 
 let macros = ref []
 
-let pnos = ref 0
-let processes = ref 0
+let processes_started_count = ref 0
+let active_processes_count = ref 0
+let failed_processes_count = ref 0
 let queue = Queue.create ()
 let queueNonempty = Condition.create ()
 let queueMutex = Mutex.create ()
@@ -31,11 +32,12 @@ let enqueue x =
 let do_print_line s =
   enqueue (fun () -> print_endline s)
 
+(* Pump events until a process finishes *)
 let pump_events () =
-  let processes0 = !processes in
+  let count0 = !active_processes_count in
   Mutex.lock queueMutex;
   let rec iter () =
-    if !processes < processes0 then
+    if !active_processes_count < count0 then
       ()
     else if Queue.is_empty queue then begin
       Condition.wait queueNonempty queueMutex;
@@ -53,16 +55,18 @@ let pump_events () =
   Mutex.unlock queueMutex
 
 let rec exec_lines filepath file lineno =
+  if !failed_processes_count = 0 then
   let error msg =
     failwith (Printf.sprintf "mysh: %s: line %d: %s" filepath lineno msg)
   in
   try
     let line = read_line_canon file in
     let rec exec_line line =
+      if !failed_processes_count = 0 then begin
       print_endline line;
       match parse_cmdline line with
         ["cd"; dir] -> Sys.chdir dir
-      | ["del"; file] -> while !processes > 0 do pump_events() done; Sys.remove file
+      | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
       (* Lines starting with "# " are comments, ignore them.
        * Don't pass comments to the shell because it is not portable.
@@ -86,43 +90,47 @@ let rec exec_lines filepath file lineno =
       | [cmdName; args] when List.mem_assoc cmdName !macros ->
         List.iter (fun line -> exec_line (Printf.sprintf "%s %s" line args)) (List.assoc cmdName !macros)
       | _ ->
-        incr pnos;
-        let pno = !pnos in
-        Printf.printf "Starting process %d\n" pno;
-        incr processes;
+        incr processes_started_count;
+        let pid = !processes_started_count in
+        Printf.printf "Starting process %d\n" pid;
+        incr active_processes_count;
         let time0 = Unix.gettimeofday () in
         let cin = Unix.open_process_in line in
         let t = Thread.create
           begin fun () ->
             try
-              while true do do_print_line (Printf.sprintf "[%d]%s" pno (input_line cin)) done
+              while true do do_print_line (Printf.sprintf "[%d]%s" pid (input_line cin)) done
             with End_of_file -> ();
             let status = Unix.close_process_in cin in
             let time1 = Unix.gettimeofday() in
-            do_print_line (Printf.sprintf "[%d]%f seconds\n" pno (time1 -. time0));
+            do_print_line (Printf.sprintf "[%d]%f seconds\n" pid (time1 -. time0));
             if status <> Unix.WEXITED 0 then begin
               let msg =
                 match status with
-                  Unix.WEXITED n -> Printf.sprintf "Process %d terminated with exit code %d" pno n
-                | Unix.WSIGNALED n -> Printf.sprintf "Process %d terminated because of signal %d" pno n
-                | Unix.WSTOPPED n -> Printf.sprintf "Process %d stopped because of signal %d" pno n
+                  Unix.WEXITED n -> Printf.sprintf "Process %d terminated with exit code %d" pid n
+                | Unix.WSIGNALED n -> Printf.sprintf "Process %d terminated because of signal %d" pid n
+                | Unix.WSTOPPED n -> Printf.sprintf "Process %d stopped because of signal %d" pid n
               in
-              enqueue (fun () -> error msg)
+              do_print_line msg;
+              enqueue (fun () -> incr failed_processes_count)
             end;
-            enqueue (fun () -> decr processes)
+            enqueue (fun () -> decr active_processes_count)
           end
           ()
         in
         ignore t;
-        if !processes = max_processes then pump_events ()
+        if !active_processes_count = max_processes then pump_events ()
+      end
     in
     exec_line line;
     exec_lines filepath file (lineno + 1)
-  with End_of_file ->
-    while !processes > 0 do pump_events () done
+  with End_of_file -> ()
 
 let () =
   let time0 = Unix.gettimeofday() in
   exec_lines "standard input" stdin 1;
+  while !active_processes_count > 0 do pump_events () done;
   let time1 = Unix.gettimeofday() in
-  Printf.printf "Total execution time: %f seconds\n" (time1 -. time0)
+  Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
+  Printf.printf "%d failed processes\n" !failed_processes_count;
+  if !failed_processes_count > 0 then exit 1
