@@ -170,7 +170,7 @@ let rtdir = Filename.concat bindir "rt"
 
 class stats =
   object (self)
-    val startTime = Sys.time()
+    val startTime = Perf.time()
     val mutable stmtsParsedCount = 0
     val mutable stmtExecCount = 0
     val mutable execStepCount = 0
@@ -225,7 +225,7 @@ class stats =
       print_endline ("Other prover queries: " ^ string_of_int proverOtherQueryCount);
       print_endline ("Prover statistics:\n" ^ proverStats);
       print_endline ("Function timings (> 0.1s):\n" ^ self#getFunctionTimings);
-      print_endline (Printf.sprintf "Total time: %.2f seconds" (Sys.time() -. startTime))
+      print_endline (Printf.sprintf "Total time: %.2f seconds" (Perf.time() -. startTime))
   end
 
 let stats = new stats
@@ -7199,10 +7199,10 @@ let verify_program_core (* ?verify_program_core *)
       | _ -> with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
     in
     (*
-    let time0 = Sys.time() in
+    let time0 = Perf.time() in
     printff "%s: Consuming assertion (timestamp: %f)\n" (string_of_loc (pred_loc p)) time0;
     let cont h ghostenv env size =
-      printff "%s: Done consuming assertion (%f seconds)\n" (string_of_loc (pred_loc p)) (Sys.time() -. time0); 
+      printff "%s: Done consuming assertion (%f seconds)\n" (string_of_loc (pred_loc p)) (Perf.time() -. time0); 
       cont h ghostenv env size
     in
     *)
@@ -9162,7 +9162,7 @@ let verify_program_core (* ?verify_program_core *)
       | DeclStmt _ :: rest -> check_block_declarations rest
       | _ :: rest -> check_after_initial_declarations rest
     in
-    if verbose then printff "%10.6fs: %s: Executing statement\n" (Sys.time ()) (string_of_loc l);
+    if verbose then printff "%10.6fs: %s: Executing statement\n" (Perf.time ()) (string_of_loc l);
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
@@ -11042,9 +11042,9 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let record_fun_timing l funName body =
-    let time0 = Sys.time() in
+    let time0 = Perf.time() in
     let result = body () in
-    stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Sys.time() -. time0);
+    stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Perf.time() -. time0);
     result
   in
   
