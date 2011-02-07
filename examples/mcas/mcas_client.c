@@ -256,7 +256,7 @@ void shift_interval(struct interval *interval) //@ : thread_run
                             cons(pair(&interval->a, a), cons(pair(&interval->b, b), nil)))
                         == cons(pair(&interval->a, a + 4), cons(pair(&interval->b, b), nil));
                     assert
-                        update_pairlist(
+                        update_assoc(
                             cons(pair(&interval->a, a), cons(pair(&interval->b, b), nil)),
                             &interval->b,
                             b + 4)

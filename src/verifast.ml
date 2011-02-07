@@ -7086,8 +7086,8 @@ let verify_program_core (* ?verify_program_core *)
     let slices =
       head_flatmap
         begin function
-          Chunk ((g, _), [tp2], coef, [a'; n'; size'; q'; vs'], _)
-            when definitely_equal g c_array_symb && tp = tp2 && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
+          Chunk (g, [tp2], coef, [a'; n'; size'; q'; vs'], _)
+            when predname_eq g (c_array_symb, true) && tp = tp2 && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
             ctxt#query (ctxt#mk_eq size' (sizeof l tp)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [i; vs'])]

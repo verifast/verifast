@@ -59,7 +59,7 @@ typedef lemma void *rdcss_operation_lemma();
     ensures
         rdcss_operation_post(this)(result) &*& mem((void *)a1, aas) == true &*& mem_assoc(a2, bs) == true &*& result == assoc(a2, bs) &*&
         assoc(a1, zip(aas, avs)) == o1 && assoc(a2, bs) == o2 ?
-            rdcss_unseparate_lemma(unsep)(info, id, inv, sep, aas, avs, update_pairlist(bs, a2, n2))
+            rdcss_unseparate_lemma(unsep)(info, id, inv, sep, aas, avs, update_assoc(bs, a2, n2))
         :
             rdcss_unseparate_lemma(unsep)(info, id, inv, sep, aas, avs, bs);
 
@@ -129,7 +129,7 @@ typedef lemma void rdcss_cas_lemma(bool success);
         rdcss_cas_post(this)(success) &*&
         rdcss_unseparate_lemma(unsep)(info, id, inv, sep, aas, avs, ?bs1) &*&
         success ?
-            bs1 == update_pairlist(bs, a2, n2)
+            bs1 == update_assoc(bs, a2, n2)
         :
             bs1 == bs;
 
