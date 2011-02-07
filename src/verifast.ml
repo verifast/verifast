@@ -3003,16 +3003,20 @@ let verify_program_core (* ?verify_program_core *)
   let auto_lemmas = Hashtbl.create 10 in
 
   let {
-    option_verbose=verbosity;
+    option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest
   } = options in
   
-  let verbose = verbosity >= 1 in
-  let very_verbose = verbosity >= 2 in
+  let verbosity = ref 0 in
   
-  ctxt#set_verbosity (verbosity - 3);
+  let set_verbosity v =
+    verbosity := v;
+    ctxt#set_verbosity (v - 3)
+  in
+  
+  set_verbosity initial_verbosity;
 
   (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
   let used_ids = ref [] in
@@ -3155,7 +3159,8 @@ let verify_program_core (* ?verify_program_core *)
   let real_zero = ctxt#mk_reallit 0 in
   let real_unit = ctxt#mk_reallit 1 in
   let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
-  
+
+  let int_zero_term = ctxt#mk_intlit 0 in  
   let min_int_big_int = big_int_of_string "-2147483648" in
   let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
   let min_short = big_int_of_string "-32768" in
@@ -6452,8 +6457,8 @@ let verify_program_core (* ?verify_program_core *)
           | Some [RealType; RealType] -> ctxt#mk_real_lt v1 v2
           end
         | BitAnd | BitXor | BitOr ->
-          let bounds = match !ts with
-            Some ([UintPtrType; _] | [_; UintPtrType]) -> None
+          let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else match !ts with
+            Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
           | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
           | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
           | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
@@ -6468,12 +6473,23 @@ let verify_program_core (* ?verify_program_core *)
           begin match bounds with
             None -> ()
           | Some(min_term, max_term) -> 
-            ignore (ctxt#assume (ctxt#mk_or (ctxt#mk_not (ctxt#mk_and (ctxt#mk_and (ctxt#mk_le min_term v1) (ctxt#mk_le v1 max_term)) (ctxt#mk_and (ctxt#mk_le min_term v2) (ctxt#mk_le v2 max_term)))) (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term))));
+            ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
           end;
           app
         | ShiftRight ->
+          let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else match !ts with
+            Some [UintPtrType; _] -> Some (int_zero_term, max_ptr_term)
+          | Some [IntType; _] -> Some (min_int_term, max_int_term)
+          | Some [ShortType; _] -> Some (min_short_term, max_short_term)
+          | Some [Char; _] -> Some (min_char_term, max_char_term)
+          | _ -> None
+          in
           let app = ctxt#mk_app shiftright_symbol [v1;v2] in
-          ignore (ctxt#assume (ctxt#mk_or (ctxt#mk_not (ctxt#mk_and (ctxt#mk_lt (ctxt#mk_intlit 0) v1) (ctxt#mk_lt (ctxt#mk_intlit 0) v2))) (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) app) (ctxt#mk_lt app v1))));
+          begin match bounds with
+            None -> ()
+          | Some(min_term, max_term) -> 
+            ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+          end;
           app
         | _ ->
           let symb = match op with
@@ -6797,7 +6813,7 @@ let verify_program_core (* ?verify_program_core *)
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if very_verbose then Printf.printf "%10.6fs: %s: Producing assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
+        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Producing assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
         with_context (Executing (h, env, pred_loc p, "Producing assertion")) cont
     in
     with_context_helper (fun _ ->
@@ -7204,7 +7220,7 @@ let verify_program_core (* ?verify_program_core *)
       match p with
         Sep (_, _, _) -> cont()
       | _ ->
-        if very_verbose then Printf.printf "%10.6fs: %s: Consuming assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
+        if !verbosity >= 2 then Printf.printf "%10.6fs: %s: Consuming assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
         with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
     in
     with_context_helper (fun _ ->
@@ -9163,7 +9179,7 @@ let verify_program_core (* ?verify_program_core *)
       | DeclStmt _ :: rest -> check_block_declarations rest
       | _ :: rest -> check_after_initial_declarations rest
     in
-    if verbose then printff "%10.6fs: %s: Executing statement\n" (Perf.time ()) (string_of_loc l);
+    if !verbosity >= 1 then printff "%10.6fs: %s: Executing statement\n" (Perf.time ()) (string_of_loc l);
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
@@ -9497,6 +9513,11 @@ let verify_program_core (* ?verify_program_core *)
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h _ -> cont h env)
       end
+    | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
+      let oldv = !verbosity in
+      set_verbosity (int_of_big_int n);
+      cont h env;
+      set_verbosity oldv
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
@@ -11062,7 +11083,7 @@ let verify_program_core (* ?verify_program_core *)
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
-        if verbose then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
+        if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
@@ -11144,7 +11165,7 @@ let verify_program_core (* ?verify_program_core *)
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         record_fun_timing l g begin fun () ->
-        if verbose then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
+        if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
         push();
         let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
@@ -11227,7 +11248,7 @@ let verify_program_core (* ?verify_program_core *)
       let g = full_name pn g in
       let lems' =
       record_fun_timing l g begin fun () ->
-      if verbose then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
+      if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
       let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
