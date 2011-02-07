@@ -154,8 +154,8 @@ proverapi.cmx: proverapi.ml
 simplex.cmx: simplex.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c simplex.ml
 
-redux.cmx: proverapi.cmx simplex.cmx redux.ml
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c redux.ml
+redux.cmx: win\Perf.cmxa proverapi.cmx simplex.cmx redux.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I .\win Perf.cmxa redux.ml
 
 z3prover.cmx: win\Perf.cmxa proverapi.cmx z3prover.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I $(Z3)\ocaml z3.cmxa -I .\win Perf.cmxa proverapi.cmx z3prover.ml

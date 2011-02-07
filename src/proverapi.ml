@@ -8,7 +8,7 @@ type symbol_kind = Ctor of ctor_symbol | Fixpoint of int | Uninterp
 
 class virtual ['typenode, 'symbol, 'termnode] context =
   object
-    method virtual set_verbose: bool -> unit
+    method virtual set_verbosity: int -> unit
     method virtual type_bool: 'typenode
     method virtual type_int: 'typenode
     method virtual type_real: 'typenode

@@ -110,8 +110,8 @@ class z3_context () =
   let () = assume_is_inverse unboxed_real boxed_real real_type in
   let () = assume_is_inverse boxed_real unboxed_real inductive_type in  
   object
-    val mutable verbose = false
-    method set_verbose v = verbose <- v
+    val mutable verbosity = 0
+    method set_verbosity v = verbosity <- v
     method type_bool = bool_type
     method type_int = int_type
     method type_real = real_type
@@ -210,15 +210,15 @@ class z3_context () =
     method pprint t = string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt t)))
     method query t =
       (* printf "Z3prover.query (%s)... " (Z3.ast_to_string ctxt t); *)
-      let t0 = if verbose then Perf.time() else 0.0 in
+      let t0 = if verbosity >= 1 then Perf.time() else 0.0 in
       let result = query t in
-      if verbose then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 query %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1 -. t0) end;
+      if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 query %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1 -. t0) end;
       result
     method assume t =
       (* printf "Z3prover.assume (%s)\n" (Z3.ast_to_string ctxt t); *)
-      let t0 = if verbose then Perf.time() else 0.0 in
+      let t0 = if verbosity >= 1 then Perf.time() else 0.0 in
       let result = assert_term t in
-      if verbose then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 assume %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1-. t0) end;
+      if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 assume %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1-. t0) end;
       result
     method push =
       Z3.push ctxt

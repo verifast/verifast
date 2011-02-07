@@ -638,9 +638,9 @@ and context () =
     val mutable simplex_assert_eq_count = 0
     val mutable simplex_assert_neq_count = 0
     
-    val mutable verbose = false
+    val mutable verbosity = 0
     
-    method set_verbose v = verbose <- v
+    method set_verbosity v = verbosity <- v
     
     method report_truenode_childcount n =
       if n > max_truenode_childcount then max_truenode_childcount <- n
@@ -809,22 +809,25 @@ and context () =
       assume_true t
 
     method assume t =
-      (* printff "assume %s\n" (self#pprint t); *)
+      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
+      let result =
       let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
       | Unknown3 ->
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
+      in
+      if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume: %.6f seconds\n" time1 (time1 -. time0) end;
+      result
 
     method query (t: (symbol, termnode) term): bool =
+      if verbosity > 0 then printff "%10.6fs: Entering Redux.query(%s)\n" (Perf.time()) (self#pprint t);
       assert (not self#prune_pending_splits);
-      (* printff "Query: %s\n" (self#pprint t); *)
-      (* let time0 = Sys.time() in *)
       self#push;
       let result = self#assume (Not t) in
       self#pop;
-      (* printff "Query result of %s: %B (%f seconds)\n" (self#pprint t) (result = Unsat) (Sys.time() -. time0); *)
+      if verbosity > 0 then printff "%10.6fs: Exiting Redux.query\n" (Perf.time());
       result = Unsat
     
     method get_type (term: (symbol, termnode) term) = ()
@@ -938,31 +941,30 @@ and context () =
         match !currentNode with
           None -> cont assumptions
         | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
-          let verbose = false in
-          if verbose then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
+          if verbosity >= 2 then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
           self#push;
-          if verbose then printff "  First branch: %s\n" (self#pprint branch1);
+          if verbosity >= 2 then printff "  First branch: %s\n" (self#pprint branch1);
           let result = self#assume_core branch1 in
-          if verbose then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
+          if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
           let continue = result = Unsat3 || result = Valid3 && assumptions = [] || iter (branch1::assumptions) nextNode in
           self#pop;
           if assumptions = [] && result <> Unknown3 then
           begin
-            if verbose then printff "Pruning split\n";
+            if verbosity >= 2 then printff "Pruning split\n";
             self#register_popaction (fun () -> pending_splits_front <- currentNode);
             pending_splits_front <- nextNode;
             let result = if result = Unsat3 then self#assume_core branch2 else Valid3 in
             let continue = result = Unsat3 || iter [] nextNode in
-            if verbose then printff "Done splitting\n";
+            if verbosity >= 2 then printff "Done splitting\n";
             continue
           end
           else
           let continue = continue && (result = Valid3 ||
             begin
               self#push;
-              if verbose then printff "  Second branch %s\n" (self#pprint branch2);
+              if verbosity >= 2 then printff "  Second branch %s\n" (self#pprint branch2);
               let result = self#assume_core branch2 in
-              if verbose then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
+              if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
               let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
               self#pop;
               if assumptions = [] && not continue then
@@ -981,7 +983,7 @@ and context () =
             end
             )
           in
-          if verbose then printff "Done splitting\n";
+          if verbosity >= 2 then printff "Done splitting\n";
           continue
       in
       iter [] pending_splits_front
@@ -1355,8 +1357,9 @@ and context () =
               | _ -> failwith (Printf.sprintf "Redux does not support subpattern %s; it currently supports only symbol applications and bound variables as subpatterns." (self#pprint pat))
             in
             match_pats [] term#children args (fun bound_env ->
+              if verbosity >= 3 then printff "%10.6fs: Redux: Axiom %s triggered with\n" (Perf.time()) (self#pprint body);
               let body = term_subst bound_env body in
-              (* printff "Axiom %s triggered\n" (self#pprint body); *)
+              if verbosity >= 3 then List.iter (fun (i, t) -> printff "            bound.%d = %s\n" i t#pprint) bound_env;
               self#add_redex (fun () ->
                 (* printff "Asserting axiom body %s\n" (self#pprint body); *)
                 self#assume_core body

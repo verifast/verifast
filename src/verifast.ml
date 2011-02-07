@@ -202,7 +202,7 @@ class stats =
       let compare (_, t1) (_, t2) = compare t1 t2 in
       let timingsSorted = List.sort compare functionTimings in
       let max_funName_length = List.fold_left (fun m (n, _) -> max m (String.length n)) 0 timingsSorted in
-      String.concat "" (List.map (fun (funName, seconds) -> Printf.sprintf "  %-*s: %3.2f seconds\n" max_funName_length funName seconds) timingsSorted)
+      String.concat "" (List.map (fun (funName, seconds) -> Printf.sprintf "  %-*s: %6.2f seconds\n" max_funName_length funName seconds) timingsSorted)
     
     method printStats =
       print_endline ("Syntactic annotation overhead statistics:");
@@ -3012,7 +3012,7 @@ let verify_program_core (* ?verify_program_core *)
   let verbose = verbosity >= 1 in
   let very_verbose = verbosity >= 2 in
   
-  ctxt#set_verbose (verbosity >= 4);
+  ctxt#set_verbosity (verbosity - 3);
 
   (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
   let used_ids = ref [] in
