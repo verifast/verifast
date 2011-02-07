@@ -158,8 +158,8 @@ simplex.cmx: simplex.ml
 redux.cmx: proverapi.cmx simplex.cmx redux.ml
 	ocamlopt.opt -warn-error F -c redux.ml
 
-z3prover.cmx: proverapi.cmx z3prover.ml
-	ocamlopt.opt -warn-error F -c -I $(Z3)/ocaml z3.cmxa proverapi.cmx z3prover.ml
+z3prover.cmx: linux/Perf.cmx proverapi.cmx z3prover.ml
+	ocamlopt.opt -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3prover.ml
 
 verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml

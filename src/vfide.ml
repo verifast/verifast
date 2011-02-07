@@ -1030,7 +1030,7 @@ let show_ide initialPath prover codeFont traceFont =
             in
             try
               let options = {
-                option_verbose = false;
+                option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;

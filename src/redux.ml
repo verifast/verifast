@@ -638,6 +638,10 @@ and context () =
     val mutable simplex_assert_eq_count = 0
     val mutable simplex_assert_neq_count = 0
     
+    val mutable verbose = false
+    
+    method set_verbose v = verbose <- v
+    
     method report_truenode_childcount n =
       if n > max_truenode_childcount then max_truenode_childcount <- n
     method report_falsenode_childcount n =

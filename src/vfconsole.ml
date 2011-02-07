@@ -131,7 +131,7 @@ let _ =
       verify (fun _ _ -> ())
   in
   let stats = ref false in
-  let verbose = ref false in
+  let verbose = ref 0 in
   let disable_overflow_check = ref false in
   let prover: string option ref = ref None in
   let compileOnly = ref false in
@@ -146,7 +146,7 @@ let _ =
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let cla = [ "-stats", Set stats, ""
-            ; "-verbose", Set verbose, ""
+            ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
             ; "-prover", String (fun str -> prover := Some str), ""
             ; "-c", Set compileOnly, ""

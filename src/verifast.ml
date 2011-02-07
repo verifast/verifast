@@ -2981,7 +2981,7 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: bool; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool; option_simplify_terms: bool} (* ?options *)
+type options = {option_verbose: int; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool; option_simplify_terms: bool} (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
@@ -3003,11 +3003,16 @@ let verify_program_core (* ?verify_program_core *)
   let auto_lemmas = Hashtbl.create 10 in
 
   let {
-    option_verbose=verbose;
+    option_verbose=verbosity;
     option_disable_overflow_check=disable_overflow_check;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest
   } = options in
+  
+  let verbose = verbosity >= 1 in
+  let very_verbose = verbosity >= 2 in
+  
+  ctxt#set_verbose (verbosity >= 4);
 
   (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
   let used_ids = ref [] in
@@ -6791,7 +6796,9 @@ let verify_program_core (* ?verify_program_core *)
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
-      | _ -> with_context (Executing (h, env, pred_loc p, "Producing assertion")) cont
+      | _ ->
+        if very_verbose then Printf.printf "%10.6fs: %s: Producing assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
+        with_context (Executing (h, env, pred_loc p, "Producing assertion")) cont
     in
     with_context_helper (fun _ ->
     let ev = eval None env in
@@ -7196,16 +7203,10 @@ let verify_program_core (* ?verify_program_core *)
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
-      | _ -> with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
+      | _ ->
+        if very_verbose then Printf.printf "%10.6fs: %s: Consuming assertion\n" (Perf.time()) (string_of_loc (pred_loc p));
+        with_context (Executing (h, env, pred_loc p, "Consuming assertion")) cont
     in
-    (*
-    let time0 = Perf.time() in
-    printff "%s: Consuming assertion (timestamp: %f)\n" (string_of_loc (pred_loc p)) time0;
-    let cont h ghostenv env size =
-      printff "%s: Done consuming assertion (%f seconds)\n" (string_of_loc (pred_loc p)) (Perf.time() -. time0); 
-      cont h ghostenv env size
-    in
-    *)
     with_context_helper (fun _ ->
     let ev = eval None env in
     let check_dummy_coefpat l coefpat coef =
@@ -11061,6 +11062,7 @@ let verify_program_core (* ?verify_program_core *)
           static_error lm "Constructor specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
+        if verbose then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
         push();
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
@@ -11142,6 +11144,7 @@ let verify_program_core (* ?verify_program_core *)
           else static_error l "Method specification is only allowed in javaspec files!" None
       | Some (Some (ss, closeBraceLoc)) ->
         record_fun_timing l g begin fun () ->
+        if verbose then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
         push();
         let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
@@ -11224,6 +11227,7 @@ let verify_program_core (* ?verify_program_core *)
       let g = full_name pn g in
       let lems' =
       record_fun_timing l g begin fun () ->
+      if verbose then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
       let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
