@@ -3018,8 +3018,12 @@ let verify_program_core (* ?verify_program_core *)
   
   set_verbosity initial_verbosity;
 
-  (** The set of currently used SMT solver symbol identifiers. Used to generate fresh SMT solver symbols. *)
-  let used_ids = ref [] in
+  (** Maps an identifier to a ref cell containing approximately the number of distinct symbols that have been generated for this identifier.
+    * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
+    * and the first symbol ('foo0') generated for 'foo0'. *)
+  let used_ids = Hashtbl.create 10000 in
+  (** Contains all ref cells from used_ids that need to be decremented at the next pop(). *)
+  let used_ids_undo_stack = ref [] in
   (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
   let dummy_frac_terms = ref [] in
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
@@ -3027,14 +3031,16 @@ let verify_program_core (* ?verify_program_core *)
 
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
-    used_ids_stack := (!used_ids, !dummy_frac_terms)::!used_ids_stack;
+    used_ids_stack := (!used_ids_undo_stack, !dummy_frac_terms)::!used_ids_stack;
+    used_ids_undo_stack := [];
     ctxt#push
   in
   
   (** Restore the previous path condition, set of used IDs, and set of dummy fraction terms. *)
   let pop() =
-    let ((ids, dummyFracTerms)::t) = !used_ids_stack in
-    used_ids := ids;
+    List.iter (fun r -> decr r) !used_ids_undo_stack;
+    let ((usedIdsUndoStack, dummyFracTerms)::t) = !used_ids_stack in
+    used_ids_undo_stack := usedIdsUndoStack;
     dummy_frac_terms := dummyFracTerms;
     used_ids_stack := t;
     ctxt#pop
@@ -3047,16 +3053,37 @@ let verify_program_core (* ?verify_program_core *)
     pop()
   in
   
+  let get_ident_use_count_cell s =
+    try
+      Hashtbl.find used_ids s
+    with Not_found ->
+      let cell = ref 0 in
+      Hashtbl.add used_ids s cell;
+      cell
+  in
+  
   (** Generate a fresh ID based on string [s]. *)
   let mk_ident s =
-    let rec iter k =
-      let sk = s ^ string_of_int k in
-      if List.mem sk !used_ids then iter (k + 1) else (used_ids := sk::!used_ids; sk)
+    let count_cell = get_ident_use_count_cell s in
+    let rec find_unused_ident count =
+      count_cell := count + 1;
+      used_ids_undo_stack := count_cell::!used_ids_undo_stack;
+      if count = 0 then
+        s
+      else
+        let s = Printf.sprintf "%s%d" s (count - 1) in
+        let indexed_count_cell = get_ident_use_count_cell s in
+        if !indexed_count_cell > 0 then
+          find_unused_ident (count + 1)
+        else begin
+          indexed_count_cell := 1;
+          used_ids_undo_stack := indexed_count_cell::!used_ids_undo_stack;
+          s
+        end
     in
-    let name = if List.mem s !used_ids then iter 0 else (used_ids := s::!used_ids; s) in
-    name
+    find_unused_ident !count_cell
   in
-
+  
   (** Convert term [t] from type [proverType] to type [proverType0]. *)  
   let apply_conversion proverType proverType0 t =
     match (proverType, proverType0) with
