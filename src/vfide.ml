@@ -595,7 +595,8 @@ let show_ide initialPath prover codeFont traceFont =
     let scrollWin = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN () in
     let lb = GTree.view ~model:store ~packing:scrollWin#add () in
     lb#coerce#misc#modify_font_by_name !scaledTraceFont;
-    let col1 = GTree.view_column ~title:title1 ~renderer:(GTree.cell_renderer_text [], ["text", col_text1]) () in
+    let col1 = GTree.view_column ~title:title1 ~renderer:(GTree.cell_renderer_text [`FONT !codeFont], ["text", col_text1]) () in
+    col1#set_resizable true;
     lb#append_column col1;
     let col2 = GTree.view_column ~title:title2 ~renderer:(GTree.cell_renderer_text [], ["text", col_text2]) () in
     lb#append_column col2;
