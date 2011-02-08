@@ -3183,6 +3183,8 @@ let verify_program_core (* ?verify_program_core *)
   let instanceof_symbol = ctxt#mk_symbol "instanceof" [ctxt#type_int; ctxt#type_int] ctxt#type_bool Uninterp in
   let array_type_symbol = ctxt#mk_symbol "array_type"  [ctxt#type_int] ctxt#type_int Uninterp in
   
+  let two_big_int = big_int_of_int 2 in
+  
   let real_zero = ctxt#mk_reallit 0 in
   let real_unit = ctxt#mk_reallit 1 in
   let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
@@ -6415,6 +6417,8 @@ let verify_program_core (* ?verify_program_core *)
       | _ ->
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
       end
+    | Operation (l, Div, [IntLit (_, n, _); IntLit (_, d, _)], _) when eq_big_int n unit_big_int && eq_big_int d two_big_int ->
+      cont state real_half
     | Operation (l, Div, [e1; e2], ts) ->
       let rec eval_reallit e =
         match e with
@@ -6774,6 +6778,7 @@ let verify_program_core (* ?verify_program_core *)
         begin
           assume (ctxt#mk_eq tv tv') $. fun () ->
           let coef =
+            if tcoef == real_half && tcoef' == real_half then real_unit else
             if is_dummy_frac_term tcoef then
               tcoef'
             else if is_dummy_frac_term tcoef' then
@@ -6814,6 +6819,7 @@ let verify_program_core (* ?verify_program_core *)
             assume_all_eq (drop n ts) (drop n ts') $. fun () ->
             let h = if List.length hdone < List.length htodo then hdone @ htodo else htodo @ hdone in
             let coef =
+              if coef == real_half && coef' == real_half then real_unit else
               if is_dummy_frac_term coef then
                 if is_dummy_frac_term coef' then
                   coef'
