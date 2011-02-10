@@ -172,6 +172,8 @@ class stats =
   object (self)
     val startTime = Perf.time()
     val mutable stmtsParsedCount = 0
+    val mutable openParsedCount = 0
+    val mutable closeParsedCount = 0
     val mutable stmtExecCount = 0
     val mutable execStepCount = 0
     val mutable branchCount = 0
@@ -184,6 +186,8 @@ class stats =
     val mutable functionTimings: (string * float) list = []
     
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
+    method openParsed = openParsedCount <- openParsedCount + 1
+    method closeParsed = closeParsedCount <- closeParsedCount + 1
     method stmtExec = stmtExecCount <- stmtExecCount + 1
     method execStep = execStepCount <- execStepCount + 1
     method branch = branchCount <- branchCount + 1
@@ -215,6 +219,8 @@ class stats =
         end
         overhead;
       print_endline ("Statements parsed: " ^ string_of_int stmtsParsedCount);
+      print_endline ("Open statements parsed: " ^ string_of_int openParsedCount);
+      print_endline ("Close statements parsed: " ^ string_of_int closeParsedCount);
       print_endline ("Statement executions: " ^ string_of_int stmtExecCount);
       print_endline ("Execution steps (including assertion production/consumption steps): " ^ string_of_int execStepCount);
       print_endline ("Symbolic execution forks: " ^ string_of_int branchCount);
@@ -2130,13 +2136,21 @@ and
 | [< '(l, Kwd "leak"); p = parse_pred; '(_, Kwd ";") >] -> Leak (l, p)
 | [< '(l, Kwd "open"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, targs, es1, es2, Static) -> Open (l, None, g, targs, es1, es2, coef)
-   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) -> Open (l, Some target, g, targs, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2, Static) ->
+       stats#openParsed;
+       Open (l, None, g, targs, es1, es2, coef)
+   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
+       stats#openParsed;
+       Open (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of open statement must be call expression.")))
 | [< '(l, Kwd "close"); coef = opt parse_coef; e = parse_expr; '(_, Kwd ";") >] ->
   (match e with
-     CallExpr (_, g, targs, es1, es2, Static) -> Close (l, None, g, targs, es1, es2, coef)
-   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) -> Close (l, Some target, g, targs, es1, es2, coef)
+     CallExpr (_, g, targs, es1, es2, Static) ->
+       stats#closeParsed;
+       Close (l, None, g, targs, es1, es2, coef)
+   | CallExpr (_, g, targs, es1, LitPat target::es2, Instance) ->
+       stats#closeParsed;
+       Close (l, Some target, g, targs, es1, es2, coef)
    | _ -> raise (ParseException (l, "Body of close statement must be call expression.")))
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
