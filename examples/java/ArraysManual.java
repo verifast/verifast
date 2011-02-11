@@ -45,7 +45,7 @@ class Persons {
     Person[] persons;
     
     void processBirthday(int i)
-        //@ requires this.persons |-> ?persons &*& persons != null &*& array_slice_deep(persons, 0, persons.length, person, 18, _, _) &*& 0 <= i &*& i < persons.length;
+        //@ requires this.persons |-> ?persons &*& array_slice_deep(persons, 0, persons.length, person, 18, _, _) &*& 0 <= i &*& i < persons.length;
         //@ ensures this.persons |-> persons &*& array_slice_deep(persons, 0, persons.length, person, 18, _, _);
     {
         Person p = this.persons[i];
@@ -93,7 +93,6 @@ class ArrayTest {
     static void deleteRecord(Object[] records, int recordLength, int i)
         /*@
         requires
-            records != null &*&
             array_slice_deep(records, 0, records.length, record, recordLength, ?rs, _) &*&
             0 <= i &*& i < records.length &*& 0 < recordLength;
         @*/

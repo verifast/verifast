@@ -15,7 +15,7 @@ public final class MyApplet extends Applet {
     /*@
     
     predicate valid() =
-        someByteArray |-> ?array &*& array != null &*&
+        someByteArray |-> ?array &*&
         array_slice(array, 0, array.length, _) &*& 20 <= array.length;
     
     @*/

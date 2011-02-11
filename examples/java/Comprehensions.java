@@ -292,7 +292,7 @@ lemma_auto void sort_is_perm(list<int> xs)
 
 class Comprehensions {
   public static int array_sum(int[] a)
-    //@ requires a != null &*& array_slice(a, 0, a.length, ?vs);
+    //@ requires array_slice(a, 0, a.length, ?vs);
     //@ ensures array_slice(a, 0, a.length, vs) &*& result == sum(vs);
   {
     int total = 0;
@@ -310,7 +310,7 @@ class Comprehensions {
   }
   
   public static int get(int[] a, int index)
-    //@ requires a != null &*& array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
+    //@ requires array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
     //@ ensures array_slice(a, 0, a.length, vs) &*& result == nth(index, vs);
   {
     int tmp = a[index];
@@ -320,7 +320,7 @@ class Comprehensions {
   }
   
   public static void set(int[] a, int index, int v)
-    //@ requires a != null &*& array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
+    //@ requires array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
     //@ ensures array_slice(a, 0, a.length, store(vs, index, v));
   {
     a[index] = v;
@@ -332,7 +332,7 @@ class Comprehensions {
 
   
   public static int min(int[] a) 
-    //@ requires a != null &*& array_slice(a, 0, a.length, ?vs) &*& vs != nil;
+    //@ requires array_slice(a, 0, a.length, ?vs) &*& vs != nil;
     //@ ensures array_slice(a, 0, a.length, vs) &*& mem(result, vs) == true && forall_le(vs, result);
   { 
     //@ switch(vs) { case nil:  case cons(h, t): }
@@ -344,7 +344,7 @@ class Comprehensions {
   }
   
   public static int indexOfMin(int[] a, int start) 
-    //@ requires a != null &*& array_slice(a, start, a.length, ?vs) &*& vs != nil &*& length(vs) != 0;
+    //@ requires array_slice(a, start, a.length, ?vs) &*& vs != nil &*& length(vs) != 0;
     //@ ensures array_slice(a, start, a.length, vs) &*& start <= result &*& result < a.length &*& forall_le(vs, nth(result, vs))== true;
   {
     int min = start;
@@ -366,7 +366,7 @@ class Comprehensions {
   
     
   public static void insert_sorted(int[] a, int start)
-    //@ requires a != null &*& array_slice(a, start, a.length, ?vs) &*& start < a.length;
+    //@ requires array_slice(a, start, a.length, ?vs) &*& start < a.length;
     //@ ensures array_slice(a, start, a.length, insert_sorted(tail(vs), head(vs)));
   {
     if(start == a.length - 1) {
@@ -385,7 +385,7 @@ class Comprehensions {
   }
   
   public static void my_sort(int[] a, int start)
-    //@ requires a != null &*& array_slice(a, start, a.length, ?vs);
+    //@ requires array_slice(a, start, a.length, ?vs);
     //@ ensures array_slice(a, start, a.length, sort(vs));
   {
     if(start == a.length) {
@@ -397,6 +397,6 @@ class Comprehensions {
     }
   }
   
-  public static void sort(int[] a)     //@ requires a!= null &*& array_slice(a, 0, a.length, ?vs);    //@ ensures a != null &*& array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs2, vs) == true;  {    my_sort(a, 0);
+  public static void sort(int[] a)     //@ requires array_slice(a, 0, a.length, ?vs);    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs2, vs) == true;  {    my_sort(a, 0);
   }
 }

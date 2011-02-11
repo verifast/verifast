@@ -303,7 +303,7 @@ lemma void inrange_all_eq(list<int> vs, int max, int i)
 
 class NQueens {
   static boolean isConsistent(int[] board, int pos) 
-    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& 0 <= pos && pos < board.length;
+    //@ requires array_slice(board, 0, board.length, ?vs) &*& 0 <= pos && pos < board.length;
     //@ ensures array_slice(board, 0, board.length, vs) &*& result == consistent(vs, nat_of_int(pos), pos);
   {
     int bp = board[pos];
@@ -321,7 +321,7 @@ class NQueens {
   }
   
   static int[] search(int[] board, int pos)
-    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true &*& 0 <= pos && pos <= board.length &*& allconsistent(vs, nat_of_int(pos)) == true;
+    //@ requires array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true &*& 0 <= pos && pos <= board.length &*& allconsistent(vs, nat_of_int(pos)) == true;
     /*@ ensures array_slice(board, 0, board.length, ?vs2) &*& inrange(vs2, board.length) == true &*& result == null  ? 
                   take(pos, vs) == take(pos, vs2) &*&
                   allconsistent(vs2, nat_of_int(pos)) == true &*&
@@ -366,7 +366,7 @@ class NQueens {
   }
   
   static int[] startsearch(int[] board) 
-    //@ requires board != null &*& array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true;
+    //@ requires array_slice(board, 0, board.length, ?vs) &*& inrange(vs, board.length) == true;
     //@ ensures array_slice(board, 0, board.length, ?vs2) &*& inrange(vs2, board.length) == true &*& result == null ? inconsistent(vs2, nat_of_int(board.length), 0) : result == board &*& allconsistent(vs2, nat_of_int(length(vs2))) == true;
   {
     return search(board, 0);

@@ -6546,10 +6546,11 @@ let verify_program_core (* ?verify_program_core *)
         end
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
-      if not (ctxt#query (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0)))) then
-        assert_false [] env l "Target of array length expression might be null" None
-      else
-        cont state (ctxt#mk_app arraylength_symbol [t])
+      begin match ass_term with
+        Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq t (ctxt#mk_intlit 0))) "Target of array length expression might be null" None
+      | None -> ()
+      end;
+      cont state (ctxt#mk_app arraylength_symbol [t])
     | WRead(l, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
       if fstatic then
         cont state
