@@ -41,7 +41,6 @@ lemma void array_unseparate_same<t>(void *a, list<t> xs)
                 close array<t>(a, M + N + 1, size, q, xs);
         }
     }
-    assert false;
 }
 
 lemma void array_unseparate<t>(void *a, int i, list<t> xs)

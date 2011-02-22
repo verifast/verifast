@@ -41,6 +41,10 @@ lemma_auto void pointer_nonzero();
     requires pointer(?pp, ?p);
     ensures pointer(pp, p) &*& pp != 0;
 
+lemma void pointer_limits(void *pp);
+    requires [?f]pointer(pp, ?p);
+    ensures [f]pointer(pp, p) &*& true == ((void *)0 <= pp) &*& pp + sizeof(void *) <= (void *)UINTPTR_MAX;
+
 fixpoint void *pointer_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointer(void * p);
 fixpoint bool chars_within_limits(list<char> cs);

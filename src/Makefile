@@ -2,7 +2,7 @@
 
 OPT_OPTIONS=-g
 
-test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest
+test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest
 	time < nl.txt
 	cd ..
 	mysh -cpus %NUMBER_OF_PROCESSORS% < testsuite.mysh
@@ -22,6 +22,11 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe 
 ..\bin\listex.vfmanifest: ..\bin\listex.h ..\bin\listex.c
 	cd ..\bin
 	verifast -c -emit_vfmanifest listex.c
+	cd ..\src
+
+..\bin\arrays.vfmanifest: ..\bin\arrays.h ..\bin\arrays.c
+	cd ..\bin
+	verifast -c -emit_vfmanifest arrays.c
 	cd ..\src
 
 clean:
