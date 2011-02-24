@@ -17,14 +17,22 @@ else
   numcpu := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
-test: ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool ../bin/vfstrip ../bin/list.vfmanifest ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest
+test: ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool ../bin/vfstrip ../bin/list.vfmanifest ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest ../bin/arrays.vfmanifest
 	export PATH=`pwd`:$$PATH; cd ..; bin/mysh -cpus $(numcpu) < testsuite.mysh
+
+clean:
+	-rm *.cm*
+	-rm *.o *.a
+	-cd ../bin; rm verifast vfide dlsymtool vfstrip mysh
 
 ../bin/list.vfmanifest: ../bin/list.c ../bin/list.h
 	cd ../bin; verifast -c -emit_vfmanifest list.c
 
 ../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.h
 	cd ../bin; verifast -c -emit_vfmanifest listex.c
+
+../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.h
+	cd ../bin; verifast -c -emit_vfmanifest arrays.c
 
 ../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c ../bin/raw_ghost_lists.h
 	cd ../bin; verifast -c -emit_vfmanifest raw_ghost_lists.c
@@ -105,16 +113,16 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmx proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 
-linux/Perf.cmx: linux/Perf.ml
-	cd linux; ocamlopt.opt -c Perf.ml
+linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.mli linux/caml_stopwatch.c
+	cd linux; make
 
-verifast.cmx: linux/Perf.cmx vfversion.cmi proverapi.cmx verifast.ml 
-	ocamlopt.opt -warn-error F -pp camlp4o -c -I ./linux Perf.cmx proverapi.cmx verifast.ml
+verifast.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx verifast.ml 
+	ocamlopt.opt -warn-error F -pp camlp4o -c -I ./linux Perf.cmxa proverapi.cmx verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
 	ocamlc.opt -warn-error F -g -pp camlp4o -c verifast.ml
@@ -147,7 +155,7 @@ SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SEx
 	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
 
 ../bin/verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmx proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml

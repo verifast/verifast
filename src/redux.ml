@@ -3,6 +3,8 @@ open Big_int
 open Proverapi
 open Printf
 
+let stopwatch = Stopwatch.create ()
+
 let (|>) x f = f x
 
 let the x = match x with Some x -> x
@@ -651,6 +653,7 @@ and context () =
     method reportExportingConstant =
       simplex_assert_eq_count <- simplex_assert_eq_count + 1
     method stats =
+      let text =
       Printf.sprintf
         "\
           assume_core_count = %d\n\
@@ -666,6 +669,8 @@ and context () =
         simplex_assert_neq_count
         max_truenode_childcount
         max_falsenode_childcount
+      in
+        (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch])
     
     initializer
       simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);
@@ -807,26 +812,31 @@ and context () =
         | t -> self#assume_eq (self#termnode_of_term t) self#false_node
       in
       assume_true t
-
-    method assume t =
-      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
-      let result =
+    
+    method assume_internal t =
       let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
       | Unknown3 ->
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
-      in
+    
+    method assume t =
+      let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
+      Stopwatch.start stopwatch;
+      let result = self#assume_internal t in
+      Stopwatch.stop stopwatch;
       if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume: %.6f seconds\n" time1 (time1 -. time0) end;
       result
 
     method query (t: (symbol, termnode) term): bool =
       if verbosity > 0 then printff "%10.6fs: Entering Redux.query(%s)\n" (Perf.time()) (self#pprint t);
+      Stopwatch.start stopwatch;
       assert (not self#prune_pending_splits);
-      self#push;
-      let result = self#assume (Not t) in
-      self#pop;
+      self#push_internal;
+      let result = self#assume_internal (Not t) in
+      self#pop_internal;
+      Stopwatch.stop stopwatch;
       if verbosity > 0 then printff "%10.6fs: Exiting Redux.query\n" (Perf.time());
       result = Unsat
     
@@ -866,6 +876,11 @@ and context () =
 
     method pushdepth = pushdepth
     method push =
+      Stopwatch.start stopwatch;
+      self#push_internal;
+      Stopwatch.stop stopwatch
+    
+    method push_internal =
       (* print_endline "Push"; *)
       self#reduce;
       assert (redexes = []);
@@ -880,6 +895,11 @@ and context () =
       popactionlist <- action::popactionlist
 
     method pop =
+      Stopwatch.start stopwatch;
+      self#pop_internal;
+      Stopwatch.stop stopwatch
+      
+    method pop_internal =
       (* print_endline "Pop"; *)
       redexes <- [];
       simplex_eqs <- [];
@@ -942,12 +962,12 @@ and context () =
           None -> cont assumptions
         | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
           if verbosity >= 2 then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
-          self#push;
+          self#push_internal;
           if verbosity >= 2 then printff "  First branch: %s\n" (self#pprint branch1);
           let result = self#assume_core branch1 in
           if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
           let continue = result = Unsat3 || result = Valid3 && assumptions = [] || iter (branch1::assumptions) nextNode in
-          self#pop;
+          self#pop_internal;
           if assumptions = [] && result <> Unknown3 then
           begin
             if verbosity >= 2 then printff "Pruning split\n";
@@ -961,12 +981,12 @@ and context () =
           else
           let continue = continue && (result = Valid3 ||
             begin
-              self#push;
+              self#push_internal;
               if verbosity >= 2 then printff "  Second branch %s\n" (self#pprint branch2);
               let result = self#assume_core branch2 in
               if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
               let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
-              self#pop;
+              self#pop_internal;
               if assumptions = [] && not continue then
               begin
                 match result with

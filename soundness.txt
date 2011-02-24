@@ -21,7 +21,7 @@ B.java
 C.java
 main-class A
 
-then "java A" does not throw any assertion failures.
+and "verifast -c program.jarsrc" succeeds, then "java A" does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
 - casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.

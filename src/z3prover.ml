@@ -225,7 +225,7 @@ class z3_context () =
     method pop =
       Z3.pop ctxt 1
     method perform_pending_splits (cont: Z3.ast list -> bool) = cont []
-    method stats = "(no statistics for Z3)"
+    method stats: string * (string * int64) list = "(no statistics for Z3)", []
     method begin_formal = ()
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3.type_ast) = Z3.mk_bound ctxt i tp

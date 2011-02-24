@@ -16,6 +16,8 @@ class source_view (source_buffer: source_buffer) view () =
     method set_tab_width (size: int) = ()
   end
 
+let source_buffer () = GText.buffer ()
+
 let source_view ?source_buffer ~packing () =
   let buffer = match source_buffer with None -> GText.buffer () | Some sbuf -> (sbuf :> GText.buffer) in
   let view = GText.view ~packing ~buffer () in

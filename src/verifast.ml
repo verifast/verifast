@@ -168,9 +168,12 @@ let rtdir = Filename.concat bindir "rt"
 
 (* Region: Statistics *)
 
+let parsing_stopwatch = Stopwatch.create ()
+
 class stats =
   object (self)
     val startTime = Perf.time()
+    val startTicks = Stopwatch.processor_ticks()
     val mutable stmtsParsedCount = 0
     val mutable openParsedCount = 0
     val mutable closeParsedCount = 0
@@ -185,6 +188,8 @@ class stats =
     val mutable overhead: <path: string; nonghost_lines: int; ghost_lines: int; mixed_lines: int> list = []
     val mutable functionTimings: (string * float) list = []
     
+    method tickLength = let t1 = Perf.time() in let ticks1 = Stopwatch.processor_ticks() in (t1 -. startTime) /. Int64.to_float (Int64.sub ticks1 startTicks)
+    
     method stmtParsed = stmtsParsedCount <- stmtsParsedCount + 1
     method openParsed = openParsedCount <- openParsedCount + 1
     method closeParsed = closeParsedCount <- closeParsedCount + 1
@@ -195,7 +200,9 @@ class stats =
     method definitelyEqualSameTerm = definitelyEqualSameTermCount <- definitelyEqualSameTermCount + 1
     method definitelyEqualQuery = definitelyEqualQueryCount <- definitelyEqualQueryCount + 1
     method proverOtherQuery = proverOtherQueryCount <- proverOtherQueryCount + 1
-    method appendProverStats s = proverStats <- proverStats ^ s
+    method appendProverStats (text, tickCounts) =
+      let tickLength = self#tickLength in
+      proverStats <- proverStats ^ text ^ String.concat "" (List.map (fun (lbl, ticks) -> Printf.sprintf "%s: %.6fs\n" lbl (Int64.to_float ticks *. tickLength)) tickCounts)
     method overhead ~path ~nonGhostLineCount ~ghostLineCount ~mixedLineCount =
       let (basepath, relpath) = path in
       let path = Filename.concat basepath relpath in
@@ -230,6 +237,7 @@ class stats =
       print_endline ("Term equality tests -- total: " ^ string_of_int (definitelyEqualSameTermCount + definitelyEqualQueryCount));
       print_endline ("Other prover queries: " ^ string_of_int proverOtherQueryCount);
       print_endline ("Prover statistics:\n" ^ proverStats);
+      Printf.printf "Time spent parsing: %.6fs\n" (Int64.to_float (Stopwatch.ticks parsing_stopwatch) *. self#tickLength);
       print_endline ("Function timings (> 0.1s):\n" ^ self#getFunctionTimings);
       print_endline (Printf.sprintf "Total time: %.2f seconds" (Perf.time() -. startTime))
   end
@@ -2648,6 +2656,8 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
 let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
+  Stopwatch.start parsing_stopwatch;
+  let result =
   if Filename.check_suffix (Filename.basename path) ".scala" then
     parse_scala_file path reportRange
   else
@@ -2659,6 +2669,9 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+  in
+  Stopwatch.stop parsing_stopwatch;
+  result
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
@@ -2674,6 +2687,8 @@ in
   parse_include_directives
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) = (* ?parse_c_file *)
+  Stopwatch.start parsing_stopwatch;
+  let result =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
   let parse_c_file =
@@ -2685,8 +2700,13 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+  in
+  Stopwatch.stop parsing_stopwatch;
+  result
 
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
+  Stopwatch.start parsing_stopwatch;
+  let result =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
   let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange reportShouldFail in
   let parse_header_file =
@@ -2704,6 +2724,9 @@ let parse_header_file (basePath: string) (relPath: string) (reportRange: range_k
   with
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
+  in
+  Stopwatch.stop parsing_stopwatch;
+  result
 
 let read_file_lines path =
   let channel = open_in path in

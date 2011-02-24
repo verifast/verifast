@@ -118,9 +118,9 @@ vfide.cmx: vfversion.cmi verifast.cmx Fonts.cmx vfide.ml
 vfideredux.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml Fonts.cmx vfide.cmx
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o vfideredux.exe -I +lablgtk2 record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa Printexc_proxy.cmx proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
 
-win\Perf.cmxa: win\caml_perf.c win\Perf.mli win\Perf.ml
+win\Perf.cmxa: win\caml_perf.c win\Perf.mli win\Perf.ml win\Stopwatch.mli win\caml_stopwatch.c
 	cd win
-	ocamlopt.opt -a -o Perf.cmxa caml_perf.c Perf.mli Perf.ml
+	ocamlopt.opt -a -o Perf.cmxa caml_perf.c Perf.mli Perf.ml Stopwatch.mli caml_stopwatch.c
 	cd ..
 
 verifast.cmx: win\Perf.cmxa vfversion.cmi proverapi.cmx verifast.ml
