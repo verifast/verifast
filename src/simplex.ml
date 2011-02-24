@@ -334,3 +334,20 @@ and ['tag] simplex () =
       columns <- col::columns;
       self#assert_eq c ((num_of_int (-1), u)::ts)
   end
+
+type 'tag simplex0 = <
+  register_listeners:
+    ('tag unknown -> 'tag unknown -> unit) ->
+    ('tag unknown -> Num.num -> unit) ->
+    unit;
+  push: unit;
+  pop: unit;
+  alloc_unknown: string -> 'tag -> 'tag unknown;
+  assert_ge: Num.num -> (Num.num * 'tag unknown) list -> result;
+  assert_eq: Num.num -> (Num.num * 'tag unknown) list -> result;
+  assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result
+>
+
+let print_unknown u = u#print
+let unknown_tag (u: 'tag unknown): 'tag option = u#tag
+let new_simplex () = (new simplex () :> 'tag simplex0)

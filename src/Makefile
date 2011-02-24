@@ -156,7 +156,10 @@ verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c proverapi.ml
 
-simplex.cmx: simplex.ml
+simplex.cmi: simplex.mli
+	ocamlopt.opt -c simplex.mli
+
+simplex.cmx: simplex.cmi simplex.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c simplex.ml
 
 redux.cmx: win\Perf.cmxa proverapi.cmx simplex.cmx redux.ml

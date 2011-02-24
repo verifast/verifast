@@ -1,5 +1,6 @@
 open Num
 open Big_int
+open Simplex
 open Proverapi
 open Printf
 
@@ -619,7 +620,7 @@ and context () =
     val mutable numnodes: termnode NumMap.t = NumMap.empty (* Sorted *)
     val mutable ttrue = None
     val mutable tfalse = None
-    val simplex = new Simplex.simplex ()
+    val simplex = Simplex.new_simplex ()
     val mutable popstack = []
     val mutable pushdepth = 0
     val mutable popactionlist: (unit -> unit) list = []
@@ -1106,7 +1107,7 @@ and context () =
     
     method assert_ge c ts =
       (* let the x = match x with Some x -> x in *)
-      (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the u#tag)#pprint u#name) ts)); *)
+      (* printff "assert_ge %s [%s]\n" (string_of_num c) (String.concat " " (List.map (fun (c, u) -> Printf.sprintf "%s*%s(%s)" (string_of_num c) (the (unknown_tag u))#pprint u#name) ts)); *)
       simplex#assert_ge c ts
     
     method assert_le t1 offset t2 =
@@ -1247,7 +1248,7 @@ and context () =
               end
             | (u, c)::consts ->
               simplex_consts <- consts;
-              let Some tn = u#tag in
+              let Some tn = unknown_tag u in
               (* print_endline ("Importing constant from Simplex: " ^ tn#pprint ^ "(" ^ u#name ^ ") = " ^ string_of_num c); *)
               match (self#assert_eq_core true tn#value (self#get_numnode c)#value, result) with
                 (Unsat3, _) -> Unsat3
@@ -1256,8 +1257,8 @@ and context () =
           end
         | (u1, u2)::eqs ->
           simplex_eqs <- eqs;
-          let Some tn1 = u1#tag in
-          let Some tn2 = u2#tag in
+          let Some tn1 = unknown_tag u1 in
+          let Some tn2 = unknown_tag u2 in
           (* print_endline ("Importing equality from Simplex: " ^ tn1#pprint ^ "(" ^ u1#name ^ ") = " ^ tn2#pprint ^ "(" ^ u2#name ^ ")"); *)
           match (self#assert_eq_core true tn1#value tn2#value, result) with
             (Unsat3, _) -> Unsat3

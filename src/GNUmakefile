@@ -160,8 +160,11 @@ SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SEx
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
 
-simplex.cmx: simplex.ml
-	ocamlopt.opt -warn-error F -c simplex.cmx simplex.ml
+simplex.cmi: simplex.mli
+	ocamlopt.opt -c simplex.mli
+
+simplex.cmx: simplex.cmi simplex.ml
+	ocamlopt.opt -warn-error F -c simplex.ml
 
 redux.cmx: linux/Perf.cmx proverapi.cmx simplex.cmx redux.ml
 	ocamlopt.opt -warn-error F -c -I ./linux Perf.cmx redux.ml
