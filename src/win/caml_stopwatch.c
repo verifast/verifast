@@ -44,4 +44,4 @@ value caml_stopwatch_stop(value stopwatch) {
 value caml_stopwatch_ticks(value stopwatch) {
     struct stopwatch *s = (void *)stopwatch;
     return copy_int64(s->counter);
-}Index: src/win/Stopwatch.mli
+}
