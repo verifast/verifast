@@ -1,11 +1,12 @@
 ifdef Z3
   Z3DEPS = z3prover.cmx verifastPluginZ3.ml
   Z3ARGS = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
-else
+else ifdef NOZ3
   Z3DEPS =
   Z3ARGS =
+else
+  $(error Neither Z3 nor NOZ3 is defined. Did you forget to run settings.sh?)
 endif
-
 
 # GSourceView2 for MAC and Linux
 ifdef MAC

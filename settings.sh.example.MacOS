@@ -1,0 +1,7 @@
+export PATH=~/verifast/trunk/bin:$PATH
+
+export MAC=yes
+
+export OCAMLLIB=/usr/local/lib/ocaml
+
+export NOZ3=true

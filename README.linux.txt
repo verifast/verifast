@@ -1,6 +1,13 @@
 Building VeriFast on Linux
 ==========================
 
+Contents:
+A. Installing the build environment
+B. How to build
+
+A. Installing the build environment
+===================================
+
 I successfully built VeriFast on Ubuntu 9.10 (Karmic Koala, released in
 October 2009) after apt-getting the packages listed in Required Packages
 (using "sudo apt-get install <packagename>") and building the O'Caml
@@ -48,12 +55,12 @@ by Update Manager.)
 Preparing the build environment
 ===============================
 
-- Copy settings.sh.example to settings.sh
+- Copy settings.sh.example.Linux to ../settings.sh
 - Adapt it to your setup
-- Source it: . settings.sh
 
-To build
-========
+B. How to build
+===============
 
+. ../settings.sh
 cd src; make
 
