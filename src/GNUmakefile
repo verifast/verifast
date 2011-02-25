@@ -1,14 +1,21 @@
 ifdef Z3
   Z3DEPS = z3prover.cmx verifastPluginZ3.ml
   Z3ARGS = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
-  GTKSOURCEVIEW = lablgtksourceview2.cmxa
-  GTKSOURCEVIEW_DEPS =
 else
   Z3DEPS =
   Z3ARGS =
+endif
+
+
+# GSourceView2 for MAC and Linux
+ifdef MAC
   GTKSOURCEVIEW = -I macos GSourceView2.cmx
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
+else
+  GTKSOURCEVIEW = lablgtksourceview2.cmxa
+  GTKSOURCEVIEW_DEPS =
 endif
+
 
 ifdef MAC
   numcpu := $(shell sysctl -n hw.ncpu)
@@ -17,25 +24,37 @@ else
   numcpu := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
+
+
 test: ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool ../bin/vfstrip ../bin/list.vfmanifest ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest ../bin/arrays.vfmanifest
-	export PATH=`pwd`:$$PATH; cd ..; bin/mysh -cpus $(numcpu) < testsuite.mysh
+	export PATH=`pwd`/../bin/:$$PATH; cd ..; bin/mysh -cpus $(numcpu) < testsuite.mysh
+
+env:
+	@echo OCAMLLIB       ${OCAMLLIB}
+	@echo Z3             ${Z3}
+	@echo MAC            ${MAC}
+	@echo GTKSOURCEVIEW  ${GTKSOURCEVIEW}
 
 clean:
-	-rm *.cm*
-	-rm *.o *.a
-	-cd ../bin; rm verifast vfide dlsymtool vfstrip mysh
+	rm -f *.cm*
+	rm -f *.o *.a
+	cd ../bin; rm -f verifast vfide dlsymtool vfstrip mysh \
+         arrays.vfmanifest list.vfmanifest listex.vfmanifest \
+         raw_ghost_lists.vfmanifest
+	rm -f macos/*.cm* macos/*.o
+	${MAKE} -C linux -f GNUmakefile clean
 
 ../bin/list.vfmanifest: ../bin/list.c ../bin/list.h
-	cd ../bin; verifast -c -emit_vfmanifest list.c
+	cd ../bin; ./verifast -c -emit_vfmanifest list.c
 
 ../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.h
-	cd ../bin; verifast -c -emit_vfmanifest listex.c
+	cd ../bin; ./verifast -c -emit_vfmanifest listex.c
 
 ../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.h
-	cd ../bin; verifast -c -emit_vfmanifest arrays.c
+	cd ../bin; ./verifast -c -emit_vfmanifest arrays.c
 
 ../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c ../bin/raw_ghost_lists.h
-	cd ../bin; verifast -c -emit_vfmanifest raw_ghost_lists.c
+	cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
 
 ../bin/vfstrip: vfstrip.ml
 	ocamlopt.opt -o ../bin/vfstrip vfstrip.ml
@@ -106,8 +125,7 @@ vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.
 mynum.cmx: mynum.ml
 	ocamlopt.opt -c nums.cmxa mynum.ml
 
-ifdef Z3
-else
+ifdef MAC
 macos/GSourceView2.cmx: macos/GSourceView2.ml
 	cd macos; ocamlopt.opt -c -I +lablgtk2 GSourceView2.ml
 endif
