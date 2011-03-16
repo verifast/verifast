@@ -1,6 +1,0 @@
-export PATH=~/verifast/trunk/bin:$PATH
-
-export OCAMLLIB=/usr/lib/ocaml/3.10.2
-
-export Z3=~/z3
-export LD_LIBRARY_PATH=~/z3/lib:$LD_LIBRARY_PATH

@@ -55,12 +55,12 @@ by Update Manager.)
 Preparing the build environment
 ===============================
 
-- Copy settings.sh.example.Linux to ../settings.sh
-- Adapt it to your setup
+- Copy GNUmakefile.settings.exampl to GNUmakefile.settings
+- Adapt it to your setup. You will usually only have to change Z3
+  to point to your installation of the Z3 solver.
 
 B. How to build
 ===============
 
-. ../settings.sh
 cd src; make
 

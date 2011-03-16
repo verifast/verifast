@@ -1,40 +1,80 @@
-ifdef Z3
-  Z3DEPS = z3prover.cmx verifastPluginZ3.ml
-  Z3ARGS = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
-else ifdef NOZ3
-  Z3DEPS =
-  Z3ARGS =
-else
-  $(error Neither Z3 nor NOZ3 is defined. Did you forget to run settings.sh?)
-endif
 
-# GSourceView2 for MAC and Linux
+include ../GNUmakefile.settings
+
+# OS detection
+ifeq ($(OS), Linux)
+  LINUX        = yes
+  OS_SUPPORTED = yes
+endif
+ifeq ($(OS), Darwin)
+  MAC          = yes
+  OS_SUPPORTED = yes
+endif
+# TODO: Add support for Cygwin
+
+# GSourceView2 for MAC
 ifdef MAC
-  GTKSOURCEVIEW = -I macos GSourceView2.cmx
+  GTKSOURCEVIEW      = -I macos GSourceView2.cmx
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
 else
-  GTKSOURCEVIEW = lablgtksourceview2.cmxa
+  GTKSOURCEVIEW      = lablgtksourceview2.cmxa
   GTKSOURCEVIEW_DEPS =
 endif
 
-
-ifdef MAC
-  numcpu := $(shell sysctl -n hw.ncpu)
+# Z3 configuration
+ifdef Z3
+  Z3DEPS  = z3prover.cmx verifastPluginZ3.ml
+  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3prover.cmx verifastPluginZ3.ml \
+            -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
+            -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+  LDLPATH = $(Z3)/lib
+else ifdef NOZ3
+  Z3DEPS  =
+  Z3ARGS  =
+  LDLPATH =
 else
-  # Also works under cygwin (tested).
-  numcpu := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
+  $(error Neither Z3 nor NOZ3 is defined. Please check your \
+   ../GNUmakefile.settings)
 endif
 
+# Number of CPUs
+# TODO: Isn't there /sys on Darwin, Linux and Cygwin?
+ifdef MAC
+  NUMCPU := $(shell sysctl -n hw.ncpu)
+else
+  NUMCPU := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
+endif
+
+SET_ENV = export PATH=$(CWD)/../bin/:$$PATH; \
+          export LD_LIBRARY_PATH=$(LDLPATH):$$LD_LIBRARY_PATH
 
 
-test: ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool ../bin/vfstrip ../bin/list.vfmanifest ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest ../bin/arrays.vfmanifest
-	export PATH=`pwd`/../bin/:$$PATH; cd ..; bin/mysh -cpus $(numcpu) < testsuite.mysh
+all: build test
+
+build: env \
+       ../bin/mysh ../bin/verifast ../bin/vfide ../bin/dlsymtool \
+       ../bin/vfstrip ../bin/list.vfmanifest \
+       ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
+       ../bin/arrays.vfmanifest
+
+test: build
+	$(SET_ENV); \
+        cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 
 env:
-	@echo OCAMLLIB       ${OCAMLLIB}
-	@echo Z3             ${Z3}
-	@echo MAC            ${MAC}
-	@echo GTKSOURCEVIEW  ${GTKSOURCEVIEW}
+	@echo "Configuration:"
+	@echo "---------------------"
+ifdef OS_SUPPORTED
+	@echo "OS            $(OS)"
+else
+	$(error Unknown operating system: $(OS))
+endif
+	@echo "NUMCPU        $(NUMCPU)"
+	@echo "OCAMLLIB      $(OCAMLLIB)"
+	@echo "CWD           $(CWD)"
+	@echo "Z3            $(Z3)"
+	@echo "LDLPATH       $(LDLPATH)"
+	@echo "GTKSOURCEVIEW $(GTKSOURCEVIEW)"
 
 clean:
 	rm -f *.cm*
@@ -45,17 +85,20 @@ clean:
 	rm -f macos/*.cm* macos/*.o
 	${MAKE} -C linux -f GNUmakefile clean
 
+distclean: clean
+
 ../bin/list.vfmanifest: ../bin/list.c ../bin/list.h
-	cd ../bin; ./verifast -c -emit_vfmanifest list.c
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c
 
 ../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.h
-	cd ../bin; ./verifast -c -emit_vfmanifest listex.c
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest listex.c
 
 ../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.h
-	cd ../bin; ./verifast -c -emit_vfmanifest arrays.c
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest arrays.c
 
-../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c ../bin/raw_ghost_lists.h
-	cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
+../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c \
+ ../bin/raw_ghost_lists.h
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
 
 ../bin/vfstrip: vfstrip.ml
 	ocamlopt.opt -o ../bin/vfstrip vfstrip.ml
