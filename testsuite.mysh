@@ -200,3 +200,4 @@ verifast_both -c -allow_should_fail fixpoint_recursive_value.c
 verifast -c -allow_should_fail erasure.c
 verifast -c -allow_should_fail erasure2.c
 verifast -c -allow_should_fail erasure3.c
+verifast_both -c -allow_should_fail autoclose_bad_downcast.c
