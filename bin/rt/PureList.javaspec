@@ -147,8 +147,8 @@ lemma_auto(drop(length(xs), xs)) void drop_length<t>(list<t> xs);
     ensures drop(length(xs), xs) == nil;
 
 lemma_auto(length(drop(n, xs))) void length_drop<t>(int n, list<t> xs);
-    requires true;
-    ensures length(drop(n, xs)) == length(xs) - (0 <= n && n <= length(xs) ? n : length(xs));
+    requires 0 <= n && n <= length(xs);
+    ensures length(drop(n, xs)) == length(xs) - n;
 
 lemma_auto(drop(n, take(n, xs))) void drop_n_take_n<t>(int n, list<t> xs);
     requires true;

@@ -50,6 +50,7 @@ type ('symbol, 'termnode) term =
 | True
 | False
 | BoundVar of int
+| Implies of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 
 let term_subst bound_env t =
   let rec iter t =
@@ -74,6 +75,7 @@ let term_subst bound_env t =
     | True -> t
     | False -> t
     | BoundVar i -> TermNode (List.assoc i bound_env)
+    | Implies (t1, t2) -> Implies (iter t1, iter t2)
   in
   iter t
 
@@ -627,6 +629,7 @@ and context () =
     val mutable simplex_eqs = []
     val mutable simplex_consts = []
     val mutable redexes = []
+    val mutable implications = []
     val mutable pending_splits_front = initialPendingSplitsFrontNode
     val mutable pending_splits_back = initialPendingSplitsFrontNode
     val mutable formal_depth = 0  (* If formal_depth = 0, App terms are eagerly turned into E-graph nodes. *)
@@ -729,6 +732,7 @@ and context () =
     method mk_ifthenelse (t1: (symbol, termnode) term) (t2: (symbol, termnode) term) (t3: (symbol, termnode) term): (symbol, termnode) term =
       IfThenElse (t1, t2, t3)
     method mk_iff (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Iff (t1, t2)
+    method mk_implies (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Implies (t1, t2)
     method mk_eq (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Eq (t1, t2)
     method mk_intlit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
     method mk_intlit_of_string (s: string): (symbol, termnode) term = NumLit (num_of_string s)
@@ -783,6 +787,8 @@ and context () =
               | _ -> Unknown3
           end
         | Not t -> assume_false t
+        | Implies (True, t2) -> assume_true t2
+        | Implies (t1, t2) -> self#add_implication t1 t2; Unknown3
         | t -> self#assume_eq (self#termnode_of_term t) self#true_node
       and assume_false t =
         match t with
@@ -814,8 +820,16 @@ and context () =
       in
       assume_true t
     
+    method assume_with_implications t =
+      let result = self#assume_core t in
+      match result with
+        Unsat3 -> Unsat3
+      | Valid3 -> Valid3
+      | Unknown3 ->
+        if self#perform_implications then Unsat3 else Unknown3
+    
     method assume_internal t =
-      let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_core t in
+      let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_with_implications t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
@@ -918,6 +932,28 @@ and context () =
     method add_redex n =
       redexes <- n::redexes
     
+    method add_implication p q =
+      let is = implications in
+      implications <- (p, q)::implications;
+      self#register_popaction (fun () -> implications <- is)
+    
+    method perform_implications =
+      match implications with
+        [] -> false
+      | (p, q)::is as is0 ->
+        implications <- is;
+        self#register_popaction (fun () -> implications <- is0);
+        let rec holds p =
+          match p with
+            And (p1, p2) -> holds p1 && holds p2
+          | p ->
+            self#push_internal;
+            let result = self#assume_core (Not p) in
+            self#pop_internal;
+            result = Unsat3
+        in
+        holds p && self#assume_core q = Unsat3 || self#perform_implications
+    
     method add_pending_split branch1 branch2 =
       (* printff "Adding pending split: (%s, %s)\n" (self#pprint branch1) (self#pprint branch2); *)
       let back = pending_splits_back in
@@ -965,7 +1001,7 @@ and context () =
           if verbosity >= 2 then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
           self#push_internal;
           if verbosity >= 2 then printff "  First branch: %s\n" (self#pprint branch1);
-          let result = self#assume_core branch1 in
+          let result = self#assume_with_implications branch1 in
           if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
           let continue = result = Unsat3 || result = Valid3 && assumptions = [] || iter (branch1::assumptions) nextNode in
           self#pop_internal;
@@ -974,7 +1010,7 @@ and context () =
             if verbosity >= 2 then printff "Pruning split\n";
             self#register_popaction (fun () -> pending_splits_front <- currentNode);
             pending_splits_front <- nextNode;
-            let result = if result = Unsat3 then self#assume_core branch2 else Valid3 in
+            let result = if result = Unsat3 then self#assume_with_implications branch2 else Valid3 in
             let continue = result = Unsat3 || iter [] nextNode in
             if verbosity >= 2 then printff "Done splitting\n";
             continue
@@ -984,7 +1020,7 @@ and context () =
             begin
               self#push_internal;
               if verbosity >= 2 then printff "  Second branch %s\n" (self#pprint branch2);
-              let result = self#assume_core branch2 in
+              let result = self#assume_with_implications branch2 in
               if verbosity >= 2 then printff "    %s\n" (match result with Unsat3 -> "Unsat" | Unknown3 -> "Unknown" | Valid3 -> "Valid");
               let continue = result = Unsat3 || iter (branch2::assumptions) nextNode in
               self#pop_internal;
@@ -1016,7 +1052,7 @@ and context () =
           Some (`SplitNode (False, branch2, nextNode)) ->
           self#register_popaction (fun () -> pending_splits_front <- pendingSplitsFront);
           pending_splits_front <- nextNode;
-          self#assume_core branch2 = Unsat3 || iter ()
+          self#assume_with_implications branch2 = Unsat3 || iter ()
         | _ -> false
       in
       iter ()
@@ -1057,6 +1093,7 @@ and context () =
       | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
       | BoundVar i -> Printf.sprintf "bound.%i" i
+      | Implies (t1, t2) -> self#pprint t1 ^ " ==> " ^ self#pprint t2
     
     method get_node s vs =
       match vs with
@@ -1292,6 +1329,7 @@ and context () =
     method end_formal = formal_depth <- formal_depth - 1
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i
     method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
+      if tps = [] then ignore (self#assume body) else
       let pats =
         if pats = [] then
           let check_pat pat =
@@ -1332,6 +1370,7 @@ and context () =
             | True -> []
             | False -> []
             | BoundVar i -> []
+            | Implies (t1, t2) -> find_terms t1 @ find_terms t2
           in
           find_terms body
         else

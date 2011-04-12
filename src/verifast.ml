@@ -11008,7 +11008,7 @@ let verify_program_core (* ?verify_program_core *)
           let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
           [eval None env trigger]
       ) in
-      let body = ctxt#mk_or (ctxt#mk_not t_pre) t_post in
+      let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
       ctxt#assume_forall trigger tps body
   | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
