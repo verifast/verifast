@@ -5274,21 +5274,23 @@ let verify_program_core (* ?verify_program_core *)
         if cn = "java.lang.Object" then None else
         match try_assoc cn classmap with 
         | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
-            if (List.exists (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths) then
-              Some((List.find (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths))
-            else
-              get_implemented_instance_method super mn argtps
+          begin try
+            Some (List.find (fun ((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths)
+          with Not_found ->
+            get_implemented_instance_method super mn argtps
+          end
         | None -> None
       in
-      let argtps = List.map (fun e -> snd (check e)) args in
-      let wargs = List.map (fun e -> fst (check e)) args in
+      let args_checked = List.map check args in 
+      let argtps = List.map snd args_checked in
+      let wargs = List.map fst args_checked in
       let thistype = try_assoc "this" tenv in
       begin match thistype with
         None -> static_error l "super calls not allowed in static context." None
       | Some(ObjType(cn)) -> 
         begin match try_assoc cn classmap with
           None -> static_error l "No matching method." None
-        | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+        | Some (_, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), (lm, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract))) -> 
@@ -9874,28 +9876,45 @@ let verify_program_core (* ?verify_program_core *)
       )
     | Open (l, target, g, targs, pats0, pats, coefpat) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let open_instance_predicate target target_cn =
+        let cn =
+          match pats0 with
+            [] -> target_cn
+          | [LitPat (ClassLit (l, x))] ->
+            begin match resolve (pn,ilist) l x classmap with
+              None -> static_error l "Index: No such class" None
+            | Some (cn, _) ->
+              if is_subtype_of target_cn cn then
+                cn
+              else
+                static_error l "Target object type must be subtype of index." None
+            end
+          | _ -> static_error l "Index should be of the form C.class." None
+        in
+        let (pmap, symb, body) =
+          match try_assoc cn classmap with
+            Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            begin match try_assoc g preds with
+              None -> static_error l "No such predicate instance" None
+            | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
+            end
+          | None -> static_error l "Target of predicate instance call must be of class type" None
+        in
+        let index = List.assoc cn classterms in
+        let env0 = [("this", target)] in
+        ([], [], (symb, true), [TermPat target; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
+      in
       let (targs, tpenv, g_symb, pats0, dropcount, ps, env0, p, inputParamCount) =
         match target with
           Some target ->
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
-          let cn =
+          let target_cn =
             match targetType with
               ObjType cn -> cn
             | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
-          let (pmap, symb, body) =
-            match try_assoc cn classmap with
-              Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-              begin match try_assoc g preds with
-                None -> static_error l "No such predicate instance" None
-              | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
-              end
-            | None -> static_error l "Target of predicate instance call must be of class type" None
-          in
           let target = ev target in
-          let index = List.assoc cn classterms in
-          let env0 = [("this", target)] in
-          ([], [], (symb, true), [TermPat target; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
+          open_instance_predicate target target_cn
         | None ->
         match resolve (pn,ilist) l g predfammap with
           Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
@@ -9929,19 +9948,9 @@ let verify_program_core (* ?verify_program_core *)
             let error () = static_error l "No such predicate or predicate constructor." None in
             begin match try_assoc "this" tenv with
               None -> error ()
-            | Some (ObjType cn) ->
-              begin match try_assoc cn classmap with
-                Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
-                begin match try_assoc g preds with
-                  None -> error ()
-                | Some (lpred, pmap, family, symb, Some body) ->
-                  let this = List.assoc "this" env in
-                  let index = List.assoc cn classterms in
-                  let env0 = [("this", this)] in
-                  ([], [], (symb, true), [TermPat this; TermPat index], 2, List.map (fun (x, t) -> (x, t, t)) pmap, env0, body, Some 2)
-                end
-              | None -> error ()
-              end
+            | Some (ObjType target_cn) ->
+              let this = List.assoc "this" env in
+              open_instance_predicate this target_cn
             end
           | Some (_, ps1, ps2, body, funcsym) ->
             if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
@@ -10098,27 +10107,44 @@ let verify_program_core (* ?verify_program_core *)
       tcont sizemap tenv ghostenv h env
     | Close (l, target, g, targs, pats0, pats, coef) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
+      let close_instance_predicate target target_cn =
+        let cn =
+          match pats0 with
+            [] -> target_cn
+          | [LitPat (ClassLit (l, x))] ->
+            begin match resolve (pn,ilist) l x classmap with
+              None -> static_error l "Index: No such class" None
+            | Some (cn, _) ->
+              if is_subtype_of target_cn cn then
+                cn
+              else
+                static_error l "Target object type must be subtype of index." None
+            end
+          | _ -> static_error l "Index should be of the form C.class." None
+        in
+        let (lpred, pmap, symb, body) =
+          match try_assoc cn classmap with
+            Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            begin match try_assoc g preds with
+              None -> static_error l "No such predicate instance" None
+            | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
+            end
+          | None -> static_error l "Target of predicate instance call must be of class type" None
+        in
+        let index = List.assoc cn classterms in
+        (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index])
+      in
       let (lpred, targs, tpenv, ps, bs0, g_symb, p, ts0) =
         match target with
           Some target ->
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
-          let cn =
+          let target_cn =
             match targetType with
               ObjType cn -> cn
             | _ -> static_error l "Target of predicate instance call must be of class type" None
           in
-          let (lpred, pmap, symb, body) =
-            match try_assoc cn classmap with
-              Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-              begin match try_assoc g preds with
-                None -> static_error l "No such predicate instance" None
-              | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
-              end
-            | None -> static_error l "Target of predicate instance call must be of class type" None
-          in
           let target = ev target in
-          let index = List.assoc cn classterms in
-          (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index])
+          close_instance_predicate target target_cn
         | None ->
         match resolve (pn,ilist) l g predfammap with
           Some (g, (lpred, _, _, _, g_symb, inputParamCount)) ->
@@ -10149,17 +10175,8 @@ let verify_program_core (* ?verify_program_core *)
               let error () = static_error l ("No such predicate family instance or predicate constructor: "^g) None in
               begin match try_assoc "this" tenv with
                 Some (ObjType cn) ->
-                begin match try_assoc cn classmap with
-                  Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, _, _) ->
-                  begin match try_assoc g preds with
-                    Some (lpred, pmap, family, symb, Some body) ->
-                    let this = List.assoc "this" env in
-                    let index = List.assoc cn classterms in
-                    (lpred, [], [], pmap, [("this", this)], (symb, true), body, [this; index])
-                  | None -> error ()
-                  end
-                | None -> error ()
-                end
+                let this = List.assoc "this" env in
+                close_instance_predicate this cn
               | _ -> error ()
               end
             | Some (lpred, ps1, ps2, body, funcsym) ->

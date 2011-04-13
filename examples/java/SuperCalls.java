@@ -21,11 +21,10 @@ class B extends A {
     //@ requires valid(?v) &*& 0 <= y;
     //@ ensures valid(y) &*& result == y;
   {
-    //@ A a = this;
     //@ open valid(v);
-    //@ close a.valid(v);
+    //@ close valid(A.class)(v);
     int tmp = super.m(y);
-   //@ open a.valid(y);
+   //@ open valid(A.class)(y);
    //@ close valid(y);
    return tmp;
   }
