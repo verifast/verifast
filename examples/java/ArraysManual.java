@@ -53,7 +53,7 @@ class Persons {
     }
 }
 
-//@ predicate record(int recordLength, Object record; unit value) = array_slice((byte[])record, 0, recordLength, _) &*& value == unit;
+//@ predicate record(int recordLength, Object record; unit value) = array_slice<byte>(^record, 0, recordLength, _) &*& value == unit;
 
 class ArrayTest {
     static void test(Object[] a, int i)
