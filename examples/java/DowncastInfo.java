@@ -23,22 +23,26 @@ class D extends C {
         //@ close D(0, 0, unit);
     }
     
-    //@ predicate C(int x, pair<int, any> info) = D(x, ?y, ?info0) &*& info == pair(y, info0);
-    //@ predicate D(int x, int y, any info) = this.C(C.class)(x, _) &*& this.y |-> y &*& info == unit;
+    /*@
+    
+    predicate C(int x, pair<int, any> info) = D(x, ?y, ?info0) &*& info == pair(y, info0);
+    predicate D(int x, int y, any info) = this.C(C.class)(x, _) &*& this.y |-> y &*& info == unit;
 
-    /* lemma */ void castCToD()
-        //@ requires C(?x, ?info);
-        //@ ensures switch (info) { case pair(y, info0): return D(x, y, info0); };
+    lemma void castCToD()
+        requires C(?x, ?info);
+        ensures switch (info) { case pair(y, info0): return D(x, y, info0); };
     {
-        //@ open C(x, _);
+        open C(x, _);
     }
     
-    /* lemma */ void castDToC()
-        //@ requires D(?x, ?y, ?info);
-        //@ ensures C(x, pair(y, info));
+    lemma void castDToC()
+        requires D(?x, ?y, ?info);
+        ensures C(x, pair(y, info));
     {
-        //@ close C(_, _);
+        close C(_, _);
     }
+    
+    @*/
     
     int getY()
         //@ requires D(?x, ?y, ?info);
@@ -59,26 +63,30 @@ class D extends C {
     {
         //@ close E(0, 0, 0, unit);
     }
+    
+    /*@
 
-    //@ predicate C(int x, pair<int, pair<int, any> > info) = E(x, ?y, ?z, unit) &*& info == pair(y, pair(z, unit));
-    //@ predicate D(int x, int y, pair<int, any> info) = E(x, y, ?z, unit) &*& info == pair(z, unit);
-    //@ predicate E(int x, int y, int z, any info) = this.D(D.class)(x, y, _) &*& this.z |-> z &*& info == unit;
+    predicate C(int x, pair<int, pair<int, any> > info) = E(x, ?y, ?z, unit) &*& info == pair(y, pair(z, unit));
+    predicate D(int x, int y, pair<int, any> info) = E(x, y, ?z, unit) &*& info == pair(z, unit);
+    predicate E(int x, int y, int z, any info) = this.D(D.class)(x, y, _) &*& this.z |-> z &*& info == unit;
 
-    /* lemma */ void castCToD()
-        //@ requires C(?x, ?info);
-        //@ ensures switch (info) { case pair(y, info0): return D(x, y, info0); };
+    lemma void castCToD()
+        requires C(?x, ?info);
+        ensures switch (info) { case pair(y, info0): return D(x, y, info0); };
     {
-        //@ open C(x, _);
-        //@ close D(x, _, _);
+        open C(x, _);
+        close D(x, _, _);
     }
 
-    /* lemma */ void castDToC()
-        //@ requires D(?x, ?y, ?info);
-        //@ ensures C(x, pair(y, info));
+    lemma void castDToC()
+        requires D(?x, ?y, ?info);
+        ensures C(x, pair(y, info));
     {
-        //@ open D(_, _, _);
-        //@ close C(_, _);
+        open D(_, _, _);
+        close C(_, _);
     }
+    
+    @*/
     
     int getY()
         //@ requires D(?x, ?y, ?info);
@@ -102,11 +110,11 @@ class Program {
     {
         if (c instanceof D) {
             D d = (D)c;
-            /*//@*/ d.castCToD();
+            //@ d.castCToD();
             //@ assert d.D(_, _, ?info0);
             //@ close getY_result(info0);
             int result = d.getY();
-            /*//@*/ d.castDToC();
+            //@ d.castDToC();
             return result;
         } else {
             return 0;

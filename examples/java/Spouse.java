@@ -7,22 +7,22 @@ public class Person {
     predicate valid(Person spouse) =
         [1/2]this.spouse |-> spouse &*& spouse == null ? [1/2]this.spouse |-> null : [1/2]spouse.spouse |-> this;
     
-    @*/
-    
-    protected /*lemma*/ void spouse_symm_helper()
-        //@ requires valid(?s) &*& [1/2]this.spouse |-> ?s0;
-        //@ ensures valid(s) &*& [1/2]this.spouse |-> s0 &*& s == s0;
+    protected lemma void spouse_symm_helper()
+        requires valid(?s) &*& [1/2]this.spouse |-> ?s0;
+        ensures valid(s) &*& [1/2]this.spouse |-> s0 &*& s == s0;
     {
-        //@ open valid(s);
-        //@ close valid(s);
+        open valid(s);
+        close valid(s);
     }
+    
+    @*/
     
     public /*lemma*/ void spouse_symm()
         //@ requires valid(?s) &*& s.valid(?ss);
         //@ ensures valid(s) &*& s.valid(ss) &*& ss == this;
     {
         //@ open valid(s);
-        spouse.spouse_symm_helper();
+        //@ spouse.spouse_symm_helper();
         //@ close valid(s);
     }
 

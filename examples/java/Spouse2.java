@@ -63,22 +63,26 @@ public class Person {
         //@ close valid(null);
     }
     
-    protected /*lemma*/ void ticketLemma0()
-        //@ requires valid0(?s) &*& ticket(?s0);
-        //@ ensures valid0(s) &*& ticket(s0) &*& s == s0;
+    /*@
+    
+    protected lemma void ticketLemma0()
+        requires valid0(?s) &*& ticket(?s0);
+        ensures valid0(s) &*& ticket(s0) &*& s == s0;
     {
-        //@ open valid0(s);
-        //@ open ticket(s0);
-        //@ close valid0(s);
-        //@ close ticket(s0);
+        open valid0(s);
+        open ticket(s0);
+        close valid0(s);
+        close ticket(s0);
     }
+    
+    @*/
     
     protected /*lemma*/ void ticketLemma()
         //@ requires valid(?s) &*& this.ticket(?s0);
         //@ ensures valid(s) &*& this.ticket(s0) &*& s == s0;
     {
         //@ open valid(s);
-        ticketLemma0();
+        //@ ticketLemma0();
         //@ close valid(s);
     }
     
@@ -99,19 +103,23 @@ public class Person {
         //@ close valid0(null);
     }
     
-    protected /* lemma */ void initLemma()
-        //@ requires this.valid0(null);
-        //@ ensures valid(null);
+    /*@
+    
+    protected lemma void initLemma()
+        requires this.valid0(null);
+        ensures valid(null);
     {
-        //@ close valid(null);
+        close valid(null);
     }
+    
+    @*/
     
     public static Person create()
         //@ requires true;
         //@ ensures result.valid(null);
     {
         Person p = new Person();
-        p.initLemma();
+        //@ p.initLemma();
         return p;
     }
     

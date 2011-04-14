@@ -1,5 +1,3 @@
-// TODO: Support lemma methods
-
 class C {
     int x;
     
@@ -23,22 +21,26 @@ class D extends C {
         //@ close D(0, 0);
     }
     
-    //@ predicate C(int x) = D(x, _);
-    //@ predicate D(int x, int y) = this.C(C.class)(x) &*& this.y |-> y;
+    /*@
+    
+    predicate C(int x) = D(x, _);
+    predicate D(int x, int y) = this.C(C.class)(x) &*& this.y |-> y;
 
-    /* lemma */ void castCToD()
-        //@ requires C(?x);
-        //@ ensures D(x, _);
+    lemma void castCToD()
+        requires C(?x);
+        ensures D(x, _);
     {
-        //@ open C(x);
+        open C(x);
     }
     
-    /* lemma */ void castDToC()
-        //@ requires D(?x, _);
-        //@ ensures C(x);
+    lemma void castDToC()
+        requires D(?x, _);
+        ensures C(x);
     {
-        //@ close C(_);
+        close C(_);
     }
+    
+    @*/
     
     int getY()
         //@ requires D(?x, ?y);
@@ -60,26 +62,30 @@ class E extends D {
     {
         //@ close E(0, 0, 0);
     }
+    
+    /*@
 
-    //@ predicate C(int x) = E(x, _, _);
-    //@ predicate D(int x, int y) = E(x, y, _);
-    //@ predicate E(int x, int y, int z) = this.D(D.class)(x, y) &*& this.z |-> z;
+    predicate C(int x) = E(x, _, _);
+    predicate D(int x, int y) = E(x, y, _);
+    predicate E(int x, int y, int z) = this.D(D.class)(x, y) &*& this.z |-> z;
 
-    /* lemma */ void castCToD()
-        //@ requires C(?x);
-        //@ ensures D(x, _);
+    lemma void castCToD()
+        requires C(?x);
+        ensures D(x, _);
     {
-        //@ open C(x);
-        //@ close D(x, _);
+        open C(x);
+        close D(x, _);
     }
 
-    /* lemma */ void castDToC()
-        //@ requires D(?x, _);
-        //@ ensures C(x);
+    lemma void castDToC()
+        requires D(?x, _);
+        ensures C(x);
     {
-        //@ open D(_, _);
-        //@ close C(_);
+        open D(_, _);
+        close C(_);
     }
+    
+    @*/
     
     int getY()
         //@ requires D(?x, ?y);
@@ -101,9 +107,9 @@ class Program {
     {
         if (c instanceof D) {
             D d = (D)c;
-            /*//@*/ d.castCToD();
+            //@ d.castCToD();
             int result = d.getY();
-            /*//@*/ d.castDToC();
+            //@ d.castDToC();
             return result;
         } else {
             return 0;

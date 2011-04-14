@@ -7,17 +7,17 @@ public final class Person {
     predicate valid(Person spouse) =
         [1/2]this.spouse |-> spouse &*& spouse == null ? [1/2]this.spouse |-> null : [1/2]spouse.spouse |-> this;
     
-    @*/
-    
-    public /*lemma*/ void spouse_symm()
-        //@ requires valid(?s) &*& s.valid(?ss);
-        //@ ensures valid(s) &*& s.valid(ss) &*& ss == this;
+    public lemma void spouse_symm()
+        requires valid(?s) &*& s.valid(?ss);
+        ensures valid(s) &*& s.valid(ss) &*& ss == this;
     {
-        //@ open valid(s);
-        //@ open s.valid(ss);
-        //@ close s.valid(ss);
-        //@ close valid(s);
+        open valid(s);
+        open s.valid(ss);
+        close s.valid(ss);
+        close valid(s);
     }
+    
+    @*/
 
     public Person()
         //@ requires true;
@@ -64,6 +64,18 @@ public final class Person {
 
 class Program {
 
+    public static void foo(Person a, Person b)
+        //@ requires a.valid(?aSpouse_) &*& b.valid(?bSpouse_);
+        //@ ensures a.valid(aSpouse_) &*& b.valid(bSpouse_);
+    {
+        Person aSpouse = a.getSpouse();
+        Person bSpouse = b.getSpouse();
+        if (aSpouse == b) {
+            //@ a.spouse_symm();
+            assert bSpouse == a;
+        }
+    }
+
     public static void main(String[] args)
         //@ requires true;
         //@ ensures true;
@@ -71,6 +83,7 @@ class Program {
         Person a = new Person();
         Person b = new Person();
         a.marry(b);
+        foo(a, b);
         b.divorce();
     }
 

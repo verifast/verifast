@@ -105,7 +105,6 @@ verifast_both -c -disable_overflow_check AbstractClasses.java
 verifast_both -c -disable_overflow_check ArraysAuto.java
 verifast_both -c -disable_overflow_check ArraysManual.java
 ifnotmac verifast -c -disable_overflow_check Comprehensions.java
-verifast_both -c -disable_overflow_check InstanceOf.java
 verifast_both -c Constants.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -disable_overflow_check -c Contrib_box.jarsrc
@@ -113,6 +112,8 @@ verifast_both -c DefaultCtor.java
 verifast_both -c Downcast.java
 verifast_both -c DowncastInfo.java
 verifast_both -c hello.scala
+verifast_both -c -disable_overflow_check InstanceOf.java
+verifast_both -c InterfaceLemmas.java
 verifast_both -c Iterator.java
 verifast_both -c JavaCard.java
 verifast_both -c -disable_overflow_check LemmaPointer.java
