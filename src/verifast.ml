@@ -11347,7 +11347,7 @@ let verify_program_core (* ?verify_program_core *)
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
+          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
         end;
         pop()
         end;

@@ -109,8 +109,7 @@ class Nil implements List {
     {
         //@ open List(Nil.class)(this, xs);
         //@ close List(Nil.class)(this, xs);
-        boolean result = other.isEmpty();
-        return result;
+        return other.isEmpty();
     }
 
 }
@@ -150,9 +149,8 @@ class Cons implements List {
         //@ ensures List(Cons.class)(this, xs) &*& result == head(xs);
     {
         //@ open List(Cons.class)(this, ?xs_);
-        int result = this.head;
+        return this.head;
         //@ close List(Cons.class)(this, xs_);
-        return result;
     }
     
     List tail()
@@ -175,10 +173,9 @@ class Cons implements List {
         List tail = this.tail;
         List ftail = tail.map(f);
         //@ assert List(_)(ftail, ?ftailxs);
-        List result = new Cons(fhead, ftail);
+        return new Cons(fhead, ftail);
         //@ close List(Cons.class)(this, xs_);
         //@ append_assoc(ys, cons(fhead, nil), ftailxs);
-        return result;
     }
     
     boolean equals(List other)
@@ -196,9 +193,8 @@ class Cons implements List {
             if (this.head == otherHead) {
                 List otherTail = other.tail();
                 List tail = this.tail;
-                boolean tmp = tail.equals(otherTail);
+                return tail.equals(otherTail);
                 //@ close List(Cons.class)(this, xs_);
-                return tmp;
             } else {
                 //@ close List(Cons.class)(this, xs_);
                 return false;

@@ -47,9 +47,8 @@ class MyCounter implements Counter {
         //@ ensures [f]Counter(value) &*& result == value;
     {
         //@ open Counter(value);
-        int result = count;
+        return count;
         //@ close [f]Counter(value);
-        return result;
     }
 
     void set(int value)

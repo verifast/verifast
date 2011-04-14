@@ -38,9 +38,8 @@ public class Person {
         //@ ensures valid(s) &*& result == s;
     {
         //@ open valid(s);
-        Person result = spouse;
+        return spouse;
         //@ close valid(s);
-        return result;
     }
     
     protected void setSpouse(Person other)

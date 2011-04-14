@@ -47,9 +47,8 @@ class D extends C {
         //@ ensures D(x, y) &*& result == y;
     {
         //@ open D(x, y);
-        int result = this.y;
+        return this.y;
         //@ close D(x, y);
-        return result;
     }
 }
 
@@ -93,10 +92,9 @@ class E extends D {
     {
         //@ open D(x, y);
         //@ open E(x, y, _);
-        int result = super.getY();
+        return super.getY();
         //@ close E(x, y, _);
         //@ close D(x, y);
-        return result;
     }
 }
 
@@ -108,9 +106,8 @@ class Program {
         if (c instanceof D) {
             D d = (D)c;
             //@ d.castCToD();
-            int result = d.getY();
+            return d.getY();
             //@ d.castDToC();
-            return result;
         } else {
             return 0;
         }

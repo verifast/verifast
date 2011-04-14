@@ -16,9 +16,8 @@ class Account {
         //@ ensures valid(b) &*& result == b;
     {
         //@ open valid(b);
-        int result = balance;
+        return balance;
         //@ close valid(b);
-        return result;
     }
     
     void deposit(int amount)

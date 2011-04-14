@@ -128,9 +128,8 @@ public class Person {
         //@ ensures valid(s) &*& result == s;
     {
         //@ open valid(s);
-        Person result = getSpouse0();
+        return getSpouse0();
         //@ close valid(s);
-        return result;
     }
     
     void marry(Person other)

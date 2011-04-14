@@ -51,9 +51,8 @@ class SingletonIterator implements Iterator {
         //@ ensures valid(xs) &*& result == (xs != nil);
     {
         //@ open valid(xs);
-        boolean result = !this.done;
+        return !done;
         //@ close valid(xs);
-        return result;
     }
     
     public Object next()
@@ -61,10 +60,9 @@ class SingletonIterator implements Iterator {
         //@ ensures valid(tail(xs)) &*& result == head(xs) &*& result != null;
     {
         //@ open valid(xs);
-        this.done = true;
-        Object result = this.value;
+        done = true;
+        return value;
         //@ close valid(nil);
-        return result;
     }
 
 }

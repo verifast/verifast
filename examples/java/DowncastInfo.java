@@ -49,9 +49,8 @@ class D extends C {
         //@ ensures D(x, y, info) &*& result == y;
     {
         //@ open D(x, y, _);
-        int result = this.y;
+        return this.y;
         //@ close D(x, y, _);
-        return result;
     }
 }
 class E extends D {
@@ -94,10 +93,9 @@ class D extends C {
     {
         //@ open D(x, y, _);
         //@ open E(x, y, _, _);
-        int result = super.getY();
+        return super.getY();
         //@ close E(x, y, _, _);
         //@ close D(x, y, _);
-        return result;
     }
 }
 
@@ -113,9 +111,8 @@ class Program {
             //@ d.castCToD();
             //@ assert d.D(_, _, ?info0);
             //@ close getY_result(info0);
-            int result = d.getY();
+            return d.getY();
             //@ d.castDToC();
-            return result;
         } else {
             return 0;
         }
