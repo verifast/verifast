@@ -9,6 +9,9 @@ set PATH=C:\gtk\bin;%PATH%
 set Z3=C:\Z3-1.3.6
 set PATH=C:\Z3-1.3.6\bin;%PATH%
 
+rem set Z3V2=C:\Z3-2.16
+rem set PATH=C:\Z3-2.16\bin;%PATH%
+
 set PATH=C:\flexdll-0.21;%PATH%
 
 set PATH=C:\VeriFast\workdir\bin;%PATH%

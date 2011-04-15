@@ -152,6 +152,11 @@ verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\verifast.exe -I $(Z3)\ocaml -I .\win record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
 	time < nl.txt
+    
+..\bin\verifastz3v2.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3v2prover.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\verifastz3v2.exe -I $(Z3V2)\ocaml -I .\win record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa proverapi.cmx z3v2prover.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3v2.ml vfconsole.ml
+	time < nl.txt
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c proverapi.ml
@@ -167,6 +172,9 @@ redux.cmx: win\Perf.cmxa proverapi.cmx simplex.cmx redux.ml
 
 z3prover.cmx: win\Perf.cmxa proverapi.cmx z3prover.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I $(Z3)\ocaml z3.cmxa -I .\win Perf.cmxa proverapi.cmx z3prover.ml
+    
+z3v2prover.cmx: win\Perf.cmxa proverapi.cmx z3v2prover.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I $(Z3V2)\ocaml z3.cmxa -I .\win Perf.cmxa proverapi.cmx z3v2prover.ml
 
 verifastredux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastRedux_opt.exe record_backtrace.cmx unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfconsole.ml
