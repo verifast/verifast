@@ -75,7 +75,7 @@ static int vf_procfs_seq_show(struct seq_file *s, void *v)
 	struct vf_procfs_callback_handle cb_handle = {
 		.seq_file = s
 	};
-	vf_procfs_read_callback_t *callback = s->private;;
+	vf_procfs_read_callback_t *callback = s->private;
 	if (callback(&cb_handle) == -1){
 		return -ENOMEM;
 	}else{
@@ -185,7 +185,7 @@ int vf_procfs_put_char(struct vf_procfs_callback_handle *cb_handle, char c)
 {
 	/*
 	 * The backend works like this: (Linux' seq_file.c) seq_file
-	 * has a counter an d knows the size of its buffer.  The
+	 * has a counter and knows the size of its buffer.  The
 	 * counter represents which byte is to be written (not which
 	 * was the last byte written).  seq_putc returns 0
 	 * ("no-error") when count < size (before writing).

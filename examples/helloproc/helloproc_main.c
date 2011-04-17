@@ -183,9 +183,7 @@ int helloproc_main_module_init() //@ : module_setup_t(helloproc_main)
 	if (mutex == 0){
 		goto error_mutex;
 	}
-	mutex = mutex;
-	
-	
+		
 	/*---- Create file ----*/
 	//@ close vf_procfs_read_callback_data(read_proc_callback)();
 	file = vf_procfs_create_file("value", dir, read_proc_callback);

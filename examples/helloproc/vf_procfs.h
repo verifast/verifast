@@ -129,17 +129,6 @@ struct vf_procfs_dir *vf_procfs_mkdir(char *name);
 	@*/
 
 
-/*#
- * predicate vf_procfs_create_file_ghost_arg
- * 
- * predicate to pass the name of a predicate as parameter to
- * vf_procfs_create_file
- */
-/*@
-predicate vf_procfs_create_file_ghost_arg(predicate() p) = p();
-@*/
-
-
 /**
  * vf_procfs_create_file - Creates a new proc file
  * 
@@ -312,7 +301,7 @@ int vf_procfs_put_string(struct vf_procfs_callback_handle *cb_handle, char *stri
 
 
 /**
- * vf_procfs_put_string - like vf_procfs_put_char, but for ints.
+ * vf_procfs_put_int - like vf_procfs_put_char, but for ints.
  * 
  * The new content is currently unspecified.
  */
