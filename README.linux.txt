@@ -16,6 +16,7 @@ release on Ubuntu 8.10 (Intrepid Ibex).
 
 VeriFast also builds successfully on Ubuntu 10.10 and Debian 6.0.
 
+
 Required Packages
 =================
 
@@ -26,13 +27,25 @@ camlidl
 libgtksourceview2.0-dev
 liblablgtksourceview2-ocaml-dev (see below)
 
+
 Z3
 ==
 
-- Download Z3.tar.tgz from
+Alternative 1 (Z3 v1):
+---------------
+- Download Z3 v 1.3, "Z3.tar.tgz" from
   https://dnetcode.cs.kuleuven.be/projects/verifast/files
-- Extract it
-- run ./build-lib.sh `ocamlc -where`
+- Extract it to "z3"
+- run "./build-lib.sh `ocamlc -where`" in "z3/ocaml"
+
+***does not work at the moment***
+Alternative 2 (Z3 v2):
+---------------
+- Download Z3 v 2.XY from
+  http://research.microsoft.com/projects/z3/z3-2.XY.tar.gz
+- Extract it to "z3"
+- run "./build-lib.sh `ocamlc -where`" in "z3/ocaml"
+
 
 Lablgtk with lablgtksourceview2
 ===============================
@@ -52,12 +65,14 @@ by Update Manager.)
   - The above command will fail due to a bug in test2.ml. Replace lang with (Some lang) in test2.ml
   - Run the example: ./test2
 
+
 Preparing the build environment
 ===============================
 
 - Copy GNUmakefile.settings.exampl to GNUmakefile.settings
 - Adapt it to your setup. You will usually only have to change Z3
-  to point to your installation of the Z3 solver.
+  or Z3V2 to point to your installation of the Z3 solver.
+
 
 B. How to build
 ===============
