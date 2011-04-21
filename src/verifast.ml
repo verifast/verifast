@@ -528,7 +528,13 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   let in_single_line_annotation = ref false in
   
   let ghost_range_start: srcpos option ref = ref (if inGhostRange then Some (current_srcpos()) else None) in
-  
+
+  let is_include_directive s = 
+      ( let x = String.compare s "include" in
+        if x = 0 then true else false ) in
+
+  let in_include_directive = ref false in
+ 
   let ignore_eol = ref true in
   
   (* Statistics *)
@@ -569,10 +575,10 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       let t = Hashtbl.find (get_kwd_table()) id in
       if isAlpha then
         reportRange (if !ghost_range_start = None then KeywordRange else GhostKeywordRange) (current_loc());
+      if is_include_directive id then in_include_directive := true; 
       t
     with
-      Not_found ->
-      let n = String.length id in
+      Not_found -> let n = String.length id in
       if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
   and keyword_or_error c =
     let s = String.make 1 c in
@@ -619,7 +625,14 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk ();
         ident ()
     | '(' -> start_token(); text_junk (); Some(ident_or_keyword "(" false)
-    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | ':' | '<' | '=' | '>' |
+    | ('<' as c) ->
+        start_token();
+        text_junk ();
+        if !in_include_directive then
+         ( reset_buffer (); Some (String (string ())) )
+         else
+         ( reset_buffer (); store c; ident2 () )
+    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | ':' | '=' | '>' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();
@@ -640,6 +653,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         | _ -> error "Single quote expected."
         end
     | '"' ->
+        if !in_include_directive then in_include_directive := false;
         start_token();
         text_junk ();
         reset_buffer (); Some (String (string ()))
@@ -710,6 +724,17 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   and string () =
     match text_peek () with
       '"' -> text_junk (); get_string ()
+    | '>' as c -> 
+        text_junk ();
+        if !in_include_directive then
+         begin
+          in_include_directive := false;
+          get_string ()
+         end
+         else
+         begin
+          store c; string ()
+         end;
     | '\\' ->
         text_junk ();
         let c =
@@ -2699,7 +2724,7 @@ type 'result parser_ = (loc * token) Stream.t -> 'result
 
 let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_ =
   let rec parse_include_directives = parser
-    [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers
+    [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers 
   | [< >] -> []
   and
   parse_include_directive = parser
