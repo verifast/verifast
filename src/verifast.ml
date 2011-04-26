@@ -5734,13 +5734,13 @@ let verify_program_core (* ?verify_program_core *)
                     in
                     (WInstCallPred (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
                   in
-                  let find_in_interf itf =
+                  let rec find_in_interf itf =
                     let search_interfmap interfmap fallback =
                       match try_assoc itf interfmap with
                         Some (li, meths, preds, interfs, pn, ilist) ->
                         begin match try_assoc p#name preds with
                           Some (_, pmap, symb) -> [(itf, pmap)]
-                        | None -> []
+                        | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
                         end
                       | None -> fallback ()
                     in
@@ -8317,7 +8317,7 @@ let verify_program_core (* ?verify_program_core *)
       interfmap1
   in
   
-  let interfmap=
+  let interfmap2=
     let rec iter map0 map1=
       match map0 with
         [] -> map1
@@ -8342,6 +8342,43 @@ let verify_program_core (* ?verify_program_core *)
           iter rest ((i,(l1,meths',preds1,interfs1,pn1,ilist1))::map1)
     in
     iter interfmap0 interfmap1
+  in
+  
+  let interfmap = (* checks overriding methods in interfaces *)
+    let rec iter map0 map1 =
+      let interf_specs_for_sign sign itf =
+                    let (_, meths, _,  _, _, _) = List.assoc itf map1 in
+                    match try_assoc sign meths with
+                      None -> []
+                    | Some spec -> [(itf, spec)]
+      in
+      match map0 with
+        [] -> map1
+      | (i, (l,meths,preds,interfs, pn,ilist)) as elem::rest ->
+        List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,v,abstract)) ->
+          let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
+          List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', vis', abstract')) ->
+            if rt <> rt' then static_error lm "Return type does not match overridden method" None;
+            if gh <> gh' then
+                  begin match gh with
+                    Ghost -> static_error lm "A lemma method cannot implement or override a non-lemma method." None
+                  | Real -> static_error lm "A non-lemma method cannot implement or override a lemma method." None
+            end;
+            begin
+            push();
+            let ("this", thisType)::xmap = xmap in
+            let ("this", _)::xmap' = xmap' in
+            let thisTerm = get_unique_var_symb "this" thisType in
+            check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
+              (Regular, [], rt, xmap, false, pre, post)
+              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post');
+            pop();
+            end
+          ) superspecs;
+        ) meths;
+        iter rest (elem :: map1)
+    in
+    iter interfmap2 []
   in
   
   let string_of_sign (mn, ts) =
