@@ -13,6 +13,7 @@ class Thread {
 
     void start()
         //@ requires this.pre();
+        //@ exsures true;
         //@ ensures started(this);
     {
         throw null;
@@ -28,6 +29,7 @@ class Thread {
 
     void join()
         //@ requires started(this);
+        //@ exsures true;
         //@ ensures this.post();
     {
         throw null;
@@ -71,6 +73,7 @@ class Program {
 
     public static void main(String[] args)
         //@ requires true;
+        //@ exsures true;
         //@ ensures true;
     {
         MyThread t = new MyThread();
