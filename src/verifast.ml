@@ -1022,7 +1022,7 @@ and
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
-  | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * pred * pred * visibility)
+  | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * pred * pred * pred * visibility)
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -4847,8 +4847,8 @@ let verify_program_core (* ?verify_program_core *)
         in
         let declared_methods =
           flatmap
-            begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) ->
-              if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre_dyn, post_dyn, fb, v, abstract))] else []
+            begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
+              if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v, abstract))] else []
             end
             meths
         in
@@ -4856,8 +4856,8 @@ let verify_program_core (* ?verify_program_core *)
       | None ->
       let (_, meths, _, interfs, _, _) = List.assoc tn interfmap in
       let declared_methods = flatmap
-        begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, v, abstract)) ->
-          if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, Instance, v, abstract))] else []
+        begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract)) ->
+          if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, Instance, v, abstract))] else []
         end
         meths
       in
@@ -5190,7 +5190,7 @@ let verify_program_core (* ?verify_program_core *)
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
         begin match ms with
           [] -> static_error l "No matching method" None
-        | [(sign, (tn', lm, gh, rt, xmap, pre, post, fb', v, abstract))] ->
+        | [(sign, (tn', lm, gh, rt, xmap, pre, post, epost, fb', v, abstract))] ->
           let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
           if fb <> fb' then static_error l "Instance method requires target object" None;
           let rt = match rt with None -> Void | Some rt -> rt in
@@ -5332,7 +5332,7 @@ let verify_program_core (* ?verify_program_core *)
         match try_assoc cn classmap with 
         | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
           begin try
-            Some (List.find (fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths)
+            Some (List.find (fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths)
           with Not_found ->
             get_implemented_instance_method super mn argtps
           end
@@ -5350,8 +5350,8 @@ let verify_program_core (* ?verify_program_core *)
         | Some (_, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
-            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract))) -> 
-             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, v)), match rt with Some(tp) -> tp | _ -> Void)
+            | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) -> 
+             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), match rt with Some(tp) -> tp | _ -> Void)
             end
         end
       end 
@@ -8328,7 +8328,7 @@ let verify_program_core (* ?verify_program_core *)
                 let (epost, _) = check_pred (pn,ilist) [] tenv epost in
                 (pre, tenv, post, epost)
             in
-            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, v, true))::mmap) meths
+            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, true))::mmap) meths
         in
         iter [] specs
       end
@@ -8347,10 +8347,10 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (sign, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,v0,abstract0)) as elem::rest ->
+              | (sign, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,v0,abstract0)) as elem::rest ->
                 match try_assoc sign meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,v1,abstract1) -> 
+                | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0);
                   iter rest meths1
             in
@@ -8373,9 +8373,9 @@ let verify_program_core (* ?verify_program_core *)
       match map0 with
         [] -> map1
       | (i, (l,meths,preds,interfs, pn,ilist)) as elem::rest ->
-        List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,v,abstract)) ->
+        List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,epost,v,abstract)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
-          List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', vis', abstract')) ->
+          List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
             if rt <> rt' then static_error lm "Return type does not match overridden method" None;
             if gh <> gh' then
                   begin match gh with
@@ -8455,7 +8455,7 @@ let verify_program_core (* ?verify_program_core *)
         in
         let specs =
           match try_assoc sign mmap with
-          | Some (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, Instance, v, _, abstract) -> [(cn, (lm, gh, rt, xmap, pre_dyn, pre_tenv, post_dyn, v, abstract))]
+          | Some (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, Instance, v, _, abstract) -> [(cn, (lm, gh, rt, xmap, pre_dyn, pre_tenv, post_dyn, epost_dyn, v, abstract))]
           | _ -> []
         in
         specs @ super_specs_for_sign sign super interfs
@@ -8491,11 +8491,11 @@ let verify_program_core (* ?verify_program_core *)
                 let (wpost, _) = check_pred (pn,ilist) [] postmap post in
                 let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
                 let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, dynamic_of wepost) in
-                Some (wpre, tenv, wpost, wpre_dyn, wpost_dyn)
+                Some (wpre, tenv, wpost, wepost, wpre_dyn, wpost_dyn, wepost_dyn)
             in
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
             List.iter
-              begin fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', vis', abstract')) ->
+              begin fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
                 if gh <> gh' then
                   begin match gh with
                     Ghost -> static_error lm "A lemma method cannot implement or override a non-lemma method." None
@@ -8504,7 +8504,7 @@ let verify_program_core (* ?verify_program_core *)
                 if rt <> rt' then static_error lm "Return type does not match overridden method" None;
                 match co with
                   None -> ()
-                | Some (pre, pre_tenv, post, pre_dyn, post_dyn) ->
+                | Some (pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn) ->
                   push();
                   let ("this", thisType)::xmap = xmap in
                   let ("this", _)::xmap' = xmap' in
@@ -8517,14 +8517,14 @@ let verify_program_core (* ?verify_program_core *)
                   pop()
               end
               super_specs;
-            let (pre, pre_tenv, post, pre_dyn, post_dyn) =
+            let (pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn) =
               match co with
                 Some spec -> spec
               | None ->
                 match super_specs with
-                  (tn, (_, _, _, xmap', pre', pre_tenv', post', _, _))::_ ->
+                  (tn, (_, _, _, xmap', pre', pre_tenv', post', epost', _, _))::_ ->
                   if not (List.for_all2 (fun (x, t) (x', t') -> x = x') xmap xmap') then static_error lm (Printf.sprintf "Parameter names do not match overridden method in %s" tn) None;
-                  (pre', pre_tenv', post', pre', post')
+                  (pre', pre_tenv', post', epost', pre', post', epost')
                 | [] -> static_error lm "Method must have contract" None
             in
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
@@ -8533,7 +8533,7 @@ let verify_program_core (* ?verify_program_core *)
                 (ExprPred (_, True _), ExprPred (_, True _)) | (EmpPred _, EmpPred _) -> main_meth := (cn, l)::!main_meth
               | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'" None
             end;
-            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, super_specs <> [], abstract))::mmap) meths
+            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, super_specs <> [], abstract))::mmap) meths
         in
         iter [] meths
     in
@@ -8659,10 +8659,10 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter meths0 meths1=
               match meths0 with
                 [] -> meths1
-              | (sign0, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,pre_dyn0,post_dyn0,ss0,fb0,v0,_,abstract0)) as elem::rest ->
+              | (sign0, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,pre_dyn0,post_dyn0,epost_dyn0,ss0,fb0,v0,_,abstract0)) as elem::rest ->
                 match try_assoc sign0 meths1 with
                   None-> iter rest (elem::meths1)
-                | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,pre_dyn1,post_dyn1,ss1,fb1,v1,_,abstract1) -> 
+                | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,pre_dyn1,post_dyn1,epost_dyn1,ss1,fb1,v1,_,abstract1) -> 
                   check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
@@ -8701,7 +8701,7 @@ let verify_program_core (* ?verify_program_core *)
       let (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
       let overrides =
         flatmap
-          begin fun (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract)) ->
+          begin fun (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
             if is_override || pre != pre_dyn || post != post_dyn then [(cn, sign)] else []
           end
           meths
@@ -9107,8 +9107,8 @@ let verify_program_core (* ?verify_program_core *)
     let (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
-  let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont =
-    let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont in
+  let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
+    let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt in
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let l = expr_loc e in
@@ -9145,7 +9145,7 @@ let verify_program_core (* ?verify_program_core *)
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
-    let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, v) cont econt =
+    let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, v) cont =
       let eval_h = if List.length args = 1 then (fun h env e cont -> eval_h_core readonly h env e cont) else eval_h in
       verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt
     in
@@ -9233,40 +9233,40 @@ let verify_program_core (* ?verify_program_core *)
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
-        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), Static) (fun h _ -> cont h obj) (fun _ _ _ _ -> static_error l "Constructor throws exception (todo)" None)
+        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), Static) (fun h _ -> cont h obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
-      let (lm, gh, rt, xmap, pre, post, fb', v) =
+      let (lm, gh, rt, xmap, pre, post, epost, fb', v) =
         match try_assoc tn classmap with
           Some (lc, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) ->
-          let (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn,  ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
-          (lm, gh, rt, xmap, pre_dyn, post_dyn, fb, v)
+          let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
+          (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v)
         | _ ->
           let (_, methods, _, _, _, _) = List.assoc tn interfmap in
-          let (lm, gh, rt, xmap, pre, pre_tenv, post, v, abstract) = List.assoc (m, pts) methods in
-          (lm, gh, rt, xmap, pre, post, Instance, v)
+          let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract) = List.assoc (m, pts) methods in
+          (lm, gh, rt, xmap, pre, post, epost, Instance, v)
       in
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo <> None then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
-      end; (* todoexcep *)
-      check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, None, v) cont (fun _ _ _ _ -> static_error l "Method throws exception (todo)" None)
-    | WSuperMethodCall(l, m, args, (lm, gh, rt, xmap, pre, post, v)) ->
+      end;
+      check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, Some epost, v) cont
+    | WSuperMethodCall(l, m, args, (lm, gh, rt, xmap, pre, post, epost, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo <> None then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
-      end; (* todoexcep *)
-      check_correct None None [] args (lm, [], rt, xmap, [], pre, post, None, v) cont (fun _ _ _ _ -> static_error l "Super call throws exception (todo)" None)
+      end;
+      check_correct None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, v) cont
     | WFunCall (l, g, targs, es) ->
       let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
       if body = None then register_prototype_used lg g;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
-      check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, v) cont (fun _ _ _ _ -> assert false)
+      check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, v) cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let w = check_expr_t (pn,ilist) tparams tenv e IntType in
@@ -9407,7 +9407,7 @@ let verify_program_core (* ?verify_program_core *)
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h_core sideeffectfree h env e cont =
       if not pure then check_ghost ghostenv l e;
-      verify_expr sideeffectfree (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont
+      verify_expr sideeffectfree (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont econt
     in
     let eval_h h env e cont =
       eval_h_core true h env e cont
@@ -9732,7 +9732,7 @@ let verify_program_core (* ?verify_program_core *)
           )
         | _ ->
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
-          verify_expr false h env None w (fun h _ -> cont h env)
+          verify_expr false h env None w (fun h _ -> cont h env) econt
       end
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
       let oldv = !verbosity in
@@ -9785,7 +9785,7 @@ let verify_program_core (* ?verify_program_core *)
               None -> cont h (get_unique_var_symb_non_ghost x t) !address_taken
             | Some e ->
               let w = check_expr_t (pn,ilist) tparams tenv e t in
-              verify_expr false h env (Some x) w (fun h v -> cont h v !address_taken)
+              verify_expr false h env (Some x) w (fun h v -> cont h v !address_taken) econt
           end $. fun h v address_taken ->
           let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
           if address_taken then
@@ -9808,25 +9808,25 @@ let verify_program_core (* ?verify_program_core *)
         Var (lx, x, _) ->
         let (tpx, symb) = vartp l x in
         let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tpx in
-        verify_expr false h env (Some x) wrhs $. fun h v ->
+        verify_expr false h env (Some x) wrhs (fun h v ->
         check_assign l x;
-        update_local_or_global h env tpx x symb v cont
+        update_local_or_global h env tpx x symb v cont) econt
       | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
         if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
         let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
         if not fstatic then
           eval_h h env w (fun h t ->
             let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-            verify_expr true h env None wrhs $. fun h vrhs ->
+            verify_expr true h env None wrhs (fun h vrhs ->
             get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
               if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
-              cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)
+              cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)) econt
           )
         else
           let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-          verify_expr true h env None wrhs $. fun h vrhs ->
+          verify_expr true h env None wrhs (fun h vrhs ->
           assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
-          cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env
+          cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env) econt
       | WReadArray (_, arr, elem_tp, i) when language = Java ->
         if pure then static_error l "Cannot write in a pure context." None;
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
@@ -9863,7 +9863,7 @@ let verify_program_core (* ?verify_program_core *)
       end
     | ExprStmt e ->
       let (w, _) = check_expr (pn,ilist) tparams tenv e in
-      verify_expr false h env None w (fun h _ -> cont h env)
+      verify_expr false h env None w (fun h _ -> cont h env) econt
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -9875,6 +9875,7 @@ let verify_program_core (* ?verify_program_core *)
     | SwitchStmt (l, e, cs) ->
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      let verify_expr ro h env opt e cont = verify_expr ro h env opt e cont econt in 
       verify_expr false h env None w $. fun h v ->
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match tp with
@@ -10629,10 +10630,10 @@ let verify_program_core (* ?verify_program_core *)
       let e' = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Throwable") in
       check_ghost ghostenv l e';
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      if not (is_checked_exception_type tp) then
+      if (is_unchecked_exception_type tp) then
         ()
       else
-        verify_expr false h env None w $. fun h v -> (econt h env tp v)
+        verify_expr false h env None w (fun h v -> (econt h env tp v)) econt
     | TryCatch (l, body, catches) ->
       if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -11006,8 +11007,8 @@ let verify_program_core (* ?verify_program_core *)
         if not pure then check_ghost ghostenv l e;
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
-        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w $. fun h v ->
-        cont h (Some v)
+        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h v ->
+        cont h (Some v)) econt
     end $. fun h retval ->
     begin fun cont ->
       if not pure && unloadable then
@@ -11390,7 +11391,7 @@ let verify_program_core (* ?verify_program_core *)
                   static_error lm "There is no superclass constructor that matches the superclass constructor call" None
                 | Some (lc0, xmap0, pre0, pre_tenv0, post0, epost0, _, v0) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
-                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont in
+                  let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
                   verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h _ ->
                   cont h) econt
@@ -11428,7 +11429,7 @@ let verify_program_core (* ?verify_program_core *)
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
     match meths with
       [] -> ()
-    | ((g,sign), (l,gh, rt, ps,pre,pre_tenv,post,pre_dyn,post_dyn,sts,fb,v, _,abstract))::meths ->
+    | ((g,sign), (l,gh, rt, ps,pre,pre_tenv,post,epost,pre_dyn,post_dyn,epost_dyn,sts,fb,v, _,abstract))::meths ->
       if abstract && not cabstract then static_error l "Abstract method can only appear in abstract class." None;
       match sts with
         None -> let (((_,p),_,_),((_,_),_,_))=l in 
@@ -11473,9 +11474,12 @@ let verify_program_core (* ?verify_program_core *)
             | (None, Some _) -> assert_false h env l "Void function returns a value." None
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
           in
+          let econt h env2 tp excep =
+            assert_pred rules [] (pn,ilist) h ghostenv env epost true real_unit $. fun _ h ghostenv env size_first ->
+            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+          in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont (fun _ _ _ _ ->
-            static_error l "Exceptions not supported yet in methods." None)
+          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
         end;
         pop()
         end;
