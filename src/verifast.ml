@@ -1275,7 +1275,7 @@ and
       type_expr option * 
       string * 
       (type_expr * string) list * 
-      (pred * pred) option * 
+      (pred * pred * pred) option * 
       (stmt list * loc (* Close brace *)) option * 
       method_binding * 
       visibility *
@@ -1288,7 +1288,7 @@ and
       type_expr option * 
       string * 
       (type_expr * string) list * 
-      (pred * pred) option * 
+      (pred * pred * pred) option * 
       method_binding * 
       visibility
 and
@@ -1296,7 +1296,7 @@ and
   | Cons of
       loc * 
       (type_expr * string) list * 
-      (pred * pred) option * 
+      (pred * pred * pred) option * 
       (stmt list * loc (* Close brace *)) option * 
       visibility
 and
@@ -1644,7 +1644,7 @@ let common_keywords = [
 
 let ghost_keywords = [
   "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
-  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
+  "ensures"; "exsures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
@@ -1707,6 +1707,7 @@ type spec_clause = (* ?spec_clause *)
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of pred
 | EnsuresClause of pred
+| ExsuresClause of pred
 
 (* A toy Scala parser. *)
 module Scala = struct
@@ -1752,7 +1753,7 @@ module Scala = struct
   and
     parse_contract = parser
       [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
-         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post)
+         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post, ExprPred(pred_loc post, False(pred_loc post)))
   and
     parse_asn = parser
       [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
@@ -1869,8 +1870,8 @@ and
   >] -> m::ms
 and
   parse_interface_meth vis cn gh = parser
-[< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";");co = opt parse_spec>]
-    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l,cn),"this")::ps,co,Instance,vis)
+[< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";"); co = opt parse_spec>]
+    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l,cn),"this")::ps, co, Instance,vis)
 and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
@@ -1947,8 +1948,8 @@ and
   [< ps = parse_paramlist;
      _ = opt parse_throws_clause;
     (ss, co) = parser
-      [< '(_, Kwd ";"); co = opt parse_spec >] -> (None, co)
-    | [< co = opt parse_spec; ss = parse_some_block >] -> (ss, co)
+      [< '(_, Kwd ";"); spec = opt parse_spec >] -> (None, spec)
+    | [< spec = opt parse_spec; ss = parse_some_block >] -> (ss, spec)
     >] -> (ps, co, ss)
 and
   parse_functype_paramlists = parser
@@ -1961,8 +1962,8 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >]
-  -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, c)]
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, _) = parse_spec >]
+  -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
@@ -2008,8 +2009,8 @@ and
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
-       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); c = parse_spec >] ->
-    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, c)]
+       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, _) = parse_spec >] ->
+    [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
 and
   parse_action_decls = parser
@@ -2048,11 +2049,11 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); tparams = parse_type_params_general; ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, co, None,Static,Public)
+       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, (match co with None -> None | Some(pre, post, _) -> Some(pre, post)), None,Static,Public)
      | [< (atomic, ft, co) = parse_spec_clauses;
           '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >]
           -> 
-          Func (l, k, tparams, t, g, ps, atomic, ft, co, Some (ss, closeBraceLoc), Static, Public)
+          Func (l, k, tparams, t, g, ps, atomic, ft, (match co with None -> None | Some(pre, post, _) -> Some(pre, post)), Some (ss, closeBraceLoc), Static, Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -2127,6 +2128,7 @@ and
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
+| [< '(_, Kwd "exsures"); p = parse_pred; '(_, Kwd ";") >] -> ExsuresClause p
 and
   parse_spec_clause = parser
   [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> c
@@ -2138,7 +2140,7 @@ and
     let clause_stream = Stream.from (fun _ -> try let clause = Some (parse_spec_clause token_stream) in in_count := !in_count + 1; clause with Stream.Failure -> None) in
     let atomic = (parser [< 'AtomicClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
     let ft = (parser [< 'FuncTypeClause (ft, fttargs, ftargs) >] -> out_count := !out_count + 1; Some (ft, fttargs, ftargs) | [< >] -> None) clause_stream in
-    let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
+    let pre_post = (parser [< 'RequiresClause pre; ex = opt (parser [< 'ExsuresClause epost >] -> epost); 'EnsuresClause post; >] -> out_count := !out_count + (match ex with None -> 2 | Some _ -> 3); Some (pre, post, (match ex with None -> ExprPred(pred_loc post, False(pred_loc post)) | Some(epost) -> epost)) | [< >] -> None) clause_stream in
     if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: atomic clause (optional), function type clause (optional), contract (optional).");
     (atomic, ft, pre_post)
 and
@@ -2146,7 +2148,7 @@ and
     [< (atomic, ft, pre_post) = parse_spec_clauses >] ->
     match (atomic, ft, pre_post) with
       (false, None, None) -> raise Stream.Failure
-    | (false, None, Some (pre, post)) -> (pre, post)
+    | (false, None, Some (pre, post, epost)) -> (pre, post, epost)
     | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
 and
   parse_block = parser
@@ -4001,6 +4003,21 @@ let verify_program_core (* ?verify_program_core *)
           | None -> false 
           end
         end
+  in
+  let is_subtype_of_ x y =
+    match (x, y) with
+      (ObjType x, ObjType y) -> is_subtype_of x y
+    | _ -> false
+  in
+  let is_checked_exception_type tp = 
+    match tp with
+     ObjType cn -> (is_subtype_of cn "java.lang.Exception") && (not (is_subtype_of cn "java.lang.RuntimeException"))
+    | _ -> false
+  in
+  let is_unchecked_exception_type tp = 
+    match tp with
+     ObjType cn -> (is_subtype_of cn "java.lang.RuntimeException")
+    | _ -> false
   in
 
   (* Region: type compatibility checker *)
@@ -8301,14 +8318,15 @@ let verify_program_core (* ?verify_program_core *)
             let sign = (n, List.map snd (List.tl xmap)) in
             if List.mem_assoc sign mmap then static_error lm "Duplicate method" None;
             let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) [] rt) in
-            let (pre, pre_tenv, post) =
+            let (pre, pre_tenv, post, epost) =
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
-              | Some (pre, post) ->
+              | Some (pre, post, epost) ->
                 let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (post, _) = check_pred (pn,ilist) [] postmap post in
-                (pre, tenv, post)
+                let (epost, _) = check_pred (pn,ilist) [] tenv epost in
+                (pre, tenv, post, epost)
             in
             iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, v, true))::mmap) meths
         in
@@ -8467,11 +8485,12 @@ let verify_program_core (* ?verify_program_core *)
             let co =
               match co with
                 None -> None
-              | Some (pre, post) ->
+              | Some (pre, post, epost) ->
                 let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                let (wpre_dyn, wpost_dyn) = if fb = Static then (wpre, wpost) else (dynamic_of wpre, dynamic_of wpost) in
+                let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
+                let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, dynamic_of wepost) in
                 Some (wpre, tenv, wpost, wpre_dyn, wpost_dyn)
             in
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
@@ -8541,17 +8560,18 @@ let verify_program_core (* ?verify_program_core *)
               in
               let sign = List.map snd xmap in
               if List.mem_assoc sign cmap then static_error lm "Duplicate constructor" None;
-              let (pre, pre_tenv, post) =
+              let (pre, pre_tenv, post, epost) =
                 match co with
                   None -> static_error lm "Constructor must have contract" None
-                | Some (pre, post) ->
+                | Some (pre, post, epost) ->
                   let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
                   let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                  (wpre, tenv, wpost)
+                  let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
+                  (wpre, tenv, wpost, wepost)
               in
               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
-              iter ((sign, (lm, xmap, pre, pre_tenv, post, ss', v))::cmap) ctors
+              iter ((sign, (lm, xmap, pre, pre_tenv, post, epost, ss', v))::cmap) ctors
         in
         iter [] ctors
       end
@@ -8571,10 +8591,10 @@ let verify_program_core (* ?verify_program_core *)
           begin fun cont ->
             let (l', abstract', fin', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
             match try_assoc [] cmap' with
-              Some (l'', xmap, pre, pre_tenv, post, _, _) ->
-              cont pre pre_tenv post
+              Some (l'', xmap, pre, pre_tenv, post, epost, _, _) ->
+              cont pre pre_tenv post epost
             | None -> c
-          end $. fun super_pre super_pre_tenv super_post ->
+          end $. fun super_pre super_pre_tenv super_post super_epost ->
           let _::super_pre_tenv = super_pre_tenv in (* Chop off the current_class entry *)
           let post =
             List.fold_left
@@ -8598,7 +8618,7 @@ let verify_program_core (* ?verify_program_core *)
             let xmap = [] in
             let ss = Some (Some ([], l)) in
             let vis = Public in
-            (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, ss, vis))
+            (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, ExprPred(l, False(l)), ss, vis))
           in
           (cn, (l, abstract, fin, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
         in
@@ -8653,10 +8673,10 @@ let verify_program_core (* ?verify_program_core *)
             let rec iter constr0 constr1=
               match constr0 with
                 [] -> constr1
-              | (sign0, (lm0,xmap0,pre0,pre_tenv0,post0,ss0,v0)) as elem::rest ->
+              | (sign0, (lm0,xmap0,pre0,pre_tenv0,post0,epost0,ss0,v0)) as elem::rest ->
                 match try_assoc sign0 constr1 with
                   None-> iter rest (elem::constr1)
-                | Some(lm1,xmap1,pre1,pre_tenv1,post1,ss1,v1) ->
+                | Some(lm1,xmap1,pre1,pre_tenv1,post1,epost1,ss1,v1) ->
                   let rt= None in
                   check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
@@ -8973,7 +8993,7 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: verification of calls *)
   
-  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont =
+  let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval_h h env pat cont =
@@ -9066,9 +9086,19 @@ let verify_program_core (* ?verify_program_core *)
             get_unique_var_symb_ symbol_name t pure
         in
         let env'' = match tr with None -> env' | Some t -> update env' "result" r in
-        assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
-        with_context PopSubcontext $. fun () ->
-        cont h r
+        (branch
+          (fun () ->
+            match epost with
+              None -> ()
+            | Some(epost) ->
+              assume_pred tpenv (pn,ilist) h ghostenv' env' epost real_unit None None $. fun h _ _ ->
+              with_context PopSubcontext $. fun () ->
+                let e = get_unique_var_symb_ "excep" (ObjType "java.lang.Throwable") false in
+                (econt h env (ObjType "java.lang.Throwable") e))
+          (fun () ->
+            assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
+            with_context PopSubcontext $. fun () ->
+            cont h r))
       )
     )
   in
@@ -9090,7 +9120,7 @@ let verify_program_core (* ?verify_program_core *)
     let rec evhs h env es cont =
       match es with
         [] -> cont h []
-      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs))) 
     in 
     let ev e = eval env e in
     let check_assign l x =
@@ -9115,9 +9145,9 @@ let verify_program_core (* ?verify_program_core *)
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
-    let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, v) cont =
+    let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, v) cont econt =
       let eval_h = if List.length args = 1 then (fun h env e cont -> eval_h_core readonly h env e cont) else eval_h in
-      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, v) pure leminfo sizemap h tparams tenv ghostenv env cont
+      verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
@@ -9129,7 +9159,7 @@ let verify_program_core (* ?verify_program_core *)
     match e with
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (PtrType (StructType tn)) tp;
-      verify_expr readonly h env xo e cont
+      verify_expr readonly h env xo e cont 
     | WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
       let fds =
         match try_assoc tn structmap with
@@ -9167,7 +9197,7 @@ let verify_program_core (* ?verify_program_core *)
       let (_, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps) = List.assoc ftn functypemap in
       if pure && gh = Real then static_error l "Cannot call regular function pointer in a pure context." None;
       let check_call targs h args0 cont =
-        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, Public) pure leminfo sizemap h tparams tenv ghostenv env cont
+        verify_call funcmap eval_h l (pn, ilist) xo None targs (TermPat fterm::List.map (fun arg -> TermPat arg) args0 @ List.map (fun e -> SrcPat (LitPat e)) args) (fttparams, rt, (("this", PtrType Void)::ftxmap @ xmap), [], pre, post, None, Public) pure leminfo sizemap h tparams tenv ghostenv env cont (fun _ _ _ _ -> assert false)
       in
       begin
         match gh with
@@ -9199,19 +9229,18 @@ let verify_program_core (* ?verify_program_core *)
       let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
-      | [(sign, (lm, xmap, pre, pre_tenv, post, ss, v))] ->
+      | [(sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))] -> (* exceptodo *)
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
-        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Static) $. fun h _ ->
-        cont h obj
+        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), Static) (fun h _ -> cont h obj) (fun _ _ _ _ -> static_error l "Constructor throws exception (todo)" None)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, gh, rt, xmap, pre, post, fb', v) =
         match try_assoc tn classmap with
           Some (lc, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) ->
-          let (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
+          let (lm, gh, rt, xmap, pre, pre_tenv, post, pre_dyn, post_dyn,  ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, fb, v)
         | _ ->
           let (_, methods, _, _, _, _) = List.assoc tn interfmap in
@@ -9222,22 +9251,22 @@ let verify_program_core (* ?verify_program_core *)
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo <> None then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
-      end;
-      check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, v) cont
+      end; (* todoexcep *)
+      check_correct xo None [] args (lm, [], rt, xmap, [], pre, post, None, v) cont (fun _ _ _ _ -> static_error l "Method throws exception (todo)" None)
     | WSuperMethodCall(l, m, args, (lm, gh, rt, xmap, pre, post, v)) ->
       if gh = Real && pure then static_error l "Method call is not allowed in a pure context" None;
       if gh = Ghost then begin
         if not pure then static_error l "A lemma method call is not allowed in a non-pure context." None;
         if leminfo <> None then static_error l "Lemma method calls in lemmas are currently not supported (for termination reasons)." None
-      end;
-      check_correct None None [] args (lm, [], rt, xmap, [], pre, post, v) cont
+      end; (* todoexcep *)
+      check_correct None None [] args (lm, [], rt, xmap, [], pre, post, None, v) cont (fun _ _ _ _ -> static_error l "Super call throws exception (todo)" None)
     | WFunCall (l, g, targs, es) ->
       let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
       if body = None then register_prototype_used lg g;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
-      check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, v) cont
+      check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, v) cont (fun _ _ _ _ -> assert false)
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let w = check_expr_t (pn,ilist) tparams tenv e IntType in
@@ -9337,7 +9366,7 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: verification of statements *)
 
-  let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont =
+  let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     stats#stmtExec;
     let l = stmt_loc s in
     let free_locals closeBraceLoc h tenv env locals cont =
@@ -9537,8 +9566,9 @@ let verify_program_core (* ?verify_program_core *)
                 let lblenv = [] in
                 let pure = true in
                 let return_cont h tenv env t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
+                let econt h env texcep excep = assert_false h [] l "You cannot throw an exception from a produce_function_pointer_chunk statement" None in
                 begin fun tcont ->
-                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont
+                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont econt
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
@@ -9566,7 +9596,7 @@ let verify_program_core (* ?verify_program_core *)
                 assume_pred [] ("",[]) h [] f_env post1 real_unit None None $. fun h _ _ ->
                 with_context PopSubcontext $. fun () ->
                 begin fun tcont ->
-                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont
+                  verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont econt
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, closeBraceLoc, "Consuming function type postcondition")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
@@ -9609,12 +9639,12 @@ let verify_program_core (* ?verify_program_core *)
           let return_cont h tenv env retval =
             consume_chunk h (fun h -> return_cont h tenv env retval)
           in
-          verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+          verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
     in
     match s with
       NonpureStmt (l, allowed, s) ->
       if allowed then
-        verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+        verify_stmt (pn,ilist) blocks_done lblenv tparams boxes false leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
       else
         static_error l "Non-pure statements are not allowed here." None
     | ExprStmt (CallExpr (l, "produce_limits", [], [], [LitPat (Var (lv, x, _) as e)], Static)) ->
@@ -9771,7 +9801,7 @@ let verify_program_core (* ?verify_program_core *)
       (* CAVEAT: This is unsound if we allow side-effects in e1 *)
       let (_, t) = check_expr (pn,ilist) tparams tenv e1 in
       let s = ExprStmt (AssignExpr (l, e1, CastExpr (l, false, ManifestTypeExpr (l, t), Operation (l, op, [e1; e2], ref None)))) in
-      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
     | ExprStmt (AssignExpr (l, lhs, rhs)) ->
       let (lhs, t) = check_expr (pn,ilist) tparams tenv lhs in
       begin match lhs with
@@ -9839,8 +9869,8 @@ let verify_program_core (* ?verify_program_core *)
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       (eval_h_nonpure h env w ( fun h w ->
         branch
-          (fun _ -> assume w (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont))
-          (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont))
+          (fun _ -> assume w (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont econt))
+          (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont econt))
       ))
     | SwitchStmt (l, e, cs) ->
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
@@ -9902,7 +9932,7 @@ let verify_program_core (* ?verify_program_core *)
               | Some k -> List.map (fun (x, t) -> (t, k - 1)) xenv @ sizemap
             in
             branch
-              (fun _ -> assume_eq v (mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont))
+              (fun _ -> assume_eq v (mk_app ctorsym xterms) (fun _ -> verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap (ptenv @ tenv) (pats @ ghostenv) h (xenv @ env) ss tcont return_cont econt))
               (fun _ -> iter (List.filter (function cn' -> cn' <> cn) ctors) cs)
         in
         iter (List.map (function (cn, _) -> cn) ctormap) cs
@@ -9920,7 +9950,7 @@ let verify_program_core (* ?verify_program_core *)
               | SwitchStmtClause (l, e, ss) -> ss
             in
             let tcont _ _ _ h env = fall_through h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) cs in
-            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+            verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt
         in
         let rec verify_cases cs =
           match cs with
@@ -10427,7 +10457,7 @@ let verify_program_core (* ?verify_program_core *)
       in
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
-      verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true l eo [] return_cont
+      verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true l eo [] return_cont econt
     | WhileStmt (l, e, None, dec, ss, closeBraceLoc) ->
       static_error l "Loop invariant required." None
     | WhileStmt (l, e, Some (LoopInv p), dec, ss, closeBraceLoc) ->
@@ -10474,6 +10504,7 @@ let verify_program_core (* ?verify_program_core *)
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv' ghostenv' h' env' ss
           (fun _ _ _ h'' env -> continue h'' env)
           return_cont
+          econt
       end $. fun h' env ->
       let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
       assert_pred rules [] (pn,ilist) h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
@@ -10563,6 +10594,7 @@ let verify_program_core (* ?verify_program_core *)
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
           (fun _ tenv''' _ h' env' -> free_locals closeBraceLoc h' tenv''' env' !locals_to_free (fun h' _ -> continue h' tenv''' env'))
           return_cont
+          econt
       end $. fun h' tenv''' env' ->
       let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
       assert_pred rules [] (pn,ilist) h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
@@ -10591,18 +10623,45 @@ let verify_program_core (* ?verify_program_core *)
       List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
       List.iter (fun x -> if List.mem x xs then static_error l "Statements after the recursive call are not allowed to assign to loop variables" None) ss_after_xs;
-      verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' ss_after (fun _ tenv _ h' env' ->  check_post h' env') (fun _ _ -> assert false)
+      verify_cont (pn,ilist) blocks_done [] tparams boxes pure leminfo funcmap predinstmap sizemap tenv''' ghostenv' h' env' ss_after (fun _ tenv _ h' env' ->  check_post h' env') (fun _ _ -> assert false) (fun _ _ _ -> assert false)
     | Throw (l, e) ->
       if pure then static_error l "Throw statements are not allowed in a pure context." None;
-      let e = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Object") in
-      check_ghost ghostenv l e;
-      ()
+      let e' = check_expr_t (pn,ilist) tparams tenv e (ObjType "java.lang.Throwable") in
+      check_ghost ghostenv l e';
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      if not (is_checked_exception_type tp) then
+        ()
+      else
+        verify_expr false h env None w $. fun h v -> (econt h env tp v)
     | TryCatch (l, body, catches) ->
       if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
         begin fun () ->
-          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun h env2 texcep excep -> 
+            let env = List.filter (fun (x, t) -> List.mem_assoc x env) env2 in
+            let rec iter catches =
+              match catches with
+                [] -> econt h env texcep excep
+              | (l, te, x, body)::catches ->
+                let t = check_pure_type (pn,ilist) tparams te in
+                branch
+                  begin fun () ->
+                    if((is_subtype_of_ texcep t) || (is_subtype_of_ t texcep)) then begin
+                      if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
+                      let tenv = (x, t)::tenv in
+                      let env = (x, excep)::env in
+                      verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
+                    end
+                  end
+                  begin fun () ->
+                    begin if not (is_subtype_of_ texcep t) then
+                      iter catches
+                    end
+                  end
+              in
+              iter catches
+          )
         end
         begin fun () ->
           (* Havoc the variables that are assigned by the try block. *)
@@ -10619,10 +10678,12 @@ let verify_program_core (* ?verify_program_core *)
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
                   let t = check_pure_type (pn,ilist) tparams te in
-                  let xterm = get_unique_var_symb_non_ghost x t in
-                  let tenv = (x, t)::tenv in
-                  let env = (x, xterm)::env in
-                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+                  if not (is_checked_exception_type t) || t = (ObjType "java.lang.Exception") then begin
+                    let xterm = get_unique_var_symb_non_ghost x t in
+                    let tenv = (x, t)::tenv in
+                    let env = (x, xterm)::env in
+                    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
+                  end
                 end
                 begin fun () ->
                   iter catches
@@ -10641,20 +10702,20 @@ let verify_program_core (* ?verify_program_core *)
               begin fun (lbl, cont) ->
                 let cont blocks_done sizemap tenv ghostenv h env =
                   let tcont _ _ _ h env = cont blocks_done sizemap tenv ghostenv h env in
-                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+                  verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont econt
                 in
                 (lbl, cont)
               end
               lblenv
           in
           let tcont _ _ _ h env =
-            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont econt
           in
           let return_cont h tenv env retval =
             let tcont _ _ _ h _ = return_cont h tenv env retval in
-            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont
+            verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env finally tcont return_cont econt
           in
-          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
         begin fun () ->
           let xs = block_assigned_variables body in
@@ -10663,7 +10724,7 @@ let verify_program_core (* ?verify_program_core *)
           let env = bs @ env in
           let h = [] in
           let tcont _ _ _ _ _ = () in
-          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
     | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
@@ -10797,7 +10858,7 @@ let verify_program_core (* ?verify_program_core *)
                  let h = boxChunk::hpChunk::h in
                  with_context PopSubcontext $. fun () ->
                  tcont sizemap tenv ghostenv h env
-               ) return_cont
+               ) return_cont econt
              )
           )
       )
@@ -10875,7 +10936,7 @@ let verify_program_core (* ?verify_program_core *)
       let cont h tenv env = free_locals closeBraceLoc h tenv env !locals_to_free cont in
       let return_cont h tenv env retval = free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> return_cont h tenv env retval) in
       let lblenv = List.map (fun (lbl, lblcont) -> (lbl, (fun blocksdone sizemap tenv ghostenv h env -> free_locals closeBraceLoc h tenv env !locals_to_free (fun h env -> lblcont blocksdone sizemap tenv ghostenv h env)))) lblenv in
-      verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont
+      verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env -> cont h tenv env) return_cont econt
     | PureStmt (l, s) ->
       begin
         match s with
@@ -10883,7 +10944,7 @@ let verify_program_core (* ?verify_program_core *)
           nonpure_ctxt := not pure
         | _ -> ()
       end;
-      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont
+      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
     | GotoStmt (l, lbl) ->
       if pure then static_error l "goto statements are not allowed in a pure context" None;
       begin
@@ -10901,20 +10962,20 @@ let verify_program_core (* ?verify_program_core *)
       end
     | SuperConstructorCall(l, es) -> static_error l "super must be first statement of constructor." None
   and
-    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
+    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     match ss with
       [] -> cont sizemap tenv ghostenv h env
     | s::ss ->
       with_context (Executing (h, env, stmt_loc s, "Executing statement")) (fun _ ->
         verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s (fun sizemap tenv ghostenv h env ->
-          verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
-        ) return_cont
+          verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
+        ) return_cont econt
       )
   and
   
   (* Region: verification of blocks *)
   
-    goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont block =
+    goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block =
     let `Block (inv, ss, cont) = block in
     let l() =
       match (inv, ss) with
@@ -10932,9 +10993,9 @@ let verify_program_core (* ?verify_program_core *)
         )
       | (false, None) ->
         let blocks_done = block::blocks_done in
-        verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+        verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont econt
     end
-  and verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env explicit l eo epilog return_cont =
+  and verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env explicit l eo epilog return_cont econt =
     with_context (Executing (h, env, l, "Executing return statement")) $. fun () ->
     if explicit then check_breakpoint h env l;
     if pure && not (List.mem "#result" ghostenv) then static_error l "Cannot return from a regular function in a pure context." None;
@@ -10957,11 +11018,11 @@ let verify_program_core (* ?verify_program_core *)
         cont h
     end $. fun h ->
     begin fun cont ->
-      verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false)
+      verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env epilog cont (fun _ _ -> assert false) econt
     end $. fun sizemap tenv ghostenv h env ->
     return_cont h tenv env retval
   and
-    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont =
+    verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt =
     let (decls, ss) =
       let rec iter decls ss =
         match ss with
@@ -10971,7 +11032,7 @@ let verify_program_core (* ?verify_program_core *)
       iter [] ss
     in
     begin fun cont ->
-      verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env decls cont return_cont
+      verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env decls cont return_cont econt
     end $. fun sizemap tenv ghostenv h env ->
     let assigned_vars = block_assigned_variables ss in
     let blocks =
@@ -11022,12 +11083,12 @@ let verify_program_core (* ?verify_program_core *)
           let cont blocks_done sizemap tenv ghostenv h env =
             match blocks' with
               [] -> cont sizemap tenv ghostenv h env
-            | block'::_ -> goto_block (pn,ilist) blocks_done !lblenv_ref tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont block'
+            | block'::_ -> goto_block (pn,ilist) blocks_done !lblenv_ref tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block'
           in
           let block' = `Block (inv, ss, cont) in
           let lblenv =
             let cont blocks_done sizemap tenv ghostenv h env =
-              goto_block (pn,ilist) blocks_done !lblenv_ref tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont block'
+              goto_block (pn,ilist) blocks_done !lblenv_ref tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block'
             in
             let rec iter lblenv lbls =
               match lbls with
@@ -11046,7 +11107,7 @@ let verify_program_core (* ?verify_program_core *)
     begin
       match blocks with
         [] -> cont sizemap tenv ghostenv h env
-      | block0::_ -> goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont block0
+      | block0::_ -> goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block0
     end;
     begin
       List.iter
@@ -11069,12 +11130,12 @@ let verify_program_core (* ?verify_program_core *)
             in
             assume_pred [] (pn,ilist) [] ghostenv env inv real_unit None None (fun h ghostenv env ->
               let blocks_done = block::blocks_done in
-              verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont
+              verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont econt
             )
         end
         blocks
     end
-  and verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont =
+  and verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt =
     let (ss, tcont) =
       if not pure && List.exists (function ReturnStmt (_, _) -> true | _ -> false) ss then
         let (ss, lr, eo, epilog) =
@@ -11087,13 +11148,13 @@ let verify_program_core (* ?verify_program_core *)
         in
         let tcont sizemap tenv ghostenv h env =
           let epilog = List.map (function (PureStmt (l, s)) -> s | s -> static_error (stmt_loc s) "An epilog statement must be a pure statement." None) epilog in
-          verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true lr eo epilog return_cont
+          verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true lr eo epilog return_cont econt
         in
         (ss, tcont)
       else
         (ss, tcont)
     in
-    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont
+    verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt
   
   (* Region: verification of function bodies *)
   and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
@@ -11209,7 +11270,7 @@ let verify_program_core (* ?verify_program_core *)
             iter [] ss
         in
         begin fun tcont ->
-          verify_cont (pn,ilist) [] [] tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env prolog tcont (fun _ _ -> assert false)
+          verify_cont (pn,ilist) [] [] tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env prolog tcont (fun _ _ -> assert false) (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
         begin fun cont ->
           if unloadable && not in_pure_context then
@@ -11240,9 +11301,9 @@ let verify_program_core (* ?verify_program_core *)
           let outerlocals = ref [] in
           stmts_mark_addr_taken ss [(outerlocals, [])] (fun _ -> ());
           let body = if List.length !outerlocals = 0 then ss else [BlockStmt(l, [], ss, closeBraceLoc, outerlocals)] in
-          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont
+          verify_block (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun _ _ _ -> assert false)
         end $. fun sizemap tenv ghostenv h env ->
-        verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont
+        verify_return_stmt (pn,ilist) [] [] tparams boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env false closeBraceLoc None [] return_cont (fun _ _ _ -> assert false)
       )
     in
     let _ = pop() in
@@ -11279,7 +11340,7 @@ let verify_program_core (* ?verify_program_core *)
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
       [] -> ()
-    | (sign, (lm, xmap, pre, pre_tenv, post, ss, v))::rest ->
+    | (sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))::rest ->
       match ss with
         None ->
         let (((_, p), _, _), ((_, _), _, _)) = lm in 
@@ -11310,6 +11371,10 @@ let verify_program_core (* ?verify_program_core *)
               assert (retval = None);
               do_return h env
             in
+            let econt h env2 exceptp excep =
+              assert_pred rules [] (pn,ilist) h ghostenv env epost true real_unit (fun _ h ghostenv env size_first ->
+                check_leaks h env closeBraceLoc "Function leaks heap chunks.")
+            in
             let tenv = ("this", ObjType cn):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
               if cn = "java.lang.Object" then
@@ -11323,15 +11388,15 @@ let verify_program_core (* ?verify_program_core *)
                 match try_assoc argtypes superctors with
                   None ->
                   static_error lm "There is no superclass constructor that matches the superclass constructor call" None
-                | Some (lc0, xmap0, pre0, pre_tenv0, post0, _, v0) ->
+                | Some (lc0, xmap0, pre0, pre_tenv0, post0, epost0, _, v0) ->
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, v0) false leminfo sizemap h [] tenv ghostenv env $. fun h _ ->
-                  cont h
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h _ ->
+                  cont h) econt
             end $. fun h ->
             verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
-              (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont
+              (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
           in
           assume_neq this (ctxt#mk_intlit 0) $. fun() ->
           let fds = get_fields (pn,ilist) cn lm in
@@ -11409,7 +11474,8 @@ let verify_program_core (* ?verify_program_core *)
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
-          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont
+          verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont (fun _ _ _ _ ->
+            static_error l "Exceptions not supported yet in methods." None)
         end;
         pop()
         end;
@@ -11525,6 +11591,7 @@ let verify_program_core (* ?verify_program_core *)
                                         let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                                         assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
                                       end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
+                                      begin fun _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
                     end;
                     pop();
                     an
