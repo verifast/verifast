@@ -63,6 +63,10 @@ int main()
     struct stack *s = create_stack();
     stack_push(s, 10);
     stack_push(s, 20);
+    int x = stack_pop(s);
+    assert(x == 20);
+    int y = stack_pop(s);
+    assert(y == 10);
     stack_dispose(s);
     return 0;
 }
