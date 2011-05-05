@@ -56,7 +56,7 @@ public class Room {
         return hasMember;
     }
     
-    public void broadcast_message(String message) throws IOException
+    public void broadcast_message(String message) throws IOException /*@ ensures true; @*/
         //@ requires room(this) &*& message != null;
         //@ ensures room(this);
     {

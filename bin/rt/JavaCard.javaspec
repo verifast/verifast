@@ -22,32 +22,41 @@ lemma_auto void APDU_inv();
 
 @*/
 
+class APDUException {
+}
+
+class SecurityException {
+}
+
+class SystemException {
+}
+
 class APDU {
     public byte[] getBuffer();
         //@ requires APDU(this, ?buffer);
         //@ ensures APDU(this, buffer) &*& result == buffer;
     
-    public short setOutgoing() throws APDUException;
+    public short setOutgoing() throws APDUException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public short setIncomingAndReceive() throws APDUException;
+    public short setIncomingAndReceive() throws APDUException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void setOutgoingAndSend(short bOff, short len) throws APDUException;
+    public void setOutgoingAndSend(short bOff, short len) throws APDUException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void setOutgoingLength(short len) throws APDUException;
+    public void setOutgoingLength(short len) throws APDUException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void sendBytes(short bOff, short len) throws APDUException;
+    public void sendBytes(short bOff, short len) throws APDUException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException, SecurityException;
+    public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException /*@ ensures true; @*/, SecurityException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
 }
@@ -69,7 +78,7 @@ class Applet {
         //@ requires this.valid();
         //@ ensures true;
     
-    public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException;
+    public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException /*@ ensures true; @*/;
         //@ requires this.valid();
         //@ ensures true;
     
@@ -86,8 +95,8 @@ class Applet {
         //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 }
 
-class ISOException {
-    public static void throwIt(short sw) throws ISOException;
+class ISOException extends RuntimeException {
+    public static void throwIt(short sw) throws ISOException /*@ ensures true; @*/;
         //@ requires true;
         //@ ensures false;
 }
@@ -140,7 +149,7 @@ class Util {
         //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
     
     public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-        throws ArrayIndexOutOfBoundsException;
+        throws ArrayIndexOutOfBoundsException /*@ ensures true; @*/;
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _) &*& !is_persistent_object(dest);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
       
@@ -148,7 +157,7 @@ class Util {
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
     
-    public static final short getShort(byte[] bArray, short bOff) throws NullPointerException, ArrayIndexOutOfBoundsException;
+    public static final short getShort(byte[] bArray, short bOff) throws NullPointerException /*@ ensures true; @*/, ArrayIndexOutOfBoundsException /*@ ensures true; @*/;
         //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
         //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
 }

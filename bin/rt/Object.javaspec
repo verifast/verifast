@@ -89,14 +89,11 @@ public class Object {
 
 }
 
-public class Throwable {
+public class Throwable {}
 
-}
+public class Exception extends Throwable {}
 
-public class Exception extends Throwable {
-}
-
-
+public class Error extends Throwable {}
 
 public class InterruptedException {}
 
@@ -112,6 +109,12 @@ public class RuntimeException extends Exception {
         //@ requires true;
         //@ ensures true;
 
+}
+
+public class ArrayIndexOutOfBoundsException extends RuntimeException {
+}
+
+public class NullPointerException extends RuntimeException {
 }
 
 public class Integer {

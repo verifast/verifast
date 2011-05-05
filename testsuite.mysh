@@ -131,6 +131,7 @@ verifast_both -c -disable_overflow_check StaticFields.java
 verifast_both -c ThreadRun.java
 verifast_both -c Tree.java
 verifast_both -c SuperConstructorCall.java
+verifast -c -allow_should_fail Exceptions.java
 cd ..
 cd vstte2010
 ifnotmac verifast -c -disable_overflow_check problem1.c

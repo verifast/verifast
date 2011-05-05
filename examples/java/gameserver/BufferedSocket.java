@@ -23,7 +23,7 @@ public class BufferedSocket {
     OutputStream outStream;
     OutputStreamWriter writer0;
     
-    public BufferedSocket(Socket socket) throws IOException 
+    public BufferedSocket(Socket socket) throws IOException /*@ ensures true; @*/
     /*@ requires socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) 
             &*& InputStream(in.getClass())(in, inInfo) 
             &*& OutputStream(out.getClass())(out, outInfo); @*/
@@ -75,7 +75,7 @@ public class BufferedSocket {
         return w;
     }
 
-    public void close() throws IOException 
+    public void close() throws IOException /*@ ensures true; @*/
     //@ requires bufferedsocket(this, ?r, ?w);
     //@ ensures true;
     {

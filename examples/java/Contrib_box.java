@@ -89,7 +89,7 @@ class Session implements Runnable {
         }
     }
     
-    public void runCore() throws InterruptedException
+    public void runCore() throws InterruptedException /*@ ensures true; @*/
         //@ requires thread_run_pre(Session.class)(this, ?info);
         //@ ensures thread_run_post(Session.class)(this, info);
     {

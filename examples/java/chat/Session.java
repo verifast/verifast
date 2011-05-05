@@ -38,7 +38,7 @@ public class Session implements Runnable {
         //@ close session(this);
     }
     
-    public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException, IOException
+    public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException /*@ ensures true; @*/, IOException /*@ ensures true; @*/
         /*@
         requires
             roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*& room!= null &*& room(room) &*&
@@ -115,7 +115,7 @@ public class Session implements Runnable {
         }
     }
     
-    public void runCore() throws InterruptedException, IOException
+    public void runCore() throws InterruptedException /*@ ensures true; @*/, IOException /*@ ensures true; @*/
         //@ requires thread_run_pre(Session.class)(this, ?info);
         //@ ensures thread_run_post(Session.class)(this, info);
     {

@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class Program {
-    public static void main(String[] args) throws IOException
+    public static void main(String[] args) throws IOException /*@ ensures true; @*/
         //@ requires true;
         //@ ensures true;
     {

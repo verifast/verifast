@@ -4,7 +4,7 @@ import java.io.*;
 import java.net.*;
 
 public class Bot {
-    public static void main(String[] args) throws IOException
+    public static void main(String[] args) throws IOException /*@ ensures true; @*/
         //@ requires true;
         //@ ensures true;
     {

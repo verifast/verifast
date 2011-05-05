@@ -1022,7 +1022,7 @@ and
   | AssignOpExpr of loc * expr * operator * expr * bool (* true = return value of lhs before operation *)
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
-  | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * pred * pred * pred * visibility)
+  | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * pred * pred * ((type_ * pred) list) * visibility)
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -1275,7 +1275,7 @@ and
       type_expr option * 
       string * 
       (type_expr * string) list * 
-      (pred * pred * pred) option * 
+      (pred * pred * ((type_expr * pred) list)) option * 
       (stmt list * loc (* Close brace *)) option * 
       method_binding * 
       visibility *
@@ -1288,7 +1288,7 @@ and
       type_expr option * 
       string * 
       (type_expr * string) list * 
-      (pred * pred * pred) option * 
+      (pred * pred * ((type_expr * pred) list)) option * 
       method_binding * 
       visibility
 and
@@ -1296,7 +1296,7 @@ and
   | Cons of
       loc * 
       (type_expr * string) list * 
-      (pred * pred * pred) option * 
+      (pred * pred * ((type_expr * pred) list)) option * 
       (stmt list * loc (* Close brace *)) option * 
       visibility
 and
@@ -1644,7 +1644,7 @@ let common_keywords = [
 
 let ghost_keywords = [
   "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
-  "ensures"; "exsures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
+  "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
@@ -1707,7 +1707,6 @@ type spec_clause = (* ?spec_clause *)
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of pred
 | EnsuresClause of pred
-| ExsuresClause of pred
 
 (* A toy Scala parser. *)
 module Scala = struct
@@ -1753,7 +1752,7 @@ module Scala = struct
   and
     parse_contract = parser
       [< '(_, Kwd "/*@"); '(_, Kwd "requires"); pre = parse_asn; '(_, Kwd "@*/");
-         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post, ExprPred(pred_loc post, False(pred_loc post)))
+         '(_, Kwd "/*@"); '(_, Kwd "ensures"); post = parse_asn; '(_, Kwd "@*/") >] -> (pre, post, [])
   and
     parse_asn = parser
       [< '(_, Kwd "("); a = parse_asn; '(_, Kwd ")") >] -> a
@@ -1871,7 +1870,7 @@ and
 and
   parse_interface_meth vis cn gh = parser
 [< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";"); co = opt parse_spec>]
-    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l,cn),"this")::ps, co, Instance,vis)
+    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l,cn),"this")::ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, [])), Instance,vis)
 and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
@@ -1898,8 +1897,11 @@ and
   parse_qualified_identifier = parser
   [< '(l, Ident x); xs = rep (parser [< '(_, Kwd "."); '(l, Ident x) >] -> (l, x)) >] -> (l, x)::xs
 and
+  parse_thrown = parser
+  [< tp = parse_type; '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> (tp, epost)
+and
   parse_throws_clause = parser
-  [< '(l, Kwd "throws"); _ = rep_comma parse_qualified_identifier >] -> ()
+  [< '(l, Kwd "throws"); epost = rep_comma parse_thrown >] -> epost
 and
   parse_array_dims t = parser
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
@@ -1946,11 +1948,11 @@ and
 and
   parse_method_rest = parser
   [< ps = parse_paramlist;
-     _ = opt parse_throws_clause;
+    epost = opt parse_throws_clause;
     (ss, co) = parser
       [< '(_, Kwd ";"); spec = opt parse_spec >] -> (None, spec)
     | [< spec = opt parse_spec; ss = parse_some_block >] -> (ss, spec)
-    >] -> (ps, co, ss)
+    >] -> (ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, (match epost with None -> [] | Some(epost) -> epost))), ss)
 and
   parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
@@ -1962,7 +1964,7 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, _) = parse_spec >]
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >]
   -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
@@ -2009,7 +2011,7 @@ and
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
   | [< '(l, Kwd "typedef"); '(_, Kwd "lemma"); rt = parse_return_type; '(li, Ident g); tps = parse_type_params li;
-       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post, _) = parse_spec >] ->
+       (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
 and
@@ -2049,11 +2051,11 @@ and
   parse_func_rest k t = parser
   [< '(l, Ident g); tparams = parse_type_params_general; ps = parse_paramlist; f =
     (parser
-       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, (match co with None -> None | Some(pre, post, _) -> Some(pre, post)), None,Static,Public)
+       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, co, None,Static,Public)
      | [< (atomic, ft, co) = parse_spec_clauses;
           '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >]
           -> 
-          Func (l, k, tparams, t, g, ps, atomic, ft, (match co with None -> None | Some(pre, post, _) -> Some(pre, post)), Some (ss, closeBraceLoc), Static, Public)
+          Func (l, k, tparams, t, g, ps, atomic, ft, co, Some (ss, closeBraceLoc), Static, Public)
     ) >] -> f
 and
   parse_ctors_suffix = parser
@@ -2128,7 +2130,6 @@ and
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
-| [< '(_, Kwd "exsures"); p = parse_pred; '(_, Kwd ";") >] -> ExsuresClause p
 and
   parse_spec_clause = parser
   [< '((sp1, _), Kwd "/*@"); c = parse_pure_spec_clause; '((_, sp2), Kwd "@*/") >] -> c
@@ -2140,7 +2141,7 @@ and
     let clause_stream = Stream.from (fun _ -> try let clause = Some (parse_spec_clause token_stream) in in_count := !in_count + 1; clause with Stream.Failure -> None) in
     let atomic = (parser [< 'AtomicClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
     let ft = (parser [< 'FuncTypeClause (ft, fttargs, ftargs) >] -> out_count := !out_count + 1; Some (ft, fttargs, ftargs) | [< >] -> None) clause_stream in
-    let pre_post = (parser [< 'RequiresClause pre; ex = opt (parser [< 'ExsuresClause epost >] -> epost); 'EnsuresClause post; >] -> out_count := !out_count + (match ex with None -> 2 | Some _ -> 3); Some (pre, post, (match ex with None -> ExprPred(pred_loc post, False(pred_loc post)) | Some(epost) -> epost)) | [< >] -> None) clause_stream in
+    let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post; >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
     if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: atomic clause (optional), function type clause (optional), contract (optional).");
     (atomic, ft, pre_post)
 and
@@ -2148,7 +2149,7 @@ and
     [< (atomic, ft, pre_post) = parse_spec_clauses >] ->
     match (atomic, ft, pre_post) with
       (false, None, None) -> raise Stream.Failure
-    | (false, None, Some (pre, post, epost)) -> (pre, post, epost)
+    | (false, None, (Some (pre, post))) -> (pre, post)
     | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
 and
   parse_block = parser
@@ -4009,14 +4010,9 @@ let verify_program_core (* ?verify_program_core *)
       (ObjType x, ObjType y) -> is_subtype_of x y
     | _ -> false
   in
-  let is_checked_exception_type tp = 
-    match tp with
-     ObjType cn -> (is_subtype_of cn "java.lang.Exception") && (not (is_subtype_of cn "java.lang.RuntimeException"))
-    | _ -> false
-  in
   let is_unchecked_exception_type tp = 
     match tp with
-     ObjType cn -> (is_subtype_of cn "java.lang.RuntimeException")
+     ObjType cn -> (is_subtype_of cn "java.lang.RuntimeException") || (is_subtype_of cn "java.lang.Error")
     | _ -> false
   in
 
@@ -8129,7 +8125,7 @@ let verify_program_core (* ?verify_program_core *)
     check_breakpoint [] env l
   in
   
-  let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0) =
+  let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post, epost) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0, epost0) =
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.") None;
@@ -8170,7 +8166,27 @@ let verify_program_core (* ?verify_program_core *)
           assert_pred rules tpenv0 (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
             check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
-        )
+        );
+        List.iter (fun (exceptp, epost) ->
+          if not (is_unchecked_exception_type exceptp) then
+            assume_pred tpenv (pn,ilist) h [] env epost real_unit None None (fun h _ _ ->
+              let rec handle_exception handlers =
+                match handlers with
+                | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
+                | (handler_tp, epost0) :: handlers ->
+                  branch
+                   (fun () ->
+                      if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
+                      assert_pred rules tpenv0 (pn,ilist) h [] env0 epost0 true real_unit (fun _ h ghostenv env size_first -> ())
+                   )
+                   (fun () ->
+                     if not (is_subtype_of_ exceptp handler_tp) then
+                       handle_exception handlers
+                   )
+              in
+              handle_exception epost0
+            )
+        ) epost;
       )
     );
     pop()
@@ -8246,8 +8262,8 @@ let verify_program_core (* ?verify_program_core *)
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
             check_func_header_compat (pn,ilist) l "Function type implementation check: " env0
-              (k, tparams, rt, xmap, atomic, pre, post)
-              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0);
+              (k, tparams, rt, xmap, atomic, pre, post, [])
+              (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, []);
             if gh = Real then
             begin
               if ftargs = [] then
@@ -8282,7 +8298,7 @@ let verify_program_core (* ?verify_program_core *)
               static_error l "Duplicate function implementation." None
           | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0);
+            check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post, []) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0, []);
             iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -8325,7 +8341,11 @@ let verify_program_core (* ?verify_program_core *)
                 let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (post, _) = check_pred (pn,ilist) [] postmap post in
-                let (epost, _) = check_pred (pn,ilist) [] tenv epost in
+                let epost = List.map (fun (tp, epost) -> 
+                  let (epost, _) = check_pred (pn,ilist) [] tenv epost in
+                  let tp = check_pure_type (pn,ilist) [] tp in
+                  (tp, epost)
+                ) epost in
                 (pre, tenv, post, epost)
             in
             iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, true))::mmap) meths
@@ -8351,7 +8371,7 @@ let verify_program_core (* ?verify_program_core *)
                 match try_assoc sign meths1 with
                   None-> iter rest (elem::meths1)
                 | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) -> 
-                  check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0);
+                  check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
                   iter rest meths1
             in
             iter meths0 meths1
@@ -8388,8 +8408,8 @@ let verify_program_core (* ?verify_program_core *)
             let ("this", _)::xmap' = xmap' in
             let thisTerm = get_unique_var_symb "this" thisType in
             check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
-              (Regular, [], rt, xmap, false, pre, post)
-              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post');
+              (Regular, [], rt, xmap, false, pre, post, epost)
+              (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost');
             pop();
             end
           ) superspecs;
@@ -8489,8 +8509,12 @@ let verify_program_core (* ?verify_program_core *)
                 let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
                 let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
-                let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, dynamic_of wepost) in
+                let wepost = List.map (fun (tp, epost) -> 
+                  let (wepost, _) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
+                  let tp = check_pure_type (pn,ilist) [] tp in
+                  (tp, wepost)
+                ) epost in
+                let (wpre_dyn, wpost_dyn, wepost_dyn) = if fb = Static then (wpre, wpost, wepost) else (dynamic_of wpre, dynamic_of wpost, List.map (fun (tp, wepost) -> (tp, dynamic_of wepost)) wepost) in
                 Some (wpre, tenv, wpost, wepost, wpre_dyn, wpost_dyn, wepost_dyn)
             in
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
@@ -8511,8 +8535,8 @@ let verify_program_core (* ?verify_program_core *)
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
                     check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
-                      (Regular, [], rt, xmap, false, pre, post)
-                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post')
+                      (Regular, [], rt, xmap, false, pre, post, epost)
+                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost')
                   );
                   pop()
               end
@@ -8567,10 +8591,15 @@ let verify_program_core (* ?verify_program_core *)
                   let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
                   let (wpost, _) = check_pred (pn,ilist) [] postmap post in
-                  let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
+                  let wepost = List.map (fun (tp, epost) -> 
+                    let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
+                    let tp = check_pure_type (pn,ilist) [] tp in
+                    (tp, wepost)
+                  ) epost in
                   (wpre, tenv, wpost, wepost)
               in
               let ss' = match ss with None -> None | Some ss -> Some (Some ss) in
+               let epost: (type_ * pred) list = epost in
               iter ((sign, (lm, xmap, pre, pre_tenv, post, epost, ss', v))::cmap) ctors
         in
         iter [] ctors
@@ -8592,6 +8621,7 @@ let verify_program_core (* ?verify_program_core *)
             let (l', abstract', fin', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
             match try_assoc [] cmap' with
               Some (l'', xmap, pre, pre_tenv, post, epost, _, _) ->
+              let epost: (type_ * pred) list = epost in
               cont pre pre_tenv post epost
             | None -> c
           end $. fun super_pre super_pre_tenv super_post super_epost ->
@@ -8618,7 +8648,7 @@ let verify_program_core (* ?verify_program_core *)
             let xmap = [] in
             let ss = Some (Some ([], l)) in
             let vis = Public in
-            (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, ExprPred(l, False(l)), ss, vis))
+            (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, [], ss, vis))
           in
           (cn, (l, abstract, fin, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
         in
@@ -8660,10 +8690,12 @@ let verify_program_core (* ?verify_program_core *)
               match meths0 with
                 [] -> meths1
               | (sign0, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,pre_dyn0,post_dyn0,epost_dyn0,ss0,fb0,v0,_,abstract0)) as elem::rest ->
+                let epost0: (type_ * pred) list = epost0 in
                 match try_assoc sign0 meths1 with
                   None-> iter rest (elem::meths1)
                 | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,pre_dyn1,post_dyn1,epost_dyn1,ss1,fb1,v1,_,abstract1) -> 
-                  check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0);
+                  let epost1: (type_ * pred) list = epost1 in
+                  check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
@@ -8674,11 +8706,13 @@ let verify_program_core (* ?verify_program_core *)
               match constr0 with
                 [] -> constr1
               | (sign0, (lm0,xmap0,pre0,pre_tenv0,post0,epost0,ss0,v0)) as elem::rest ->
+                let epost0: (type_ * pred) list = epost0 in
                 match try_assoc sign0 constr1 with
                   None-> iter rest (elem::constr1)
                 | Some(lm1,xmap1,pre1,pre_tenv1,post1,epost1,ss1,v1) ->
+                  let epost1: (type_ * pred) list = epost1 in
                   let rt= None in
-                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0);
+                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1, epost1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0, epost0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
@@ -9087,14 +9121,16 @@ let verify_program_core (* ?verify_program_core *)
         in
         let env'' = match tr with None -> env' | Some t -> update env' "result" r in
         (branch
-          (fun () ->
-            match epost with
+          (fun () -> match epost with
               None -> ()
             | Some(epost) ->
-              assume_pred tpenv (pn,ilist) h ghostenv' env' epost real_unit None None $. fun h _ _ ->
-              with_context PopSubcontext $. fun () ->
-                let e = get_unique_var_symb_ "excep" (ObjType "java.lang.Throwable") false in
-                (econt h env (ObjType "java.lang.Throwable") e))
+                List.iter (fun (tp, post) -> assume_pred tpenv (pn,ilist) h ghostenv' env' post real_unit None None $. fun h _ _ ->
+                  with_context PopSubcontext $. fun () ->
+                  let e = get_unique_var_symb_ "excep" tp false in
+                  (econt l h env tp e)
+                )
+                epost
+          )
           (fun () ->
             assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
             with_context PopSubcontext $. fun () ->
@@ -9229,7 +9265,7 @@ let verify_program_core (* ?verify_program_core *)
       let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
-      | [(sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))] -> (* exceptodo *)
+      | [(sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))] ->
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
@@ -9566,7 +9602,7 @@ let verify_program_core (* ?verify_program_core *)
                 let lblenv = [] in
                 let pure = true in
                 let return_cont h tenv env t = assert_false h [] l "You cannot return out of a produce_function_pointer_chunk statement" None in
-                let econt h env texcep excep = assert_false h [] l "You cannot throw an exception from a produce_function_pointer_chunk statement" None in
+                let econt _ h env texcep excep = assert_false h [] l "You cannot throw an exception from a produce_function_pointer_chunk statement" None in
                 begin fun tcont ->
                   verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_before tcont return_cont econt
                 end $. fun sizemap tenv ghostenv h env ->
@@ -10633,17 +10669,17 @@ let verify_program_core (* ?verify_program_core *)
       if (is_unchecked_exception_type tp) then
         ()
       else
-        verify_expr false h env None w (fun h v -> (econt h env tp v)) econt
+        verify_expr false h env None w (fun h v -> (econt l h env tp v)) econt
     | TryCatch (l, body, catches) ->
       if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       branch
         begin fun () ->
-          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun h env2 texcep excep -> 
+          verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont (fun throwl h env2 texcep excep -> 
             let env = List.filter (fun (x, t) -> List.mem_assoc x env) env2 in
             let rec iter catches =
               match catches with
-                [] -> econt h env texcep excep
+                [] -> econt throwl h env texcep excep
               | (l, te, x, body)::catches ->
                 let t = check_pure_type (pn,ilist) tparams te in
                 branch
@@ -10679,7 +10715,7 @@ let verify_program_core (* ?verify_program_core *)
                 begin fun () ->
                   if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
                   let t = check_pure_type (pn,ilist) tparams te in
-                  if not (is_checked_exception_type t) || t = (ObjType "java.lang.Exception") then begin
+                  if (is_unchecked_exception_type t) || t = (ObjType "java.lang.Exception") || t = (ObjType "java.lang.Throwable") then begin
                     let xterm = get_unique_var_symb_non_ghost x t in
                     let tenv = (x, t)::tenv in
                     let env = (x, xterm)::env in
@@ -11337,7 +11373,21 @@ let verify_program_core (* ?verify_program_core *)
     stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Perf.time() -. time0);
     result
   in
-  
+  let rec verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers =
+    if not (is_unchecked_exception_type exceptp) then
+      match handlers with
+      | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
+      | (handler_tp, epost) :: handlers ->
+        branch
+          (fun () ->
+            if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
+              assert_pred rules [] (pn,ilist) h ghostenv env epost true real_unit (fun _ h ghostenv env size_first -> ())
+          )
+          (fun () ->
+            if not (is_subtype_of_ exceptp handler_tp) then
+              verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers
+          )
+  in
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
       [] -> ()
@@ -11372,9 +11422,8 @@ let verify_program_core (* ?verify_program_core *)
               assert (retval = None);
               do_return h env
             in
-            let econt h env2 exceptp excep =
-              assert_pred rules [] (pn,ilist) h ghostenv env epost true real_unit (fun _ h ghostenv env size_first ->
-                check_leaks h env closeBraceLoc "Function leaks heap chunks.")
+            let econt throwl h env2 exceptp excep =
+              verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
             in
             let tenv = ("this", ObjType cn):: (current_thread_name, current_thread_type) ::pre_tenv in
             begin fun cont ->
@@ -11474,9 +11523,8 @@ let verify_program_core (* ?verify_program_core *)
             | (None, Some _) -> assert_false h env l "Void function returns a value." None
             | (Some _, None) -> assert_false h env l "Non-void function does not return a value." None
           in
-          let econt h env2 tp excep =
-            assert_pred rules [] (pn,ilist) h ghostenv env epost true real_unit $. fun _ h ghostenv env size_first ->
-            check_leaks h env closeBraceLoc "Function leaks heap chunks."
+          let econt throwl h env2 exceptp excep =
+            verify_exceptional_return (pn,ilist) throwl h ghostenv env exceptp excep epost
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
           verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
@@ -11595,7 +11643,7 @@ let verify_program_core (* ?verify_program_core *)
                                         let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                                         assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
                                       end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
-                                      begin fun _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
+                                      begin fun _ _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
                     end;
                     pop();
                     an

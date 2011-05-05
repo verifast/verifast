@@ -12,10 +12,10 @@ let normalize_to_lf text =
   let buffer = Buffer.create n in
   let rec iter lfCount crCount crlfCount k =
     if k = n then begin
-      Printf.printf "lfCount=%d; crCount=%d; crlfCount=%d\n" lfCount crCount crlfCount;
+      (*Printf.printf "lfCount=%d; crCount=%d; crlfCount=%d\n" lfCount crCount crlfCount;*)
       let counts = [lfCount, platform = Linux || platform = MacOS, "\n"; crlfCount, platform = Windows, "\r\n"; crCount, false, "\r"] in
       let (_, _, eol)::_ = List.sort (fun x y -> - compare x y) counts in
-      Printf.printf "length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]);
+      (*Printf.printf "length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]);*)
       (eol, Buffer.contents buffer)
     end else
       let c = text.[k] in
@@ -34,7 +34,7 @@ let normalize_to_lf text =
   iter 0 0 0 0
 
 let convert_eol eol text =
-  Printf.printf "convert_eol: length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]);
+  (* Printf.printf "convert_eol: length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]); *)
   let n = String.length text in
   let buffer = Buffer.create n in
   let rec iter k =

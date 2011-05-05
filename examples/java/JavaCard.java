@@ -20,7 +20,7 @@ public final class MyApplet extends Applet {
     
     @*/
     
-    public static void install(byte[] array, short offset, byte length) throws ISOException
+    public static void install(byte[] array, short offset, byte length) throws ISOException /*@ ensures true; @*/
         /*@
         requires
             someByteArray |-> _ &*& // TODO: Eliminate this
@@ -68,7 +68,7 @@ public final class MyApplet extends Applet {
         return true;
     }
     
-    public void process(APDU apdu) throws ISOException
+    public void process(APDU apdu) throws ISOException /*@ ensures true; @*/
         //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
         //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
     {

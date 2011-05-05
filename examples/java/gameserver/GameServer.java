@@ -25,7 +25,7 @@ predicate_ctor Session_ctor(RPSSession session, BufferedReader r, BufferedWriter
 @*/
 
 public class GameServer {
-    public boolean createGame(BufferedSocket socket, Semaphore semaphore, Games games) throws InterruptedException, IOException
+    public boolean createGame(BufferedSocket socket, Semaphore semaphore, Games games) throws InterruptedException /*@ ensures true; @*/, IOException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w) &*& semaphore != null 
     &*& semaphore(?f, semaphore, ?p, Games_ctor(games)); @*/
     /*@ ensures (result == false ? bufferedsocket(socket, r, w) : true)
@@ -68,7 +68,7 @@ public class GameServer {
         }
     }
 
-    public void showGamesHelper(BufferedSocket socket, Game game, int count) throws IOException, InterruptedException
+    public void showGamesHelper(BufferedSocket socket, Game game, int count) throws IOException /*@ ensures true; @*/, InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w) &*& Game(game, count) &*& count >= 0; @*/
     /*@ ensures bufferedsocket(socket, r, w) &*& Game(game, count); @*/
     {
@@ -90,7 +90,7 @@ public class GameServer {
         }
     }
 
-    public void showGames(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException, InterruptedException
+    public void showGames(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException /*@ ensures true; @*/ , InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w)  &*& games != null &*& semaphore != null
     &*& semaphore(?f, semaphore, ?p, Games_ctor(games)); @*/
     /*@ ensures bufferedsocket(socket, r, w) &*& semaphore(f, semaphore, p, Games_ctor(games)); @*/
@@ -112,7 +112,7 @@ public class GameServer {
         semaphore.release();
     }
 
-    public void getRPS(RPSSession session) throws IOException 
+    public void getRPS(RPSSession session) throws IOException /*@ ensures true; @*/
     //@ requires session != null &*& RPSSession(session, ?r, ?w);
     //@ ensures RPSSession(session, r, w);
     {
@@ -153,7 +153,7 @@ public class GameServer {
         //@ close RPSSession(session, r, w);
     }
 
-    public void playGame(BufferedSocket socket1, BufferedSocket socket2) throws IOException, InterruptedException
+    public void playGame(BufferedSocket socket1, BufferedSocket socket2) throws IOException /*@ ensures true; @*/ , InterruptedException /*@ ensures true; @*/
     /*@ requires socket1 != null &*& socket2 != null &*& bufferedsocket(socket1, ?r1, ?w1)
     &*& bufferedsocket(socket2, ?r2, ?w2); @*/
     /*@ ensures bufferedsocket(socket1, r1, w1)
@@ -230,7 +230,7 @@ public class GameServer {
         }
     }
 
-    public void joinGameCore(BufferedSocket socket, Semaphore semaphore, Games games, Game joinedGame) throws IOException, InterruptedException
+    public void joinGameCore(BufferedSocket socket, Semaphore semaphore, Games games, Game joinedGame) throws IOException /*@ ensures true; @*/ , InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r1, ?w1) &*& joinedGame != null &*& joinedGame.name |-> ?name
     &*& joinedGame.socket |-> ?s &*& s != null &*& bufferedsocket(s, ?r2, ?w2) &*& semaphore(?f, semaphore, ?p, Games_ctor(games))
     &*& joinedGame.next |-> ?next &*& games != null &*& semaphore != null; @*/
@@ -269,7 +269,7 @@ public class GameServer {
         t.start();
     }
 
-    public void joinGame(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException, InterruptedException
+    public void joinGame(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException /*@ ensures true; @*/ , InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w) &*& semaphore != null
     &*& semaphore(?f, semaphore, ?p, Games_ctor(games)); @*/
     /*@ ensures bufferedsocket(socket, r, w) &*& semaphore(_, semaphore, _, Games_ctor(games)); @*/
@@ -327,7 +327,7 @@ public class GameServer {
         return joinedGame;
     }
 
-    public void joinSelectedGame(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException, InterruptedException
+    public void joinSelectedGame(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException /*@ ensures true; @*/, InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w) &*& semaphore != null
     &*& semaphore(?f, semaphore, ?p, Games_ctor(games)); @*/
     /*@ ensures bufferedsocket(socket, r, w) &*& semaphore(_, semaphore, _, Games_ctor(games)); @*/
@@ -409,7 +409,7 @@ public class GameServer {
         }
     }
 
-    public void mainMenu(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException, InterruptedException
+    public void mainMenu(BufferedSocket socket, Semaphore semaphore, Games games) throws IOException /*@ ensures true; @*/, InterruptedException /*@ ensures true; @*/
     /*@ requires socket != null &*& bufferedsocket(socket, ?r, ?w) &*& semaphore != null
     &*& semaphore(?f, semaphore, ?p, Games_ctor(games)) &*& games != null; @*/ 
     /*@ ensures true; @*/
@@ -489,7 +489,7 @@ public class GameServer {
         }
     }
 
-    public void startServer() throws IOException
+    public void startServer() throws IOException /*@ ensures true; @*/
     //@ requires true;
     //@ ensures true;
     {
