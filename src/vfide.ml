@@ -3,6 +3,58 @@ open Verifast
 open GMain
 open Pervasives
 
+type platform = Windows | Linux | MacOS
+
+let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then MacOS else Linux
+
+let normalize_to_lf text =
+  let n = String.length text in
+  let buffer = Buffer.create n in
+  let rec iter lfCount crCount crlfCount k =
+    if k = n then begin
+      Printf.printf "lfCount=%d; crCount=%d; crlfCount=%d\n" lfCount crCount crlfCount;
+      let counts = [lfCount, platform = Linux || platform = MacOS, "\n"; crlfCount, platform = Windows, "\r\n"; crCount, false, "\r"] in
+      let (_, _, eol)::_ = List.sort (fun x y -> - compare x y) counts in
+      Printf.printf "length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]);
+      (eol, Buffer.contents buffer)
+    end else
+      let c = text.[k] in
+      match c with
+      | '\n' ->
+        Buffer.add_char buffer c; iter (lfCount + 1) crCount crlfCount (k + 1)
+      | '\r' ->
+        if k + 1 < n && text.[k + 1] = '\n' then begin
+          Buffer.add_char buffer '\n'; iter lfCount crCount (crlfCount + 1) (k + 2)
+        end else begin
+          Buffer.add_char buffer '\n'; iter lfCount (crCount + 1) crlfCount (k + 1)
+        end
+      | c ->
+        Buffer.add_char buffer c; iter lfCount crCount crlfCount (k + 1)
+  in
+  iter 0 0 0 0
+
+let convert_eol eol text =
+  Printf.printf "convert_eol: length eol=%d; eol0=%d\n" (String.length eol) (int_of_char eol.[0]);
+  let n = String.length text in
+  let buffer = Buffer.create n in
+  let rec iter k =
+    if k = n then
+      Buffer.contents buffer
+    else
+      match text.[k] with
+      | '\n' ->
+        Buffer.add_string buffer eol; iter (k + 1)
+      | '\r' ->
+        if k + 1 < n && text.[k + 1] = '\n' then begin
+          Buffer.add_string buffer eol; iter (k + 2)
+        end else begin
+          Buffer.add_string buffer eol; iter (k + 1)
+        end
+      | c ->
+        Buffer.add_char buffer c; iter (k + 1)
+  in
+  iter 0
+
 type undo_action =
   Insert of int * string
 | Delete of int * string
@@ -350,16 +402,7 @@ let show_ide initialPath prover codeFont traceFont =
         in
         let home = iter lineStart in
         let indent = lineStart#get_text ~stop:home in
-        let lineEnd = cursor#forward_to_line_end in
-        let eol = (* Copy the end-of-line sequence from the current line, or else the previous line, or else use the system standard sequence. *)
-          if lineEnd#is_end then
-            if lineStart#is_start then
-              if Sys.os_type = "Win32" then "\r\n" else "\n"
-            else
-              lineStart#backward_cursor_position#get_text ~stop:lineStart
-          else
-            lineEnd#get_text ~stop:lineEnd#forward_cursor_position
-        in
+        let eol = "\n" in
         buffer#insert (eol ^ indent);
         srcText#scroll_mark_onscreen `INSERT;
         true
@@ -386,8 +429,10 @@ let show_ide initialPath prover codeFont traceFont =
     let subView = create_editor subNotebook buffer in
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
+    let eol = ref (if platform = Windows then "\r\n" else "\n") in
     let tab = object
       method path = path
+      method eol = eol
       method buffer = buffer
       method undoList = undoList
       method redoList = redoList
@@ -484,10 +529,12 @@ let show_ide initialPath prover codeFont traceFont =
       let mtime = in_channel_last_modification_time chan in
       close_in chan;
       let text = file_to_utf8 text in
+      let (eol, text) = normalize_to_lf text in
       ignore_text_changes := true;
       let buffer = tab#buffer in
       buffer#delete ~start:buffer#start_iter ~stop:buffer#end_iter;
       let gIter = buffer#start_iter in
+      tab#eol := eol;
       (buffer: GSourceView2.source_buffer)#insert ~iter:gIter text;
       let {file_opt_tab_size=tabSize} = get_file_options text in
       tab#mainView#view#set_tab_width tabSize;
@@ -521,7 +568,7 @@ let show_ide initialPath prover codeFont traceFont =
   let store tab thePath =
     let chan = open_out_bin thePath in
     let text = (tab#buffer: GSourceView2.source_buffer)#get_text () in
-    output_string chan (utf8_to_file text);
+    output_string chan (utf8_to_file (convert_eol !(tab#eol) text));
     flush chan;
     let mtime = out_channel_last_modification_time chan in
     close_out chan;
