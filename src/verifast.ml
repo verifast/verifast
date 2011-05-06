@@ -942,7 +942,7 @@ type
   | PureCtor
   | FuncName
   | PredFamName
-  | EnumElemName of int
+  | EnumElemName of big_int
   | GlobalName
   | ModuleName
   | PureFuncName
@@ -1376,7 +1376,7 @@ and
       action_decl list *
       handle_pred_decl list
   (* enum def met line - name - elements *)
-  | EnumDecl of loc * string * (string list)
+  | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * (expr option)
   | UnloadableModuleDecl of loc
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
@@ -1966,7 +1966,10 @@ and
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >]
   -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
-| [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{"); elems = (rep_comma (parser [< '(_, Ident e) >] -> e)); '(_, Kwd "}"); '(_, Kwd ";"); >] -> [EnumDecl(l, n, elems)]
+| [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{");
+     elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
+     '(_, Kwd "}"); '(_, Kwd ";"); >] ->
+  [EnumDecl(l, n, elems)]
 | [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
@@ -3601,7 +3604,7 @@ let verify_program_core (* ?verify_program_core *)
   let enumdeclmap = 
     let rec iter edm ds = 
       match ds with
-        [] -> edm
+        [] -> List.rev edm
       | EnumDecl(l, en, elems) :: ds ->
         begin 
           match try_assoc en edm with
@@ -3614,7 +3617,49 @@ let verify_program_core (* ?verify_program_core *)
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
   in
-   
+  
+  let enummap1 =
+    let rec process_decls enummap1 ds =
+      match ds with
+        [] -> enummap1
+      | (_, (l, elems))::ds ->
+        let rec process_elems enummap1 nextValue elems =
+          match elems with
+            [] -> process_decls enummap1 ds
+          | (c, expr_opt)::elems ->
+            let value =
+              match expr_opt with
+                None -> nextValue
+              | Some e ->
+                let rec eval e =
+                  match e with
+                    IntLit (_, n, _) -> n
+                  | Var (l, x, _) ->
+                    begin match try_assoc2 x enummap1 enummap0 with
+                      None -> static_error l "No such enumeration constant" None
+                    | Some n -> n
+                    end
+                  | Operation (l, op, [e1; e2], _) ->
+                    let n1 = eval e1 in
+                    let n2 = eval e2 in
+                    begin match op with
+                      Add -> add_big_int n1 n2
+                    | Sub -> sub_big_int n1 n2
+                    | Mul -> mult_big_int n1 n2
+                    | Div -> div_big_int n1 n2
+                    | _ -> static_error l "This operation is not supported in this position." None
+                    end
+                  | e -> static_error (expr_loc e) "This expression form is not supported in this position." None
+                in
+                eval e
+            in
+            process_elems ((c, value)::enummap1) (succ_big_int value) elems
+        in
+        process_elems enummap1 zero_big_int elems
+    in
+    process_decls [] enumdeclmap
+  in
+  
   let functypenames = 
     let ds=match ps with
         [PackageDecl(_,"",[],ds)] -> ds
@@ -3967,8 +4012,6 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let structmap = structmap1 @ structmap0 in
-  
-  let enummap1 = enumdeclmap in
   
   let enummap = enummap1 @ enummap0 in
   
@@ -4819,7 +4862,7 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let current_class = "#currentClass" in
-
+  
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 false in
@@ -4975,8 +5018,7 @@ let verify_program_core (* ?verify_program_core *)
         scope := Some PredFamName;
         (Var (l, x, scope), PredType (tparams, ts, inputParamCount))
       | None ->
-      let enumElems = flatmap (fun (name, (l, elems)) -> imap (fun i x -> (x, i)) elems) enummap in
-      match try_assoc x enumElems with
+      match try_assoc x enummap with
       | Some i ->
         scope := Some (EnumElemName i);
         (e, IntType)
@@ -6432,7 +6474,7 @@ let verify_program_core (* ?verify_program_core *)
         | PureCtor -> let Some (lg, tparams, t, [], s) = try_assoc x purefuncmap in mk_app s []
         | FuncName -> List.assoc x funcnameterms
         | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc x predfammap in symb
-        | EnumElemName n -> ctxt#mk_intlit n
+        | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->
           begin
             match read_field with
