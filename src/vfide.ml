@@ -91,7 +91,7 @@ let in_channel_last_modification_time chan =
 let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
-let show_ide initialPath prover codeFont traceFont =
+let show_ide initialPath prover codeFont traceFont runtime =
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
@@ -1080,7 +1080,8 @@ let show_ide initialPath prover codeFont traceFont =
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_allow_assume = true;
-                option_simplify_terms = !simplifyTerms
+                option_simplify_terms = !simplifyTerms;
+                option_runtime = runtime
               }
               in
               verify_program prover false options path reportRange breakpoint;
@@ -1164,13 +1165,15 @@ let () =
   let prover = ref None in
   let codeFont = ref Fonts.code_font in
   let traceFont = ref Fonts.trace_font in
+  let runtime = ref None in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := Some arg; iter args
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
+    | "-runtime"::arg::args -> runtime := Some arg; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime
     | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line.\n\nUsage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] [-traceFont fontSpec]"
   in
   let _::args = Array.to_list (Sys.argv) in

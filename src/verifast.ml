@@ -3071,7 +3071,15 @@ let do_finally tryBlock finallyBlock =
   finallyBlock();
   result
 
-type options = {option_verbose: int; option_disable_overflow_check: bool; option_allow_should_fail: bool; option_emit_manifest: bool; option_allow_assume: bool; option_simplify_terms: bool} (* ?options *)
+type options = {
+  option_verbose: int;
+  option_disable_overflow_check: bool;
+  option_allow_should_fail: bool;
+  option_emit_manifest: bool;
+  option_allow_assume: bool;
+  option_simplify_terms: bool;
+  option_runtime: string option
+} (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
@@ -3085,9 +3093,12 @@ let verify_program_core (* ?verify_program_core *)
     ?(emitter_callback : package list -> unit = fun _ -> ())
     (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context)
     (options : options)
-    (path : string)
+    (program_path : string)
     (reportRange : range_kind -> loc -> unit)
     (breakpoint : (string * int) option) : unit =
+  
+  let path = program_path in
+  
   let language = file_type path in
   
   let auto_lemmas = Hashtbl.create 10 in
@@ -3338,8 +3349,7 @@ let verify_program_core (* ?verify_program_core *)
   
   let programDir = Filename.dirname path in
   let preludePath = Filename.concat bindir "prelude.h" in
-  let rtdir= Filename.concat bindir "rt" in 
-  let rtpath= Filename.concat rtdir "rt.jarspec" in
+  let rtpath = match options.option_runtime with None -> Filename.concat rtdir "rt.jarspec" | Some path -> path in
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs = ref [] in
   
@@ -3425,8 +3435,12 @@ let verify_program_core (* ?verify_program_core *)
       Recursively calls itself on headers included by the current file.
       Returns the elements declared directly in the current file.
       May add symbols and global assumptions to the SMT solver.
-    *)      
-  let rec check_file (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
+      
+      is_import_spec:
+        true if the file being checked specifies a module used by the module being verified
+        false if the file being checked specifies the module being verified
+    *)
+  let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
   let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
@@ -3494,7 +3508,8 @@ let verify_program_core (* ?verify_program_core *)
               match try_assoc path !headermap with
                 None ->
                 let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
-                let (_, maps) = check_file include_prelude basedir headers' ds in
+                let header_is_import_spec = Filename.chop_extension (Filename.basename header_path) <> Filename.chop_extension (Filename.basename program_path) in
+                let (_, maps) = check_file header_is_import_spec include_prelude basedir headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
@@ -3531,7 +3546,8 @@ let verify_program_core (* ?verify_program_core *)
             let allspecs= remove (fun x -> List.mem x headers_included)(list_remove_dups allspecs) in
             let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) jarspecs))in
             let (headers',ds) = ([],(List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) allspecs)) in
-            let (_, maps) = check_file include_prelude basedir [] ds in
+            let is_import_spec = false in (* TODO: Fix this so that .jarspecs for imported .jars are checked separately with is_import_spec = true *)
+            let (_, maps) = check_file is_import_spec include_prelude basedir [] ds in
             headermap := (path, (headers', maps))::!headermap;
             spec_classes:=classes;
             spec_lemmas:=lemmas;
@@ -3546,6 +3562,7 @@ let verify_program_core (* ?verify_program_core *)
       if include_prelude then
         match file_type path with
           | Java -> begin
+            if rtpath = "nort" then (maps0, []) else
             match try_assoc rtpath !headermap with
               | None -> 
                 let (_,allspecs)= parse_jarspec_file rtpath in
@@ -3553,7 +3570,7 @@ let verify_program_core (* ?verify_program_core *)
                   if options.option_allow_assume then Filename.concat rtdir "_assume.javaspec"::allspecs else allspecs
                 in
                 let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) allspecs in
-                let (_, maps0) = check_file false bindir [] ds in
+                let (_, maps0) = check_file true false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->
@@ -6320,15 +6337,18 @@ let verify_program_core (* ?verify_program_core *)
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
   
-  let (array_element_symb, array_slice_symb, array_slice_deep_symb) =
-    if language = Java then
-      let (_, _, _, _, array_element_symb, _) = List.assoc "java.lang.array_element" predfammap in
-      let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
-      let (_, _, _, _, array_slice_deep_symb, _) = List.assoc "java.lang.array_slice_deep" predfammap in
-      (array_element_symb, array_slice_symb, array_slice_deep_symb)
-    else
-      (get_unique_var_symb "#array_element" (PredType ([], [], None)), get_unique_var_symb "#array_slice" (PredType ([], [], None)), get_unique_var_symb "#array_slice_deep" (PredType ([], [], None)))
+  let lazy_value f =
+    let cell = ref None in
+    fun () ->
+      match !cell with
+        None -> let result = f() in cell := Some result; result
+      | Some result -> result
   in
+  let lazy_predfamsymb name = lazy_value (fun () -> let (_, _, _, _, symb, _) = List.assoc name predfammap in symb) in
+  
+  let array_element_symb = lazy_predfamsymb "java.lang.array_element" in
+  let array_slice_symb = lazy_predfamsymb "java.lang.array_slice" in
+  let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep" in
   
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
@@ -7023,7 +7043,7 @@ let verify_program_core (* ?verify_program_core *)
       let a = ev ea in
       let i = ev ei in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let slice = Chunk ((array_element_symb, true), [tp], coef, [a; i; t], None) in
+      let slice = Chunk ((array_element_symb(), true), [tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
     | WCallPred (l, g, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
@@ -7243,14 +7263,14 @@ let verify_program_core (* ?verify_program_core *)
       head_flatmap
         begin function
           Chunk ((g, true), [tp], coef, [a'; i'; v], _)
-            when g == array_element_symb && definitely_equal a' a && definitely_equal i' i ->
+            when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i ->
             [v]
         | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
-            when g == array_slice_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+            when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
         | Chunk ((g, true), [tp;tp2;tp3], coef, [a'; istart; iend; p; info; elems; vs], _)
-            when g == array_slice_deep_symb && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+            when g == array_slice_deep_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
         | _ -> []
@@ -7435,7 +7455,7 @@ let verify_program_core (* ?verify_program_core *)
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
-        assert_chunk rules (pn,ilist) h ghostenv env env' l (array_element_symb, true) [tp] coef coefpat (Some 2) pats $.
+        assert_chunk rules (pn,ilist) h ghostenv env env' l (array_element_symb(), true) [tp] coef coefpat (Some 2) pats $.
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
@@ -7678,6 +7698,9 @@ let verify_program_core (* ?verify_program_core *)
     let (pn, ilist) = ("", []) in
     (* rules for array slices *)
     begin if language = Java then
+      let array_element_symb = array_element_symb () in
+      let array_slice_symb = array_slice_symb () in
+      let array_slice_deep_symb = array_slice_deep_symb () in
       let get_element_rule h [elem_tp] terms_are_well_typed [arr; index] cont =
         match extract
           begin function
@@ -9411,9 +9434,9 @@ let verify_program_core (* ?verify_program_core *)
       eval_h h env i $. fun h i ->
       begin
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb, true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
+        assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
         let elem_tp = unfold_inferred_type elem_tp in
-        cont (Chunk ((array_element_symb, true), [elem_tp], coef, [arr; i; elem], None)::h) elem
+        cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) elem
       end
     | WReadArray (l, arr, elem_tp, i) when language = CLang ->
       eval_h h env arr $. fun h arr ->
@@ -9912,8 +9935,8 @@ let verify_program_core (* ?verify_program_core *)
         eval_h h env i $. fun h i ->
         eval_h h env rhs $. fun h rhs ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb, true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
-        cont (Chunk ((array_element_symb, true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
+        assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
+        cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
       | WReadArray(l2, arr, elem_tp, i) when language = CLang ->
         if pure then static_error l "Cannot write in a pure context." None;
         let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
@@ -11597,22 +11620,13 @@ let verify_program_core (* ?verify_program_core *)
     | Func (l, Lemma(auto, trigger), _, rt, g, ps, _, _, _, None, _, _)::ds -> 
       let g = full_name pn g in
       let (((_, g_file_name), _, _), _) = l in
-      if language = Java && not (Filename.check_suffix g_file_name "javaspec") then
+      if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
-      let f_file_name = Filename.chop_extension (Filename.basename g_file_name) in
-      let c_file_name = Filename.chop_extension (Filename.basename path) in
-      let _ = 
-      (if auto && (
-        (* case of C: *)
-          (Filename.check_suffix g_file_name "c") or (f_file_name <> c_file_name) or 
-        (* case of Java: *)
-          (g_file_name = "PureList.javaspec") or
-          (g_file_name = "Object.javaspec")) 
-        then 
-          let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
-          register_prototype_used l g;
-          create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
-      ) in 
+      if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec) then begin
+        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
+        register_prototype_used l g;
+        create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
+      end;
       verify_funcs (pn,ilist)  boxes (g::lems) ds
     | Func (l, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
@@ -11742,7 +11756,7 @@ let verify_program_core (* ?verify_program_core *)
     emitter_callback ds;
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (linker_info, _) = check_file true programDir headers ds in
+      let (linker_info, _) = check_file false true programDir headers ds in
       linker_info
     in
     begin

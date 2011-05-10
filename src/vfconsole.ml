@@ -145,6 +145,7 @@ let _ =
   let emitHighlightedSourceFiles = ref false in
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
+  let runtime: string option ref = ref None in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
@@ -152,6 +153,7 @@ let _ =
             ; "-c", Set compileOnly, ""
             ; "-shared", Set isLibrary, ""
             ; "-allow_assume", Set allowAssume, ""
+            ; "-runtime", String (fun path -> runtime := Some path), ""
             ; "-allow_should_fail", Set allowShouldFail, ""
             ; "-emit_vfmanifest", Set emitManifest, ""
             ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
@@ -180,7 +182,8 @@ let _ =
           option_allow_should_fail = !allowShouldFail;
           option_emit_manifest = !emitManifest;
           option_allow_assume = !allowAssume;
-          option_simplify_terms = !simplifyTerms
+          option_simplify_terms = !simplifyTerms;
+          option_runtime = !runtime
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =
