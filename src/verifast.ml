@@ -3550,7 +3550,7 @@ let verify_program_core (* ?verify_program_core *)
               | None -> 
                 let (_,allspecs)= parse_jarspec_file rtpath in
                 let allspecs =
-                  if options.option_allow_assume then Filename.concat rtdir "assume.javaspec"::allspecs else allspecs
+                  if options.option_allow_assume then Filename.concat rtdir "_assume.javaspec"::allspecs else allspecs
                 in
                 let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) allspecs in
                 let (_, maps0) = check_file false bindir [] ds in
