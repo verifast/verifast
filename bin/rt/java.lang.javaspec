@@ -1,6 +1,5 @@
 package java.lang;
 
-import java.util.*;
 
 /*@
 
@@ -102,6 +101,8 @@ public class InterruptedException {}
 
 public class IOException extends Exception {}
 
+public class ClosedChannelException extends IOException {}
+
 public class RuntimeException extends Exception {
 
     public RuntimeException();
@@ -130,13 +131,21 @@ public class Integer {
         //@ ensures true;
     
 
-} 
+}
+
+public class System {
+	public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length);
+	//@ requires src != null &*& 0 <= srcPos &*& dest != null &*& 0 <= destPos &*& 0 <= length &*& false; // TODO
+	//@ ensures true;
+}
 
 public class String{
-  public String(byte[] src);
-    //@ requires src != null;
+  public String();
+    //@ requires emp;
     //@ ensures true;
-
+  public String(byte[] src);
+    //@ requires [?f]array_slice(src, 0, src.length, _);
+    //@ ensures [f]array_slice(src, 0, src.length, _);
   public boolean equals(String other);
     //@ requires true;
     //@ ensures true;
@@ -152,9 +161,18 @@ public class String{
   public boolean matches(String regex);
     //@ requires true;
     //@ ensures true;
-  public static String valueOf(int value);
+  public boolean contains(String regex);
     //@ requires true;
     //@ ensures true;
+  public static String valueOf(int value);
+    //@ requires true;
+    //@ ensures result != null;
+  public byte[] getBytes();
+    //@ requires true;
+    //@ ensures result != null &*& 0 <= result.length;
+  public String trim();
+    //@ requires true;
+    //@ ensures result != null;
 }
 
 /*@
@@ -178,6 +196,8 @@ predicate thread_started(Thread thread, Runnable run, any info);
 @*/
 
 public class Thread {
+    static final int MAX_PRIORITY = 10;
+    
     public Thread(Runnable run);
         //@ requires true;
         //@ ensures thread(this, run);
@@ -185,6 +205,10 @@ public class Thread {
     void start();
         //@ requires thread(this, ?run) &*& thread_run_pre(run.getClass())(run, ?info);
         //@ ensures thread_started(this, run, info);
+        
+    void setPriority(int newPriority);
+        //@ requires thread(this, ?run);
+        //@ ensures thread(this, run);
 }
 
 /*@
@@ -196,10 +220,10 @@ public class StringBuffer{
     //@ ensures string_buffer(this);
   StringBuffer append(StringBuffer b);
     //@ requires string_buffer(this) &*& [?f]string_buffer(b);
-    //@ ensures string_buffer(this) &*& [f]string_buffer(b)  &*& result==this;
+    //@ ensures string_buffer(this) &*& [f]string_buffer(b) &*& result==this;
   StringBuffer append(String string);
     //@ requires string_buffer(this);
-    //@ ensures string_buffer(this)&*& result==this;
+    //@ ensures string_buffer(this) &*& result==this;
   String toString();
     //@ requires [?f]string_buffer(this);
     //@ ensures [f]string_buffer(this) &*& result!=null;
