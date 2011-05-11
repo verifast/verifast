@@ -127,16 +127,16 @@ public class Integer {
     public static final int MIN_VALUE = -0x80000000;
     
     public static int parseInt(String s);
-    	//@ requires s != null;
+        //@ requires s != null;
         //@ ensures true;
     
 
 }
 
 public class System {
-	public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length);
-	//@ requires src != null &*& 0 <= srcPos &*& dest != null &*& 0 <= destPos &*& 0 <= length &*& false; // TODO
-	//@ ensures true;
+    public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types. - Support overlapping slices.
+        //@ requires [?f]array_slice<byte>(^src, srcPos, srcPos + length, ?bs) &*& array_slice<byte>(^dest, destPos, destPos + length, _);
+        //@ ensures [f]array_slice<byte>(^src, srcPos, srcPos + length, bs) &*& array_slice<byte>(^dest, destPos, destPos + length, bs);
 }
 
 public class String{
@@ -144,8 +144,8 @@ public class String{
     //@ requires emp;
     //@ ensures true;
   public String(byte[] src);
-    //@ requires [?f]array_slice(src, 0, src.length, _);
-    //@ ensures [f]array_slice(src, 0, src.length, _);
+    //@ requires [?f]array_slice(src, 0, src.length, ?bs);
+    //@ ensures [f]array_slice(src, 0, src.length, bs);
   public boolean equals(String other);
     //@ requires true;
     //@ ensures true;
