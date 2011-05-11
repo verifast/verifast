@@ -1359,6 +1359,10 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
+  | TypedefDecl of
+      loc *
+      type_expr *
+      string
   | FuncTypeDecl of
       loc *
       ghostness *
@@ -1964,8 +1968,12 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g); (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >]
-  -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
+| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g);
+     ds = begin parser
+       [< (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >] -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
+     | [< '(_, Kwd ";") >] -> begin match rt with None -> raise (ParseException (l, "Void not allowed here.")) | Some te -> [TypedefDecl (l, te, g)] end
+     end
+  >] -> ds
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
@@ -3441,7 +3449,7 @@ let verify_program_core (* ?verify_program_core *)
         false if the file being checked specifies the module being verified
     *)
   let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
-  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0) =
+  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
@@ -3455,8 +3463,8 @@ let verify_program_core (* ?verify_program_core *)
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms)
-      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0)
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
@@ -3469,6 +3477,7 @@ let verify_program_core (* ?verify_program_core *)
        field_pred_map @ field_pred_map0,
        append_nodups predfammap predfammap0 id l "predicate",
        append_nodups predinstmap predinstmap0 (fun (p, is) -> p ^ "(" ^ String.concat ", " is ^ ")") l "predicate instance",
+       append_nodups typedefmap typedefmap0 id l "typedef",
        append_nodups functypemap functypemap0 id l "function type",
        append_nodups funcmap funcmap0 id l "function",
        append_nodups boxmap boxmap0 id l "box predicate",
@@ -3556,7 +3565,7 @@ let verify_program_core (* ?verify_program_core *)
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -3594,6 +3603,20 @@ let verify_program_core (* ?verify_program_core *)
         let [PackageDecl (_, _, _, ds)] = ps in
         List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
       | Java -> false
+  in
+  
+  let typedefdeclmap =
+    let rec iter tddm ds =
+      match ds with
+        [] -> List.rev tddm
+      | TypedefDecl (l, te, d)::ds ->
+        (* C compiler detects duplicate typedefs *)
+        iter ((d, (l, te))::tddm) ds
+      | _::ds ->
+        iter tddm ds
+    in
+    if language = Java then [] else
+    let [PackageDecl(_,"",[],ds)] = ps in iter [] ds
   in
   
   let structdeclmap =
@@ -3888,17 +3911,21 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: check_pure_type: checks validity of type expressions *)
   
-  let rec check_pure_type (pn,ilist) tpenv te=
+  let check_pure_type_core typedefmap1 (pn,ilist) tpenv te =
+    let rec check te =
     match te with
       ManifestTypeExpr (l, t) -> t
     | ArrayTypeExpr (l, t) -> 
-        let tp = check_pure_type (pn,ilist) tpenv t in
+        let tp = check t in
         ArrayType(tp)
     | IdentTypeExpr (l, id) ->
       if List.mem id tpenv then
         TypeParam id
       else
       begin
+      match try_assoc2 id typedefmap0 typedefmap1 with
+        Some t -> t
+      | None ->
       match search' id (pn,ilist) inductive_arities with
         Some s -> let n=List.assoc s inductive_arities in
         if n > 0 then static_error l "Missing type arguments." None;
@@ -3919,7 +3946,7 @@ let verify_program_core (* ?verify_program_core *)
       match resolve (pn,ilist) l id inductive_arities with
         Some (id, n) ->
         if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
-        InductiveType (id, List.map (check_type_arg (pn,ilist) tpenv) targs)
+        InductiveType (id, List.map check targs)
       | None -> static_error l "No such inductive datatype." None
       end
     | StructTypeExpr (l, sn) ->
@@ -3927,10 +3954,10 @@ let verify_program_core (* ?verify_program_core *)
         static_error l "No such struct." None
       else
         StructType sn
-    | PtrTypeExpr (l, te) -> PtrType (check_pure_type (pn,ilist) tpenv te)
-    | PredTypeExpr (l, tes, inputParamCount) -> PredType ([], List.map (check_pure_type (pn,ilist) tpenv) tes, inputParamCount)
+    | PtrTypeExpr (l, te) -> PtrType (check te)
+    | PredTypeExpr (l, tes, inputParamCount) -> PredType ([], List.map check tes, inputParamCount)
     | PureFuncTypeExpr (l, tes) ->
-      let ts = List.map (check_pure_type (pn,ilist) tpenv) tes in
+      let ts = List.map check tes in
       let rec iter ts =
         match ts with
           [t1; t2] -> PureFuncType (t1, t2)
@@ -3938,10 +3965,24 @@ let verify_program_core (* ?verify_program_core *)
         | _ -> static_error l "A fixpoint function type requires at least two types: a domain type and a range type" None
       in
       iter ts
-  and check_type_arg (pn,ilist) tpenv te =
-    let t = check_pure_type (pn,ilist) tpenv te in
-    t
+    in
+    check te
   in
+  
+  let typedefmap1 =
+    let rec iter tdm1 tdds =
+      match tdds with
+        [] -> tdm1
+      | (d, (l, te))::tdds ->
+        let t = check_pure_type_core tdm1 ("",[]) [] te in
+        iter ((d,t)::tdm1) tdds
+    in
+    iter [] typedefdeclmap
+  in
+  
+  let typedefmap = typedefmap1 @ typedefmap0 in
+  
+  let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap1 (pn,ilist) tpenv te in
   
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
@@ -11723,7 +11764,7 @@ let verify_program_core (* ?verify_program_core *)
   in
   verify_funcs' [] lems0 ps;
   
-  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
+  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
   
   in (* let rec check_file *)
   

@@ -84,6 +84,7 @@ verifast_both swap.c
 verifast_both -c switch.c
 verifast_both -c -disable_overflow_check tuerk.c
 verifast_both -c -disable_overflow_check tuerk_explicit.c
+verifast_both -c typedefs.c
 verifast_both -disable_overflow_check wc.c
 verifast_both -c -allow_should_fail carrays.c
 cd helloproc
