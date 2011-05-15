@@ -1978,7 +1978,13 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] -> [Global(l, t, x, None)] (* assumes globals start with keyword static *)
+(* parse globals; assumes globals start with keyword static: *)
+| [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
+  ( try match t with
+     ManifestTypeExpr (_, Void) ->
+      raise (ParseException (l, "A global cannot be of type void."))
+    with
+     Match_failure _ -> [Global(l, t, x, None)] )
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -2077,10 +2083,6 @@ and parse_ctors = parser
 and
   parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
 and
-  parse_more_types = parser
-  [< '(_, Kwd ","); t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()); ts = parse_more_types >] -> t::ts
-| [< '(_, Kwd ")") >] -> []
-and
   parse_fields = parser
   [< '(_, Kwd "}") >] -> []
 | [< f = parse_field; fs = parse_fields >] -> f::fs
@@ -2127,10 +2129,33 @@ and
 | [<'(l, Kwd "[");'(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
 | [< >] -> t0
 and
-  parse_paramlist = parser [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] -> ps
+(* parse function parameters: *)
+  parse_paramlist =
+  parser
+    [< '(_, Kwd "("); ps = rep_comma parse_param; '(_, Kwd ")") >] ->
+    List.filter filter_void_params ps
 and
-  parse_param = parser
-  [< t = parse_type; '(l, Ident pn) >] -> (t, pn)
+  filter_void_params ps = match ps with
+    (ManifestTypeExpr (_, Void), "") -> false
+  | _ -> true
+and
+  parse_param = parser [< t = parse_type; pn = parse_param_name >] ->
+  ( try match t with
+      ManifestTypeExpr (_, Void) -> (
+      try match pn with
+        None -> (t, "")
+      with
+       Match_failure msg ->
+        raise (ParseException ((match pn with Some p ->
+         match p with (l, name) -> l),
+         "A parameter cannot be of type void.")) )
+    with
+     Match_failure msg -> (t, (match pn with Some p ->
+     match p with (l, name) -> name)) )
+and
+  parse_param_name = parser
+    [< '(l, Ident pn) >] -> Some (l, pn)
+  | [< >] -> None
 and
   parse_functypeclause_args = parser
   [< '(_, Kwd "("); args = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")") >] -> args
@@ -2325,7 +2350,13 @@ and
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
   | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> s
   >] -> s
-| [< te = parse_type; '(_, Ident x); s2 = parse_decl_stmt_rest te x >] -> s2
+(* parse variable declarations: *)
+| [< te = parse_type; '(_, Ident x); s2 = parse_decl_stmt_rest te x >] ->
+  ( try match te with
+     ManifestTypeExpr (l, Void) ->
+      raise (ParseException (l, "A variable cannot be of type void."))
+    with
+     Match_failure _ -> s2 )
 and
   parse_loop_core = parser [<
     inv =
