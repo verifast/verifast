@@ -7415,6 +7415,14 @@ let verify_program_core (* ?verify_program_core *)
     List.for_all (fun x -> not (List.mem x ys)) xs
   in
   
+  let with_updated_ref r f body =
+    let value = !r in
+    r := f value;
+    do_finally body (fun () -> r := value)
+  in
+  
+  let assert_chunk_recursion_depth = ref 0 in
+  
   let assert_chunk_core rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
     let rec assert_chunk_core_core h =
       let rec iter hprefix h =
@@ -7428,6 +7436,8 @@ let verify_program_core (* ?verify_program_core *)
       match iter [] h with
         [] ->
         begin fun cont ->
+          if !assert_chunk_recursion_depth > 100 then cont () else
+          with_updated_ref assert_chunk_recursion_depth ((+) 1) $. fun () ->
           if inputParamCount = None then cont () else
           begin fun cont' ->
             let Some inputParamCount = inputParamCount in
