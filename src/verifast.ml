@@ -4296,11 +4296,14 @@ let verify_program_core (* ?verify_program_core *)
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) (Proverapi.Fixpoint index) in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, index, body, pn, ilist))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
+        | Some ([ReturnStmt (lr, Some e) as body], _) ->
+          let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
         | None ->
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
           iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) fpm ds
-        | _ -> static_error l "Body of fixpoint function must be switch statement." None
+        | _ -> static_error l "Body of fixpoint function must be switch statement or return statement." None
         end
       | _::ds -> iter (pn,ilist) imap pfm fpm ds
     in
@@ -5573,8 +5576,9 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter fpm_done fpm_todo =
       match fpm_todo with
         [] -> List.rev fpm_done
-      | (g, (l, tparams, rt, pmap, index, body, pn, ilist))::fpm_todo ->
-        let (SwitchStmt (ls, Var (lx, x, _), cs)) = body in
+      | (g, (l, tparams, rt, pmap, index, body, pn, ilist, fsym))::fpm_todo ->
+      match (index, body) with
+        (Some index, SwitchStmt (ls, Var (lx, x, _), cs)) ->
         let (i, targs) =
           match List.assoc x pmap with
             InductiveType (i, targs) -> (i, targs)
@@ -5648,10 +5652,30 @@ let verify_program_core (* ?verify_program_core *)
               iter () e
             in
             iter0 (List.map fst xmap) wbody;
-            check_cs (List.remove_assoc cn ctormap) ((cn, xs, wbody)::wcs) cs
+            check_cs (List.remove_assoc cn ctormap) (SwitchExprClause (lc, cn, xs, wbody)::wcs) cs
         in
         let wcs = check_cs ctormap [] cs in
-        iter ((g, (l, rt, pmap, ls, x, wcs, pn, ilist))::fpm_done) fpm_todo
+        iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x, ref None), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
+      | (None, ReturnStmt (lr, Some e)) ->
+        let tenv = pmap in
+        let w = check_expr_t (pn,ilist) tparams tenv e rt in
+        let rec iter0 e =
+          let rec iter () e =
+            let iter1 e = iter () e in
+            match e with
+              WPureFunCall (l, g', targs, args) ->
+              if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
+              if g' = g then static_error l "A fixpoint function whose body is a return statement cannot call itself." None;
+              List.iter iter1 args
+            | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+              if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
+              if g' = g then static_error l "A fixpoint function whose body is a return statement cannot mention itself." None
+            | _ -> expr_fold_open iter () e
+          in
+          iter () e
+        in
+        iter0 w;
+        iter ((g, (l, rt, pmap, None, w, pn, ilist, fsym))::fpm_done) fpm_todo
     in
     iter [] fixpointmap1
   in
@@ -6908,18 +6932,17 @@ let verify_program_core (* ?verify_program_core *)
 
   let _ =
     List.iter
-    (function
-       (g, (l, t, pmap, _, x, cs,pn,ilist)) ->
+    begin function
+       (g, (l, t, pmap, Some index, SwitchExpr (_, Var (_, x, _), cs, _, _), pn, ilist, fsym)) ->
        let rec index_of_param i x0 ps =
          match ps with
            [] -> assert false
          | (x, tp)::ps -> if x = x0 then (i, tp) else index_of_param (i + 1) x0 ps
        in
        let (i, InductiveType (_, targs)) = index_of_param 0 x pmap in
-       let Some(_,_,_,_,(fsym,_)) =try_assoc' (pn,ilist) g purefuncmap in
        let clauses =
          List.map
-           (function (cn, pats, e) ->
+           (function SwitchExprClause (_, cn, pats, e) ->
               let (_, tparams, _, ts, (ctorsym, _)) = match try_assoc' (pn,ilist) cn purefuncmap with Some x -> x in
               let eval_body gts cts =
                 let Some pts = zip pmap gts in
@@ -6947,7 +6970,16 @@ let verify_program_core (* ?verify_program_core *)
            cs
        in
        ctxt#set_fpclauses fsym i clauses
-    )
+     | (g, (l, t, pmap, None, w, pn, ilist, fsym)) ->
+       ctxt#begin_formal;
+       let env = imap (fun i (x, tp) -> let pt = typenode_of_type tp in (pt, (x, ctxt#mk_bound i pt))) pmap in
+       let tps = List.map fst env in
+       let env = List.map snd env in
+       let rhs = eval None env w in
+       let lhs = ctxt#mk_app fsym (List.map snd env) in
+       ctxt#end_formal;
+       ctxt#assume_forall [lhs] tps (ctxt#mk_eq lhs rhs)
+    end
     fixpointmap1
   in
   

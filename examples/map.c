@@ -92,14 +92,12 @@ struct node *fmap(struct node *list, mapfunc *f, void *data)
 
 /*@
 
-fixpoint int plusOne(unit u, int x) {
-    switch (u) {
-        case unit: return x + 1;
-    }
+fixpoint int plusOne(int x) {
+    return x + 1;
 }
 
 predicate_family_instance mapfunc(plusOneFunc)(void *data, list<int> in, list<int> out, list<int> info) =
-    map((plusOne)(unit), info) == append(out, map((plusOne)(unit), in));
+    map(plusOne, info) == append(out, map(plusOne, in));
 
 @*/
 
@@ -109,7 +107,7 @@ int plusOneFunc(void *data, int x) //@ : mapfunc
 {
     if (x == 2147483647) abort();
     //@ open mapfunc(plusOneFunc)(data, in, out, ?info_);
-    //@ append_assoc(out, cons(x + 1, nil), map((plusOne)(unit), tail(in)));
+    //@ append_assoc(out, cons(x + 1, nil), map(plusOne, tail(in)));
     //@ switch (in) { case nil: case cons(h, t): }
     //@ close mapfunc(plusOneFunc)(data, tail(in), append(out, cons(x + 1, nil)), info_);
     return x + 1;
