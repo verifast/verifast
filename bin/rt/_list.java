@@ -275,13 +275,13 @@ lemma void drop_take_remove_nth<t>(list<t> xs, int n)
 
 lemma void mem_index_of<t>(t x, list<t> xs)
     requires mem(x, xs) == true;
-    ensures mem(x, xs) == (0 <= index_of(x, xs)) &*& index_of(x, xs) <= length(xs);
+    ensures 0 <= index_of(x, xs) &*& index_of(x, xs) < length(xs);
 {
     switch (xs) {
         case nil:
         case cons(x0, xs0):
             if (x == x0) {
-                length_nonnegative(xs);
+                length_nonnegative(xs0);
             } else {
                 mem_index_of(x, xs0);
             }

@@ -178,7 +178,7 @@ lemma_auto(append(take(n, xs), tail(drop(n, xs)))) void drop_take_remove_nth<t>(
 
 fixpoint int index_of<t>(t x, list<t> xs) {
     switch (xs) {
-        case nil: return -1;
+        case nil: return 0;
         case cons(x0, xs0): return x0 == x ? 0 : 1 + index_of(x, xs0);
     }
 }
