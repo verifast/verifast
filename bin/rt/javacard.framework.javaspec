@@ -22,13 +22,16 @@ lemma_auto void APDU_inv();
 
 @*/
 
-class APDUException {
+class CardRuntimeException extends RuntimeException {
+}
+
+class APDUException extends CardRuntimeException {
 }
 
 class SecurityException {
 }
 
-class SystemException {
+class SystemException extends CardRuntimeException {
 }
 
 class APDU {
