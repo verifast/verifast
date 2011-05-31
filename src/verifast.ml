@@ -10062,7 +10062,9 @@ let verify_program_core (* ?verify_program_core *)
         eval_h h env rhs $. fun h rhs ->
         let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l2 elem_tp); TermPat predsym; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
-        assert_term (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)) h env l2 ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i size)))) None;
+        (let term = ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)
+         in
+           assert_term term h env l2 ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint term)) None);
         let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive rhs; vs] in
         cont (Chunk ((c_array_symb, true), [elem_tp], real_unit, [a; n; size; q; updated], None) :: h) env
       | Deref (_, w, _) ->
