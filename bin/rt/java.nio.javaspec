@@ -1,0 +1,41 @@
+package java.nio;
+
+//@ predicate bytebuffer(ByteBuffer buffer, int capacity, int limit, int pos);
+
+public class ByteBuffer {
+	static ByteBuffer allocate(int cap);
+	//@ requires 0 <= cap;
+	//@ ensures bytebuffer(result, cap, cap, 0) &*& result != null;
+
+	public ByteBuffer put(byte[] src);
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos) &*& src != null &*& [?f]array_slice(src, 0, src.length, ?bs);
+	//@ ensures bytebuffer(this, cap, lim, pos + src.length) &*& [f]array_slice(src, 0, src.length, bs);
+
+	public ByteBuffer flip();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, pos, 0);
+
+	public ByteBuffer clear();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, cap, 0);
+	
+	public final int position();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, lim, pos) &*& result == pos &*& 0 <= pos &*& pos <= lim;
+
+	public boolean hasRemaining();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, lim, pos) &*& result == (lim > pos);
+	
+	public int remaining();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, lim, pos) &*& result == lim - pos;
+	
+	public ByteBuffer rewind();
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos);
+	//@ ensures bytebuffer(this, cap, lim, 0);
+	
+	public ByteBuffer get(byte[] dst)
+	//@ requires bytebuffer(this, ?cap, ?lim, ?pos) &*& array_slice(dst, 0, dst.length, _) &*& dst.length <= lim - pos;
+	//@ ensures bytebuffer(this, cap, lim, pos+dst.length) &*& array_slice(dst, 0, dst.length, _);
+}

@@ -4,5 +4,7 @@ _list.javaspec
 _nat.javaspec
 java.util.javaspec
 java.io.javaspec
+java.nio.channels.javaspec
+java.nio.javaspec
 java.net.javaspec
 java.util.concurrent.javaspec

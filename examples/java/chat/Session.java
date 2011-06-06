@@ -155,7 +155,7 @@ public class Session implements Runnable {
                 /*@
                 invariant
                     Writer(writer.getClass())(writer, writerInfo) &*&
-                    iter(iter, membersList, members, ?i) &*& foreach(members, @member)
+                    iter(iter, 1, membersList, list_wrapper, members, ?i) &*& foreach(members, @member)
                     &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
                 @*/
             {
@@ -173,7 +173,9 @@ public class Session implements Runnable {
             writer.write("\r\n");
             writer.flush();
             //@ iter_dispose(iter);
+            //@ open list_wrapper(membersList, members);
         }
+        
         //@ close room(room);
         //@ close room_ctor(room)();
         roomLock.release();

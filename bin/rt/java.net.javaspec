@@ -2,6 +2,18 @@ package java.net;
 
 import java.io.*;
 
+public class SocketAddress {
+
+}
+
+//@ predicate inetsocketaddress(InetSocketAddress address);
+
+public class InetSocketAddress extends SocketAddress {
+	public InetSocketAddress(int port);
+	//@ requires true;
+	//@ ensures inetsocketaddress(this);
+}
+
 /*@
 
 predicate ServerSocket(ServerSocket serverSocket);
@@ -27,8 +39,8 @@ public class Socket {
         //@ ensures Socket(this, in, inInfo, out, outInfo);
     
     public void close();
-      //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
-      //@ ensures emp;
+        //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        //@ ensures emp;
 }
 
 public class ServerSocket {
@@ -39,4 +51,7 @@ public class ServerSocket {
     public Socket accept();
         //@ requires ServerSocket(this);
         //@ ensures result!= null &*& ServerSocket(this) &*& Socket(result, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+	public void bind(SocketAddress endpoint) throws IOException /*@ ensures true; @*/;
+		//@ requires ServerSocket(this);
+		//@ ensures ServerSocket(this);
 }

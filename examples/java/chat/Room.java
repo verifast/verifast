@@ -37,7 +37,7 @@ public class Room {
         while (hasNext && !hasMember)
             /*@
             invariant
-                iter(iter, membersList, members, ?i) &*& foreach(members, @member)
+                iter(iter, 1, membersList, list_wrapper, members, ?i) &*& foreach(members, @member)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -52,6 +52,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ iter_dispose(iter);
+        //@ open list_wrapper(membersList, members);
         //@ close room(this);
         return hasMember;
     }
@@ -69,7 +70,7 @@ public class Room {
         while (hasNext)
             /*@
             invariant
-                foreach<Member>(?members, @member) &*& iter(iter, membersList, members, ?i)
+                foreach<Member>(?members, @member) &*& iter(iter, 1, membersList, list_wrapper, members, ?i)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -87,6 +88,7 @@ public class Room {
             hasNext = iter.hasNext();
         }
         //@ iter_dispose(iter);
+        //@ open list_wrapper(membersList, members);
         //@ close room(this);
     }
 }

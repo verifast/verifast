@@ -206,9 +206,11 @@ lemma void duplicate_inconsistent(list<int> vs, nat i, int pos)
   }
 }
 
-lemma void length_update<t>(list<t> vs, t v, int pos)  requires 0 <= pos && pos < length(vs);
+lemma void length_update<t>(list<t> vs, t v, int pos)
+  requires 0 <= pos && pos < length(vs);
   ensures length(update(unit, vs, v, pos)) == length(vs);
-{  switch(vs) {
+{
+  switch(vs) {
     case nil: 
     case cons(h, t):
       if(pos == 0) {

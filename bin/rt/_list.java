@@ -139,7 +139,7 @@ lemma void length_take<t>(int n, list<t> xs)
 }
 
 lemma void length_take_n<t>(int n, list<t> xs)
-    requires 0 <= n && n < length(xs);
+    requires 0 <= n && n <= length(xs);
     ensures length(take(n, xs)) == n;
 {
     switch (xs) {
@@ -356,6 +356,50 @@ lemma void drop_append<t>(list<t> xs1, list<t> xs2)
             length_nonnegative(xs10);
             drop_append(xs10, xs2);
     }
+}
+
+lemma void foreach_remove_nth<t>(int i, list<t> xs)
+    requires foreach(xs, ?p) &*& 0 <= i &*& i < length(xs);
+    ensures p(nth<t>(i, xs)) &*& foreach(remove_nth<t>(i, xs), p);
+{
+	open foreach(xs, p);
+	switch (xs) {
+		case nil:
+		case cons(x0, xs0):
+			if (i == 0) {
+			} else {
+				foreach_remove_nth(i-1, xs0);
+				close foreach(remove_nth(i, xs), p);
+			}
+	}
+}
+
+lemma void foreach_unremove_nth<t>(int i, list<t> xs)
+    requires foreach(remove_nth<t>(i, xs), ?p) &*& p(nth<t>(i, xs));
+    ensures foreach(xs, p);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (i == 0) {
+                close foreach(xs, p);
+            } else {
+                open foreach(remove_nth(i, xs), p);
+                foreach_unremove_nth(i-1, xs0);
+                close foreach(xs, p);
+            }
+    }
+}
+
+lemma void length_nul<t>(list<t> xs)
+requires length(xs) == 0;
+ensures xs == nil;
+{
+	switch (xs) {
+		case nil:
+		case cons(x0, xs0):
+			length_nonnegative(xs0);
+	}
 }
 
 @*/

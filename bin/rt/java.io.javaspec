@@ -27,7 +27,15 @@ lemma void BufferedReader_dispose(BufferedReader r);
 
 @*/
 
+public class IOException {}
+
 public interface InputStream {
+   public int read();
+   	//@ requires InputStream(this.getClass())(this, ?info);
+   	//@ ensures InputStream(this.getClass())(this, info);
+   public void close();
+   	//@ requires InputStream(this.getClass())(this, ?info);
+   	//@ ensures emp;
 }
 
 public interface Reader {

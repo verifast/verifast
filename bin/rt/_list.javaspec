@@ -120,7 +120,7 @@ lemma void length_take<t>(int n, list<t> xs);
     ensures length(take(n, xs)) == n;
 
 lemma_auto(length(take(n, xs))) void length_take_n<t>(int n, list<t> xs);
-    requires 0 <= n && n < length(xs);
+    requires 0 <= n && n <= length(xs);
     ensures length(take(n, xs)) == n;
 
 lemma_auto(nth(i, take(n, xs))) void nth_take<t>(int i, int n, list<t> xs);
@@ -176,6 +176,13 @@ fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
     }
 }
 
+fixpoint list<t> remove_all<t>(list<t> xs, list<t> ys) {
+    switch (xs) {
+        case nil: return ys;
+        case cons(x, xs0): return remove(x, remove_all(xs0, ys));
+    }
+}
+
 lemma void drop_take_remove_nth<t>(list<t> xs, int n);
   requires 0<=n && n < length(xs);
   ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
@@ -223,5 +230,16 @@ lemma_auto(all_eq(append(xs1, xs2), x0)) void all_eq_append<t>(list<t> xs1, list
 lemma_auto(drop(length(xs1), append(xs1, xs2))) void drop_append<t>(list<t> xs1, list<t> xs2);
     requires true;
     ensures drop(length(xs1), append(xs1, xs2)) == xs2;
+	
+lemma void foreach_remove_nth<t>(int i, list<t> xs);
+    requires foreach(xs, ?p) &*& 0 <= i &*& i < length(xs);
+    ensures p(nth<t>(i, xs)) &*& foreach(remove_nth<t>(i, xs), p);
 
+lemma void foreach_unremove_nth<t>(int i, list<t> xs);
+    requires foreach(remove_nth<t>(i, xs), ?p) &*& p(nth<t>(i, xs));
+    ensures foreach(xs, p);
+    
+lemma_auto(length(xs)) void length_nul<t>(list<t> xs);
+    requires length(xs) == 0;
+    ensures xs == nil;
 @*/

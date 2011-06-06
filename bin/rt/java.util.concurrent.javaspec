@@ -1,10 +1,22 @@
 package java.util.concurrent;
 
-/*@
+//@ predicate executor(Executor executor);
 
+public interface Executor {
+	void execute(Runnable run);
+	//@ requires [?f]executor(this) &*& thread_run_pre(run.getClass())(run, ?info);
+	//@ ensures [f]executor(this);
+}
+
+public class Executors {
+
+	public static Executor newFixedThreadPool(int nThreads);
+	//@ requires true;
+	//@ ensures executor(result) &*& result != null; 
+}
+
+/*@   
 predicate semaphore(real f, Semaphore s, int p, predicate() inv);
-
-predicate create_semaphore_ghost_arg(predicate() inv) = true;
 
 predicate n_times(int p, predicate() inv) = p == 0 ? emp : (inv() &*& n_times(p - 1, inv));
 
@@ -24,6 +36,15 @@ lemma void semaphore_join();
     requires semaphore(?f1, ?s, ?p1, ?inv) &*& semaphore(?f2, s, ?p2, inv);
     ensures semaphore(f1 + f2, s, p1 + p2, inv);
 
+predicate semaphore_simple(Semaphore s, predicate() inv);
+
+lemma void create_semaphore_simple(Semaphore s);
+    requires semaphore(_, s, _, ?inv);
+    ensures semaphore_simple(s, inv);
+
+lemma void semaphore_simple_split(Semaphore s);
+    requires [?f]semaphore_simple(s, ?inv);
+    ensures [f]semaphore_simple(s, inv) &*& semaphore(_, s, _, inv);
 @*/
 
 public class Semaphore {
