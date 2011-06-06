@@ -24,7 +24,6 @@ main-class A
 and "verifast -c program.jarsrc" succeeds, then "java A" does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
-- casts in specification elements: for now casts are allowed in the specification of Java programs, this should be disabled in the future.
 - Java: ClassCastExceptions are currently not prevented
 - ghost variables (which can hide fields) can appear in the argument of the Java assert statement
-- VeriFast does not perform all necessary override checks in programs with interfaces that extend other interfaces
+- Spec of List.remove: this method uses Object.equals instead of == but the spec assumes it uses ==
