@@ -49,6 +49,7 @@ verifast_both -disable_overflow_check globals.c
 verifast_both -shared goto.c
 verifast_both -disable_overflow_check -c gui-app.c
 verifast_both -c ifs.c
+verifast_both threading.o incr.c
 cd incr_box
 verifast_both -c incr_box.c
 cd ..
