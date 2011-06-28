@@ -15,10 +15,9 @@ or you can do a manual install.
 i) Use tools2.zip
 ----------------
 
-Simply download tools2.zip from https://aramis.cs.kuleuven.be/verifast/chrome/site/tools2.zip and unzip it to C:\.
+Simply download tools2.zip from https://dnetcode.cs.kuleuven.be/attachments/download/60/tools2.zip and unzip it to C:\.
 
-Note: unfortunately, the tools are not relocatable. I installed them to C:\, so you
-MUST unzip them to C:\ as well.
+Note: unfortunately, the tools are not relocatable. I installed them to C:\, so you MUST unzip them to C:\ as well.
 
 ii) Manual install
 ------------------
