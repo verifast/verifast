@@ -151,6 +151,6 @@ C:\WINDOWS\system32\cmd.exe /k C:\verifast\settings.bat
 3) Run Nmake
 ============
 
-Go to the src directory, and run nmake. You will get verifast.exe and vfide.exe in the src directory.
+Go to the src directory, and run nmake. You will get verifast.exe and vfide.exe in the bin directory.
 The makefile will also run the test suite.
-You might want to put the src directory in your PATH.
+You might want to put the bin directory in your PATH.
