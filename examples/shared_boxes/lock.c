@@ -15,7 +15,7 @@ box_class mylock_box(struct mylock *mylock, bool is_locked, real myf, handle own
     invariant mylock->is_locked |-> is_locked &*& 
               0 < myf &*&
              (is_locked ? 
-                  [myf]mylock_help(mylock,?v) 
+                  [myf]mylock->help |-> ?v 
                   : p());
 
     action try_acquire(real f);
@@ -91,7 +91,6 @@ void mylock_dispose(struct mylock *mylock)
     //@ box mybox = mylock -> mybox;
     //@ open mylock_ctor (mylock,mybox, p)();
     //@ dispose_box mylock_box(mybox,mylock, ?waslocked, ?f, ?h, p);
-    //@ assume (false); // TODO: mylock should not be locked when disposing, but how can we guarantee this?
     free (mylock);
 }
 
