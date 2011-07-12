@@ -7057,16 +7057,14 @@ let verify_program_core (* ?verify_program_core *)
         else if definitely_equal tp tp' then
         begin
           assume (ctxt#mk_eq tv tv') $. fun () ->
-          let coef =
-            if tcoef == real_half && tcoef' == real_half then real_unit else
-            if is_dummy_frac_term tcoef then
-              tcoef'
-            else if is_dummy_frac_term tcoef' then
-              tcoef
-            else
-              ctxt#mk_real_add tcoef tcoef'
-          in
-          cont (Chunk ((symb, true), [], coef, [tp'; tv'], None)::List.filter (fun ch -> ch != chunk) h0)
+          let cont = (fun coef -> cont (Chunk ((symb, true), [], coef, [tp'; tv'], None)::List.filter (fun ch -> ch != chunk) h0)) in
+          if tcoef == real_half && tcoef' == real_half then cont real_unit else
+          if is_dummy_frac_term tcoef then
+            cont tcoef'
+          else if is_dummy_frac_term tcoef' then
+            cont tcoef
+          else
+            let newcoef = (ctxt#mk_real_add tcoef tcoef') in (assume (ctxt#mk_real_le newcoef real_unit) $. fun () -> cont newcoef)
         end
         else
           iter h
