@@ -7052,7 +7052,7 @@ let verify_program_core (* ?verify_program_core *)
       match h with
         [] -> cont (Chunk ((symb, true), [], tcoef, [tp; tv], None)::h0)
       | Chunk (g, targs', tcoef', [tp'; tv'], _) as chunk::h when predname_eq g pred_symb ->
-        if tcoef' == real_unit then
+        if tcoef == real_unit || tcoef' == real_unit then
           assume_neq tp tp' (fun _ -> iter h)
         else if definitely_equal tp tp' then
         begin
