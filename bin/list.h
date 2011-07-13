@@ -71,6 +71,10 @@ fixpoint list<t> reverse<t>(list<t> xs) {
     }
 }
 
+lemma void nth_append<t>(list<t> xs, list<t> ys, int i);
+  requires 0 <= i && i < length(xs);
+  ensures nth(i, xs) == nth(i, append(xs, ys));
+
 lemma void reverse_append<t>(list<t> xs, list<t> ys);
     requires true;
     ensures reverse(append(xs, ys)) == append(reverse(ys), reverse(xs));

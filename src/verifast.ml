@@ -11809,6 +11809,7 @@ let verify_program_core (* ?verify_program_core *)
                                       let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                                       let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
                                         post_boxvars @ old_boxvars @ aarg_env @ hpargs in
+                                      let tenv = ["actionHandle", HandleIdType; "predicateHandle", HandleIdType; "currentThread", IntType] @ tenv in
                                       verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss begin fun _ _ _ _ _ ->
                                         let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
                                         assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None

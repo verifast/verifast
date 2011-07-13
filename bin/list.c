@@ -171,6 +171,16 @@ lemma void length_drop<t>(int n, list<t> xs)
     }
 }
 
+lemma void nth_append<t>(list<t> xs, list<t> ys, int i)
+  requires 0 <= i && i < length(xs);
+  ensures nth(i, xs) == nth(i, append(xs, ys));
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t): if(i != 0) nth_append(t, ys, i - 1); 
+  }
+}
+
 lemma void length_take<a>(int n, list<a> xs)
     requires 0 <= n &*& n <= length(xs);
     ensures length(take(n, xs)) == n;
