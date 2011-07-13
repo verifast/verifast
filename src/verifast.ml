@@ -6986,13 +6986,25 @@ let verify_program_core (* ?verify_program_core *)
   (* Region: production of assertions *)
   
   let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url in
-  
+
   let success() = () in
   
   let branch cont1 cont2 =
     stats#branch;
     in_temporary_context (fun _ -> cont1());
     in_temporary_context (fun _ -> cont2())
+  in
+  
+  let rec assert_expr_split e h env l msg url = 
+    match e with
+      IfExpr(l0, con, e1, e2) -> 
+        branch
+           (fun _ -> assume (eval None env con) (fun _ -> assert_expr_split e1 h env l msg url; ))
+           (fun _ -> assume (ctxt#mk_not (eval None env con)) (fun _ -> assert_expr_split e2 h env l msg url; ))
+    | Operation(l0, And, [e1; e2], tps) ->
+        assert_expr_split e1 h env l msg url;
+        assert_expr_split e2 h env l msg url;
+    | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun _ -> assert_expr env e h env l msg url)
   in
   
   let evalpat ghost ghostenv env pat tp0 tp cont =
@@ -7629,6 +7641,22 @@ let verify_program_core (* ?verify_program_core *)
         Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
+   (* | ExprPred(l, Operation(lo, And, [e1; e2], tps)) ->
+      assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' (ExprPred (expr_loc e1, e1)) checkDummyFracs coef (fun chunks h ghostenv env env' size ->
+        assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' (ExprPred (expr_loc e2, e2)) checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
+          cont (chunks @ chunks') h ghostenv env env' size
+        )
+      )
+    | ExprPred(l, IfExpr(lo, con, e1, e2)) ->
+      let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
+      let env' = [] in
+      branch
+        (fun _ ->
+           assume (ev con) (fun _ ->
+             assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' (ExprPred (expr_loc e1, e1)) checkDummyFracs coef cont))
+        (fun _ ->
+           assume (ctxt#mk_not (ev con)) (fun _ ->
+             assert_pred_core rules tpenv (pn,ilist) h ghostenv env env' (ExprPred (expr_loc e2, e2)) checkDummyFracs coef cont))*)
     | ExprPred (l, e) ->
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
@@ -11812,7 +11840,7 @@ let verify_program_core (* ?verify_program_core *)
                                       let tenv = ["actionHandle", HandleIdType; "predicateHandle", HandleIdType; "currentThread", IntType] @ tenv in
                                       verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv [] env ss begin fun _ _ _ _ _ ->
                                         let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                                        assert_term (eval None post_inv_env inv) [] post_inv_env l "Handle predicate invariant preservation check failure." None
+                                        assert_expr_split inv [] post_inv_env l "Handle predicate invariant preservation check failure." None
                                       end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
                                       begin fun _ _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
                     end;
