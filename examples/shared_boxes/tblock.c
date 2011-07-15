@@ -91,7 +91,6 @@ lemma void nth_snoc_length<t>(list<t> l, t el);
 box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<handle> thandles, predicate() p) {
     invariant lock->next |-> next &*& 
               lock->owner |-> owner &*& 
-              distinct (thandles) == true &*&
               owner <= next &*&
               (next == owner ? !locked : true) &*&
               length (thandles) == next - owner &*&
@@ -120,7 +119,7 @@ box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<h
                   (ticket == owner ? isLocked == locked : !isLocked);
         
         preserved_by get_ticket() {
-            append_nth(ticket - owner, old_thandles, cons(actionHandle, nil));
+           append_nth(ticket - owner, old_thandles, cons(actionHandle, nil));
         }
         preserved_by try_acquire(t) {
         }
@@ -212,8 +211,6 @@ void tlock_acquire(struct tlock *lock)
         ticket = lock->next;
         if (ticket == INT_MAX) abort();
         lock->next = ticket + 1;
-        //@ assume (mem(h, th)==false); // TODO: create_handle gives new handle!
-        //@ distinct_snoc(th, h);
         //@ nth_snoc_length(th, h);
     }
     /*@
@@ -276,7 +273,7 @@ void tlock_release(struct tlock *lock)
     {
 	lock->owner++;
 	
-	//@ distinct_tail(th);
+	// distinct_tail(th);
 	//@ length_tail(th);
     }
     /*@
