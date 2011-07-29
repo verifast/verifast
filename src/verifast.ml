@@ -1658,7 +1658,8 @@ let ghost_keywords = [
 
 let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
-  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX"; "UINTPTR_MAX"; "enum"; "static"
+  "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
+  "UINTPTR_MAX"; "enum"; "static"; "unsigned"; "long"
 ]
 
 let java_keywords = [
@@ -2105,6 +2106,11 @@ and
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
+| [< '(l, Kwd "long") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
+  (match t0 with
+     ManifestTypeExpr (l, IntType) -> ManifestTypeExpr (l, UintPtrType)
+   | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
 | [< '(l, Kwd "bool") >] -> ManifestTypeExpr (l, Bool)
@@ -2126,7 +2132,7 @@ and
 and
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
-| [<'(l, Kwd "[");'(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
+| [< '(l, Kwd "["); '(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
 | [< >] -> t0
 and
 (* parse function parameters: *)
@@ -3332,12 +3338,14 @@ let verify_program_core (* ?verify_program_core *)
   let int_zero_term = ctxt#mk_intlit 0 in  
   let min_int_big_int = big_int_of_string "-2147483648" in
   let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let min_uint_term = ctxt#mk_intlit_of_string "0" in
   let min_short = big_int_of_string "-32768" in
   let max_short = big_int_of_string "32767" in
   let min_short_term = ctxt#mk_intlit_of_string "-32768" in
   let max_short_term = ctxt#mk_intlit_of_string "32767" in
   let max_int_big_int = big_int_of_string "2147483647" in
   let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
+  let max_uint_term = ctxt#mk_intlit_of_string "4294967295" in
   let max_ptr_big_int = big_int_of_string "4294967295" in
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
   let min_char_big_int = big_int_of_string "-128" in
@@ -4190,18 +4198,20 @@ let verify_program_core (* ?verify_program_core *)
     | (Char, IntType) -> ()
     | (ShortType, IntType) -> ()
     | (Char, ShortType) -> ()
+    | (IntType, UintPtrType) -> () (*TODO: Probably unsound. *)
+    | (UintPtrType, IntType) -> () (*TODO: Probably unsound. *)
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount), PredType ([], ts0, inputParamCount0)) ->
       begin
         match zip ts ts0 with
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
-        | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+        | _ -> static_error l (msg ^ "E0: Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
     | (InductiveType _, AnyType) -> ()
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify t t0 then () else static_error l (msg ^ "E1: Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   in
   
   let expect_type l t t0 = expect_type_core l "" t t0 in
@@ -5013,7 +5023,7 @@ let verify_program_core (* ?verify_program_core *)
     in
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
-        (w1, w2, (Char | ShortType | IntType | RealType | PtrType _)) as result -> result
+        (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _)) as result -> result
       | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected." None
     in
     let check_pure_fun_value_call l w t es =
@@ -5207,7 +5217,7 @@ let verify_program_core (* ?verify_program_core *)
             ts:=Some [t1; IntType];
             (Operation (l, operator, [w1; w2], ts), t1)
           end
-        | IntType | RealType | ShortType | Char ->
+        | IntType | RealType | ShortType | Char | UintPtrType ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (Operation (l, operator, [w1; w2], ts), t)
         | ObjType "java.lang.String" as t when operator = Add ->
@@ -6607,7 +6617,8 @@ let verify_program_core (* ?verify_program_core *)
       begin
         match (e, t, truncating) with
           (IntLit (_, n, _), PtrType _, _) ->
-          if ass_term <> None && not (le_big_int zero_big_int n && le_big_int n max_ptr_big_int) then static_error l "Int literal is out of range." None;
+          if ass_term <> None && not (le_big_int zero_big_int n &&
+le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out of range." None;
           cont state (ctxt#mk_intlit_of_string (string_of_big_int n))
         | (e, Char, false) ->
           ev state e $. fun state t ->
@@ -6640,13 +6651,13 @@ let verify_program_core (* ?verify_program_core *)
         if ass_term <> None then
         begin
           let (min, max) =
-            match t with
+            match t with 
               IntType -> (min_int_big_int, max_int_big_int)
             | Char -> (min_char_big_int, max_char_big_int)
             | ShortType -> (min_short, max_short)
             | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
           in
-          if not (le_big_int min n && le_big_int n max) then static_error l "Int literal is out of range." None
+          if not (le_big_int min n && le_big_int n max) then static_error l "IntLit: Int literal is out of range." None
         end;
         cont state
           begin
@@ -6723,6 +6734,8 @@ let verify_program_core (* ?verify_program_core *)
             check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
           | Some [Char; Char] ->
             check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
+          | Some [UintPtrType; UintPtrType] ->
+            check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
           | _ -> static_error l "Internal error in eval." None
           end
         | Sub ->
@@ -6740,11 +6753,15 @@ let verify_program_core (* ?verify_program_core *)
             check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
           | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
             check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
+          | Some [UintPtrType; UintPtrType] ->
+            check_overflow l min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
           end
         | Mul ->
           begin match !ts with
             Some [IntType; IntType] ->
             check_overflow l min_int_term (ctxt#mk_mul v1 v2) max_int_term
+          | Some [UintPtrType; UintPtrType] ->
+            check_overflow l min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
           | Some [RealType; RealType] ->
             ctxt#mk_real_mul v1 v2
           end
