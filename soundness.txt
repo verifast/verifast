@@ -27,3 +27,4 @@ Known VeriFast unsoundnesses:
 - Java: ClassCastExceptions are currently not prevented
 - ghost variables (which can hide fields) can appear in the argument of the Java assert statement
 - Spec of List.remove: this method uses Object.equals instead of == but the spec assumes it uses ==
+- Spec of Selector.selectedKeys: states that the selected-keys set does not contain any cancelled keys. This is not true.
