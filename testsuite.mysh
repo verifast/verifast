@@ -17,6 +17,11 @@ verifast_both -disable_overflow_check threading.o barrier.c
 cd BeepDriver
 mysh < BeepKernel.mysh
 cd ..
+cd shared_boxes
+verifast -c threading.o sblock.c
+verifast_both -c threading.o sglock.c
+verifast_both -c threading.o tblock.c
+cd ..
 ifnotmac verifast stringBuffers.c sockets.o bot.c
 verifast_both -disable_overflow_check cat.c
 verifast_both char.c

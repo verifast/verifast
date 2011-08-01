@@ -14,7 +14,7 @@ struct mylock {
 box_class mylock_box(struct mylock *mylock, bool is_locked, real myf, handle owner, predicate() p) {
     invariant mylock->is_locked |-> is_locked &*& 
               0 < myf &*&
-             (is_locked ? 
+              (is_locked ? 
                   [myf]mylock->help |-> ?v 
                   : p());
 
@@ -125,7 +125,7 @@ void mylock_acquire(struct mylock *mylock)
                 mylock->is_locked = true;
                 locked = true;
             }
-            //@ assume (f > 0);
+            ////@ assume (f > 0);
             //@ if(!locked) close mylock_help_hidden(mylock, f);
         }
         /*@
