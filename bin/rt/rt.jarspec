@@ -1,5 +1,6 @@
 java.lang.javaspec
 javacard.framework.javaspec
+javacard.security.javaspec
 _list.javaspec
 _nat.javaspec
 java.util.javaspec

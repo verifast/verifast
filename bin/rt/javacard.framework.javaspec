@@ -11,6 +11,39 @@
 package javacard.framework;
 
 /*@
+	predicate OwnerPIN(OwnerPIN pin; byte tryLimit, byte maxPINSize);
+@*/
+class OwnerPIN {
+	public OwnerPIN(byte tryLimit, byte maxPINSize);
+	//@ requires true;
+	//@ ensures OwnerPIN(this, tryLimit, maxPINSize);
+
+	public void update(byte[] pin, short offset, byte length);
+	//@ requires [?f]OwnerPIN(this, _, _);
+	//@ ensures [f]OwnerPIN(this, _, _);
+	
+	public void reset();
+	//@ requires [?f]OwnerPIN(this, _, _);
+	//@ ensures [f]OwnerPIN(this, _, _);
+
+	public boolean check(byte[] pin, short offset, byte length);
+	//@ requires [?f]OwnerPIN(this, _, _) &*& [?g]array_slice(pin, 0, pin.length, _) &*& offset >= 0 &*& length >= 0 &*& offset < pin.length &*& offset + length <= pin.length;
+	//@ ensures [f]OwnerPIN(this, _, _) &*& [g]array_slice(pin, 0, pin.length, _) &*& offset >= 0 &*& length >= 0 &*& offset < pin.length &*& offset + length <= pin.length;
+
+	public byte getTriesRemaining();
+	//@ requires [?f]OwnerPIN(this, _, _);
+	//@ ensures [f]OwnerPIN(this, _, _);
+
+	public boolean isValidated();
+	//@ requires [?f]OwnerPIN(this, _, _);
+	//@ ensures [f]OwnerPIN(this, _, _);
+	
+	public void resetAndUnblock();
+	//@ requires [?f]OwnerPIN(this, _, _);
+	//@ ensures [f]OwnerPIN(this, _, _);
+}
+
+/*@
 
 fixpoint boolean is_persistent_object(Object o);
 
@@ -206,4 +239,8 @@ class ISO7816 {
     public static final short SW_WRONG_DATA = (short) 0x6A80;
     public static final short SW_WRONG_LENGTH = (short) 0x6700;
     public static final short SW_WRONG_P1P2 = (short) 0x6B00;
+}
+
+interface Shareable{
+    
 }

@@ -1,0 +1,62 @@
+package javacard.security;
+
+abstract class RandomData {
+    public static RandomData getInstance(byte algorithm);
+    //@ requires true;
+    //@ ensures result != null;
+    
+    public abstract void generateData(byte[] buffer, short offset, short length);
+    //@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& length >= 0 &*& offset + length <= buffer.length;
+    //@ ensures array_slice(buffer, 0, buffer.length, _);
+    
+    public static final byte ALG_PSEUDO_RANDOM = 1;
+    public static final byte ALG_SECURE_RANDOM = 2;
+}
+
+interface Key {
+    public void clearKey();
+    //@ requires true;
+    //@ ensures true;
+}
+
+interface PublicKey extends Key {
+
+}
+
+interface PrivateKey extends Key {
+
+}
+
+interface RSAPrivateCrtKey extends PrivateKey {
+
+}
+
+//interface RSAPublicKey extends PublicKey {
+//    public short getExponent(byte[] buffer, short offset);
+//    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
+//    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
+//
+//    public short getModulus(byte[] buffer, short offset);
+//    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
+//    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
+//}
+
+class KeyPair {
+    public PublicKey getPublic();
+    //@ requires true;
+    //@ ensures result != null;
+
+    public PrivateKey getPrivate();
+    //@ requires true;
+    //@ ensures result != null;
+
+    public KeyPair(byte algorithm, short keyLength);
+    //@ requires true;
+    //@ ensures true;
+
+    public final void genKeyPair();
+    //@ requires true;
+    //@ ensures true;
+
+    public static final byte ALG_RSA_CRT = 1; // POSSIBLY WRONG VALUE!! What is the correct value??
+}

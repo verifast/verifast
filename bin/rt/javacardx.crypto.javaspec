@@ -1,0 +1,21 @@
+package javacardx.crypto;
+
+import javacard.security.Key;
+
+abstract class Cipher {
+    public static Cipher getInstance(byte algorithm, boolean externalAccess);
+    //@ requires true;
+    //@ ensures result != null;
+    
+    public abstract void init(Key theKey, byte theMode);
+    //@ requires theKey != null;
+    //@ ensures true;
+    
+    public abstract short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset);
+    //@ requires inBuff != null &*& outBuff != null &*& inOffset >= 0 &*& inLength >= 0 &*& inOffset + inLength <= inBuff.length &*& outOffset >= 0 &*& outOffset <= outBuff.length;
+    //@ ensures true;
+
+    public static final byte ALG_RSA_NOPAD = 1; //POSSIBLY WRONG VALUE!!
+    public static final byte MODE_ENCRYPT = 1; //POSSIBLY WRONG VALUE!!
+    public static final byte MODE_DECRYPT = 2; //POSSIBLY WRONG VALUE!!
+}
