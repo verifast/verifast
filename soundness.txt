@@ -9,6 +9,11 @@ Known VeriFast unsoundnesses:
 - linking correctness: prevent duplicate struct definitions and duplicate predicate definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
+- VeriFast assumes that the C compiler does not assume that the C program obeys strict aliasing rules.
+  For example, gcc -O2 assumes that a pointer-to-float does not alias a pointer-to-int, and therefore that an assignment through one of these
+  does not affect the value at the other location.
+  VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for gcc -O2.
+  However, this unsoundness does not apply to gcc -O2 -fno-strict-aliasing.
 
 Java Programs
 =============

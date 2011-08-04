@@ -11,6 +11,8 @@ let mk_dstate, gt_dstate = DynType.create_ctor ()
 let mk_pstate state = PluginState (mk_dstate state)
 let gt_pstate (PluginState dstate) = gt (gt_dstate dstate)
 
+let (>>) f g x = g (f x)
+
 let typecheck_assertion tenv text =
   try
     mk_ptasn (int_of_string text), []
@@ -25,8 +27,7 @@ let create_instance ctxt =
       fun pstate env ptasn cont ->
       cont (mk_pstate (gt_pstate pstate + gt_ptasn ptasn)) env
     method consume_assertion: 'a. plugin_state -> 'term environment -> typechecked_plugin_assertion -> (plugin_state -> 'term environment -> 'a) -> 'a =
-      fun pstate env ptasn cont ->
-      let state, tasn = gt_pstate pstate, gt_ptasn ptasn in
+      gt_pstate >> fun state env -> gt_ptasn >> fun tasn cont ->
       if state < tasn then raise (PluginConsumeError (0, 1, "Insufficient trivial resource"));
       cont (mk_pstate (state - tasn)) env
     method string_of_state pstate = string_of_int (gt_pstate pstate)
