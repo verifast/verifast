@@ -7,4 +7,4 @@ verify:
 	verifast -c -allow_should_fail plugin.c
 
 clean:
-	rm *.cmi *.cmx *.o *.cmxs
+	-rm *.cmi *.cmx *.o *.cmxs
