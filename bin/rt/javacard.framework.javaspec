@@ -28,7 +28,7 @@ class CardRuntimeException extends RuntimeException {
 class APDUException extends CardRuntimeException {
 }
 
-class SecurityException {
+class SecurityException extends RuntimeException {
 }
 
 class SystemException extends CardRuntimeException {
@@ -129,21 +129,27 @@ class OPSystem {
 class AID {
 }
 
+//@ predicate in_transaction(Applet a, list<Applet> l);
+
+//@ predicate applet_valid(Applet a) = a.valid();
+
 class JCSystem {
     public static AID lookupAID(byte[] buffer, short offset, byte length);
         //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
         //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
     
     public static void beginTransaction();
-        //@ requires current_applet(?applet);
-        //@ ensures current_applet(applet) &*& [1/2]applet.valid();
+        //@ requires current_applet(?a);
+	//@ ensures in_transaction(a, ?l) &*& [1/2]a.valid() &*& foreach( remove(a, l), applet_valid);
+
+        // ensures current_applet(applet) &*& [1/2]applet.valid();
     
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
     //       In process(), set b = false, then commit, then throw an exception. Next time you enter process(), you have [1]y |-> _ outside a transaction.
     public static void commitTransaction();
-        //@ requires current_applet(?applet) &*& applet.valid();
-        //@ ensures current_applet(applet) &*& [1/2]applet.valid();
+        //@ requires in_transaction(?a, ?l) &*& a.valid() &*& foreach( remove(a, l), applet_valid);
+        //@ ensures current_applet(a) &*& [1/2]a.valid();
 }
 
 class Util {
