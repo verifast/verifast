@@ -64,7 +64,11 @@ build: env \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
        ../bin/arrays.vfmanifest
 
-test: build
+test_plugin: build
+	$(SET_ENV); \
+	cd ../examples/plugin; make clean && make
+
+test: build test_plugin
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 
@@ -190,7 +194,7 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -198,7 +202,37 @@ vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx v
 linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.mli linux/caml_stopwatch.c
 	cd linux; make
 
-verifast.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx verifast.ml 
+DynType.mli: ../examples/plugin/DynType.mli
+	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
+
+DynType.cmi: DynType.mli
+	ocamlopt.opt -c DynType.mli
+
+DynType.cmx: DynType.cmi DynType.ml
+	ocamlopt.opt -c DynType.ml
+
+plugins.mli: ../examples/plugin/plugins.mli
+	cat generated_file_warning.txt ../examples/plugin/plugins.mli > plugins.mli
+
+plugins.cmi: DynType.cmi plugins.mli
+	ocamlopt.opt -c plugins.mli
+
+plugins.cmx: DynType.cmx plugins.cmi plugins.ml
+	ocamlopt.opt -c plugins.ml
+
+plugins_private.cmx: plugins.cmx plugins_private.ml
+	ocamlopt.opt -c plugins_private.ml
+
+plugins2.mli: ../examples/plugin/plugins2.mli
+	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
+
+plugins2.cmi: plugins.cmi plugins2.mli
+	ocamlopt.opt -c plugins2.mli
+
+plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
+	ocamlopt.opt -c plugins2.ml
+
+verifast.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx verifast.ml 
 	ocamlopt.opt -warn-error F -pp camlp4o -c -I ./linux Perf.cmxa proverapi.cmx verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
@@ -241,7 +275,7 @@ SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SEx
 	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
 
 ../bin/verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
