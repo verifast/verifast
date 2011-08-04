@@ -908,6 +908,7 @@ type type_ = (* ?type_ *)
   | ClassOrInterfaceName of string (* not a real type; used only during type checking *)
   | PackageName of string (* not a real type; used only during type checking *)
   | RefType of type_ (* not a real type; used only for locals whose address is taken *)
+  | PluginInternalType of DynType.dyn
 
 type prover_type = ProverInt | ProverBool | ProverReal | ProverInductive (* ?prover_type *)
 
@@ -1254,6 +1255,8 @@ and
       loc *
       pat *
       pred
+  | PluginPred of loc * string
+  | WPluginPred of loc * string list * Plugins.typechecked_plugin_assertion
 and
   switch_pred_clause = (* ?switch_pred_clause *)
   | SwitchPredClause of
@@ -1383,6 +1386,7 @@ and
   | EnumDecl of loc * string * (string * expr option) list
   | Global of loc * type_expr * string * (expr option)
   | UnloadableModuleDecl of loc
+  | LoadPluginDecl of loc * loc * string
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
@@ -1528,6 +1532,8 @@ let pred_loc p =
   | SwitchPred (l, e, spcs) -> l
   | EmpPred l -> l
   | CoefPred (l, coef, body) -> l
+  | PluginPred (l, asn) -> l
+  | WPluginPred (l, xs, asn) -> l
   
 let stmt_loc s =
   match s with
@@ -1653,7 +1659,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"
+  "unloadable_module"; "decreases"; "load_plugin"
 ]
 
 let c_keywords = [
@@ -2032,6 +2038,7 @@ and
        (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >] ->
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
+  | [< '(l, Kwd "load_plugin"); '(lx, Ident x); '(_, Kwd ";") >] -> [LoadPluginDecl (l, lx, x)]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
@@ -2426,6 +2433,7 @@ and
 | [< '(l, Kwd "emp") >] -> EmpPred l
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefPred (l, coef, p)
+| [< '(_, Kwd "#"); '(l, String s) >] -> PluginPred (l, s)
 | [< e = parse_disj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> Access (l, e, rhs)
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfPred (l, e, p1, p2)
@@ -2996,13 +3004,16 @@ let printff format = kfprintf (fun _ -> flush stdout) stdout format
 (** Internal pattern. Either a pattern from the source code, or a term pattern. A term pattern (TermPat t) matches a term t' if t and t' are definitely_equal. *)
 type 'termnode pat0 = SrcPat of pat | TermPat of 'termnode
 (** A heap chunk. *)
+type chunk_info =
+  PredicateChunkSize of int (* Size of this chunk with respect to the first chunk of the precondition; used to check lemma termination. *)
+| PluginChunkInfo of Plugins.plugin_state
 type 'termnode chunk =
   Chunk of
     ('termnode (* Predicate name *) * bool (* true if a declared predicate's symbol; false in a scenario where predicate names are passed as values. Used to avoid prover queries. *) ) *
     type_ list *  (* Type arguments *)
     'termnode *  (* Coefficient of fractional permission *)
     'termnode list *  (* Arguments; their prover type is as per the instantiated parameter types, not the generic ones. *)
-    int option  (* Size of this chunk with respect to the first chunk of the precondition; used to check lemma termination. *)
+    chunk_info option
 type 'termnode heap = 'termnode chunk list
 type 'termnode env = (string * 'termnode) list
 (** Execution trace. For error reporting. *)
@@ -3386,6 +3397,14 @@ let verify_program_core (* ?verify_program_core *)
   
   let real_unit_pat = TermPat real_unit in
   
+  let plugin_context = object
+    method mk_symbol x tp = get_unique_var_symb x (match tp with Plugins.PointerTerm -> PtrType Void | Plugins.IntTerm -> IntType | Plugins.CharListTerm -> InductiveType ("list", [IntType]))
+    method query_formula t1 r t2 = ctxt#query (match r with Plugins.Eq -> ctxt#mk_eq t1 t2 | Plugins.Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) | Plugins.Lt -> ctxt#mk_lt t1 t2)
+    method push = ctxt#push
+    method assert_formula t1 r t2 = ctxt#assume (match r with Plugins.Eq -> ctxt#mk_eq t1 t2 | Plugins.Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) | Plugins.Lt -> ctxt#mk_lt t1 t2) = Unsat
+    method pop = ctxt#pop
+  end in
+  
   let current_module_name =
     match language with
       | Java -> "current_module"
@@ -3488,7 +3507,7 @@ let verify_program_core (* ?verify_program_core *)
         false if the file being checked specifies the module being verified
     *)
   let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
-  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0) =
+  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0, pluginmap0) =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
@@ -3502,8 +3521,8 @@ let verify_program_core (* ?verify_program_core *)
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms)
-      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0)
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
@@ -3523,7 +3542,9 @@ let verify_program_core (* ?verify_program_core *)
        append_nodups classmap classmap0 id l "class",
        append_nodups interfmap interfmap0 id l "interface",
        classterms @ classterms0, 
-       interfaceterms @ interfaceterms0)
+       interfaceterms @ interfaceterms0,
+       if pluginmap0 <> [] && pluginmap <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None else
+       append_nodups pluginmap pluginmap0 id l "plugin")
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
@@ -3604,7 +3625,7 @@ let verify_program_core (* ?verify_program_core *)
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -3635,6 +3656,26 @@ let verify_program_core (* ?verify_program_core *)
   in
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
+  
+  let pluginmap1 =
+    ps |> List.fold_left begin fun pluginmap1 (PackageDecl (l, pn, ilist, ds)) ->
+      ds |> List.fold_left begin fun pluginmap1 decl ->
+        match decl with
+          LoadPluginDecl (l, lx, x) ->
+          if pluginmap0 <> [] || pluginmap1 <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None;
+          begin try
+            let p = Plugins_private.load_plugin (Filename.concat basedir (x ^ "_verifast_plugin")) in
+            let x = full_name pn x in
+            (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None))))::pluginmap1
+          with
+            Plugins_private.LoadPluginError msg -> static_error l ("Could not load plugin: " ^ msg) None
+          end
+        | _ -> pluginmap1
+      end pluginmap1
+    end []
+  in
+  
+  let pluginmap = pluginmap1 @ pluginmap0 in
   
   let unloadable =
     match language with
@@ -6076,6 +6117,33 @@ let verify_program_core (* ?verify_program_core *)
       let (wcoef, tenv') = check_pat_core (pn,ilist) l tparams tenv RealType coef in
       let (wbody, tenv, infTps) = check_pred (pn,ilist) tparams tenv body in
       (CoefPred (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
+    | PluginPred (l, text) ->
+      match pluginmap with
+        [] -> static_error l "Load a plugin before using a plugin assertion" None
+      | [_, ((plugin, _), _)] ->
+        let to_plugin_type t =
+          match t with
+            PtrType (StructType sn) -> Plugins.StructPointerType sn
+          | PluginInternalType t -> Plugins.PluginInternalType t
+          | _ -> Plugins.VeriFastInternalType
+        in
+        let from_plugin_type t =
+          match t with
+            Plugins.StructPointerType sn -> PtrType (StructType sn)
+          | Plugins.VeriFastInternalType -> failwith "plugin_typecheck_assertion must not create binding with type VeriFastInternalType"
+          | Plugins.PluginInternalType t -> PluginInternalType t
+        in        
+        let plugin_tenv = List.map (fun (x, t) -> (x, to_plugin_type t)) tenv in
+        begin try
+          let (w, plugin_bindings) = plugin#typecheck_assertion plugin_tenv text in
+          let bindings = List.map (fun (x, t) -> (x, from_plugin_type t)) plugin_bindings in
+          (WPluginPred (l, List.map fst bindings, w), bindings @ tenv, [])
+        with
+          Plugins.PluginStaticError (off, len, msg) ->
+          let ((path, line, col), _) = l in
+          let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in (* TODO: Suport multiline assertions *)
+          static_error l msg None
+        end
   in
   
   let rec fix_inferred_type r =
@@ -6085,11 +6153,11 @@ let verify_program_core (* ?verify_program_core *)
     | _ -> ()
   in
   
-  let fix_inferred_types rs = List.map fix_inferred_type rs in
+  let fix_inferred_types rs = List.iter fix_inferred_type rs in
   
   let check_pred (pn,ilist) tparams tenv p =
     let (wpred, tenv, infTypes) = check_pred_core (pn,ilist) tparams tenv p in
-    ignore $. fix_inferred_types infTypes;
+    fix_inferred_types infTypes;
     (wpred, tenv)
   in
   
@@ -6487,7 +6555,7 @@ let verify_program_core (* ?verify_program_core *)
     mk_app append_symb [l1; l2]
   in
   
-  let contextStack = ref ([]: 'termnode context list) in
+  let contextStack = ref [] in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
   let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
@@ -6532,7 +6600,11 @@ let verify_program_core (* ?verify_program_core *)
        | Executing (h, env, l, msg) ->
          let h' =
            List.map
-             begin fun (Chunk ((g, literal), targs, coef, ts, size)) ->
+             begin function
+               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) ->
+               let [_, ((_, plugin), _)] = pluginmap in
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None)
+             | (Chunk ((g, literal), targs, coef, ts, size)) ->
                Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
              end
              h
@@ -7286,6 +7358,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | CoefPred (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
       assume_pred_core tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
+    | WPluginPred (l, xs, wasn) ->
+      let [_, ((_, plugin), symb)] = pluginmap in
+      let (pluginState, h) =
+        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
+          None -> (plugin#empty_state, h)
+        | Some (s, h) -> (s, h)
+      in
+      plugin#produce_assertion pluginState env wasn $. fun pluginState env ->
+      cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   in
   let assume_pred tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
@@ -7735,6 +7816,20 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | CoefPred (l, coefpat, WAccess (_, e, tp, rhs)) -> access l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefPred (l, coefpat, WCallPred (_, g, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     | CoefPred (l, coefpat, WInstCallPred (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
+    | WPluginPred (l, xs, wasn) ->
+      let [_, ((_, plugin), symb)] = pluginmap in
+      let (pluginState, h) =
+        match extract (function Chunk ((p, true), _, _, _, Some (PluginChunkInfo info)) when p == symb -> Some info | _ -> None) h with
+          None -> (plugin#empty_state, h)
+        | Some (s, h) -> (s, h)
+      in
+      try 
+        plugin#consume_assertion pluginState env wasn $. fun pluginState env ->
+        cont [] (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env env' None
+      with Plugins.PluginConsumeError (off, len, msg) ->
+        let ((path, line, col), _) = l in
+        let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in
+        assert_false h env l msg None
     )
   in
   
@@ -8343,6 +8438,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
     with_context (Executing (h, env, l, "Leak check.")) $. fun () ->
     let h = List.filter (function (Chunk(name, targs, frac, args, _)) when is_empty_chunk name targs frac args -> false | _ -> true) h in
+    let check_plugin_state h env l symb state =
+      let [_, ((_, plugin), _)] = pluginmap in
+      match plugin#check_leaks state with
+        None -> ()
+      | Some msg -> assert_false h env l msg None
+    in
+    let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l
   in
@@ -9312,7 +9414,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                         None ->
                           begin
                             match chunk_size with
-                              Some k when k < 0 -> ()
+                              Some (PredicateChunkSize k) when k < 0 -> ()
                             | _ ->
                               with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
                               assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
@@ -10363,7 +10465,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             (let Some bs = zip ps ts in bs)
         in
         let env' = env0 @ env' in
-        let body_size = match chunk_size with None -> None | Some k -> Some (k - 1) in
+        let body_size = match chunk_size with Some (PredicateChunkSize k) -> Some (PredicateChunkSize (k - 1)) | _ -> None in
         with_context PushSubcontext (fun () ->
           assume_pred tpenv (pn,ilist) h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
@@ -11518,7 +11620,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
       check_should_fail () $. fun _ ->
-      assume_pred [] (pn, ilist) [] ghostenv env pre real_unit (Some 0) None (fun h ghostenv env ->
+      assume_pred [] (pn, ilist) [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env ->
         let (prolog, ss) =
           if in_pure_context then
             ([], ss)
@@ -11632,7 +11734,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
         let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
         begin
-          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
+          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
@@ -11735,7 +11837,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
           let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
-          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit (Some 0) None $. fun h ghostenv env ->
+          assume_pred [] (pn,ilist) [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let do_return h env_post =
             assert_pred rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
@@ -11883,7 +11985,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   verify_funcs' [] lems0 ps;
   
-  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1))
+  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
   
   in (* let rec check_file *)
   
