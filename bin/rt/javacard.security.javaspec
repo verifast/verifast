@@ -31,15 +31,15 @@ interface RSAPrivateCrtKey extends PrivateKey {
 
 }
 
-//interface RSAPublicKey extends PublicKey {
-//    public short getExponent(byte[] buffer, short offset);
-//    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
-//    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
-//
-//    public short getModulus(byte[] buffer, short offset);
-//    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
-//    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
-//}
+interface RSAPublicKey extends PublicKey {
+    public short getExponent(byte[] buffer, short offset);
+    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
+    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
+
+    public short getModulus(byte[] buffer, short offset);
+    //@ requires buffer != null &*& [?f]array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length;
+    //@ ensures [f]array_slice(buffer, 0, buffer.length, _);
+}
 
 class KeyPair {
     public PublicKey getPublic();

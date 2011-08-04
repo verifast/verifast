@@ -8770,31 +8770,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       interfmap1
   in
   
-  let interfmap2=
-    let rec iter map0 map1=
-      match map0 with
-        [] -> map1
-      | (i, (l0,meths0,preds0,interfs0, pn0,ilist0)) as elem::rest->
-        match try_assoc i map1 with
-          None -> iter rest (elem::map1)
-        | Some (l1,meths1,preds1,interfs1, pn1,ilist1) ->
-          let match_meths meths0 meths1=
-            let rec iter meths0 meths1=
-              match meths0 with
-                [] -> meths1
-              | (sign, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,v0,abstract0)) as elem::rest ->
-                match try_assoc sign meths1 with
-                  None-> iter rest (elem::meths1)
-                | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) -> 
-                  check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
-                  iter rest meths1
-            in
-            iter meths0 meths1
-          in
-          let meths'= match_meths meths0 meths1 in
-          iter rest ((i,(l1,meths',preds1,interfs1,pn1,ilist1))::map1)
-    in
-    iter interfmap0 interfmap1
+  let string_of_sign (mn, ts) =
+    Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
+  in
+  
+  let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
+    interfmap1 |> List.iter begin function (i, (l1,meths1,preds1,interfs1, pn1,ilist1)) ->
+      match try_assoc i interfmap0 with
+      | None -> ()
+      | Some (l0,meths0,preds0,interfs0, pn0,ilist0) ->
+        let rec match_meths meths0 meths1=
+          match meths0 with
+            [] -> if meths1 <> [] then static_error l1 ".java file does not correctly implement .javaspec file: interface declares more methods" None
+          | (sign, (lm0,gh0,rt0,xmap0,pre0,pre_tenv0,post0,epost0,v0,abstract0))::meths0 ->
+            match try_assoc sign meths1 with
+              None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
+            | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) ->
+              check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
+              match_meths meths0 (List.remove_assoc sign meths1)
+        in
+        match_meths meths0 meths1
+    end
   in
   
   let interfmap = (* checks overriding methods in interfaces *)
@@ -8831,11 +8827,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         ) meths;
         iter rest (elem :: map1)
     in
-    iter interfmap2 []
-  in
-  
-  let string_of_sign (mn, ts) =
-    Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
+    iter interfmap1 interfmap0
   in
   
   let rec dynamic_of asn =
