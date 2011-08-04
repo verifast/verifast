@@ -115,6 +115,12 @@ cd Iterator
 verifast_both -c it.jarsrc
 verifast_both -c prog.jarsrc
 cd ..
+cd Java Card
+verifast_both -c JavaCard.java
+verifast_both -c Echo.java
+verifast_both -c Store.java
+verifast_both -c Addressbook.java
+cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java
 verifast_both -c -disable_overflow_check ArraysAuto.java
@@ -130,7 +136,6 @@ verifast_both -c hello.scala
 verifast_both -c -disable_overflow_check InstanceOf.java
 verifast_both -c InterfaceLemmas.java
 verifast_both -c Iterator.java
-verifast_both -c JavaCard.java
 verifast_both -c -disable_overflow_check LemmaPointer.java
 verifast_both -allow_assume -disable_overflow_check -c map.java
 verifast_both -c -disable_overflow_check NestedExprTest.java

@@ -141,8 +141,6 @@ class JCSystem {
     public static void beginTransaction();
         //@ requires current_applet(?a);
 	//@ ensures in_transaction(a, ?l) &*& [1/2]a.valid() &*& foreach( remove(a, l), applet_valid);
-
-        // ensures current_applet(applet) &*& [1/2]applet.valid();
     
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
