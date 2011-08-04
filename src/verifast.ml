@@ -888,9 +888,11 @@ type type_ = (* ?type_ *)
     Bool
   | Void
   | IntType
+  | UShortType
   | ShortType
   | UintPtrType  (* The uintptr_t type from the C99 standard. It's an integer type big enough to hold a pointer value. *)
   | RealType
+  | UChar
   | Char
   | StructType of string
   | PtrType of type_
@@ -1665,7 +1667,8 @@ let ghost_keywords = [
 let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
-  "UINTPTR_MAX"; "enum"; "static"; "unsigned"; "long"
+  "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
+  "volatile"; "register"
 ]
 
 let java_keywords = [
@@ -2109,14 +2112,24 @@ and
   [< t0 = parse_primary_type; t = parse_type_suffix t0 >] -> t
 and
   parse_primary_type = parser
-  [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
+  [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
+| [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
+| [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "int") >] -> ManifestTypeExpr (l, IntType)
 | [< '(l, Kwd "short") >] -> ManifestTypeExpr(l, ShortType)
 | [< '(l, Kwd "long") >] -> ManifestTypeExpr (l, IntType)
+| [< '(l, Kwd "signed"); t0 = parse_primary_type >] ->
+  (match t0 with
+     ManifestTypeExpr (_, IntType) -> t0
+   | ManifestTypeExpr (_, ShortType) -> t0
+   | ManifestTypeExpr (_, Char) -> t0
+   | _ -> raise (ParseException (l, "This type cannot be signed.")))
 | [< '(l, Kwd "unsigned"); t0 = parse_primary_type >] ->
   (match t0 with
      ManifestTypeExpr (l, IntType) -> ManifestTypeExpr (l, UintPtrType)
+   | ManifestTypeExpr (l, ShortType) -> ManifestTypeExpr (l, UShortType)
+   | ManifestTypeExpr (l, Char) -> ManifestTypeExpr (l, UChar)
    | _ -> raise (ParseException (l, "This type cannot be unsigned.")))
 | [< '(l, Kwd "uintptr_t") >] -> ManifestTypeExpr (l, UintPtrType)
 | [< '(l, Kwd "real") >] -> ManifestTypeExpr (l, RealType)
@@ -3042,9 +3055,11 @@ let rec string_of_type t =
     Bool -> "bool"
   | Void -> "void"
   | IntType -> "int"
+  | UShortType -> "ushort"
   | ShortType -> "short"
   | UintPtrType -> "uintptr_t"
   | RealType -> "real"
+  | UChar -> "uint8"
   | Char -> "int8"
   | InductiveType (i, []) -> i
   | InductiveType (i, targs) -> i ^ "<" ^ String.concat ", " (List.map string_of_type targs) ^ ">"
@@ -3297,9 +3312,11 @@ let verify_program_core (* ?verify_program_core *)
     match t with
       Bool -> ProverBool
     | IntType -> ProverInt
+    | UShortType -> ProverInt
     | ShortType -> ProverInt
     | UintPtrType -> ProverInt
     | RealType -> ProverReal
+    | UChar -> ProverInt
     | Char -> ProverInt
     | InductiveType _ -> ProverInductive
     | StructType sn -> assert false
@@ -3346,19 +3363,40 @@ let verify_program_core (* ?verify_program_core *)
   let real_unit = ctxt#mk_reallit 1 in
   let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
 
-  let int_zero_term = ctxt#mk_intlit 0 in  
-  let min_int_big_int = big_int_of_string "-2147483648" in
-  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let int_zero_term = ctxt#mk_intlit 0 in 
+
+  (* unsigned int & pointer types *)
   let min_uint_term = ctxt#mk_intlit_of_string "0" in
-  let min_short = big_int_of_string "-32768" in
-  let max_short = big_int_of_string "32767" in
-  let min_short_term = ctxt#mk_intlit_of_string "-32768" in
-  let max_short_term = ctxt#mk_intlit_of_string "32767" in
-  let max_int_big_int = big_int_of_string "2147483647" in
-  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
   let max_uint_term = ctxt#mk_intlit_of_string "4294967295" in
+  let min_ptr_big_int = big_int_of_string "0" in
   let max_ptr_big_int = big_int_of_string "4294967295" in
   let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
+
+  (* signed int *)
+  let min_int_big_int = big_int_of_string "-2147483648" in
+  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
+  let max_int_big_int = big_int_of_string "2147483647" in
+  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
+
+  (* unsigned short *)
+  let min_ushort_big_int = big_int_of_string "0" in
+  let min_ushort_term = ctxt#mk_intlit_of_string "0" in
+  let max_ushort_big_int = big_int_of_string "65535" in
+  let max_ushort_term = ctxt#mk_intlit_of_string "65535" in
+
+  (* signed short *)
+  let min_short_big_int = big_int_of_string "-32768" in
+  let min_short_term = ctxt#mk_intlit_of_string "-32768" in
+  let max_short_big_int = big_int_of_string "32767" in
+  let max_short_term = ctxt#mk_intlit_of_string "32767" in
+
+  (* unsigned char *)
+  let min_uchar_big_int = big_int_of_string "0" in
+  let min_uchar_term = ctxt#mk_intlit_of_string "0" in
+  let max_uchar_big_int = big_int_of_string "255" in
+  let max_uchar_term = ctxt#mk_intlit_of_string "255" in
+
+  (* signed char *)
   let min_char_big_int = big_int_of_string "-128" in
   let min_char_term = ctxt#mk_intlit_of_string "-128" in
   let max_char_big_int = big_int_of_string "127" in
@@ -4236,23 +4274,27 @@ let verify_program_core (* ?verify_program_core *)
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
+    | (UChar, IntType) -> ()
+    | (UChar, ShortType) -> ()
+    | (UChar, UShortType) -> ()
+    | (UChar, UintPtrType) -> ()
     | (Char, IntType) -> ()
-    | (ShortType, IntType) -> ()
     | (Char, ShortType) -> ()
-    | (IntType, UintPtrType) -> () (*TODO: Probably unsound. *)
-    | (UintPtrType, IntType) -> () (*TODO: Probably unsound. *)
+    | (UShortType, IntType) -> ()
+    | (UShortType, UintPtrType) -> ()
+    | (ShortType, IntType) -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount), PredType ([], ts0, inputParamCount0)) ->
       begin
         match zip ts ts0 with
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
-        | _ -> static_error l (msg ^ "E0: Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+        | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
     | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
     | (InductiveType _, AnyType) -> ()
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg) args1 args2
-    | _ -> if unify t t0 then () else static_error l (msg ^ "E1: Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
+    | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   in
   
   let expect_type l t t0 = expect_type_core l "" t t0 in
@@ -5544,9 +5586,19 @@ let verify_program_core (* ?verify_program_core *)
       (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
     | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
+    | (IntLit (l, n, t), UChar) ->
+      t:=Some UChar;
+      if not (le_big_int min_uchar_big_int n && le_big_int n max_uchar_big_int) then
+        if isCast then
+          let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
+          IntLit (l, big_int_of_int n, t)
+        else
+          static_error l "Integer literal used as uchar must be between 0 and 255." None
+      else
+        e
     | (IntLit (l, n, t), Char) ->
       t:=Some Char;
-      if not (le_big_int (big_int_of_int (-128)) n && le_big_int n (big_int_of_int 127)) then
+      if not (le_big_int min_char_big_int n && le_big_int n max_char_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 256)) in
           let n = if 128 <= n then n - 256 else n in
@@ -5555,9 +5607,19 @@ let verify_program_core (* ?verify_program_core *)
           static_error l "Integer literal used as char must be between -128 and 127." None
       else
         e
+    | (IntLit (l, n, t), UShortType) ->
+      t:=Some UShortType;
+      if not (le_big_int min_ushort_big_int n && le_big_int n max_ushort_big_int) then
+        if isCast then
+          let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
+          IntLit (l, big_int_of_int n, t)
+        else
+          static_error l "Integer literal used as ushort must be between 0 and 65535." None
+      else
+        e
     | (IntLit (l, n, t), ShortType) ->
       t:=Some ShortType;
-      if not (le_big_int (big_int_of_int (-32768)) n && le_big_int n (big_int_of_int 32767)) then
+      if not (le_big_int min_short_big_int n && le_big_int n max_short_big_int) then
         if isCast then
           let n = int_of_big_int (mod_big_int n (big_int_of_int 65536)) in
           let n = if 32768 <= n then n - 65536 else n in
@@ -5566,15 +5628,39 @@ let verify_program_core (* ?verify_program_core *)
           static_error l "Integer literal used as short must be between -32768 and 32767." None
       else
         e
-    | _ ->
+    | (IntLit (l, n, t), UintPtrType) ->
+      t:=Some UintPtrType;
+      if not (le_big_int min_ptr_big_int n && le_big_int n max_ptr_big_int) then
+        if isCast then
+          let n = int_of_big_int (mod_big_int n (big_int_of_string "4294967296")) in
+          IntLit (l, big_int_of_int n, t)
+        else
+          static_error l "Integer literal used as ushort must be between 0 and 65535." None
+      else
+        e    | _ ->
       let (w, t) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
       match (t, t0) with
         (ObjType _, ObjType _) when isCast -> w
       | (PtrType _, UintPtrType) when isCast -> w
       | (UintPtrType, PtrType _) when isCast -> w
       | (IntType, Char) when isCast -> w
+      | (IntType, UChar) when isCast -> w
       | (IntType, ShortType) when isCast -> w
+      | (IntType, UShortType) when isCast -> w
+      | (IntType, UintPtrType) when isCast -> w
+      | (UintPtrType, Char) when isCast -> w
+      | (UintPtrType, UChar) when isCast -> w
+      | (UintPtrType, ShortType) when isCast -> w
+      | (UintPtrType, UShortType) when isCast -> w
+      | (UintPtrType, IntType) when isCast -> w
+      | (ShortType, UChar) when isCast -> w
       | (ShortType, Char) when isCast -> w
+      | (ShortType, UShortType) when isCast -> w
+      | (UShortType, UChar) when isCast -> w
+      | (UShortType, Char) when isCast -> w
+      | (UShortType, ShortType) when isCast -> w
+      | (Char, UChar) when isCast -> w
+      | (UChar, Char) when isCast -> w
       | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
       | _ ->
         expect_type (expr_loc e) t t0;
@@ -6725,9 +6811,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (min, max) =
             match t with 
               IntType -> (min_int_big_int, max_int_big_int)
+            | UChar -> (min_uchar_big_int, max_uchar_big_int)
             | Char -> (min_char_big_int, max_char_big_int)
-            | ShortType -> (min_short, max_short)
-            | (UintPtrType|PtrType _) -> (zero_big_int, max_ptr_big_int)
+            | UShortType -> (min_ushort_big_int, max_ushort_big_int)
+            | ShortType -> (min_short_big_int, max_short_big_int)
+            | UintPtrType -> (zero_big_int, max_ptr_big_int)
+            | PtrType _ -> (zero_big_int, max_ptr_big_int)
           in
           if not (le_big_int min n && le_big_int n max) then static_error l "IntLit: Int literal is out of range." None
         end;
@@ -6839,12 +6928,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end
         | Le ->
           begin match !ts with
-            Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_le v1 v2
+            Some ([IntType; IntType] | [PtrType _; PtrType _] |
+                  [UintPtrType; UintPtrType]) -> ctxt#mk_le v1 v2
           | Some [RealType; RealType] -> ctxt#mk_real_le v1 v2
           end
         | Lt ->
           begin match !ts with
-            Some ([IntType; IntType] | [PtrType _; PtrType _]) -> ctxt#mk_lt v1 v2
+            Some ([IntType; IntType] | [PtrType _; PtrType _] |
+                  [UintPtrType; UintPtrType]) -> ctxt#mk_lt v1 v2
           | Some [RealType; RealType] -> ctxt#mk_real_lt v1 v2
           end
         | BitAnd | BitXor | BitOr ->
