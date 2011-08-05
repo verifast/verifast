@@ -95,6 +95,12 @@ class APDU {
     public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException /*@ ensures true; @*/, SecurityException /*@ ensures true; @*/;
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
+
+    public static byte getProtocol();
+        //@ requires true;
+        //@ ensures true;
+        
+    public static final byte PROTOCOL_T1 = 0x1; /* correct value? */
 }
 
 //@ predicate current_applet(Applet applet);
@@ -181,6 +187,12 @@ class JCSystem {
     public static void commitTransaction();
         //@ requires in_transaction(?a, ?l) &*& a.valid() &*& foreach( remove(a, l), applet_valid);
         //@ ensures current_applet(a) &*& [1/2]a.valid();
+
+    public static byte[] makeTransientByteArray(short length, byte event);
+        //@ requires true;
+        //@ ensures array_slice(?buffer, 0, length, ?elems) &*& result == buffer &*& buffer.length == length;
+
+    public static final byte CLEAR_ON_DESELECT = 0; // WRONG VALUE!!
 }
 
 class Util {
@@ -200,6 +212,14 @@ class Util {
     public static final short getShort(byte[] bArray, short bOff) throws NullPointerException /*@ ensures true; @*/, ArrayIndexOutOfBoundsException /*@ ensures true; @*/;
         //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
         //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
+
+    public static final void arrayFillNonAtomic(byte[] bArray, short bOff, short bLen, byte bValue);
+        //@ requires [?f]array_slice(bArray, bOff, bOff + bLen, _);
+        //@ ensures [f]array_slice(bArray, bOff, bOff + bLen, _);
+
+    public static final short makeShort(byte b1, byte b2);
+		//@ requires true;
+		//@ ensures true;
 }
 
 class ISO7816 {

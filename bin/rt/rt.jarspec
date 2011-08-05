@@ -1,6 +1,8 @@
 java.lang.javaspec
 javacard.framework.javaspec
 javacard.security.javaspec
+javacardx.crypto.javaspec
+org.globalplatform.javaspec
 _list.javaspec
 _nat.javaspec
 java.util.javaspec

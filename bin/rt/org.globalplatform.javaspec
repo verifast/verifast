@@ -1,0 +1,15 @@
+package org.globalplatform;
+
+public class GPSystem {
+	public static byte getCardContentState();
+	//@ requires true;
+	//@ ensures true;
+	
+	public static boolean setCardContentState(byte bState)
+	//@ requires true;
+	//@ ensures true;
+	
+	public static final byte APPLICATION_SELECTABLE = 0; /*WRONG VALUE*/
+	public static final byte CARD_SECURED = 0; /*WRONG VALUE*/
+	public static final byte CARD_LOCKED = 0; /*WRONG VALUE*/
+}
