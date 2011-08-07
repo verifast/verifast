@@ -16,7 +16,7 @@ public class Echo extends Applet {
     
     
     public static void install(byte[] bArray, short bOffset, byte bLength) 
-    //@ requires true;
+    //@ requires transient_arrays(?ta) &*& foreach(ta, transient_buffer);
     //@ ensures true;
     {
         Echo echo = new Echo();
@@ -25,8 +25,8 @@ public class Echo extends Applet {
     }
     
     public void process(APDU apdu) 
-    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu,?buffer_) &*& array_slice(buffer_,0,buffer_.length,_);
-    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu,buffer_) &*& array_slice(buffer_,0,buffer_.length,_);
+    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu,?buffer_) &*& array_slice(buffer_,0,buffer_.length,_) &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu,buffer_) &*& array_slice(buffer_,0,buffer_.length,_) &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
     {
         //retrieve the APDU buffer
 	byte[] buffer = apdu.getBuffer();

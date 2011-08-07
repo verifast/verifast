@@ -28,7 +28,8 @@ public final class MyApplet extends Applet {
             length_value_record(array, infoStart, ?appletDataStart) &*&
             array[appletDataStart] |-> ?appletDataLength &*&
             array[appletDataStart + 1] |-> ?bufferSize &*& 20 <= bufferSize &*&
-            appletDataStart + 1 <= 32767;
+            appletDataStart + 1 <= 32767 &*&
+            transient_arrays(?ta) &*& foreach(ta, transient_buffer);
         @*/
         //@ ensures true;
     {
@@ -56,8 +57,8 @@ public final class MyApplet extends Applet {
     }
     
     public boolean select()
-        //@ requires current_applet(this) &*& [1/2]valid();
-        //@ ensures current_applet(this) &*& [1/2]valid();
+        //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
     {
         // selection initialization
         JCSystem.beginTransaction();
@@ -69,8 +70,8 @@ public final class MyApplet extends Applet {
     }
     
     public void process(APDU apdu) throws ISOException /*@ ensures true; @*/
-        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
-        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
     {
         byte[] buffer = apdu.getBuffer();
         // .. process the incoming data and reply

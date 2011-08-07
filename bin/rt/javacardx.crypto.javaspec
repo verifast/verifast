@@ -15,7 +15,7 @@ abstract class Cipher {
     //@ requires inBuff != null &*& outBuff != null &*& inOffset >= 0 &*& inLength >= 0 &*& inOffset + inLength <= inBuff.length &*& outOffset >= 0 &*& outOffset <= outBuff.length;
     //@ ensures true;
 
-    public static final byte ALG_RSA_NOPAD = 1; //POSSIBLY WRONG VALUE!!
-    public static final byte MODE_ENCRYPT = 1; //POSSIBLY WRONG VALUE!!
-    public static final byte MODE_DECRYPT = 2; //POSSIBLY WRONG VALUE!!
+    public static final byte ALG_RSA_NOPAD = 12;
+    public static final byte MODE_ENCRYPT = 2;
+    public static final byte MODE_DECRYPT = 1;
 }

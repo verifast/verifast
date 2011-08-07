@@ -10,6 +10,15 @@
 
 package javacard.framework;
 
+//@ fixpoint boolean is_transient_array(byte[] o);
+
+//@ predicate transient_arrays(list<byte[]> arrays);
+
+/*@ lemma void transient_arrays_mem(byte[] a);
+     requires transient_arrays(?as) &*& is_transient_array(a) == true;
+     ensures transient_arrays(as) &*& mem(a, as) == true;
+@*/
+
 /*@
 	predicate OwnerPIN(OwnerPIN pin; byte tryLimit, byte maxPINSize);
 @*/
@@ -100,7 +109,7 @@ class APDU {
         //@ requires true;
         //@ ensures true;
         
-    public static final byte PROTOCOL_T1 = 0x1; /* correct value? */
+    public static final byte PROTOCOL_T1 = 0x1;
 }
 
 //@ predicate current_applet(Applet applet);
@@ -117,24 +126,24 @@ class Applet {
         //@ ensures true;
     
     public void register();
-        //@ requires this.valid();
+        //@ requires this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
         //@ ensures true;
     
     public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException /*@ ensures true; @*/;
-        //@ requires this.valid();
+        //@ requires this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
         //@ ensures true;
     
     public boolean select();
-        //@ requires current_applet(this) &*& [1/2]this.valid();
-        //@ ensures current_applet(this) &*& [1/2]this.valid();
+        //@ requires current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+        //@ ensures current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
     
     public void deselect();
-        //@ requires current_applet(this) &*& [1/2]this.valid();
-        //@ ensures current_applet(this) &*& [1/2]this.valid();
+        //@ requires current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+        //@ ensures current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
     
     public void process(APDU apdu);
-        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
-        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
 }
 
 class ISOException extends RuntimeException {
@@ -172,27 +181,32 @@ class AID {
 
 //@ predicate applet_valid(Applet a) = a.valid();
 
+//@ predicate transient_buffer(byte[] tb) = array_slice(tb, _, _, _);
+
 class JCSystem {
     public static AID lookupAID(byte[] buffer, short offset, byte length);
         //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
         //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
-    
+
     public static void beginTransaction();
         //@ requires current_applet(?a);
-	//@ ensures in_transaction(a, ?l) &*& [1/2]a.valid() &*& foreach( remove(a, l), applet_valid);
+		//@ ensures in_transaction(a, ?l) &*& [1/2]a.valid() &*& foreach( remove(a, l), applet_valid);
     
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
     //       In process(), set b = false, then commit, then throw an exception. Next time you enter process(), you have [1]y |-> _ outside a transaction.
     public static void commitTransaction();
-        //@ requires in_transaction(?a, ?l) &*& a.valid() &*& foreach( remove(a, l), applet_valid);
-        //@ ensures current_applet(a) &*& [1/2]a.valid();
+        /*@ requires in_transaction(?a, ?l) &*& a.valid() &*& foreach( remove(a, l), applet_valid)
+		     &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer); @*/
+        /*@ ensures current_applet(a) &*& [1/2]a.valid()
+		     &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);@*/
 
     public static byte[] makeTransientByteArray(short length, byte event);
-        //@ requires true;
-        //@ ensures array_slice(?buffer, 0, length, ?elems) &*& result == buffer &*& buffer.length == length;
+        //@ requires transient_arrays(?ta);
+        /*@ ensures array_slice(?buffer, 0, length, ?elems) &*& result == buffer &*& buffer.length == length
+		      &*& transient_arrays(?ta2) &*& ta2 == append(ta, cons(buffer, nil)); @*/
 
-    public static final byte CLEAR_ON_DESELECT = 0; // WRONG VALUE!!
+    public static final byte CLEAR_ON_DESELECT = 2;
 }
 
 class Util {
@@ -214,8 +228,8 @@ class Util {
         //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
 
     public static final void arrayFillNonAtomic(byte[] bArray, short bOff, short bLen, byte bValue);
-        //@ requires [?f]array_slice(bArray, bOff, bOff + bLen, _);
-        //@ ensures [f]array_slice(bArray, bOff, bOff + bLen, _);
+        //@ requires array_slice(bArray, bOff, bOff + bLen, _);
+        //@ ensures array_slice(bArray, bOff, bOff + bLen, _);
 
     public static final short makeShort(byte b1, byte b2);
 		//@ requires true;

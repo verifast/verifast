@@ -9,7 +9,7 @@ public class GPSystem {
 	//@ requires true;
 	//@ ensures true;
 	
-	public static final byte APPLICATION_SELECTABLE = 0; /*WRONG VALUE*/
-	public static final byte CARD_SECURED = 0; /*WRONG VALUE*/
-	public static final byte CARD_LOCKED = 0; /*WRONG VALUE*/
+	public static final byte APPLICATION_SELECTABLE = 0x7;
+	public static final byte CARD_SECURED = 0xf;
+	public static final byte CARD_LOCKED = 0x7f;
 }
