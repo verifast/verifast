@@ -6340,7 +6340,7 @@ let verify_program_core (* ?verify_program_core *)
     | WCallPred (l, g, targs, pats0, pats) ->
       begin
         match g#inputParamCount with
-          None -> static_error l "Preciseness check failure: callee is not precise." None
+          None -> static_error l "Preciseness check failure: callee is not precise." (Some "calleeisnotprecise")
         | Some n ->
           let (inpats, outpats) = take_drop n pats in
           let inpats = pats0 @ inpats in
@@ -10537,7 +10537,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | Some coefpat -> check_pat (pn,ilist) l tparams tenv RealType coefpat
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
-      let pats = pats0 @ srcpats wpats in
+      let wpats = (List.map (function (LitPat e) -> (TermPat (eval_non_pure true h env e)) | wpat -> SrcPat wpat) wpats) in
+      let pats = pats0 @ wpats in
       assert_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit (SrcPat coefpat) inputParamCount pats (fun _ h coef ts chunk_size ghostenv env [] ->
         let ts = drop dropcount ts in
         let env' =

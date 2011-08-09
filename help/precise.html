@@ -1,0 +1,31 @@
+<html>
+<head>
+<title>VeriFast Help: Precise Predicate</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Glossary</p>
+<p class="section">Term</p>
+<p>precise predicate</p>
+<p class="section">Definition</p>
+<p>A predicate is precise if the values of its input parameters fix the shape of the heap described by the predicate and the values of the output parameters.</p>
+<p class="section">Notes</p>
+<ul>
+<li>By default, predicates are not precise. To indicate a predicate is precise, place a semicolon (instead of a colon) between the input and output parameters.</li>
+<li>Instance predicates are always precise.</li>
+<li>The body of a precise predicate can only mention precise predicates.
+<li>VeriFast automatically performs certain open and close operations for precise predicates.
+</ul>
+<p class="section">Examples</p>
+<p>The predicate <tt>p</tt> shown below is precise (indicated by the semicolon between the parameters <tt>x</tt> and <tt>y</tt>). The input parameter <tt>x</tt> fixes the value of the output parameter <tt>y</tt>. </p>
+<table class="codebox_green"><tr><td>0 errors found</td></tr>
+<tr><td class="codebox_code"><pre>//@ predicate p(int x; int y) = x == y;</pre></td></tr></table>
+<p>The predicate <tt>q</tt> is not precise as the input parameter <tt>x</tt> does not fix the value of the output parameter <tt>y</tt>.</p>
+<table class="codebox_red"><tr><td>Preciseness check failure: body does not fix output parameter 'y'.</td></tr>
+<tr><td class="codebox_code"><pre>//@ predicate q(int x; int y) = x < y;</pre></td></tr></table>
+<p>The predicate <tt>my_cell</tt> is precise as the input parameter <tt>c</tt> fixes the value of the output parameter <tt>contents</tt> via the heap.</p>
+<table class="codebox_green"><tr><td>0 errors found</td></tr>
+<tr><td class="codebox_code"><pre>struct cell { int x; };
+//@ predicate my_cell(struct cell* c; int contents) = c->x |-> contents;</pre></td></tr></table>
+</body>
+</html>

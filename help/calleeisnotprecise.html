@@ -1,0 +1,24 @@
+<html>
+<head>
+<title>VeriFast error: callee is not precise</title>
+<link rel="stylesheet" type="text/css" href="verifast-help.css" />
+</head>
+<body>
+<p class="navbar">VeriFast Help > Error messages</p>
+<p class="section">Error message</p>
+<p class="error">Preciseness check failure: callee is not precise</p>
+<p class="section">Context</p>
+<p>When checking the body of a <a href="precise.html">precise</a> predicate.</p>
+<p class="section">Cause</p>
+<p>The body of a <a href="precise.html">precise</a> predicate mentions a non-precise predicate.</p>
+<p class="section">Notes</p>
+<ul>
+</ul>
+<p class="section">Suggested solutions</p>
+<p>Suggested approaches:</p>
+<ul>
+<li>Change the callee to a precise predicate by placing a semicolon at the end of its parameters list.</li>
+<li>Change the predicate itself to a non-precise predicate by replacing the semicolon in the parameter list with a colon. Note that instance predicates are always precise and hence this solution does not apply to instance predicates.</li>
+</ul>
+</body>
+<html>
