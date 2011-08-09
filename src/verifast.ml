@@ -5154,7 +5154,8 @@ let verify_program_core (* ?verify_program_core *)
         | Some (ClassOrInterfaceName cn) ->
           match lookup_class_field cn x with
             None -> None
-          | Some ((lf, t, vis, binding, final, init, value), fclass) when binding = Static ->
+          | Some ((lf, t, vis, binding, final, init, value), fclass) ->
+            if binding <> Static then static_error l "Instance field access without target object" None;
             Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t)
       in
       match field_of_class with
