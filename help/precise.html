@@ -8,19 +8,27 @@
 <p class="section">Term</p>
 <p>precise predicate</p>
 <p class="section">Definition</p>
-<p>A predicate is precise if the values of its input parameters fix the shape of the heap described by the predicate and the values of the output parameters.</p>
+<p>
+VeriFast considers a predicate to be precise if one of the following conditions holds:
+<ul>
+<li>The parameter list contains a semicolon (instead of a comma) separating the input from the output parameters.
+<li>The predicate is an instance predicate. The only input parameter is the target variable <tt>this</tt>; all other parameters are output parameters.
+</ul>
+If a predicate is declared precise, VeriFast syntactically checks that the values of its input parameters fix the shape of the heap described by the predicate's body and the values of the output parameters.
+</p>
 <p class="section">Notes</p>
 <ul>
-<li>By default, predicates are not precise. To indicate a predicate is precise, place a semicolon (instead of a colon) between the input and output parameters.</li>
-<li>Instance predicates are always precise.</li>
 <li>The body of a precise predicate can only mention precise predicates.
 <li>VeriFast automatically performs certain open and close operations for precise predicates.
+<li>VeriFast automatically merges fractional chunks of precise predicates. That is, suppose <tt>p</tt> is a precise predicate with input parameters <tt>x1, ..., xn</tt> and output parameters <tt>y1, ..., ym</tt>. If the heap contains
+the chunks <tt>[f]p(i1, ..., in, o1, ..., om)</tt> and <tt>[g]p(i'1, ..., i'n, o'1, ..., o'm)</tt></li>, then VeriFast merges these chunks into a single chunk
+<tt>[f + g]p(i1, ..., in, o1, ..., om)</tt> provided <tt>i1 == i'1 && ... && in == i'n</tt>.
 </ul>
 <p class="section">Examples</p>
 <p>The predicate <tt>p</tt> shown below is precise (indicated by the semicolon between the parameters <tt>x</tt> and <tt>y</tt>). The input parameter <tt>x</tt> fixes the value of the output parameter <tt>y</tt>. </p>
 <table class="codebox_green"><tr><td>0 errors found</td></tr>
 <tr><td class="codebox_code"><pre>//@ predicate p(int x; int y) = x == y;</pre></td></tr></table>
-<p>The predicate <tt>q</tt> is not precise as the input parameter <tt>x</tt> does not fix the value of the output parameter <tt>y</tt>.</p>
+<p>The predicate <tt>q</tt> is declared precise, but fails the preciseness check as <tt>x</tt> does not fix the value of the output parameter <tt>y</tt>.</p>
 <table class="codebox_red"><tr><td>Preciseness check failure: body does not fix output parameter 'y'.</td></tr>
 <tr><td class="codebox_code"><pre>//@ predicate q(int x; int y) = x < y;</pre></td></tr></table>
 <p>The predicate <tt>my_cell</tt> is precise as the input parameter <tt>c</tt> fixes the value of the output parameter <tt>contents</tt> via the heap.</p>
