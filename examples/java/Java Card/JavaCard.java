@@ -29,7 +29,7 @@ public final class MyApplet extends Applet {
             array[appletDataStart] |-> ?appletDataLength &*&
             array[appletDataStart + 1] |-> ?bufferSize &*& 20 <= bufferSize &*&
             appletDataStart + 1 <= 32767 &*&
-            transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+            transient_arrays(?ta) &*& foreach(ta, transient_array);
         @*/
         //@ ensures true;
     {
@@ -57,8 +57,8 @@ public final class MyApplet extends Applet {
     }
     
     public boolean select()
-        //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-        //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         // selection initialization
         JCSystem.beginTransaction();
@@ -70,8 +70,8 @@ public final class MyApplet extends Applet {
     }
     
     public void process(APDU apdu) throws ISOException /*@ ensures true; @*/
-        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] buffer = apdu.getBuffer();
         // .. process the incoming data and reply

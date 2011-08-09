@@ -12,8 +12,8 @@ abstract class Cipher {
     //@ ensures true;
     
     public abstract short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset);
-    //@ requires inBuff != null &*& outBuff != null &*& inOffset >= 0 &*& inLength >= 0 &*& inOffset + inLength <= inBuff.length &*& outOffset >= 0 &*& outOffset <= outBuff.length;
-    //@ ensures true;
+    //@ requires inBuff != null &*& array_slice(inBuff, 0, inBuff.length, ?inEl) &*& outBuff != null &*& array_slice(outBuff, 0, outBuff.length, _) &*& inOffset >= 0 &*& inLength >= 0 &*& inOffset + inLength <= inBuff.length &*& outOffset >= 0 &*& outOffset <= outBuff.length;
+    //@ ensures array_slice(inBuff, 0, inBuff.length, inEl) &*& array_slice(outBuff, 0, outBuff.length, _);
 
     public static final byte ALG_RSA_NOPAD = 12;
     public static final byte MODE_ENCRYPT = 2;

@@ -17,7 +17,7 @@ public final class Store extends Applet {
     @*/
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires value |-> _  &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+    //@ requires value |-> _  &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
     //@ ensures true;
     {
         Store store = new Store();
@@ -33,8 +33,8 @@ public final class Store extends Applet {
     }
     
     public void process(APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -52,8 +52,8 @@ public final class Store extends Applet {
     }
 
     private final void set(APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 

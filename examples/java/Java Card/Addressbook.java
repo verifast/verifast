@@ -56,7 +56,7 @@ public final class Addressbook extends Applet {
     @*/ 
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires zeros |-> _ &*& phoneNbs |-> _ &*& emptyPhoneNbs |-> _ &*& groupnames |-> _ &*& groupnbs |-> _ &*& emptyGroups |-> _  &*& filteredNames |-> _  &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
+    //@ requires zeros |-> _ &*& phoneNbs |-> _ &*& emptyPhoneNbs |-> _ &*& groupnames |-> _ &*& groupnbs |-> _ &*& emptyGroups |-> _  &*& filteredNames |-> _  &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
     //@ ensures true;
     {
         Addressbook addressbook = new Addressbook();
@@ -112,8 +112,8 @@ public final class Addressbook extends Applet {
     }
 
     private void add(APDU apdu)
-    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -129,7 +129,7 @@ public final class Addressbook extends Applet {
         //Search empty space in phoneNbs by inspecting emptyPhoneNbs
         //if empty space found, store contact in that space
         for(short i=0;i<length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             short item = emptyPhoneNbs[i];
@@ -153,8 +153,8 @@ public final class Addressbook extends Applet {
     }
 
     private void delete(APDU apdu)
-    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -167,7 +167,7 @@ public final class Addressbook extends Applet {
 
         //Search each record of phoneNbs
         for(short i=0;i<length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             short item = emptyPhoneNbs[i];
@@ -234,8 +234,8 @@ public final class Addressbook extends Applet {
     }
 
     private void addGroup (APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -249,7 +249,7 @@ public final class Addressbook extends Applet {
         boolean added = false;
         //Search empty space in groupnames
         for(short i=0;i<length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& 0 <= i &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& 0 <= i &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             short item = emptyGroups[i];
@@ -275,8 +275,8 @@ public final class Addressbook extends Applet {
     }
 
     private void addContactToGroup (APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -317,7 +317,7 @@ public final class Addressbook extends Applet {
 
         //Search for group in groupnames
         for(short i=0;i<g_length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             //Match groupname of groupnames and incoming apdu
@@ -333,7 +333,7 @@ public final class Addressbook extends Applet {
 
                 //Search empty contactnb-space in space of groupname in groupnbs
                 for(short a=begin;a<end;a++)
-                //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& a >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+                //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& a >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
                 {
                     //@ open [1/2]valid();
                     byte openplace = groupnbs[a];
@@ -362,8 +362,8 @@ public final class Addressbook extends Applet {
     }
 
     private void removeContactFromGroup (APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -403,7 +403,7 @@ public final class Addressbook extends Applet {
 
         //Search for group in groupnames
         for(short i=0;i<g_length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             //Match groupname in groupnames and incoming apdu
@@ -419,7 +419,7 @@ public final class Addressbook extends Applet {
 
                 //Search contactnb in space of groupname in groupnbs
                 for(short a=begin;a<end;a++)
-                //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& a >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+                //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& a >= 0 &*& transient_arrays(ta) &*& foreach(ta, transient_array);
                 {
                     //@ open [1/2]valid();
                     byte contactequal = groupnbs[a];
@@ -446,8 +446,8 @@ public final class Addressbook extends Applet {
     }
 
     private void deleteGroup (APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
          byte[] abuffer = apdu.getBuffer();
 
@@ -460,7 +460,7 @@ public final class Addressbook extends Applet {
 
         //Search for group in groupnames
         for(short i=0;i<length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& 0 <= i &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& 0 <= i &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             short item = emptyGroups[i];
@@ -566,8 +566,8 @@ public final class Addressbook extends Applet {
     }
 
     private void filterContacts(APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_buffer);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -586,7 +586,7 @@ public final class Addressbook extends Applet {
         //Loop to fetch all filtered names
         //match every record in phoneNbs
         for(short i=0;i<length;i++)
-        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& filter_index(index) &*& transient_arrays(ta) &*& foreach(ta, transient_buffer);
+        //@ invariant APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& i >= 0 &*& filter_index(index) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
         {
             //@ open [1/2]valid();
             short item = emptyPhoneNbs[i];
