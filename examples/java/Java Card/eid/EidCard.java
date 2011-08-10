@@ -470,21 +470,21 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		//@ close ElementaryFile(fid, parent, data, true, size, _);
 	}
 	public byte[] getData() 
-  	    //@ requires [?f]ElementaryFile(?fid, ?pf, ?d, ?active, ?size, ?info);
-      	    //@ ensures [f]ElementaryFile(fid, pf, d, active, size, info) &*& result == d;
+  	    //@ requires [?f]ElementaryFile(?fid, ?pf, ?d, ?a, ?size, ?info);
+      	    //@ ensures [f]ElementaryFile(fid, pf, d, a, size, info) &*& result == d;
 	{
-		//@ open [f/2]ElementaryFile( fid, pf, d, active, size, info);	
-		//@ close [f/2]File(fid, active, ?info2);		
-		if (isActive() /*VF* changed to a call to isActive, because VeriFast can't access protected variables */ == true) {
-			//@ open [f/2]File(fid, active, ?info3);
+		//@ open [f/2]ElementaryFile( fid, pf, d, a, size, info);	
+		//@ close [f/2]File(fid, a, ?info2);		
+		if (active == true) {
+			//@ open [f/2]File(fid, a, ?info3);
 			//@ open [f/2]ElementaryFile(_, _, _, _, _, ?info4);
 			//@ close [f]ElementaryFile(_, _, _, _, _, info);			
 			//@ open [f]ElementaryFile(_, _, _, _, _, info);
 			return data;
-			//@ close [f]ElementaryFile(fid, pf, d, active, size, info);
+			//@ close [f]ElementaryFile(fid, pf, d, a, size, info);
 		} else {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-			//@ close [f]ElementaryFile(fid, pf, d, active, size);
+			//@ close [f]ElementaryFile(fid, pf, d, a, size);
 			return null;
 		}
 	}
@@ -621,12 +621,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 
 //@ predicate eq<T>(T t1; T t2) = t2 == t1;
 
-public final class EidCard extends /*VFjavacard.framework.*/Applet {
-	// theSelectedFile == theMasterFile || theSelectedFile == theIdentityFile || theSelectedFile == theIdentityFileSignature ||
-	// theSelectedFile == theAddressFile || theSelectedFile == theAddressFileSignature || theSelectedFile == thePhotoFile || 
-	// theSelectedFile == thecaRoleIDFile || theSelectedFile == theDirFile || theSelectedFile == theTokenInfo || 
-	// theSelectedFile == theObjectDirectoryFile || theSelectedFile == theAuthenticationObjectDirectoryFile || 
-	// theSelectedFile == thePrivateKeyDirectoryFile || theSelectedFile == theCertificateDirectoryFile
+public final class EidCard extends Applet {
 	/*@
 	
           predicate valid() =
@@ -2191,7 +2186,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ open [1/2]valid();
 		
 		if (getSignatureType() == NON_REPUDIATION) {		
-			// cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
+			//cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 			/*VF* rewritten due to bug */
 			PrivateKey k = nonRepKeyPair.getPrivate();
 			cipher.init((RSAPrivateCrtKey)k, Cipher.MODE_ENCRYPT);

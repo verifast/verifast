@@ -27,7 +27,15 @@ interface PrivateKey extends Key {
 
 }
 
-interface RSAPrivateCrtKey extends PrivateKey {
+interface RSAKey {
+
+}
+
+interface RSAPrivateKey extends PrivateKey, RSAKey {
+
+}
+
+interface RSAPrivateCrtKey extends RSAPrivateKey {
 
 }
 
