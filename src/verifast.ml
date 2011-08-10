@@ -5819,8 +5819,8 @@ let verify_program_core (* ?verify_program_core *)
   in
 
   let fixpointmap = fixpointmap1 @ fixpointmap0 in
-
-  (* Region: Type checking of field initializers *)
+  
+  (* Region: Type checking of field initializers for fields *)
   
   let classmap1 =
     List.map
@@ -5833,7 +5833,10 @@ let verify_program_core (* ?verify_program_core *)
               List.map
                 begin function
                   (f, (l, t, vis, binding, final, Some e, value)) ->
-                  (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
+                    begin match binding with
+                      Static -> (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
+                    | Instance -> (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] e t), value))
+                    end
                 | fd -> fd
                 end
                 fds
@@ -6531,7 +6534,7 @@ let verify_program_core (* ?verify_program_core *)
         (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
       end
   in
-
+  
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
   
   let check_ghost ghostenv l e =
@@ -9140,7 +9143,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
       classmap1
   in
-
+  
   (* Default constructor insertion *)
 
   let classmap1 =
@@ -11982,30 +11985,35 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h _ ->
                   cont h) econt
             end $. fun h ->
-            verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
-              (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
+            let fds = get_fields (pn,ilist) cn lm in
+            let rec iter h fds =
+              match fds with
+                [] -> verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
+                     (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
+              | (f, (lf, t, vis, binding, final, init, value))::fds ->
+                if binding = Instance then begin
+                  match init with 
+                    None ->
+                     let default_value t =
+                      match t with
+                       Bool -> ctxt#mk_false
+                      | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+                      | _ -> get_unique_var_symb_non_ghost "value" t
+                    in
+                    assume_field h cn f t Real this (default_value t) real_unit $. fun h ->
+                    iter h fds
+                  | Some(e) -> 
+                    with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
+                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] ghostenv h [("this", this)] None e (fun h initial_value ->
+                      assume_field h cn f t Real this initial_value real_unit $. fun h ->
+                      iter h fds
+                    ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
+                end else
+                  iter h fds
+            in
+            iter h fds
           in
-          assume_neq this (ctxt#mk_intlit 0) $. fun() ->
-          let fds = get_fields (pn,ilist) cn lm in
-          let rec iter h fds =
-            match fds with
-              [] -> 
-              do_body h ghostenv (("this", this)::env)
-            | (f, (lf, t, vis, binding, final, init, value))::fds ->
-              if binding = Instance then begin
-                if init <> None then static_error lf "Instance field initializers are not yet supported." None;
-                let default_value t =
-                  match t with
-                    Bool -> ctxt#mk_false
-                  | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
-                  | _ -> get_unique_var_symb_non_ghost "value" t
-                in
-                assume_field h cn f t Real this (default_value t) real_unit $. fun h ->
-                iter h fds
-              end else
-                iter h fds
-          in
-          iter h fds
+          assume_neq this (ctxt#mk_intlit 0) $. fun() -> do_body h ghostenv (("this", this)::env)
         end;
         pop()
         end;
