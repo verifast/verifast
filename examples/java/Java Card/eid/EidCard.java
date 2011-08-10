@@ -110,7 +110,12 @@ lemma void shr_limits(int x, int y, nat p)
   assume(false);
 }
 
-
+lemma void positive_and(byte x, short y)
+    requires y >= 0;
+    ensures 0 <= (x & y);
+{
+  assume(false);
+}
 
 inductive pos = p1_ | p0(pos) | p1(pos);
 
@@ -590,6 +595,12 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
     :
       array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length;
 
+  predicate transient_array_pointer(byte[] buffer, short length) =
+    buffer == null ?
+      true
+    :
+      array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length &*& is_transient_array(buffer) == true;
+
   predicate selected_file_types(File theSelectedFile, MasterFile theMasterFile, ElementaryFile theIdentityFile, ElementaryFile theIdentityFileSignature, ElementaryFile theAddressFile, ElementaryFile theAddressFileSignature, ElementaryFile thePhotoFile, 
 	  ElementaryFile thecaRoleIDFile, ElementaryFile theDirFile, ElementaryFile theTokenInfo, ElementaryFile theObjectDirectoryFile, ElementaryFile theAuthenticationObjectDirectoryFile, ElementaryFile thePrivateKeyDirectoryFile, ElementaryFile theCertificateDirectoryFile; ElementaryFile theSelectedFile2) = 
 	    theSelectedFile == theMasterFile ? theSelectedFile2 == null : 
@@ -884,24 +895,36 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			  &*& caRoleIDFile |-> _ &*& preferencesFile |-> _ &*& idDirectory |-> _
 			  &*& certificateDirectoryFile |-> _ &*& privateKeyDirectoryFile |-> _ &*& authenticationObjectDirectoryFile |-> _ &*& objectDirectoryFile |-> _
 			  &*& tokenInfo |-> _ &*& belpicDirectory |-> _ &*& dirFile |-> _
-			  &*& masterFile |-> _;
+			  &*& masterFile |-> _ &*& selectedFile |-> _;
 	    @*/
-      	/*@ ensures dirFile |-> ?theDirFile &*& theDirFile.ElementaryFile(_, _, _, _, _, _) &*& theDirFile != null 
+      	/*@ ensures dirFile |-> ?theDirFile &*& theDirFile.ElementaryFile(_, _, ?dirFileData, _, _, _) &*& theDirFile != null 
+      	              &*& dirFileData != null &*& dirFileData.length == 0x25
 	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, _) &*& theBelpicDirectory != null
-	         &*& tokenInfo |-> ?theTokenInfo &*& theTokenInfo.ElementaryFile(_, _, _, _, _, _) &*& theTokenInfo != null
-	         &*& objectDirectoryFile |-> ?theObjectDirectoryFile &*& theObjectDirectoryFile.ElementaryFile(_, _, _, _, _, _) &*& theObjectDirectoryFile != null
-	         &*& authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, _, _, _, _) &*& theAuthenticationObjectDirectoryFile != null
-	         &*& privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& thePrivateKeyDirectoryFile.ElementaryFile(_, _, _, _, _, _) &*& thePrivateKeyDirectoryFile != null
-	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, _, _, _, _) &*& theCertificateDirectoryFile != null
+	         &*& tokenInfo |-> ?theTokenInfo &*& theTokenInfo.ElementaryFile(_, _, ?tokenInfoData, _, _, _) &*& theTokenInfo != null
+	              &*& tokenInfoData != null &*& tokenInfoData.length == 0x30
+	         &*& objectDirectoryFile |-> ?theObjectDirectoryFile &*& theObjectDirectoryFile.ElementaryFile(_, _, ?objectDirectoryFileData, _, _, _) &*& theObjectDirectoryFile != null
+	              &*& objectDirectoryFileData != null &*& objectDirectoryFileData.length == 40
+	         &*& authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, ?authenticationObjectDirectoryFileData, _, _, _) &*& theAuthenticationObjectDirectoryFile != null
+	              &*& authenticationObjectDirectoryFileData != null &*& authenticationObjectDirectoryFileData.length == 0x40
+	         &*& privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& thePrivateKeyDirectoryFile.ElementaryFile(_, _, ?privateKeyDirectoryFileData, _, _, _) &*& thePrivateKeyDirectoryFile != null
+	              &*& privateKeyDirectoryFileData != null &*& privateKeyDirectoryFileData.length == 0xB0
+	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?certificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile !=  null
+	              &*& certificateDirectoryFileData != null &*& certificateDirectoryFileData.length == 0xB0
 	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, _) &*& theIdDirectory != null
 	         &*& identityFile |-> ?theIdentityFile &*& theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null
 	              &*& identityData != null &*& identityData.length == 0xD0
-	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, _, _, _, _) &*& theIdentityFileSignature != null
-	         &*& addressFile |-> ?theAddressFile &*& theAddressFile.ElementaryFile(_, _, _, _, _, _) &*& theAddressFile != null
-	         &*& addressFileSignature |-> ?theAddressFileSignature &*& theAddressFileSignature.ElementaryFile(_, _, _, _, _, _) &*& theAddressFileSignature != null
-	         &*& caRoleIDFile |-> ?theCaRoleIDFile &*& theCaRoleIDFile.ElementaryFile(_, _, _, _, _, _) &*& theCaRoleIDFile != null
-	         &*& preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, _, _, _, _) &*& thePreferencesFile != null
-	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _) &*& theMasterFile != null;
+	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, ?identitySignatureData, _, _, _) &*& theIdentityFileSignature != null
+	              &*& identitySignatureData != null &*& identitySignatureData.length == 0x80
+	         &*& addressFile |-> ?theAddressFile &*& theAddressFile.ElementaryFile(_, _, ?addressFileData, _, _, _) &*& theAddressFile != null
+	              &*& addressFileData != null &*& addressFileData.length == 117
+	         &*& addressFileSignature |-> ?theAddressFileSignature &*& theAddressFileSignature.ElementaryFile(_, _, ?addressFileSignatureData, _, _, _) &*& theAddressFileSignature != null
+	              &*& addressFileSignatureData != null &*& addressFileSignatureData.length == 128
+	         &*& caRoleIDFile |-> ?theCaRoleIDFile &*& theCaRoleIDFile.ElementaryFile(_, _, ?caRoldIDFileData, _, _, _) &*& theCaRoleIDFile != null
+	              &*& caRoldIDFileData != null &*& caRoldIDFileData.length == 0x20
+	         &*& preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?preferencesFileData, _, _, _) &*& thePreferencesFile != null
+	              &*& preferencesFileData != null &*& preferencesFileData.length == 100
+	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _) &*& theMasterFile != null
+	         &*& selectedFile |-> theMasterFile &*& theBelpicDirectory.getClass() == DedicatedFile.class &*& theIdDirectory.getClass() == DedicatedFile.class;
 	    @*/
 	{
 		masterFile = new MasterFile();
@@ -938,6 +961,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// initialize Preferences EF to 100 zero bytes
 		preferencesFile = new ElementaryFile(PREFERENCES, idDirectory, (short) 100);
 		
+		selectedFile = masterFile;
 		//@ masterFile.castDedicatedToMaster();
 	}
 	
@@ -953,9 +977,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		// use P1 and P2 as offset
 		short offset = Util.makeShort(buffer[ISO7816.OFFSET_P1], buffer[ISO7816.OFFSET_P2]);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
@@ -966,9 +988,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		((ElementaryFile) selectedFile).eraseData(offset);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * change data in a file that was selected with SELECT FILE
@@ -984,9 +1004,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		short offset = Util.makeShort(buffer[ISO7816.OFFSET_P1], buffer[ISO7816.OFFSET_P2]);
 		// impossible to start updating from offset larger than max size of file
 		// this however does not imply that the file length can not change
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
@@ -1000,18 +1018,16 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// get the new data
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
+		//@ positive_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if ((lc == 0) || (byteRead == 0))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		// update file
-		//@ assume (lc >= 0); // follows from AND with 0x00FF
 		if (offset < 0 || ISO7816.OFFSET_CDATA + lc > buffer.length || offset + lc > size)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		((ElementaryFile) selectedFile).updateData(offset, buffer, ISO7816.OFFSET_CDATA, lc);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * checks if a certain file operation is allowed on the currently selected
@@ -1216,9 +1232,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// check if activating this file is allowed
 		if (!fileAccessAllowed(UPDATE_BINARY))
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
 		/*@ if(selectedFile == masterFile) {
@@ -1235,9 +1249,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		    }
 		@*/
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}	
 	
 	/*VF* COPIED FROM EmptyEidCard */
@@ -1259,9 +1271,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
     	    //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
       	    //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		
 		//@ open valid();
 
@@ -1280,9 +1290,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// open selectedFile.File(?d1, ?d2);
 		//@ close valid();
 
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
@@ -1370,9 +1378,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		// get the file identifier out of the APDU
 		short fid = Util.makeShort(buffer[ISO7816.OFFSET_CDATA], buffer[ISO7816.OFFSET_CDATA + 1]);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		//@ open selected_file_types(_, ?f1, ?f2, ?f3, ?f4, ?f5, ?f6, ?f7, ?f8, ?f9, ?f10, ?f11, ?f12, ?f13, _);
 		// if file identifier is the master file, select it immediately
@@ -1385,7 +1391,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			if (s != null) {
 				//TODO: get rid of this
 				//@ assume (s == identityFile || s == identityFileSignature || s == addressFile || s == addressFileSignature || s == photoFile || s == caRoleIDFile || s == dirFile || s == tokenInfo || s == objectDirectoryFile || s == authenticationObjectDirectoryFile || s == privateKeyDirectoryFile || s == certificateDirectoryFile);
-				selectedFile = s;				
+				selectedFile = s;
 				//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
 			//the fid is an elementary file:
 			} else {
@@ -1410,9 +1416,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			}
 		}		
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * select file by path from the MF
@@ -1424,15 +1428,16 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// receive the path name
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
+		//@ positive_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
-		//@ assume (lc > 0); // follows from AND with 0x00FF
 		// it must be a multiple of 2
 		if (((lc & 1) == 1) || ((byteRead & 1) == 1))
 			ISOException.throwIt(SW_INCONSISTENT_P1P2);
+		if (buffer.length < ISO7816.OFFSET_CDATA + lc + 1)
+			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		//@ open [1/2]valid();
 		// use the path name in the APDU data to select a file
 		File f = masterFile;
-		//@ assume (buffer.length >= ISO7816.OFFSET_CDATA + 1 + lc);
 		//@ assert [1/2]masterFile |-> ?theMasterFile;
 		for (byte i = 0; i < lc; i += 2) 
 		    /*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i < (lc + 2) &*& 
@@ -1452,18 +1457,14 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
 
 		//@ close [1/2]valid();
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		//@ open selected_file_types(_, ?g1, ?g2, ?g3, ?g4, ?g5, ?g6, ?g7, ?g8, ?g9, ?g10, ?g11, ?g12, ?g13, _);
 		//@ assume (f == masterFile || f == identityFile || f == identityFileSignature || f == addressFile || f == addressFileSignature || f == photoFile || f == caRoleIDFile || f == dirFile || f == tokenInfo || f == objectDirectoryFile || f == authenticationObjectDirectoryFile || f == privateKeyDirectoryFile || f == certificateDirectoryFile);
 		selectedFile = f;
 		//@ close selected_file_types(f, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, _);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 
 	/*VF* END COPY */
@@ -1534,15 +1535,14 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 	 */
 	protected EidCard() 
     	/*@ requires EidCard_randomData(_) &*& EidCard_cipher(_) &*& EidCard_messageBuffer(?mb) &*& EidCard_nonRepKeyPair(_) 
-    	       &*& EidCard_basicKeyPair(_) &*& EidCard_authKeyPair(_) &*& array_pointer(mb, 128) 
+    	       &*& EidCard_basicKeyPair(_) &*& EidCard_authKeyPair(_) &*& transient_array_pointer(mb, 128) 
     	       &*& EidCard_PKCS1_HEADER(?thePKCS1HEADER) &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1
     	       &*& EidCard_PKCS1_SHA1_HEADER(?thePKCS1SHA1HEADER) &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _)&*& thePKCS1SHA1HEADER.length == 16
     	       &*& EidCard_PKCS1_MD5_HEADER(?thePKCS1MD5HEADER) &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19
-    	       &*& transient_arrays(?ta)
- 	       /*&*& selectedFile |-> ?theSelectedFile &*& theSelectedFile != null*/; @*/
+    	       &*& transient_arrays(?ta) &*& foreach(ta, transient_array); @*/
     	//@ ensures true;
 	{
-		//@ open array_pointer(mb, 128);
+		//@ open transient_array_pointer(mb, 128);
 		internalAuthenticateCounter = 5000;
 
 		randomBuffer = new byte[256];
@@ -1571,11 +1571,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// initialize basic keys pair
 		initializeKeyPairs();
 		/*VF* END COPY */
-	
-		//@ assume (selectedFile != null);
-		// als ik "&*& selectedFile |-> ?theSelectedFile &*& theSelectedFile != null" in
-		// de preconditie zet, dan crasht VeriFast
-	
+		
 		//@ close valid();
 		register();
 	}
@@ -1625,16 +1621,12 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		 * of a PIN Verify APDU (because the type gets overwritten to a wrong
 		 * value) and at the end of a "generate signature" and PIN Change APDU
 		 */
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		if ((buffer[ISO7816.OFFSET_INS] != INS_GENERATE_SIGNATURE) && (buffer[ISO7816.OFFSET_INS] != INS_CHANGE_PIN) && (buffer[ISO7816.OFFSET_INS] != INS_GET_KEY))
 			setPreviousApduType(OTHER);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 		// return if the APDU is the applet SELECT command
 		if (selectingApplet()) {
 			return;
@@ -1743,9 +1735,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// receive the PIN data for validation
 		apdu.setIncomingAndReceive();
 		// check PIN depending on value of P2
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		switch (buffer[ISO7816.OFFSET_P2]) {
 		case CARDHOLDER_PIN:
@@ -1778,9 +1768,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
 		}
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * check the PIN
@@ -1824,9 +1812,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		 * the previous APDU type has to be overwritten in every possible exit
 		 * path out of this function
 		 */
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x01) {
@@ -1837,25 +1823,19 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		switch (buffer[ISO7816.OFFSET_P1]) {
 		case (byte) 0x00:
 			setPreviousApduType(OTHER);
-			/*VF* Added for verification purposes */
 			//@ close valid();
 			JCSystem.commitTransaction();
-			/*VF* </added> */
 			userChangePin(apdu, buffer);
 			break;
 		case (byte) 0x01:
-			/*VF* Added for verification purposes */
 			//@ close valid();
 			JCSystem.commitTransaction();
-			/*VF* </added> */
 			administratorChangePin(apdu, buffer);
 			break;
 		default:
 			setPreviousApduType(OTHER);
-			/*VF* Added for verification purposes */
 			//@ close valid();
 			JCSystem.commitTransaction();
-			/*VF* </added> */
 			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 			break;
 		}
@@ -1902,9 +1882,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		 * possible exit path out of this function; therefore we check the
 		 * security conditions as early as possible
 		 */
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		// previous APDU must have checked the reset PIN
 		if ((!resetPin.isValidated()) || (getPreviousApduType() != VERIFY_RESET_PIN)) {
@@ -1915,7 +1893,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		setPreviousApduType(OTHER);
 		// receive the PIN data
 		short byteRead = apdu.setIncomingAndReceive();
-		//@ assume (buffer.length == byteRead + ISO7816.OFFSET_CDATA);
 		// check Lc
 		//@ and_limits(buffer[ISO7816.OFFSET_LC], 0x00FF, nat_of_pos(p1(p1(p1(p1_)))));
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
@@ -1930,9 +1907,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// include header as well in PIN object
 		cardholderPin.update(buffer, OFFSET_PIN_HEADER, PIN_SIZE);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * check if new PIN conforms to internal format
@@ -1955,10 +1930,12 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// divide PIN length by 2 to get the length in bytes
 		//@ shr_limits(pinLength, 1, nat_of_pos(p1(p1(p1_))));
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
+		
 		// check if PIN length is odd
 		if ((pinLength & (byte) 0x01) == (byte) 0x01)
 			pinLengthInBytes++;
-		//@ assume (pinLengthInBytes == 2 || pinLengthInBytes == 4 || pinLengthInBytes == 6);
+		//@ assume (pinLengthInBytes >= 2 && pinLengthInBytes <= 6); // follows from the above code
+		//TODO: change this after we have support for /
 		// check if PIN data is padded with 0xFF
 		byte i = (byte) (offset + PIN_SIZE - 1);
 		for (; i > offset + pinLengthInBytes; i--) 
@@ -1980,7 +1957,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 	 * check if new PIN is based on the last generated random challenge
 	 */
 	private boolean isNewPinCorrectValue(byte[] buffer) 
-  	    /*@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& buffer.length == ISO7816.OFFSET_CDATA + 8
+  	    /*@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& buffer.length >= ISO7816.OFFSET_CDATA + 8
   	    	  &*& randomBuffer |-> ?theRandomBuffer &*& theRandomBuffer != null &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _) &*& theRandomBuffer.length == 256;
   	    @*/
       	    //@ ensures array_slice(buffer, 0, buffer.length, _) &*& randomBuffer |-> theRandomBuffer &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _);
@@ -1991,7 +1968,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		byte oldLength = (byte) (pinLength & 0x01);
 		// divide PIN length by 2 to get the length in bytes
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
-		//@ assume (pinLengthInBytes >= 2 && pinLengthInBytes <= 6);
+		//@ assume (pinLengthInBytes == 0 || pinLengthInBytes == 2 ||  pinLengthInBytes == 4 || pinLengthInBytes == 6); // follows from the above code
 		byte i;
 		for (i = 0; i < pinLengthInBytes; i++) 
 			/*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i <= pinLengthInBytes
@@ -2018,9 +1995,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00 || buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
 			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		// remove previous access conditions:
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		setPreviousApduType(OTHER);
 		setSignatureType(NO_SIGNATURE);
@@ -2029,9 +2004,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		unblockPin.reset();
 		activationPin.reset();
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * unblock card
@@ -2076,9 +2049,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		// initialize signature object depending on hash function type
 		
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		switch (buffer[ISO7816.OFFSET_CDATA + 2]) {
 		case ALG_SHA1_PKCS1:
@@ -2115,9 +2086,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			break;
 		}
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * generate (authentication or non repudiation) signature
@@ -2137,9 +2106,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		 * of the non repudiation signature as early as possible, but we have to
 		 * overwrite the previous APDU type in the 2 possible exceptions before
 		 */
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		// check P1 and P2		
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x9E || buffer[ISO7816.OFFSET_P2] != (byte) 0x9A) {
@@ -2172,9 +2139,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 		//@ open [1/2]valid();
 		switch (signatureAlgorithm) {
 		case ALG_MD5_PKCS1:
@@ -2196,15 +2161,11 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ close [1/2]valid();
 		// if T=1, store signature in sigBuffer so that it can latter be sent
 		if (APDU.getProtocol() == APDU.PROTOCOL_T1) {
-			/*VF* Added for verification purposes */
 			JCSystem.beginTransaction();
-			/*VF* </added> */
 			//@ open valid();
 			Util.arrayCopy(buffer, (short) 0, responseBuffer, (short) 0, (short) 128);
 			//@ close valid();
-			/*VF* Added for verification purposes */
 			JCSystem.commitTransaction();
-			/*VF* </added> */
 			
 			// in case T=0 protocol, send the signature immediately in a
 			// response APDU
@@ -2244,9 +2205,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			/*VF* /rewritten */
 		}
 		//@ close [1/2]valid();
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		
 		//@ open valid();
 		
@@ -2258,7 +2217,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		preparePkcs1ClearText(messageBuffer, ALG_MD5_PKCS1, lc);
 		// copy the MD5 hash from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
-		/*VF* Added for verification purposes */
 
 		//@ close transient_array(messageBuffer);
 		//@ foreach_unremove(messageBuffer, ta);
@@ -2266,7 +2224,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
-		/*VF* </added> */
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
 		//@ foreach_remove(messageBuffer, ta);
@@ -2316,9 +2273,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		}
 		
 		//@ close [1/2]valid();
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		
 		//@ transient_arrays_mem(messageBuffer);
@@ -2329,7 +2284,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		preparePkcs1ClearText(messageBuffer, ALG_SHA1_PKCS1, lc);
 		// copy the SHA1 hash from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
-		/*VF* Added for verification purposes */
 
 		//@ close transient_array(messageBuffer);
 		//@ foreach_unremove(messageBuffer, ta);
@@ -2337,7 +2291,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
-		/*VF* </added> */
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
 		//@ foreach_remove(messageBuffer, ta);
@@ -2357,6 +2310,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
+		//@ positive_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if ((lc > 117) || (byteRead > 117))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -2377,26 +2331,17 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			/*VF* /rewritten */
 		}
 		//@ close [1/2]valid();
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 
 		//@ transient_arrays_mem(messageBuffer);
 		//@ foreach_remove(messageBuffer, ta);
 		//@ open transient_array(messageBuffer);
 
-		//@ assume (lc >= 0);
-		//VF: assume hierboven is in feite afleidbaar uit de AND met 0x00FF
-		//@ assume (lc <108);
-		//VF: assume hierboven is nodig om omwille van een (waarschijnlijke) bug in de app let
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
 		preparePkcs1ClearText(messageBuffer, ALG_PKCS1, lc);
 		// copy the clear text from the APDU to the message buffer
-		//@ assume (lc >= 0);
-		//VF: in feite kan die assume afgeleid worden uit de & 0x00FF die wordt gedaan...
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
-		/*VF* Added for verification purposes */
 		//@ close transient_array(messageBuffer);
 		//@ foreach_unremove(messageBuffer, ta);
 
@@ -2406,7 +2351,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ transient_arrays_mem(messageBuffer);
 		//@ foreach_remove(messageBuffer, ta);
 		//@ open transient_array(messageBuffer);
-		/*VF* </added> */		
 		// generate signature
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
 		//@ close transient_array(messageBuffer);
@@ -2425,7 +2369,8 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 	  	    &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _)
 	  	    &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _)
 	  	    &*& messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null 
-	  	    &*& messageLength >= 0 &*& messageLength < 108; @*/
+	  	    &*& messageLength >= 0
+	  	    &*& type == ALG_SHA1_PKCS1 ? messageLength == 20 || messageLength == 22 : type == ALG_MD5_PKCS1 ? messageLength == 16 : messageLength < 126; @*/
       	    /*@ ensures array_slice(clearText, 0, clearText.length, _) &*& PKCS1_HEADER |-> thePKCS1HEADER 
       	    	    &*& PKCS1_SHA1_HEADER |-> thePKCS1SHA1HEADER &*& PKCS1_MD5_HEADER |-> thePKCS1MD5HEADER
 	  	    &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _)
@@ -2444,7 +2389,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			header = PKCS1_SHA1_HEADER;
 		if (type == ALG_MD5_PKCS1)
 			header = PKCS1_MD5_HEADER;
-		Util.arrayCopy(header, (short) 0, clearText /*VF: 'bug' in code; was originally 'messageBuffer'*/, (short) (128 - messageLength - header.length), (short) header.length);
+		Util.arrayCopy(header, (short) 0, clearText, (short) (128 - messageLength - header.length), (short) header.length);
 	}
 	/**
 	 * generate a key pair
@@ -2486,9 +2431,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// impossible on some java cards
 		// ((RSAPublicKey)tempkp.getPublic()).setExponent(buffer, (short)(13),
 		// (short)3);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		setPreviousApduType(GENERATE_KEY_PAIR);
 		switch (buffer[ISO7816.OFFSET_P2]) {
@@ -2513,9 +2456,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			break;
 		}
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * get a public key. for the authentication and non-repudiation key, this
@@ -2551,17 +2492,13 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			        PublicKey pk = authKeyPair.getPublic();
 			        pk.clearKey();
 			        //VF: /bug
-				/*VF* Added for verification purposes */
 			        //@ close [1/2]valid();
 				JCSystem.beginTransaction();
 			        //@ open valid();
-				/*VF* </added> */
 				setPreviousApduType(OTHER);
-				/*VF* Added for verification purposes */
 			        //@ close valid();
 				JCSystem.commitTransaction();
 			        //@ open [1/2]valid();
-				/*VF* </added> */
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}
 			//VF: bug; was origineel:
@@ -2580,17 +2517,13 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 				tpk = nonRepKeyPair.getPublic();
 				tpk.clearKey();
 				//VF: /bug
-				/*VF* Added for verification purposes */
 			        //@ close [1/2]valid();
 				JCSystem.beginTransaction();
 			        //@ open valid();
-				/*VF* </added> */
 				setPreviousApduType(OTHER);
-				/*VF* Added for verification purposes */
 				//@ close valid();
 				JCSystem.commitTransaction();
 				//@ open [1/2]valid();
-				/*VF* </added> */
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}			
 			//VF: bug; was origineel:
@@ -2605,8 +2538,8 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			//VF: bug; was origineel:
 			//((RSAPublicKey) basicKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
 			//((RSAPublicKey) basicKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
-			//@ assume(basicKeyPair != null);
-			//VF bovenstaande is mogelijk een bug in de applicatie!
+			if (basicKeyPair == null)
+				ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
 			PublicKey tpk3 = basicKeyPair.getPublic();
 			RSAPublicKey rpk3 = (RSAPublicKey)tpk3;
 			rpk3.getExponent(tempBuffer, (short) 7);
@@ -2615,17 +2548,13 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		} else {
 			ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
 		}
-		/*VF* Added for verification purposes */
 	        //@ close [1/2]valid();
 		JCSystem.beginTransaction();
 	        //@ open valid();
-		/*VF* </added> */
 		setPreviousApduType(OTHER);
-		/*VF* Added for verification purposes */
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
-		/*VF* </added> */
 		//VF: bug; was origineel:
 		// authKeyPair.getPublic().clearKey();
 		// nonRepKeyPair.getPublic().clearKey();
@@ -2661,15 +2590,11 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		switch (buffer[ISO7816.OFFSET_P2]) {
 		case BASIC:
-			/*VF* Added for verification purposes */
 			JCSystem.beginTransaction();
-			/*VF* </added> */
 			//@ open valid();
 			basicKeyPair = null;
 			//@ close valid();
-			/*VF* Added for verification purposes */
 			JCSystem.commitTransaction();
-			/*VF* </added> */			
 			break;
 		default:
 			ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
@@ -2735,16 +2660,16 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		if ((buffer[ISO7816.OFFSET_CDATA] != (byte) 0x94) || (buffer[ISO7816.OFFSET_CDATA + 1] != (byte) 0x14))
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		// use the basic private key
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		
 		//@ transient_arrays_mem(messageBuffer);
 		//@ foreach_remove(messageBuffer, ta);
 		//@ open transient_array(messageBuffer);
 
-		//@ assume (basicKeyPair != null);
+		if (basicKeyPair == null)
+			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+
 		//VF: bovenstaande is mogelijk bug in programma!
 		cipher.init(basicKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
@@ -2768,9 +2693,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		//@ foreach_unremove(messageBuffer, ta);
 		
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * return the generated signature in a response APDU Used in T=0 protocol
@@ -2793,8 +2716,8 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// set the actual number of outgoing data bytes
 		apdu.setOutgoingLength(le);
 		// send content of sigBuffer in apdu
-		//@ assume (offset + le <= 128 && offset >= 0);
-		//VF: the above might be a bug in the application!
+		if (offset + le > 128 || offset < 0)
+			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		apdu.sendBytesLong(responseBuffer, offset, le);
 		//@ close [1/2]valid();
 	}
@@ -2813,9 +2736,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// Le = 0 is not allowed
 		if (le == 0)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 		RandomData random = EidCard.randomData;
 		// generate random data and put it into buffer
@@ -2825,9 +2746,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// send content of buffer in apdu
 		apdu.sendBytesLong(randomBuffer, (short) 0, le);
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 	/**
 	 * select a file on the eID card
@@ -2938,9 +2857,7 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		// check if deactivating this file is allowed
 		if (!fileAccessAllowed(UPDATE_BINARY))
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-		/*VF* Added for verification purposes */
 		JCSystem.beginTransaction();
-		/*VF* </added> */
 		//@ open valid();
 	  	//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
 		/*@ if(selectedFile == masterFile) {
@@ -2957,8 +2874,6 @@ public final class EidCard extends /*VFjavacard.framework.*/Applet {
 		    }
 		@*/
 		//@ close valid();
-		/*VF* Added for verification purposes */
 		JCSystem.commitTransaction();
-		/*VF* </added> */
 	}
 }

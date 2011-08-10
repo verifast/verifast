@@ -202,9 +202,10 @@ class JCSystem {
 		     &*& transient_arrays(ta) &*& foreach(ta, transient_array);@*/
 
     public static byte[] makeTransientByteArray(short length, byte event);
-        //@ requires transient_arrays(?ta);
+        //@ requires transient_arrays(?ta) &*& foreach(ta, transient_array);
         /*@ ensures array_slice(?buffer, 0, length, ?elems) &*& result == buffer &*& buffer.length == length
-		      &*& transient_arrays(?ta2) &*& ta2 == append(cons(buffer, nil), ta); @*/
+		      &*& transient_arrays(?ta2) &*& ta2 == append(cons(buffer, nil), ta)
+		      &*& foreach(ta2, transient_array) &*& is_transient_array(buffer) == true; @*/
 
     public static final byte CLEAR_ON_DESELECT = 2;
 }
