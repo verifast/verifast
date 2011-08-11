@@ -11227,7 +11227,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if not pure then check_ghost ghostenv l e;
       let [BlockStmt(_, _, ss, _, locals_to_free)] = ss in
       check_block_declarations ss;
-      let xs = block_assigned_variables ss in
+      let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
