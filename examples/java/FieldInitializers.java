@@ -1,9 +1,9 @@
 class A {
-  int x = 5;
+  int a = 1, b = 2;
   
   A() 
    //@ requires true;
-   //@ ensures this.x |-> 5;
+   //@ ensures this.a |-> 1 &*& this.b |->  2;
   {
    
   }
@@ -11,11 +11,11 @@ class A {
 
 class B extends A {
 
-  int y = this.x;
+  int c = this.a, d = this.c + 10;
   
   B() 
     //@ requires true;
-    //@ ensures this.x |-> 5 &*& this.y |-> 5;
+    //@ ensures this.a |-> 1 &*& this.b |-> 2 &*& this.c |-> 1 &*& this.d |-> 11;
   {
     super();
   }

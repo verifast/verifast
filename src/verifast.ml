@@ -1418,7 +1418,7 @@ and
   | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
 and
   member = (* ?member *)
-  | FieldMember of field
+  | FieldMember of field list
   | MethMember of meth
   | ConsMember of cons
   | PredMember of instance_pred_decl
@@ -1848,7 +1848,7 @@ and
 and
   fields m=
   match m with
-    FieldMember f::ms -> f::(fields ms)
+    FieldMember fs::ms -> fs @ (fields ms)
     |_::ms -> fields ms
     | []->[]
 and
@@ -1944,9 +1944,10 @@ and
                  >] -> Some e
                | [< >] -> None
                end;
+               rest = parse_field_declaration_rest t;
                '(_, Kwd ";")
             >] ->
-            FieldMember (Field (l, Real, t, x, binding, vis, final, init))
+            FieldMember (Field (l, Real, t, x, binding, vis, final, init) :: (List.map (fun (l, x, init) -> Field (l, Real, t, x, binding, vis, final, init)) rest))
        >] -> member
      | [< (ps, co, ss) = parse_method_rest >] ->
        let l =
@@ -1959,6 +1960,22 @@ and
        if final then raise (ParseException (l, "A constructor cannot be final."));
        ConsMember (Cons (l, ps, co, ss, vis))
   >] -> member
+and
+  parse_field_declaration_rest t = parser
+    [< '(_, Kwd ","); 
+       '(l, Ident x);
+       init = begin parser
+                 [< '(_, Kwd "="); e = parser
+                      [< e = parse_expr >] -> e
+                    | [< '(linit, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] ->
+                      match t with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> raise (ParseException (linit, "Cannot specify an array initializer for a field whose type is not an array type."))
+                 >] -> Some e
+               | [< >] -> None;
+       end;
+       rest = parse_field_declaration_rest t;
+       
+    >] -> (l, x, init) :: rest
+| [< >] -> []
 and
   parse_method_rest = parser
   [< ps = parse_paramlist;
