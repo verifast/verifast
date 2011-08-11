@@ -33,12 +33,12 @@ public class DisplayMenu implements Runnable {
         //@ open DisplayMenu(this, ?s);
         try {
             String output = "\nWhat would you like to do?\r\n";
-            output += "1. Create a new game.\r\n";
-            output += "2. Show all available games.\r\n";
-            output += "3. Join an existing game.\r\n";
-            output += "4. Select and join an existing game.\r\n";
-            output += "5. Quit.\r\n";
-            output += "6. Create a new game (optional).\r\n";
+            output = output + "1. Create a new game.\r\n";
+            output = output + "2. Show all available games.\r\n";
+            output = output + "3. Join an existing game.\r\n";
+            output = output + "4. Select and join an existing game.\r\n";
+            output = output + "5. Quit.\r\n";
+            output = output + "6. Create a new game (optional).\r\n";
             gameServer.writeToSocket(output, socket);
 
             ProcessMenuInput command = new ProcessMenuInput();

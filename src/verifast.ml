@@ -6747,7 +6747,7 @@ let verify_program_core (* ?verify_program_core *)
   (* Region: evaluation *)
   
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
-        let evs state es cont =
+     let evs state es cont =
       let rec iter state vs es =
         match es with
           [] -> cont state (List.rev vs)
@@ -9587,12 +9587,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let eval_h h env pat cont =
       match pat with
         SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
-      | TermPat t -> cont h t
+      | TermPat t -> cont h env t
     in
     let rec evhs h env pats cont =
       match pats with
-        [] -> cont h []
-      | pat::pats -> eval_h h env pat (fun h v -> evhs h env pats (fun h vs -> cont h (v::vs)))
+        [] -> cont h env []
+      | pat::pats -> eval_h h env pat (fun h env v -> evhs h env pats (fun h env vs -> cont h env (v::vs)))
     in 
     let tpenv =
       match zip callee_tparams targs with
@@ -9612,7 +9612,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           | (TermPat t, _) -> TermPat t
           ) bs
     in
-    evhs h env ws $. fun h ts ->
+    evhs h env ws $. fun h env ts ->
     let Some env' = zip ys ts in
     let _ = if file_type path = Java && match try_assoc "this" ps with Some ObjType _ -> true | _ -> false then 
       let this_term = List.assoc "this" env' in
@@ -9688,7 +9688,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           (fun () ->
             assume_pred tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
             with_context PopSubcontext $. fun () ->
-            cont h r))
+            cont h env r))
       )
     )
   in
@@ -9698,7 +9698,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
-    let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt in
+    let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e (fun h env v -> cont h env v) econt in
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let l = expr_loc e in
@@ -9709,8 +9709,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let eval_h_core ro h env e cont = if not pure then check_ghost ghostenv l e; verify_expr ro h env None e cont in
     let rec evhs h env es cont =
       match es with
-        [] -> cont h []
-      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs))) 
+        [] -> cont h env []
+      | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs))) 
     in 
     let ev e = eval env e in
     let check_assign l x =
@@ -9739,12 +9739,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let eval_h = if List.length args = 1 then (fun h env e cont -> eval_h_core readonly h env e cont) else eval_h in
       verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt
     in
-    let new_array h l elem_tp length elems =
+    let new_array h env l elem_tp length elems =
       let at = get_unique_var_symb (match xo with None -> "array" | Some x -> x) (ArrayType elem_tp) in
       let (_, _, _, _, array_slice_symb, _) = List.assoc "java.lang.array_slice" predfammap in
       assume (ctxt#mk_not (ctxt#mk_eq at (ctxt#mk_intlit 0))) $. fun () ->
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
-      cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) at
+      cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
     in
     match e with
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
@@ -9759,7 +9759,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       let resultType = PtrType (StructType tn) in
       let result = get_unique_var_symb (match xo with None -> tn | Some x -> x) resultType in
-      let cont h = cont h result in
+      let cont h = cont h env result in
       branch
         (fun () ->
            assume_eq result (ctxt#mk_intlit 0) (fun () ->
@@ -9800,16 +9800,16 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
-          check_call [] h args $. fun h retval ->
-          cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) retval
+          check_call [] h args $. fun h env retval ->
+          cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
           assert_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
-          check_call targs h args $. fun h retval ->
-          cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) retval
+          check_call targs h args $. fun h env retval ->
+          cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) env retval
       end
     | NewObject (l, cn, args) ->
       if pure then static_error l "Object creation is not allowed in a pure context" None;
@@ -9823,7 +9823,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let obj = get_unique_var_symb (match xo with None -> "object" | Some x -> x) (ObjType cn) in
         assume_neq obj (ctxt#mk_intlit 0) $. fun () ->
         assume_eq (ctxt#mk_app get_class_symbol [obj]) (List.assoc cn classterms) $. fun () ->
-        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), Static) (fun h _ -> cont h obj)
+        check_correct None None [] args (lm, [], None, xmap, ["this", obj], pre, post, Some(epost), Static) (fun h env _ -> cont h env obj)
       | _ -> static_error l "Multiple matching overloads" None
       end
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
@@ -9860,25 +9860,25 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let w = check_expr_t (pn,ilist) tparams tenv e IntType in
-      eval_h h env w $. fun h lv ->
+      eval_h h env w $. fun h env lv ->
       if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative" None;
       let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
       let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
       assume (mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
-      new_array h l elem_tp lv elems
+      new_array h env l elem_tp lv elems
     | NewArrayWithInitializer(l, tp, es) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
-      evhs h env ws $. fun h vs ->
+      evhs h env ws $. fun h env vs ->
       let elems = mk_list elem_tp vs in
       let lv = ctxt#mk_intlit (List.length vs) in
-      new_array h l elem_tp lv elems
+      new_array h env l elem_tp lv elems
     | StringLit (l, s)->
       begin match file_type path with
         Java ->
         let value = get_unique_var_symb "stringLiteral" (ObjType "java.lang.String") in
         assume_neq value (ctxt#mk_intlit 0) (fun () ->
-          cont h value
+          cont h env value
         )
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
@@ -9898,60 +9898,166 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         assume (mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
           assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
             assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
-              cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) value
+              cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) env value
             )
           )
         )
       end
     | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
-      eval_h h env e1 $. fun h v1 ->
-      eval_h h env e2 $. fun h v2 ->
+      eval_h h env e1 $. fun h env v1 ->
+      eval_h h env e2 $. fun h env v2 ->
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
       assume_neq value (ctxt#mk_intlit 0) $. fun () ->
-      cont h value
+      cont h env value
     | WRead (l, e, fparent, fname, frange, false, fvalue, fghost) ->
-      eval_h h env e $. fun h t ->
+      eval_h h env e $. fun h env t ->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
         get_points_to (pn,ilist) h t f_symb l $. fun h coef v ->
-        cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) v
-      | Some v -> cont h v
+        cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) env v
+      | Some v -> cont h env v
       end
     | WReadArray (l, arr, elem_tp, i) when language = Java ->
-      eval_h h env arr $. fun h arr ->
-      eval_h h env i $. fun h i ->
+      eval_h h env arr $. fun h env arr ->
+      eval_h h env i $. fun h env i ->
       begin
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
         let elem_tp = unfold_inferred_type elem_tp in
-        cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) elem
+        cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) env elem
       end
     | WReadArray (l, arr, elem_tp, i) when language = CLang ->
-      eval_h h env arr $. fun h arr ->
-      eval_h h env i $. fun h i ->
-      cont h (read_c_array h env l arr i elem_tp)
-    | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h v -> cont h (ctxt#mk_not v))
+      eval_h h env arr $. fun h env arr ->
+      eval_h h env i $. fun h env i ->
+      cont h env (read_c_array h env l arr i elem_tp)
+    | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
     | Operation (l, Eq, [e1; e2], ts) ->
-      eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_eq v1 v2)))
+      eval_h h env e1 (fun h env v1 -> eval_h h env e2 (fun h env v2 -> cont h env (ctxt#mk_eq v1 v2)))
     | Operation (l, Neq, [e1; e2], ts) ->
-      eval_h h env e1 (fun h v1 -> eval_h h env e2 (fun h v2 -> cont h (ctxt#mk_not (ctxt#mk_eq v1 v2))))
+      eval_h h env e1 (fun h env v1 -> eval_h h env e2 (fun h env v2 -> cont h env (ctxt#mk_not (ctxt#mk_eq v1 v2))))
     | Operation (l, And, [e1; e2], ts) ->
-      eval_h h env e1 $. fun h v1 ->
+      eval_h h env e1 $. fun h env v1 ->
       branch
         (fun () -> assume v1 (fun () -> eval_h h env e2 cont))
-        (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h ctxt#mk_false))
+        (fun () -> assume (ctxt#mk_not v1) (fun () -> cont h env ctxt#mk_false))
     | Operation (l, Or, [e1; e2], ts) -> 
-      eval_h h env e1 $. fun h v1 ->
+      eval_h h env e1 $. fun h env v1 ->
       branch
-        (fun () -> assume v1 (fun () -> cont h ctxt#mk_true))
+        (fun () -> assume v1 (fun () -> cont h env ctxt#mk_true))
         (fun () -> assume (ctxt#mk_not v1) (fun () -> eval_h h env e2 cont))
     | IfExpr (l, con, e1, e2) ->
-      eval_h_core readonly h env con $. fun h v ->
+      eval_h_core readonly h env con $. fun h env v ->
       branch
         (fun () -> assume v (fun () -> eval_h_core readonly h env e1 cont))
         (fun () -> assume (ctxt#mk_not v) (fun () -> eval_h_core readonly h env e2 cont))
-    | e -> eval_non_pure_cps (fun h e cont -> eval_h h env e cont) pure h env e cont
+    | AssignOpExpr(l, lhs, op, rhs, postOp) as aoe ->
+      let (wlhs, t1) = check_expr (pn,ilist) tparams tenv lhs in
+      eval_h h env wlhs (fun h env v1 ->
+        let (wrhs, t2) = check_expr (pn,ilist) tparams tenv rhs in
+        eval_h h env wrhs (fun h env v2 ->
+          let check_overflow min t max =
+            (if not disable_overflow_check && not pure then begin
+            assert_term (ctxt#mk_le min t) h env l "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
+            assert_term (ctxt#mk_le t max) h env l "Potential arithmetic overflow." (Some "potentialarithmeticoverflow");
+            end
+            );
+            t
+          in
+          let new_value = 
+          match op with
+            Add ->
+            (* todo: make sure these cover all cases *) 
+            begin match Some [t1; t2] with
+              Some ([IntType; IntType] | [IntType; ShortType | Char] | [ShortType | Char; IntType]) ->
+              check_overflow min_int_term (ctxt#mk_add v1 v2) max_int_term
+            | Some [ObjType "java.lang.String"; ObjType _] -> 
+                let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
+                (*assume_neq value (ctxt#mk_intlit 0) $. fun () ->*)
+                value
+            | Some [PtrType t; IntType] ->
+              let n = sizeof l t in
+              check_overflow (ctxt#mk_intlit 0) (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_ptr_term
+            | Some [RealType; RealType] ->
+              ctxt#mk_real_add v1 v2
+            | Some [ShortType; ShortType] ->
+              check_overflow min_short_term (ctxt#mk_add v1 v2) max_short_term
+            | Some [Char; Char] ->
+              check_overflow min_char_term (ctxt#mk_add v1 v2) max_char_term
+            | Some [UintPtrType; UintPtrType] ->
+              check_overflow min_uint_term (ctxt#mk_add v1 v2) max_uint_term
+            | _ -> static_error l "Compound assignment operation not supported for these types." None
+            end
+          | Sub ->
+            begin match Some [t1; t2] with
+              Some [IntType; IntType] ->
+              check_overflow min_int_term (ctxt#mk_sub v1 v2) max_int_term
+            | Some [PtrType t; IntType] ->
+              let n = sizeof l t in
+              check_overflow (ctxt#mk_intlit 0) (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_ptr_term
+            | Some [RealType; RealType] ->
+              ctxt#mk_real_sub v1 v2
+            | Some [ShortType; ShortType] ->
+              check_overflow min_short_term (ctxt#mk_sub v1 v2) max_short_term
+            | Some [Char; Char] ->
+              check_overflow min_char_term (ctxt#mk_sub v1 v2) max_char_term
+            | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
+              check_overflow min_int_term (ctxt#mk_sub v1 v2) max_int_term
+            | Some [UintPtrType; UintPtrType] ->
+              check_overflow min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
+            | _ -> static_error l "Compound assignment operation not supported for these types." None
+            end
+          | Mul ->
+            begin match Some [t1; t2] with
+              Some [IntType; IntType] ->
+              check_overflow min_int_term (ctxt#mk_mul v1 v2) max_int_term
+            | Some [UintPtrType; UintPtrType] ->
+              check_overflow min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
+            | Some [RealType; RealType] ->
+              ctxt#mk_real_mul v1 v2
+            end
+          | _ -> static_error l "operation not supported yet in compound assign operator" None
+          in
+          (* todo: convert new_value to type of lhs as described by JLS 15.26.2 *) 
+          let result_value = if postOp then v1 else new_value in
+          match wlhs with
+            Var(lx, x, _) ->
+              check_assign l x;
+              let (tpx, symb) = vartp l x in
+              update_local_or_global h env tpx x symb new_value (fun h env -> cont h env result_value)
+          | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
+            if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
+            let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+            if not fstatic then
+              eval_h h env w (fun h env target_term ->
+                get_field (pn,ilist) h target_term fparent fname l (fun h coef _ ->
+                  if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
+                  cont (Chunk ((f_symb, true), [], real_unit, [target_term; new_value], None)::h) env result_value)
+              )
+            else
+              assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+              cont (Chunk ((f_symb, true), [], real_unit, [new_value], None)::h) env result_value
+          | WReadArray (_, arr, elem_tp, i) when language = Java ->
+            if pure then static_error l "Cannot write in a pure context." None;
+            eval_h h env arr $. fun h env arr ->
+            eval_h h env i $. fun h env i ->
+            let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+            assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
+            cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; new_value], None)::h) env result_value
+          | Deref (_, w, _) ->
+            if pure then static_error l "Cannot write in a pure context." None;
+            let pointeeType = t1 in
+            eval_h h env w (fun h env target_term ->
+              let predSymb = pointee_pred_symb l pointeeType in
+              get_points_to (pn,ilist) h target_term predSymb l (fun h coef _ ->
+                if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission." None;
+                cont (Chunk ((predSymb, true), [], real_unit, [target_term; new_value], None)::h) env result_value)
+            )
+        )
+      )
+    | e -> 
+      (* assumes that eval_non_pure_cps does not change the environment *)
+      eval_non_pure_cps (fun h e cont -> eval_h h env e (fun h env t -> cont h t)) pure h env e (fun h v -> cont h env v)
   in
   
   (* Region: verification of statements *)
@@ -10007,8 +10113,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     let rec evhs h env es cont =
       match es with
-        [] -> cont h []
-      | e::es -> eval_h h env e (fun h v -> evhs h env es (fun h vs -> cont h (v::vs)))
+        [] -> cont h env []
+      | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs)))
     in 
     let ev e = eval env e in
     let cont= tcont sizemap tenv ghostenv
@@ -10253,7 +10359,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
       let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot close a struct that does not declare a body." None in
       let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." None in
-      eval_h h env e $. fun h pointerTerm ->
+      eval_h h env e $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
       assert_chunk rules (pn,ilist) h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef ts _ _ _ _ ->
@@ -10278,7 +10384,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
       let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." None in
       let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." None in
-      eval_h h env e $. fun h pointerTerm ->
+      eval_h h env e $. fun h env pointerTerm ->
       begin fun cont ->
         let rec iter h fds =
           match fds with
@@ -10322,7 +10428,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           )
         | _ ->
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
-          verify_expr false h env None w (fun h _ -> cont h env) econt
+          verify_expr false h env None w (fun h env _ -> cont h env) econt
       end
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
       let oldv = !verbosity in
@@ -10365,64 +10471,65 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont (Chunk ((module_symb, true), [], real_unit, [current_module_term; ctxt#mk_false], None)::h) env
     | DeclStmt (l, te, xs) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      let rec iter h tenv' ghostenv' env' xs =
+      let rec iter h tenv ghostenv env xs =
         match xs with
-          [] -> tcont sizemap tenv' ghostenv' h env'
+          [] -> tcont sizemap tenv ghostenv h env
         | (x, e, address_taken)::xs ->
-          if List.mem_assoc x tenv' then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
+          if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           begin fun cont ->
             match e with
-              None -> cont h (get_unique_var_symb_non_ghost x t) !address_taken
+              None -> cont h env (get_unique_var_symb_non_ghost x t) !address_taken
             | Some e ->
               let w = check_expr_t (pn,ilist) tparams tenv e t in
-              verify_expr false h env (Some x) w (fun h v -> cont h v !address_taken) econt
-          end $. fun h v address_taken ->
-          let ghostenv' = if pure then x::ghostenv' else List.filter (fun y -> y <> x) ghostenv' in
+              verify_expr false h env (Some x) w (fun h env v -> cont h env v !address_taken) econt
+          end $. fun h env v address_taken ->
+          let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
           if address_taken then
             let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in 
             let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
             if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
-            iter h ((x, RefType(t)) :: tenv') ghostenv' ((x, addr)::env') xs
+            iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
           else
-            iter h ((x, t) :: tenv') ghostenv' ((x, v)::env') xs
+            iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs
       in
       iter h tenv ghostenv env xs
-    | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp)) ->
-      (* CAVEAT: This is unsound if we allow side-effects in e1 *)
+    | ExprStmt (AssignOpExpr (l, e1, op, e2, postOp) as aoe) ->
+      eval_h h env aoe (fun h env _ -> cont h env)
+      (* CAVEAT: This is unsound if we allow side-effects in e1
       let (_, t) = check_expr (pn,ilist) tparams tenv e1 in
       let s = ExprStmt (AssignExpr (l, e1, CastExpr (l, false, ManifestTypeExpr (l, t), Operation (l, op, [e1; e2], ref None)))) in
-      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt
+      verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt *)
     | ExprStmt (AssignExpr (l, lhs, rhs)) ->
       let (lhs, t) = check_expr (pn,ilist) tparams tenv lhs in
       begin match lhs with
         Var (lx, x, _) ->
         let (tpx, symb) = vartp l x in
         let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tpx in
-        verify_expr false h env (Some x) wrhs (fun h v ->
+        verify_expr false h env (Some x) wrhs (fun h env v ->
         check_assign l x;
         update_local_or_global h env tpx x symb v cont) econt
       | WRead (_, w, fparent, fname, tp, fstatic, fvalue, fghost) ->
         if pure && fghost = Real then static_error l "Cannot write in a pure context" None;
         let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
         if not fstatic then
-          eval_h h env w (fun h t ->
+          eval_h h env w (fun h env t ->
             let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-            verify_expr true h env None wrhs (fun h vrhs ->
+            verify_expr true h env None wrhs (fun h env vrhs ->
             get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
               if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
               cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)) econt
           )
         else
           let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
-          verify_expr true h env None wrhs (fun h vrhs ->
+          verify_expr true h env None wrhs (fun h env vrhs ->
           assert_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
           cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env) econt
       | WReadArray (_, arr, elem_tp, i) when language = Java ->
         if pure then static_error l "Cannot write in a pure context." None;
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
-        eval_h h env arr $. fun h arr ->
-        eval_h h env i $. fun h i ->
-        eval_h h env rhs $. fun h rhs ->
+        eval_h h env arr $. fun h env arr ->
+        eval_h h env i $. fun h env i ->
+        eval_h h env rhs $. fun h env rhs ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
         cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
@@ -10432,9 +10539,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
         let predsym = pointee_pred_symb l elem_tp in
         let rhs = check_expr_t (pn,ilist) tparams tenv rhs elem_tp in
-        eval_h h env arr $. fun h arr ->
-        eval_h h env i $. fun h i ->
-        eval_h h env rhs $. fun h rhs ->
+        eval_h h env arr $. fun h env arr ->
+        eval_h h env i $. fun h env i ->
+        eval_h h env rhs $. fun h env rhs ->
         let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l2 elem_tp); TermPat predsym; SrcPat DummyPat] in
         assert_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
         (let term = ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)
@@ -10446,7 +10553,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         if pure then static_error l "Cannot write in a pure context." None;
         let pointeeType = t in
         let wrhs = check_expr_t (pn,ilist) tparams tenv rhs pointeeType in
-        eval_h h env w (fun h t ->
+        eval_h h env w (fun h env t ->
           let predSymb = pointee_pred_symb l pointeeType in
           get_points_to (pn,ilist) h t predSymb l (fun h coef _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission." None;
@@ -10455,11 +10562,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | ExprStmt e ->
       let (w, _) = check_expr (pn,ilist) tparams tenv e in
-      verify_expr false h env None w (fun h _ -> cont h env) econt
+      verify_expr false h env None w (fun h env _ -> cont h env) econt
     | IfStmt (l, e, ss1, ss2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-      (eval_h_nonpure h env w ( fun h w ->
+      (eval_h_nonpure h env w ( fun h env w ->
         branch
           (fun _ -> assume w (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss1 tcont return_cont econt))
           (fun _ -> assume (ctxt#mk_not w) (fun _ -> verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss2 tcont return_cont econt))
@@ -10468,7 +10575,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env))::lblenv in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let verify_expr ro h env opt e cont = verify_expr ro h env opt e cont econt in 
-      verify_expr false h env None w $. fun h v ->
+      verify_expr false h env None w $. fun h env v ->
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       begin match tp with
         InductiveType (i, targs) ->
@@ -10552,7 +10659,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             begin match c with
               SwitchStmtClause (l, i, ss) ->
               let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
-              eval_h h env w2 $. fun h t ->
+              eval_h h env w2 $. fun h env t ->
               assume_eq t v $. fun () ->
               fall_through h env cs
             | SwitchStmtDefaultClause (l, ss) ->
@@ -11060,7 +11167,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       if not pure then check_ghost ghostenv l e;
-      let xs = block_assigned_variables ss in
+      let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
@@ -11080,10 +11187,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         match dec with
           None -> cont None
         | Some dec ->
-          eval_h h' env' dec $. fun _ t_dec ->
+          eval_h h' env' dec $. fun _ _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
-      eval_h_nonpure h' env' e $. fun h' v ->
+      eval_h_nonpure h' env' e $. fun h' env' v ->
       begin fun cont ->
         branch
           begin fun () ->
@@ -11106,7 +11213,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin match (t_dec, dec) with
         (None, None) -> ()
       | (Some t_dec, Some dec) ->
-        eval_h h' env''' dec $. fun _ t_dec2 ->
+        eval_h h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
@@ -11138,7 +11245,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         match dec with
           None -> cont None
         | Some dec ->
-          eval_h h' env' dec $. fun _ t_dec ->
+          eval_h h' env' dec $. fun _ _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
       let env' = old_xs_env @ env' in
@@ -11165,7 +11272,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals closeBraceLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
       let return_cont h' tenv env retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
-      eval_h_nonpure h' env' e $. fun h' v ->
+      eval_h_nonpure h' env' e $. fun h' env' v ->
       begin fun cont ->
         branch
           begin fun () ->
@@ -11195,7 +11302,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin match (t_dec, dec) with
         (None, None) -> ()
       | (Some t_dec, Some dec) ->
-        eval_h h' env'' dec $. fun _ t_dec2 ->
+        eval_h h' env'' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
@@ -11226,7 +11333,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if (is_unchecked_exception_type tp) then
         ()
       else
-        verify_expr false h env None w (fun h v -> (econt l h env tp v)) econt
+        verify_expr false h env None w (fun h env v -> (econt l h env tp v)) econt
     | TryCatch (l, body, catches) ->
       if pure then static_error l "Try-catch statements are not allowed in a pure context." None;
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -11600,7 +11707,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         if not pure then check_ghost ghostenv l e;
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
         let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
-        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h v ->
+        verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
         cont h (Some v)) econt
     end $. fun h retval ->
     begin fun cont ->
@@ -11999,7 +12106,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   with_context (Executing (h, env, lm, "Implicit superclass constructor call")) $. fun () ->
                   let eval_h h env e cont = verify_expr false (pn,ilist) [] false leminfo funcmap sizemap tenv ghostenv h env None e cont econt in
                   let pats = (List.map (fun e -> SrcPat (LitPat e)) args) in
-                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h _ ->
+                  verify_call funcmap eval_h lm (pn, ilist) None None [] pats ([], None, xmap0, ["this", this], pre0, post0, Some(epost0), v0) false leminfo sizemap h [] tenv ghostenv env (fun h env _ ->
                   cont h) econt
             end $. fun h ->
             let fds = get_fields (pn,ilist) cn lm in
@@ -12021,7 +12128,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] ghostenv h [("this", this)] None e (fun h initial_value ->
+                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] ghostenv h [("this", this)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
