@@ -1,3 +1,12 @@
+class C {
+  static int id(int x)
+    //@ requires true;
+    //@ ensures result == x;
+  {
+    return x;
+  }
+}
+
 class A {
   int a = 1, b = 2;
   
@@ -7,11 +16,18 @@ class A {
   {
    
   }
+  
+  int getA() 
+    //@ requires this.a |-> ?v;
+    //@ ensures this.a |-> v &*& result == v;
+  {
+    return this.a;
+  }
 }
 
 class B extends A {
 
-  int c = this.a, d = this.c + 10;
+  int c = getA(), d = this.c + C.id(10);
   
   B() 
     //@ requires true;

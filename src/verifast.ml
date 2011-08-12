@@ -5837,7 +5837,7 @@ let verify_program_core (* ?verify_program_core *)
 
   let fixpointmap = fixpointmap1 @ fixpointmap0 in
   
-  (* Region: Type checking of field initializers for fields *)
+  (* Region: Type checking of field initializers for static fields *)
   
   let classmap1 =
     List.map
@@ -5849,11 +5849,8 @@ let verify_program_core (* ?verify_program_core *)
             let fds =
               List.map
                 begin function
-                  (f, (l, t, vis, binding, final, Some e, value)) ->
-                    begin match binding with
-                      Static -> (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
-                    | Instance -> (f, (l, t, vis, binding, final, Some (check_expr_t (pn,ilist) [] [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] e t), value))
-                    end
+                  (f, (l, t, vis, Static, final, Some e, value)) ->
+                    (f, (l, t, vis, Static, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
                 | fd -> fd
                 end
                 fds
@@ -9282,6 +9279,32 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     iter classmap0 classmap1
   in
   
+  (* Region: Type checking of field initializers for instance fields *)
+
+  let classmap =
+    List.map
+      begin fun (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
+        let fds_opt =
+          match fds_opt with
+            None -> fds_opt
+          | Some fds ->
+            let fds =
+              List.map
+                begin function
+                  (f, (l, t, vis, Instance, final, Some e, value)) ->
+                    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+                    (f, (l, t, vis, Instance, final, Some (check_expr_t (pn,ilist) [] [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] e t), value))
+                | fd -> fd
+                end
+                fds
+            in
+            Some fds
+        in
+        (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
+      end
+      classmap
+  in
+  
   begin
     (* Inheritance check *)
     let rec get_overrides cn =
@@ -12128,7 +12151,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     iter h fds
                   | Some(e) -> 
                     with_context (Executing (h, [], expr_loc e, "Executing field initializer")) $. fun () ->
-                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn)] ghostenv h [("this", this)] None e (fun h _ initial_value ->
+                    verify_expr false (pn,ilist) [] false leminfo funcmap sizemap [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] ghostenv h [("this", this); (current_thread_name, List.assoc current_thread_name env)] None e (fun h _ initial_value ->
                       assume_field h cn f t Real this initial_value real_unit $. fun h ->
                       iter h fds
                     ) (fun throwl h env2 exceptp excep -> assert_false h env2 throwl ("Field initializers throws exception.") None)
