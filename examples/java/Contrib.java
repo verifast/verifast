@@ -26,9 +26,18 @@ class Counter {
 inductive pair<t1, t2> = pair(t1, t2);
 
 fixpoint t1 fst<t1, t2>(pair<t1, t2> pr) {
-  switch(pr) {    case pair(a, b): return a;  }}fixpoint t2 snd<t1, t2>(pair<t1, t2> pr) {
-  switch(pr) {    case pair(a, b): return b;  }}
-predicate_ctor Counter_ctor(Counter counter)() = counter.value |-> ?value &*& [1/2]counter.c1 |-> ?v1 
+  switch(pr) {
+    case pair(a, b): return a;
+  }
+}
+
+fixpoint t2 snd<t1, t2>(pair<t1, t2> pr) {
+  switch(pr) {
+    case pair(a, b): return b;
+  }
+}
+
+predicate_ctor Counter_ctor(Counter counter)() = counter.value |-> ?value &*& [1/2]counter.c1 |-> ?v1 
     &*& [1/2]counter.c2 |-> ?v2 &*& value == v1 + v2;
         
 predicate Session(Session Session, pair<int, real> pf, int contrib) = [1/2]Session.counter |-> ?counter &*& counter != null 
@@ -37,7 +46,8 @@ predicate Session(Session Session, pair<int, real> pf, int contrib) = [1/2]Sessi
     &*& semaphore(snd(pf), lock, fst(pf), Counter_ctor(counter));
     
 predicate_family_instance thread_run_pre(Session.class)(Session run, pair<int, real> info) = Session(run, info, 0);
-predicate_family_instance thread_run_post(Session.class)(Session run, pair<int, real> info) = Session(run, info, 1);
+predicate_family_instance thread_run_post(Session.class)(Session run, pair<int, real> info) = Session(run, info, 1);
+
 @*/
 
 class Session implements Runnable {
@@ -99,27 +109,28 @@ class Program {
         //@ close Counter_ctor(c)();
         //@ close n_times(0, Counter_ctor(c));
         //@ close n_times(1, Counter_ctor(c));
-        Semaphore lock = new Semaphore(1);        //@ semaphore_split_detailed(lock, 1/2, 1);
+        Semaphore lock = new Semaphore(1);
+        //@ semaphore_split_detailed(lock, 1/2, 1);
         Session session1 = new Session(c, lock, true);
-        //@ close Session(session1, pair(0, 1/2), 0);
-        //@ close thread_run_pre(Session.class)(session1, pair(0, 1/2));
+        //@ close Session(session1, pair(0, 1r/2), 0);
+        //@ close thread_run_pre(Session.class)(session1, pair(0, 1r/2));
         JoinableRunnable session1Joinable = ThreadingHelper.createJoinableRunnable(session1);
         //@ close_joinable_runnable(session1Joinable);
         Thread thread1 = new Thread(session1Joinable);
         thread1.start();
         Session session2 = new Session(c, lock, false);
-        //@ close Session(session2, pair(1, 1/2), 0);
-        //@ close thread_run_pre(Session.class)(session2, pair(1, 1/2));
+        //@ close Session(session2, pair(1, 1r/2), 0);
+        //@ close thread_run_pre(Session.class)(session2, pair(1, 1r/2));
         JoinableRunnable session2Joinable = ThreadingHelper.createJoinableRunnable(session2);
         //@ close_joinable_runnable(session2Joinable);
         Thread thread2 = new Thread(session2Joinable);
         thread2.start();
         ThreadingHelper.join(thread1, session1Joinable);
-        //@ open thread_run_post(Session.class)(session1, pair(0, 1/2)); 
+        //@ open thread_run_post(Session.class)(session1, pair(0, 1r/2)); 
         ThreadingHelper.join(thread2, session2Joinable);
-        //@ open thread_run_post(Session.class)(session2, pair(1, 1/2)); 
-        //@ open Session(session1, pair(0, 1/2), 1);
-        //@ open Session(session2, pair(1, 1/2), 1);
+        //@ open thread_run_post(Session.class)(session2, pair(1, 1r/2)); 
+        //@ open Session(session1, pair(0, 1r/2), 1);
+        //@ open Session(session2, pair(1, 1r/2), 1);
         //@ semaphore_join();
         //@ semaphore_dispose(lock);
         //@ open n_times(1, Counter_ctor(c));

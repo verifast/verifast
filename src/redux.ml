@@ -42,6 +42,7 @@ type ('symbol, 'termnode) term =
 | Add of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Sub of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | Mul of ('symbol, 'termnode) term * ('symbol, 'termnode) term
+| Div of ('symbol, 'termnode) term * ('symbol, 'termnode) term
 | NumLit of num
 | App of 'symbol * ('symbol, 'termnode) term list * 'termnode option
 | IfThenElse of ('symbol, 'termnode) term * ('symbol, 'termnode) term * ('symbol, 'termnode) term
@@ -66,6 +67,7 @@ let term_subst bound_env t =
     | Add (t1, t2) -> Add (iter t1, iter t2)
     | Sub (t1, t2) -> Sub (iter t1, iter t2)
     | Mul (t1, t2) -> Mul (iter t1, iter t2)
+    | Div (t1, t2) -> Div (iter t1, iter t2)
     | NumLit n -> t
     | App (s, args, None) -> App (s, List.map iter args, None)
     | App (s, args, Some _) -> t
@@ -739,6 +741,7 @@ and context () =
     method mk_add (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Add (t1, t2)
     method mk_sub (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Sub (t1, t2)
     method mk_mul (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Mul (t1, t2)
+    method mk_div (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Div (t1, t2)
     method mk_lt (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Lt (t1, t2)
     method mk_le (t1: (symbol, termnode) term) (t2: (symbol, termnode) term): (symbol, termnode) term = Le (t1, t2)
     method mk_reallit (n: int): (symbol, termnode) term = NumLit (num_of_int n)
@@ -1091,6 +1094,7 @@ and context () =
       | App (s, ts, _) -> s#name ^ (if ts = [] then "" else "(" ^ String.concat ", " (List.map (fun t -> self#pprint t) ts) ^ ")")
       | NumLit n -> string_of_num n
       | Mul (t1, t2) -> Printf.sprintf "(%s * %s)" (self#pprint t1) (self#pprint t2)
+      | Div (t1, t2) -> Printf.sprintf "(%s / %s)" (self#pprint t1) (self#pprint t2)
       | IfThenElse (t1, t2, t3) -> "(" ^ self#pprint t1 ^ " ? " ^ self#pprint t2 ^ " : " ^ self#pprint t3 ^ ")"
       | BoundVar i -> Printf.sprintf "bound.%i" i
       | Implies (t1, t2) -> self#pprint t1 ^ " ==> " ^ self#pprint t2
@@ -1218,6 +1222,7 @@ and context () =
           let ts3 = iter ts3 ts2 in
           (* Printf.printf "Mul %s %s %s = %s\n" (string_of_num scale) (self#pprint t1) (self#pprint t2) (self#pprint_poly (n3, ts3)); *)
           (n3, ts3)
+        (*| Div(t1, t2) -> todo *)
         | _ ->
           let t = self#termnode_of_term t in
           begin match t#value#as_number with
@@ -1362,6 +1367,7 @@ and context () =
             | Add (t1, t2) -> find_terms t1 @ find_terms t2
             | Sub (t1, t2) -> find_terms t1 @ find_terms t2
             | Mul (t1, t2) -> find_terms t1 @ find_terms t2
+            | Div (t1, t2) -> find_terms t1 @ find_terms t2
             | NumLit n -> []
             | App (s, args, _) -> check_pat pat
             | IfThenElse (t1, t2, t3) -> []

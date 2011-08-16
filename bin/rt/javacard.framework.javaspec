@@ -134,16 +134,16 @@ class Applet {
         //@ ensures true;
     
     public boolean select();
-        //@ requires current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
     
     public void deselect();
-        //@ requires current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
     
     public void process(APDU apdu);
-        //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
 }
 
 class ISOException extends RuntimeException {
@@ -190,7 +190,7 @@ class JCSystem {
 
     public static void beginTransaction();
         //@ requires current_applet(?a);
-		//@ ensures in_transaction(a, ?l) &*& [1/2]a.valid() &*& foreach( remove(a, l), applet_valid);
+		//@ ensures in_transaction(a, ?l) &*& [1r/2]a.valid() &*& foreach( remove(a, l), applet_valid);
     
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
@@ -198,7 +198,7 @@ class JCSystem {
     public static void commitTransaction();
         /*@ requires in_transaction(?a, ?l) &*& a.valid() &*& foreach( remove(a, l), applet_valid)
 		     &*& transient_arrays(?ta) &*& foreach(ta, transient_array); @*/
-        /*@ ensures current_applet(a) &*& [1/2]a.valid()
+        /*@ ensures current_applet(a) &*& [1r/2]a.valid()
 		     &*& transient_arrays(ta) &*& foreach(ta, transient_array);@*/
 
     public static byte[] makeTransientByteArray(short length, byte event);

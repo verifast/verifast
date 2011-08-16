@@ -108,7 +108,8 @@ class z3_context () =
   let boxed_real = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(realbox)") [| real_type |] inductive_type in
   let unboxed_real = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(real)") [| inductive_type |] real_type in
   let () = assume_is_inverse unboxed_real boxed_real real_type in
-  let () = assume_is_inverse boxed_real unboxed_real inductive_type in  
+  let () = assume_is_inverse boxed_real unboxed_real inductive_type in
+  let div = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "div") [| int_type; int_type |] int_type in
   object
     val mutable verbosity = 0
     method set_verbosity v = verbosity <- v
@@ -198,6 +199,7 @@ class z3_context () =
     method mk_add t1 t2 = Z3.mk_add ctxt [| t1; t2 |]
     method mk_sub t1 t2 = Z3.mk_sub ctxt [| t1; t2 |]
     method mk_mul t1 t2 = Z3.mk_mul ctxt [| t1; t2 |]
+    method mk_div t1 t2 = Z3.mk_app ctxt div [| t1; t2 |]
     method mk_lt t1 t2 = Z3.mk_lt ctxt t1 t2
     method mk_le t1 t2 = Z3.mk_le ctxt t1 t2
     method mk_reallit n = Z3.mk_int ctxt n real_type

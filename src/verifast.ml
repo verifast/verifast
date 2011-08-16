@@ -381,6 +381,7 @@ type token = (* ?token *)
   | Kwd of string
   | Ident of string
   | Int of big_int
+  | RealToken of big_int
   | Float of float
   | String of string
   | CharToken of char
@@ -699,6 +700,8 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk (); store '.'; decimal_part ()
     | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()
+    | ('r') ->
+        text_junk (); Some (RealToken (big_int_of_string (get_string ())))
     | _ -> Some (Int (big_int_of_string (get_string ())))
   and hex_number () =
     match text_peek () with
@@ -965,6 +968,7 @@ and
       expr list *
       type_ list option ref
   | IntLit of loc * big_int * type_ option ref (* int literal*)
+  | RealLit of loc * num
   | StringLit of loc * string (* string literal *)
   | ClassLit of loc * string (* class literal in java *)
   | Read of loc * expr * string (* lezen van een veld; hergebruiken voor java field access *)
@@ -1485,6 +1489,7 @@ let rec expr_loc e =
   | Null l -> l
   | Var (l, x, _) -> l
   | IntLit (l, n, t) -> l
+  | RealLit (l, n) -> l
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
@@ -1603,6 +1608,7 @@ let expr_fold_open iter state e =
   | Var (l, x, scope) -> state
   | Operation (l, op, es, ts) -> iters state es
   | IntLit (l, n, tp) -> state
+  | RealLit(l, n) -> state
   | StringLit (l, s) -> state
   | ClassLit (l, cn) -> state
   | Read (l, e0, f) -> iter state e0
@@ -2586,6 +2592,7 @@ and
     | [< >] -> Var (lx, x, ref None)
   >] -> ex
 | [< '(l, Int i) >] -> IntLit (l, i, ref None)
+| [< '(l, RealToken i) >] -> RealLit (l, num_of_big_int i)
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
@@ -5113,6 +5120,10 @@ let verify_program_core (* ?verify_program_core *)
         let w1 = checkt e1 RealType in
         ts := Some [RealType; RealType];
         (w1, w2, RealType)
+      | (RealType, IntType) ->
+        let w2 = checkt e2 RealType in
+        ts := Some [RealType; RealType];
+        (w1, w2, RealType)
       | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
         ts := Some [IntType; IntType];
         (w1, w2, IntType)
@@ -5332,14 +5343,15 @@ let verify_program_core (* ?verify_program_core *)
       begin match t with PtrType _ -> static_error l "Cannot multiply pointers." None | _ -> () end;
       (Operation (l, Mul, [w1; w2], ts), t)
     | Operation (l, Div, [e1; e2], ts) ->
-      let w1 = checkt e1 RealType in
-      let w2 = checkt e2 RealType in
-      (Operation (l, Div, [w1; w2], ts), RealType)
+      let (w1, w2, t) = promote l e1 e2 ts in
+      begin match t with PtrType _ -> static_error l "Cannot divide pointers." None | _ -> () end;
+      (Operation (l, Div, [w1; w2], ts), t)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
       (Operation (l, op, [w1; w2], ts), IntType)
     | IntLit (l, n, t) -> (e, match !t with None -> t := Some intt; intt | Some t -> t)
+    | RealLit(l, n) -> (e, RealType)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
       (ClassLit (l, s), ObjType "java.lang.Class")
@@ -5628,7 +5640,8 @@ let verify_program_core (* ?verify_program_core *)
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
   and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 isCast =
     match (e, unfold_inferred_type t0) with
-      (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
+      (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)], _), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
+    | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
     | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), UChar) ->
@@ -6840,6 +6853,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | Upcast (e, fromType, toType) -> ev state e cont
     | WidenedParameterArgument e -> ev state e cont
+    | RealLit(l, n) ->
+      cont state begin 
+        if eq_num n (num_of_big_int unit_big_int) then
+        real_unit
+            else
+        ctxt#mk_reallit_of_num n
+      end
     | IntLit (l, n, t) ->
       begin match !t with
         Some RealType ->
@@ -6905,16 +6925,29 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _ ->
         static_error l "VeriFast does not currently support taking the bitwise complement (~) of an unsigned integer except as part of a bitwise AND (x & ~y)." None
       end
-    | Operation (l, Div, [IntLit (_, n, _); IntLit (_, d, _)], _) when eq_big_int n unit_big_int && eq_big_int d two_big_int ->
-      cont state real_half
     | Operation (l, Div, [e1; e2], ts) ->
-      let rec eval_reallit e =
-        match e with
-          IntLit (l, n, t) -> num_of_big_int n
-        | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
-      in
-      ev state e1 $. fun state v1 ->
-      cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2))))
+      begin match ! ts with
+        Some ([RealType; RealType]) ->
+        begin match (e1, e2) with
+          (RealLit (_, n), IntLit (_, d, _)) when eq_num n (num_of_big_int unit_big_int) && eq_big_int d two_big_int -> cont state real_half
+        | (IntLit (_, n, _), IntLit (_, d, _)) when eq_big_int n unit_big_int && eq_big_int d two_big_int -> cont state real_half
+        | _ -> 
+          let rec eval_reallit e =
+              match e with
+              IntLit (l, n, t) -> num_of_big_int n
+            | RealLit (l, n) -> n
+            | _ -> static_error (expr_loc e) "The denominator of a division must be a literal." None
+          in
+          ev state e1 $. fun state v1 -> cont state (ctxt#mk_real_mul v1 (ctxt#mk_reallit_of_num (div_num (num_of_int 1) (eval_reallit e2)))) 
+        end
+      | Some ([IntType; IntType]) -> 
+        ev state e1 $. fun state v1 -> ev state e2 $. fun state v2 -> 
+        begin match ass_term with
+          Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
+        | None -> ()
+        end;
+        cont state (ctxt#mk_div v1 v2)
+      end
     | Operation (l, op, ([e1; e2] as es), ts) ->
       evs state es $. fun state [v1; v2] ->
       cont state
@@ -9423,7 +9456,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   let rec expr_mark_addr_taken e locals = 
     match e with
-      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | StringLit(_, _) | ClassLit(_) -> ()
+      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
     | Operation(_, _, es, _) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
     | AddressOf(_, Var(_, x, scope)) -> mark_if_local locals x
     | Read(_, e, _) -> expr_mark_addr_taken e locals
@@ -9540,7 +9573,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _ -> []
     in
     match e with
-      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | StringLit(_, _) | ClassLit(_) -> []
+      True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> []
     | Operation(_, _, es, _) -> List.flatten (List.map (fun e -> expr_address_taken e) es)
     | Read(_, e, _) -> expr_address_taken e
     | ArrayLengthExpr(_, e) -> expr_address_taken e
