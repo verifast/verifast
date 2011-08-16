@@ -19,6 +19,10 @@ package javacard.framework;
      ensures transient_arrays(as) &*& mem(a, as) == true;
 @*/
 
+//@ predicate registered_applets(list<Applet> as);
+//@ predicate semi_valid(Applet applet;) = [1/2]applet.valid();
+//@ predicate full_valid(Applet applet;) = applet.valid();
+
 /*@
 	predicate OwnerPIN(OwnerPIN pin; byte tryLimit, byte maxPINSize);
 @*/
@@ -134,16 +138,16 @@ class Applet {
         //@ ensures true;
     
     public boolean select();
-        //@ requires current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
     
     public void deselect();
-        //@ requires current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]this.valid() &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
     
     public void process(APDU apdu);
-        //@ requires current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this,as),semi_valid) &*& current_applet(this) &*& [1r/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
 }
 
 class ISOException extends RuntimeException {
@@ -174,7 +178,11 @@ class OPSystem {
         //@ ensures true;
 }
 
+//@predicate AID(AID aid);
 class AID {
+    public boolean equals(byte[] bArray, short offset, byte length);
+    //@ requires [?f1]AID(this) &*& [?f2]array_slice(bArray, offset, offset + length, ? elems) &*& 0 <= offset &*& 0 < length;
+    //@ ensures [f1]AID(this) &*& [f2]array_slice(bArray, offset, offset + length, elems) &*& 0 <= offset &*& 0 < length; 
 }
 
 //@ predicate in_transaction(Applet a, list<Applet> l);
@@ -206,6 +214,10 @@ class JCSystem {
         /*@ ensures result != null &*& result.length == length
 		      &*& transient_arrays(?ta2) &*& ta2 == append(cons(result, nil), ta)
 		      &*& foreach(ta2, transient_array) &*& is_transient_array(result) == true; @*/
+
+    public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
+    	//@ requires registered_applets(?as);
+    	//@ ensures registered_applets(as) &*& (result == null ? true : result instanceof Shareable); /* &*& mem((Shareable)result,as)==true */
 
     public static final byte CLEAR_ON_DESELECT = 2;
 }
