@@ -130,6 +130,7 @@ verifast_both -c Constants.java
 verifast_both -c FieldInitializers.java
 verifast_both -c -allow_should_fail CompoundAssignments.java
 verifast -c -allow_should_fail Division.java
+verifast -c ConstantExpressions.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
 verifast_both -disable_overflow_check -c Contrib_box.jarsrc
 verifast_both -c DefaultCtor.java

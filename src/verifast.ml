@@ -5072,7 +5072,7 @@ let verify_program_core (* ?verify_program_core *)
   
   let current_class = "#currentClass" in
   
-  let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
+  let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 false in
     let checkt_cast e t0 = 
@@ -5113,8 +5113,8 @@ let verify_program_core (* ?verify_program_core *)
       declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
     in
     let promote_numeric e1 e2 ts =
-      let (w1, t1) = check e1 in
-      let (w2, t2) = check e2 in
+      let (w1, t1, _) = check e1 in
+      let (w2, t2, _) = check e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (IntType, RealType) ->
         let w1 = checkt e1 RealType in
@@ -5150,17 +5150,17 @@ let verify_program_core (* ?verify_program_core *)
         in
         apply [] t es
       in
-      (unbox (WPureFunValueCall (l, w, ws)) tp, tp)
+      (unbox (WPureFunValueCall (l, w, ws)) tp, tp, None)
     in
     match e with
-      True l -> (e, boolt)
-    | False l -> (e, boolt)
-    | Null l -> (e, ObjType "null")
+      True l -> (e, boolt, None)
+    | False l -> (e, boolt, None)
+    | Null l -> (e, ObjType "null", None)
     | Var (l, x, scope) ->
       begin
       match try_assoc x tenv with
-      | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t)
-      | Some t -> scope := Some LocalVar; (e, t)
+      | Some(RefType(t)) -> scope := Some LocalVar; (Deref(l, e, ref (Some t)), t, None)
+      | Some t -> scope := Some LocalVar; (e, t, None)
       | None ->
       begin fun cont ->
       if language <> Java then cont () else
@@ -5171,7 +5171,15 @@ let verify_program_core (* ?verify_program_core *)
           match lookup_class_field cn x with
             None -> None
           | Some ((lf, t, vis, binding, final, init, value), fclass) ->
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, t, binding = Static, value, Real), t)
+            let constant_value =
+              if final then
+                match ! value with
+                  Some(Some(IntConst(i))) -> Some(i)
+                | _ -> None
+              else
+                None
+            in
+            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, t, binding = Static, value, Real), t, constant_value)
       in
       match field_of_this with
         Some result -> result
@@ -5184,25 +5192,25 @@ let verify_program_core (* ?verify_program_core *)
             None -> None
           | Some ((lf, t, vis, binding, final, init, value), fclass) ->
             if binding <> Static then static_error l "Instance field access without target object" None;
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t)
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t, None)
       in
       match field_of_class with
         Some result -> result
       | None ->
       match resolve (pn,ilist) l x classmap1 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve (pn,ilist) l x interfmap1 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve (pn,ilist) l x classmap0 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
       | None ->
       match resolve (pn,ilist) l x interfmap0 with
-        Some (cn, _) -> (e, ClassOrInterfaceName cn)
+        Some (cn, _) -> (e, ClassOrInterfaceName cn, None)
       | None ->
       if is_package x then
-        (e, PackageName x)
+        (e, PackageName x, None)
       else
         cont ()
       end $. fun () ->
@@ -5213,35 +5221,35 @@ let verify_program_core (* ?verify_program_core *)
           let targs = List.map (fun _ -> InferredType (ref None)) tparams in
           let Some tpenv = zip tparams targs in
           scope := Some PureCtor;
-          (Var (l, x, scope), instantiate_type tpenv t)
+          (Var (l, x, scope), instantiate_type tpenv t, None)
         end
         else
         begin
-          scope := Some PureCtor; (Var (l, x, scope), t)
+          scope := Some PureCtor; (Var (l, x, scope), t, None)
         end
       | _ ->
       if List.mem x funcnames then
         match file_type path with
           Java -> static_error l "In java methods can't be used as pointers" None
-        | _ -> scope := Some FuncName; (e, PtrType Void)
+        | _ -> scope := Some FuncName; (e, PtrType Void, None)
       else
       match resolve (pn,ilist) l x predfammap with
       | Some (x, (_, tparams, arity, ts, _, inputParamCount)) ->
         if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
         if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
         scope := Some PredFamName;
-        (Var (l, x, scope), PredType (tparams, ts, inputParamCount))
+        (Var (l, x, scope), PredType (tparams, ts, inputParamCount), None)
       | None ->
       match try_assoc x enummap with
       | Some i ->
         scope := Some (EnumElemName i);
-        (e, IntType)
+        (e, IntType, None)
       | None ->
       match try_assoc' (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp)
+      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp, None)
       | None ->
       match try_assoc x modulemap with
-      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType)
+      | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
       | _ ->
       match resolve (pn,ilist) l x purefuncmap with
         Some (x, (_, tparams, t, pts, _)) ->
@@ -5252,7 +5260,7 @@ let verify_program_core (* ?verify_program_core *)
             let tpenv = List.map (fun x -> (x, InferredType (ref None))) tparams in
             (List.map (instantiate_type tpenv) pts, instantiate_type tpenv t)
         in
-        scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t)
+        scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
       | None ->
       if language = Java then
         static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate" None
@@ -5265,56 +5273,56 @@ let verify_program_core (* ?verify_program_core *)
           Some (g, (_, tparams, arity, ts, _, inputParamCount)) ->
           if arity <> 0 then static_error l "Using a predicate family as a value is not supported." None;
           if tparams <> [] then static_error l "Using a predicate with type parameters as a value is not supported." None;
-          (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount))
+          (PredNameExpr (l, g), PredType (tparams, ts, inputParamCount), None)
         | None -> static_error l "No such predicate." None
       end
     | Operation (l, (Eq | Neq as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote_numeric e1 e2 ts in
-      (Operation (l, operator, [w1; w2], ts), boolt)
+      (Operation (l, operator, [w1; w2], ts), boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
       let w1 = checkt e1 boolt in
       let w2 = checkt e2 boolt in
-      (Operation (l, operator, [w1; w2], ts), boolt)
+      (Operation (l, operator, [w1; w2], ts), boolt, None)
     | Operation (l, Not, [e], ts) -> 
       let w = checkt e boolt in
-      (Operation (l, Not, [w], ts), boolt)
+      (Operation (l, Not, [w], ts), boolt, None)
     | Operation (l, BitAnd, [e1; e2], ts) ->
-      let (w1, t1) = check e1 in
-      let (w2, t2) = check e2 in
+      let (w1, t1, _) = check e1 in
+      let (w2, t2, _) = check e2 in
       begin match (t1, t2) with
         ((Char|ShortType|IntType|UintPtrType), (Char|ShortType|IntType|UintPtrType)) ->
         let t = match (t1, t2) with (UintPtrType, _) | (_, UintPtrType) -> UintPtrType | _ -> IntType in
         ts := Some [t1; t2];
-        (Operation (l, BitAnd, [w1; w2], ts), t)
+        (Operation (l, BitAnd, [w1; w2], ts), t, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, (BitXor | BitOr as operator), [e1; e2], ts) ->
-      let (w1, t1) = check e1 in
-      let (_, t2) = check e2 in
+      let (w1, t1, _) = check e1 in
+      let (_, t2, _) = check e2 in
       begin
       match t1 with
-        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType)
-      | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType)
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts := Some [t1;t2]; (Operation (l, operator, [w1; w2], ts), IntType, None)
+      | UintPtrType -> let w2 = checkt e2 UintPtrType in (Operation (l, operator, [w1; w2], ts), UintPtrType, None)
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, Mod, [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
-      (Operation (l, Mod, [w1; w2], ts), IntType)
+      (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | Operation (l, BitNot, [e], ts) ->
-      let (w, t) = check e in
+      let (w, t, _) = check e in
       begin
       match t with
-        Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType)
-      | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType)
+        Char | ShortType | IntType -> ts := Some [IntType]; (Operation (l, BitNot, [w], ts), IntType, None)
+      | UintPtrType -> ts := Some [UintPtrType]; (Operation (l, BitNot, [w], ts), UintPtrType, None)
       | _ -> static_error l "argument to ~ must be char, short, int or uintptr" None
       end
     | Operation (l, (Le | Lt as operator), [e1; e2], ts) -> 
       let (w1, w2, t) = promote l e1 e2 ts in
-      (Operation (l, operator, [w1; w2], ts), boolt)
+      (Operation (l, operator, [w1; w2], ts), boolt, None)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
-      let (w1, t1) = check e1 in
-      let (w2, t2) = check e2 in
+      let (w1, t1, value1) = check e1 in
+      let (w2, t2, value2) = check e2 in
       begin
         match t1 with
           PtrType pt1 ->
@@ -5323,66 +5331,66 @@ let verify_program_core (* ?verify_program_core *)
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             ts:=Some [t1; t2];
-            (Operation (l, operator, [w1; w2], ts), IntType)
+            (Operation (l, operator, [w1; w2], ts), IntType, None)
           | _ ->
             let w2 = checkt e2 intt in
             ts:=Some [t1; IntType];
-            (Operation (l, operator, [w1; w2], ts), t1)
+            (Operation (l, operator, [w1; w2], ts), t1, None)
           end
         | IntType | RealType | ShortType | Char | UintPtrType ->
           let (w1, w2, t) = promote l e1 e2 ts in
-          (Operation (l, operator, [w1; w2], ts), t)
+          (Operation (l, operator, [w1; w2], ts), t, if t = IntType then (match (value1, value2) with ((Some value1), (Some value2)) -> begin match operator with Add -> Some(add_big_int value1 value2) | Sub -> Some(sub_big_int value1 value2) end | _-> None) else None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
-          (Operation (l, operator, [w1; w2], ts), t1)
+          (Operation (l, operator, [w1; w2], ts), t1, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
     | Operation (l, Mul, [e1; e2], ts) ->
       let (w1, w2, t) = promote l e1 e2 ts in
       begin match t with PtrType _ -> static_error l "Cannot multiply pointers." None | _ -> () end;
-      (Operation (l, Mul, [w1; w2], ts), t)
+      (Operation (l, Mul, [w1; w2], ts), t, None)
     | Operation (l, Div, [e1; e2], ts) ->
       let (w1, w2, t) = promote l e1 e2 ts in
       begin match t with PtrType _ -> static_error l "Cannot divide pointers." None | _ -> () end;
-      (Operation (l, Div, [w1; w2], ts), t)
+      (Operation (l, Div, [w1; w2], ts), t, None)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
-      (Operation (l, op, [w1; w2], ts), IntType)
-    | IntLit (l, n, t) -> (e, match !t with None -> t := Some intt; intt | Some t -> t)
-    | RealLit(l, n) -> (e, RealType)
+      (Operation (l, op, [w1; w2], ts), IntType, None)
+    | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
+    | RealLit(l, n) -> (e, RealType, None)
     | ClassLit (l, s) ->
       let s = check_classname (pn, ilist) (l, s) in
-      (ClassLit (l, s), ObjType "java.lang.Class")
+      (ClassLit (l, s), ObjType "java.lang.Class", None)
     | StringLit (l, s) -> (match file_type path with
-        Java-> (e, ObjType "java.lang.String")
-      | _ -> (e, PtrType Char))
+        Java-> (e, ObjType "java.lang.String", None)
+      | _ -> (e, (PtrType Char), None))
     | CastExpr (l, truncating, te, e) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt_cast e t in
-      (CastExpr (l, truncating, ManifestTypeExpr (type_expr_loc te, t), w), t)
+      (CastExpr (l, truncating, ManifestTypeExpr (type_expr_loc te, t), w), t, None)
     | Read (l, e, f) ->
       check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f
     | Deref (l, e, tr) ->
-      let (w, t) = check e in
+      let (w, t, _) = check e in
       begin
         match t with
-          PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0)
+          PtrType t0 -> tr := Some t0; (Deref (l, w, tr), t0, None)
         | _ -> static_error l "Operand must be pointer." None
       end
     | AddressOf (l, Var(l2, x, scope)) when List.mem_assoc x tenv ->
-      scope := Some(LocalVar); (Var(l2, x, scope), PtrType(match List.assoc x tenv with RefType(t) -> t | _ -> static_error l "Taking the address of this expression is not supported." None))
-    | AddressOf (l, e) -> let (w, t) = check e in (AddressOf (l, w), PtrType t)
+      scope := Some(LocalVar); (Var(l2, x, scope), PtrType(match List.assoc x tenv with RefType(t) -> t | _ -> static_error l "Taking the address of this expression is not supported." None), None)
+    | AddressOf (l, e) -> let (w, t, _) = check e in (AddressOf (l, w), PtrType t, None)
     | CallExpr (l, "getClass", [], [], [LitPat target], Instance) when language = Java ->
       let w = checkt target (ObjType "java.lang.Object") in
-      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class")
+      (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class", None)
     | ExprCallExpr (l, e, es) ->
-      let (w, t) = check e in
+      let (w, t, _) = check e in
       begin match t with
         PureFuncType (_, _) -> check_pure_fun_value_call l w t es
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
-      end
+      end 
     | CallExpr (l, g, targes, [], pats, fb) ->
       let es = List.map (function LitPat e -> e | _ -> static_error l "Patterns are not allowed in this position" None) pats in
       let process_targes callee_tparams =
@@ -5404,7 +5412,7 @@ let verify_program_core (* ?verify_program_core *)
           Some (PtrType (FuncType ftn)) ->
           let (_, gh, tparams, rt, ftxmap, xmap, pre, post, ft_predfammap) = List.assoc ftn functypemap in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
-          (WFunPtrCall (l, g, es), rt)
+          (WFunPtrCall (l, g, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
           if targes <> [] then static_error l "Pure function value does not have type parameters." None;
           check_pure_fun_value_call l (Var (l, g, ref (Some LocalVar))) t es
@@ -5412,14 +5420,14 @@ let verify_program_core (* ?verify_program_core *)
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
           if not (List.mem_assoc tn structmap) then static_error lt "No such struct" None;
-          (WFunCall (l, g, [], es), PtrType (StructType tn))
+          (WFunCall (l, g, [], es), PtrType (StructType tn), None)
         | _ ->
         match resolve (pn,ilist) l g funcmap with
           Some (g, (funenv, fterm, lg, k, callee_tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v)) ->
           let (targs, tpenv) = process_targes callee_tparams in
           let rt0 = match tr with None -> Void | Some rt -> rt in
           let rt = instantiate_type tpenv rt0 in
-          (WFunCall (l, g, targs, es), rt)
+          (WFunCall (l, g, targs, es), rt, None)
         | None ->
         match resolve (pn,ilist) l g purefuncmap with
           Some (g, (_, callee_tparams, t0, ts, _)) ->
@@ -5431,7 +5439,7 @@ let verify_program_core (* ?verify_program_core *)
           in
           let args = List.map (fun (e, t0) -> let t = instantiate_type tpenv t0 in box (checkt e t) t t0) pts in
           let t = instantiate_type tpenv t0 in
-          (unbox (WPureFunCall (l, g, targs, args)) t0 t, t)
+          (unbox (WPureFunCall (l, g, targs, args)) t0 t, t, None)
         | None ->
           static_error l (match language with CLang -> "No such function" | Java -> "No such method or function") None
       in
@@ -5439,7 +5447,7 @@ let verify_program_core (* ?verify_program_core *)
       let try_qualified_call tn es args fb on_fail =
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
-        let argtps = List.map (fun e -> snd (check e)) args in
+        let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
         begin match ms with
           [] -> static_error l "No matching method" None
@@ -5447,7 +5455,7 @@ let verify_program_core (* ?verify_program_core *)
           let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
           if fb <> fb' then static_error l "Instance method requires target object" None;
           let rt = match rt with None -> Void | Some rt -> rt in
-          (WMethodCall (l, tn', g, sign, es, fb), rt)
+          (WMethodCall (l, tn', g, sign, es, fb), rt, None)
         | _ -> static_error l "Multiple matching overloads" None
         end
       in
@@ -5467,7 +5475,7 @@ let verify_program_core (* ?verify_program_core *)
         func_call ()
       | Instance ->
         let arg0e::args = es in
-        let (_, arg0tp) = check arg0e in
+        let (_, arg0tp, _) = check arg0e in
         let (tn, es, fb) =
           match unfold_inferred_type arg0tp with
             ObjType tn -> (tn, es, Instance)
@@ -5482,33 +5490,33 @@ let verify_program_core (* ?verify_program_core *)
         if abstract then
           static_error l "Cannot create instance of abstract class." None
         else 
-          (NewObject (l, cn, args), ObjType cn)
+          (NewObject (l, cn, args), ObjType cn, None)
       | None -> static_error l "No such class" None
       end
     | ReadArray(l, arr, index) ->
-      let (w1, arr_t) = check arr in
+      let (w1, arr_t, _) = check arr in
       let w2 = checkt index intt in
       begin match unfold_inferred_type arr_t with
-        ArrayType tp -> (WReadArray (l, w1, tp, w2), tp)
-      | PtrType tp -> (WReadArray (l, w1, tp, w2), tp)
+        ArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
+      | PtrType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | _ when language = Java -> static_error l "target of array access is not an array" None
       | _ when language = CLang -> static_error l "target of array access is not an array or pointer" None
       end
     | NewArray (l, te, len) ->
       let t = check_pure_type (pn,ilist) tparams te in
       ignore $. checkt len IntType;
-      (e, ArrayType t)
+      (e, (ArrayType t), None)
     | NewArrayWithInitializer (l, te, es) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let ws = List.map (fun e -> checkt e t) es in
-      (e, ArrayType t)
+      (e, ArrayType t, None)
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
-      let (w2, t) = check e2 in
+      let (w2, t, _) = check e2 in
       let w3 = checkt e3 t in
-      (IfExpr (l, w1, w2, w3), t)
+      (IfExpr (l, w1, w2, w3), t, None)
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
-      let (w, t) = check e in
+      let (w, t, _) = check e in
       begin
         match t with
           InductiveType (i, targs) ->
@@ -5525,7 +5533,7 @@ let verify_program_core (* ?verify_program_core *)
                     (t0, None)
                   | Some (lcdef, edef) ->
                     if ctors = [] then static_error lcdef "Superfluous default clause" None;
-                    let (wdef, tdef) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv edef in
+                    let (wdef, tdef, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv edef in
                     let t0 =
                       match t0 with
                         None -> Some tdef
@@ -5536,7 +5544,7 @@ let verify_program_core (* ?verify_program_core *)
                 begin
                   match t0 with
                     None -> static_error l "Switch expressions with zero clauses are not yet supported." None
-                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, wcdef_opt, tref), t0)
+                  | Some t0 -> tref := Some (t, tenv, targs, t0); (SwitchExpr (l, w, wcs, wcdef_opt, tref), t0, None)
                 end
               | SwitchExprClause (lc, cn, xs, e)::cs ->
                 begin
@@ -5558,7 +5566,7 @@ let verify_program_core (* ?verify_program_core *)
                       in
                       iter2 ts xs []
                     in
-                    let (w, t) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (xenv@tenv) e in
+                    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (xenv@tenv) e in
                     let t0 =
                       match t0 with
                         None -> Some t
@@ -5574,11 +5582,11 @@ let verify_program_core (* ?verify_program_core *)
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
-      (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt)
+      (InstanceOfExpr (l, w, ManifestTypeExpr (type_expr_loc te, t)), boolt, None)
     | SuperMethodCall(l, mn, args) ->
       let rec get_implemented_instance_method cn mn argtps =
         if cn = "java.lang.Object" then None else
@@ -5591,7 +5599,7 @@ let verify_program_core (* ?verify_program_core *)
           end
         | None -> None
       in
-      let args_checked = List.map check args in 
+      let args_checked = List.map (fun a -> let (w, tp, _) = check a in (w, tp)) args in 
       let argtps = List.map snd args_checked in
       let wargs = List.map fst args_checked in
       let thistype = try_assoc "this" tenv in
@@ -5604,14 +5612,14 @@ let verify_program_core (* ?verify_program_core *)
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) -> 
-             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), match rt with Some(tp) -> tp | _ -> Void)
+             (WSuperMethodCall(l, mn, (Var (l, "this", ref (Some LocalVar))) :: wargs, (lm, gh, rt, xmap, pre, post, epost, v)), (match rt with Some(tp) -> tp | _ -> Void), None)
             end
         end
       end 
     | AssignOpExpr(l, e1, (Add | Sub as operator), e2, postOp, ts, lhs_type) ->
-      let (w1, t1) = check e1 in
+      let (w1, t1, _) = check e1 in
       lhs_type := Some t1;
-      let (w2, t2) = check e2 in
+      let (w2, t2, _) = check e2 in
       begin
         match t1 with
           PtrType pt1 ->
@@ -5620,19 +5628,19 @@ let verify_program_core (* ?verify_program_core *)
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
             if pt1 <> Char && pt1 <> Void then static_error l "Subtracting non-char pointers is not yet supported" None;
             ts:=Some [t1; t2];
-            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), IntType)
+            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), IntType, None)
           | _ ->
             let w2 = checkt e2 intt in
             ts:=Some [t1; IntType];
-            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1)
+            (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
         | IntType | RealType | ShortType | Char | UintPtrType ->
           let (w1, w2, t) = promote l e1 e2 ts in
-          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1)
+          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
-          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1)
+          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
@@ -5695,39 +5703,46 @@ let verify_program_core (* ?verify_program_core *)
         else
           static_error l "Integer literal used as ushort must be between 0 and 65535." None
       else
-        e    | _ ->
-      let (w, t) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-      match (t, t0) with
-        (ObjType _, ObjType _) when isCast -> w
-      | (PtrType _, UintPtrType) when isCast -> w
-      | (UintPtrType, PtrType _) when isCast -> w
-      | (IntType, Char) when isCast -> w
-      | (IntType, UChar) when isCast -> w
-      | (IntType, ShortType) when isCast -> w
-      | (IntType, UShortType) when isCast -> w
-      | (IntType, UintPtrType) when isCast -> w
-      | (UintPtrType, Char) when isCast -> w
-      | (UintPtrType, UChar) when isCast -> w
-      | (UintPtrType, ShortType) when isCast -> w
-      | (UintPtrType, UShortType) when isCast -> w
-      | (UintPtrType, IntType) when isCast -> w
-      | (ShortType, UChar) when isCast -> w
-      | (ShortType, Char) when isCast -> w
-      | (ShortType, UShortType) when isCast -> w
-      | (UShortType, UChar) when isCast -> w
-      | (UShortType, Char) when isCast -> w
-      | (UShortType, ShortType) when isCast -> w
-      | (Char, UChar) when isCast -> w
-      | (UChar, Char) when isCast -> w
-      | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
-      | _ ->
-        expect_type (expr_loc e) t t0;
-        if try expect_type dummy_loc t0 t; false with StaticError _ -> true then
-          Upcast (w, t, t0)
-        else
-          w
+        e  
+    | _ ->
+      let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+      let check () = begin match (t, t0) with
+          (ObjType _, ObjType _) when isCast -> w
+        | (PtrType _, UintPtrType) when isCast -> w
+        | (UintPtrType, PtrType _) when isCast -> w
+        | (IntType, Char) when isCast -> w
+        | (IntType, UChar) when isCast -> w
+        | (IntType, ShortType) when isCast -> w
+        | (IntType, UShortType) when isCast -> w
+        | (IntType, UintPtrType) when isCast -> w
+        | (UintPtrType, Char) when isCast -> w
+        | (UintPtrType, UChar) when isCast -> w
+        | (UintPtrType, ShortType) when isCast -> w
+        | (UintPtrType, UShortType) when isCast -> w
+        | (UintPtrType, IntType) when isCast -> w
+        | (ShortType, UChar) when isCast -> w
+        | (ShortType, Char) when isCast -> w
+        | (ShortType, UShortType) when isCast -> w
+        | (UShortType, UChar) when isCast -> w
+        | (UShortType, Char) when isCast -> w
+        | (UShortType, ShortType) when isCast -> w
+        | (Char, UChar) when isCast -> w
+        | (UChar, Char) when isCast -> w
+        | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
+        | _ ->
+          expect_type (expr_loc e) t t0;
+          if try expect_type dummy_loc t0 t; false with StaticError _ -> true then
+            Upcast (w, t, t0)
+          else
+            w
+        end
+      in
+      match (value, t, t0) with
+        (Some(value), IntType, Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w
+      | (Some(value), IntType, ShortType) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
+      | _ -> check ()
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
-    let (w, t) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     begin
     match unfold_inferred_type t with
     | PtrType (StructType sn) ->
@@ -5737,7 +5752,7 @@ let verify_program_core (* ?verify_program_core *)
         begin
           match try_assoc' (pn,ilist) f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
-          | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t)
+          | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
         end
       | (_, None, _) -> static_error l ("Invalid dereference; struct type '" ^ sn ^ "' was declared without a body.") None
       end
@@ -5747,19 +5762,24 @@ let verify_program_core (* ?verify_program_core *)
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
       | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Static then static_error l "Accessing a static field via an instance is not supported." None;
-        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t)
+        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t, None)
       end
     | ArrayType _ when f = "length" ->
-      (ArrayLengthExpr (l, w), IntType)
+      (ArrayLengthExpr (l, w), IntType, None)
     | ClassOrInterfaceName cn ->
       begin match lookup_class_field cn f with
         None -> static_error l "No such field" None
       | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
-        (WRead (l, w, fclass, f, t, true, value, Real), t)
+        (WRead (l, w, fclass, f, t, true, value, Real), t, None)
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
+  in
+  
+  let check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
+   let (w, tp, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+   (w, tp)
   in
   
   let check_expr (pn,ilist) tparams tenv e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv e in
