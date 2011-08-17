@@ -6823,6 +6823,18 @@ let verify_program_core (* ?verify_program_core *)
       end;
       t
     in
+    let mk_mod x y =
+      let dv = ctxt#mk_div x y in
+      let md = ctxt#mk_mod x y in
+      ignore(ctxt#assume(ctxt#mk_eq (ctxt#mk_add (ctxt#mk_mul y dv) md) x));
+      md
+    in
+    let mk_div x y =
+      let dv = ctxt#mk_div x y in
+      let md = ctxt#mk_mod x y in
+      ignore(ctxt#assume (ctxt#mk_eq (ctxt#mk_add (ctxt#mk_mul y dv) md) x));
+      dv
+    in
     match e with
       True l -> cont state ctxt#mk_true
     | False l -> cont state ctxt#mk_false
@@ -6967,8 +6979,22 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
         | None -> ()
         end;
-        cont state (ctxt#mk_div v1 v2)
+        cont state (mk_div v1 v2)
       end
+    | Operation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i -> (* optimization *)
+      ev state e1 $. fun state v1 ->
+        let iterm = ctxt#mk_intlit (int_of_big_int i) in
+        let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
+        ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term app) (ctxt#mk_le app iterm)));
+        begin if eq_big_int i unit_big_int then
+          ignore (ctxt#assume (ctxt#mk_eq (mk_mod v1 (ctxt#mk_intlit 2)) app));
+        end;
+        cont state app
+    | Operation(l, ShiftRight, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i -> (* optimization: a >> b equals a / 2^b when b is a non-negative int_literal *)
+       ev state e1 $. fun state v1 ->
+         let ipow2 = ctxt#mk_intlit (int_of_big_int (power_int_positive_big_int 2 i)) in
+         let app = mk_div v1 ipow2 in
+         cont state app
     | Operation (l, op, ([e1; e2] as es), ts) ->
       evs state es $. fun state [v1; v2] ->
       cont state
@@ -7073,7 +7099,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end;
           app
         | Mod ->
-          ctxt#mk_mod v1 v2
+          mk_mod v1 v2
         | _ ->
           let symb = match op with
             | ShiftLeft -> shiftleft_symbol

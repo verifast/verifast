@@ -1963,7 +1963,8 @@ public final class EidCard extends Applet {
 		byte oldLength = (byte) (pinLength & 0x01);
 		// divide PIN length by 2 to get the length in bytes
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
-		//@ assume (pinLengthInBytes == 0 || pinLengthInBytes == 2 ||  pinLengthInBytes == 4 || pinLengthInBytes == 6); // follows from the above code
+		//@ assert 0 <= pinLengthInBytes && pinLengthInBytes < 8;
+		//@ assume (pinLengthInBytes == 0 || pinLengthInBytes == 2 ||  pinLengthInBytes == 4 || pinLengthInBytes == 6); // wrong assume
 		byte i;
 		for (i = 0; i < pinLengthInBytes; i++) 
 			/*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i <= pinLengthInBytes

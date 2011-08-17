@@ -13,6 +13,7 @@ class Division {
   {
     int tmp = nom / denom;
     int rest = nom % denom;
+    //@ assert denom*tmp + rest == nom;
     return tmp;
   }
   
