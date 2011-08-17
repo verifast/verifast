@@ -2603,8 +2603,8 @@ and
      e = parser
      [< e0 = parse_expr; '(_, Kwd ")");
          e = parser
-           [< '(l', Ident y) >] -> (match e0 with 
-             Var (lt, x, _) ->CastExpr (l, false, IdentTypeExpr (lt, x), Var (l', y, ref (Some LocalVar)))
+           [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y, ref (Some LocalVar))) >] -> (match e0 with 
+             Var (lt, x, _) -> CastExpr (l, false, IdentTypeExpr (lt, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
          | [<>] -> e0
      >] -> e
@@ -5387,8 +5387,9 @@ let verify_program_core (* ?verify_program_core *)
       (WMethodCall (l, "java.lang.Object", "getClass", [], [w], Instance), ObjType "java.lang.Class", None)
     | ExprCallExpr (l, e, es) ->
       let (w, t, _) = check e in
-      begin match t with
-        PureFuncType (_, _) -> check_pure_fun_value_call l w t es
+      begin match (t, es) with
+        (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
+      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (CastExpr(l, false, IdentTypeExpr(expr_loc e, cn), e2))
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
