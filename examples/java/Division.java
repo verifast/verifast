@@ -7,6 +7,16 @@ class Division {
     return tmp;
   }
   
+  int division_test2(int nom, int denom) 
+    //@ requires denom != 0;
+    //@ ensures result == nom / denom;
+  {
+    int tmp = nom / denom;
+    int rest = nom % denom;
+    return tmp;
+  }
+  
+  
   int division_test_fail(int nom, int denom) 
     //@ requires true;
     //@ ensures result == nom / denom;

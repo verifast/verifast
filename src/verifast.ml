@@ -3367,7 +3367,7 @@ let verify_program_core (* ?verify_program_core *)
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
-  let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
+  (*let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in*)
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
   let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
@@ -7071,9 +7071,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
           end;
           app
+        | Mod ->
+          ctxt#mk_mod v1 v2
         | _ ->
           let symb = match op with
-            | Mod -> modulo_symbol
             | ShiftLeft -> shiftleft_symbol
             | _ -> static_error l "This operator is not supported in this position" None
           in
