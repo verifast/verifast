@@ -77,10 +77,11 @@ public final class Addressbook extends Applet {
 
         //Initialize the groupnbs array
         for(short i =0; i< 100; i++)
-        //@ invariant 0 <= i &*& groupnbs |-> ?gn_array &*& array_slice_deep(gn_array,0,i,groupnbs_element,0,?ielems,_) &*& array_slice(gn_array,i,gn_array.length,_) &*& gn_array.length == 100;
+        //@ invariant 0 <= i &*& groupnbs |-> ?gn_array &*& array_slice_deep(gn_array,0,i,groupnbs_element,0,?ielems,_) &*& array_slice(gn_array,i,gn_array.length,?elems) &*& gn_array.length == 100;
         {
         	groupnbs[i] = (byte)0;
         	//@ close groupnbs_element(0,0,0);
+        	//@ switch(elems) { case nil: case cons(h, t): }
         	//@ array_slice_deep_close(gn_array,i,groupnbs_element,0);
 
         }

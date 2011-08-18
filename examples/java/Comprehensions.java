@@ -40,7 +40,7 @@ fixpoint boolean forall_le(list<int> vs, int v) {
 
 lemma void store_take_drop<t>(list<t> xs, int index, t v)
   requires 0 <= index && index < length(xs);
-  ensures store(xs, index, v) == append(take(index, xs), cons(v, drop(index + 1, xs)));
+  ensures update(index, v, xs) == append(take(index, xs), cons(v, drop(index + 1, xs)));
 {
   switch(xs) {
     case nil: 
@@ -234,7 +234,9 @@ lemma void is_perm_mem(list<int> xs, list<int> ys, int x)
 lemma void is_perm_remove(list<int> xs, list<int> ys, int x)
   requires is_perm(xs, ys) == true;
   ensures is_perm(remove(x, xs), remove(x, ys)) == true;
-{  switch(xs) {    case nil:
+{
+  switch(xs) {
+    case nil:
     case cons(h, t):
       if(x == h) {
       } else {
@@ -243,7 +245,8 @@ lemma void is_perm_remove(list<int> xs, list<int> ys, int x)
         is_perm_remove(t, remove(h, ys), x);  
       }
   }
-}
+}
+
 
 lemma void is_perm_transitive(list<int> xs, list<int> ys, list<int> zs)
   requires is_perm(xs, ys) == true &*& is_perm(ys, zs)== true;
@@ -321,13 +324,9 @@ class Comprehensions {
   
   public static void set(int[] a, int index, int v)
     //@ requires array_slice(a, 0, a.length, ?vs) &*& 0 <= index &*& index < a.length;
-    //@ ensures array_slice(a, 0, a.length, store(vs, index, v));
+    //@ ensures array_slice(a, 0, a.length, update(index, v, vs));
   {
     a[index] = v;
-    //@ drop_one_more(vs, index);
-    //@ length_drop(index, vs);
-    //@ nth_drop(vs, index);
-    //@ store_take_drop(vs, index, v);
   }
 
   
@@ -375,6 +374,8 @@ class Comprehensions {
     } else {
       int tmp = a[start];
       int tmp2 = a[start + 1];
+      //@ switch(vs) { case nil: case cons(h, t): }
+      //@ switch(tail(vs)) { case nil: case cons(h, t): }
       if(tmp < tmp2) {
       } else {
         a[start + 1] = tmp;
@@ -397,6 +398,10 @@ class Comprehensions {
     }
   }
   
-  public static void sort(int[] a)     //@ requires array_slice(a, 0, a.length, ?vs);    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs2, vs) == true;  {    my_sort(a, 0);
+  public static void sort(int[] a) 
+    //@ requires array_slice(a, 0, a.length, ?vs);
+    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs2, vs) == true;
+  {
+    my_sort(a, 0);
   }
 }

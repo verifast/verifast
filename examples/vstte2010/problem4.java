@@ -144,15 +144,29 @@ lemma void take_oke(list<int> vs1, list<int> vs2, int i)
   }
 }
 
-fixpoint list<t> update<t>(unit u, list<t> vs, t v, int pos) {
+fixpoint list<t> update2<t>(unit u, list<t> vs, t v, int pos) {
   switch(u) {
     case unit: return append(take(pos, vs), append(cons(v, nil), tail(drop(pos, vs))));
   }
 }
 
+lemma_auto(update(pos, v, vs)) void update_eq_update2<t>(list<t> vs, t v, int pos)
+  requires 0 <= pos && pos < length(vs);
+  ensures update(pos, v, vs) == update2(unit, vs, v, pos);
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(pos == 0) {
+      } else {
+        update_eq_update2(t, v, pos - 1);
+      }
+  }
+}
+
 lemma void update_nth<t>(list<t> vs, t v, int pos) 
   requires nth(pos, vs) == v && 0 <= pos && pos < length(vs);
-  ensures update(unit, vs, v, pos) == vs;
+  ensures update2(unit, vs, v, pos) == vs;
 {
   switch(vs) {
     case nil:
@@ -166,7 +180,7 @@ lemma void update_nth<t>(list<t> vs, t v, int pos)
 
 lemma void update_append<t>(list<t> vs, t v, int pos, list<t> vs2) 
   requires 0 <= pos &*& pos < length(vs);
-  ensures append(update(unit, vs, v, pos), vs2) == update(unit, append(vs, vs2), v, pos);
+  ensures append(update2(unit, vs, v, pos), vs2) == update2(unit, append(vs, vs2), v, pos);
 {
   switch(vs) {
     case nil:
@@ -183,8 +197,8 @@ predicate inconsistent(list<int> vs, nat i, int pos) =
     case zero: return true; 
     case succ(i0): 
     return pos < length(vs) &*& inconsistent(vs, i0, pos) &*& 
-    (consistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos) == true ? 
-      inconsistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1) : true); }) ;
+    (consistent(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos) == true ? 
+      inconsistent(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1) : true); }) ;
 
 lemma void duplicate_inconsistent(list<int> vs, nat i, int pos) 
   requires inconsistent(vs, i, pos);
@@ -195,8 +209,8 @@ lemma void duplicate_inconsistent(list<int> vs, nat i, int pos)
     case zero: close inconsistent(vs, zero, pos); close inconsistent(vs, zero, pos);
     case succ(i0):
       duplicate_inconsistent(vs,  i0, pos);      
-      if(consistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos)) {
-        duplicate_inconsistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1);
+      if(consistent(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos)) {
+        duplicate_inconsistent(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1);
         close inconsistent(vs, i, pos);
         close inconsistent(vs, i, pos);
       } else {
@@ -206,28 +220,30 @@ lemma void duplicate_inconsistent(list<int> vs, nat i, int pos)
   }
 }
 
-lemma void length_update<t>(list<t> vs, t v, int pos)  requires 0 <= pos && pos < length(vs);
-  ensures length(update(unit, vs, v, pos)) == length(vs);
-{  switch(vs) {
+lemma void length_update2<t>(list<t> vs, t v, int pos)
+  requires 0 <= pos && pos < length(vs);
+  ensures length(update2(unit, vs, v, pos)) == length(vs);
+{
+  switch(vs) {
     case nil: 
     case cons(h, t):
       if(pos == 0) {
       } else {
-        length_update(t, v, pos - 1);
+        length_update2(t, v, pos - 1);
       }
   } 
 }
 
 lemma void update_same(list<int> vs, list<int> vs2, int pos, int v)
   requires length(vs) == length(vs2) && take(pos, vs) == take(pos, vs2) &*& 0 <= pos &*& pos < length(vs);
-  ensures take(pos + 1, update(unit, vs, v, pos)) == take(pos + 1, update(unit, vs2, v, pos));
+  ensures take(pos + 1, update2(unit, vs, v, pos)) == take(pos + 1, update2(unit, vs2, v, pos));
 {
   take_append(take(pos, vs), append(cons(v, nil), tail(drop(pos, vs))), pos);
   take_append(take(pos, vs2), append(cons(v, nil), tail(drop(pos, vs2))), pos);
   nth_append(take(pos, vs2), append(cons(v, nil), tail(drop(pos, vs2))), pos);
   nth_append(take(pos, vs), append(cons(v, nil), tail(drop(pos, vs))), pos);
-  take_one_extra(update(unit, vs, v, pos), pos);
-  take_one_extra(update(unit, vs2, v, pos), pos);
+  take_one_extra(update2(unit, vs, v, pos), pos);
+  take_one_extra(update2(unit, vs2, v, pos), pos);
 }
 
 lemma void inconsistent_preserved(list<int> vs, int pos, list<int> vs2)
@@ -247,21 +263,36 @@ lemma void inconsistent_take_core(list<int> vs, nat i, int pos, list<int> vs2)
     case zero: close inconsistent(vs2, i, pos);
     case succ(i0):
       inconsistent_take_core(vs, i0, pos, vs2);
-      length_update(vs, int_of_nat(i0), pos);
-      length_update(vs2, int_of_nat(i0), pos);
+      length_update2(vs, int_of_nat(i0), pos);
+      length_update2(vs2, int_of_nat(i0), pos);
       update_same(vs, vs2, pos, int_of_nat(i0));
-      if(consistent(update(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos)) {
-        inconsistent_take_core(update(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1, update(unit, vs2, int_of_nat(i0), pos));
+      if(consistent(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(pos), pos)) {
+        inconsistent_take_core(update2(unit, vs, int_of_nat(i0), pos), nat_of_int(length(vs)), pos + 1, update2(unit, vs2, int_of_nat(i0), pos));
         close inconsistent(vs2, i, pos);
       } else {
-        inconsistent_preserved(update(unit, vs, int_of_nat(i0), pos), pos, update(unit, vs2, int_of_nat(i0), pos));
+        inconsistent_preserved(update2(unit, vs, int_of_nat(i0), pos), pos, update2(unit, vs2, int_of_nat(i0), pos));
         close inconsistent(vs2, i, pos);
       }
   }
 }
 
+lemma_auto(take(j, update(i, v, vs))) void take_update<t>(list<t> vs, t v, int i, int j)
+  requires 0 <= i && i < length(vs) && 0 <= j && j <= i;
+  ensures take(j, vs) == take(j, update(i, v, vs));
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(j == 0) {
+      } else {
+        take_update(t, v, i - 1, j - 1);
+      }
+  }
+}
+  
+
 lemma void inconsistent_take(list<int> vs, nat i, int pos, list<int> vs2)
-  requires length(vs) == length(vs2) && take(pos, vs) == take(pos, vs2) &*& inconsistent(vs, i, pos) &*& 0 <= pos;
+  requires length(vs) == length(vs2) &*& take(pos, vs) == take(pos, vs2) &*& inconsistent(vs, i, pos) &*& 0 <= pos;
   ensures inconsistent(vs, i, pos) &*& inconsistent(vs2, i, pos);
 {
   duplicate_inconsistent(vs,  i, pos);
@@ -275,9 +306,23 @@ fixpoint boolean inrange(list<int> vs, int max) {
   }
 }
 
+lemma void inrange_update_array(list<int> vs, int max, int v, int pos)
+  requires 0 <= pos && pos < length(vs) && 0 <= v && v < max && inrange(vs, max);
+  ensures inrange(update(pos, v, vs), max) == true; 
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(pos == 0) {
+      } else {
+        inrange_update_array(t, max, v, pos - 1);
+      }
+  }
+}
+
 lemma void inrange_update(list<int> vs, int max, int v, int pos)
   requires 0 <= pos && pos < length(vs) && 0 <= v && v < max && inrange(vs, max);
-  ensures inrange(update(unit, vs, v, pos), max) == true; 
+  ensures inrange(update2(unit, vs, v, pos), max) == true; 
 {
   switch(vs) {
     case nil:
@@ -342,6 +387,7 @@ class NQueens {
         //@ append_allconsistent(take(pos, vs2), nat_of_int(pos), append(cons(i, nil), take(length(vs2) - pos - 1, tail(drop(pos, vs2)))));
         //@ inconsistent_take(vs2, nat_of_int(i), pos, vs3);
         //@ inrange_update(vs2, board.length, i, pos);
+        //@ inrange_update_array(vs2, board.length, i, pos);        
         if(isConsistent(board, pos)) {
           //@ succ_int(pos);
           int[] s = search(board, pos + 1);

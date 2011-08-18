@@ -4,6 +4,7 @@ class InitTest {
         //@ ensures true;
     {
         int[] xs = new int[100];
+        //@ assert array_slice(xs, 0, 100, ?elems);
         int x = xs[50];
         assert x == 0;
         test3(xs);

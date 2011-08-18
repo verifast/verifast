@@ -55,6 +55,7 @@ class Persons {
 
 //@ predicate record(int recordLength, Object record; unit value) = array_slice<byte>(^record, 0, recordLength, _) &*& value == unit;
 
+
 class ArrayTest {
     static void test(Object[] a, int i)
       /*@
@@ -114,8 +115,13 @@ class ArrayTest {
         {
             Object tmp = records[i];
             assert tmp == null;
-            byte[] record = new byte[recordLength];
-            records[i] = record;
+            byte[] record2 = new byte[recordLength];
+            records[i] = record2;
+            Object tmp2 = record2;
+            //@ array_slice_split(records, i, i + 1);
+            //@ close record(recordLength, record2, unit);
+            //@ switch(elems) { case nil: case cons(h, t): }
+            //@ array_slice_deep_close(records, i, record, recordLength);
             i++;
         }
         return records;

@@ -345,6 +345,19 @@ lemma void all_eq_append<t>(list<t> xs1, list<t> xs2, t x0)
     }
 }
 
+lemma void all_eq_nth(list<int> xs, int i)
+    requires all_eq(xs, 0) == true && 0 <= i && i < length(xs);
+    ensures nth(i, xs) == 0;
+{
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            if(i != 0) {
+              all_eq_nth(xs0, i - 1);
+            }
+    }
+}
+
 lemma void drop_append<t>(list<t> xs1, list<t> xs2)
     requires true;
     ensures drop(length(xs1), append(xs1, xs2)) == xs2;
@@ -400,6 +413,39 @@ ensures xs == nil;
 		case cons(x0, xs0):
 			length_nonnegative(xs0);
 	}
+}
+
+lemma void nth_update<t>(int i, int j, t y, list<t> xs)
+    requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
+    ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(j == 0) {
+        if(i == 0) {
+        } else {
+        }
+      } else {
+        if(i == 0) {
+        } else {
+          nth_update<t>(i-1,j-1,y,t);
+        }
+      }
+  }
+}
+
+lemma void length_update<t>(int i, t y, list<t> xs)
+    requires true;
+    ensures length(update(i, y, xs)) == length(xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i != 0) {
+        length_update(i - 1, y, t);
+      }
+  }
 }
 
 @*/

@@ -136,6 +136,18 @@ let list_remove_dups xs =
   in
   iter [] xs
 
+let try_extract xs condition =
+  let rec try_extract_core xs condition seen =
+    match xs with
+      [] -> None
+    | x :: rest ->
+      if condition x then
+        Some((x, seen @ rest))
+      else
+        try_extract_core rest condition (seen @ [x])
+  in
+  try_extract_core xs condition []
+
 let startswith s s0 =
   String.length s0 <= String.length s && String.sub s 0 (String.length s0) = s0
 
@@ -3429,14 +3441,18 @@ let verify_program_core (* ?verify_program_core *)
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
   in
+  let assume_bounds term tp = 
+    match tp with
+      Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
+    | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term term) (ctxt#mk_le term max_short_term));
+    | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
+    | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) term) (ctxt#mk_le term max_ptr_term));
+    | _ -> ()
+  in
   let get_unique_var_symb_non_ghost x t = 
     let res = get_unique_var_symb x t in
-    match t with
-      Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term res) (ctxt#mk_le res max_char_term)); res
-    | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term res) (ctxt#mk_le res max_short_term)); res  
-    | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term res) (ctxt#mk_le res max_int_term)); res
-    | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) res) (ctxt#mk_le res max_ptr_term)); res
-    | _ -> res
+    assume_bounds res t;
+    res
   in
   let get_unique_var_symb_ x t ghost = 
     if ghost then
@@ -7692,25 +7708,46 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Some (v, _) -> v
   in
   
-  let read_java_array h env l a i tp =
-    let slices =
-      head_flatmap
-        begin function
-          Chunk ((g, true), [tp], coef, [a'; i'; v], _)
-            when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i ->
-            [v]
-        | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
-            when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
-            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
-            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
-        | Chunk ((g, true), [tp;tp2;tp3], coef, [a'; istart; iend; p; info; elems; vs], _)
-            when g == array_slice_deep_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
-            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
-            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
-        | _ -> []
-        end
-        h
+  let try_read_java_array h env l a i tp =
+    head_flatmap
+      begin function
+        Chunk ((g, true), [tp], coef, [a'; i'; v], _)
+          when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i ->
+          [v]
+      | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
+          when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+          let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
+          [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
+     (* | Chunk ((g, true), [tp;tp2;tp3], coef, [a'; istart; iend; p; info; elems; vs], _)
+          when g == array_slice_deep_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+          let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
+          [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]*)
+      | _ -> []
+      end
+      h
+  in
+  
+  let try_update_java_array h env l a i tp new_value =
+    let rec try_update_java_array_core todo seen = 
+      match todo with
+        [] -> None
+      | Chunk ((g, true), [tp], coef, [a'; i'; v], b) :: rest
+          when g == array_element_symb() && definitely_equal a' a && definitely_equal i' i ->
+        Some(seen @ ((Chunk ((g, true), [tp], coef, [a'; i'; new_value], b)) :: rest))
+      | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], b) :: rest
+          when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
+        let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
+        let converted_new_value = apply_conversion (provertype_of_type tp) ProverInductive new_value in
+        let updated_vs = (mk_app update_symb [ctxt#mk_sub i istart; converted_new_value; vs]) in
+        Some(seen @ ((Chunk ((g, true), [tp], coef, [a'; istart; iend; updated_vs], b)) :: rest))
+      | chunk :: rest ->
+        try_update_java_array_core rest (seen @ [chunk])
     in
+      try_update_java_array_core h [] 
+  in
+  
+  let read_java_array h env l a i tp =
+    let slices = try_read_java_array h env l a i tp in
     match slices with
       None -> assert_false h env l "No matching array element or array slice chunk" None
     | Some v -> v
@@ -9916,11 +9953,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         eval_h h env arr $. fun h env arr ->
         eval_h h env i $. fun h env i ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ _ _ [_; _; elem] _ _ _ _ ->
-          get_values h env elem (fun h env result_value new_value ->
-            assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
-              cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; new_value], None)::h) env result_value
-          )
+          assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ _ _ [_; _; elem] _ _ _ _ ->
+            get_values h env elem (fun h env result_value new_value ->
+              assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
+                cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; new_value], None)::h) env result_value
+            )
       | Deref (_, w, _) ->
         if pure then static_error l "Cannot write in a pure context." None;
         let pointeeType = t1 in
@@ -10054,8 +10091,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if not (ctxt#query (ctxt#mk_le (ctxt#mk_intlit 0) lv)) then assert_false h env l "array length might be negative" None;
       let elems = get_unique_var_symb "elems" (InductiveType ("list", [elem_tp])) in
       let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
-      assume (mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
-      new_array h env l elem_tp lv elems
+      let (_, _, _, _, length_symb) = List.assoc "length" purefuncmap in
+      assume_eq (mk_app length_symb [elems]) lv $. fun () ->
+        assume (mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
+          new_array h env l elem_tp lv elems
     | NewArrayWithInitializer(l, tp, es) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
@@ -10111,11 +10150,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | WReadArray (l, arr, elem_tp, i) when language = Java ->
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
-      begin
-        let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
-        let elem_tp = unfold_inferred_type elem_tp in
-        cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) env elem
+      begin match try_read_java_array h env l arr i elem_tp with
+        None -> 
+          let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+          assert_chunk rules (pn,ilist) h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
+          let elem_tp = unfold_inferred_type elem_tp in
+          cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) env elem
+      | Some (v) -> 
+        if not pure then assume_bounds v elem_tp;
+        cont h env v
       end
     | WReadArray (l, arr, elem_tp, i) when language = CLang ->
       eval_h h env arr $. fun h env arr ->
@@ -10689,9 +10732,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         eval_h h env arr $. fun h env arr ->
         eval_h h env i $. fun h env i ->
         eval_h h env rhs $. fun h env rhs ->
-        let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-        assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
-        cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
+        begin match try_update_java_array h env l arr i elem_tp rhs with
+          None -> 
+          let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
+          assert_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
+          cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
+        | Some(h) ->
+          cont h env
+        end 
       | WReadArray(l2, arr, elem_tp, i) when language = CLang ->
         if pure then static_error l "Cannot write in a pure context." None;
         let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
