@@ -935,7 +935,7 @@ type type_expr = (* ?type_expr *)
   | PtrTypeExpr of loc * type_expr
   | ArrayTypeExpr of loc * type_expr
   | ManifestTypeExpr of loc * type_  (* A type expression that is obviously a given type. *)
-  | IdentTypeExpr of loc * string
+  | IdentTypeExpr of loc * string option (* package name *) * string
   | ConstructedTypeExpr of loc * string * type_expr list  (* A type of the form x<T1, T2, ...> *)
   | PredTypeExpr of loc * type_expr list * int option (* if None, not necessarily precise; if Some n, precise with n input parameters *)
   | PureFuncTypeExpr of loc * type_expr list   (* Potentially uncurried *)
@@ -1591,7 +1591,7 @@ let type_expr_loc t =
   match t with
     ManifestTypeExpr (l, t) -> l
   | StructTypeExpr (l, sn) -> l
-  | IdentTypeExpr (l, x) -> l
+  | IdentTypeExpr (l, _, x) -> l
   | ConstructedTypeExpr (l, x, targs) -> l
   | PtrTypeExpr (l, te) -> l
   | ArrayTypeExpr(l, te) -> l
@@ -1774,7 +1774,7 @@ module Scala = struct
           ("Unit", []) -> ManifestTypeExpr (l, Void)
         | ("Int", []) -> ManifestTypeExpr (l, IntType)
         | ("Array", [t]) -> ArrayTypeExpr (l, t)
-        | (_, []) -> IdentTypeExpr (l, tn)
+        | (_, []) -> IdentTypeExpr (l, None, tn)
         | _ -> raise (ParseException (l, "Type arguments are not supported."))
       end
   and
@@ -1907,7 +1907,7 @@ and
 and
   parse_interface_meth vis cn gh = parser
 [< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";"); co = opt parse_spec>]
-    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l,cn),"this")::ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, [])), Instance,vis)
+    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l, None, cn),"this")::ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, [])), Instance,vis)
 and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
@@ -1925,7 +1925,7 @@ and
 | [< vis = parse_visibility; m = begin parser
        [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "="); p = parse_pred; '(_, Kwd ";") >] -> PredMember (InstancePredDecl (l, g, ps, Some p))
      | [< '(l, Kwd "lemma"); t = parse_return_type; '(l, Ident x); (ps, co, ss) = parse_method_rest >] ->
-       let ps = (IdentTypeExpr (l, cn), "this")::ps in
+       let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
        MethMember (Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
      end;
      mems = parse_ghost_java_members cn
@@ -1956,7 +1956,7 @@ and
        [< '(l, Ident x);
           member = parser
             [< (ps, co, ss) = parse_method_rest >] ->
-            let ps = if binding = Instance then (IdentTypeExpr (l, cn), "this")::ps else ps in
+            let ps = if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps in
             MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
           | [< t = parse_array_dims (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some t -> t);
                init = begin parser
@@ -1976,7 +1976,7 @@ and
        let l =
          match t with
            None -> raise (Stream.Error "Keyword 'void' cannot be followed by a parameter list.")
-         | Some (IdentTypeExpr (l, x)) -> if x = cn then l else raise (ParseException (l, "Constructor name does not match class name."))
+         | Some (IdentTypeExpr (l, None, x)) -> if x = cn then l else raise (ParseException (l, "Constructor name does not match class name."))
          | Some t -> raise (ParseException (type_expr_loc t, "Constructor name expected."))
        in
        if binding = Static then raise (ParseException (l, "A constructor cannot be static."));
@@ -2188,11 +2188,17 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n); targs = parse_type_args l >] -> 
+| [< '(l, Ident n); rest = rep(parser [< '(l, Kwd "."); '(l, Ident n) >] -> n); targs = parse_type_args l;  >] -> 
     if targs <> [] then 
-      ConstructedTypeExpr (l, n, targs) 
+      match rest with
+      | [] ->  ConstructedTypeExpr (l, n, targs) 
+      | _ -> raise (ParseException (l, "Package name not supported for generic types."))
     else
-      IdentTypeExpr (l, n)
+      match rest with
+        [] -> IdentTypeExpr(l, None, n)
+      | _ -> 
+      let pac = (String.concat "." (n :: (take ((List.length rest) -1) rest))) in
+      IdentTypeExpr(l, Some (pac), List.nth rest ((List.length rest) - 1))
 and 
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
@@ -2414,7 +2420,7 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, t)), [x, Some(rhs), ref false])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), [x, Some(rhs), ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
@@ -2445,11 +2451,18 @@ and
     '(entryBraceLoc, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
   >] -> (inv, dec, [BlockStmt(entryBraceLoc, [], b, closeBraceLoc, ref [])], closeBraceLoc)
 and
+  packagename_of_read l e =
+  match e with
+  | Var(_, x, _) when x <> "this" -> x
+  | Read(_, e, f) -> (packagename_of_read l e) ^ "." ^ f
+  | e -> raise (ParseException (l, "Type expected."))
+and
   type_expr_of_expr e =
   match e with
-    Var (l, x, _) -> IdentTypeExpr (l, x)
+    Var (l, x, _) -> IdentTypeExpr (l, None, x)
   | CallExpr (l, x, targs, [], [], Static) -> ConstructedTypeExpr (l, x, targs)
   | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
+  | Read(l, e, name) -> IdentTypeExpr(l, Some(packagename_of_read l e), name)
   | e -> raise (ParseException (expr_loc e, "Type expected."))
 and
   parse_decl_stmt_rest te x = parser 
@@ -2580,14 +2593,13 @@ and
 | [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
-| [< '(l, Kwd "new");
-     res = parser
-               [< '(l2, Ident x);
-                  e = (parser 
-                    [< args0 = parse_patlist >] -> NewObject (l, x, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
-                  | [< e = parse_new_array_expr_rest l (IdentTypeExpr (l2, x)) >] -> e)
-               >] -> e
-            | [< tp = parse_primary_type; e = parse_new_array_expr_rest l tp >] -> e
+| [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
+                    [< args0 = parse_patlist >] -> 
+                    begin match tp with
+                      IdentTypeExpr(_, pac, cn) -> NewObject (l, (match pac with None -> "" | Some(pac) -> pac ^ ".") ^ cn, List.map (function LitPat e -> e | _ -> raise (Stream.Error "Patterns are not allowed in this position")) args0)
+                    | _ -> raise (ParseException (type_expr_loc tp, "Class name expected"))
+                    end
+                  | [< e = parse_new_array_expr_rest l tp >] -> e)
   >] -> res
 | [<
     '(lx, Ident x);
@@ -2625,7 +2637,7 @@ and
      [< e0 = parse_expr; '(_, Kwd ")");
          e = parser
            [< '(l', Ident y); e = parse_expr_suffix_rest (Var (l', y, ref (Some LocalVar))) >] -> (match e0 with 
-             Var (lt, x, _) -> CastExpr (l, false, IdentTypeExpr (lt, x), e)
+             Var (lt, x, _) -> CastExpr (l, false, IdentTypeExpr (lt, None, x), e)
            | _ -> raise (ParseException (l, "Type expression of cast expression must be identifier: ")))
          | [<>] -> e0
      >] -> e
@@ -3996,7 +4008,7 @@ let verify_program_core (* ?verify_program_core *)
                   [] -> []
                 | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
                             Some i -> i::check_interfs ls
-                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn) None
+                          | None -> static_error l ("Interface wasn't found: " ^ i) None
             in
             check_interfs interfs
           in
@@ -4015,7 +4027,7 @@ let verify_program_core (* ?verify_program_core *)
                   [] -> []
                 | i::ls -> match search2' i (pn,il) ifdm interfmap0 with 
                             Some i -> i::check_interfs ls
-                          | None -> static_error l ("Interface wasn't found: "^i^" "^pn) None
+                          | None -> static_error l ("Interface wasn't found: "^i) None
             in
             check_interfs interfs
           in
@@ -4054,13 +4066,14 @@ let verify_program_core (* ?verify_program_core *)
                 | ManifestTypeExpr (_, ShortType) -> ShortType
                 | ArrayTypeExpr (l, tp) -> 
                     let elem_tp = check_type tp in ArrayType(elem_tp)
-                | IdentTypeExpr(lt, sn) ->
-                  begin match search2' sn (pn,ilist) classmap1 classmap0 with
+                | IdentTypeExpr(lt, pac, sn) ->
+                  let full_name = match pac with None -> sn | Some(pac) -> pac ^ "." ^ sn in
+                  begin match search2' full_name (pn,ilist) classmap1 classmap0 with
                     Some s -> ObjType s
                   | None ->
-                    match search2' sn (pn,ilist) interfmap1 interfmap0 with
+                    match search2' full_name (pn,ilist) interfmap1 interfmap0 with
                       Some s -> ObjType s
-                    | None -> static_error lt ("No such class or interface: "^sn) None
+                    | None -> static_error lt ("No such class or interface: "^full_name) None
                   end
                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
               in
@@ -4085,7 +4098,7 @@ let verify_program_core (* ?verify_program_core *)
     | ArrayTypeExpr (l, t) -> 
         let tp = check t in
         ArrayType(tp)
-    | IdentTypeExpr (l, id) ->
+    | IdentTypeExpr (l, None, id) ->
       if List.mem id tpenv then
         TypeParam id
       else
@@ -4107,6 +4120,14 @@ let verify_program_core (* ?verify_program_core *)
                       FuncType id
                     else
                       static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^pn^" "^id) None
+      end
+    | IdentTypeExpr (l, Some(pac), id) ->
+      let full_name = pac ^ "." ^ id in
+      begin match (search2' full_name (pn,ilist) classmap1 classmap0) with
+          Some s -> ObjType s
+        | None -> match (search2' full_name (pn,ilist) interfmap1 interfmap0) with
+                    Some s->ObjType s
+                  | None -> static_error l ("No such type parameter, inductive datatype, class, interface, or function type: " ^ full_name) None
       end
     | ConstructedTypeExpr (l, id, targs) ->
       begin
@@ -5414,7 +5435,7 @@ let verify_program_core (* ?verify_program_core *)
       let (w, t, _) = check e in
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
-      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (CastExpr(l, false, IdentTypeExpr(expr_loc e, cn), e2))
+      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (CastExpr(l, false, IdentTypeExpr(expr_loc e, None, cn), e2))
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
