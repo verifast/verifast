@@ -33,8 +33,10 @@ public final class Store extends Applet {
     }
     
     public void process(APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+        //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+        //@ ensures registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+    ///@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    ///@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -52,8 +54,8 @@ public final class Store extends Applet {
     }
 
     private final void set(APDU apdu)
-    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    //@ requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
     {
         byte[] abuffer = apdu.getBuffer();
 

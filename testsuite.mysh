@@ -120,6 +120,9 @@ verifast_both -c JavaCard.java
 verifast_both -c Echo.java
 verifast_both -c Store.java
 verifast_both -c Addressbook.java
+cd shareable-applets
+verifast_both -c wallet.jarsrc
+cd ..
 cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java
