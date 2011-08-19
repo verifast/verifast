@@ -148,6 +148,11 @@ class Applet {
     public void process(APDU apdu);
         //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
         //@ ensures registered_applets(as) &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+
+    public Shareable getShareableInterfaceObject(AID clientAID, byte parameter);
+    	//@ requires registered_applets(?as) &*& mem<Applet>(this,as) == true &*& AID(clientAID);
+    	/*@ ensures registered_applets(as) &*& AID(clientAID) &*&
+    		result == null ? true : shareable_interface_object(result.getClass())(result, ?a); @*/
 }
 
 class ISOException extends RuntimeException {
@@ -217,7 +222,7 @@ class JCSystem {
 
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
     	//@ requires registered_applets(?as);
-    	//@ ensures registered_applets(as) &*& shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a,as) == true; /*registered_applets(as) &*& (result == null ? true : result instanceof Applet)*/ /*&*& mem<Applet>(result,as) == true*/
+    	//@ ensures registered_applets(as) &*& shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a,as) == true;
 
     public static final byte CLEAR_ON_DESELECT = 2;
 }
