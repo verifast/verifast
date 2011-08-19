@@ -230,6 +230,10 @@ lemma_auto(all_eq(append(xs1, xs2), x0)) void all_eq_append<t>(list<t> xs1, list
     requires true;
     ensures all_eq(append(xs1, xs2), x0) == (all_eq(xs1, x0) && all_eq(xs2, x0));
 
+lemma_auto(all_eq(drop(i, xs), x0)) void all_eq_drop<t>(int i, list<t> xs, t x0);
+    requires all_eq(xs, x0) && 0 <= i && i <= length(xs);
+    ensures all_eq(drop(i, xs), x0) == true;
+
 lemma_auto(nth(i, xs)) void all_eq_nth(list<int> xs, int i);
     requires all_eq(xs, 0) == true && 0 <= i && i < length(xs);
     ensures nth(i, xs) == 0;
@@ -256,6 +260,14 @@ fixpoint list<t> update<t>(int i, t y, list<t> xs) {
         case cons(x, xs0): return i == 0 ? cons(y, xs0) : cons(x, update(i - 1, y, xs0));
     }
 }
+
+lemma void append_take_nth_drop<t>(int i, list<t> xs);
+  requires 0 <= i && i < length(xs);
+  ensures xs == append(take(i, xs), cons(nth(i, xs), drop(i + 1, xs)));
+
+lemma_auto(update(i, v, xs)) void update_eq_append_cons_drop<t>(int i, t v, list<t> xs);
+  requires 0 <= i && i < length(xs);
+  ensures update(i, v, xs) == append(take(i, xs), cons(v, drop(i + 1, xs)));
 
 lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<t> xs);
   requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);

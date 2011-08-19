@@ -120,7 +120,6 @@ class ArrayTest {
             Object tmp2 = record2;
             //@ array_slice_split(records, i, i + 1);
             //@ close record(recordLength, record2, unit);
-            //@ switch(elems) { case nil: case cons(h, t): }
             //@ array_slice_deep_close(records, i, record, recordLength);
             i++;
         }

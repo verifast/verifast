@@ -2183,8 +2183,12 @@ and
 | [< '(l, Kwd "box") >] -> ManifestTypeExpr (l, BoxIdType)
 | [< '(l, Kwd "handle") >] -> ManifestTypeExpr (l, HandleIdType)
 | [< '(l, Kwd "any") >] -> ManifestTypeExpr (l, AnyType)
-| [< '(l, Ident n); targs = parse_type_args l >] -> if targs <> [] then ConstructedTypeExpr (l, n, targs) else IdentTypeExpr (l, n)
-and
+| [< '(l, Ident n); targs = parse_type_args l >] -> 
+    if targs <> [] then 
+      ConstructedTypeExpr (l, n, targs) 
+    else
+      IdentTypeExpr (l, n)
+and 
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
 | [< '(l, Kwd "["); '(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
@@ -2201,18 +2205,18 @@ and
   | _ -> true
 and
   parse_param = parser [< t = parse_type; pn = parse_param_name >] ->
-  ( try match t with
-      ManifestTypeExpr (_, Void) -> (
-      try match pn with
+    begin match t with
+      ManifestTypeExpr (_, Void) -> 
+      begin match pn with
         None -> (t, "")
-      with
-       Match_failure msg ->
-        raise (ParseException ((match pn with Some p ->
-         match p with (l, name) -> l),
-         "A parameter cannot be of type void.")) )
-    with
-     Match_failure msg -> (t, (match pn with Some p ->
-     match p with (l, name) -> name)) )
+      | Some((l, pname)) -> raise (ParseException (l, "A parameter cannot be of type void."))
+      end
+    | _ -> 
+      begin match pn with
+        None -> raise (ParseException (type_expr_loc t, "Illegal parameter."));
+      | Some((l, pname)) -> (t, pname)
+      end
+    end
 and
   parse_param_name = parser
     [< '(l, Ident pn) >] -> Some (l, pn)

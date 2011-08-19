@@ -81,7 +81,6 @@ public final class Addressbook extends Applet {
         {
         	groupnbs[i] = (byte)0;
         	//@ close groupnbs_element(0,0,0);
-        	//@ switch(elems) { case nil: case cons(h, t): }
         	//@ array_slice_deep_close(gn_array,i,groupnbs_element,0);
 
         }

@@ -345,6 +345,20 @@ lemma void all_eq_append<t>(list<t> xs1, list<t> xs2, t x0)
     }
 }
 
+lemma void all_eq_drop<t>(int i, list<t> xs, t x0)
+    requires all_eq(xs, x0) && 0 <= i && i <= length(xs);
+    ensures all_eq(drop(i, xs), x0) == true;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i == 0) {
+      } else {
+        all_eq_drop(i - 1, t, x0);
+      }
+  }
+}
+
 lemma void all_eq_nth(list<int> xs, int i)
     requires all_eq(xs, 0) == true && 0 <= i && i < length(xs);
     ensures nth(i, xs) == 0;
@@ -415,7 +429,20 @@ ensures xs == nil;
 	}
 }
 
-lemma void nth_update<t>(int i, int j, t y, list<t> xs)
+lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> xs)
+    requires true;
+    ensures length(update(i, y, xs)) == length(xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i != 0) {
+        length_update(i - 1, y, t);
+      }
+  }
+}
+
+lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<t> xs)
     requires 0 <= i && i < length(xs) && 0 <= j && j < length(xs);
     ensures nth(i, update(j, y, xs)) == (i == j ? y : nth(i, xs));
 {
@@ -435,15 +462,32 @@ lemma void nth_update<t>(int i, int j, t y, list<t> xs)
   }
 }
 
-lemma void length_update<t>(int i, t y, list<t> xs)
-    requires true;
-    ensures length(update(i, y, xs)) == length(xs);
+lemma void append_take_nth_drop<t>(int i, list<t> xs)
+  requires 0 <= i && i < length(xs);
+  ensures xs == append(take(i, xs), cons(nth(i, xs), drop(i + 1, xs)));
 {
   switch(xs) {
-    case nil:
+    case nil: 
     case cons(h, t):
-      if(i != 0) {
-        length_update(i - 1, y, t);
+      if(i == 0) {
+        drop_0(t);
+      } else {
+        append_take_nth_drop<t>(i - 1 , t);
+      }
+  }
+}
+
+lemma void update_eq_append_cons_drop<t>(int i, t v, list<t> xs)
+  requires 0 <= i && i < length(xs);
+  ensures update(i, v, xs) == append(take(i, xs), cons(v, drop(i + 1, xs)));
+{
+  switch(xs) {
+    case nil: 
+    case cons(h, t):
+      if(i == 0) {
+        drop_0(t);
+      } else {
+        update_eq_append_cons_drop<t>(i - 1 , v, t);
       }
   }
 }
