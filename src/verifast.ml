@@ -1841,20 +1841,25 @@ let rec
      | [< >] -> []
      end
   >] -> ds
+and parse_qualified_type_rest = parser
+  [< '(_, Kwd "."); '(_, Ident s); rest = parse_qualified_type_rest >] -> "." ^ s ^ rest
+| [<>] -> ""
+and parse_qualified_type = parser
+  [<'(_, Ident s); rest = parse_qualified_type_rest >] -> s ^ rest
 and
   parse_super_class= parser
-    [<'(_, Kwd "extends");'(_, Ident s)>] -> s 
+    [<'(_, Kwd "extends"); s = parse_qualified_type >] -> s 
   | [<>] -> "java.lang.Object"
 and
   parse_interfaces= parser
   [< '(_, Kwd "implements"); is = rep_comma (parser 
-    [< '(l, Ident i); e=parser
+    [< i = parse_qualified_type; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
 and
   parse_extended_interfaces= parser
   [< '(_, Kwd "extends"); is = rep_comma (parser 
-    [< '(l, Ident i); e=parser
+    [< i = parse_qualified_type; e=parser
       [<>]->(i)>] -> e); '(_, Kwd "{") >] -> is
 | [<'(_, Kwd "{")>]-> []
 and

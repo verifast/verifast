@@ -161,7 +161,7 @@ public final class Addressbook extends Applet {
         if((short)abuffer[ISO7816.OFFSET_LC] != NAME_LENGTH)
             ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 
-	//@open [1/2]valid();
+        //@open [1/2]valid();
         short length = (short) emptyPhoneNbs.length;
         //@close [1/2]valid();
 
