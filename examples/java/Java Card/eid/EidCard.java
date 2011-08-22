@@ -196,16 +196,6 @@ public abstract class File {
 	}
 }
 
-/*@
-fixpoint boolean contains<t>(t obj, list<t> xs) {
-    switch (xs) {
-        case nil: return false;
-        case cons(x, xs0): return x == obj ? true : contains(obj, xs0);
-    }
-}
-@*/
-
-
 public class DedicatedFile extends File {
 	/*@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = 
 		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo); @*/
@@ -255,7 +245,7 @@ public class DedicatedFile extends File {
 	
 	public File getSibling(short fid) 
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || contains(result, siblist) == true;
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
 	{
 		//@ assume (false);
 		for (byte i = 0; i < number; i++) 
@@ -357,7 +347,7 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public File getSibling(short fid) 
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || contains(result, siblist) == true;
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
 	{
 		//@ assume (false);
 	}
@@ -462,7 +452,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	/*@ predicate ElementaryFile(short fileID, DedicatedFile parentFile, byte[] data, boolean activeState, short size, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& 
 		this.data |-> data &*& data != null &*& this.size |-> size &*& array_slice(data, 0, data.length, _) &*&
-		size >= 0 &*& size <= data.length &*& info == unit; @*/
+		size >= 0 &*& size <= data.length &*& info == unit &*& data.length <= Short.MAX_VALUE; @*/
 
 //&*& parentFile.DedicatedFile(?parentFileID, ?parentParentFile, ?parentState, ?parentSiblings, ?parentSnumber)
 	// link to parent DF
@@ -472,7 +462,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	// current size of data stored in file
 	short size;
 	public ElementaryFile(short fid, DedicatedFile parent, byte[] d) 
-  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?thesiblings, ?snumber, _, _);
+  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& d.length <= Short.MAX_VALUE &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?thesiblings, ?snumber, _, _);
       	    //@ ensures ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	{
 		super(fid);
@@ -679,7 +669,7 @@ public final class EidCard extends Applet {
 	    selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
 	    selected_file_types(theSelectedFile, theMasterFile, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCertificateDirectoryFile, _) &*&
     	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class) &*&
-      	    internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&
+      	    /*internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&*/
 	    signatureAlgorithm |-> ?theSignatureAlgorithm &*&
 	    nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
 	    authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&
@@ -890,7 +880,7 @@ public final class EidCard extends Applet {
 	// only 5000 internal authenticates can be done and then the activation
 	// PIN needs to be checked again
 	/*VF*private short internalAuthenticateCounter = 5000;*/
-	private short internalAuthenticateCounter;
+	//private short internalAuthenticateCounter;
 	/**
 	 * called by the JCRE to create an applet instance
 	 */
@@ -1565,7 +1555,7 @@ public final class EidCard extends Applet {
     	//@ ensures true;
 	{
 		//@ open transient_array_pointer(mb, 128);
-		internalAuthenticateCounter = 5000;
+		//internalAuthenticateCounter = 5000;
 
 		randomBuffer = new byte[256];
 		responseBuffer = new byte[128];
@@ -1774,7 +1764,7 @@ public final class EidCard extends Applet {
 				// set the applet status to personalized
 				GPSystem.setCardContentState(GPSystem.CARD_SECURED);
 			// reset internal authenticate counter
-			internalAuthenticateCounter = 5000;
+			//internalAuthenticateCounter = 5000;
 			break;
 		case RESET_PIN:
 			// overwrite previous APDU type
@@ -1935,28 +1925,25 @@ public final class EidCard extends Applet {
 	 * returns false if new PIN is not formatted correctly
 	 */
 	private boolean isNewPinFormattedCorrectly(byte[] buffer, byte offset) 
-  	    //@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length - PIN_SIZE;
+  	    //@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& offset >= 0 &*& offset < buffer.length - PIN_SIZE &*& offset + PIN_SIZE <= Byte.MAX_VALUE;
       	    //@ ensures array_slice(buffer, 0, buffer.length, _);
 	{
 		// 1st nibble of new PIN header should be 2
 		if ((buffer[offset] >> 4) != 2)
 			return false;
 		// 2nd nibble of new PIN header is the length (in digits)
-		//@ masking_and(buffer[offset], 0x0F);
+		//@ and_limits(buffer[offset], 0x0F, nat_of_pos(p1(p1(p1_))));
 		byte pinLength = (byte) (buffer[offset] & 0x0F);
 		// the new PIN should be between 4 and 12 digits
 		if (pinLength < 4 || pinLength > 12)
 			return false;
 		// divide PIN length by 2 to get the length in bytes
-		// shr_limits(pinLength, 1, nat_of_pos(p1(p1(p1_))));
+		//@ shr_limits(pinLength, 1, nat_of_pos(p1(p1(p1_))));
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
 		
 		// check if PIN length is odd
 		if ((pinLength & (byte) 0x01) == (byte) 0x01)
 			pinLengthInBytes++;
-		//@ assume (pinLengthInBytes >= 2 && pinLengthInBytes <= 6); // follows from the above code
-		
-		//TODO: change this after we have support for /
 		// check if PIN data is padded with 0xFF
 		byte i = (byte) (offset + PIN_SIZE - 1);
 		for (; i > offset + pinLengthInBytes; i--) 
@@ -1969,7 +1956,7 @@ public final class EidCard extends Applet {
 		}
 		// if PIN length is odd, check if last PIN data nibble is F
 		if ((pinLength & (byte) 0x01) == (byte) 0x01) {
-			if ((byte) (buffer[i] << 4) != (byte) 0xF0)
+			if (/*@truncating@*/ (byte) (buffer[i] << 4) != (byte) 0xF0)
 				return false;
 		}
 		return true;
@@ -1988,6 +1975,7 @@ public final class EidCard extends Applet {
 		// check if PIN length is odd
 		byte oldLength = (byte) (pinLength & 0x01);
 		// divide PIN length by 2 to get the length in bytes
+		//@ assert 2*(pinLength /2) + (pinLength % 2) == pinLength;
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
 		//@ assert 0 <= pinLengthInBytes && pinLengthInBytes < 8;
 		byte i;
@@ -2709,7 +2697,7 @@ public final class EidCard extends Applet {
 			apdu.setOutgoingAndSend((short) 0, (short) 128);
 		}
 		// decrement internal authenticate counter
-		internalAuthenticateCounter--;
+		//internalAuthenticateCounter--;
 		//@ close transient_array(messageBuffer);
 		//@ foreach_unremove(messageBuffer, ta);
 		
