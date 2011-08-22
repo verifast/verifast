@@ -475,6 +475,10 @@ let big_int_of_hex_string s =
   iter (String.length s - 1) unit_big_int zero_big_int
 
 (** For syntax highlighting. *)
+
+type decl_kind =
+  | DeclKind_InductiveType
+
 type range_kind = (* ?range_kind *)
     KeywordRange
   | GhostKeywordRange
@@ -3223,6 +3227,7 @@ let verify_program_core (* ?verify_program_core *)
     (options : options)
     (program_path : string)
     (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
     (breakpoint : (string * int) option) : unit =
   
   let path = program_path in
@@ -4085,8 +4090,8 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let inductive_arities =
-    List.map (fun (i, (_, tparams, _)) -> (i, List.length tparams)) inductivedeclmap
-    @ List.map (fun (i, (_, tparams, _, _)) -> (i, List.length tparams)) inductivemap0
+    List.map (fun (i, (l, tparams, _)) -> (i, (l, List.length tparams))) inductivedeclmap
+    @ List.map (fun (i, (l, tparams, _, _)) -> (i, (l, List.length tparams))) inductivemap0
   in
   
   (* Region: check_pure_type: checks validity of type expressions *)
@@ -4106,9 +4111,10 @@ let verify_program_core (* ?verify_program_core *)
       match try_assoc2 id typedefmap0 typedefmap1 with
         Some t -> t
       | None ->
-      match search' id (pn,ilist) inductive_arities with
-        Some s -> let n=List.assoc s inductive_arities in
+      match resolve (pn,ilist) l id inductive_arities with
+        Some (s, (ld, n)) ->
         if n > 0 then static_error l "Missing type arguments." None;
+        reportUseSite DeclKind_InductiveType ld l;
         InductiveType (s, [])
       | None ->
         match (search2' id (pn,ilist) classmap1 classmap0) with
@@ -4132,8 +4138,9 @@ let verify_program_core (* ?verify_program_core *)
     | ConstructedTypeExpr (l, id, targs) ->
       begin
       match resolve (pn,ilist) l id inductive_arities with
-        Some (id, n) ->
+        Some (id, (ld, n)) ->
         if n <> List.length targs then static_error l "Incorrect number of type arguments." None;
+        reportUseSite DeclKind_InductiveType ld l;
         InductiveType (id, List.map check targs)
       | None -> static_error l "No such inductive datatype." None
       end
@@ -12680,9 +12687,10 @@ let verify_program_with_stats (* ?verify_program_with_stats *)
     (verbose : options)
     (path : string)
     (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
     (breakpoint : (string * int) option) : unit =
   do_finally
-    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange breakpoint)
+    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange reportUseSite breakpoint)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -12724,11 +12732,12 @@ let verify_program (* ?verify_program *)
     (options : options)
     (path : string)
     (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
     (breakpoint : (string * int) option) : unit =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange breakpoint
+         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange reportUseSite breakpoint
      end)
 
 (* Region: linker *)

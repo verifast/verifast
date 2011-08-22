@@ -390,6 +390,10 @@ let show_ide initialPath prover codeFont traceFont runtime =
     ignore $. srcText#event#connect#key_press (fun key ->
       if GdkEvent.Key.keyval key = GdkKeysyms._f && List.mem `CONTROL (GdkEvent.Key.state key) then begin
         textFindBox#misc#show (); (new GObj.misc_ops textFindEntry#as_widget)#grab_focus (); true
+      end else if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then begin
+        let cursor = buffer#get_iter `INSERT in
+        cursor#tags |> List.iter (fun (tag: GText.tag) -> ignore (tag#event srcText#as_widget (key: GdkEvent.Key.t :> GdkEvent.any) cursor#as_iter));
+        true
       end else if GdkEvent.Key.keyval key = GdkKeysyms._Return then
       begin
         let cursor = buffer#get_iter `INSERT in
@@ -427,6 +431,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let undoList: undo_action list ref = ref [] in
     let redoList: undo_action list ref = ref [] in
     let eol = ref (if platform = Windows then "\r\n" else "\n") in
+    let useSiteTags = ref [] in
     let tab = object
       method path = path
       method eol = eol
@@ -437,6 +442,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       method subView = subView
       method currentStepMark = currentStepMark
       method currentCallerMark = currentCallerMark
+      method useSiteTags = useSiteTags
     end in
     ignore $. buffer#connect#modified_changed (fun () ->
       updateBufferTitle tab
@@ -936,13 +942,9 @@ let show_ide initialPath prover codeFont traceFont runtime =
   ignore $. (actionGroup#get_action "Save")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. save tab | None -> ());
   ignore $. (actionGroup#get_action "SaveAs")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. saveAs tab | None -> ());
   ignore $. (actionGroup#get_action "Close")#connect#activate (fun () -> match get_current_tab() with Some tab -> ignore $. close tab | None -> ());
-  let handleStaticError l emsg eurl =
-    apply_tag_by_loc "error" l;
-    msg := Some emsg;
-    url := eurl;
-    updateMessageEntry();
+  let go_to_loc l =
     let (start, stop) = l in
-    let (path, line, col) = stop in
+    let (path, line, col) = start in
     let (k, tab) = get_tab_for_path (string_of_path path) in
     textNotebook#goto_page k;
     let buffer = tab#buffer in
@@ -951,9 +953,34 @@ let show_ide initialPath prover codeFont traceFont runtime =
     ignore $. Glib.Idle.add (fun () -> ignore $. tab#mainView#view#scroll_to_iter ~within_margin:0.2 it; (* NOTE: scroll_to_iter returns a boolean *) false);
     ()
   in
+  let handleStaticError l emsg eurl =
+    apply_tag_by_loc "error" l;
+    msg := Some emsg;
+    url := eurl;
+    updateMessageEntry();
+    go_to_loc l
+  in
   let loc_path ((path, _, _), _) = path in
   let reportRange kind l =
     apply_tag_by_loc (tag_name_of_range_kind kind) l
+  in
+  let reportUseSite declKind declLoc useSiteLoc =
+    let (useSiteStart, useSiteStop) = useSiteLoc in
+    let (useSitePath, useSiteLine, useSiteCol) = useSiteStart in
+    let (_, useSiteStopLine, useSiteStopCol) = useSiteStop in
+    let (useSiteK, useSiteTab) = get_tab_for_path (string_of_path useSitePath) in
+    let useSiteBuffer = useSiteTab#buffer in
+    let useSiteTag = useSiteBuffer#create_tag [] in
+    useSiteTab#useSiteTags := useSiteTag::!(useSiteTab#useSiteTags);
+    ignore $. useSiteTag#connect#event begin fun ~origin event iter ->
+      if GdkEvent.get_type event = `KEY_PRESS then begin
+        let key = GdkEvent.Key.cast event in
+        if GdkEvent.Key.keyval key = GdkKeysyms._d && List.mem `CONTROL (GdkEvent.Key.state key) then
+          go_to_loc declLoc
+      end;
+      false
+    end;
+    useSiteBuffer#apply_tag useSiteTag ~start:(srcpos_iter useSiteBuffer (useSiteLine, useSiteCol)) ~stop:(srcpos_iter useSiteBuffer (useSiteStopLine, useSiteStopCol))
   in
   let ensureHasPath tab =
     match !(tab#path) with
@@ -1042,7 +1069,10 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let clearSyntaxHighlighting () =
     !buffers |> List.iter begin fun tab ->
       let buffer = tab#buffer in
-      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter
+      buffer#remove_all_tags ~start:buffer#start_iter ~stop:buffer#end_iter;
+      let tagTable = new GText.tag_table buffer#tag_table in
+      !(tab#useSiteTags) |> List.iter (fun tag -> tagTable#remove tag#as_tag);
+      tab#useSiteTags := []
     end
   in
   let verifyProgram runToCursor () =
@@ -1084,7 +1114,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_runtime = runtime
               }
               in
-              verify_program prover false options path reportRange breakpoint;
+              verify_program prover false options path reportRange reportUseSite breakpoint;
               msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with

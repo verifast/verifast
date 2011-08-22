@@ -8,7 +8,8 @@ let _ =
   let verify ?(emitter_callback = fun _ -> ()) (stats : bool) (options : options) (prover : string option) (path : string) (emitHighlightedSourceFiles : bool) =
     let verify range_callback =
     try
-      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback None;
+      let use_site_callback declKind declLoc useSiteLoc = () in
+      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
