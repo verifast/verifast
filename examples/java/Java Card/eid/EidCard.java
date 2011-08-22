@@ -117,6 +117,13 @@ lemma void positive_and(byte x, short y)
   assume(false);
 }
 
+lemma void masking_and(byte x, short y)
+    requires y >= 0;
+    ensures 0 <= (x & y) &*& y >= (x & y);
+{
+  assume(false);
+}
+
 inductive pos = p1_ | p0(pos) | p1(pos);
 
 fixpoint nat double(nat n) {
@@ -138,6 +145,8 @@ fixpoint nat nat_of_pos(pos p) {
 inductive triple<a, b, c> = triple(a, b, c);
 
 inductive quad<a, b, c, d> = quad(a, b, c, d);
+
+inductive quint<a, b, c, d, e> = quint(a, b, c, d, e);
 
 @*/
 
@@ -187,12 +196,22 @@ public abstract class File {
 	}
 }
 
+/*@
+fixpoint boolean contains<t>(t obj, list<t> xs) {
+    switch (xs) {
+        case nil: return false;
+        case cons(x, xs0): return x == obj ? true : contains(obj, xs0);
+    }
+}
+@*/
+
+
 public class DedicatedFile extends File {
-	/*@ predicate File(short theFileID, boolean activeState, quad<DedicatedFile, File[], byte, any> info) = 
-		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?oinfo) &*& info == quad(dedFile, sibs, num, oinfo); @*/
-	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, any info) = 
+	/*@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = 
+		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo); @*/
+	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& this.siblings |-> siblings &*& 
-		siblings != null &*& siblings.length == DedicatedFile.MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, _) &*& 
+		siblings != null &*& siblings.length == DedicatedFile.MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, siblist) &*& 
 		this.number |-> number &*& number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit; @*/
 
 	// link to parent DF
@@ -205,68 +224,63 @@ public class DedicatedFile extends File {
 	// constructor only used by MasterFile
 	protected DedicatedFile(short fid) 
   	    //@ requires true;
-      	    //@ ensures DedicatedFile(fid, null, true, _, 0, _);
+      	    //@ ensures DedicatedFile(fid, null, true, _, 0, _, _);
 	{
 		super(fid);
 		// MasterFile does not have a parent, as it is the root of all files
 		parentFile = null;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
-		//@ close DedicatedFile(fid, null, true, _, 0, _);
+		//@ close DedicatedFile(fid, null, true, _, 0, _, _);
 	}
 	public DedicatedFile(short fid, DedicatedFile parent) 
-  	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?d1, ?d2, ?d3);
-      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, _) &*& parent.DedicatedFile(fileID, pf, activeState, d1, d2 < DedicatedFile.MAX_SIBLINGS ? (byte)(d2 + 1) : d2, d3);
+  	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
+      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, _, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
 	{
 		super(fid);
 		parentFile = parent;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
 		parent.addSibling(this);
-		//@ close DedicatedFile(fid, parent, true, _, 0, _);
+		//@ close DedicatedFile(fid, parent, true, _, 0, _, _);
 	}
 	public DedicatedFile getParent() 
-	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?info);
-	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, info) &*& result == parentfile;
+	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?siblist, ?info);
+	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, siblist, info) &*& result == parentfile;
 	{
-		//@ open DedicatedFile(fid, parentfile, active, siblings, number, info);
+		//@ open DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
 		return parentFile;
-		//@ close DedicatedFile(fid, parentfile, active, siblings, number, info);
+		//@ close DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
 	}
+	
 	public File getSibling(short fid) 
-  	    //@ requires true;
-  	    // number |-> ?theNumber &*& theNumber <= MAX_SIBLINGS &*& siblings |-> ?theSiblings &*& theSiblings != null &*& array_slice(theSiblings, 0, theSiblings.length, _) &*& theSiblings.length == MAX_SIBLINGS;
-      	    /*@ ensures true;
-	                      @*/
-      	    //number |-> theNumber &*& siblings |-> theSiblings;
+  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || contains(result, siblist) == true;
 	{
 		//@ assume (false);
-		// check this method later...
-	
-		//VF: bovenstaande is een mogelijke fout in het programma!
 		for (byte i = 0; i < number; i++) 
-		//@ invariant i >= 0 &*& number |-> theNumber &*& siblings |-> theSiblings &*& array_slice(theSiblings, 0, theSiblings.length, _);
+		//@ invariant i >= 0 &*& [f]number |-> snumber &*& [f]siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, _);
 		{
-			//VF bug... was: if (siblings[i].getFileID() == fid)
-			File f = siblings[i];
-			//@ assume (f != null);
-			if (f.getFileID() == fid)
+			if (siblings[i] != null && siblings[i].getFileID() == fid)
 				return siblings[i];
-			//VF: /bug
 		}
 		return null;
 	}
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?info);
-  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, thesiblings, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), info);
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
+  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist), info);
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, info);
+		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
 		if (number < MAX_SIBLINGS) {
 			//VF was: siblings[number++] = s;
 			siblings[number] = s;
 			number += 1;
+			//@ drop_n_plus_one(snumber, siblist);
 		}
-		//@ close DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, info);
+		/*@ close DedicatedFile(fileID, parentFile, activeState, ?newsiblings, 
+			snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, 
+			snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist, 
+			info); @*/
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
@@ -274,12 +288,12 @@ public class DedicatedFile extends File {
 	    //@ ensures [f]File(fid, state, info) &*& result == fid;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]DedicatedFile(fid, ?d1, state, ?d2, ?d3, ?info2);
+		//@ open [f]DedicatedFile(fid, ?d1, state, ?d2, ?d3, ?siblist, ?info2);
 		File thiz = this;
 		//@ open [f]thiz.File(fid, state, ?info3);
 		return fileID;
 		//@ close [f]thiz.File(fid, state, info3);
-		//@ close [f]DedicatedFile(fid, d1, state, d2, d3, info2);
+		//@ close [f]DedicatedFile(fid, d1, state, d2, d3, siblist, info2);
 		//@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -288,12 +302,12 @@ public class DedicatedFile extends File {
 	    //@ ensures File(fid, b, info);
 	{
 		//@ open File(fid, _, info);
-		//@ open DedicatedFile(fid, ?d1, _, ?d3, ?d4, ?info2);
+		//@ open DedicatedFile(fid, ?d1, _, ?d3, ?d4, ?siblist, ?info2);
 		File thiz = this;
 		//@ open thiz.File(fid, _, ?info3);
 		active = b;
 		//@ close thiz.File(fid, b, info3);
-		//@ close DedicatedFile(fid, d1, b, d3, d4, info2);
+		//@ close DedicatedFile(fid, d1, b, d3, d4, siblist, info2);
 		//@ close File(fid, b, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -302,56 +316,65 @@ public class DedicatedFile extends File {
 	    //@ ensures [f]File(fid, state, info) &*& result == state;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]DedicatedFile(fid, ?d1, state, ?d3, ?d4, ?info2);
+		//@ open [f]DedicatedFile(fid, ?d1, state, ?d3, ?d4, ?siblist, ?info2);
 		//@ open this.File(File.class)(fid, state, ?info3);
 		return active;
 		//@ close [f]this.File(File.class)(fid, state, info3);
-		//@ close [f]DedicatedFile(fid, d1, state, d3, d4, info2);
+		//@ close [f]DedicatedFile(fid, d1, state, d3, d4, siblist, info2);
 		//@ close [f]File(fid, state, info);
 	}
 }
 
 public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
-	//@ predicate File(short theFileID, boolean activeState, quad<DedicatedFile, File[], byte, any> info) = MasterFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?oinfo) &*& info == quad(dedFile, sibs, num, oinfo);
-	//@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, any info) = MasterFile(fileID, parentFile, activeState, siblings, number, info);
-	//@ predicate MasterFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, any info) = this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, siblings, number, _) &*& fileID == 0x3F00 &*& parentFile == null &*& info == unit;
+	//@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = MasterFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo);
+	//@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = MasterFile(fileID, parentFile, activeState, siblings, number, siblist, info);
+	//@ predicate MasterFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, siblings, number, siblist, _) &*& fileID == 0x3F00 &*& parentFile == null &*& info == unit;
 
 	private static final short MF_FID = 0x3F00;
 	public MasterFile() 
   	    //@ requires true;
-      	    //@ ensures this.MasterFile(0x3F00, null, true, _, 0, _);
+      	    //@ ensures this.MasterFile(0x3F00, null, true, _, 0, _, _);
 	{
 		// file identifier of MasterFile is hard coded to 3F00
 		super(MF_FID);
-		//@ close MasterFile(0x3F00, null, true, _, 0, _);
+		//@ close MasterFile(0x3F00, null, true, _, 0, _, _);
 	}
 	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public DedicatedFile getParent() 
-	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?info);
-	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, info) &*& result == parentfile;
+	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?siblist, ?info);
+	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, siblist, info) &*& result == parentfile;
 	{
-		//@ open DedicatedFile(fid, parentfile, active, siblings, number, info);
-		//@ open MasterFile(fid, parentfile, active, siblings, number, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, ?info3);
+		//@ open DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
+		//@ open MasterFile(fid, parentfile, active, siblings, number, siblist, ?info2);
+		//@ open this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, siblist, ?info3);
 		return parentFile;
-		//@ close this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, info3);
-		//@ close MasterFile(fid, parentfile, active, siblings, number, info2);
-		//@ close DedicatedFile(fid, parentfile, active, siblings, number, info);
+		//@ close this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, siblist, info3);
+		//@ close MasterFile(fid, parentfile, active, siblings, number, siblist, info2);
+		//@ close DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
 	}
+
+	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
+	public File getSibling(short fid) 
+  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || contains(result, siblist) == true;
+	{
+		//@ assume (false);
+	}
+	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
 	    //@ requires [?f]File(?fid, ?state, ?info);
 	    //@ ensures [f]File(fid, state, info) &*& result == fid;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?info2);
-		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, ?info3);
+		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?d3, ?info2);
+		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, d3, ?info3);
 		//@ open [f]this.File(File.class)(fid, state, ?info4);
 		return fileID;
 		//@ close [f]this.File(File.class)(fid, state, info4);
-		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, info3);
-		//@ close [f]MasterFile(fid, d0, state, d1, d2, info2);
+		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, d3, info3);
+		//@ close [f]MasterFile(fid, d0, state, d1, d2, d3, info2);
 		//@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -360,13 +383,13 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	    //@ ensures File(fid, b, info);
 	{
 		//@ open File(fid, _, info);
-		//@ open MasterFile(fid, ?d0, _, ?d1, ?d2, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fid, null, _, d1, d2, ?info3);
+		//@ open MasterFile(fid, ?d0, _, ?d1, ?d2, ?d3, ?info2);
+		//@ open this.DedicatedFile(DedicatedFile.class)(fid, null, _, d1, d2, d3, ?info3);
 		//@ open this.File(File.class)(fid, _, ?info4);
 		active = b;
 		//@ close this.File(File.class)(fid, b, info4);
-		//@ close this.DedicatedFile(DedicatedFile.class)(fid, null, b, d1, d2, info3);
-		//@ close MasterFile(fid, null, b, d1, d2, info2);
+		//@ close this.DedicatedFile(DedicatedFile.class)(fid, null, b, d1, d2, d3, info3);
+		//@ close MasterFile(fid, null, b, d1, d2, d3, info2);
 		//@ close File(fid, b, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -375,59 +398,60 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	    //@ ensures [f]File(fid, state, info) &*& result == state;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?info2);
-		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, ?info3);
+		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?d3, ?info2);
+		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, d3, ?info3);
 		//@ open [f]this.File(File.class)(fid, state, ?info4);
 		return active;
 		//@ close [f]this.File(File.class)(fid, state, info4);
-		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, info3);
-		//@ close [f]MasterFile(fid, null, state, d1, d2, info2);
+		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, d3, info3);
+		//@ close [f]MasterFile(fid, null, state, d1, d2, d3, info2);
 		//@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?info);
-  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, theSiblings, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), info);
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?siblist, ?info);
+  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, _, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber, info);
-		//@ open MasterFile(fileID, parentFile, activeState, theSiblings, theNumber, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber, ?info3);
+		//@ open DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, info);
+		//@ open MasterFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info2);
+		//@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info3);
 		if (number < MAX_SIBLINGS) {
 			//VF: bug; was    siblings[number++] = s;
 			siblings[number] = s;
 			number += 1;
+			//@ drop_n_plus_one(theNumber, siblist);
 		}
-		//@ close this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, info3);
-		//@ close MasterFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, info2);
-		//@ close DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, info);
+		//@ close this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info3);
+		//@ close MasterFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info2);
+		//@ close DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
 	}
 	
 	/*@ lemma void castFileToMaster()
             requires [?f]File(?fid, ?state, ?info);
-            ensures switch (info) { case quad(dedFile, sibs, num, oinfo): return [f]MasterFile(fid, dedFile, state, sibs, num, oinfo); } ;
+            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]MasterFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
 	{
 	    open [f]File(fid, state, _);
     	}
 
 	lemma void castMasterToFile()
-            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?oinfo);
-            ensures [f]File(fid, state, quad(dedFile, sibs, num, oinfo));
+            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
 	{
-	    close [f]File(fid, state, quad(dedFile, sibs, num, oinfo));
+	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
     	}
 
 	lemma void castMasterToDedicated()
-            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?oinfo);
-            ensures [f]DedicatedFile(fid, dedFile, state, sibs, num, oinfo);
+            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
+            ensures [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
 	{
-	    close [f]DedicatedFile(fid, dedFile, state, sibs, num, oinfo);
+	    close [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
     	}
 
 	lemma void castDedicatedToMaster()
-            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?oinfo);
-            ensures [f]MasterFile(fid, dedFile, state, sibs, num, oinfo);
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
+            ensures [f]MasterFile(fid, dedFile, state, sibs, num, siblist, oinfo);
 	{
-	    open [f]DedicatedFile(fid, dedFile, state, sibs, num, oinfo);
+	    open [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
     	}
     	@*/
 }
@@ -448,7 +472,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	// current size of data stored in file
 	short size;
 	public ElementaryFile(short fid, DedicatedFile parent, byte[] d) 
-  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?thesiblings, ?snumber, _);
+  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?thesiblings, ?snumber, _, _);
       	    //@ ensures ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	{
 		super(fid);
@@ -459,8 +483,8 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		//@ close ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	}
 	public ElementaryFile(short fid, DedicatedFile parent, short maxSize) 
-  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?d1, ?d2, ?d3);
-      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, d1, d2 < DedicatedFile.MAX_SIBLINGS ? (byte)(d2 + 1) : d2, d3);
+  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
+      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
 	{
 		super(fid);
 		parentFile = parent;
@@ -632,7 +656,7 @@ public final class EidCard extends Applet {
             messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
             previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
             signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
-            masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
+            masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
             cardholderPin |-> ?theCardholderPin &*& OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
             resetPin |-> ?theResetPin &*& OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
             unblockPin |-> ?theUnblockPin &*& OwnerPIN(theUnblockPin, _, _) &*& theUnblockPin != null &*&
@@ -649,8 +673,8 @@ public final class EidCard extends Applet {
             authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, ?theAuthenticationObjectDirectoryFileData, _, _, _) &*& theAuthenticationObjectDirectoryFile != null &*& theAuthenticationObjectDirectoryFileData != null &*& theAuthenticationObjectDirectoryFileData.length == 0x40 &*&  theAuthenticationObjectDirectoryFile.getClass() == ElementaryFile.class &*&
             privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& thePrivateKeyDirectoryFile.ElementaryFile(_, _, ?thePrivateKeyDirectoryFileData, _, _, _) &*& thePrivateKeyDirectoryFile != null &*& thePrivateKeyDirectoryFileData != null &*& thePrivateKeyDirectoryFileData.length == 0xB0 &*& thePrivateKeyDirectoryFile.getClass() == ElementaryFile.class &*&
             certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?theCertificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile != null &*& theCertificateDirectoryFileData != null &*& theCertificateDirectoryFileData.length == 0xB0 &*& theCertificateDirectoryFile.getClass() == ElementaryFile.class &*&
-            belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
-            idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
+            belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
+            idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
             preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?thePreferencesFileData, _, _, _) &*& thePreferencesFile != null &*& thePreferencesFileData != null &*& thePreferencesFileData.length == 100 &*& thePreferencesFile.getClass() == ElementaryFile.class &*&
 	    selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
 	    selected_file_types(theSelectedFile, theMasterFile, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCertificateDirectoryFile, _) &*&
@@ -745,7 +769,8 @@ public final class EidCard extends Applet {
 	protected OwnerPIN resetPin;
 	protected OwnerPIN unblockPin;
 	protected OwnerPIN activationPin;
-	/*VF*protected OwnerPIN cardholderPin, resetPin, unblockPin, activationPin;*/
+	//protected OwnerPIN cardholderPin, resetPin, unblockPin, activationPin;
+	
 	
 	/* signature related variables */
 	private byte signatureAlgorithm;
@@ -894,7 +919,7 @@ public final class EidCard extends Applet {
 	    @*/
       	/*@ ensures dirFile |-> ?theDirFile &*& theDirFile.ElementaryFile(_, _, ?dirFileData, _, _, _) &*& theDirFile != null 
       	              &*& dirFileData != null &*& dirFileData.length == 0x25
-	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, _) &*& theBelpicDirectory != null
+	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, _, _) &*& theBelpicDirectory != null
 	         &*& tokenInfo |-> ?theTokenInfo &*& theTokenInfo.ElementaryFile(_, _, ?tokenInfoData, _, _, _) &*& theTokenInfo != null
 	              &*& tokenInfoData != null &*& tokenInfoData.length == 0x30
 	         &*& objectDirectoryFile |-> ?theObjectDirectoryFile &*& theObjectDirectoryFile.ElementaryFile(_, _, ?objectDirectoryFileData, _, _, _) &*& theObjectDirectoryFile != null
@@ -905,7 +930,7 @@ public final class EidCard extends Applet {
 	              &*& privateKeyDirectoryFileData != null &*& privateKeyDirectoryFileData.length == 0xB0
 	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?certificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile !=  null
 	              &*& certificateDirectoryFileData != null &*& certificateDirectoryFileData.length == 0xB0
-	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, _) &*& theIdDirectory != null
+	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, _, _) &*& theIdDirectory != null
 	         &*& identityFile |-> ?theIdentityFile &*& theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null
 	              &*& identityData != null &*& identityData.length == 0xD0
 	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, ?identitySignatureData, _, _, _) &*& theIdentityFileSignature != null
@@ -918,7 +943,7 @@ public final class EidCard extends Applet {
 	              &*& caRoldIDFileData != null &*& caRoldIDFileData.length == 0x20
 	         &*& preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?preferencesFileData, _, _, _) &*& thePreferencesFile != null
 	              &*& preferencesFileData != null &*& preferencesFileData.length == 100
-	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _) &*& theMasterFile != null
+	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _, _) &*& theMasterFile != null
 	         &*& selectedFile |-> theMasterFile &*& theBelpicDirectory.getClass() == DedicatedFile.class &*& theIdDirectory.getClass() == DedicatedFile.class;
 	    @*/
 	{
@@ -964,8 +989,8 @@ public final class EidCard extends Applet {
 	 * erase data in file that was selected with SELECT FILE
 	 */
 	private void eraseBinary(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check if access to this file is allowed
 		if (!fileAccessAllowed(ERASE_BINARY))
@@ -989,8 +1014,8 @@ public final class EidCard extends Applet {
 	 * change data in a file that was selected with SELECT FILE
 	 */
 	private void updateBinary(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check if access to this file is allowed
 		if (!fileAccessAllowed(UPDATE_BINARY))
@@ -1206,8 +1231,8 @@ public final class EidCard extends Applet {
 	 * activate: see belgian eID content file
 	 */
 	private void activateFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)
@@ -1263,8 +1288,8 @@ public final class EidCard extends Applet {
 	 * perform any cleanup tasks and set default selectedFile
 	 */
 	private void clear() 
-    	    //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		JCSystem.beginTransaction();
 		
@@ -1291,12 +1316,12 @@ public final class EidCard extends Applet {
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
 	 */
 	private void initializeEmptyLargeFiles() 
-	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, _, _) &*& 
-	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, _, _) &*& 
+	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, _, _, _) &*& 
+	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
 	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
 	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
-      	    /*@ ensures belpicDirectory |-> bpd &*& bpd.DedicatedFile(_, _, _, _, _, _) &*& 
-	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _) &*& 
+      	    /*@ ensures belpicDirectory |-> bpd &*& bpd.DedicatedFile(_, _, _, _, _, _, _) &*& 
+	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
 	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
 	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
 	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
@@ -1362,9 +1387,10 @@ public final class EidCard extends Applet {
 	 * select file under the current DF
 	 */
 	private void selectByFileIdentifier(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
+		//@ assume(false);
 		// receive the data to see which file needs to be selected
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
@@ -1420,6 +1446,7 @@ public final class EidCard extends Applet {
   	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
       	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
+		//@assume(false);
 		// receive the path name
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
@@ -1436,7 +1463,7 @@ public final class EidCard extends Applet {
 		//@ assert [1/2]masterFile |-> ?theMasterFile;
 		for (byte i = 0; i < lc; i += 2) 
 		    /*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i < (lc + 2) &*& 
-		    			[1/2]masterFile |-> theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, _, _, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class; @*/
+		    			[1/2]masterFile |-> theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, _, _, _, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class; @*/
 		{
 			short fid = Util.makeShort(buffer[(short) (ISO7816.OFFSET_CDATA + i)], buffer[(short) (ISO7816.OFFSET_CDATA + i + 1)]);
 			// MF can be explicitely or implicitely in the path name
@@ -1576,8 +1603,8 @@ public final class EidCard extends Applet {
 	 * select always has to happen after a reset
 	 */
 	public boolean select() 
-            //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-            //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+            //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+            //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// Clear data and set default selectedFile to masterFile
 		clear();
@@ -1587,8 +1614,8 @@ public final class EidCard extends Applet {
 	 * perform any cleanup and bookkeeping tasks before the applet is deselected
 	 */
 	public void deselect() 
-    	    //@ requires current_applet(this) &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    	    //@ ensures current_applet(this) &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		clear();
 		return;
@@ -1597,8 +1624,8 @@ public final class EidCard extends Applet {
 	 * process APDUs
 	 */
 	public void process(APDU apdu) 
-            //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-            //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+            //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+            //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		byte[] buffer = apdu.getBuffer();
 		/*
@@ -1720,8 +1747,8 @@ public final class EidCard extends Applet {
 	 * verify the PIN
 	 */
 	private void verifyPin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		
 		// check P1
@@ -1795,8 +1822,8 @@ public final class EidCard extends Applet {
 	 * change the PIN
 	 */
 	private void changePin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		/*
 		 * IMPORTANT: in all other APDUs the previous APDU type gets overwritten
@@ -1847,7 +1874,6 @@ public final class EidCard extends Applet {
 		// receive the PIN data
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
-		//@ and_limits(buffer[ISO7816.OFFSET_LC], 0x00FF, nat_of_pos(p1(p1(p1(p1_)))));
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if ((lc != 16) || (byteRead != 16))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -1867,8 +1893,8 @@ public final class EidCard extends Applet {
 	 * administrator changes the PIN
 	 */
 	private void administratorChangePin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// The previous getChallenge() should ask for at least the length of the
 		// new administrator pin. Otherwise exception is thrown
@@ -1889,7 +1915,6 @@ public final class EidCard extends Applet {
 		// receive the PIN data
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
-		//@ and_limits(buffer[ISO7816.OFFSET_LC], 0x00FF, nat_of_pos(p1(p1(p1(p1_)))));
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if ((lc != 8) || (byteRead != 8))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -1917,19 +1942,20 @@ public final class EidCard extends Applet {
 		if ((buffer[offset] >> 4) != 2)
 			return false;
 		// 2nd nibble of new PIN header is the length (in digits)
-		//@ and_limits(buffer[offset], 0x0F, nat_of_pos(p1(p1(p1_))));
+		//@ masking_and(buffer[offset], 0x0F);
 		byte pinLength = (byte) (buffer[offset] & 0x0F);
 		// the new PIN should be between 4 and 12 digits
 		if (pinLength < 4 || pinLength > 12)
 			return false;
 		// divide PIN length by 2 to get the length in bytes
-		//@ shr_limits(pinLength, 1, nat_of_pos(p1(p1(p1_))));
+		// shr_limits(pinLength, 1, nat_of_pos(p1(p1(p1_))));
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
 		
 		// check if PIN length is odd
 		if ((pinLength & (byte) 0x01) == (byte) 0x01)
 			pinLengthInBytes++;
 		//@ assume (pinLengthInBytes >= 2 && pinLengthInBytes <= 6); // follows from the above code
+		
 		//TODO: change this after we have support for /
 		// check if PIN data is padded with 0xFF
 		byte i = (byte) (offset + PIN_SIZE - 1);
@@ -1952,7 +1978,7 @@ public final class EidCard extends Applet {
 	 * check if new PIN is based on the last generated random challenge
 	 */
 	private boolean isNewPinCorrectValue(byte[] buffer) 
-  	    /*@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& buffer.length >= ISO7816.OFFSET_CDATA + 8
+  	    /*@ requires buffer != null &*& array_slice(buffer, 0, buffer.length, _) &*& buffer.length >= OFFSET_PIN_DATA + 8
   	    	  &*& randomBuffer |-> ?theRandomBuffer &*& theRandomBuffer != null &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _) &*& theRandomBuffer.length == 256;
   	    @*/
       	    //@ ensures array_slice(buffer, 0, buffer.length, _) &*& randomBuffer |-> theRandomBuffer &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _);
@@ -1964,7 +1990,6 @@ public final class EidCard extends Applet {
 		// divide PIN length by 2 to get the length in bytes
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
 		//@ assert 0 <= pinLengthInBytes && pinLengthInBytes < 8;
-		//@ assume (pinLengthInBytes == 0 || pinLengthInBytes == 2 ||  pinLengthInBytes == 4 || pinLengthInBytes == 6); // wrong assume
 		byte i;
 		for (i = 0; i < pinLengthInBytes; i++) 
 			/*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i <= pinLengthInBytes
@@ -1984,8 +2009,8 @@ public final class EidCard extends Applet {
 	 * Discard current fulfilled access conditions
 	 */
 	private void logOff(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00 || buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -2027,8 +2052,8 @@ public final class EidCard extends Applet {
 	 * prepare for authentication or non repudiation signature
 	 */
 	private void prepareForSignature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x41 || buffer[ISO7816.OFFSET_P2] != (byte) 0xB6)
@@ -2088,8 +2113,8 @@ public final class EidCard extends Applet {
 	 * generate (authentication or non repudiation) signature
 	 */
 	private void generateSignature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		/*
 		 * IMPORTANT: in all other APDUs the previous APDU type gets overwritten
@@ -2174,8 +2199,8 @@ public final class EidCard extends Applet {
 	 * generate PKCS#1 MD5 signature
 	 */
 	private void generatePkcs1Md5Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2236,8 +2261,8 @@ public final class EidCard extends Applet {
 	 * generate PKCS#1 SHA1 signature
 	 */
 	private void generatePkcs1Sha1Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2300,8 +2325,8 @@ public final class EidCard extends Applet {
 	 * generate PKCS#1 signature
 	 */
 	private void generatePkcs1Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2397,8 +2422,8 @@ public final class EidCard extends Applet {
 	 * authentication or non repudiation keys.
 	 */
 	private void generateKeyPair(APDU apdu) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		apdu.setIncomingAndReceive();// If this was removed, function will not
 		// work: no data except for command will be read
@@ -2460,8 +2485,8 @@ public final class EidCard extends Applet {
 	 * 
 	 */
 	private void getPublicKey(APDU apdu) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		
 		
@@ -2578,8 +2603,8 @@ public final class EidCard extends Applet {
 	 * erase a public key (basic, commune or role key) only basic supported
 	 */
 	private void eraseKey(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P1
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
@@ -2636,8 +2661,8 @@ public final class EidCard extends Applet {
 	 * (Mutual authentication not supported)
 	 */
 	private void internalAuthenticate(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P1 and P2
 		if ((buffer[ISO7816.OFFSET_P1] != ALG_SHA1_PKCS1) || buffer[ISO7816.OFFSET_P2] != BASIC)
@@ -2721,8 +2746,8 @@ public final class EidCard extends Applet {
 	 * generate a random challenge
 	 */
 	private void getChallenge(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00 || buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -2750,8 +2775,8 @@ public final class EidCard extends Applet {
 	 * this file can latter be read by a READ BINARY
 	 */
 	private void selectFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)
@@ -2832,8 +2857,8 @@ public final class EidCard extends Applet {
 	 * activate: see belgian eID content file
 	 */
 	private void deactivateFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)
