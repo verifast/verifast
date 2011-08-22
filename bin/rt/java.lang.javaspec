@@ -27,6 +27,10 @@ fixpoint int unboxed_int(boxed_int i) { switch (i) { case boxed_int(value): retu
 inductive boxed_bool = boxed_bool(boolean);
 fixpoint boolean unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): return value; } }
 
+lemma_auto(x%y) void modulo_nonnegative(int x, int y);
+  requires 0 <= x && 0 < y;
+  ensures 0 <= x % y && x % y < y;
+
 predicate array_element<T>(T[] array, int index; T value);
 predicate array_slice<T>(T[] array, int start, int end; list<T> elements);
 predicate array_slice_deep<T, A, V>(T[] array, int start, int end, predicate(A, T; V) p, A info; list<T> elements, list<V> values);
@@ -119,6 +123,16 @@ public class ArrayIndexOutOfBoundsException extends RuntimeException {
 }
 
 public class NullPointerException extends RuntimeException {
+}
+
+public class Byte {
+    public static final byte MIN_VALUE = -128;
+    public static final byte MAX_VALUE = 127;
+}
+
+public class Short {
+    public static final short MIN_VALUE = -32768;
+    public static final short MAX_VALUE = 32767;
 }
 
 public class Integer {
