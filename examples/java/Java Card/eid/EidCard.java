@@ -1319,7 +1319,6 @@ public final class EidCard extends Applet {
 	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
 	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200; @*/
 	{
-	//short fileID, DedicatedFile parentFile, byte[] data, boolean activeState, short size
 		/*
 		 * these 3 certificates are the same for all sample eid card applets
 		 * therefor they are made static and the data is allocated only once
