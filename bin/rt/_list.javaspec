@@ -93,6 +93,10 @@ lemma_auto(nth(0, vs)) void nth_zero<t>(list<t> vs);
     requires true;
     ensures nth(0, vs) == head(vs);
 
+lemma_auto(mem(x, append(xs, ys))) void mem_append<t>(list<t> xs, list<t> ys, t x);
+    requires true;
+    ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
+
 fixpoint boolean distinct<t>(list<t> xs) {
     switch (xs) {
         case nil: return true;

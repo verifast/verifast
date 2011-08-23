@@ -102,6 +102,17 @@ lemma void nth_zero<t>(list<t> vs)
     }
 }
 
+lemma void mem_append<t>(list<t> xs, list<t> ys, t x)
+    requires true;
+    ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      mem_append(t, ys, x);
+  }
+}
+
 lemma void take_0<t>(list<t> xs)
     requires true;
     ensures take(0, xs) == nil;

@@ -3405,7 +3405,6 @@ let verify_program_core (* ?verify_program_core *)
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
-  (*let modulo_symbol = mk_symbol "modulo" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in*)
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
   let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
@@ -7401,6 +7400,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     result
   in
   
+  let definitely_different t1 t2 =
+    let result = if t1 == t2 then false else ctxt#query (ctxt#mk_not (ctxt#mk_eq t1 t2)) in
+    (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
+    result
+  in
+  
   let predname_eq g1 g2 =
     match (g1, g2) with
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
@@ -8232,6 +8237,44 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       predinstmap
   in
   
+  let contains_edges2 =
+    List.map
+    (fun ((symb, fsymbs, symb', targs, inputExprTypes, inputArgs, conds, predinst) as edge) ->
+         (symb, fsymbs, symb', (symb', targs, inputExprTypes, inputArgs, conds, predinst) :: [])
+    )
+    contains_edges
+  in
+  
+  let close1 edges =
+    flatmap
+      begin fun ((symb, fsymbs, symb', theway) as edge) ->
+        flatmap 
+        (fun (symb2, fsymbs2, symb2', theway2) -> 
+          if definitely_equal symb' symb2 && symb != symb2' then
+            let new_edge = (symb, fsymbs, symb2', theway @ theway2) in
+            if List.exists (fun (symb3, fsymbs3, symb3', theway3) -> symb3 == symb && symb2' == symb3') edges then
+              []
+            else 
+              [new_edge]
+          else 
+            []
+        )
+        edges
+      end
+    edges
+  in
+  
+  let transitive_contains_edges = 
+    let rec perform_close edges =
+      let new_edges = close1 edges in
+      if(List.length new_edges == 0) then
+        edges
+      else
+        perform_close (edges @ new_edges)
+    in
+    perform_close contains_edges2
+  in
+  
   let instance_predicate_contains_edges =
     classmap1 |> flatmap
       begin fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
@@ -8522,7 +8565,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     end;
     (* auto-open/close rules for chunks that contain other chunks *)
     List.iter
-      begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+     begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
         let g = (symb, true) in
         let indexCount = List.length fns in
         let Some n = inputParamCount in
@@ -8564,7 +8607,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           rule
         in
         add_rule symb autoclose_rule;
-        let autoopen_rule =
+       (* let autoopen_rule =
           let match_func h targs ts =
             List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && chunks_match g' targs' ts' symb' targs ts) h
           in
@@ -8593,9 +8636,78 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           rule
         in
-        add_rule symb' autoopen_rule
+        add_rule symb' autoopen_rule*)
       end
       contains_edges;
+    (* transitive auto-open rules for predicates *)
+    List.iter
+      begin fun (fromsymb, indices, tosymb, path) ->
+        let auto_open_rule =
+          let rec can_apply_rule_core wanted_targs wanted_ts actual_targs actual_ts path =
+            match path with
+              [] -> List.for_all2 (fun t1 t2 ->definitely_equal t1 t2) wanted_ts actual_ts
+            | (_, pathtargs, inputExprTypes, inputArgs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) :: rest ->
+                let indexCount = List.length fns in
+                let (actual_indices, actual_ts) = take_drop indexCount actual_ts in
+                let Some n = inputParamCount in
+                let actual_input_ts = take n actual_ts in
+                let (inputParams, outputParams) = take_drop n xs in
+                let Some tpenv = zip predinst_tparams actual_targs in
+                let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams actual_input_ts in
+                if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) (* check indices once tosymb can have indices*) then
+                  let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, t)) inputParams actual_input_ts in
+                  let new_actual_ts = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in (eval None env e) ) inputArgs inputExprTypes in
+                  let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) pathtargs in
+                    can_apply_rule_core wanted_targs wanted_ts new_actual_targs new_actual_ts rest
+                else
+                  false
+          in
+          let can_apply_rule h wanted_targs wanted_ts =
+            List.exists 
+              (fun (Chunk ((g', is_symb), actual_targs, coef', actual_ts, _)) ->
+                is_symb && fromsymb == g' && (List.for_all2 definitely_equal (take (List.length indices) actual_ts) indices) && (can_apply_rule_core wanted_targs wanted_ts actual_targs actual_ts path)
+              )
+            h
+          in
+          let exec_rule h targs ts cont =
+            let rec exec_rule_core h symb targs ts path cont =
+              match path with
+                [] -> cont h
+              | (nextsymb, waytargs, inputExprTypes, inputArgs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) :: rest ->
+                let indexCount = List.length fns in
+                let Some n = inputParamCount in
+                let (inputParams, outputParams) = take_drop n xs in
+                let (h, targs_, coef_, ts_) =
+                  let rec iter hdone htodo =
+                    match htodo with
+                      (Chunk ((g', is_symb), targs_, coef_, ts_, _) as chunk)::htodo ->
+                      if is_symb && g' == symb && (can_apply_rule_core targs ts targs_ ts_ path) then
+                        (hdone @ htodo, targs_, coef_, ts_)
+                      else
+                        iter (chunk::hdone) htodo
+                  in
+                  iter [] h
+                in
+                let (indices, args) = take_drop indexCount ts_ in
+                let Some tpenv = zip predinst_tparams targs_ in
+                let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) xs args in
+                let ghostenv = [] in
+                with_context (Executing (h, env, l, "Auto-opening predicate")) $. fun () ->
+                assume_pred tpenv (pn,ilist) h ghostenv env wbody coef_ None None $. fun h ghostenv env ->
+                  exec_rule_core h nextsymb targs ts rest cont
+            in
+            exec_rule_core h fromsymb targs ts path cont
+          in
+          let rule h targs terms_are_well_typed ts cont =
+            if terms_are_well_typed && can_apply_rule h targs ts then
+              exec_rule h targs ts (fun h -> cont (Some h))
+            else
+              cont None
+          in rule
+        in
+        add_rule tosymb auto_open_rule
+      end
+      transitive_contains_edges;
     (* auto-open/close rules for instance predicates *)
     List.iter
       begin fun (cn, symb, symb', targs, inputExprTypes, inputExprs, conds, (_, (l, xs, family, _, Some wbody))) ->
