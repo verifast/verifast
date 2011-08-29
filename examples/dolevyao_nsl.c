@@ -106,7 +106,7 @@ struct item;
 inductive item =
   | key_item(int creator, int id, bool isPublicKey, int info)
   | data_item(int data)
-  | encrypted_item(int keyCreator, int id, int info, item payload)
+  | encrypted_item(int keyCreator, int id, int info, item payload, int entropy)
   | pair_item(item first, item second);
 
 predicate item(struct item *item, item i);
@@ -153,7 +153,7 @@ void check_is_key(struct item *item);
         switch (i) {
             case key_item(creator, id, isPublicKey, info): return key(item, creator, id, isPublicKey, info);
             case data_item(d): return false;
-            case encrypted_item(creator, id, info, payload): return false;
+            case encrypted_item(creator, id, info, payload, entropy): return false;
             case pair_item(f, s): return false;
         };
     @*/
@@ -170,15 +170,17 @@ int item_get_data(struct item *item);
         switch (i) {
             case data_item(d): return item(item, i) &*& result == d;
             case key_item(creator, id, isPublicKey, info): return false;
-            case encrypted_item(creator, id, info, payload): return false;
+            case encrypted_item(creator, id, info, payload, entropy): return false;
             case pair_item(f, s): return false;
         };
     @*/
 
+//@ predicate entropy(int value) = true;
+
 // This function aborts if the key is a private key.
 struct item *encrypt(struct item *key, struct item *payload);
     //@ requires key(key, ?creator, ?id, ?isPublicKey, ?info) &*& item(payload, ?p);
-    //@ ensures key(key, creator, id, isPublicKey, info) &*& item(payload, p) &*& item(result, encrypted_item(creator, id, info, p)) &*& isPublicKey;
+    //@ ensures key(key, creator, id, isPublicKey, info) &*& item(payload, p) &*& [_]entropy(?entropy) &*& item(result, encrypted_item(creator, id, info, p, entropy)) &*& isPublicKey;
 
 // This function aborts if the key is a public key.
 struct item *decrypt(struct item *key, struct item *item);
@@ -187,7 +189,7 @@ struct item *decrypt(struct item *key, struct item *item);
     ensures
         key(key, creator, id, isPublicKey, info) &*& item(item, i) &*& !isPublicKey &*&
         switch (i) {
-            case encrypted_item(creator0, id0, info0, p): return creator0 == creator &*& id0 == id &*& info0 == info &*& item(result, p);
+            case encrypted_item(creator0, id0, info0, p, entropy): return creator0 == creator &*& id0 == id &*& info0 == info &*& item(result, p);
             case key_item(creator0, id0, isPublicKey0, info0): return false;
             case data_item(d): return false;
             case pair_item(f, s): return false;
@@ -216,7 +218,7 @@ struct item *pair_get_first(struct item *pair);
             case pair_item(f, s): return item(result, f);
             case key_item(creator, id, isPublicKey, info): return false;
             case data_item(d): return false;
-            case encrypted_item(creator, id, info, payload): return false;
+            case encrypted_item(creator, id, info, payload, entropy): return false;
         };
     @*/
 
@@ -229,7 +231,7 @@ struct item *pair_get_second(struct item *pair);
             case pair_item(f, s): return item(result, s);
             case key_item(creator, id, isPublicKey, info): return false;
             case data_item(d): return false;
-            case encrypted_item(creator, id, info, payload): return false;
+            case encrypted_item(creator, id, info, payload, entropy): return false;
         };
     @*/
 
@@ -269,7 +271,7 @@ fixpoint bool mypub(item i) {
         case key_item(o, k, isPublicKey, info): return
             isPublicKey || bad(o) || int_left(info) == 1 && bad(int_right(info)) || int_left(info) == 2 && bad(int_left(int_right(info)));
         case data_item(d): return true;
-        case encrypted_item(creator, id, info, m): return
+        case encrypted_item(creator, id, info, m, entropy): return
             mypub(m) ||
             switch (m) {
                 case key_item(creator0, id0, isPublicKey0, info0): return
@@ -359,7 +361,7 @@ void client(int client, int server, struct item *clientPrivateKey, struct item *
     switch (sn) {
         case key_item(creator, id, isPublicKey, info):
         case data_item(d):
-        case encrypted_item(creator, id, info, payload):
+        case encrypted_item(creator, id, info, payload, entropy):
         case pair_item(fst, snd):
     }
     @*/
@@ -442,7 +444,7 @@ void server(int server, struct item *serverPrivateKey)
                 assert info == int_pair(1, server);
             case data_item(d):
                 nc = nc;
-            case encrypted_item(creator, id, info, payload):
+            case encrypted_item(creator, id, info, payload, entropy):
                 nc = nc;
             case pair_item(fst, snd):
                 nc = nc;
@@ -544,7 +546,7 @@ void attacker()
                             p = p;
                         case data_item(d):
                             p = p;
-                        case encrypted_item(creator, id, isPublicKey, info):
+                        case encrypted_item(creator, id, isPublicKey, info, entropy):
                             p = p;
                         case pair_item(f, s):
                             p = p;
@@ -553,7 +555,7 @@ void attacker()
                                     p = p;
                                 case data_item(d):
                                     p = p;
-                                case encrypted_item(creator, id, info, payload0):
+                                case encrypted_item(creator, id, info, payload0, entropy0):
                                     p = p;
                                 case pair_item(sf, ss):
                                     p = p;
@@ -565,7 +567,7 @@ void attacker()
                                                     p = p;
                                                 case data_item(d):
                                                     p = p;
-                                                case encrypted_item(creator1, id1, info1, payload1):
+                                                case encrypted_item(creator1, id1, info1, payload1, entropy1):
                                                     p = p;
                                                     assert !kispublickey;
                                                     assert kinfo == int_pair(0, 0);
@@ -580,7 +582,7 @@ void attacker()
                                             }
                                         case data_item(d):
                                             p = p;
-                                        case encrypted_item(creator, id, info, payload0):
+                                        case encrypted_item(creator, id, info, payload0, entropy0):
                                             p = p;
                                         case pair_item(ssf, sss):
                                             p = p;
