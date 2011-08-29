@@ -196,13 +196,48 @@ public abstract class File {
 	}
 }
 
+/*@
+    predicate file_element(File child;) = child == null ? true : child.File(child.fileID, child.active, _);
+@*/
+/*@
+predicate foreach2<t>(list<t> xs, predicate(t;) p;) =
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return p(x) &*& foreach2(xs0, p);
+    };
+    
+lemma void foreach2_remove<t>(t x, list<t> xs)
+    requires [?f]foreach2(xs, ?p) &*& mem(x, xs) == true;
+    ensures [f]foreach2(remove(x, xs), p) &*& p(x);
+{
+   assume(false);
+}
+
+lemma void foreach2_unremove<t>(t x, list<t> xs)
+    requires [?f]foreach2(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
+    ensures [f]foreach2(xs, p);
+{
+   assume(false);
+}
+        
+lemma void close_empty_file_array(list<File> xs)
+    requires all_eq(xs, null) == true;
+    ensures foreach2(xs, file_element);
+{
+  assume(false);
+  // TODO: prove this! (by induction... case nil: true; case else: ...)
+}
+@*/
+
 public class DedicatedFile extends File {
+
 	/*@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = 
 		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo); @*/
 	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& this.siblings |-> siblings &*& 
 		siblings != null &*& siblings.length == DedicatedFile.MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, siblist) &*& 
-		this.number |-> number &*& number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit; @*/
+		this.number |-> number &*& number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit &*&
+		foreach2<File>(siblist, file_element); @*/
 
 	// link to parent DF
 	private DedicatedFile parentFile;
@@ -214,23 +249,29 @@ public class DedicatedFile extends File {
 	// constructor only used by MasterFile
 	protected DedicatedFile(short fid) 
   	    //@ requires true;
-      	    //@ ensures DedicatedFile(fid, null, true, _, 0, _, _);
+      	    //@ ensures DedicatedFile(fid, null, true, _, 0, ?sl, _);
 	{
 		super(fid);
 		// MasterFile does not have a parent, as it is the root of all files
 		parentFile = null;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
-		//@ close DedicatedFile(fid, null, true, _, 0, _, _);
+		//@ assert this.siblings |-> ?siblings;
+		//@ assert array_slice(siblings, 0, siblings.length, ?siblist);
+		//@ close_empty_file_array(siblist);
+		//@ close DedicatedFile(fid, null, true, siblings, 0, siblist, _);
 	}
 	public DedicatedFile(short fid, DedicatedFile parent) 
   	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, _, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
+      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, ?sl, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
 	{
 		super(fid);
 		parentFile = parent;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
+		//@ assert this.siblings |-> ?siblings;
+		//@ assert array_slice(siblings, 0, siblings.length, ?childSiblist);
+		//@ close_empty_file_array(childSiblist);
 		parent.addSibling(this);
 		//@ close DedicatedFile(fid, parent, true, _, 0, _, _);
 	}
@@ -243,24 +284,15 @@ public class DedicatedFile extends File {
 		//@ close DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
 	}
 	
-	public File getSibling(short fid) 
-  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
-	{
-		//@ assume (false);
-		for (byte i = 0; i < number; i++) 
-		//@ invariant i >= 0 &*& [f]number |-> snumber &*& [f]siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, _);
-		{
-			if (siblings[i] != null && siblings[i].getFileID() == fid)
-				return siblings[i];
-		}
-		return null;
-	}
 	protected void addSibling(File s) 
   	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist), info);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
+  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, drop((snumber + 1), siblist))) : siblist)
+  	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
 	{
+	//@ assume(false);
 		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ open foreach2(siblist, file_element);
 		if (number < MAX_SIBLINGS) {
 			//VF was: siblings[number++] = s;
 			siblings[number] = s;
@@ -272,7 +304,27 @@ public class DedicatedFile extends File {
 			snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist, 
 			info); @*/
 	}
-	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
+
+	public File getSibling(short fid) 
+  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
+	{
+		//@ assume(false);
+		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		
+		for (byte i = 0; i < number; i++) 
+		/*@ invariant i >= 0 &*& [f]number |-> snumber &*& [f]siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, siblist)
+		      &*& [f]foreach2(siblist, file_element); @*/
+		{
+			File fl = siblings[i];
+			//@ foreach2_remove<File>(fl, siblist);
+			if (fl != null && fl.getFileID() == fid)
+				return fl;
+		}
+		return null;
+	}
+
+/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
 	    //@ requires [?f]File(?fid, ?state, ?info);
 	    //@ ensures [f]File(fid, state, info) &*& result == fid;
@@ -399,9 +451,14 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?siblist, ?info);
-  	    //@ ensures DedicatedFile(fileID, parentFile, activeState, _, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
+  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, drop((snumber + 1), siblist))) : siblist)
+  	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
+  	    // requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?siblist, ?info);
+  	    // ensures DedicatedFile(fileID, parentFile, activeState, _, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
 	{
+		//@ assume(false);
 		//@ open DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, info);
 		//@ open MasterFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info2);
 		//@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info3);
