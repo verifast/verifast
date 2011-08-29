@@ -152,7 +152,7 @@ inductive quint<a, b, c, d, e> = quint(a, b, c, d, e);
 
 public abstract class File {
 	/*@ predicate File(short theFileID, boolean activeState, any info) = 
-	 	this.fileID |-> theFileID &*& this.active |-> activeState
+	 	[_]this.fileID |-> theFileID &*& this.active |-> activeState
 	 	&*& info == unit; @*/
 
 	// file identifier
@@ -161,19 +161,21 @@ public abstract class File {
 	
 	public File(short fid) 
   	    //@ requires true;
-      	    //@ ensures File(fid, true, _);
+      	    //@ ensures File(fid, true, _) &*& valid_id(this);
     	{
 		fileID = fid;
 		active = true;
+		//@ leak File_fileID(this, _);
+		//@ close valid_id(this);
 		//@ close File(fid, true, _);
 	}
 	public short getFileID() 
-	    //@ requires [?f]File(?fid, ?state, ?info);
-	    //@ ensures [f]File(fid, state, info) &*& result == fid;
+	    //@ requires [?f]valid_id(this);
+	    //@ ensures [f]valid_id(this);// &*& result == fid;
 	{
-		//@ open [f]File(fid, state, info);
+		//@ open [f]valid_id(this);
 		return fileID;
-		//@ close [f]File(fid, state, info);
+		//@ close [f]valid_id(this);
 	}
 	
 	public void setActive(boolean b)
@@ -197,35 +199,34 @@ public abstract class File {
 }
 
 /*@
-    predicate file_element(File child;) = child == null ? true : child.File(child.fileID, child.active, _);
-@*/
-/*@
-predicate foreach2<t>(list<t> xs, predicate(t;) p;) =
+predicate file_element(File child;) = child == null ? true : [1/2]child.File(_, _, _);
+predicate valid_id(File child;) = [_]child.fileID |->_;
+
+predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
     switch (xs) {
         case nil: return true;
-        case cons(x, xs0): return p(x) &*& foreach2(xs0, p);
+        case cons(x, xs0): return p(x) &*& foreachp(xs0, p);
     };
-    
-lemma void foreach2_remove<t>(t x, list<t> xs)
-    requires [?f]foreach2(xs, ?p) &*& mem(x, xs) == true;
-    ensures [f]foreach2(remove(x, xs), p) &*& p(x);
-{
-   assume(false);
-}
 
-lemma void foreach2_unremove<t>(t x, list<t> xs)
-    requires [?f]foreach2(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
-    ensures [f]foreach2(xs, p);
-{
-   assume(false);
-}
-        
-lemma void close_empty_file_array(list<File> xs)
-    requires all_eq(xs, null) == true;
-    ensures foreach2(xs, file_element);
+lemma void foreachp_remove<t>(t x, list<t> xs)
+    requires [?f]foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures [f]foreachp(remove(x, xs), p) &*& [f]p(x);
 {
   assume(false);
-  // TODO: prove this! (by induction... case nil: true; case else: ...)
+}
+
+lemma void foreachp_unremove<t>(t x, list<t> xs)
+    requires [?f]foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& [f]p(x);
+    ensures [f]foreachp(xs, p);
+{
+  assume(false);
+}
+
+lemma void foreachp_append<t>(list<t> xs, list<t> ys)
+    requires foreachp(xs, ?p) &*& foreachp(ys, p);
+    ensures foreachp(append(xs, ys), p);
+{
+  assume(false);
 }
 @*/
 
@@ -235,9 +236,9 @@ public class DedicatedFile extends File {
 		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo); @*/
 	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& this.siblings |-> siblings &*& 
-		siblings != null &*& siblings.length == DedicatedFile.MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, siblist) &*& 
-		this.number |-> number &*& number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit &*&
-		foreach2<File>(siblist, file_element); @*/
+		siblings != null &*& siblings.length == MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, ?sb) &*& this.number |-> number &*& siblist == take(number, sb) &*&
+		number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit &*&
+		foreachp(take(number, sb), valid_id); @*/
 
 	// link to parent DF
 	private DedicatedFile parentFile;
@@ -249,7 +250,7 @@ public class DedicatedFile extends File {
 	// constructor only used by MasterFile
 	protected DedicatedFile(short fid) 
   	    //@ requires true;
-      	    //@ ensures DedicatedFile(fid, null, true, _, 0, ?sl, _);
+      	    //@ ensures DedicatedFile(fid, null, true, _, 0, nil, _);
 	{
 		super(fid);
 		// MasterFile does not have a parent, as it is the root of all files
@@ -258,12 +259,12 @@ public class DedicatedFile extends File {
 		number = 0;
 		//@ assert this.siblings |-> ?siblings;
 		//@ assert array_slice(siblings, 0, siblings.length, ?siblist);
-		//@ close_empty_file_array(siblist);
-		//@ close DedicatedFile(fid, null, true, siblings, 0, siblist, _);
+		//@ close foreachp(nil, valid_id);
+		//@ close DedicatedFile(fid, null, true, siblings, 0, nil, _);
 	}
 	public DedicatedFile(short fid, DedicatedFile parent) 
   	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, ?sl, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
+      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, nil, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(siblist, cons(this, nil)) : siblist), info);
 	{
 		super(fid);
 		parentFile = parent;
@@ -271,9 +272,12 @@ public class DedicatedFile extends File {
 		number = 0;
 		//@ assert this.siblings |-> ?siblings;
 		//@ assert array_slice(siblings, 0, siblings.length, ?childSiblist);
-		//@ close_empty_file_array(childSiblist);
+		////@ close_empty_file_array(childSiblist)
+		
+		////@ close valid_id(this);
 		parent.addSibling(this);
-		//@ close DedicatedFile(fid, parent, true, _, 0, _, _);
+		//@ close foreachp(nil, valid_id);
+		//@ close DedicatedFile(fid, parent, true, _, 0, nil, _);
 	}
 	public DedicatedFile getParent() 
 	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?siblist, ?info);
@@ -285,23 +289,32 @@ public class DedicatedFile extends File {
 	}
 	
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
-  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, drop((snumber + 1), siblist))) : siblist)
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info) &*& valid_id(s);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, thesiblings, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
+  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
   	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
 	{
-	//@ assume(false);
 		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ open foreach2(siblist, file_element);
+		//@ assert array_slice(thesiblings, _, _, ?sb);
 		if (number < MAX_SIBLINGS) {
 			//VF was: siblings[number++] = s;
 			siblings[number] = s;
 			number += 1;
-			//@ drop_n_plus_one(snumber, siblist);
+			////@ drop_n_plus_one(snumber, take(number - 1, siblist));
+			//@ take_one_more(snumber, update(snumber, s, sb));
+			//@ assert array_slice(thesiblings, _, _, ?sb2);
+			//@ assert sb2 == update(snumber, s, sb);
+			//@ assert nth(snumber, update(snumber, s, sb)) == s;
+			//@ assert take(snumber, sb) == take(snumber, update(snumber, s, sb));
+			//@ assert take(snumber + 1, update(snumber, s, sb)) == append(take(snumber, update(snumber, s, sb)), cons(nth(snumber, update(snumber, s, sb)), nil));
+			//@ close foreachp(nil, valid_id);
+			//@ close foreachp(cons(s, nil), valid_id);
+			//@ foreachp_append(take(snumber, sb), cons(s, nil));	
 		}
+		
 		/*@ close DedicatedFile(fileID, parentFile, activeState, ?newsiblings, 
 			snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, 
-			snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist, 
+			snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, nil)) : siblist, 
 			info); @*/
 	}
 
@@ -309,34 +322,46 @@ public class DedicatedFile extends File {
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
       	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
 	{
-		//@ assume(false);
 		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		
+		//@ assert [f]array_slice(thesiblings, _, _, ?sb);
 		for (byte i = 0; i < number; i++) 
-		/*@ invariant i >= 0 &*& [f]number |-> snumber &*& [f]siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, siblist)
-		      &*& [f]foreach2(siblist, file_element); @*/
+		/*@ invariant i >= 0 &*& [f]this.File(File.class)(fileID, activeState, _) &*& [f]this.parentFile |-> parentFile &*& [f]number |-> snumber &*& [f]this.siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, sb)
+		      &*& [f]foreachp(siblist, valid_id); @*/
 		{
+			//@ assert 0 <= i &*& i < thesiblings.length;
 			File fl = siblings[i];
-			//@ foreach2_remove<File>(fl, siblist);
-			if (fl != null && fl.getFileID() == fid)
+			//@ assert nth(i, siblist) == fl;
+			//@ int tmp = thesiblings.length;
+			//@ assert snumber <= tmp;
+			//@ nth_take(i, snumber, sb);
+			//@ assert nth(i, take(snumber, sb)) == nth(i, sb);
+			//@ assert nth(i, take(snumber, sb)) == nth(i, sb);
+			//@ assert nth(i, siblist) == fl;
+			//@ mem_nth(i, siblist);
+			//@ foreachp_remove<File>(fl, siblist);
+			////@ open valid_id(fl);
+			if (fl != null && fl.getFileID() == fid) {
+				////@ close file_element(fl);
+				//@ foreachp_unremove<File>(fl, siblist);
 				return fl;
+				//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+			}
+			////@ close file_element(fl);
+			//@ foreachp_unremove<File>(fl, siblist);
 		}
+		//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
 		return null;
 	}
 
 /*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
-	    //@ requires [?f]File(?fid, ?state, ?info);
-	    //@ ensures [f]File(fid, state, info) &*& result == fid;
+	    //@ requires [?f]valid_id(this);
+	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]File(fid, state, info);
-		//@ open [f]DedicatedFile(fid, ?d1, state, ?d2, ?d3, ?siblist, ?info2);
+		//@ open [f]valid_id(this);
 		File thiz = this;
-		//@ open [f]thiz.File(fid, state, ?info3);
 		return fileID;
-		//@ close [f]thiz.File(fid, state, info3);
-		//@ close [f]DedicatedFile(fid, d1, state, d2, d3, siblist, info2);
-		//@ close [f]File(fid, state, info);
+		//@ close [f]valid_id(this);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
@@ -375,7 +400,7 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	private static final short MF_FID = 0x3F00;
 	public MasterFile() 
   	    //@ requires true;
-      	    //@ ensures this.MasterFile(0x3F00, null, true, _, 0, _, _);
+      	    //@ ensures this.MasterFile(0x3F00, null, true, _, 0, nil, _);
 	{
 		// file identifier of MasterFile is hard coded to 3F00
 		super(MF_FID);
@@ -401,23 +426,21 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
       	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
 	{
-		//@ assume (false);
+		//@ open [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ open [f]MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		return super.getSibling(fid);
+		//@ close [f]MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
 	}
 	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
-	    //@ requires [?f]File(?fid, ?state, ?info);
-	    //@ ensures [f]File(fid, state, info) &*& result == fid;
+	    //@ requires [?f]valid_id(this);
+	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]File(fid, state, info);
-		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?d3, ?info2);
-		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, d3, ?info3);
-		//@ open [f]this.File(File.class)(fid, state, ?info4);
+		//@ open [f]valid_id(this);
 		return fileID;
-		//@ close [f]this.File(File.class)(fid, state, info4);
-		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, d0, state, d1, d2, d3, info3);
-		//@ close [f]MasterFile(fid, d0, state, d1, d2, d3, info2);
-		//@ close [f]File(fid, state, info);
+		//@ close [f]valid_id(this);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
@@ -451,26 +474,27 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, _, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
-  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, drop((snumber + 1), siblist))) : siblist)
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info) &*& valid_id(s);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, thesiblings, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
+  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
   	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
   	    // requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?siblist, ?info);
   	    // ensures DedicatedFile(fileID, parentFile, activeState, _, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
 	{
-		//@ assume(false);
-		//@ open DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, info);
-		//@ open MasterFile(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber, siblist, ?info3);
-		if (number < MAX_SIBLINGS) {
-			//VF: bug; was    siblings[number++] = s;
-			siblings[number] = s;
-			number += 1;
-			//@ drop_n_plus_one(theNumber, siblist);
-		}
-		//@ close this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info3);
-		//@ close MasterFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info2);
-		//@ close DedicatedFile(fileID, parentFile, activeState, theSiblings, theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber, (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
+		
+		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ open MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, ?info2);
+		super.addSibling(s);
+		////@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, thesiblings, snumber, siblist, ?info3);
+		//if (number < MAX_SIBLINGS) {
+		//	//VF: bug; was    siblings[number++] = s;
+		//	siblings[number] = s;
+		//	number += 1;
+		//	//@ drop_n_plus_one(snumber, siblist);
+		//}
+		////@ close this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist), info3);
+		//@ close MasterFile(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info2);
+		//@ close DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info);
 	}
 	
 	/*@ lemma void castFileToMaster()
@@ -530,8 +554,8 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		//@ close ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	}
 	public ElementaryFile(short fid, DedicatedFile parent, short maxSize) 
-  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(take(snumber, siblist), append<File>(cons(this, nil), drop((snumber + 1), siblist))) : siblist), info);
+  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info) &*& snumber < DedicatedFile.MAX_SIBLINGS;
+      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, _,  (byte)(snumber + 1), append(siblist, cons(this, nil)), info);
 	{
 		super(fid);
 		parentFile = parent;
@@ -605,16 +629,18 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
-	    //@ requires [?f]File(?fid, ?state, ?info);
-	    //@ ensures [f]File(fid, state, info) &*& result == fid;
+	    //@ requires [?f]valid_id(this);
+	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]File(fid, state, info);
-		//@ open [f]ElementaryFile(fid, ?d1, ?d2, state, ?d3, ?info2);
-		//@ open [f]this.File(File.class)(fid, state, ?info3);
+		////@ open [f]File(fid, state, info);
+		////@ open [f]ElementaryFile(fid, ?d1, ?d2, state, ?d3, ?info2);
+		////@ open [f]this.File(File.class)(fid, state, ?info3);
+		//@ open [f]valid_id(this);
 		return fileID;
-		//@ close [f]this.File(File.class)(fid, state, info3);
-		//@ close [f]ElementaryFile(fid, d1, d2, state, d3, info2);
-		//@ close [f]File(fid, state, info);
+		//@ close [f]valid_id(this);
+		////@ close [f]this.File(File.class)(fid, state, info3);
+		////@ close [f]ElementaryFile(fid, d1, d2, state, d3, info2);
+		////@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
@@ -724,6 +750,13 @@ public final class EidCard extends Applet {
             idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
             preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?thePreferencesFileData, _, _, _) &*& thePreferencesFile != null &*& thePreferencesFileData != null &*& thePreferencesFileData.length == 100 &*& thePreferencesFile.getClass() == ElementaryFile.class &*&
 	    selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
+	    masterSibs == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil))) &*&
+	    caCertificate |-> ?theCaCertificate &*& theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    rootCaCertificate |-> ?theRootCaCertificate &*& theRootCaCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    rrnCertificate |-> ?theRrnCertificate &*& theRrnCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    authenticationCertificate |-> ?theAuthenticationCertificate &*& theAuthenticationCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    nonRepudiationCertificate |-> ?theNonRepudiationCertificate &*& theNonRepudiationCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    belpicSibs == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
 	    selected_file_types(theSelectedFile, theMasterFile, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCertificateDirectoryFile, _) &*&
     	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class) &*&
       	    /*internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&*/
@@ -966,7 +999,7 @@ public final class EidCard extends Applet {
 	    @*/
       	/*@ ensures dirFile |-> ?theDirFile &*& theDirFile.ElementaryFile(_, _, ?dirFileData, _, _, _) &*& theDirFile != null 
       	              &*& dirFileData != null &*& dirFileData.length == 0x25
-	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, _, _) &*& theBelpicDirectory != null
+	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, 5, ?belpic_siblings, _) &*& theBelpicDirectory != null
 	         &*& tokenInfo |-> ?theTokenInfo &*& theTokenInfo.ElementaryFile(_, _, ?tokenInfoData, _, _, _) &*& theTokenInfo != null
 	              &*& tokenInfoData != null &*& tokenInfoData.length == 0x30
 	         &*& objectDirectoryFile |-> ?theObjectDirectoryFile &*& theObjectDirectoryFile.ElementaryFile(_, _, ?objectDirectoryFileData, _, _, _) &*& theObjectDirectoryFile != null
@@ -977,7 +1010,7 @@ public final class EidCard extends Applet {
 	              &*& privateKeyDirectoryFileData != null &*& privateKeyDirectoryFileData.length == 0xB0
 	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?certificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile !=  null
 	              &*& certificateDirectoryFileData != null &*& certificateDirectoryFileData.length == 0xB0
-	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, _, _) &*& theIdDirectory != null
+	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, 6, _, _) &*& theIdDirectory != null
 	         &*& identityFile |-> ?theIdentityFile &*& theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null
 	              &*& identityData != null &*& identityData.length == 0xD0
 	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, ?identitySignatureData, _, _, _) &*& theIdentityFileSignature != null
@@ -990,7 +1023,10 @@ public final class EidCard extends Applet {
 	              &*& caRoldIDFileData != null &*& caRoldIDFileData.length == 0x20
 	         &*& preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?preferencesFileData, _, _, _) &*& thePreferencesFile != null
 	              &*& preferencesFileData != null &*& preferencesFileData.length == 100
-	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, _, _) &*& theMasterFile != null
+	         //&*& caCertificate |-> ?theCaCertificate
+	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, ?master_siblings, _) &*& theMasterFile != null
+	         &*& master_siblings == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil)))
+	         &*& belpic_siblings == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile,nil)))))
 	         &*& selectedFile |-> theMasterFile &*& theBelpicDirectory.getClass() == DedicatedFile.class &*& theIdDirectory.getClass() == DedicatedFile.class;
 	    @*/
 	{
@@ -1363,25 +1399,30 @@ public final class EidCard extends Applet {
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
 	 */
 	private void initializeEmptyLargeFiles() 
-	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, _, _, _) &*& 
-	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
+	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
+	                nb_belpic_sibs == 5 &*&
+	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, _, _) &*& 
+	    		nb_iddir_sibs < 7 &*&
 	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
 	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
-      	    /*@ ensures belpicDirectory |-> bpd &*& bpd.DedicatedFile(_, _, _, _, _, _, _) &*& 
+      	    /*@ ensures belpicDirectory |-> bpd &*& 
 	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
 	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
 	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
 	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
 	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
 	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
-	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200; @*/
+	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
+	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(belpic_sibs, cons<File>(cac, cons(rrnc, cons(rootcac, cons(ac, cons(nrc, nil)))))), _); @*/
 	{
+		//@ assume(false);
 		/*
 		 * these 3 certificates are the same for all sample eid card applets
 		 * therefor they are made static and the data is allocated only once
 		 */
 		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
 		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
+		
 		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
 		/*
 		 * to save some memory we only support 1 photo for all subclasses
@@ -1436,7 +1477,6 @@ public final class EidCard extends Applet {
   	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
       	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
-		//@ assume(false);
 		// receive the data to see which file needs to be selected
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
@@ -1453,7 +1493,31 @@ public final class EidCard extends Applet {
 			selectedFile = masterFile;		
 		else {
 			// check if the requested file exists under the current DF
+			////@ close masterFile.DedicatedFile();
+			//@ MasterFile theMasterFile = masterFile;
+			//@ assert theMasterFile.MasterFile(16128, null, ?x1, ?x2, ?x3, ?x4, ?x5);
+			//@ close foreach(nil, file_element);
+			//@ close idDirectory.File(_, _, _);
+			//@ close file_element(idDirectory);
+			//@ close foreach<File>(cons(idDirectory, nil), file_element);
+			//@ close belpicDirectory.File(_, _, _);
+			//@ close file_element(belpicDirectory);
+			//@ close foreach<File>(cons(belpicDirectory, cons(idDirectory, nil)), file_element);
+			//@ close dirFile.File(_, _, _);
+			//@ close file_element(dirFile);
+			//@ close foreach<File>(cons<File>(dirFile, cons(belpicDirectory, cons(idDirectory, nil))), file_element);
+			//@ close theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
 			File s = ((DedicatedFile) masterFile).getSibling(fid);
+			//@ open theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
+			//@ open foreach<File>(cons<File>(dirFile, cons(belpicDirectory, cons(idDirectory, nil))), file_element);
+			//@ open file_element(dirFile);
+			//@ open dirFile.File(_, _, _);
+			//@ open foreach<File>(cons(belpicDirectory, cons(idDirectory, nil)), file_element);
+			//@ open file_element(belpicDirectory);
+			//@ open belpicDirectory.File(_, _, _);
+			//@ open foreach<File>(cons(idDirectory, nil), file_element);
+			//@ open file_element(idDirectory);
+			//@ open idDirectory.File(_, _, _);
 			//VF /bug
 			if (s != null) {
 				//TODO: get rid of this
@@ -1462,7 +1526,89 @@ public final class EidCard extends Applet {
 				//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
 			//the fid is an elementary file:
 			} else {
+				//@ close foreach(nil, file_element);
+				//cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
+			        //@ close nonRepudiationCertificate.File(_, _, _);
+			        //@ close file_element(nonRepudiationCertificate);
+			        //@ close foreach<File>(cons(nonRepudiationCertificate, nil), file_element);
+			     //   theAuthenticationCertificate
+			        //@ close authenticationCertificate.File(_, _, _);
+			        //@ close file_element(authenticationCertificate);
+			        //@ close foreach<File>(cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)), file_element);
+				//theRootCaCertificate
+				//@ close rootCaCertificate.File(_, _, _);
+			        //@ close file_element(rootCaCertificate);
+			        //@ close foreach<File>(cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))), file_element);
+				//theRrnCertificate
+				//@ close rrnCertificate.File(_, _, _);
+			        //@ close file_element(rrnCertificate);
+			        //@ close foreach<File>(cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))), file_element);
+				// theCaCertificate
+				//@ close caCertificate.File(_, _, _);
+			        //@ close file_element(caCertificate);
+			        //@ close foreach<File>(cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))), file_element);
+				//theCertificateDirectoryFile
+				//@ close certificateDirectoryFile.File(_, _, _);
+			        //@ close file_element(certificateDirectoryFile);
+			        //@ close foreach<File>(cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))), file_element);
+				// thePrivateKeyDirectoryFile
+				//@ close privateKeyDirectoryFile.File(_, _, _);
+			        //@ close file_element(privateKeyDirectoryFile);
+			        //@ close foreach<File>(cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))), file_element);
+			        //theAuthenticationObjectDirectoryFile
+				//@ close authenticationObjectDirectoryFile.File(_, _, _);
+			        //@ close file_element(authenticationObjectDirectoryFile);
+			        //@ close foreach<File>(cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))), file_element);
+			        //theObjectDirectoryFile
+			        //@ close objectDirectoryFile.File(_, _, _);
+			        //@ close file_element(objectDirectoryFile);
+			        //@ close foreach<File>(cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))))), file_element);
+			        //tokenInfo
+			        //@ close tokenInfo.File(_, _, _);
+			        //@ close file_element(tokenInfo);
+			        //@ close foreach<File>(cons(tokenInfo, cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))))), file_element);
 				s = belpicDirectory.getSibling(fid);
+				//@ open foreach(nil, file_element);
+				//cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
+			        //tokenInfo
+			        //@ open foreach<File>(cons(tokenInfo, cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))))), file_element); 
+			        //@ open file_element(tokenInfo);
+			        //@ open tokenInfo.File(_, _, _);
+			        //theObjectDirectoryFile
+			        //@ open foreach<File>(cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))))), file_element);
+			        //@ open file_element(objectDirectoryFile);
+			        //@ open objectDirectoryFile.File(_, _, _);
+			        //theAuthenticationObjectDirectoryFile
+				//@ open foreach<File>(cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))), file_element);
+			        //@ open file_element(authenticationObjectDirectoryFile);
+			        //@ open authenticationObjectDirectoryFile.File(_, _, _);
+			        // thePrivateKeyDirectoryFile
+				//@ open foreach<File>(cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))), file_element);
+			        //@ open file_element(privateKeyDirectoryFile);
+			        //@ open privateKeyDirectoryFile.File(_, _, _);
+			        //theCertificateDirectoryFile
+				//@ open foreach<File>(cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))), file_element);
+				//@ open file_element(certificateDirectoryFile);
+				//@ open certificateDirectoryFile.File(_, _, _);       
+				// theCaCertificate
+				//@ open foreach<File>(cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))), file_element);
+			        //@ open file_element(caCertificate);
+			        //@ open caCertificate.File(_, _, _);
+			        //theRrnCertificate
+				//@ open foreach<File>(cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))), file_element);
+			        //@ open file_element(rrnCertificate);
+			        //@ open rrnCertificate.File(_, _, _);
+			        //theRootCaCertificate
+				//@ open foreach<File>(cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))), file_element);
+			        //@ open file_element(rootCaCertificate);
+			        //@ open rootCaCertificate.File(_, _, _);
+			       	//   theAuthenticationCertificate
+			        //@ open foreach<File>(cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)), file_element);
+			        //@ open file_element(authenticationCertificate);
+			        //@ open authenticationCertificate.File(_, _, _);
+			       	//@ open foreach<File>(cons(nonRepudiationCertificate, nil), file_element);
+			        //@ open file_element(nonRepudiationCertificate);
+			        //@ open nonRepudiationCertificate.File(_, _, _);
 				if (s != null) {
 					//TODO: get rid of this
 					//@ assume (s == identityFile || s == identityFileSignature || s == addressFile || s == addressFileSignature || s == photoFile || s == caRoleIDFile || s == dirFile || s == tokenInfo || s == objectDirectoryFile || s == authenticationObjectDirectoryFile || s == privateKeyDirectoryFile || s == certificateDirectoryFile);
@@ -1492,7 +1638,7 @@ public final class EidCard extends Applet {
   	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
       	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
 	{
-		//@assume(false);
+		//@ assume(false);
 		// receive the path name
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
@@ -1518,6 +1664,7 @@ public final class EidCard extends Applet {
 			else {
 				if ((f instanceof ElementaryFile) || f == null)
 					ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
+				
 				f = ((DedicatedFile) f).getSibling(fid);
 			}
 		}

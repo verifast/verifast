@@ -503,4 +503,37 @@ lemma void update_eq_append_cons_drop<t>(int i, t v, list<t> xs)
   }
 }
 
+lemma void take_one_more<t>(int i, list<t> xs)
+  requires 0 <= i &*& i < length(xs);
+  ensures take(i + 1, xs) == append(take(i, xs), cons(nth(i, xs), nil));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i == 0) {
+        switch(t) { case nil: case cons(h0, t0): }
+      } else {
+        take_one_more(i - 1, t);
+      }
+  }
+}
+
+lemma void take_update<t>(t v, int i, list<t> xs, int j)
+  requires 0 <= i && i < length(xs) && 0 <= j && j <= i;
+  ensures take(j, xs) == take(j, update(i, v, xs));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i == 0) {
+        
+      } else {
+        if (j == 0) {
+        } else {
+          take_update(v, i - 1, t, j - 1);
+        }
+      }
+  }
+}
+
 @*/

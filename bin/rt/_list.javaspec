@@ -85,7 +85,7 @@ fixpoint list<t> store<t>(list<t> xs, int index, t v) {
 
 
 
-lemma void mem_nth<t>(int n, list<t> xs);
+lemma_auto(mem(nth(n, xs), xs)) void mem_nth<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;
 
@@ -181,6 +181,14 @@ fixpoint list<t> remove_nth<t>(int n, list<t> xs) {
         case nil: return nil;
         case cons(h, t): return n == 0 ? t : cons(h, remove_nth(n - 1, t));
     }
+}
+
+fixpoint list<t> remove_every<t>(t x, list<t> xs)
+{
+  switch(xs) {
+    case nil: return nil;
+    case cons(h, t): return h == x ? remove_every(x, t) : cons(h, remove_every(x, t));
+  }
 }
 
 fixpoint list<t> remove_all<t>(list<t> xs, list<t> ys) {
@@ -280,4 +288,12 @@ lemma_auto(nth(i, update(j, y, xs))) void nth_update<t>(int i, int j, t y, list<
 lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> xs);
   requires true;
   ensures length(update(i, y, xs)) == length(xs);
+
+lemma void take_one_more<t>(int i, list<t> xs);
+  requires 0 <= i &*& i < length(xs);
+  ensures take(i + 1, xs) == append(take(i, xs), cons(nth(i, xs), nil));
+
+lemma_auto(take(j, update(i, v, xs))) void take_update<t>(t v, int i, list<t> xs, int j);
+  requires 0 <= i && i < length(xs) && 0 <= j && j <= i;
+  ensures take(j, xs) == take(j, update(i, v, xs));
 @*/

@@ -16,7 +16,7 @@ lemma_auto(sum(append(xs, ys))) void sum_append(list<int> xs, list<int> ys)
   }
 }
 
-lemma void take_one_more<t>(list<t> vs, int i)
+lemma void take_one_more2<t>(list<t> vs, int i)
   requires 0 <= i && i < length(vs);
   ensures append(take(i, vs), cons(head(drop(i, vs)), nil)) == take(i + 1, vs);
 {
@@ -26,7 +26,7 @@ lemma void take_one_more<t>(list<t> vs, int i)
       if(i == 0) 
       {
       } else {
-        take_one_more(t, i - 1);
+        take_one_more2(t, i - 1);
       }
   }
 }
@@ -306,7 +306,7 @@ class Comprehensions {
       int tmp = a[i];
       total = total + tmp;
       //@ length_drop(i, vs);
-      //@ take_one_more(vs, i);
+      //@ take_one_more2(vs, i);
       i++;
     }
     return total;

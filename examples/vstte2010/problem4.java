@@ -220,6 +220,20 @@ lemma void duplicate_inconsistent(list<int> vs, nat i, int pos)
   }
 }
 
+lemma_auto(take(j, update(i, v, vs))) void take_update2<t>(list<t> vs, t v, int i, int j)
+  requires 0 <= i && i < length(vs) && 0 <= j && j <= i;
+  ensures take(j, vs) == take(j, update(i, v, vs));
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(j == 0) {
+      } else {
+        take_update2(t, v, i - 1, j - 1);
+      }
+  }
+}
+
 lemma void length_update2<t>(list<t> vs, t v, int pos)
   requires 0 <= pos && pos < length(vs);
   ensures length(update2(unit, vs, v, pos)) == length(vs);
@@ -276,19 +290,7 @@ lemma void inconsistent_take_core(list<int> vs, nat i, int pos, list<int> vs2)
   }
 }
 
-lemma_auto(take(j, update(i, v, vs))) void take_update<t>(list<t> vs, t v, int i, int j)
-  requires 0 <= i && i < length(vs) && 0 <= j && j <= i;
-  ensures take(j, vs) == take(j, update(i, v, vs));
-{
-  switch(vs) {
-    case nil:
-    case cons(h, t):
-      if(j == 0) {
-      } else {
-        take_update(t, v, i - 1, j - 1);
-      }
-  }
-}
+
   
 
 lemma void inconsistent_take(list<int> vs, nat i, int pos, list<int> vs2)
