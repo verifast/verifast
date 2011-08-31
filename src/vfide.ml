@@ -166,7 +166,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
-      a "Window" ~label:"_Window";
+      a "TopWindow" ~label:"Window(_Top)";
+      a "BottomWindow" ~label:"Window(_Bottom)";
       a "Stub";
       a "Help" ~label:"_Help";
       a "About" ~stock:`ABOUT ~callback:(fun _ -> GToolbox.message_box "VeriFast IDE" (Verifast.banner ()))
@@ -211,7 +212,10 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <menuitem action='CheckOverflow' />
           <menuitem action='SimplifyTerms' />
         </menu>
-        <menu action='Window'>
+        <menu action='TopWindow'>
+           <menuitem action='Stub' />
+        </menu>
+	<menu action='BottomWindow'>
            <menuitem action='Stub' />
         </menu>
         <menu action='Help'>
@@ -232,7 +236,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
   ");
   let undoAction = actionGroup#get_action "Undo" in
   let redoAction = actionGroup#get_action "Redo" in
-  let windowMenuItem = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/Window")#as_widget) in
+  let windowMenuItemTop = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/TopWindow")#as_widget) in
+  let windowMenuItemBottom = new GMenu.menu_item (GtkMenu.MenuItem.cast (ui#get_widget "/MenuBar/BottomWindow")#as_widget) in
   let ignore_text_changes = ref false in
   let rootVbox = GPack.vbox ~packing:root#add () in
   rootVbox#pack (ui#get_widget "/MenuBar");
@@ -278,18 +283,22 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let textNotebook = GPack.notebook ~scrollable:true ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let subNotebook = GPack.notebook ~scrollable:true ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let buffers = ref [] in
-  let goto_tab tab =
-    textNotebook#goto_page (index_of_byref tab !buffers)
+  let goto_tab tab notebook =
+    notebook#goto_page (index_of_byref tab !buffers)
   in
   let updateBufferMenu () =
-    let menu = GMenu.menu () in
-    let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
-    let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
-    items |> List.iter begin fun (name, tab) ->
-      let item = GMenu.menu_item ~label:name ~packing:(menu#add) () in
-      ignore (item#connect#activate (fun () -> goto_tab tab))
-    end;
-    windowMenuItem#set_submenu menu
+    let menu notebook = 
+      let gtk_menu = GMenu.menu () in
+      let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
+      let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
+      items |> List.iter begin fun (name, tab) ->
+         let item = GMenu.menu_item ~label:name ~packing:gtk_menu#add () in
+         ignore (item#connect#activate (fun () -> goto_tab tab notebook))
+      end;
+      gtk_menu
+    in
+      windowMenuItemTop#set_submenu (menu subNotebook);
+      windowMenuItemBottom#set_submenu (menu textNotebook)
   in
   let updateBufferTitle tab =
     let text = (match !(tab#path) with None -> "(New buffer)" | Some (path, mtime) -> Filename.basename path) ^ (if tab#buffer#modified then "*" else "") in
@@ -810,7 +819,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
             textPaned#set_position 0;
           apply_tag_at_marks "currentLine" l;
           let (tab, mark1, _) = l in
-          goto_tab tab;
+          goto_tab tab textNotebook;
           tab#buffer#move_mark (`MARK tab#currentStepMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
           ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentStepMark); false);
           append_assoc_items srcEnvStore srcEnvKCol srcEnvCol1 srcEnvCol2 (strings_of_env env)
@@ -829,7 +838,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
           begin
             apply_tag_at_marks "currentCaller" caller_loc;
             let (tab, mark1, _) = caller_loc in
-            goto_tab tab;
+            goto_tab tab textNotebook;
             tab#buffer#move_mark (`MARK tab#currentCallerMark) ~where:(tab#buffer#get_iter_at_mark (`MARK mark1));
             ignore $. Glib.Idle.add(fun () -> tab#mainView#view#scroll_to_mark ~within_margin:0.2 (`MARK tab#currentCallerMark); false);
             append_assoc_items srcEnvStore srcEnvKCol srcEnvCol1 srcEnvCol2 (strings_of_env caller_env)
