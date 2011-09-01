@@ -2,8 +2,6 @@ package wallet;
 
 import javacard.framework.*;
 
-///@ predicate_family_instance EInterface(EWallet)(EWallet ewallet) = registered_applets(?as) &*& shareable_interface_object(ewallet.getClass())(ewallet, ?a) &*& foreach<Applet>(as,full_valid) &*& mem<Applet>(a,as)==true;
-
 //@ predicate_family_instance shareable_interface_object(EWallet.class)(Shareable sio, EWallet owner) = sio == owner;
 
 public final class EWallet extends Applet implements EWalletInterface {
@@ -67,38 +65,28 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public boolean select() 
-    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ ensures registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ requires [1/2]this.valid();
+    //@ ensures [1/2]this.valid();
     {
         // The applet declines to be selected
         // if the pin is blocked.
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
         //@ open [1/2]valid();
         if ( pin.getTriesRemaining() == 0 ){
            //@ close [1/2]valid();
-           ///@ close semi_valid(this);
-           ///@ foreach_unremove<Applet>(this, as);
 	   return false;
 	}
 	//@ close [1/2]valid();
-        ///@ close semi_valid(this);
-        ///@ foreach_unremove<Applet>(this, as);
         return true;
     }
 
     public void deselect() 
-    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ ensures registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ requires [1/2]this.valid();
+    //@ ensures [1/2]this.valid();
     {
         // reset the pins validated flag to unvalidated
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
         //@ open [1/2]valid();
         pin.reset();
         //@ close [1/2]valid();
-        ///@ close semi_valid(this);
-        ///@ foreach_unremove<Applet>(this, as);
     }
 
     public void process(APDU apdu) {
@@ -132,8 +120,6 @@ public final class EWallet extends Applet implements EWalletInterface {
     //@requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     //@ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     {
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
     	//@ open [1/2]valid();
         if (!pin.isValidated())
             ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
@@ -161,28 +147,18 @@ public final class EWallet extends Applet implements EWalletInterface {
 	// check the new balance
 	if (newBalance > MAX_BALANCE)
 	    ISOException.throwIt(SW_EXCEED_MAXIMUM_BALANCE);
-	///@ close semi_valid(this);
-	///@ foreach_unremove<Applet>(this,as);
         JCSystem.beginTransaction();
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open full_valid(this);
         //@ open valid();
         // credit the amount
         balance = newBalance;
         //@ close valid();
-        ///@ close full_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
         JCSystem.commitTransaction();
-        ///@ foreach_remove((Applet)this,as);
-        ///@ open semi_valid(this);
     }
 
     private void debit(APDU apdu) 
     //@ requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     //@ ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     {
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
     	//@ open [1/2]valid();
         if (!pin.isValidated())
             ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
@@ -210,27 +186,17 @@ public final class EWallet extends Applet implements EWalletInterface {
         if (newBalance < (short)0)
              ISOException.throwIt(SW_NEGATIVE_BALANCE);
 
-	///@ close semi_valid(this);
-	///@ foreach_unremove<Applet>(this,as);
 	JCSystem.beginTransaction();
-	///@ foreach_remove<Applet>(this,as);
-	///@ open full_valid(this);
 	//@ open valid();
         balance = newBalance;
         //@ close valid();
-        ///@ close full_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
         JCSystem.commitTransaction();
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open semi_valid(this);
     }
 
     private void getBalance(APDU apdu) 
     //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
     	//@ open [1/2]valid();
         if (!pin.isValidated())
             ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
@@ -247,8 +213,6 @@ public final class EWallet extends Applet implements EWalletInterface {
         //@ close [1/2]valid();
 
         apdu.sendBytes((short)0, (short)1);
-        ///@ close semi_valid(this);
-        ///@ foreach_unremove<Applet>(this, as);
     }
 
     private void verify(APDU apdu) 
@@ -261,46 +225,31 @@ public final class EWallet extends Applet implements EWalletInterface {
         byte numBytes = (byte)(abuffer[ISO7816.OFFSET_LC]);
 
         // check pin
-        ///@ foreach_remove<Applet>(this, as);
-        ///@ open semi_valid(this);
         //@ open [1/2]valid();
         if (numBytes < 0 || pin.check(abuffer, ISO7816.OFFSET_CDATA, numBytes) == false )
             ISOException.throwIt(SW_VERIFICATION_FAILED);
         //@ close [1/2]valid();
-        ///@ close semi_valid(this);
-        ///@ foreach_unremove<Applet>(this, as);
     }
 
     public void verify(byte[] pincode, short offset, byte length) 
-    //@ requires array_slice(pincode, 0, pincode.length,_) &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
-    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
+    //@ requires array_slice(pincode, 0, pincode.length,_) &*& shareable_interface_object(this.getClass())(this, ?a) &*& in_transaction(a) &*& a.valid();
+    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& shareable_interface_object(this.getClass())(this, a) &*& in_transaction(a) &*& a.valid();
     {
-    	// open EInterface(EWallet.class)(this);
-    	// assert registered_applets(?as);
     	//@ open shareable_interface_object(EWallet.class)(this, _);
-    	///@ foreach_remove<Applet>(this, as);
-    	///@ open full_valid(this);
     	//@ open valid();
     	if (offset < 0 || length < 0 || offset + length > pincode.length)
     	    ISOException.throwIt(ISO7816.SW_WRONG_DATA);
         if ( pin.check(pincode, /*(short)0*/ offset, length) == false )
             ISOException.throwIt(SW_VERIFICATION_FAILED);
         //@ close valid();
-        ///@ close full_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
     	//@ close shareable_interface_object(EWallet.class)(this, this);
-        // close EInterface(EWallet.class)(this);
     }
 
     public void debit(byte debitAmount) 
-    //@requires 0 <= debitAmount &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
-    //@ensures registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
+    //@ requires 0 <= debitAmount &*& shareable_interface_object(this.getClass())(this, ?a) &*& in_transaction(a) &*& a.valid();
+    //@ ensures shareable_interface_object(this.getClass())(this, a) &*& in_transaction(a) &*& a.valid();
     {
-    	// open EInterface(EWallet.class)(this);
-    	///@ assert registered_applets(as);
     	//@ open shareable_interface_object(EWallet.class)(this, _);
-    	///@ foreach_remove<Applet>(this,as);
-    	///@ open full_valid(this);
     	//@ open valid();
         if (!pin.isValidated())
             ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
@@ -321,10 +270,7 @@ public final class EWallet extends Applet implements EWalletInterface {
 	//@ open valid();
         balance = newBalance;
         //@ close valid();
-        ///@ close full_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
     	//@ close shareable_interface_object(EWallet.class)(this, this);
-        // close EInterface(EWallet.class)(this);
     }
 
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter)

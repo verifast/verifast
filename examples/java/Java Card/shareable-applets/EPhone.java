@@ -74,29 +74,18 @@ public final class EPhone extends Applet {
         if(amount > max_transaction_amount)
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
             
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open semi_valid(this);
         //@ open [1/2]valid();
         short newBalance = (short)(balance + amount);
         //@ close [1/2]valid();
             
         if(newBalance > max_balance)
             ISOException.throwIt(SW_AMOUNT_TO_HIGH);
-        ///@ close semi_valid(this);
-	///@ foreach_unremove<Applet>(this,as);
 	JCSystem.beginTransaction();
         makeBankcardDebit(amount);
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open full_valid(this);
-        ///@ open semi_valid(this);
         //@ open valid();
         balance = newBalance;
         //@ close valid();
-        ///@ close full_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
         JCSystem.commitTransaction();
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open semi_valid<Applet>(this);
     }
 
     private void getBalance(APDU apdu) 
@@ -109,13 +98,9 @@ public final class EPhone extends Applet {
         apdu.setOutgoingLength((byte)1);
 
         // place balance in the APDU buffer
-        ///@ foreach_remove<Applet>(this,as);
-        ///@ open semi_valid(this);
         //@ open [1/2]valid();
         abuffer[0] = (byte)balance;
         //@ close [1/2]valid();
-        ///@ close semi_valid(this);
-        ///@ foreach_unremove<Applet>(this,as);
 
         apdu.sendBytes((short)0, (short)1);
     }
@@ -124,9 +109,6 @@ public final class EPhone extends Applet {
     //@ requires 0 <= amount &*& amount <= max_transaction_amount &*& this.valid() &*& in_transaction(this);
     //@ ensures in_transaction(this) &*& this.valid();
     {
-    
-    	///@ foreach_remove<Applet>(this, as);
-        ///@ open full_valid(this);
     	//@ open valid();
         AID ewallet_aid = JCSystem.lookupAID(ewallet_aid_bytes,(short)0,(byte)ewallet_aid_bytes.length);
 	//@ close valid();
@@ -141,28 +123,26 @@ public final class EPhone extends Applet {
         if(sio instanceof EWalletInterface){
           EWalletInterface WalletInterface = (EWalletInterface)sio;
         
-	  ///@ close full_valid(this);
-          ///@ foreach_unremove<Applet>(this,as);
-	  ///@ close EInterface(EWallet.class)(WalletInterface);  
           byte[] pin = new byte[] {(byte)1,(byte)1,(byte)1,(byte)1};
-          ///@ assume (sio.getClass() == EWallet.class);
-          // WalletInterface.convertToInstance();
           //@ close full_valid(this);
           //@ assert registered_applets(?as);
           //@ foreachp_unremove<Applet>(this,as);
-          //@ assert (shareable_interface_object(sio.getClass())(sio, ?a));
+          //@ mem_registered_applets_is(this);
+          //@ assert shareable_interface_object(sio.getClass())(sio, ?a);
+          //@ set_current_applet(a);
           //@ foreachp_remove<Applet>(a,as);
           //@ open full_valid(a);
           WalletInterface.verify(pin, (short)0, (byte)(short)pin.length);
           WalletInterface.debit((byte)amount);
           //@ close full_valid(a);
-          //@ foreachp_unremove<Applet>(a, as);
-          //@ foreachp_remove<Applet>(this, as);
+          //@ open in_transaction0(a);
+          //@ assert registered_applets(?as1);
+          //@ foreachp_unremove<Applet>(a, as1);
+          //@ is_registered_applets_mem(this);
+          //@ set_current_applet(this);
+          //@ foreachp_remove<Applet>(this, as1);
           //@ open full_valid(this);
           
-          // WalletInterface.convertFromInstance();
-          ///@ assert registered_applets(?as0);
-          ///@ assume (as == as0);           
         }else
           ISOException.throwIt(SW_DOES_NOT_IMPLEMENT_INTERFACE);
     }
