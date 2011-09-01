@@ -121,8 +121,8 @@ public final class EPhone extends Applet {
     }
 
     private void makeBankcardDebit(short amount)
-    //@ requires 0 <= amount &*& amount <= max_transaction_amount &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid() &*& in_transaction(this, as) &*& mem<Applet>(this,as)==true;
-    //@ ensures in_transaction(this, as) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid();
+    //@ requires 0 <= amount &*& amount <= max_transaction_amount &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid() &*& in_transaction(this) &*& mem<Applet>(this,as)==true;
+    //@ ensures in_transaction(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid();
     {
     
     	///@ foreach_remove<Applet>(this, as);

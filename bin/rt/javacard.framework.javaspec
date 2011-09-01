@@ -1,59 +1,25 @@
-// VeriFast-annotated partial JavaCard API
+// VeriFast-annotated partial Java Card API
 // Status:
 // - Should be sound, even in the presence of card tearing. That is, during all executions of verified programs, all assert statements succeed.
-// - Not all API method preconditions specified in the official API docs have been encoded yet; this means an execution of a verified program may throw exceptions
+// - Not all API method preconditions specified in the official API docs have been encoded yet; this means an execution of a verified program may throw exceptions.
 // TODO:
-// - Strengthen contracts so that in executions of a verified program, API calls do not throw exceptions
-// - Support transient objects (i.e. the JCSystem.makeTransientXXX methods). (This requires keeping track of them and consuming them during register() and commitTransaction() to ensure they do not end up in applet.valid().)
+// - Enforce correct usage of method Util.arrayFillNonAtomic.
+// - Strengthen contracts so that in executions of a verified program, API calls do not throw exceptions.
 // - Support JCSystem.abortTransaction(). (This is difficult because the footprint of this method is all persistent objects modified during the transaction, which might include objects not in currentApplet.valid().)
-// - Support communication with other applets.
 
 package javacard.framework;
 
-//@ fixpoint boolean is_transient_array(byte[] o);
+class CardRuntimeException extends RuntimeException {}
+class APDUException extends CardRuntimeException {}
+class SystemException extends CardRuntimeException {}
+class SecurityException extends RuntimeException {}
 
-//@ predicate transient_arrays(list<byte[]> arrays);
-
-/*@ lemma void transient_arrays_mem(byte[] a);
-     requires transient_arrays(?as) &*& is_transient_array(a) == true;
-     ensures transient_arrays(as) &*& mem(a, as) == true;
-@*/
-
-//@ predicate registered_applets(list<Applet> as);
-//@ predicate semi_valid(Applet applet;) = [1/2]applet.valid();
-//@ predicate full_valid(Applet applet;) = applet.valid();
-
-/*@
-	predicate OwnerPIN(OwnerPIN pin; byte tryLimit, byte maxPINSize);
-@*/
-class OwnerPIN {
-	public OwnerPIN(byte tryLimit, byte maxPINSize);
-	//@ requires true;
-	//@ ensures OwnerPIN(this, tryLimit, maxPINSize);
-
-	public void update(byte[] pin, short offset, byte length);
-	//@ requires [?f]OwnerPIN(this, _, _);
-	//@ ensures [f]OwnerPIN(this, _, _);
-	
-	public void reset();
-	//@ requires [?f]OwnerPIN(this, _, _);
-	//@ ensures [f]OwnerPIN(this, _, _);
-
-	public boolean check(byte[] pin, short offset, byte length);
-	//@ requires [?f]OwnerPIN(this, _, _) &*& [?g]array_slice(pin, offset, length, _) &*& offset >= 0 &*& length >= 0 &*& offset <= pin.length &*& offset + length <= pin.length;
-	//@ ensures [f]OwnerPIN(this, _, _) &*& [g]array_slice(pin, offset, length, _) &*& offset >= 0 &*& length >= 0 &*& offset <= pin.length &*& offset + length <= pin.length;
-
-	public byte getTriesRemaining();
-	//@ requires [?f]OwnerPIN(this, _, _);
-	//@ ensures [f]OwnerPIN(this, _, _);
-
-	public boolean isValidated();
-	//@ requires [?f]OwnerPIN(this, _, _);
-	//@ ensures [f]OwnerPIN(this, _, _);
-	
-	public void resetAndUnblock();
-	//@ requires [?f]OwnerPIN(this, _, _);
-	//@ ensures [f]OwnerPIN(this, _, _);
+class ISOException extends RuntimeException {
+    
+    public static void throwIt(short sw);
+        //@ requires true;
+        //@ ensures false;
+    
 }
 
 /*@
@@ -68,57 +34,79 @@ lemma_auto void APDU_inv();
 
 @*/
 
-class CardRuntimeException extends RuntimeException {
-}
-
-class APDUException extends CardRuntimeException {
-}
-
-class SecurityException extends RuntimeException {
-}
-
-class SystemException extends CardRuntimeException {
-}
-
 class APDU {
+    
     public byte[] getBuffer();
         //@ requires APDU(this, ?buffer);
         //@ ensures APDU(this, buffer) &*& result == buffer;
     
-    public short setOutgoing() throws APDUException /*@ ensures true; @*/;
+    public short setOutgoing();
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& result >= 0 &*& result <= 256;
     
-    public short setIncomingAndReceive() throws APDUException /*@ ensures true; @*/;
+    public short setIncomingAndReceive();
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void setOutgoingAndSend(short bOff, short len) throws APDUException /*@ ensures true; @*/;
+    public void setOutgoingAndSend(short bOff, short len);
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void setOutgoingLength(short len) throws APDUException /*@ ensures true; @*/;
+    public void setOutgoingLength(short len);
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void sendBytes(short bOff, short len) throws APDUException /*@ ensures true; @*/;
+    public void sendBytes(short bOff, short len);
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
-    public void sendBytesLong(byte[] outData, short bOff, short len) throws APDUException /*@ ensures true; @*/, SecurityException /*@ ensures true; @*/;
+    public void sendBytesLong(byte[] outData, short bOff, short len);
         //@ requires APDU(this, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [?f]array_slice(outData, bOff, bOff + len, ?elems);
         //@ ensures APDU(this, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& outData != null &*& [f]array_slice(outData, bOff, bOff + len, elems);
-
+    
     public static byte getProtocol();
         //@ requires true;
         //@ ensures true;
-        
+    
     public static final byte PROTOCOL_T1 = 0x1;
+    
 }
 
-//@ predicate current_applet(Applet applet);
+//@ predicate AID(AID aid) = aid != null;
+
+class AID {
+    
+    public boolean equals(byte[] bArray, short offset, byte length);
+        //@ requires [?f1]AID(this) &*& [?f2]array_slice(bArray, offset, offset + length, ?elems);
+        //@ ensures [f1]AID(this) &*& [f2]array_slice(bArray, offset, offset + length, elems);
+    
+}
+
+interface Shareable {}
+
+/*@
+
+fixpoint boolean is_transient_array(byte[] a);
+predicate transient_arrays(list<byte[]> arrays);
+predicate transient_array(byte[] a) = array_slice(a, 0, a.length, _);
+
+lemma void transient_arrays_mem(byte[] a);
+    requires transient_arrays(?as) &*& is_transient_array(a) == true;
+    ensures transient_arrays(as) &*& mem(a, as) == true;
+
+predicate registered_applets(list<Applet> as);
+
+predicate semi_valid(Applet applet;) = [1/2]applet.valid();
+predicate full_valid(Applet applet;) = applet.valid();
+
+predicate current_applet(Applet applet);
+
+predicate_family shareable_interface_object(Class c)(Shareable sio, Applet owner);
+
+@*/
 
 class Applet {
+    
     //@ predicate valid() = false;
     
     public Applet();
@@ -133,128 +121,90 @@ class Applet {
         //@ requires this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
         //@ ensures true;
     
-    public void register(byte[] bArray, short bOffset, byte bLength) throws SystemException /*@ ensures true; @*/;
+    public void register(byte[] bArray, short bOffset, byte bLength);
         //@ requires this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
         //@ ensures true;
     
     public boolean select();
-        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures registered_applets(as) &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires registered_applets(?as) &*& mem(this, as) == true &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& transient_arrays(?as0) &*& foreach(as0, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& transient_arrays(?as1) &*& foreach(as1, transient_array);
     
     public void deselect();
-        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures registered_applets(as) &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires registered_applets(?as) &*& mem(this, as) == true &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& transient_arrays(?as0) &*& foreach(as0, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& transient_arrays(?as1) &*& foreach(as1, transient_array);
     
     public void process(APDU apdu);
-        //@ requires registered_applets(?as) &*& mem(this,as)==true &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures registered_applets(as) &*& foreach(remove(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
-
+        //@ requires registered_applets(?as) &*& mem(this, as) == true &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?as0) &*& foreach(as0, transient_array);
+        //@ ensures registered_applets(as) &*& foreach(remove(this, as), semi_valid) &*& [1/2]this.valid() &*& current_applet(this) &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?as1) &*& foreach(as1, transient_array);
+    
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter);
-    	//@ requires registered_applets(?as) &*& mem<Applet>(this,as) == true &*& AID(clientAID);
-    	/*@ ensures registered_applets(as) &*& AID(clientAID) &*&
-    		result == null ? true : shareable_interface_object(result.getClass())(result, ?a); @*/
-}
-
-class ISOException extends RuntimeException {
-    public static void throwIt(short sw) throws ISOException /*@ ensures true; @*/;
-        //@ requires true;
-        //@ ensures false;
-}
-
-class OPSystem {
-    public static final byte APPLET_BLOCKED = 127;
-    public static final byte APPLET_PERSONALIZED = 15;
-    public static final byte APPLET_INSTALLED = 3;
-    public static final byte APPLET_SELECTABLE = 7;
-    public static final byte APPLET_LOCKED = -1;
-    public static final byte CARD_INITIALIZED = 7;
-    public static final byte INITIALIZED = 7;
-    public static final byte CARD_SECURED = 15;
-    public static final byte CARD_LOCKED = 127;
-    public static final byte CARD_OP_READY = 1;
-    public static final byte PACKAGE_LOADED = 1;
+        //@ requires registered_applets(?as) &*& mem<Applet>(this, as) == true &*& AID(clientAID);
+        //@ ensures registered_applets(as) &*& AID(clientAID) &*& result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true;
     
-    public static byte getCardContentState();
-        //@ requires true;
-        //@ ensures true;
-    
-    public static boolean setCardContentState(byte state);
-        //@ requires true;
-        //@ ensures true;
 }
 
-//@predicate AID(AID aid);
-class AID {
-    public boolean equals(byte[] bArray, short offset, byte length);
-    //@ requires [?f1]AID(this) &*& [?f2]array_slice(bArray, offset, offset + length, ? elems) &*& 0 <= offset &*& 0 < length;
-    //@ ensures [f1]AID(this) &*& [f2]array_slice(bArray, offset, offset + length, elems) &*& 0 <= offset &*& 0 < length; 
-}
-
-//@ predicate in_transaction(Applet a, list<Applet> l);
-
-//@ predicate transient_array(byte[] tb) = array_slice(tb, 0, tb.length, _);
-
-//@ predicate_family shareable_interface_object(Class c)(Shareable sio, Applet owner);
+//@ predicate in_transaction(Applet a);
 
 class JCSystem {
+    
     public static AID lookupAID(byte[] buffer, short offset, byte length);
         //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
         //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
-
+    
     public static void beginTransaction();
-        //@ requires current_applet(?a) &*& registered_applets(?as) &*& foreach<Applet>(remove(a, as), semi_valid) &*& [1r/2]a.valid() &*& mem<Applet>(a, as) == true;
-	//@ ensures in_transaction(a, as) &*& registered_applets(as) &*& foreach<Applet>(remove(a, as), full_valid) &*& a.valid() &*& mem<Applet>(a, as) == true;
+        //@ requires current_applet(?a) &*& registered_applets(?as) &*& foreach<Applet>(remove(a, as), semi_valid) &*& [1/2]a.valid();
+        //@ ensures in_transaction(a) &*& registered_applets(as) &*& foreach<Applet>(remove(a, as), full_valid) &*& a.valid() &*& mem<Applet>(a, as) == true;
     
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
     //       In process(), set b = false, then commit, then throw an exception. Next time you enter process(), you have [1]y |-> _ outside a transaction.
     public static void commitTransaction();
-        /*@ requires in_transaction(?a, ?as) &*& registered_applets(as) &*& foreach(remove(a, as), full_valid) &*& a.valid() &*& mem<Applet>(a, as) == true
-		     &*& transient_arrays(?ta) &*& foreach(ta, transient_array); @*/
-        /*@ ensures current_applet(a) &*& registered_applets(as) &*& foreach(remove(a, as), semi_valid) &*& [1r/2]a.valid() &*& mem<Applet>(a, as) == true
-		     &*& transient_arrays(ta) &*& foreach(ta, transient_array); @*/
-
+        //@ requires in_transaction(?a) &*& registered_applets(?as) &*& foreach(remove(a, as), full_valid) &*& a.valid() &*& transient_arrays(?as0) &*& foreach(as0, transient_array);
+        //@ ensures current_applet(a) &*& registered_applets(as) &*& mem<Applet>(a, as) == true &*& foreach(remove(a, as), semi_valid) &*& [1/2]a.valid() &*& transient_arrays(as0) &*& foreach(as0, transient_array);
+    
     public static byte[] makeTransientByteArray(short length, byte event);
-        //@ requires transient_arrays(?ta) &*& foreach(ta, transient_array);
-        /*@ ensures result != null &*& result.length == length
-		      &*& transient_arrays(?ta2) &*& ta2 == append(cons(result, nil), ta)
-		      &*& foreach(ta2, transient_array) &*& is_transient_array(result) == true; @*/
-
+        //@ requires transient_arrays(?as) &*& foreach(as, transient_array);
+        //@ ensures result != null &*& result.length == length &*& transient_arrays(cons(result, as)) &*& foreach(cons(result, as), transient_array) &*& is_transient_array(result) == true;
+    
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
-    	//@ requires registered_applets(?as);
-    	//@ ensures registered_applets(as) &*& shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a,as) == true;
-
+        //@ requires registered_applets(?as);
+        //@ ensures registered_applets(as) &*& result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true;
+    
     public static final byte CLEAR_ON_DESELECT = 2;
+    
 }
 
 class Util {
+    
     public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
         //@ requires [?f1]array_slice(src, srcOff, srcOff + length, ?elems1) &*& [?f2]array_slice(dest, destOff, destOff + length, ?elems2);
         //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
     
-    public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length)
-        throws ArrayIndexOutOfBoundsException /*@ ensures true; @*/;
+    public static short arrayCopyNonAtomic(byte[] src, short srcOff, byte[] dest, short destOff, short length);
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _) &*& !is_persistent_object(dest);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
-      
+    
     public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
     
-    public static final short getShort(byte[] bArray, short bOff) throws NullPointerException /*@ ensures true; @*/, ArrayIndexOutOfBoundsException /*@ ensures true; @*/;
+    public static final short getShort(byte[] bArray, short bOff);
         //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
         //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
-
+    
+    // Note: Calling this method on a persistent object is sound only if the call is the only update operation in the transaction. This is not yet enforced by VeriFast.
     public static final void arrayFillNonAtomic(byte[] bArray, short bOff, short bLen, byte bValue);
         //@ requires array_slice(bArray, bOff, bOff + bLen, _);
-        //@ ensures array_slice(bArray, bOff, bOff + bLen, _);
-
+        //@ ensures array_slice(bArray, bOff, bOff + bLen, _); // Because of the non-atomic nature of this call, it is crucial for soundness that this postcondition does not specify the new value of the array elements.
+    
     public static final short makeShort(byte b1, byte b2);
-		//@ requires true;
-		//@ ensures true;
+        //@ requires true;
+        //@ ensures true;
+    
 }
 
 class ISO7816 {
+    
     public static final byte CLA_ISO7816 = 0x00;
     public static final byte INS_EXTERNAL_AUTHENTICATE = (byte) 0x82;
     public static final byte INS_SELECT = (byte) 0xA4;
@@ -291,8 +241,67 @@ class ISO7816 {
     public static final short SW_WRONG_DATA = (short) 0x6A80;
     public static final short SW_WRONG_LENGTH = (short) 0x6700;
     public static final short SW_WRONG_P1P2 = (short) 0x6B00;
+    
 }
 
-interface Shareable{
+/*@
+
+predicate OwnerPIN(OwnerPIN pin; byte tryLimit, byte maxPINSize);
+
+@*/
+
+class OwnerPIN {
+    
+    public OwnerPIN(byte tryLimit, byte maxPINSize);
+        //@ requires true;
+        //@ ensures OwnerPIN(this, tryLimit, maxPINSize);
+    
+    public void update(byte[] pin, short offset, byte length);
+        //@ requires [?f]OwnerPIN(this, _, _);
+        //@ ensures [f]OwnerPIN(this, _, _);
+    
+    public void reset();
+        //@ requires [?f]OwnerPIN(this, _, _);
+        //@ ensures [f]OwnerPIN(this, _, _);
+    
+    public boolean check(byte[] pin, short offset, byte length);
+        //@ requires [?f]OwnerPIN(this, _, _) &*& [?g]array_slice(pin, offset, length, _);
+        //@ ensures [f]OwnerPIN(this, _, _) &*& [g]array_slice(pin, offset, length, _);
+    
+    public byte getTriesRemaining();
+        //@ requires [?f]OwnerPIN(this, _, _);
+        //@ ensures [f]OwnerPIN(this, _, _);
+    
+    public boolean isValidated();
+        //@ requires [?f]OwnerPIN(this, _, _);
+        //@ ensures [f]OwnerPIN(this, _, _);
+    
+    public void resetAndUnblock();
+        //@ requires [?f]OwnerPIN(this, _, _);
+        //@ ensures [f]OwnerPIN(this, _, _);
+    
+}
+
+class OPSystem {
+    
+    public static final byte APPLET_BLOCKED = 127;
+    public static final byte APPLET_PERSONALIZED = 15;
+    public static final byte APPLET_INSTALLED = 3;
+    public static final byte APPLET_SELECTABLE = 7;
+    public static final byte APPLET_LOCKED = -1;
+    public static final byte CARD_INITIALIZED = 7;
+    public static final byte INITIALIZED = 7;
+    public static final byte CARD_SECURED = 15;
+    public static final byte CARD_LOCKED = 127;
+    public static final byte CARD_OP_READY = 1;
+    public static final byte PACKAGE_LOADED = 1;
+    
+    public static byte getCardContentState();
+        //@ requires true;
+        //@ ensures true;
+    
+    public static boolean setCardContentState(byte state);
+        //@ requires true;
+        //@ ensures true;
     
 }

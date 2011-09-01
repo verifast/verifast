@@ -215,7 +215,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
         <menu action='TopWindow'>
            <menuitem action='Stub' />
         </menu>
-	<menu action='BottomWindow'>
+        <menu action='BottomWindow'>
            <menuitem action='Stub' />
         </menu>
         <menu action='Help'>

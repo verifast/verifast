@@ -330,7 +330,7 @@ public final class EWallet extends Applet implements EWalletInterface {
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter)
     	//@ requires registered_applets(?as) &*& mem<Applet>(this,as) == true &*& AID(clientAID);
     	/*@ ensures registered_applets(as) &*& mem<Applet>(this,as) == true &*& AID(clientAID) &*&
-    	        result == null ? true : shareable_interface_object(result.getClass())(result, ?a); @*/
+    	        result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true; @*/
     {
     	if(clientAID == null)
     	    return null;
