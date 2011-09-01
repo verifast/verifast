@@ -1,3 +1,7 @@
+// Note: on this program, VeriFast/Redux is 10x faster than VeriFast/Z3. To use Redux:
+//    vfide -prover redux Addressbook.java
+//    verifast -c -prover redux Addressbook.java
+
 package Addressbook;
 
 import javacard.framework.*;

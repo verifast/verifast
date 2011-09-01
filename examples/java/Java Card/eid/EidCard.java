@@ -1,3 +1,7 @@
+// Note: on this program, VeriFast/Redux is much faster than VeriFast/Z3! (2s versus 70s). To use Redux, use:
+//   vfide -prover redux EidCard.java
+//   verifast -c -allow_assume -prover redux EidCard.java
+
 /*
                            This file is a work in progress!
                            

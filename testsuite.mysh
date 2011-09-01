@@ -119,7 +119,7 @@ cd Java Card
 verifast_both -c JavaCard.java
 verifast_both -c Echo.java
 verifast_both -c Store.java
-verifast_both -c Addressbook.java
+verifast -c -prover redux Addressbook.java
 cd shareable-applets
 verifast_both -c wallet.jarsrc
 cd ..
