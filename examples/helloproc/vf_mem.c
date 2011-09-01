@@ -13,7 +13,7 @@
  * might think that *probably* memcpy'ing 0 bytes is allowed.
  * However, as long as we are not entirely sure, we can not allow it
  * in the API implementation here.  Since the vf_API specification
- * disallows it too, we don't have too check anything though.
+ * disallows it too, we don't have to check anything though.
  *
  * memcpy does not support overlap (not documented at memcpy itself
  * but it is documented at memmove in lib/string.c).

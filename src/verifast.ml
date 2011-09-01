@@ -6688,8 +6688,8 @@ let verify_program_core (* ?verify_program_core *)
   
   let sizeof l t =
     match t with
-      Void | Char -> ctxt#mk_intlit 1
-    | IntType -> ctxt#mk_intlit 4
+      Void | Char | UChar -> ctxt#mk_intlit 1
+    | IntType | UintPtrType -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
@@ -7804,17 +7804,30 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
     int_pred_symb
   in
+
+  let u_int_pred_symb () =
+    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
+    u_int_pred_symb
+  in
   
   let char_pred_symb () =
     let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
     char_pred_symb
   in
+
+  let u_char_pred_symb () =
+    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
+    u_char_pred_symb
+  in
+
   
   let pointee_pred_symb l pointeeType =
     match pointeeType with
       PtrType _ -> pointer_pred_symb ()
     | IntType -> int_pred_symb ()
+    | UintPtrType -> u_int_pred_symb ()
     | Char -> char_pred_symb ()
+    | UChar -> u_char_pred_symb ()
     | _ -> static_error l "Dereferencing pointers of this type is not yet supported." None
   in
   

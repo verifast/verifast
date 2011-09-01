@@ -24,8 +24,10 @@ lemma_auto void array_inv<t>();
     ensures array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
 
 predicate character(char *p; char c);
+predicate u_character(unsigned char *p; unsigned char c);
 
 predicate integer(int *p; int v);
+predicate u_integer(unsigned int *p; unsigned int v);
 
 predicate pointer(void **pp; void *p);
 
@@ -94,17 +96,35 @@ lemma void chars_join(char *array);
         [f]chars(array, append(cs, cs0))
         &*& length(append(cs, cs0)) == length(cs) + length(cs0); // To avoid lemma call at call site in common scenario.
 
+// chars to ...
 lemma void chars_to_integer(void *p);
     requires chars(p, ?cs) &*& length(cs) == sizeof(int);
     ensures integer(p, _);
 
-lemma void integer_to_chars(void *p);
-    requires integer(p, _);
-    ensures chars(p, ?cs) &*& length(cs) == sizeof(int);
+lemma void chars_to_u_integer(void *p);
+    requires chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+    ensures u_integer(p, _);
+
+lemma void chars_to_u_character(void *p);
+    requires chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
+    ensures u_character(p, _);
 
 lemma void chars_to_pointer(void *p);
     requires chars(p, ?cs) &*& length(cs) == sizeof(void *);
     ensures pointer(p, pointer_of_chars(cs));
+
+// ... to chars
+lemma void integer_to_chars(void *p);
+    requires integer(p, _);
+    ensures chars(p, ?cs) &*& length(cs) == sizeof(int);
+
+lemma void u_integer_to_chars(void *p);
+    requires u_integer(p, _);
+    ensures chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+
+lemma void u_character_to_chars(void *p);
+    requires u_character(p, _);
+    ensures chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
 
 lemma void pointer_to_chars(void *p);
     requires pointer(p, ?v);
