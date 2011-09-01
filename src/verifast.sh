@@ -1,4 +1,5 @@
 #!/bin/sh
-MYABSDIR=$(dirname "$(readlink -f $0)")
+MYABSPATH=$(readlink -f "$0")
+MYABSDIR=$(dirname "$MYABSPATH")
 export LD_LIBRARY_PATH="$MYABSDIR:$LD_LIBRARY_PATH"
-"$MYABSDIR/verifast-core" $*
+"$MYABSDIR/verifast-core" "$@"
