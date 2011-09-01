@@ -25,7 +25,7 @@ public final class EPhone extends Applet {
     @*/
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _ &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _ &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
     //@ ensures true;
     {
         EPhone Ephone = new EPhone();
@@ -58,8 +58,8 @@ public final class EPhone extends Applet {
     }
 
     private void credit(APDU apdu)
-    //@requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& mem<Applet>(this,as)==true &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    //@ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    //@requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
+    //@ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -100,8 +100,8 @@ public final class EPhone extends Applet {
     }
 
     private void getBalance(APDU apdu) 
-    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
     	byte[] abuffer = apdu.getBuffer();
 
@@ -121,8 +121,8 @@ public final class EPhone extends Applet {
     }
 
     private void makeBankcardDebit(short amount)
-    //@ requires 0 <= amount &*& amount <= max_transaction_amount &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid() &*& in_transaction(this) &*& mem<Applet>(this,as)==true;
-    //@ ensures in_transaction(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),full_valid) &*& this.valid();
+    //@ requires 0 <= amount &*& amount <= max_transaction_amount &*& this.valid() &*& in_transaction(this);
+    //@ ensures in_transaction(this) &*& this.valid();
     {
     
     	///@ foreach_remove<Applet>(this, as);
@@ -148,15 +148,16 @@ public final class EPhone extends Applet {
           ///@ assume (sio.getClass() == EWallet.class);
           // WalletInterface.convertToInstance();
           //@ close full_valid(this);
-          //@ foreach_unremove<Applet>(this,as);
+          //@ assert registered_applets(?as);
+          //@ foreachp_unremove<Applet>(this,as);
           //@ assert (shareable_interface_object(sio.getClass())(sio, ?a));
-          //@ foreach_remove<Applet>(a,as);
+          //@ foreachp_remove<Applet>(a,as);
           //@ open full_valid(a);
           WalletInterface.verify(pin, (short)0, (byte)(short)pin.length);
           WalletInterface.debit((byte)amount);
           //@ close full_valid(a);
-          //@ foreach_unremove<Applet>(a, as);
-          //@ foreach_remove<Applet>(this, as);
+          //@ foreachp_unremove<Applet>(a, as);
+          //@ foreachp_remove<Applet>(this, as);
           //@ open full_valid(this);
           
           // WalletInterface.convertFromInstance();

@@ -231,6 +231,24 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys);
     requires foreach(xs, ?p) &*& foreach(ys, p);
     ensures foreach(append(xs, ys), p);
 
+predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return p(x) &*& foreachp(xs0, p);
+    };
+
+lemma void foreachp_remove<t>(t x, list<t> xs);
+    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures foreachp(remove(x, xs), p) &*& p(x);
+
+lemma void foreachp_unremove<t>(t x, list<t> xs);
+    requires foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
+    ensures foreachp(xs, p);
+
+lemma void foreachp_append<t>(list<t> xs, list<t> ys);
+    requires foreachp(xs, ?p) &*& foreachp(ys, p);
+    ensures foreachp(append(xs, ys), p);
+
 fixpoint boolean all_eq<t>(list<t> xs, t x0) {
     switch (xs) {
         case nil: return true;

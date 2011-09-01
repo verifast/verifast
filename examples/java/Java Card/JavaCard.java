@@ -20,7 +20,7 @@ public final class MyApplet extends Applet {
     
     @*/
     
-    public static void install(byte[] array, short offset, byte length) throws ISOException /*@ ensures true; @*/
+    public static void install(byte[] array, short offset, byte length)
         /*@
         requires
             someByteArray |-> _ &*& // TODO: Eliminate this
@@ -29,7 +29,7 @@ public final class MyApplet extends Applet {
             array[appletDataStart] |-> ?appletDataLength &*&
             array[appletDataStart + 1] |-> ?bufferSize &*& 20 <= bufferSize &*&
             appletDataStart + 1 <= 32767 &*&
-            transient_arrays(?ta) &*& foreach(ta, transient_array);
+            system();
         @*/
         //@ ensures true;
     {
@@ -57,8 +57,8 @@ public final class MyApplet extends Applet {
     }
     
     public boolean select()
-        //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+        //@ requires current_applet(this) &*& [1/2]this.valid();
+        //@ ensures current_applet(this) &*& [1/2]this.valid();
     {
         // selection initialization
         JCSystem.beginTransaction();
@@ -69,9 +69,9 @@ public final class MyApplet extends Applet {
         return true;
     }
     
-    public void process(APDU apdu) throws ISOException /*@ ensures true; @*/
-        //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-        //@ ensures registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1r/2]this.valid() &*& current_applet(this) &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta2) &*& foreach(ta2, transient_array);
+    public void process(APDU apdu)
+        //@ requires current_applet(this) &*& [1/2]this.valid() &*& APDU(apdu, ?buffer0) &*& array_slice(buffer0, 0, buffer0.length, _);
+        //@ ensures current_applet(this) &*& [1/2]this.valid() &*& APDU(apdu, buffer0) &*& array_slice(buffer0, 0, buffer0.length, _);
     {
         byte[] buffer = apdu.getBuffer();
         // .. process the incoming data and reply

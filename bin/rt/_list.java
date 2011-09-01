@@ -345,6 +345,52 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys)
     }
 }
 
+lemma void foreachp_remove<t>(t x, list<t> xs)
+    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures foreachp(remove(x, xs), p) &*& p(x);
+{
+    open foreachp(xs, p);
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x == x0) {
+            } else {
+                foreachp_remove(x, xs0);
+                close foreachp(remove(x, xs), p);
+            }
+    }
+}
+
+lemma void foreachp_unremove<t>(t x, list<t> xs)
+    requires foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
+    ensures foreachp(xs, p);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x == x0) {
+                close foreachp(xs, p);
+            } else {
+                open foreachp(remove(x, xs), p);
+                foreachp_unremove(x, xs0);
+                close foreachp(xs, p);
+            }
+    }
+}
+
+lemma void foreachp_append<t>(list<t> xs, list<t> ys)
+    requires foreachp(xs, ?p) &*& foreachp(ys, p);
+    ensures foreachp(append(xs, ys), p);
+{
+    open foreachp(xs, p);
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            foreachp_append(xs0, ys);
+            close foreachp(append(xs, ys), p);
+    }
+}
+
 lemma void all_eq_append<t>(list<t> xs1, list<t> xs2, t x0)
     requires true;
     ensures all_eq(append(xs1, xs2), x0) == (all_eq(xs1, x0) && all_eq(xs2, x0));

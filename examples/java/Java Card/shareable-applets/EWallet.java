@@ -59,7 +59,7 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) 
-    //@ requires pin |-> _ &*& pinnb |-> _ &*& balance |-> _ &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
+    //@ requires pin |-> _ &*& pinnb |-> _ &*& balance |-> _ &*& system();
     //@ ensures true;
     {
         EWallet wallet = new EWallet();
@@ -67,8 +67,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public boolean select() 
-    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ ensures registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ ensures registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
         // The applet declines to be selected
         // if the pin is blocked.
@@ -88,8 +88,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public void deselect() 
-    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ ensures registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ requires registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ ensures registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
         // reset the pins validated flag to unvalidated
         ///@ foreach_remove<Applet>(this, as);
@@ -129,8 +129,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     private void credit(APDU apdu) 
-    //@requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    //@ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    //@requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
+    //@ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     {
         ///@ foreach_remove<Applet>(this, as);
         ///@ open semi_valid(this);
@@ -178,8 +178,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     private void debit(APDU apdu) 
-    //@ requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    //@ ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    //@ requires current_applet(this) &*& APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
+    //@ ensures current_applet(this) &*& APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& [1/2]this.valid();
     {
         ///@ foreach_remove<Applet>(this, as);
         ///@ open semi_valid(this);
@@ -226,8 +226,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     private void getBalance(APDU apdu) 
-    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
         ///@ foreach_remove<Applet>(this, as);
         ///@ open semi_valid(this);
@@ -252,8 +252,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     private void verify(APDU apdu) 
-    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
-    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@requires APDU(apdu,?buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(?as) &*& mem<Applet>(this,as)==true &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
+    //@ensures APDU(apdu,buffer) &*& array_slice(buffer,0,buffer.length,_) &*& registered_applets(as) &*& foreachp<Applet>(remove<Applet>(this, as),semi_valid) &*& [1/2]this.valid();
     {
         byte[] abuffer = apdu.getBuffer();
 
@@ -272,8 +272,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public void verify(byte[] pincode, short offset, byte length) 
-    //@ requires array_slice(pincode, 0, pincode.length,_) &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreach<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
-    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreach<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
+    //@ requires array_slice(pincode, 0, pincode.length,_) &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
+    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this) &*& array_slice(pincode, 0, pincode.length, _);
     {
     	// open EInterface(EWallet.class)(this);
     	// assert registered_applets(?as);
@@ -293,8 +293,8 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public void debit(byte debitAmount) 
-    //@requires 0 <= debitAmount &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreach<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
-    //@ensures registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreach<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
+    //@requires 0 <= debitAmount &*& registered_applets(?as) &*& shareable_interface_object(this.getClass())(this, ?a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
+    //@ensures registered_applets(as) &*& shareable_interface_object(this.getClass())(this, a) &*& foreachp<Applet>(remove<Applet>(a, as),full_valid) &*& a.valid() &*& mem<Applet>(a,as)==true; //EInterface(EWallet.class)(this);
     {
     	// open EInterface(EWallet.class)(this);
     	///@ assert registered_applets(as);
