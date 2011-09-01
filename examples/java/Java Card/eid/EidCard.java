@@ -201,33 +201,6 @@ public abstract class File {
 /*@
 predicate file_element(File child;) = child == null ? true : [1/2]child.File(_, _, _);
 predicate valid_id(File child;) = [_]child.fileID |->_;
-
-predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
-    switch (xs) {
-        case nil: return true;
-        case cons(x, xs0): return p(x) &*& foreachp(xs0, p);
-    };
-
-lemma void foreachp_remove<t>(t x, list<t> xs)
-    requires [?f]foreachp(xs, ?p) &*& mem(x, xs) == true;
-    ensures [f]foreachp(remove(x, xs), p) &*& [f]p(x);
-{
-  assume(false);
-}
-
-lemma void foreachp_unremove<t>(t x, list<t> xs)
-    requires [?f]foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& [f]p(x);
-    ensures [f]foreachp(xs, p);
-{
-  assume(false);
-}
-
-lemma void foreachp_append<t>(list<t> xs, list<t> ys)
-    requires foreachp(xs, ?p) &*& foreachp(ys, p);
-    ensures foreachp(append(xs, ys), p);
-{
-  assume(false);
-}
 @*/
 
 public class DedicatedFile extends File {
@@ -1072,8 +1045,8 @@ public final class EidCard extends Applet {
 	 * erase data in file that was selected with SELECT FILE
 	 */
 	private void eraseBinary(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check if access to this file is allowed
 		if (!fileAccessAllowed(ERASE_BINARY))
@@ -1097,8 +1070,8 @@ public final class EidCard extends Applet {
 	 * change data in a file that was selected with SELECT FILE
 	 */
 	private void updateBinary(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check if access to this file is allowed
 		if (!fileAccessAllowed(UPDATE_BINARY))
@@ -1314,8 +1287,8 @@ public final class EidCard extends Applet {
 	 * activate: see belgian eID content file
 	 */
 	private void activateFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)
@@ -1371,8 +1344,8 @@ public final class EidCard extends Applet {
 	 * perform any cleanup tasks and set default selectedFile
 	 */
 	private void clear() 
-    	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    	    //@ requires current_applet(this) &*& [1/2]valid();
+      	    //@ ensures current_applet(this) &*& [1/2]valid();
 	{
 		JCSystem.beginTransaction();
 		
@@ -1474,8 +1447,8 @@ public final class EidCard extends Applet {
 	 * select file under the current DF
 	 */
 	private void selectByFileIdentifier(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// receive the data to see which file needs to be selected
 		short byteRead = apdu.setIncomingAndReceive();
@@ -1487,7 +1460,7 @@ public final class EidCard extends Applet {
 		short fid = Util.makeShort(buffer[ISO7816.OFFSET_CDATA], buffer[ISO7816.OFFSET_CDATA + 1]);
 		JCSystem.beginTransaction();
 		//@ open valid();
-		//@ open selected_file_types(_, ?f1, ?f2, ?f3, ?f4, ?f5, ?f6, ?f7, ?f8, ?f9, ?f10, ?f11, ?f12, ?f13, _);
+		//@ assert selected_file_types(_, ?f1, ?f2, ?f3, ?f4, ?f5, ?f6, ?f7, ?f8, ?f9, ?f10, ?f11, ?f12, ?f13, _);
 		// if file identifier is the master file, select it immediately
 		if (fid == MF)
 			selectedFile = masterFile;		
@@ -1635,8 +1608,8 @@ public final class EidCard extends Applet {
 	 * select file by path from the MF
 	 */
 	private void selectByPath(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		//@ assume(false);
 		// receive the path name
@@ -1754,7 +1727,7 @@ public final class EidCard extends Applet {
     	       &*& EidCard_PKCS1_HEADER(?thePKCS1HEADER) &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1
     	       &*& EidCard_PKCS1_SHA1_HEADER(?thePKCS1SHA1HEADER) &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _)&*& thePKCS1SHA1HEADER.length == 16
     	       &*& EidCard_PKCS1_MD5_HEADER(?thePKCS1MD5HEADER) &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19
-    	       &*& transient_arrays(?ta) &*& foreach(ta, transient_array); @*/
+    	       &*& transient_arrays(?ta) &*& foreachp(ta, transient_array); @*/
     	//@ ensures true;
 	{
 		//@ open transient_array_pointer(mb, 128);
@@ -1796,8 +1769,8 @@ public final class EidCard extends Applet {
 	 * select always has to happen after a reset
 	 */
 	public boolean select() 
-            //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-            //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+            //@ requires current_applet(this) &*& [1/2]valid();
+            //@ ensures current_applet(this) &*& [1/2]valid();
 	{
 		// Clear data and set default selectedFile to masterFile
 		clear();
@@ -1807,8 +1780,8 @@ public final class EidCard extends Applet {
 	 * perform any cleanup and bookkeeping tasks before the applet is deselected
 	 */
 	public void deselect() 
-    	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-    	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+    	    //@ requires current_applet(this) &*& [1/2]valid();
+    	    //@ ensures current_applet(this) &*& [1/2]valid();
 	{
 		clear();
 		return;
@@ -1817,8 +1790,8 @@ public final class EidCard extends Applet {
 	 * process APDUs
 	 */
 	public void process(APDU apdu) 
-            //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-            //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+            //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
+            //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
 	{
 		byte[] buffer = apdu.getBuffer();
 		/*
@@ -1940,8 +1913,8 @@ public final class EidCard extends Applet {
 	 * verify the PIN
 	 */
 	private void verifyPin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		
 		// check P1
@@ -2015,8 +1988,8 @@ public final class EidCard extends Applet {
 	 * change the PIN
 	 */
 	private void changePin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		/*
 		 * IMPORTANT: in all other APDUs the previous APDU type gets overwritten
@@ -2086,8 +2059,8 @@ public final class EidCard extends Applet {
 	 * administrator changes the PIN
 	 */
 	private void administratorChangePin(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// The previous getChallenge() should ask for at least the length of the
 		// new administrator pin. Otherwise exception is thrown
@@ -2200,8 +2173,8 @@ public final class EidCard extends Applet {
 	 * Discard current fulfilled access conditions
 	 */
 	private void logOff(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00 || buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -2243,8 +2216,8 @@ public final class EidCard extends Applet {
 	 * prepare for authentication or non repudiation signature
 	 */
 	private void prepareForSignature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x41 || buffer[ISO7816.OFFSET_P2] != (byte) 0xB6)
@@ -2304,8 +2277,8 @@ public final class EidCard extends Applet {
 	 * generate (authentication or non repudiation) signature
 	 */
 	private void generateSignature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		/*
 		 * IMPORTANT: in all other APDUs the previous APDU type gets overwritten
@@ -2390,8 +2363,8 @@ public final class EidCard extends Applet {
 	 * generate PKCS#1 MD5 signature
 	 */
 	private void generatePkcs1Md5Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2422,7 +2395,8 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as);
+		//@ foreachp_remove(messageBuffer, as);
 		//@ open transient_array(messageBuffer);
 		
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
@@ -2431,18 +2405,19 @@ public final class EidCard extends Applet {
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
 
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as);
 
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as1);
+		//@ foreachp_remove(messageBuffer, as1);
 		//@ open transient_array(messageBuffer);
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as1);
 
 		//@ close [1/2]valid();
 
@@ -2452,8 +2427,8 @@ public final class EidCard extends Applet {
 	 * generate PKCS#1 SHA1 signature
 	 */
 	private void generatePkcs1Sha1Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2489,7 +2464,8 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as);
+		//@ foreachp_remove(messageBuffer, as);
 		//@ open transient_array(messageBuffer);
 
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
@@ -2498,26 +2474,27 @@ public final class EidCard extends Applet {
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
 
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as);
 
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as1);
+		//@ foreachp_remove(messageBuffer, as1);
 		//@ open transient_array(messageBuffer);
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as1);
 		//@ close [1/2]valid();
 	}
 	/**
 	 * generate PKCS#1 signature
 	 */
 	private void generatePkcs1Signature(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// receive the data that needs to be signed
 		short byteRead = apdu.setIncomingAndReceive();
@@ -2547,7 +2524,8 @@ public final class EidCard extends Applet {
 		//@ open valid();
 
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as);
+		//@ foreachp_remove(messageBuffer, as);
 		//@ open transient_array(messageBuffer);
 
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
@@ -2555,18 +2533,19 @@ public final class EidCard extends Applet {
 		// copy the clear text from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as);
 
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as1);
+		//@ foreachp_remove(messageBuffer, as1);
 		//@ open transient_array(messageBuffer);
 		// generate signature
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as1);
 		//@ close [1/2]valid();
 	}
 	/**
@@ -2613,8 +2592,8 @@ public final class EidCard extends Applet {
 	 * authentication or non repudiation keys.
 	 */
 	private void generateKeyPair(APDU apdu) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _);
 	{
 		apdu.setIncomingAndReceive();// If this was removed, function will not
 		// work: no data except for command will be read
@@ -2676,8 +2655,8 @@ public final class EidCard extends Applet {
 	 * 
 	 */
 	private void getPublicKey(APDU apdu) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, ?theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, theBuffer) &*& array_slice(theBuffer, 0, theBuffer.length, _);
 	{
 		
 		
@@ -2794,8 +2773,8 @@ public final class EidCard extends Applet {
 	 * erase a public key (basic, commune or role key) only basic supported
 	 */
 	private void eraseKey(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P1
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
@@ -2852,8 +2831,8 @@ public final class EidCard extends Applet {
 	 * (Mutual authentication not supported)
 	 */
 	private void internalAuthenticate(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P1 and P2
 		if ((buffer[ISO7816.OFFSET_P1] != ALG_SHA1_PKCS1) || buffer[ISO7816.OFFSET_P2] != BASIC)
@@ -2876,7 +2855,8 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		
 		//@ transient_arrays_mem(messageBuffer);
-		//@ foreach_remove(messageBuffer, ta);
+		//@ assert transient_arrays(?as);
+		//@ foreachp_remove(messageBuffer, as);
 		//@ open transient_array(messageBuffer);
 
 		if (basicKeyPair == null)
@@ -2902,7 +2882,7 @@ public final class EidCard extends Applet {
 		// decrement internal authenticate counter
 		//internalAuthenticateCounter--;
 		//@ close transient_array(messageBuffer);
-		//@ foreach_unremove(messageBuffer, ta);
+		//@ foreachp_unremove(messageBuffer, as);
 		
 		//@ close valid();
 		JCSystem.commitTransaction();
@@ -2937,8 +2917,8 @@ public final class EidCard extends Applet {
 	 * generate a random challenge
 	 */
 	private void getChallenge(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P1 and P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00 || buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -2966,8 +2946,8 @@ public final class EidCard extends Applet {
 	 * this file can latter be read by a READ BINARY
 	 */
 	private void selectFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)
@@ -2989,57 +2969,57 @@ public final class EidCard extends Applet {
 	 * set the previous APDU type to a certain value
 	 */
 	private void setPreviousApduType(byte type) 
-  	    //@ requires previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures previousApduType |-> thePreviousApduType &*& thePreviousApduType != null &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
+      	    //@ ensures previousApduType |-> thePreviousApduType &*& thePreviousApduType != null &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
 	{
 		//@ transient_arrays_mem(thePreviousApduType);
-		//@ foreach_remove(thePreviousApduType, ta);
+		//@ foreachp_remove(thePreviousApduType, ta);
 		//@ open transient_array(thePreviousApduType);
 		previousApduType[0] = type;
 		//@ close transient_array(thePreviousApduType);
-		//@ foreach_unremove(thePreviousApduType, ta);
+		//@ foreachp_unremove(thePreviousApduType, ta);
 	}
 	/**
 	 * return the previous APDU type
 	 */
 	private byte getPreviousApduType() 
-  	    //@ requires [?f]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-  	    //@ ensures [f]previousApduType |-> thePreviousApduType &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires [?f]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
+  	    //@ ensures [f]previousApduType |-> thePreviousApduType &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
 	{
 		//@ transient_arrays_mem(thePreviousApduType);
-		//@ foreach_remove(thePreviousApduType, ta);
+		//@ foreachp_remove(thePreviousApduType, ta);
 		//@ open transient_array(thePreviousApduType);
 		return previousApduType[0];
 		//@ close transient_array(thePreviousApduType);
-		//@ foreach_unremove(thePreviousApduType, ta);
+		//@ foreachp_unremove(thePreviousApduType, ta);
 	}
 	/**
 	 * set the signature type to a certain value
 	 */
 	private void setSignatureType(byte type) 
-  	    //@ requires signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures signatureType |-> theSignatureType &*& is_transient_array(theSignatureType) == true &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
+      	    //@ ensures signatureType |-> theSignatureType &*& is_transient_array(theSignatureType) == true &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
 	{
 		//@ transient_arrays_mem(theSignatureType);
-		//@ foreach_remove(theSignatureType, ta);
+		//@ foreachp_remove(theSignatureType, ta);
 		//@ open transient_array(theSignatureType);
 		signatureType[0] = type;
 		//@ close transient_array(theSignatureType);
-		//@ foreach_unremove(theSignatureType, ta);
+		//@ foreachp_unremove(theSignatureType, ta);
 	}
 	/**
 	 * return the signature type
 	 */
 	private byte getSignatureType() 
-  	    //@ requires [?f]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures [f]signatureType |-> theSignatureType &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires [?f]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
+      	    //@ ensures [f]signatureType |-> theSignatureType &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
 	{
 		//@ transient_arrays_mem(theSignatureType);
-		//@ foreach_remove(theSignatureType, ta);
+		//@ foreachp_remove(theSignatureType, ta);
 		//@ open transient_array(theSignatureType);
 		return signatureType[0];
 		//@ close transient_array(theSignatureType);
-		//@ foreach_unremove(theSignatureType, ta);
+		//@ foreachp_unremove(theSignatureType, ta);
 	}
 	
 
@@ -3048,8 +3028,8 @@ public final class EidCard extends Applet {
 	 * activate: see belgian eID content file
 	 */
 	private void deactivateFile(APDU apdu, byte[] buffer) 
-  	    //@ requires current_applet(this) &*& registered_applets(?as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(?ta) &*& foreach(ta, transient_array);
-      	    //@ ensures current_applet(this) &*& registered_applets(as) &*& foreach<Applet>(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _) &*& transient_arrays(ta) &*& foreach(ta, transient_array);
+  	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+      	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
 		// check P2
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x0C)

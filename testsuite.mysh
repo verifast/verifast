@@ -123,6 +123,9 @@ verifast_both -c Addressbook.java
 cd shareable-applets
 verifast_both -c wallet.jarsrc
 cd ..
+cd eid
+verifast -c -allow_assume -prover redux EidCard.java
+cd ..
 cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java

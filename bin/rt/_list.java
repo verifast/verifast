@@ -346,8 +346,8 @@ lemma void foreach_append<t>(list<t> xs, list<t> ys)
 }
 
 lemma void foreachp_remove<t>(t x, list<t> xs)
-    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
-    ensures foreachp(remove(x, xs), p) &*& p(x);
+    requires [?f]foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures [f]foreachp(remove(x, xs), p) &*& [f]p(x);
 {
     open foreachp(xs, p);
     switch (xs) {
@@ -356,38 +356,38 @@ lemma void foreachp_remove<t>(t x, list<t> xs)
             if (x == x0) {
             } else {
                 foreachp_remove(x, xs0);
-                close foreachp(remove(x, xs), p);
+                close [f]foreachp(remove(x, xs), p);
             }
     }
 }
 
 lemma void foreachp_unremove<t>(t x, list<t> xs)
-    requires foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
-    ensures foreachp(xs, p);
+    requires [?f]foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& [f]p(x);
+    ensures [f]foreachp(xs, p);
 {
     switch (xs) {
         case nil:
         case cons(x0, xs0):
             if (x == x0) {
-                close foreachp(xs, p);
+                close [f]foreachp(xs, p);
             } else {
                 open foreachp(remove(x, xs), p);
                 foreachp_unremove(x, xs0);
-                close foreachp(xs, p);
+                close [f]foreachp(xs, p);
             }
     }
 }
 
 lemma void foreachp_append<t>(list<t> xs, list<t> ys)
-    requires foreachp(xs, ?p) &*& foreachp(ys, p);
-    ensures foreachp(append(xs, ys), p);
+    requires [?f]foreachp(xs, ?p) &*& [f]foreachp(ys, p);
+    ensures [f]foreachp(append(xs, ys), p);
 {
     open foreachp(xs, p);
     switch (xs) {
         case nil:
         case cons(x, xs0):
             foreachp_append(xs0, ys);
-            close foreachp(append(xs, ys), p);
+            close [f]foreachp(append(xs, ys), p);
     }
 }
 

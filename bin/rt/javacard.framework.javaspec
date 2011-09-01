@@ -177,8 +177,8 @@ class JCSystem {
         //@ ensures current_applet(a) &*& [1/2]a.valid();
     
     public static byte[] makeTransientByteArray(short length, byte event);
-        //@ requires transient_arrays(?as) &*& foreach(as, transient_array);
-        //@ ensures result != null &*& result.length == length &*& transient_arrays(cons(result, as)) &*& foreach(cons(result, as), transient_array) &*& is_transient_array(result) == true;
+        //@ requires transient_arrays(?as) &*& foreachp(as, transient_array);
+        //@ ensures result != null &*& result.length == length &*& transient_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_array) &*& is_transient_array(result) == true;
     
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
         //@ requires registered_applets(?as);
