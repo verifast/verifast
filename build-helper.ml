@@ -3,7 +3,7 @@
 open Unix;;
 
 let releases = [ (* Add new releases to the front *)
-  "11.9", 848;
+  "11.9", 849;
   "10.6", 680;
   "10.5.2", 618;
   "10.5.1", 612;
@@ -65,7 +65,7 @@ let () =
   end;
   let (release, revision) = List.hd releases in
   if Sys.file_exists "exportdir" then rm_Rf "exportdir";
-  sh (Printf.sprintf "svn export https://aramis.cs.kuleuven.be/svn/verifast/verifast/trunk@%d exportdir" revision);
+  sh (Printf.sprintf "svn export https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk@%d exportdir" revision);
   Sys.chdir "exportdir";
   Sys.chdir "src";
   let mac_flag = if is_macos then "MAC=yes" else "" in
