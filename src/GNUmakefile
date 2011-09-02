@@ -318,6 +318,7 @@ else
 endif
 	cp -R ../examples verifast-$(VFVERSION)
 	cp -R ../help verifast-$(VFVERSION)
+	cp -R ../javacard_tutorial verifast-$(VFVERSION)
 	cp -R ../tests verifast-$(VFVERSION)
 	cp -R ../tutorial_solutions verifast-$(VFVERSION)
 	mkdir verifast-$(VFVERSION)/tutorial

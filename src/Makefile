@@ -293,6 +293,7 @@ release: test refman
 	xcopy /E /I ..\..\tests tests
 	xcopy /E /I ..\..\tutorial_solutions tutorial_solutions
 	xcopy /E /I ..\..\help help
+	xcopy /E /I ..\..\javacard_tutorial javacard_tutorial
 	mkdir tutorial
 	cd tutorial_solutions
 	for %f in (*.c) do vfstrip < %f > ..\tutorial\%f
