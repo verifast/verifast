@@ -3223,7 +3223,8 @@ type options = {
     *)
 let verify_program_core (* ?verify_program_core *)
     ?(emitter_callback : package list -> unit = fun _ -> ())
-    (ctxt: ('typenode, 'symbol, 'termnode) Proverapi.context)
+    (type typenode) (type symbol) (type termnode)  (* Explicit type parameters; new in OCaml 3.12 *)
+    (ctxt: (typenode, symbol, termnode) Proverapi.context)
     (options : options)
     (program_path : string)
     (reportRange : range_kind -> loc -> unit)
@@ -3598,6 +3599,50 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   (* Region: check_file *)
+  
+  let module MapTypes = struct
+    type 'a map = (string * 'a) list
+    type struct_field_info =
+        loc
+      * ghostness
+      * type_
+    type struct_info =
+        loc
+      * (string * struct_field_info) list option (* None if struct without body *)
+      * termnode option (* predicate symbol for struct_padding predicate *)
+    type enum_info =
+        big_int
+    type global_info =
+        loc
+      * type_
+      * termnode (* address symbol *)
+    type func_symbol =
+        symbol
+      * termnode (* function as value (for use with "apply") *)
+    type pure_func_info =
+        loc
+      * string list (* type parameters *)
+      * type_ (* return type *)
+      * type_ list (* parameter types *)
+      * func_symbol
+    type inductive_ctor_info =
+        string (* fully qualified constructor name *)
+      * pure_func_info
+    type inductive_info =
+        loc
+      * string list (* type parameters *)
+      * (string * inductive_ctor_info) list
+      * string list option (* The type is infinite if any of these type parameters are infinite; if None, it is always infinite. *)
+    type pred_ctor_info =
+        loc
+      * (string * type_) list (* constructor parameters *)
+      * (string * type_) list (* predicate parameters *)
+      * pred (* body *)
+      * func_symbol
+      * string (* package name *)
+      * import list (* import list *)
+  end in
+  let open MapTypes in
 
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
@@ -3610,7 +3655,27 @@ let verify_program_core (* ?verify_program_core *)
         false if the file being checked specifies the module being verified
     *)
   let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
-  let (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0,predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0,boxmap0,classmap0,interfmap0,classterms0,interfaceterms0, pluginmap0) =
+  let
+    (structmap0: struct_info map),
+    (enummap0: enum_info map),
+    (globalmap0: global_info map),
+    (inductivemap0: inductive_info map),
+    (purefuncmap0: pure_func_info map),
+    (predctormap0: pred_ctor_info map),
+    fixpointmap0,
+    malloc_block_pred_map0,
+    field_pred_map0,
+    predfammap0,
+    predinstmap0,
+    typedefmap0,
+    functypemap0,
+    funcmap0,
+    boxmap0,
+    classmap0,
+    interfmap0,
+    classterms0,
+    interfaceterms0,
+    pluginmap0 =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
@@ -4253,7 +4318,7 @@ let verify_program_core (* ?verify_program_core *)
             Some (_) -> static_error l "Duplicate global variable name." None
           | None -> 
             let tp = check_pure_type ("",[]) [] te in
-            let global_symb = get_unique_var_symb x tp in
+            let global_symb = get_unique_var_symb x (PtrType tp) in
             iter ((x, (l, tp, global_symb)) :: gdm) ds
         end
       | _::ds -> iter gdm ds
@@ -7500,7 +7565,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter [] h
   in
 
-  let rec assume_pred_core tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all (assuming: bool) cont =
+  let rec assume_pred_core tpenv (pn,ilist) h ghostenv env p coef size_first size_all (assuming: bool) cont =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -7649,7 +7714,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   in
-  let assume_pred tpenv (pn,ilist) h ghostenv (env: (string * 'termnode) list) p coef size_first size_all cont =
+  let assume_pred tpenv (pn,ilist) h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
     assume_pred_core tpenv (pn,ilist) h ghostenv env p coef size_first size_all false cont
   in
   

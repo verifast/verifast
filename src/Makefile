@@ -34,7 +34,7 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe 
 	cd ..\src
 
 clean:
-	del *.cm* *.obj ..\bin\*.exe
+	del *.cm* *.obj ..\bin\*.exe win\*.cm* win\*.obj
 
 refman:
 	cd ..\doc\refman
@@ -257,23 +257,27 @@ release: test refman
 	copy $(Z3)\LICENSE.txt z3.LICENSE.txt
 	xcopy /E /I ..\..\bin bin
 	cd bin
-	copy $(GTKLIB)\..\bin\iconv.dll
+	copy $(GTKLIB)\..\bin\freetype6.dll
 	copy $(GTKLIB)\..\bin\intl.dll
 	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
 	copy $(GTKLIB)\..\bin\libcairo-2.dll
+	copy $(GTKLIB)\..\bin\libexpat-1.dll
+	copy $(GTKLIB)\..\bin\libfontconfig-1.dll
 	copy $(GTKLIB)\..\bin\libgdk-win32-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgdk_pixbuf-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgio-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libglib-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgmodule-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgobject-2.0-0.dll
+	copy $(GTKLIB)\..\bin\libgthread-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgtk-win32-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libgtksourceview-2.0-0.dll
 	copy $(GTKLIB)\..\bin\libpango-1.0-0.dll
 	copy $(GTKLIB)\..\bin\libpangocairo-1.0-0.dll
+	copy $(GTKLIB)\..\bin\libpangoft2-1.0-0.dll
 	copy $(GTKLIB)\..\bin\libpangowin32-1.0-0.dll
-	copy $(GTKLIB)\..\bin\libpng12-0.dll
-	copy $(GTKLIB)\..\bin\libxml2.dll
+	copy $(GTKLIB)\..\bin\libpng14-14.dll
+	copy $(GTKLIB)\..\bin\libxml2-2.dll
 	copy $(GTKLIB)\..\bin\zlib1.dll
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
@@ -283,8 +287,15 @@ release: test refman
 	mkdir gtk-2.0
 	cd gtk-2.0
 	echo > gdk-pixbuf.loaders
+	echo gtk-theme-name = "MS-Windows" > gtkrc
 	cd ..
 	cd ..
+	mkdir share\themes\MS-Windows\gtk-2.0
+	cd share\themes\MS-Windows\gtk-2.0
+	copy $(GTKLIB)\..\share\themes\MS-Windows\gtk-2.0\gtkrc
+	cd ..\..\..\..
+	mkdir lib\gtk-2.0\2.10.0\engines
+	copy $(GTKLIB)\gtk-2.0\2.10.0\engines\libwimp.dll lib\gtk-2.0\2.10.0\engines
 	mkdir doc
 	cd doc
 	copy ..\..\..\doc\refman\refman.pdf
