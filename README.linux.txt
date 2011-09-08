@@ -8,13 +8,14 @@ B. How to build
 A. Installing the build environment
 ===================================
 
-I successfully built VeriFast on Ubuntu 9.10 (Karmic Koala, released in
-October 2009) after apt-getting the packages listed in Required Packages
-(using "sudo apt-get install <packagename>") and building the O'Caml
-bindings for Z3 and GTK with GtkSourceView (see below). I tested the
-release on Ubuntu 8.10 (Intrepid Ibex).
+Recent releases of VeriFast require OCaml >= 3.12.0, released in May 2011.
+Currently not many Linux distributions provide packages of the latest OCaml
+and LABLGTK2. Thus, some massaging is required to make it work. The
+instructions below will help you to install VeriFast on Debian 6.0
+(squeeze) and above.
 
-VeriFast also builds successfully on Ubuntu 10.10 and Debian 6.0.
+TODO: Updated instructions for Ubuntu will follow shortly. Will be similar
+to Debian, though.
 
 
 Required Packages
@@ -26,6 +27,94 @@ ocaml-native-compilers
 camlidl
 libgtksourceview2.0-dev
 liblablgtksourceview2-ocaml-dev (see below)
+
+
+OCaml Packages
+==============
+
+Unofficial OCaml 3.12.0 packages are provided by the Debian OCamlTaskForce
+(http://wiki.debian.org/Teams/OCamlTaskForce) at
+http://ocaml.debian.net/debian/ocaml-3.12.0/. Although these packages are
+meant to be used in Debian unstable "sid", they work fine with the current
+stable and testing releases. To install OCaml, add the following two sources
+to your /etc/apt/sources.list:
+
+deb     http://ocaml.debian.net/debian/ocaml-3.12.0 sid main
+deb-src http://ocaml.debian.net/debian/ocaml-3.12.0 sid main
+
+Then do
+
+$ apt-get update; apt-get install ocaml ocaml-native-compilers camlidl
+
+If you had previously installed any LABLGTK2 packages for a previous
+release of OCaml, these will be removed now due to unmet dependencies:
+
+> The following packages will be REMOVED:
+>   liblablgtk2-ocaml liblablgtk2-ocaml-dev liblablgtksourceview2-ocaml
+>   liblablgtksourceview2-ocaml-dev
+> The following packages will be upgraded:
+>   camlidl camlp4 hlins ledit liblablgtk2-ocaml-doc ocaml
+>   ocaml-base ocaml-base-nox ocaml-interp ocaml-native-compilers ocaml-nox
+
+Neither the stable Debian nor Ubuntu distributions currently provide
+updated LABLGTK2 packages -- they have to be installed manually.
+
+
+LABLGTK2
+========
+
+Download an unzip the sources from http://ftp.de.debian.org/:
+
+$ wget http://ftp.de.debian.org/debian/pool/main/l/lablgtk2/lablgtk2_2.14.2+dfsg.orig.tar.gz
+$ gunzip -c lablgtk2_2.14.2+dfsg.orig.tar.gz | tar -xv
+
+Configure and compile it. To avoid interference with your package
+management system, we configure LABLGTK2 to be installed in /usr/local/:
+
+$ cd lablgtk2-2.14.2+dfsg
+$ ./configure --prefix=/usr/local/ --with-libdir=/usr/local/lib/ocaml/
+
+The output of configure will tell you the installation directories (just
+remove these when you don't need LABLGTK2 any more). You will have to add
+these paths to the VeriFast configuration later on:
+
+> Install dirs are : /usr/local/lib/ocaml//lablgtk2 and
+> /usr/local/lib/ocaml//stublibs
+>         Compile with
+>                ocamlc -I /usr/local/lib/ocaml//lablgtk2
+>        and add /usr/local/lib/ocaml//stublibs either to OCAMLLIB/ld.conf
+> or
+>        to CAML_LD_LIBRARY_PATH
+
+It will allso tell you what features of LABLGTK2 are enabled. Make sure
+that "gtksourceview 2" is set to yes and install "gtksourceview2-dev" and
+dependent packages if it is not enabled:
+
+> LablGTK configuration:
+>         threads         system
+>         native dynlink  yes
+>         GtkGLArea       not found
+>         libglade        yes
+>         librsvg         not found
+>         libgnomecanvas  not found
+>         libgnomeui      not found
+>         libpanelapplet  not found
+>         gtkspell        yes
+>         gtksourceview 1         not found
+>         gtksourceview 2         yes        <--- important!
+>         quartz          not found
+> 
+>         debug           no
+>         C compiler      gcc
+
+Now compile and install LABLGTK2:
+
+$ make
+$ make -C src gtkInit.cmx lablgtksourceview2.cmxa lablgtk.cmxa
+$ make install
+$ cp src/gtkInit.cmx src/gtkInit.o src/lablgtksourceview2.cmxa \
+  src/lablgtksourceview2.a src/lablgtk.cmxa src/lablgtk.a \
+  /usr/local/lib/ocaml/lablgtk2/
 
 
 Z3
@@ -47,25 +136,6 @@ Alternative 2 (Z3 v2):
 - run "./build-lib.sh `ocamlc -where`" in "z3/ocaml"
 
 
-Lablgtk with lablgtksourceview2
-===============================
-
-Note: on Ubuntu 10.4 (Lucid Lynx) or later, and Debian 6.0 (Squeeze),
-simply "sudo apt-get install liblablgtksourceview2-ocaml-dev" instead. (If
-apt-get gives you Bad package errors, first install all updates recommended
-by Update Manager.)
-
-- Download lablgtk-2.14.0.tar.gz from the lablgtk website
-- ./configure --with-gtksourceview2
-- make world    # This will fail due to compiler errors; fix these by replacing SourceViewEnums by SourceView2Enums in the relevant source files
-- sudo make install
-- To run the example (optional):
-  - cd examples/sourceView
-  - ocamlopt.opt -o test2 -I +lablgtk2 lablgtk.cmxa gtkInit.cmx lablgtksourceview2.cmxa test2.ml
-  - The above command will fail due to a bug in test2.ml. Replace lang with (Some lang) in test2.ml
-  - Run the example: ./test2
-
-
 Preparing the build environment
 ===============================
 
@@ -77,5 +147,5 @@ Preparing the build environment
 B. How to build
 ===============
 
-cd src; make
+cd src; make clean; make
 

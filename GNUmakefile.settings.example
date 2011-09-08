@@ -22,6 +22,12 @@ OCAMLLIB = $(shell ocamlc -where)
 
 
 # ----------------------------------------------------------------------------
+# lablgtk2 installation directories
+LABLGTK2 = /usr/local/lib/ocaml/lablgtk2
+LABLLIBS = /usr/local/lib/ocaml/stublibs
+
+
+# ----------------------------------------------------------------------------
 # Autodetect current working directory
 CWD      = $(CURDIR)
 

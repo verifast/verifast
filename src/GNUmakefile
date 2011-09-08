@@ -16,10 +16,22 @@ endif
 ifdef MAC
   GTKSOURCEVIEW      = -I macos GSourceView2.cmx
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
+  GTKSOURCEVIEW_LIBS =
 else
-  GTKSOURCEVIEW      = lablgtksourceview2.cmxa
-  GTKSOURCEVIEW_DEPS =
+  ifdef LABLGTK2
+    GTKSOURCEVIEW      = -I ${LABLGTK2} lablgtksourceview2.cmxa
+    GTKSOURCEVIEW_DEPS =
+  else
+    GTKSOURCEVIEW      = lablgtksourceview2.cmxa
+    GTKSOURCEVIEW_DEPS =
+  endif
+  ifdef LABLLIBS
+    GTKSOURCEVIEW_LIBS = ${LABLLIBS}
+  else
+    GTKSOURCEVIEW_LIBS =
+  endif
 endif
+
 
 # Z3 configuration
 ifdef Z3
@@ -52,6 +64,9 @@ else
   NUMCPU := $(shell cat /proc/cpuinfo | grep 'processor' | wc -l)
 endif
 
+
+# Shorthands to set up environments
+SET_LDD = export CAML_LD_LIBRARY_PATH=$$CAML_LD_LIBRARY_PATH:GTKSOURCEVIEW_LIBS
 SET_ENV = export PATH=$(CWD)/../bin/:$$PATH; \
           export LD_LIBRARY_PATH=$(LDLPATH):$$LD_LIBRARY_PATH
 
@@ -80,14 +95,15 @@ ifdef OS_SUPPORTED
 else
 	$(error Unknown operating system: $(OS))
 endif
-	@echo "NUMCPU        $(NUMCPU)"
-	@echo "OCAMLLIB      $(OCAMLLIB)"
-	@echo "CWD           $(CWD)"
-	@echo "Z3            $(Z3)"
-	@echo "Z3V2          $(Z3V2)"
-	@echo "Z3DEPS        $(Z3DEPS)"
-	@echo "LDLPATH       $(LDLPATH)"
-	@echo "GTKSOURCEVIEW $(GTKSOURCEVIEW)"
+	@echo "NUMCPU             $(NUMCPU)"
+	@echo "OCAMLLIB           $(OCAMLLIB)"
+	@echo "CWD                $(CWD)"
+	@echo "Z3                 $(Z3)"
+	@echo "Z3V2               $(Z3V2)"
+	@echo "Z3DEPS             $(Z3DEPS)"
+	@echo "LDLPATH            $(LDLPATH)"
+	@echo "GTKSOURCEVIEW      $(GTKSOURCEVIEW)"
+	@echo "GTKSOURCEVIEW_LIBS ${GTKSOURCEVIEW_LIBS}"
 
 clean:
 	rm -f *.cm*
@@ -183,7 +199,7 @@ endif
 	ocamlc -custom -warn-error F -g -pp camlp4o -o verifastZ3v2 -I ./linux -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3v2prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
 
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
-	ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
+	$(SET_LDD); ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
 mynum.cmx: mynum.ml
 	ocamlopt.opt -c nums.cmxa mynum.ml
@@ -194,10 +210,10 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
+	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 
 linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.mli linux/caml_stopwatch.c
 	cd linux; make

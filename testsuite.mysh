@@ -14,6 +14,7 @@ verifast_both -c args.c
 verifast_both -disable_overflow_check array_of_struct.c
 verifast_both -disable_overflow_check -c arraylist.c
 verifast_both -disable_overflow_check threading.o barrier.c
+verifast_both -c static_array.c
 cd BeepDriver
 mysh < BeepKernel.mysh
 cd ..
