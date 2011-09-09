@@ -2061,19 +2061,24 @@ and
     [< '(_, Kwd "requires"); p = parse_pred >] -> p
   | [< '(_, Kwd "="); p = parse_pred >] -> p
 and
+  parse_pred_paramlist = parser
+    [< 
+      '(_, Kwd "("); ps = rep_comma parse_param;
+      (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None)); '(_, Kwd ")")
+    >] -> (ps, inputParamCount)
+and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
   | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
-  | [< '(l, Kwd "predicate"); '(li, Ident g); tparams = parse_type_params li; '(_, Kwd "("); ps = rep_comma parse_param;
-     (ps, inputParamCount) = (parser [< '(_, Kwd ";"); ps' = rep_comma parse_param >] -> (ps @ ps', Some (List.length ps)) | [< >] -> (ps, None));
-     '(_, Kwd ")");
+  | [< '(l, Kwd "predicate"); '(li, Ident g); tparams = parse_type_params li; 
+     (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
      '(_, Kwd ";");
     >] ->
     [PredFamilyDecl (l, g, tparams, 0, List.map (fun (t, p) -> t) ps, inputParamCount)] @
     (match body with None -> [] | Some body -> [PredFamilyInstanceDecl (l, g, tparams, [], ps, body)])
-  | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; ps = parse_paramlist; '(_, Kwd ";") >]
-  -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, None)]
+  | [< '(l, Kwd "predicate_family"); '(_, Ident g); is = parse_paramlist; (ps, inputParamCount) = parse_pred_paramlist; '(_, Kwd ";") >]
+  -> [PredFamilyDecl (l, g, [], List.length is, List.map (fun (t, p) -> t) ps, inputParamCount)]
   | [< '(l, Kwd "predicate_family_instance"); '(_, Ident g); is = parse_index_list; ps = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
