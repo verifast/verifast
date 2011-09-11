@@ -3689,6 +3689,60 @@ let verify_program_core (* ?verify_program_core *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
       * method_binding (* always Static; TODO: remove *)
       * visibility (* always Public; TODO: remove *)
+    type signature = string * type_ list
+    type method_info =
+        loc
+      * ghostness
+      * type_ option
+      * type_ map
+      * pred
+      * type_ map
+      * pred
+      * (type_ * pred) list
+      * pred
+      * pred
+      * (type_ * pred) list
+      * (stmt list * loc) option option
+      * method_binding
+      * visibility
+      * bool (* is override *)
+      * bool (* is abstract *)
+    type field_info =
+        loc
+      * type_
+      * visibility
+      * method_binding
+      * bool (* final *)
+      * expr option
+      * constant_value option option ref
+    type ctor_info =
+        loc
+      * type_ map (* parameters *)
+      * pred
+      * type_ map
+      * pred
+      * (type_ * pred) list
+      * (stmt list * loc) option option
+      * visibility
+    type inst_pred_info =
+        loc
+      * type_ map
+      * string (* family (= class or interface that first declared the predicate) *)
+      * termnode
+      * pred option
+    type class_info =
+      ClassInfo of
+        loc
+      * bool
+      * class_finality
+      * (signature * method_info) list
+      * field_info map option
+      * (type_ list * ctor_info) list
+      * string (* superclass *)
+      * string list (* interfaces *)
+      * inst_pred_info map
+      * string (* package name *)
+      * import list
   end in
   let open MapTypes in
   
@@ -3726,7 +3780,7 @@ let verify_program_core (* ?verify_program_core *)
     functypemap0,
     (funcmap0: func_info map),
     boxmap0,
-    classmap0,
+    (classmap0: class_info map),
     interfmap0,
     classterms0,
     interfaceterms0,
@@ -4409,7 +4463,7 @@ let verify_program_core (* ?verify_program_core *)
       is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
     | None ->
       match try_assoc x classmap0 with
-        Some (_, _, _, _, _, _, super, interfaces, _, _, _) ->
+        Some (ClassInfo (_, _, _, _, _, _, super, interfaces, _, _, _)) ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
       | None -> begin match try_assoc x interfmap1 with
           Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
@@ -5097,9 +5151,10 @@ let verify_program_core (* ?verify_program_core *)
               in
               let rec preds_in_class cn =
                 if cn = "" then [] else
-                let check_classmap classmap fallback =
+                let check_classmap classmap proj fallback =
                   begin match try_assoc cn classmap with
-                    Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) ->
+                    Some info ->
+                    let (super, interfs, predmap) = proj info in
                     begin match try_assoc g predmap with
                       Some (l, pmap, family, symb, body) -> [(family, pmap, symb)]
                     | None -> preds_in_class super @ flatmap preds_in_itf interfs
@@ -5107,7 +5162,13 @@ let verify_program_core (* ?verify_program_core *)
                   | None -> fallback ()
                   end
                 in
-                check_classmap classmap1_done (fun () -> check_classmap classmap0 (fun () -> []))
+                check_classmap classmap1_done
+                  (function (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) -> (super, interfs, predmap))
+                  $. fun () ->
+                check_classmap classmap0
+                  (function ClassInfo (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, predmap, pn, ilist) -> (super, interfs, predmap))
+                  $. fun () ->
+                []
               in
               match preds_in_class super @ flatmap preds_in_itf interfs with
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None)))
@@ -5223,8 +5284,8 @@ let verify_program_core (* ?verify_program_core *)
       | Some(f) -> Some((f, cn))
       end
     | None -> 
-    begin match try_assoc cn (classmap0) with
-      Some (_,_,_,_, Some fds,_, super ,_,_,_,_) ->
+    begin match try_assoc cn classmap0 with
+      Some (ClassInfo (_,_,_,_, Some fds,_, super ,_,_,_,_)) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
       | None -> lookup_class_field super fn
@@ -5259,7 +5320,7 @@ let verify_program_core (* ?verify_program_core *)
     let rec get_methods tn mn =
       if tn = "" then [] else
       match try_assoc tn classmap with
-        Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+        Some (ClassInfo (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist)) ->
         let inherited_methods =
           get_methods super mn @ flatmap (fun ifn -> get_methods ifn mn) interfs
         in
@@ -5657,7 +5718,7 @@ let verify_program_core (* ?verify_program_core *)
       end
     | NewObject (l, cn, args) ->
       begin match resolve (pn,ilist) l cn classmap with
-        Some (cn, (_, abstract, _, _, _, _, _, _, _, _, _)) ->
+        Some (cn, ClassInfo (_, abstract, _, _, _, _, _, _, _, _, _)) ->
         if abstract then
           static_error l "Cannot create instance of abstract class." None
         else 
@@ -5763,7 +5824,7 @@ let verify_program_core (* ?verify_program_core *)
       let rec get_implemented_instance_method cn mn argtps =
         if cn = "java.lang.Object" then None else
         match try_assoc cn classmap with 
-        | Some (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+        | Some (ClassInfo (l, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist)) ->
           begin try
             Some (List.find (fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) -> mn = mn' &&  is_assignable_to_sign argtps sign && not abstract) meths)
           with Not_found ->
@@ -5780,7 +5841,7 @@ let verify_program_core (* ?verify_program_core *)
       | Some(ObjType(cn)) -> 
         begin match try_assoc cn classmap with
           None -> static_error l "No matching method." None
-        | Some (_, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist) ->
+        | Some (ClassInfo (_, abstract, fin, meths, fds, constr, super, interfs, _, pn, ilist)) ->
             begin match get_implemented_instance_method super mn argtps with
               None -> static_error l "No matching method." None
             | Some(((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract))) -> 
@@ -6162,7 +6223,7 @@ let verify_program_core (* ?verify_program_core *)
         Some (l, abstract, fin, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
         match try_assoc cn classmap0 with
-          Some (l, abstract, fin, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+          Some (ClassInfo (l, abstract, fin, meths, Some fds, const, super, interfs, preds, pn, ilist)) -> eval_field_body (f::callers) (List.assoc fn fds)
     and eval_field_body callers (l, t, vis, binding, final, init, value) =
       match !value with
         Some None -> raise NotAConstant
@@ -6237,7 +6298,7 @@ let verify_program_core (* ?verify_program_core *)
       fin
     | None ->
       match try_assoc tn classmap0 with
-        Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+        Some (ClassInfo (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
         fin
       | None -> ExtensibleClass
   in
@@ -6307,16 +6368,23 @@ let verify_program_core (* ?verify_program_core *)
                     search_interfmap interfmap1 (fun () -> search_interfmap interfmap0 (fun () -> []))
                   in
                   let rec find_in_class cn =
-                    let search_classmap classmap fallback =
+                    let search_classmap classmap proj fallback =
                       match try_assoc cn classmap with
-                        Some (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+                        Some info ->
+                        let (super, interfs, preds) = proj info in
                         begin match try_assoc p#name preds with
                           Some (_, pmap, family, symb, body) -> [(family, pmap)]
                         | None -> find_in_class super @ flatmap find_in_interf interfs
                         end
                       | None -> fallback ()
                     in
-                    search_classmap classmap1 (fun () -> search_classmap classmap0 (fun () -> []))
+                    search_classmap classmap1
+                      (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+                      $. fun () ->
+                    search_classmap classmap0
+                      (function ClassInfo (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+                      $. fun () ->
+                    []
                   in
                   begin match find_in_class cn @ find_in_interf cn with
                     [] -> error ()
@@ -6367,7 +6435,7 @@ let verify_program_core (* ?verify_program_core *)
           end
         | None ->
           begin match try_assoc cn classmap0 with
-            Some (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (ClassInfo (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
             begin match try_assoc g preds with
               Some (_, pmap, family, symb, body) -> check_call family pmap
             | None -> error ()
@@ -7700,7 +7768,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (ClassInfo (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
@@ -8152,7 +8220,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
         | None ->
           match try_assoc tn classmap0 with
-            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (ClassInfo (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
             let (_, pmap, _, symb, _) = List.assoc g preds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
@@ -9460,7 +9528,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             Some (l, abstract, fin, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
           | None ->
             match try_assoc cn classmap0 with
-              Some (l, abstract, fin, mmap, fds, constr, super, interfs, preds, pn, ilist) -> (super, interfs, mmap)
+              Some (ClassInfo (l, abstract, fin, mmap, fds, constr, super, interfs, preds, pn, ilist)) -> (super, interfs, mmap)
             | None -> assert false
         in
         let specs =
@@ -9559,7 +9627,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, interfs, preds, pn, ilist)) ->
         let rec iter cmap ctors =
           match ctors with
-            [] -> (cn, (l, abstract, fin, meths, fds, List.rev cmap, super, interfs, preds, pn, ilist))
+            [] -> (cn, ClassInfo (l, abstract, fin, meths, fds, List.rev cmap, super, interfs, preds, pn, ilist))
             | Cons (lm, ps, co, ss, v)::ctors ->
               let xmap =
                 let rec iter xm xs =
@@ -9603,12 +9671,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
-      | (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) as c::classmap1_todo ->
+      | (cn, ClassInfo (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) as c::classmap1_todo ->
         let c =
           if cmap <> [] then c else
           (* Check if superclass has zero-arg ctor *)
           begin fun cont ->
-            let (l', abstract', fin', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
+            let ClassInfo (l', abstract', fin', meths', fds', cmap', super', interfs', preds', pn', ilist') = assoc2 super classmap1_done classmap0 in
             match try_assoc [] cmap' with
               Some (l'', xmap, pre, pre_tenv, post, epost, _, _) ->
               let epost: (type_ * pred) list = epost in
@@ -9640,7 +9708,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let vis = Public in
             (sign, (l, xmap, super_pre, (current_class, ClassOrInterfaceName cn)::super_pre_tenv, post, [], ss, vis))
           in
-          (cn, (l, abstract, fin, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
+          (cn, ClassInfo (l, abstract, fin, meths, fds, [default_ctor], super, interfs, preds, pn, ilist))
         in
         iter (c::classmap1_done) classmap1_todo
     in
@@ -9652,10 +9720,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let rec iter map0 map1 =
       match map0 with
         [] -> map1
-      | (cn, (l0,abstract0,fin0,meths0,fds0,constr0,super0,interfs0,preds0,pn0,ilist0)) as elem::rest ->
+      | (cn, ClassInfo (l0,abstract0,fin0,meths0,fds0,constr0,super0,interfs0,preds0,pn0,ilist0)) as elem::rest ->
         match try_assoc cn map1 with
           None -> iter rest (elem::map1)
-        | Some (l1,abstract1,fin1,meths1,fds1,constr1,super1,interfs1,preds1,pn1,ilist1) ->
+        | Some (ClassInfo (l1,abstract1,fin1,meths1,fds1,constr1,super1,interfs1,preds1,pn1,ilist1)) ->
           if fin1 <> fin0 then static_error l1 "Class finality does not match specification." None;
           let match_fds fds0 fds1=
             let rec iter fds0 fds1=
@@ -9713,7 +9781,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let meths'= match_meths meths0 meths1 in
           let fds'= match_fds fds0 fds1 in
           let constr'= match_constr constr0 constr1 in
-          iter rest ((cn,(l1,abstract1,fin1,meths',fds',constr',super1,interfs1,preds1,pn1,ilist1))::map1)
+          iter rest ((cn, ClassInfo (l1,abstract1,fin1,meths',fds',constr',super1,interfs1,preds1,pn1,ilist1))::map1)
     in
     iter classmap0 classmap1
   in
@@ -9722,7 +9790,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
 
   let classmap =
     List.map
-      begin fun (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, ClassInfo (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
         let fds_opt =
           match fds_opt with
             None -> fds_opt
@@ -9739,7 +9807,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             in
             Some fds
         in
-        (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
+        (cn, ClassInfo (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
       end
       classmap
   in
@@ -9748,7 +9816,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     (* Inheritance check *)
     let rec get_overrides cn =
       if cn = "java.lang.Object" then [] else
-      let (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
+      let ClassInfo (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) = List.assoc cn classmap in
       let overrides =
         flatmap
           begin fun (sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
@@ -9759,7 +9827,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       overrides @ get_overrides super
     in
     List.iter
-      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
+      begin fun (cn, ClassInfo (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
         if not abstract then begin
           let overrides = get_overrides cn in
           List.iter
@@ -10340,7 +10408,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | NewObject (l, cn, args) ->
       if pure then static_error l "Object creation is not allowed in a pure context" None;
-      let (_, _, _, _, _, consmap, _, _, _, _, _) = List.assoc cn classmap in
+      let ClassInfo (_, _, _, _, _, consmap, _, _, _, _, _) = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
       let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) consmap in
@@ -10356,7 +10424,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | WMethodCall (l, tn, m, pts, args, fb) when m <> "getClass" ->
       let (lm, gh, rt, xmap, pre, post, epost, fb', v) =
         match try_assoc tn classmap with
-          Some (lc, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist) ->
+          Some (ClassInfo (lc, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v)
         | _ ->
@@ -11265,7 +11333,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         let (pmap, symb, body) =
           match try_assoc cn classmap with
-            Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (ClassInfo (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
             begin match try_assoc g preds with
               None -> static_error l "No such predicate instance" None
             | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
@@ -11497,7 +11565,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         let (lpred, pmap, symb, body) =
           match try_assoc cn classmap with
-            Some (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            Some (ClassInfo (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
             begin match try_assoc g preds with
               None -> static_error l "No such predicate instance" None
             | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
@@ -12579,7 +12647,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let get_fields (pn,ilist) cn lm=
     match try_assoc' (pn,ilist) cn classmap with
-      Some (_,_,_,_,fds_opt,_,_,_,_,_,_)-> (match fds_opt with Some fds -> fds | None -> [])
+      Some (ClassInfo (_,_,_,_,fds_opt,_,_,_,_,_,_)) -> (match fds_opt with Some fds -> fds | None -> [])
     | None -> static_error lm ("No class was found: "^cn) None
   in
   
@@ -12758,10 +12826,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let rec verify_classes boxes lems classm=
     match classm with
       [] -> ()
-    | (cn, (l, abstract, fin, meths, _, cons, super, itfs, preds, pn, ilist))::classm ->
+    | (cn, ClassInfo (l, abstract, fin, meths, _, cons, super, itfs, preds, pn, ilist))::classm ->
       let (superctors, superfinal) =
         if super = "" then ([], ExtensibleClass) else
-          let (l, abstract, fin, meths, fds, cons, super, itfs, preds, pn, ilist) = List.assoc super classmap in
+          let ClassInfo (l, abstract, fin, meths, fds, cons, super, itfs, preds, pn, ilist) = List.assoc super classmap in
           (cons, fin)
       in
       if superfinal = FinalClass then static_error l "Cannot extend final class." None;
