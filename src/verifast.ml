@@ -3569,14 +3569,6 @@ let verify_program_core (* ?verify_program_core *)
       prototypes_used := (g, l)::!prototypes_used
   in
   
-  (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
-  let headermap = ref [] in
-  let spec_classes= ref [] in
-  let spec_lemmas= ref [] in
-  let meths_impl= ref [] in
-  let cons_impl= ref [] in
-  let main_meth= ref [] in
-  
   let extract_specs ps=
     let rec iter (pn,ilist) classes lemmas ds=
       match ds with
@@ -3653,16 +3645,61 @@ let verify_program_core (* ?verify_program_core *)
       * (string * inductive_ctor_info) list
       * string list option (* The type is infinite if any of these type parameters are infinite; if None, it is always infinite. *)
     type pred_ctor_info =
+      PredCtorInfo of
         loc
       * (string * type_) list (* constructor parameters *)
       * (string * type_) list (* predicate parameters *)
       * pred (* body *)
       * func_symbol
-      * string (* package name *)
-      * import list (* import list *)
+    type pred_fam_info =
+        loc
+      * string list (* type parameters *)
+      * int (* number of predicate family indices *)
+      * type_ list (* parameter types *)
+      * termnode
+      * int option (* number of input parameters; None if not precise *)
+    type malloc_block_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
+    type field_pred_info =
+        string (* predicate name *)
+      * pred_fam_info
+    type pred_inst_info =
+        (string * termnode) list (* environment at definition site (for local predicate family instances; see e.g. examples/mcas/mcas.c) *)
+      * loc
+      * string list (* type parameters *)
+      * (string * type_) list (* parameters *)
+      * int option (* input parameter count *)
+      * pred (* body *)
+    type pred_inst_map = ((string * string list) (* predicate name and indices *) * pred_inst_info) list
+    type func_info =
+      FuncInfo of
+        (string * termnode) list (* environment at definition site (for local lemma functions) *)
+      * termnode option (* function pointer; None if ? *)
+      * loc
+      * func_kind
+      * string list (* type parameters *)
+      * type_ option
+      * (string * type_) list (* parameters *)
+      * bool (* is an atomic function? (deprecated) *)
+      * pred (* precondition *)
+      * (string * type_) list (* type environment after precondition *)
+      * pred (* postcondition *)
+      * (string * pred_fam_info map * type_ list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *)
+      * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
+      * method_binding (* always Static; TODO: remove *)
+      * visibility (* always Public; TODO: remove *)
   end in
   let open MapTypes in
-
+  
+  (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
+  let headermap = ref [] in
+  let spec_classes= ref [] in
+  let spec_lemmas= ref [] in
+  let meths_impl= ref [] in
+  let cons_impl= ref [] in
+  let main_meth= ref [] in
+  
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
       Recursively calls itself on headers included by the current file.
@@ -3681,14 +3718,13 @@ let verify_program_core (* ?verify_program_core *)
     (inductivemap0: inductive_info map),
     (purefuncmap0: pure_func_info map),
     (predctormap0: pred_ctor_info map),
-    fixpointmap0,
-    malloc_block_pred_map0,
-    field_pred_map0,
-    predfammap0,
-    predinstmap0,
+    (malloc_block_pred_map0: malloc_block_pred_info map),
+    (field_pred_map0: ((string * string) * field_pred_info) list),
+    (predfammap0: pred_fam_info map),
+    (predinstmap0: pred_inst_map),
     typedefmap0,
     functypemap0,
-    funcmap0,
+    (funcmap0: func_info map),
     boxmap0,
     classmap0,
     interfmap0,
@@ -3708,8 +3744,8 @@ let verify_program_core (* ?verify_program_core *)
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, fixpointmap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
-      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, fixpointmap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
+      (structmap, enummap, globalmap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
+      (structmap0, enummap0, globalmap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
@@ -3717,7 +3753,6 @@ let verify_program_core (* ?verify_program_core *)
        append_nodups inductivemap inductivemap0 id l "inductive datatype",
        append_nodups purefuncmap purefuncmap0 id l "pure function",
        append_nodups predctormap predctormap0 id l "predicate constructor",
-       append_nodups fixpointmap fixpointmap0 id l "fixpoint function",
        malloc_block_pred_map @ malloc_block_pred_map0,
        field_pred_map @ field_pred_map0,
        append_nodups predfammap predfammap0 id l "predicate",
@@ -3812,7 +3847,7 @@ let verify_program_core (* ?verify_program_core *)
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -4844,10 +4879,10 @@ let verify_program_core (* ?verify_program_core *)
   let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1 in
   
   let malloc_block_pred_map1 = 
-    match file_type path with
-    Java-> []
-    | _ -> flatmap (function (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 
-            [PtrType (StructType sn)] (Some 1))] | _ -> []) structmap1 
+    structmap1 |> flatmap begin function
+      (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1))]
+    | _ -> []
+    end
   in
   
   let malloc_block_pred_map = malloc_block_pred_map1 @ malloc_block_pred_map0 in
@@ -5147,7 +5182,6 @@ let verify_program_core (* ?verify_program_core *)
     iter' ([],purefuncmap1) ps
   in
   let purefuncmap = purefuncmap1 @ purefuncmap0 in
-  let predctormap = predctormap1 @ predctormap0 in
   
   (* Region: The type checker *)
   
@@ -5560,7 +5594,7 @@ let verify_program_core (* ?verify_program_core *)
           (WFunCall (l, g, [], es), PtrType (StructType tn), None)
         | _ ->
         match resolve (pn,ilist) l g funcmap with
-          Some (g, (funenv, fterm, lg, k, callee_tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v)) ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v)) ->
           let (targs, tpenv) = process_targes callee_tparams in
           let rt0 = match tr with None -> Void | Some rt -> rt in
           let rt = instantiate_type tpenv rt0 in
@@ -6032,8 +6066,6 @@ let verify_program_core (* ?verify_program_core *)
     in
     iter [] fixpointmap1
   in
-
-  let fixpointmap = fixpointmap1 @ fixpointmap0 in
   
   (* Region: Type checking of field initializers for static fields *)
   
@@ -6235,8 +6267,15 @@ let verify_program_core (* ?verify_program_core *)
           begin
             match try_assoc p#name tenv with
               None ->
-              begin match try_assoc p#name predctormap with
-                Some (l, ps1, ps2, body, funcsym, pn, ilist) ->
+              begin match
+                match try_assoc p#name predctormap1 with
+                  Some (l, ps1, ps2, body, funcsym, pn, ilist) -> Some (ps1, ps2)
+                | None ->
+                match try_assoc p#name predctormap0 with
+                  Some (PredCtorInfo (l, ps1, ps2, body, funcsym)) -> Some (ps1, ps2)
+                | None -> None
+              with
+                Some (ps1, ps2) ->
                 cont (new predref (p#name), [], List.map snd ps1, List.map snd ps2, None)
               | None ->
                 let error () = static_error l ("No such predicate: " ^ p#name) None in
@@ -6715,16 +6754,18 @@ let verify_program_core (* ?verify_program_core *)
   
   let predinstmap = predinstmap1 @ predinstmap0 in
   
-  let predctormap =
+  let predctormap1 =
     List.map
       (
         function
           (g, (l, ps1, ps2, body, funcsym,pn,ilist)) ->
           let (wbody, _) = check_pred (pn,ilist) [] (ps1 @ ps2) body in
-          (g, (l, ps1, ps2, wbody, funcsym))
+          (g, PredCtorInfo (l, ps1, ps2, wbody, funcsym))
       )
-      predctormap
+      predctormap1
   in
+  
+  let predctormap = predctormap1 @ predctormap0 in
   
   let classmap1 =
     classmap1 |> List.map
@@ -7621,7 +7662,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           begin match try_assoc g#name env with
             Some term -> ((term, false), pats0, pats, g#domain, None)
           | None ->
-            let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2, None)
@@ -8090,7 +8131,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           begin match try_assoc (g#name) env with
             Some term -> ((term, false), pats0, pats, g#domain)
           | None ->
-            let (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2)
@@ -9247,16 +9288,16 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc2 fn funcmap funcmap0 with
-            None -> iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, _, Some _,Static,Public) ->
+            None -> iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, _, Some _,Static,Public)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
             else
               static_error l "Duplicate function implementation." None
-          | Some ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public) ->
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
             check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post, []) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0, []);
-            iter pn ilist ((fn, ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
@@ -10126,7 +10167,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let funcnameterm_of funcmap fn =
-    let (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
+    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
@@ -10337,7 +10378,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end;
       check_correct None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, v) cont
     | WFunCall (l, g, targs, es) ->
-      let (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
+      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_effects ();
       if body = None then register_prototype_used lg g;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
@@ -10632,7 +10673,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       match resolve (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -11283,7 +11324,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let this = List.assoc "this" env in
               open_instance_predicate this target_cn
             end
-          | Some (_, ps1, ps2, body, funcsym) ->
+          | Some (PredCtorInfo (_, ps1, ps2, body, funcsym)) ->
             if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
             let bs0 =
               match zip pats0 ps1 with
@@ -11511,7 +11552,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 close_instance_predicate this cn
               | _ -> error ()
               end
-            | Some (lpred, ps1, ps2, body, funcsym) ->
+            | Some (PredCtorInfo (lpred, ps1, ps2, body, funcsym)) ->
               let bs0 =
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments." None
@@ -12014,7 +12055,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                        in
                        match try_assoc funcname funcmap with
                          None -> static_error l "No such function." None
-                       | Some (funenv, fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v) ->
+                       | Some (FuncInfo (funenv, fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v)) ->
                          if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function." None
                      end;
                      NonpureStmt (l, true, s)
@@ -12116,7 +12157,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
               check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
             in
-            (fn, (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
+            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
@@ -12124,7 +12165,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
-          begin fun lems0 (fn, (funenv, fterm, l, k, tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
+          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
             verify_func pn ilist lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap pre pre_tenv post ss closeBraceLoc
           end
           lems0
@@ -12135,7 +12176,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           None ->
           let lems0 =
             flatmap
-              (function (fn, (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
+              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
               funcmap
           in
           ignore $. verify_lems lems0;
@@ -12738,7 +12779,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec) then begin
-        let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
+        let FuncInfo ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
@@ -12748,7 +12789,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let lems' =
       record_fun_timing l g begin fun () ->
       if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
-      let ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
       verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc
@@ -12829,7 +12870,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   let lems0 =
     flatmap
-      (function (g, (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
       funcmap0
   in
   let rec verify_funcs' boxes lems ps=
@@ -12839,7 +12880,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   verify_funcs' [] lems0 ps;
   
-  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, fixpointmap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
   
   in (* let rec check_file *)
   
