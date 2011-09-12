@@ -98,37 +98,37 @@ lemma void chars_join(char *array);
 
 // chars to ...
 lemma void chars_to_integer(void *p);
-    requires chars(p, ?cs) &*& length(cs) == sizeof(int);
-    ensures integer(p, _);
+    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(int);
+    ensures [f]integer(p, _);
 
 lemma void chars_to_u_integer(void *p);
-    requires chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
-    ensures u_integer(p, _);
+    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+    ensures [f]u_integer(p, _);
 
 lemma void chars_to_u_character(void *p);
-    requires chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
-    ensures u_character(p, _);
+    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
+    ensures [f]u_character(p, _);
 
 lemma void chars_to_pointer(void *p);
-    requires chars(p, ?cs) &*& length(cs) == sizeof(void *);
-    ensures pointer(p, pointer_of_chars(cs));
+    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(void *);
+    ensures [f]pointer(p, pointer_of_chars(cs));
 
 // ... to chars
 lemma void integer_to_chars(void *p);
-    requires integer(p, _);
-    ensures chars(p, ?cs) &*& length(cs) == sizeof(int);
+    requires [?f]integer(p, _);
+    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(int);
 
 lemma void u_integer_to_chars(void *p);
-    requires u_integer(p, _);
-    ensures chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+    requires [?f]u_integer(p, _);
+    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
 
 lemma void u_character_to_chars(void *p);
-    requires u_character(p, _);
-    ensures chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
+    requires [?f]u_character(p, _);
+    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
 
 lemma void pointer_to_chars(void *p);
-    requires pointer(p, ?v);
-    ensures chars(p, chars_of_pointer(v)) &*& length(chars_of_pointer(v)) == sizeof(void *);
+    requires [?f]pointer(p, ?v);
+    ensures [f]chars(p, chars_of_pointer(v)) &*& length(chars_of_pointer(v)) == sizeof(void *);
 
 @*/
 
