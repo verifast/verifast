@@ -5,6 +5,7 @@ javacardx.crypto.javaspec
 org.globalplatform.javaspec
 _list.javaspec
 _nat.javaspec
+_bitops.javaspec
 java.util.javaspec
 java.io.javaspec
 java.nio.channels.javaspec

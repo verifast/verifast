@@ -86,65 +86,6 @@ import javacard.security.PublicKey;
 /*VF*ADDED FOLLOWING CLASSES*/
 
 /*@
-fixpoint int pow(int x, nat y) {
-    switch (y) {
-        case zero: return 1;
-        case succ(y0): return x * pow(x, y0);
-    }
-}
-
-lemma void or_limits(int x, int y, nat p)
-    requires -pow(2, p) <= x &*& x < pow(2, p) &*& -pow(2, p) <= y &*& y < pow(2, p);
-    ensures -pow(2, p) <= (x | y) &*& 0+(x | y) < pow(2, p);
-{
-  assume(false);
-}
-
-lemma void and_limits(int x, int y, nat p)
-    requires -pow(2, p) <= x &*& x < pow(2, p) &*& -pow(2, p) <= y &*& y < pow(2, p);
-    ensures -pow(2, p) <= (x & y) &*& 0+(x & y) < pow(2, p);
-{
-  assume(false);
-}
-
-lemma void shr_limits(int x, int y, nat p)
-    requires -pow(2, p) <= x &*& x < pow(2, p) &*& -pow(2, p) <= y &*& y < pow(2, p);
-    ensures -pow(2, p) <= (x >> y) &*& 0+(x >> y) < pow(2, nat_of_int(int_of_nat(p) - y));
-{
-  assume(false);
-}
-
-lemma void positive_and(byte x, short y)
-    requires y >= 0;
-    ensures 0 <= (x & y);
-{
-  assume(false);
-}
-
-lemma void masking_and(byte x, short y)
-    requires y >= 0;
-    ensures 0 <= (x & y) &*& y >= (x & y);
-{
-  assume(false);
-}
-
-inductive pos = p1_ | p0(pos) | p1(pos);
-
-fixpoint nat double(nat n) {
-    switch (n) {
-        case zero: return zero;
-        case succ(n0): return succ(succ(double(n0)));
-    }
-}
-
-
-fixpoint nat nat_of_pos(pos p) {
-    switch (p) {
-        case p1_: return succ(zero);
-        case p0(p0): return double(nat_of_pos(p0));
-        case p1(p0): return succ(double(nat_of_pos(p0)));
-    }
-}
 
 inductive triple<a, b, c> = triple(a, b, c);
 
@@ -835,7 +776,7 @@ public final class EidCard extends Applet {
 	private final static byte ALG_SHA1_PKCS1 = (byte) 0x02;
 	private final static byte ALG_MD5_PKCS1 = (byte) 0x04;
 	private final static byte[] PKCS1_HEADER = { (byte) 0x00 };
-	private final static byte[] PKCS1_SHA1_HEADER = { (byte) 0x00, (byte) 0x30, (byte) 0x21, (byte) 0x30, (byte) 0x09, (byte) 0x06, (byte) 0x05, (byte) 0x2b, (byte) 0x0e, (byte) 0x03, (byte) 0x02, (byte) 0x1a, (byte) 0x05, (byte) 0x00, (byte) 0x04,
+	private final static byte[] PKCS1_SHA1_HEADER = { 0x00, (byte) 0x30, (byte) 0x21, (byte) 0x30, (byte) 0x09, (byte) 0x06, (byte) 0x05, (byte) 0x2b, (byte) 0x0e, (byte) 0x03, (byte) 0x02, (byte) 0x1a, (byte) 0x05, (byte) 0x00, (byte) 0x04,
 			(byte) 0x14 };
 	private final static byte[] PKCS1_MD5_HEADER = { (byte) 0x00, (byte) 0x30, (byte) 0x20, (byte) 0x30, (byte) 0x0c, (byte) 0x06, (byte) 0x08, (byte) 0x2a, (byte) 0x86, (byte) 0x48, (byte) 0x86, (byte) 0xf7, (byte) 0x0d, (byte) 0x02, (byte) 0x05,
 			(byte) 0x05, (byte) 0x00, (byte) 0x04, (byte) 0x10 };
@@ -1375,43 +1316,43 @@ public final class EidCard extends Applet {
 	/**
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
 	 */
-	private void initializeEmptyLargeFiles() 
-	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
-	                nb_belpic_sibs == 5 &*&
-	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, _, _) &*& 
-	    		nb_iddir_sibs < 7 &*&
-	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
-	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
-      	    /*@ ensures belpicDirectory |-> bpd &*& 
-	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
-	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
-	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
-	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
-	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
-	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
-	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
-	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(belpic_sibs, cons<File>(cac, cons(rrnc, cons(rootcac, cons(ac, cons(nrc, nil)))))), _); @*/
-	{
-		//@ assume(false);
-		/*
-		 * these 3 certificates are the same for all sample eid card applets
-		 * therefor they are made static and the data is allocated only once
-		 */
-		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
-		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
-		
-		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
-		/*
-		 * to save some memory we only support 1 photo for all subclasses
-		 * ideally this should be applet specific and have max size 3584 (3.5K)
-		 */
-		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
-		/*
-		 * certificate #2 and #3 are applet specific allocate enough memory
-		 */
-		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
-		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
-	}
+//	private void initializeEmptyLargeFiles() 
+//	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
+//	                nb_belpic_sibs == 5 &*&
+//	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, _, _) &*& 
+//	    		nb_iddir_sibs < 7 &*&
+//	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
+//	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
+//      	    /*@ ensures belpicDirectory |-> bpd &*& 
+//	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
+//	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
+//	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
+//	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
+//	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
+//	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
+//	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
+//	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(belpic_sibs, cons<File>(cac, cons(rrnc, cons(rootcac, cons(ac, cons(nrc, nil)))))), _); @*/
+//	{
+//		//@ assume(false);
+//		/*
+//		 * these 3 certificates are the same for all sample eid card applets
+//		 * therefor they are made static and the data is allocated only once
+//		 */
+//		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
+//		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
+//		
+//		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
+//		/*
+//		 * to save some memory we only support 1 photo for all subclasses
+//		 * ideally this should be applet specific and have max size 3584 (3.5K)
+//		 */
+//		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
+//		/*
+//		 * certificate #2 and #3 are applet specific allocate enough memory
+//		 */
+//		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
+//		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
+//	}
 	/**
 	 * initialize basic key pair
 	 */
@@ -1498,7 +1439,8 @@ public final class EidCard extends Applet {
 			//VF /bug
 			if (s != null) {
 				//TODO: get rid of this
-				//@ assume (s == identityFile || s == identityFileSignature || s == addressFile || s == addressFileSignature || s == photoFile || s == caRoleIDFile || s == dirFile || s == tokenInfo || s == objectDirectoryFile || s == authenticationObjectDirectoryFile || s == privateKeyDirectoryFile || s == certificateDirectoryFile);
+				//@ assert dirFile |-> ?theDirFile &*& belpicDirectory |-> ?theBPD &*& idDirectory |-> ?theIdD &*& s == theDirFile || s == theBPD || s == theIdD;
+				//@ assume(s != belpicDirectory && s != idDirectory); // IS THIS TRUE??
 				selectedFile = s;
 				//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
 			//the fid is an elementary file:
@@ -1759,7 +1701,22 @@ public final class EidCard extends Applet {
 		// initialize file system
 		initializeFileSystem();
 		// initialize place holders for large files (certificates + photo)
-		initializeEmptyLargeFiles();
+		//<begin VF INLINED>: initializeEmptyLargeFiles();
+		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
+		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
+		
+		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
+		/*
+		 * to save some memory we only support 1 photo for all subclasses
+		 * ideally this should be applet specific and have max size 3584 (3.5K)
+		 */
+		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
+		/*
+		 * certificate #2 and #3 are applet specific allocate enough memory
+		 */
+		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
+		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
+		//<end VF inline>
 		// initialize basic keys pair
 		initializeKeyPairs();
 		/*VF* END COPY */

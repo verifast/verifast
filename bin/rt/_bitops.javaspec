@@ -1,0 +1,47 @@
+/*@
+
+fixpoint int pow(int x, nat y) {
+    switch (y) {
+        case zero: return 1;
+        case succ(y0): return x * pow(x, y0);
+    }
+}
+
+lemma void or_limits(int x, int y, nat p);
+    requires -pow(2, p) <= x &*& x < pow(2, p) &*& -pow(2, p) <= y &*& y < pow(2, p);
+    ensures -pow(2, p) <= (x | y) &*& 0+(x | y) < pow(2, p);
+
+lemma void and_limits(int x, int y, nat p);
+    requires -pow(2, p) <= x &*& x < pow(2, p) &*& -pow(2, p) <= y &*& y < pow(2, p);
+    ensures -pow(2, p) <= (x & y) &*& 0+(x & y) < pow(2, p);
+
+lemma void shr_limits(int x, int y, nat p);
+    requires -pow(2, p) <= x &*& x < pow(2, p);
+    ensures -pow(2, p) <= (x >> y) &*& 0+(x >> y) < pow(2, nat_of_int(int_of_nat(p) - y));
+
+lemma void positive_and(byte x, short y);
+    requires y >= 0;
+    ensures 0 <= (x & y);
+
+lemma void masking_and(byte x, short y);
+    requires y >= 0;
+    ensures 0 <= (x & y) &*& y >= (x & y);
+
+inductive pos = p1_ | p0(pos) | p1(pos);
+
+fixpoint nat double(nat n) {
+    switch (n) {
+        case zero: return zero;
+        case succ(n0): return succ(succ(double(n0)));
+    }
+}
+
+fixpoint nat nat_of_pos(pos p) {
+    switch (p) {
+        case p1_: return succ(zero);
+        case p0(p0): return double(nat_of_pos(p0));
+        case p1(p0): return succ(double(nat_of_pos(p0)));
+    }
+}
+
+@*/
