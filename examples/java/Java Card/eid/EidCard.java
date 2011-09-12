@@ -1051,7 +1051,6 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		//@ assume(selectedFile != belpicDirectory && selectedFile != idDirectory); // can be removed by adding distinctness of classterms
 		// impossible to start erasing from offset large than size of file
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile)selectedFile).getCurrentSize();
@@ -1079,7 +1078,6 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		//@ assume(selectedFile != belpicDirectory && selectedFile != idDirectory); // can be removed by adding distinctness of classterms
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile) selectedFile).getMaxSize();
 		if (offset > size)

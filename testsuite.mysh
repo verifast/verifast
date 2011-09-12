@@ -125,7 +125,7 @@ cd shareable-applets
 verifast_both -c wallet.jarsrc
 cd ..
 cd eid
-verifast -c -allow_assume -disable_overflow_check -prover redux EidCard.java
+verifast -c -disable_overflow_check -prover redux EidCard.java
 cd ..
 cd ..
 verifast_both -c -disable_overflow_check Account.java

@@ -3271,6 +3271,8 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   set_verbosity initial_verbosity;
+  
+  let class_counter = ref 0 in
 
   (** Maps an identifier to a ref cell containing approximately the number of distinct symbols that have been generated for this identifier.
     * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
@@ -3421,6 +3423,7 @@ let verify_program_core (* ?verify_program_core *)
   (* Generate some global symbols. *)
   
   let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
+  let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
@@ -4372,19 +4375,18 @@ let verify_program_core (* ?verify_program_core *)
     if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
   in
   
-  let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
+  let terms_of xys =
+    xys |> List.map begin fun (x, _) ->
+      let t = ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [] in
+      let serialNumber = !class_counter in
+      class_counter := !class_counter + 1;
+      ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber));
+      (x, t)
+    end
+  in
   let classterms1 =  terms_of classmap1 in
   let interfaceterms1 = terms_of interfmap1 in
 
-  (* assuming that all class terms are unique *)
-  (*let rec unique_terms ts =
-    match ts with
-      [] -> ()
-    | t :: ts -> (List.iter (fun t' -> ignore (ctxt#assume (ctxt#mk_not (ctxt#mk_eq t t')))) ts); unique_terms ts;
-  in
-  unique_terms (List.map (fun (c, t) -> t) classterms1);
-  *)
- 
   let classterms = classterms1 @ classterms0 in
   let interfaceterms = interfaceterms1 @ interfaceterms0 in
   
