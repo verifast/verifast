@@ -44,7 +44,11 @@ deb-src http://ocaml.debian.net/debian/ocaml-3.12.0 sid main
 
 Then do
 
-$ apt-get update; apt-get install ocaml ocaml-native-compilers camlidl
+$ apt-get update
+$ apt-get install ocaml ocaml-native-compilers camlidl
+
+If you get "unknown key" warnings, you can optionally add the key:
+$ apt-key adv --keyserver keyring.debian.org --recv-keys 7853DA4D49881AD3
 
 If you had previously installed any LABLGTK2 packages for a previous
 release of OCaml, these will be removed now due to unmet dependencies:
@@ -86,7 +90,11 @@ these paths to the VeriFast configuration later on:
 > or
 >        to CAML_LD_LIBRARY_PATH
 
-It will allso tell you what features of LABLGTK2 are enabled. Make sure
+Adding a line like
+    LABLGTK2 = /usr/local/lib/ocaml//lablgtk2
+to GNUmakefile.settings seems to do the trick.
+
+./configure will also tell you what features of LABLGTK2 are enabled. Make sure
 that "gtksourceview 2" is set to yes and install "gtksourceview2-dev" and
 dependent packages if it is not enabled:
 
