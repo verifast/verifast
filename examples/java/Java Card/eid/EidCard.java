@@ -238,7 +238,7 @@ public class DedicatedFile extends File {
 
 	public File getSibling(short fid) 
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
 		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
 		//@ assert [f]array_slice(thesiblings, _, _, ?sb);
@@ -308,6 +308,22 @@ public class DedicatedFile extends File {
 		//@ close [f]DedicatedFile(fid, d1, state, d3, d4, siblist, info2);
 		//@ close [f]File(fid, state, info);
 	}
+	
+	/*@ 
+	lemma void castFileToDedicated()
+            requires [?f]File(?fid, ?state, ?info);
+            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
+	{
+	    open [f]File(fid, state, _);
+    	}
+
+	lemma void castDedicatedToFile()
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+	{
+	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+    	}
+    	@*/
 }
 
 public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
@@ -342,7 +358,7 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public File getSibling(short fid) 
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null || mem(result, siblist) == true;
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
 		//@ open [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
 		//@ open [f]MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
@@ -441,6 +457,22 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
             ensures [f]MasterFile(fid, dedFile, state, sibs, num, siblist, oinfo);
 	{
 	    open [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
+    	}
+
+	lemma void castFileToDedicated()
+            requires [?f]File(?fid, ?state, ?info);
+            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
+	{
+	    open [f]File(fid, state, _);
+	    close [f]DedicatedFile(fid, _, _, _, _, _, _);
+    	}
+
+	lemma void castDedicatedToFile()
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+	{
+   	    open [f]DedicatedFile(fid, _, _, _, _, _, _);
+	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
     	}
     	@*/
 }
@@ -598,6 +630,14 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	{
 	    close [f]File(fid, state, quad(dedFile, dta, sz, ifo));
     	}
+    	
+    	lemma void neq(ElementaryFile other)
+    	  requires ElementaryFile(?fid, ?dedFile, ?dta, ?state, ?sz, ?ifo) &*& other.ElementaryFile(?fid2, ?dedFile2, ?dta2, ?state2, ?sz2, ?ifo2);
+    	  ensures ElementaryFile(fid, dedFile, dta, state, sz, ifo) &*& other.ElementaryFile(fid2, dedFile2, dta2, state2, sz2, ifo2) &*& this != other;
+    	{
+    	  open ElementaryFile(fid, dedFile, dta, state, sz, ifo);
+    	  open other.ElementaryFile(fid2, dedFile2, dta2, state2, sz2, ifo2);
+    	}
     	@*/
 }
 
@@ -616,9 +656,9 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
     :
       array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length &*& is_transient_array(buffer) == true;
 
-  predicate selected_file_types(File theSelectedFile, MasterFile theMasterFile, ElementaryFile theIdentityFile, ElementaryFile theIdentityFileSignature, ElementaryFile theAddressFile, ElementaryFile theAddressFileSignature, ElementaryFile thePhotoFile, 
-	  ElementaryFile thecaRoleIDFile, ElementaryFile theDirFile, ElementaryFile theTokenInfo, ElementaryFile theObjectDirectoryFile, ElementaryFile theAuthenticationObjectDirectoryFile, ElementaryFile thePrivateKeyDirectoryFile, ElementaryFile theCertificateDirectoryFile; ElementaryFile theSelectedFile2) = 
-	    theSelectedFile == theMasterFile ? theSelectedFile2 == null : 
+  predicate selected_file_types(File theSelectedFile, MasterFile theMasterFile, DedicatedFile theBelpicDirectory, DedicatedFile theIdDirectory, ElementaryFile theIdentityFile, ElementaryFile theIdentityFileSignature, ElementaryFile theAddressFile, ElementaryFile theAddressFileSignature, ElementaryFile thePhotoFile, 
+	  ElementaryFile thecaRoleIDFile, ElementaryFile theDirFile, ElementaryFile theTokenInfo, ElementaryFile theObjectDirectoryFile, ElementaryFile theAuthenticationObjectDirectoryFile, ElementaryFile thePrivateKeyDirectoryFile, ElementaryFile theCaCertificate, ElementaryFile theCertificateDirectoryFile, ElementaryFile theRrnCertificate, ElementaryFile theRootCaCertificate, ElementaryFile theAuthenticationCertificate, ElementaryFile theNonRepudationCertificate, ElementaryFile thePreferencesFile; ElementaryFile theSelectedFile2) = 
+	    theSelectedFile == theMasterFile || theSelectedFile == theBelpicDirectory || theSelectedFile == theIdDirectory ? theSelectedFile2 == null : 
 	      theSelectedFile == theIdentityFile ? theSelectedFile2 == theIdentityFile : 
 	        theSelectedFile == theIdentityFileSignature ? theSelectedFile2 == theIdentityFileSignature : 
 	          theSelectedFile == theAddressFile ? theSelectedFile2 == theAddressFile : 
@@ -630,7 +670,13 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	                      theSelectedFile == theObjectDirectoryFile ? theSelectedFile2 == theObjectDirectoryFile : 
 	                        theSelectedFile == theAuthenticationObjectDirectoryFile ? theSelectedFile2 == theAuthenticationObjectDirectoryFile : 
  	                          theSelectedFile == thePrivateKeyDirectoryFile ? theSelectedFile2 == thePrivateKeyDirectoryFile : 
-	                            (theSelectedFile == theCertificateDirectoryFile &*& theSelectedFile2 == theCertificateDirectoryFile);
+                                    theSelectedFile == theCaCertificate ? theSelectedFile2 == theCaCertificate :
+                                      theSelectedFile == theRrnCertificate ? theSelectedFile2 == theRrnCertificate :
+                                        theSelectedFile == theRootCaCertificate ? theSelectedFile2 == theRootCaCertificate :
+                                          theSelectedFile == theAuthenticationCertificate ? theSelectedFile2 == theAuthenticationCertificate :
+                                            theSelectedFile == theNonRepudationCertificate ? theSelectedFile2 == theNonRepudationCertificate :
+                                              theSelectedFile == thePreferencesFile ? theSelectedFile2 == thePreferencesFile :
+                                                (theSelectedFile == theCertificateDirectoryFile &*& theSelectedFile2 == theCertificateDirectoryFile);
 
 @*/
 
@@ -666,17 +712,18 @@ public final class EidCard extends Applet {
             certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?theCertificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile != null &*& theCertificateDirectoryFileData != null &*& theCertificateDirectoryFileData.length == 0xB0 &*& theCertificateDirectoryFile.getClass() == ElementaryFile.class &*&
             belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
             idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
-            preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?thePreferencesFileData, _, _, _) &*& thePreferencesFile != null &*& thePreferencesFileData != null &*& thePreferencesFileData.length == 100 &*& thePreferencesFile.getClass() == ElementaryFile.class &*&
+            caCertificate |-> ?theCaCertificate &*& theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theCaCertificate.getClass() == ElementaryFile.class &*&
 	    selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
 	    masterSibs == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil))) &*&
-	    caCertificate |-> ?theCaCertificate &*& theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*&
-	    rootCaCertificate |-> ?theRootCaCertificate &*& theRootCaCertificate.ElementaryFile(_, _, _, _, _, _) &*&
-	    rrnCertificate |-> ?theRrnCertificate &*& theRrnCertificate.ElementaryFile(_, _, _, _, _, _) &*&
-	    authenticationCertificate |-> ?theAuthenticationCertificate &*& theAuthenticationCertificate.ElementaryFile(_, _, _, _, _, _) &*&
-	    nonRepudiationCertificate |-> ?theNonRepudiationCertificate &*& theNonRepudiationCertificate.ElementaryFile(_, _, _, _, _, _) &*&
+	    rootCaCertificate |-> ?theRootCaCertificate &*& theRootCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theRootCaCertificate.getClass() == ElementaryFile.class &*&
+	    rrnCertificate |-> ?theRrnCertificate &*& theRrnCertificate.ElementaryFile(_, _, _, _, _, _) &*& theRrnCertificate.getClass() == ElementaryFile.class &*&
+	    authenticationCertificate |-> ?theAuthenticationCertificate &*& theAuthenticationCertificate.ElementaryFile(_, _, _, _, _, _) &*& theAuthenticationCertificate.getClass() == ElementaryFile.class &*&
+	    nonRepudiationCertificate |-> ?theNonRepudiationCertificate &*& theNonRepudiationCertificate.ElementaryFile(_, _, _, _, _, _) &*& theNonRepudiationCertificate.getClass() == ElementaryFile.class &*&
+	    preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile != theCaCertificate &*& thePreferencesFile != theRrnCertificate &*& thePreferencesFile.ElementaryFile(_, _, ?thePreferencesFileData, _, _, _) &*& thePreferencesFile != null &*& thePreferencesFileData != null &*& thePreferencesFileData.length == 100 &*& thePreferencesFile.getClass() == ElementaryFile.class &*&
 	    belpicSibs == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
-	    selected_file_types(theSelectedFile, theMasterFile, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCertificateDirectoryFile, _) &*&
-    	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class) &*&
+	    idSibs == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(thecaRoleIDFile, cons(thePreferencesFile, cons(thePhotoFile, nil))))))) &*&
+	    selected_file_types(theSelectedFile, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
+    	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class) &*&
       	    /*internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&*/
 	    signatureAlgorithm |-> ?theSignatureAlgorithm &*&
 	    nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
@@ -684,7 +731,8 @@ public final class EidCard extends Applet {
 	    basicKeyPair |-> ?theBasicKeyPair &*&
 	    PKCS1_HEADER |-> ?thePKCS1HEADER &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1 &*&
 	    PKCS1_SHA1_HEADER |-> ?thePKCS1SHA1HEADER &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _) &*& thePKCS1SHA1HEADER.length == 16 &*&
-	    PKCS1_MD5_HEADER |-> ?thePKCS1MD5HEADER &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19
+	    PKCS1_MD5_HEADER |-> ?thePKCS1MD5HEADER &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19 &*&
+	    theDirFile != thePreferencesFile &*& theTokenInfo != thePreferencesFile &*& thePreferencesFile != theObjectDirectoryFile &*& thePreferencesFile != theAuthenticationObjectDirectoryFile &*& thePreferencesFile != thePrivateKeyDirectoryFile
 	    ;
     	@*/
 
@@ -928,7 +976,7 @@ public final class EidCard extends Applet {
 	              &*& privateKeyDirectoryFileData != null &*& privateKeyDirectoryFileData.length == 0xB0
 	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?certificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile !=  null
 	              &*& certificateDirectoryFileData != null &*& certificateDirectoryFileData.length == 0xB0
-	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, 6, _, _) &*& theIdDirectory != null
+	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, 6, ?idDirectory_siblings, _) &*& theIdDirectory != null
 	         &*& identityFile |-> ?theIdentityFile &*& theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null
 	              &*& identityData != null &*& identityData.length == 0xD0
 	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, ?identitySignatureData, _, _, _) &*& theIdentityFileSignature != null
@@ -945,6 +993,7 @@ public final class EidCard extends Applet {
 	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, ?master_siblings, _) &*& theMasterFile != null
 	         &*& master_siblings == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil)))
 	         &*& belpic_siblings == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile,nil)))))
+	         &*& idDirectory_siblings == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(theCaRoleIDFile, cons(thePreferencesFile, nil))))))
 	         &*& selectedFile |-> theMasterFile &*& theBelpicDirectory.getClass() == DedicatedFile.class &*& theIdDirectory.getClass() == DedicatedFile.class;
 	    @*/
 	{
@@ -1002,8 +1051,9 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+		//@ assume(selectedFile != belpicDirectory && selectedFile != idDirectory); // can be removed by adding distinctness of classterms
 		// impossible to start erasing from offset large than size of file
-		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
+		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile)selectedFile).getCurrentSize();
 		if (offset > size || offset < 0)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
@@ -1029,8 +1079,8 @@ public final class EidCard extends Applet {
 		//@ open valid();
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		
-		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
+		//@ assume(selectedFile != belpicDirectory && selectedFile != idDirectory); // can be removed by adding distinctness of classterms
+		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile) selectedFile).getMaxSize();
 		if (offset > size)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
@@ -1063,32 +1113,27 @@ public final class EidCard extends Applet {
 	 * not during its use
 	 */
 	private boolean fileAccessAllowed(byte mode) 
-  	    //@ requires current_applet(this) &*& [1/2]valid();
-      	    //@ ensures current_applet(this) &*& [1/2]valid();
+  	    //@ requires [?f]selectedFile |-> ?theSelectedFile &*& [f]this.preferencesFile |-> ?thePreferencesFile &*& [f]this.cardholderPin |-> ?theCardHolderPin &*& theCardHolderPin != null &*& [f]OwnerPIN(theCardHolderPin, _, _);
+      	    //@ ensures [f]selectedFile |-> theSelectedFile &*& [f]this.preferencesFile |-> thePreferencesFile &*& [f]this.cardholderPin |-> theCardHolderPin &*& [f]OwnerPIN(theCardHolderPin, _, _) &*& theSelectedFile instanceof ElementaryFile;
 	{
-		//@ open [1/2]valid();
-		// if selected file is not an EF, throw "no current EF" exception
+			// if selected file is not an EF, throw "no current EF" exception
 		if (!(selectedFile instanceof ElementaryFile))
 			ISOException.throwIt(ISO7816.SW_COMMAND_NOT_ALLOWED);
 		// always allow READ BINARY
 		if (mode == READ_BINARY) {
-			//@ close [1/2]valid();
-			return true;
+				return true;
 		}
 		// allow write access to the preference file if the cardholder pin was
 		// entered correctly
 		if ((selectedFile == preferencesFile) && cardholderPin.isValidated()) {
-			//@ close [1/2]valid();
-			return true;
+				return true;
 		}
 		// we abuse the activation pin to update some of the large files (photo
 		// + certificates)
 		if (GPSystem.getCardContentState() == GPSystem.APPLICATION_SELECTABLE) {
-			//@ close [1/2]valid();
-			return true;			
+				return true;			
 		}
-		//@ close [1/2]valid();
-		// default to false
+			// default to false
 		return false;
 	}
 	/**
@@ -1176,6 +1221,7 @@ public final class EidCard extends Applet {
   	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
       	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
+		//@ open [1/2]valid();
 		// check if access to this file is allowed
 		if (!fileAccessAllowed(READ_BINARY))
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
@@ -1185,11 +1231,14 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		// inform the JCRE that the applet has data to return
 		short le = apdu.setOutgoing();
-		//@ open [1/2]valid();
 		// impossible to start reading from offset large than size of file				
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
+		/* start adding to remove bug: */
+		if (selectedFile == belpicDirectory || selectedFile == idDirectory)
+			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
+		/* end */
+		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile) selectedFile).getCurrentSize();
 		if (offset > size)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
@@ -1255,9 +1304,13 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		JCSystem.beginTransaction();
 		//@ open valid();
-		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
+		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
 		/*@ if(selectedFile == masterFile) {
 		  	masterFile.castMasterToFile();
+  		    } else if(selectedFile == belpicDirectory) {
+  		      belpicDirectory.castDedicatedToFile();
+  		    } else if(selectedFile == idDirectory) {
+  		      idDirectory.castDedicatedToFile();
   		    } else {
 			sf2.castElementaryToFile();
 		    }
@@ -1265,7 +1318,11 @@ public final class EidCard extends Applet {
 		selectedFile.setActive(true);
 		/*@ if(selectedFile == masterFile) {
 		  	masterFile.castFileToMaster();
-		    } else {
+		    } else if(selectedFile == belpicDirectory) {
+  		      belpicDirectory.castFileToDedicated();
+  		    } else if(selectedFile == idDirectory) {
+  		      idDirectory.castFileToDedicated();
+  		    } else {
 			sf2.castFileToElementary();
 		    }
 		@*/
@@ -1316,43 +1373,44 @@ public final class EidCard extends Applet {
 	/**
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
 	 */
-//	private void initializeEmptyLargeFiles() 
-//	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
-//	                nb_belpic_sibs == 5 &*&
-//	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, _, _) &*& 
-//	    		nb_iddir_sibs < 7 &*&
-//	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
-//	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
-//      	    /*@ ensures belpicDirectory |-> bpd &*& 
-//	    		idDirectory |-> idd &*& idd.DedicatedFile(_, _, _, _, _, _, _) &*& 
-//	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
-//	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
-//	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
-//	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
-//	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
-//	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
-//	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(belpic_sibs, cons<File>(cac, cons(rrnc, cons(rootcac, cons(ac, cons(nrc, nil)))))), _); @*/
-//	{
-//		//@ assume(false);
-//		/*
-//		 * these 3 certificates are the same for all sample eid card applets
-//		 * therefor they are made static and the data is allocated only once
-//		 */
-//		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
-//		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
-//		
-//		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
-//		/*
-//		 * to save some memory we only support 1 photo for all subclasses
-//		 * ideally this should be applet specific and have max size 3584 (3.5K)
-//		 */
-//		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
-//		/*
-//		 * certificate #2 and #3 are applet specific allocate enough memory
-//		 */
-//		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
-//		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
-//	}
+	private void initializeEmptyLargeFiles() 
+	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
+	                nb_belpic_sibs == 5 &*&
+	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, ?iddir_sibs, _) &*& 
+	    		nb_iddir_sibs < 7 &*&
+	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
+	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
+      	    /*@ ensures belpicDirectory |-> bpd &*& 
+	    		idDirectory |-> idd &*&
+	    		caCertificate |-> ?cac &*& cac.ElementaryFile(CA_CERTIFICATE, bpd, ?d1, true, 0, _) &*& d1 != null &*& d1.length == 1200 &*&
+	    		rrnCertificate |-> ?rrnc &*&  rrnc.ElementaryFile(RRN_CERTIFICATE, bpd, ?d2, true, 0, _) &*& d2 != null &*& d2.length == 1200 &*&
+	    		rootCaCertificate |-> ?rootcac &*&  rootcac.ElementaryFile(ROOT_CA_CERTIFICATE, bpd, ?d3, true, 0, _) &*& d3 != null &*& d3.length == 1200 &*&
+	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
+	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
+	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
+	    		idd.DedicatedFile(_, _, _, _, _, append(iddir_sibs, cons(pf, nil)), _) &*& 
+	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(append(append(append(append(belpic_sibs, cons(cac, nil)), cons(rrnc, nil)), cons(rootcac, nil)), cons(ac, nil)), cons(nrc, nil)), _); @*/
+	{
+		/*
+		 * these 3 certificates are the same for all sample eid card applets
+		 * therefor they are made static and the data is allocated only once
+		 */
+		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
+		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
+		
+		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
+		/*
+		 * to save some memory we only support 1 photo for all subclasses
+		 * ideally this should be applet specific and have max size 3584 (3.5K)
+		 */
+		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
+		/*
+		 * certificate #2 and #3 are applet specific allocate enough memory
+		 */
+		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
+		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
+	}
+	
 	/**
 	 * initialize basic key pair
 	 */
@@ -1405,7 +1463,7 @@ public final class EidCard extends Applet {
 		short fid = Util.makeShort(buffer[ISO7816.OFFSET_CDATA], buffer[ISO7816.OFFSET_CDATA + 1]);
 		JCSystem.beginTransaction();
 		//@ open valid();
-		//@ assert selected_file_types(_, ?f1, ?f2, ?f3, ?f4, ?f5, ?f6, ?f7, ?f8, ?f9, ?f10, ?f11, ?f12, ?f13, _);
+		//@ assert selected_file_types(_, ?f1, ?f2, ?f3, ?f4, ?f5, ?f6, ?f7, ?f8, ?f9, ?f10, ?f11, ?f12, ?f13, ?f14, ?f15, ?f16, ?f17, ?f18, ?f19, ?f20, ?f21, _);
 		// if file identifier is the master file, select it immediately
 		if (fid == MF)
 			selectedFile = masterFile;		
@@ -1414,139 +1472,33 @@ public final class EidCard extends Applet {
 			////@ close masterFile.DedicatedFile();
 			//@ MasterFile theMasterFile = masterFile;
 			//@ assert theMasterFile.MasterFile(16128, null, ?x1, ?x2, ?x3, ?x4, ?x5);
-			//@ close foreach(nil, file_element);
-			//@ close idDirectory.File(_, _, _);
-			//@ close file_element(idDirectory);
-			//@ close foreach<File>(cons(idDirectory, nil), file_element);
-			//@ close belpicDirectory.File(_, _, _);
-			//@ close file_element(belpicDirectory);
-			//@ close foreach<File>(cons(belpicDirectory, cons(idDirectory, nil)), file_element);
-			//@ close dirFile.File(_, _, _);
-			//@ close file_element(dirFile);
-			//@ close foreach<File>(cons<File>(dirFile, cons(belpicDirectory, cons(idDirectory, nil))), file_element);
 			//@ close theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
 			File s = ((DedicatedFile) masterFile).getSibling(fid);
 			//@ open theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
-			//@ open foreach<File>(cons<File>(dirFile, cons(belpicDirectory, cons(idDirectory, nil))), file_element);
-			//@ open file_element(dirFile);
-			//@ open dirFile.File(_, _, _);
-			//@ open foreach<File>(cons(belpicDirectory, cons(idDirectory, nil)), file_element);
-			//@ open file_element(belpicDirectory);
-			//@ open belpicDirectory.File(_, _, _);
-			//@ open foreach<File>(cons(idDirectory, nil), file_element);
-			//@ open file_element(idDirectory);
-			//@ open idDirectory.File(_, _, _);
 			//VF /bug
 			if (s != null) {
 				//TODO: get rid of this
 				//@ assert dirFile |-> ?theDirFile &*& belpicDirectory |-> ?theBPD &*& idDirectory |-> ?theIdD &*& s == theDirFile || s == theBPD || s == theIdD;
-				//@ assume(s != belpicDirectory && s != idDirectory); // IS THIS TRUE??
 				selectedFile = s;
-				//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
 			//the fid is an elementary file:
 			} else {
-				//@ close foreach(nil, file_element);
-				//cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
-			        //@ close nonRepudiationCertificate.File(_, _, _);
-			        //@ close file_element(nonRepudiationCertificate);
-			        //@ close foreach<File>(cons(nonRepudiationCertificate, nil), file_element);
-			     //   theAuthenticationCertificate
-			        //@ close authenticationCertificate.File(_, _, _);
-			        //@ close file_element(authenticationCertificate);
-			        //@ close foreach<File>(cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)), file_element);
-				//theRootCaCertificate
-				//@ close rootCaCertificate.File(_, _, _);
-			        //@ close file_element(rootCaCertificate);
-			        //@ close foreach<File>(cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))), file_element);
-				//theRrnCertificate
-				//@ close rrnCertificate.File(_, _, _);
-			        //@ close file_element(rrnCertificate);
-			        //@ close foreach<File>(cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))), file_element);
-				// theCaCertificate
-				//@ close caCertificate.File(_, _, _);
-			        //@ close file_element(caCertificate);
-			        //@ close foreach<File>(cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))), file_element);
-				//theCertificateDirectoryFile
-				//@ close certificateDirectoryFile.File(_, _, _);
-			        //@ close file_element(certificateDirectoryFile);
-			        //@ close foreach<File>(cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))), file_element);
-				// thePrivateKeyDirectoryFile
-				//@ close privateKeyDirectoryFile.File(_, _, _);
-			        //@ close file_element(privateKeyDirectoryFile);
-			        //@ close foreach<File>(cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))), file_element);
-			        //theAuthenticationObjectDirectoryFile
-				//@ close authenticationObjectDirectoryFile.File(_, _, _);
-			        //@ close file_element(authenticationObjectDirectoryFile);
-			        //@ close foreach<File>(cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))), file_element);
-			        //theObjectDirectoryFile
-			        //@ close objectDirectoryFile.File(_, _, _);
-			        //@ close file_element(objectDirectoryFile);
-			        //@ close foreach<File>(cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))))), file_element);
-			        //tokenInfo
-			        //@ close tokenInfo.File(_, _, _);
-			        //@ close file_element(tokenInfo);
-			        //@ close foreach<File>(cons(tokenInfo, cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))))), file_element);
 				s = belpicDirectory.getSibling(fid);
-				//@ open foreach(nil, file_element);
-				//cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
-			        //tokenInfo
-			        //@ open foreach<File>(cons(tokenInfo, cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))))), file_element); 
-			        //@ open file_element(tokenInfo);
-			        //@ open tokenInfo.File(_, _, _);
-			        //theObjectDirectoryFile
-			        //@ open foreach<File>(cons(objectDirectoryFile, cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))))), file_element);
-			        //@ open file_element(objectDirectoryFile);
-			        //@ open objectDirectoryFile.File(_, _, _);
-			        //theAuthenticationObjectDirectoryFile
-				//@ open foreach<File>(cons(authenticationObjectDirectoryFile, cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))))), file_element);
-			        //@ open file_element(authenticationObjectDirectoryFile);
-			        //@ open authenticationObjectDirectoryFile.File(_, _, _);
-			        // thePrivateKeyDirectoryFile
-				//@ open foreach<File>(cons(privateKeyDirectoryFile, cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))))), file_element);
-			        //@ open file_element(privateKeyDirectoryFile);
-			        //@ open privateKeyDirectoryFile.File(_, _, _);
-			        //theCertificateDirectoryFile
-				//@ open foreach<File>(cons(certificateDirectoryFile, cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))))), file_element);
-				//@ open file_element(certificateDirectoryFile);
-				//@ open certificateDirectoryFile.File(_, _, _);       
-				// theCaCertificate
-				//@ open foreach<File>(cons(caCertificate, cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))))), file_element);
-			        //@ open file_element(caCertificate);
-			        //@ open caCertificate.File(_, _, _);
-			        //theRrnCertificate
-				//@ open foreach<File>(cons(rrnCertificate, cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)))), file_element);
-			        //@ open file_element(rrnCertificate);
-			        //@ open rrnCertificate.File(_, _, _);
-			        //theRootCaCertificate
-				//@ open foreach<File>(cons(rootCaCertificate, cons(authenticationCertificate, cons(nonRepudiationCertificate, nil))), file_element);
-			        //@ open file_element(rootCaCertificate);
-			        //@ open rootCaCertificate.File(_, _, _);
-			       	//   theAuthenticationCertificate
-			        //@ open foreach<File>(cons(authenticationCertificate, cons(nonRepudiationCertificate, nil)), file_element);
-			        //@ open file_element(authenticationCertificate);
-			        //@ open authenticationCertificate.File(_, _, _);
-			       	//@ open foreach<File>(cons(nonRepudiationCertificate, nil), file_element);
-			        //@ open file_element(nonRepudiationCertificate);
-			        //@ open nonRepudiationCertificate.File(_, _, _);
 				if (s != null) {
-					//TODO: get rid of this
-					//@ assume (s == identityFile || s == identityFileSignature || s == addressFile || s == addressFileSignature || s == photoFile || s == caRoleIDFile || s == dirFile || s == tokenInfo || s == objectDirectoryFile || s == authenticationObjectDirectoryFile || s == privateKeyDirectoryFile || s == certificateDirectoryFile);
 					selectedFile = s;
-					//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
 				} else {
 					s = idDirectory.getSibling(fid);
 					if (s != null) {
-						//TODO: get rid of this
-						//@ assume (s == identityFile || s == identityFileSignature || s == addressFile || s == addressFileSignature || s == photoFile || s == caRoleIDFile || s == dirFile || s == tokenInfo || s == objectDirectoryFile || s == authenticationObjectDirectoryFile || s == privateKeyDirectoryFile || s == certificateDirectoryFile);
 						selectedFile = s;
-						//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, _);
+						
 					} else {
 						ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
 					}
 				}
 				
 			}
-		}		
+			//@ close selected_file_types(s, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20, f21, _);	
+		}	
+		
 		//@ close valid();
 		JCSystem.commitTransaction();
 	}
@@ -1557,11 +1509,10 @@ public final class EidCard extends Applet {
   	    //@ requires current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
       	    //@ ensures current_applet(this) &*& [1/2]valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
 	{
-		//@ assume(false);
 		// receive the path name
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
-		//@ positive_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
+		//@ masking_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		// it must be a multiple of 2
 		if (((lc & 1) == 1) || ((byteRead & 1) == 1))
@@ -1571,32 +1522,108 @@ public final class EidCard extends Applet {
 		//@ open [1/2]valid();
 		// use the path name in the APDU data to select a file
 		File f = masterFile;
-		//@ assert [1/2]masterFile |-> ?theMasterFile;
+		//@ assert lc <= 255;
+		////@ assert [1/2]masterFile |-> ?theMasterFile;
 		for (byte i = 0; i < lc; i += 2) 
 		    /*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i < (lc + 2) &*& 
-		    			[1/2]masterFile |-> theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, _, _, _, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class; @*/
+		    			[1/2]randomBuffer |-> ?theRandomBuffer &*& theRandomBuffer != null &*& [1/2]array_slice(theRandomBuffer, 0, theRandomBuffer.length, _) &*& theRandomBuffer.length == 256 &*&
+				    [1/2]responseBuffer |-> ?theResponseBuffer &*& theResponseBuffer != null &*& [1/2]array_slice(theResponseBuffer, 0, theResponseBuffer.length, _) &*& theResponseBuffer.length == 128 &*&
+				    [1/2]randomData |-> ?theRandomData &*& theRandomData != null &*&
+				    [1/2]cipher |-> ?theCipher &*& theCipher != null &*&
+				    [1/2]messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
+				    [1/2]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
+				    [1/2]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
+				    [1/2]masterFile |-> ?theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, _, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
+				    [1/2]cardholderPin |-> ?theCardholderPin &*& [1/2]OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
+				    [1/2]resetPin |-> ?theResetPin &*& [1/2]OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
+				    [1/2]unblockPin |-> ?theUnblockPin &*& [1/2]OwnerPIN(theUnblockPin, _, _) &*& theUnblockPin != null &*&
+				    [1/2]activationPin |-> ?theActivationPin &*& [1/2]OwnerPIN(theActivationPin, _, _) &*& theActivationPin != null &*&
+				    [1/2]identityFile |-> ?theIdentityFile &*& [1/2]theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null &*& identityData != null &*& identityData.length == 0xD0 &*& theIdentityFile.getClass() == ElementaryFile.class &*&
+				    [1/2]identityFileSignature |-> ?theIdentityFileSignature &*& [1/2]theIdentityFileSignature.ElementaryFile(_, _, ?theIdentityFileSignatureData, _, _, _) &*& theIdentityFileSignature != null &*& theIdentityFileSignatureData != null &*& theIdentityFileSignatureData.length == 0x80 &*& theIdentityFileSignature.getClass() == ElementaryFile.class &*&
+				    [1/2]addressFile |-> ?theAddressFile &*& [1/2]theAddressFile.ElementaryFile(_, _, ?theAddressFileData, _, _, _) &*& theAddressFile != null &*& theAddressFileData != null &*& theAddressFileData.length == 117 &*& theAddressFile.getClass() == ElementaryFile.class &*&
+				    [1/2]addressFileSignature |-> ?theAddressFileSignature &*& [1/2]theAddressFileSignature.ElementaryFile(_, _, ?theAddressFileSignatureData, _, _, _) &*& theAddressFileSignature != null &*& theAddressFileSignatureData != null &*& theAddressFileSignatureData.length == 128 &*& theAddressFileSignature.getClass() == ElementaryFile.class &*&
+				    [1/2]photoFile |-> ?thePhotoFile &*& [1/2]thePhotoFile.ElementaryFile(_, _, _, _, _, _) &*& thePhotoFile != null &*& thePhotoFile.getClass() == ElementaryFile.class &*&
+				    [1/2]caRoleIDFile |-> ?thecaRoleIDFile &*& [1/2]thecaRoleIDFile.ElementaryFile(_, _, ?theCaRoleIDFileData, _, _, _) &*& thecaRoleIDFile != null &*& theCaRoleIDFileData != null &*& theCaRoleIDFileData.length == 0x20 &*& thecaRoleIDFile.getClass() == ElementaryFile.class &*&
+				    [1/2]dirFile |-> ?theDirFile &*& [1/2]theDirFile.ElementaryFile(_, _, ?theDirFileData, _, _, _) &*& theDirFile != null &*& theDirFileData != null &*& theDirFileData.length ==  0x25 &*& theDirFile.getClass() == ElementaryFile.class &*&
+				    [1/2]tokenInfo |-> ?theTokenInfo &*& [1/2]theTokenInfo.ElementaryFile(_, _, ?theTokenInfoData, _, _, _) &*& theTokenInfo != null &*& theTokenInfoData != null &*& theTokenInfoData.length == 0x30 &*& theTokenInfo.getClass() == ElementaryFile.class &*&
+				    [1/2]objectDirectoryFile |-> ?theObjectDirectoryFile &*& [1/2]theObjectDirectoryFile.ElementaryFile(_, _, ?theObjectDirectoryFileData, _, _, _) &*& theObjectDirectoryFile != null &*& theObjectDirectoryFileData != null &*& theObjectDirectoryFileData.length == 40 &*& theObjectDirectoryFile.getClass() == ElementaryFile.class &*&
+				    [1/2]authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& [1/2]theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, ?theAuthenticationObjectDirectoryFileData, _, _, _) &*& theAuthenticationObjectDirectoryFile != null &*& theAuthenticationObjectDirectoryFileData != null &*& theAuthenticationObjectDirectoryFileData.length == 0x40 &*&  theAuthenticationObjectDirectoryFile.getClass() == ElementaryFile.class &*&
+				    [1/2]privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& [1/2]thePrivateKeyDirectoryFile.ElementaryFile(_, _, ?thePrivateKeyDirectoryFileData, _, _, _) &*& thePrivateKeyDirectoryFile != null &*& thePrivateKeyDirectoryFileData != null &*& thePrivateKeyDirectoryFileData.length == 0xB0 &*& thePrivateKeyDirectoryFile.getClass() == ElementaryFile.class &*&
+				    [1/2]certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& [1/2]theCertificateDirectoryFile.ElementaryFile(_, _, ?theCertificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile != null &*& theCertificateDirectoryFileData != null &*& theCertificateDirectoryFileData.length == 0xB0 &*& theCertificateDirectoryFile.getClass() == ElementaryFile.class &*&
+				    [1/2]belpicDirectory |-> ?theBelpicDirectory &*& [1/2]theBelpicDirectory.DedicatedFile(_, _, _, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
+				    [1/2]idDirectory |-> ?theIdDirectory &*& [1/2]theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
+				    [1/2]caCertificate |-> ?theCaCertificate &*& [1/2]theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theCaCertificate.getClass() == ElementaryFile.class &*&
+				    [1/2]selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
+				    masterSibs == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil))) &*&
+				    [1/2]rootCaCertificate |-> ?theRootCaCertificate &*& [1/2]theRootCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theRootCaCertificate.getClass() == ElementaryFile.class &*&
+				    [1/2]rrnCertificate |-> ?theRrnCertificate &*& [1/2]theRrnCertificate.ElementaryFile(_, _, _, _, _, _) &*& theRrnCertificate.getClass() == ElementaryFile.class &*&
+				    [1/2]authenticationCertificate |-> ?theAuthenticationCertificate &*& [1/2]theAuthenticationCertificate.ElementaryFile(_, _, _, _, _, _) &*& theAuthenticationCertificate.getClass() == ElementaryFile.class &*&
+				    [1/2]nonRepudiationCertificate |-> ?theNonRepudiationCertificate &*& [1/2]theNonRepudiationCertificate.ElementaryFile(_, _, _, _, _, _) &*& theNonRepudiationCertificate.getClass() == ElementaryFile.class &*&
+				    [1/2]preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile != theCaCertificate &*& thePreferencesFile != theRrnCertificate &*& [1/2]thePreferencesFile.ElementaryFile(_, _, ?thePreferencesFileData, _, _, _) &*& thePreferencesFile != null &*& thePreferencesFileData != null &*& thePreferencesFileData.length == 100 &*& thePreferencesFile.getClass() == ElementaryFile.class &*&
+				    belpicSibs == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
+				    idSibs == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(thecaRoleIDFile, cons(thePreferencesFile, cons(thePhotoFile, nil))))))) &*&
+				    [1/2]selected_file_types(theSelectedFile, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
+			    	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class) &*&
+			      	    /*internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&*/
+				    [1/2]signatureAlgorithm |-> ?theSignatureAlgorithm &*&
+				    [1/2]nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
+				    [1/2]authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&
+				    [1/2]basicKeyPair |-> ?theBasicKeyPair &*&
+				    [1/2]PKCS1_HEADER |-> ?thePKCS1HEADER &*& thePKCS1HEADER != null &*& [1/2]array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1 &*&
+				    [1/2]PKCS1_SHA1_HEADER |-> ?thePKCS1SHA1HEADER &*& thePKCS1SHA1HEADER != null &*& [1/2]array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _) &*& thePKCS1SHA1HEADER.length == 16 &*&
+				    [1/2]PKCS1_MD5_HEADER |-> ?thePKCS1MD5HEADER &*& thePKCS1MD5HEADER != null &*& [1/2]array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19 &*&
+				    theDirFile != thePreferencesFile &*& theTokenInfo != thePreferencesFile &*& thePreferencesFile != theObjectDirectoryFile &*& thePreferencesFile != theAuthenticationObjectDirectoryFile &*& thePreferencesFile != thePrivateKeyDirectoryFile &*&
+				    (f == null ? 
+				      true 
+				        : 
+				      selected_file_types(f, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
+				      f.getClass() == ElementaryFile.class || f.getClass() == MasterFile.class || f.getClass() == DedicatedFile.class			                 
+				    )
+				      
+				    ; @*/
 		{
 			short fid = Util.makeShort(buffer[(short) (ISO7816.OFFSET_CDATA + i)], buffer[(short) (ISO7816.OFFSET_CDATA + i + 1)]);
 			// MF can be explicitely or implicitely in the path name
 			if ((i == 0) && (fid == MF))
 				f = masterFile;
 			else {
+			        
 				if ((f instanceof ElementaryFile) || f == null)
 					ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
-				
+				//@ open selected_file_types(f, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _);
+//				//@ assert f == masterFile || f == idDirectory || f == belpicDirectory;
+				//@ File oldf = f;
+				/*@ 
+				if(f == masterFile) 
+				{} else if (f == idDirectory) {} else {}
+				@*/
+				/*@
+				if(f == masterFile) {
+				  masterFile.castMasterToDedicated();
+		  		}	  		
+		  		@*/
 				f = ((DedicatedFile) f).getSibling(fid);
+				/*@ if(oldf == masterFile) {
+			  	      masterFile.castDedicatedToMaster();
+			  	      assert f == null || (f == idDirectory && f.getClass() == DedicatedFile.class) || (f == belpicDirectory && f.getClass() == DedicatedFile.class)|| (f == dirFile && f.getClass() == ElementaryFile.class);
+				    } 
+				@*/
+				/*@
+				  if(f != null) {
+				    close selected_file_types(f, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _);
+				  }
+				@*/
+				
 			}
 		}
 		if (f == null)
 			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
 
-		//@ close [1/2]valid();
 		JCSystem.beginTransaction();
-		//@ open valid();
-		//@ open selected_file_types(_, ?g1, ?g2, ?g3, ?g4, ?g5, ?g6, ?g7, ?g8, ?g9, ?g10, ?g11, ?g12, ?g13, _);
-		//@ assume (f == masterFile || f == identityFile || f == identityFileSignature || f == addressFile || f == addressFileSignature || f == photoFile || f == caRoleIDFile || f == dirFile || f == tokenInfo || f == objectDirectoryFile || f == authenticationObjectDirectoryFile || f == privateKeyDirectoryFile || f == certificateDirectoryFile);
+		//@ open [1/2]valid();
+		////@ open selected_file_types(f, ?g1, ?g2, ?g3, ?g4, ?g5, ?g6, ?g7, ?g8, ?g9, ?g10, ?g11, ?g12, ?g13, ?g14, ?g15, ?g16, ?g17, ?g18, ?g19, ?g20, ?g21, _);
 		selectedFile = f;
-		//@ close selected_file_types(f, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, _);
+		////@ close selected_file_types(f, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19, g20, g21, _);
 		//@ close valid();
 		JCSystem.commitTransaction();
 	}
@@ -1720,7 +1747,13 @@ public final class EidCard extends Applet {
 		// initialize basic keys pair
 		initializeKeyPairs();
 		/*VF* END COPY */
-		
+ 		//@ preferencesFile.neq(caCertificate);
+ 		//@ preferencesFile.neq(rrnCertificate);
+ 		//@ preferencesFile.neq(dirFile);
+ 		//@ preferencesFile.neq(tokenInfo);
+ 		//@ preferencesFile.neq(objectDirectoryFile);
+ 		//@ preferencesFile.neq(authenticationObjectDirectoryFile);
+ 		//@ preferencesFile.neq(privateKeyDirectoryFile);
 		//@ close valid();
 		register();
 	}
@@ -3012,9 +3045,13 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		JCSystem.beginTransaction();
 		//@ open valid();
-	  	//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
+	  	//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
 		/*@ if(selectedFile == masterFile) {
 			masterFile.castMasterToFile();
+		    } else if(selectedFile == belpicDirectory) {
+		      belpicDirectory.castDedicatedToFile();
+		    } else if(selectedFile == idDirectory) {
+		      idDirectory.castDedicatedToFile();
 		    } else {
 			sf2.castElementaryToFile();
 		    }
@@ -3022,6 +3059,10 @@ public final class EidCard extends Applet {
 		selectedFile.setActive(false);
 		/*@ if(selectedFile == masterFile) {
 		  	masterFile.castFileToMaster();
+		    } else if(selectedFile == belpicDirectory) {
+		      belpicDirectory.castFileToDedicated();
+		    } else if(selectedFile == idDirectory) {
+		      idDirectory.castFileToDedicated();
 		    } else {
 			sf2.castFileToElementary();
 		    }

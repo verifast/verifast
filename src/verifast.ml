@@ -4373,8 +4373,17 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let terms_of xys = List.map (fun (x, _) -> (x, ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [])) xys in
-  let classterms1 = terms_of classmap1 in
+  let classterms1 =  terms_of classmap1 in
   let interfaceterms1 = terms_of interfmap1 in
+
+  (* assuming that all class terms are unique *)
+  (*let rec unique_terms ts =
+    match ts with
+      [] -> ()
+    | t :: ts -> (List.iter (fun t' -> ignore (ctxt#assume (ctxt#mk_not (ctxt#mk_eq t t')))) ts); unique_terms ts;
+  in
+  unique_terms (List.map (fun (c, t) -> t) classterms1);
+  *)
  
   let classterms = classterms1 @ classterms0 in
   let interfaceterms = interfaceterms1 @ interfaceterms0 in
@@ -7474,7 +7483,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont state (sizeof l t)
     | InstanceOfExpr(l, e, ManifestTypeExpr (l2, tp)) ->
       ev state e $. fun state v ->
-        cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
+        begin match tp with (* hack: if tp is a final class, then instanceof is translated as getClass *)
+          ObjType(c) when get_class_finality c = FinalClass -> cont state (ctxt#mk_eq (prover_type_term l2 tp) (ctxt#mk_app get_class_symbol [v]))
+        | _ -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
+        end
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
   in
   
@@ -11302,6 +11314,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         verify_cases cs
       | _ -> static_error l "Switch statement operand is not an inductive value or integer." None
       end
+    | Assert(_, ExprPred(le, e)) -> 
+      let we = check_expr_t (pn,ilist) tparams tenv e boolt in
+      let t = eval env we in
+      assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
+      cont h env
     | Assert (l, p) ->
       let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
       assert_pred rules [] (pn,ilist) h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->

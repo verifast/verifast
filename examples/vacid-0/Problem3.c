@@ -683,7 +683,7 @@ void insert(struct heap* h, int x)
   //@ close ghostparam(prevk);
   //@ assert 2*prevk == size + 1 || 2*prevk +1 == size + 1;
   //@ int tmp = h->size;
-  assert tmp == size + 1;
+  //@ assert tmp == size + 1;
   /*@
   if(2*prevk == size +1) {
     
