@@ -1108,9 +1108,8 @@ public final class EidCard extends Applet {
 		// if (le != dataLen)
 		// ISOException.throwIt((short)(ISO7816.SW_WRONG_LENGTH));
 		/*VF*byte version[] = { (byte) 0xA5, (byte) 0x03, (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x11, (byte) 0x00, (byte) 0x02, (byte) 0x00, (byte) 0x01, (byte) 0x01, (byte) 0x0F };*/
-		byte[] version = new byte[] { (byte) 0xA5, (byte) 0x03, (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x11, (byte) 0x00, (byte) 0x02, (byte) 0x00, (byte) 0x01, (byte) 0x01, (byte) 0x0F };
-		/*VF*byte chipNumber[] = new byte[(short) (dataLen + 12)];*/
-		byte[] chipNumber = new byte[(short) (dataLen + 12)];
+		byte version[] = new byte[] { (byte) 0xA5, (byte) 0x03, (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x11, (byte) 0x00, (byte) 0x02, (byte) 0x00, (byte) 0x01, (byte) 0x01, (byte) 0x0F };
+		byte chipNumber[] = new byte[(short) (dataLen + 12)];
 		Util.arrayCopy(data, pos, chipNumber, (short) 0, dataLen);
 		Util.arrayCopy(version, (short) 0, chipNumber, dataLen, (short) 12);
 		// //Set serial number
@@ -1600,7 +1599,7 @@ public final class EidCard extends Applet {
 		 * digits) fill rest of PIN data with F
 		 */
 		/*VF*byte[] cardhold = { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF }; */
-		byte[] cardhold = new byte[] { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
+		byte cardhold[] = new byte[] { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
 		cardholderPin = new OwnerPIN(CARDHOLDER_PIN_TRY_LIMIT, PIN_SIZE);
 		cardholderPin.update(cardhold, (short) 0, PIN_SIZE);
 		/*
@@ -1612,7 +1611,7 @@ public final class EidCard extends Applet {
 		 * with "FF"
 		 */
 		/*VF* byte[] unblock = { (byte) 0x2c, (byte) 0x22, (byte) 0x22, (byte) 0x22, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF }; */
-		byte[] unblock = new byte[] { (byte) 0x2c, (byte) 0x22, (byte) 0x22, (byte) 0x22, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF };
+		byte unblock[] = new byte[] { (byte) 0x2c, (byte) 0x22, (byte) 0x22, (byte) 0x22, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF };
 		unblockPin = new OwnerPIN(UNBLOCK_PIN_TRY_LIMIT, PIN_SIZE);
 		unblockPin.update(unblock, (short) 0, PIN_SIZE);
 		/*
@@ -1629,7 +1628,7 @@ public final class EidCard extends Applet {
 		 * with "FF"
 		 */
 		/*VF* byte[] reset = { (byte) 0x2c, (byte) 0x33, (byte) 0x33, (byte) 0x33, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF }; */
-		byte[] reset = new byte[] { (byte) 0x2c, (byte) 0x33, (byte) 0x33, (byte) 0x33, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF };
+		byte reset[] = new byte[] { (byte) 0x2c, (byte) 0x33, (byte) 0x33, (byte) 0x33, (byte) 0x11, (byte) 0x11, (byte) 0x11, (byte) 0xFF };
 		resetPin = new OwnerPIN(RESET_PIN_TRY_LIMIT, PIN_SIZE);
 		resetPin.update(reset, (short) 0, PIN_SIZE);
 	}

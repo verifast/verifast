@@ -2486,18 +2486,21 @@ and
        | [< rhs = parse_expr; xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e, ref false)); '(_, Kwd ";") >] ->
          DeclStmt (l, te, (x, Some(rhs), ref false)::xs)
     >] -> s
-  | [< '(l, Kwd "["); (* parse array declaration *)
+  | [< '(l2, Kwd "["); (* parse array declaration *)
        (* TODO: check (size > 0) *)
-       size = parser
-             [< '(_, Int size); '(l, Kwd "]") >] -> size
+       e = parser
+             [< '(_, Int size); '(l, Kwd "]") >] -> 
+               (match te with
+                 (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
+                  DeclStmt(l, StaticArrayTypeExpr (l2, te, (int_of_big_int size)), (x, None, ref false)::[]))
+           | [< '(_, Kwd "]"); init = opt(parser [< '(_, Kwd "="); rhs = parse_expr; >] -> rhs); '(_, Kwd ";") >] -> 
+             (* should only be parsed like this if language is Java *)
+             DeclStmt(type_expr_loc te, ArrayTypeExpr(l2, te), [(x, init, ref false)])
 (*         | [< '(_, PreprocessorSymbol size); '(l, Kwd "]") >]
                -> (* TODO: size defined by macro *)
            | [< '(l, Kwd "]") >]
                -> (* TODO: size defined by array initialiser *) *)
-    >] -> (match te with
-           (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
-            DeclStmt(l, StaticArrayTypeExpr (l, te, (int_of_big_int size)),
-             (x, None, ref false)::[]))
+    >] -> e
     (* end of parse array declaration *)
   | [< xs = comma_rep (parser [< '(_, Ident x); e = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (x, e, ref false)); '(l, Kwd ";") >] ->
     DeclStmt(l, te, (x, None, ref false)::xs)
