@@ -63,13 +63,6 @@
  */
 package be.fedict.eidapplet;
 
-/*VF*REMOVED FOLLOWING IMPORTS (needed to import predicate)*/
-/*import javacard.framework.APDU;
-import javacard.framework.ISO7816;
-import javacard.framework.ISOException;
-import javacard.framework.JCSystem;
-import javacard.framework.OwnerPIN;
-import javacard.framework.Util;*/
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateKey;
 import javacard.security.RSAPrivateCrtKey;
@@ -90,8 +83,6 @@ import javacard.security.PublicKey;
 inductive triple<a, b, c> = triple(a, b, c);
 
 inductive quad<a, b, c, d> = quad(a, b, c, d);
-
-inductive quint<a, b, c, d, e> = quint(a, b, c, d, e);
 
 @*/
 
@@ -116,7 +107,7 @@ public abstract class File {
 	}
 	public short getFileID() 
 	    //@ requires [?f]valid_id(this);
-	    //@ ensures [f]valid_id(this);// &*& result == fid;
+	    //@ ensures [f]valid_id(this);
 	{
 		//@ open [f]valid_id(this);
 		return fileID;
@@ -150,11 +141,11 @@ predicate valid_id(File child;) = [_]child.fileID |->_;
 
 public class DedicatedFile extends File {
 
-	/*@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = 
-		DedicatedFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo); @*/
-	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = 
-		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& this.siblings |-> siblings &*& 
-		siblings != null &*& siblings.length == MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, ?sb) &*& this.number |-> number &*& siblist == take(number, sb) &*&
+	/*@ predicate File(short theFileID, boolean activeState, triple<DedicatedFile, list<File>, any> info) = 
+		DedicatedFile(theFileID, ?dedFile, activeState, ?siblist, ?oinfo) &*& info == triple(dedFile, siblist, oinfo); @*/
+	/*@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, list<File> siblist, any info) = 
+		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& this.siblings |-> ?siblings &*& 
+		siblings != null &*& siblings.length == MAX_SIBLINGS &*& array_slice(siblings, 0, siblings.length, ?sb) &*& this.number |-> ?number &*& siblist == take(number, sb) &*&
 		number >= 0 &*& number <= DedicatedFile.MAX_SIBLINGS &*& info == unit &*&
 		foreachp(take(number, sb), valid_id); @*/
 
@@ -168,57 +159,49 @@ public class DedicatedFile extends File {
 	// constructor only used by MasterFile
 	protected DedicatedFile(short fid) 
   	    //@ requires true;
-      	    //@ ensures DedicatedFile(fid, null, true, _, 0, nil, _);
+      	    //@ ensures DedicatedFile(fid, null, true, nil, _);
 	{
 		super(fid);
-		// MasterFile does not have a parent, as it is the root of all files
 		parentFile = null;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
 		//@ assert this.siblings |-> ?siblings;
 		//@ assert array_slice(siblings, 0, siblings.length, ?siblist);
 		//@ close foreachp(nil, valid_id);
-		//@ close DedicatedFile(fid, null, true, siblings, 0, nil, _);
+		//@ close DedicatedFile(fid, null, true, nil, _);
 	}
 	public DedicatedFile(short fid, DedicatedFile parent) 
-  	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures DedicatedFile(fid, parent, true, _, 0, nil, _) &*& parent.DedicatedFile(fileID, pf, activeState, _, snumber < DedicatedFile.MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < DedicatedFile.MAX_SIBLINGS ? append(siblist, cons(this, nil)) : siblist), info);
+  	    //@ requires parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?siblist, ?info);
+      	    //@ ensures DedicatedFile(fid, parent, true, nil, _) &*& parent.DedicatedFile(fileID, pf, activeState, (length(siblist) < DedicatedFile.MAX_SIBLINGS ? append(siblist, cons(this, nil)) : siblist), info);
 	{
 		super(fid);
 		parentFile = parent;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
-		//@ assert this.siblings |-> ?siblings;
-		//@ assert array_slice(siblings, 0, siblings.length, ?childSiblist);
-		////@ close_empty_file_array(childSiblist)
-		
-		////@ close valid_id(this);
 		parent.addSibling(this);
 		//@ close foreachp(nil, valid_id);
-		//@ close DedicatedFile(fid, parent, true, _, 0, nil, _);
+		//@ close DedicatedFile(fid, parent, true, nil, _);
 	}
 	public DedicatedFile getParent() 
-	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?siblist, ?info);
-	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, siblist, info) &*& result == parentfile;
+	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblist, ?info);
+	    //@ ensures DedicatedFile(fid, parentfile, active, siblist, info) &*& result == parentfile;
 	{
-		//@ open DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
+		//@ open DedicatedFile(fid, parentfile, active, siblist, info);
 		return parentFile;
-		//@ close DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
+		//@ close DedicatedFile(fid, parentfile, active, siblist, info);
 	}
 	
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info) &*& valid_id(s);
-  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, thesiblings, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
-  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
-  	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info) &*& valid_id(s);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, ?newSibList, info)
+  	    		&*& newSibList == (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
+  	    		&*& length(siblist) < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ assert array_slice(thesiblings, _, _, ?sb);
+		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info);
+		//@ assert array_slice(?thesiblings, _, _, ?sb);
+		//@ int snumber = length(siblist);
 		if (number < MAX_SIBLINGS) {
-			//VF was: siblings[number++] = s;
-			siblings[number] = s;
-			number += 1;
-			////@ drop_n_plus_one(snumber, take(number - 1, siblist));
+			siblings[number++] = s;
 			//@ take_one_more(snumber, update(snumber, s, sb));
 			//@ assert array_slice(thesiblings, _, _, ?sb2);
 			//@ assert sb2 == update(snumber, s, sb);
@@ -230,20 +213,20 @@ public class DedicatedFile extends File {
 			//@ foreachp_append(take(snumber, sb), cons(s, nil));	
 		}
 		
-		/*@ close DedicatedFile(fileID, parentFile, activeState, ?newsiblings, 
-			snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, 
+		/*@ close DedicatedFile(fileID, parentFile, activeState,		 
 			snumber < MAX_SIBLINGS ? append(take(snumber, siblist), cons(s, nil)) : siblist, 
 			info); @*/
 	}
 
 	public File getSibling(short fid) 
-  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
+  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info);
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ assert [f]array_slice(thesiblings, _, _, ?sb);
+		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info);
+		//@ assert [f]array_slice(?thesiblings, _, _, ?sb);
+		//@ int snumber = length(siblist);
 		for (byte i = 0; i < number; i++) 
-		/*@ invariant i >= 0 &*& [f]this.File(File.class)(fileID, activeState, _) &*& [f]this.parentFile |-> parentFile &*& [f]number |-> snumber &*& [f]this.siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, sb)
+		/*@ invariant i >= 0 &*& [f]this.File(File.class)(fileID, activeState, _) &*& [f]this.parentFile |-> parentFile &*& [f]number |-> (byte) length(siblist) &*& [f]this.siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, sb)
 		      &*& [f]foreachp(siblist, valid_id); @*/
 		{
 			//@ assert 0 <= i &*& i < thesiblings.length;
@@ -257,21 +240,18 @@ public class DedicatedFile extends File {
 			//@ assert nth(i, siblist) == fl;
 			//@ mem_nth(i, siblist);
 			//@ foreachp_remove<File>(fl, siblist);
-			////@ open valid_id(fl);
 			if (fl != null && fl.getFileID() == fid) {
-				////@ close file_element(fl);
 				//@ foreachp_unremove<File>(fl, siblist);
 				return fl;
-				//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+				//@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info);
 			}
-			////@ close file_element(fl);
 			//@ foreachp_unremove<File>(fl, siblist);
 		}
-		//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info);
 		return null;
 	}
 
-/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
+        /*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public short getFileID() 
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
@@ -287,12 +267,12 @@ public class DedicatedFile extends File {
 	    //@ ensures File(fid, b, info);
 	{
 		//@ open File(fid, _, info);
-		//@ open DedicatedFile(fid, ?d1, _, ?d3, ?d4, ?siblist, ?info2);
+		//@ open DedicatedFile(fid, ?d1, _, ?siblist, ?info2);
 		File thiz = this;
 		//@ open thiz.File(fid, _, ?info3);
 		active = b;
 		//@ close thiz.File(fid, b, info3);
-		//@ close DedicatedFile(fid, d1, b, d3, d4, siblist, info2);
+		//@ close DedicatedFile(fid, d1, b, siblist, info2);
 		//@ close File(fid, b, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -301,70 +281,69 @@ public class DedicatedFile extends File {
 	    //@ ensures [f]File(fid, state, info) &*& result == state;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]DedicatedFile(fid, ?d1, state, ?d3, ?d4, ?siblist, ?info2);
+		//@ open [f]DedicatedFile(fid, ?d1, state, ?siblist, ?info2);
 		//@ open this.File(File.class)(fid, state, ?info3);
 		return active;
 		//@ close [f]this.File(File.class)(fid, state, info3);
-		//@ close [f]DedicatedFile(fid, d1, state, d3, d4, siblist, info2);
+		//@ close [f]DedicatedFile(fid, d1, state, siblist, info2);
 		//@ close [f]File(fid, state, info);
 	}
 	
 	/*@ 
 	lemma void castFileToDedicated()
             requires [?f]File(?fid, ?state, ?info);
-            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
+            ensures switch (info) { case triple(dedFile, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, siblist, oinfo); } ;
 	{
 	    open [f]File(fid, state, _);
     	}
 
 	lemma void castDedicatedToFile()
-            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
-            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, triple(dedFile, siblist, oinfo));
 	{
-	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+	    close [f]File(fid, state, triple(dedFile, siblist, oinfo));
     	}
     	@*/
 }
 
 public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
-	//@ predicate File(short theFileID, boolean activeState, quint<DedicatedFile, File[], byte, list<File>, any> info) = MasterFile(theFileID, ?dedFile, activeState, ?sibs, ?num, ?siblist, ?oinfo) &*& info == quint(dedFile, sibs, num, siblist, oinfo);
-	//@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = MasterFile(fileID, parentFile, activeState, siblings, number, siblist, info);
-	//@ predicate MasterFile(short fileID, DedicatedFile parentFile, boolean activeState, File[] siblings, byte number, list<File> siblist, any info) = this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, siblings, number, siblist, _) &*& fileID == 0x3F00 &*& parentFile == null &*& info == unit;
+	//@ predicate File(short theFileID, boolean activeState, triple<DedicatedFile, list<File>, any> info) = MasterFile(theFileID, ?dedFile, activeState, ?siblist, ?oinfo) &*& info == triple(dedFile, siblist, oinfo);
+	//@ predicate DedicatedFile(short fileID, DedicatedFile parentFile, boolean activeState, list<File> siblist, any info) = MasterFile(fileID, parentFile, activeState, siblist, info);
+	//@ predicate MasterFile(short fileID, DedicatedFile parentFile, boolean activeState, list<File> siblist, any info) = this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, siblist, _) &*& fileID == 0x3F00 &*& parentFile == null &*& info == unit;
 
 	private static final short MF_FID = 0x3F00;
 	public MasterFile() 
   	    //@ requires true;
-      	    //@ ensures this.MasterFile(0x3F00, null, true, _, 0, nil, _);
+      	    //@ ensures this.MasterFile(0x3F00, null, true, nil, _);
 	{
-		// file identifier of MasterFile is hard coded to 3F00
 		super(MF_FID);
-		//@ close MasterFile(0x3F00, null, true, _, 0, _, _);
+		//@ close MasterFile(0x3F00, null, true, _, _);
 	}
 	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public DedicatedFile getParent() 
-	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblings, ?number, ?siblist, ?info);
-	    //@ ensures DedicatedFile(fid, parentfile, active, siblings, number, siblist, info) &*& result == parentfile;
+	    //@ requires DedicatedFile(?fid, ?parentfile, ?active, ?siblist, ?info);
+	    //@ ensures DedicatedFile(fid, parentfile, active, siblist, info) &*& result == parentfile;
 	{
-		//@ open DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
-		//@ open MasterFile(fid, parentfile, active, siblings, number, siblist, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, siblist, ?info3);
+		//@ open DedicatedFile(fid, parentfile, active, siblist, info);
+		//@ open MasterFile(fid, parentfile, active, siblist, ?info2);
+		//@ open this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblist, ?info3);
 		return parentFile;
-		//@ close this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblings, number, siblist, info3);
-		//@ close MasterFile(fid, parentfile, active, siblings, number, siblist, info2);
-		//@ close DedicatedFile(fid, parentfile, active, siblings, number, siblist, info);
+		//@ close this.DedicatedFile(DedicatedFile.class)(fid, parentfile, active, siblist, info3);
+		//@ close MasterFile(fid, parentfile, active, siblist, info2);
+		//@ close DedicatedFile(fid, parentfile, active, siblist, info);
 	}
 
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public File getSibling(short fid) 
-  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info);
-      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
+  	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info);
+      	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
-		//@ open [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ open [f]MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ open [f]DedicatedFile(fileID, parentFile, activeState, siblist, info);
+		//@ open [f]MasterFile(fileID, parentFile, activeState, siblist, info);
 		return super.getSibling(fid);
-		//@ close [f]MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ close [f]DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
+		//@ close [f]MasterFile(fileID, parentFile, activeState, siblist, info);
+		//@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info);
 	}
 	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -382,13 +361,13 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	    //@ ensures File(fid, b, info);
 	{
 		//@ open File(fid, _, info);
-		//@ open MasterFile(fid, ?d0, _, ?d1, ?d2, ?d3, ?info2);
-		//@ open this.DedicatedFile(DedicatedFile.class)(fid, null, _, d1, d2, d3, ?info3);
+		//@ open MasterFile(fid, ?d0, _, ?d1, ?info2);
+		//@ open this.DedicatedFile(DedicatedFile.class)(fid, null, _, d1, ?info3);
 		//@ open this.File(File.class)(fid, _, ?info4);
 		active = b;
 		//@ close this.File(File.class)(fid, b, info4);
-		//@ close this.DedicatedFile(DedicatedFile.class)(fid, null, b, d1, d2, d3, info3);
-		//@ close MasterFile(fid, null, b, d1, d2, d3, info2);
+		//@ close this.DedicatedFile(DedicatedFile.class)(fid, null, b, d1, info3);
+		//@ close MasterFile(fid, null, b, d1, info2);
 		//@ close File(fid, b, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -397,95 +376,84 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	    //@ ensures [f]File(fid, state, info) &*& result == state;
 	{
 		//@ open [f]File(fid, state, info);
-		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?d2, ?d3, ?info2);
-		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, d3, ?info3);
+		//@ open [f]MasterFile(fid, ?d0, state, ?d1, ?info2);
+		//@ open [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, ?info3);
 		//@ open [f]this.File(File.class)(fid, state, ?info4);
 		return active;
 		//@ close [f]this.File(File.class)(fid, state, info4);
-		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, d2, d3, info3);
-		//@ close [f]MasterFile(fid, null, state, d1, d2, d3, info2);
+		//@ close [f]this.DedicatedFile(DedicatedFile.class)(fid, null, state, d1, info3);
+		//@ close [f]MasterFile(fid, null, state, d1, info2);
 		//@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	protected void addSibling(File s) 
-  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?thesiblings, ?snumber, ?siblist, ?info) &*& valid_id(s);
-  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, thesiblings, (snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber), ?newSibList, info)
-  	    		&*& newSibList == (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
-  	    		&*& snumber < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
-  	    // requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?theSiblings, ?theNumber, ?siblist, ?info);
-  	    // ensures DedicatedFile(fileID, parentFile, activeState, _, (theNumber < MAX_SIBLINGS ? (byte)(theNumber + 1) : theNumber), (theNumber < MAX_SIBLINGS ? append(take(theNumber, siblist), append(cons(s, nil), drop((theNumber + 1), siblist))) : siblist), info);
-	{
+  	    //@ requires DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info) &*& valid_id(s);
+  	    /*@ ensures DedicatedFile(fileID, parentFile, activeState, ?newSibList, info)
+  	    		&*& newSibList == (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
+  	    		&*& length(siblist) < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
+ 	{
 		
-		//@ open DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, info);
-		//@ open MasterFile(fileID, parentFile, activeState, thesiblings, snumber, siblist, ?info2);
+		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info);
+		//@ open MasterFile(fileID, parentFile, activeState, siblist, ?info2);
 		super.addSibling(s);
-		////@ open this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, thesiblings, snumber, siblist, ?info3);
-		//if (number < MAX_SIBLINGS) {
-		//	//VF: bug; was    siblings[number++] = s;
-		//	siblings[number] = s;
-		//	number += 1;
-		//	//@ drop_n_plus_one(snumber, siblist);
-		//}
-		////@ close this.DedicatedFile(DedicatedFile.class)(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(take(snumber, siblist), append(cons(s, nil), drop((snumber + 1), siblist))) : siblist), info3);
-		//@ close MasterFile(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info2);
-		//@ close DedicatedFile(fileID, parentFile, activeState, thesiblings, snumber < MAX_SIBLINGS ? (byte)(snumber + 1) : snumber, (snumber < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info);
+		//@ close MasterFile(fileID, parentFile, activeState, (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info2);
+		//@ close DedicatedFile(fileID, parentFile, activeState, (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info);
 	}
 	
 	/*@ lemma void castFileToMaster()
             requires [?f]File(?fid, ?state, ?info);
-            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]MasterFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
+            ensures switch (info) { case triple(dedFile, siblist, oinfo): return [f]MasterFile(fid, dedFile, state, siblist, oinfo); } ;
 	{
 	    open [f]File(fid, state, _);
     	}
 
 	lemma void castMasterToFile()
-            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
-            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, triple(dedFile, siblist, oinfo));
 	{
-	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+	    close [f]File(fid, state, triple(dedFile, siblist, oinfo));
     	}
 
 	lemma void castMasterToDedicated()
-            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
-            ensures [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
+            requires [?f]MasterFile(?fid, ?dedFile, ?state, ?siblist, ?oinfo);
+            ensures [f]DedicatedFile(fid, dedFile, state, siblist, oinfo);
 	{
-	    close [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
+	    close [f]DedicatedFile(fid, dedFile, state, siblist, oinfo);
     	}
 
 	lemma void castDedicatedToMaster()
-            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
-            ensures [f]MasterFile(fid, dedFile, state, sibs, num, siblist, oinfo);
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?siblist, ?oinfo);
+            ensures [f]MasterFile(fid, dedFile, state, siblist, oinfo);
 	{
-	    open [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo);
+	    open [f]DedicatedFile(fid, dedFile, state, siblist, oinfo);
     	}
 
 	lemma void castFileToDedicated()
             requires [?f]File(?fid, ?state, ?info);
-            ensures switch (info) { case quint(dedFile, sibs, num, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, sibs, num, siblist, oinfo); } ;
+            ensures switch (info) { case triple(dedFile, siblist, oinfo): return [f]DedicatedFile(fid, dedFile, state, siblist, oinfo); } ;
 	{
 	    open [f]File(fid, state, _);
-	    close [f]DedicatedFile(fid, _, _, _, _, _, _);
+	    close [f]DedicatedFile(fid, _, _, _, _);
     	}
 
 	lemma void castDedicatedToFile()
-            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?sibs, ?num, ?siblist, ?oinfo);
-            ensures [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+            requires [?f]DedicatedFile(?fid, ?dedFile, ?state, ?siblist, ?oinfo);
+            ensures [f]File(fid, state, triple(dedFile, siblist, oinfo));
 	{
-   	    open [f]DedicatedFile(fid, _, _, _, _, _, _);
-	    close [f]File(fid, state, quint(dedFile, sibs, num, siblist, oinfo));
+   	    open [f]DedicatedFile(fid, _, _, _, _);
+	    close [f]File(fid, state, triple(dedFile, siblist, oinfo));
     	}
     	@*/
 }
 
 public /*VF*ADDED*/final class ElementaryFile extends File {
 	/*@ predicate File(short theFileID, boolean activeState, quad<DedicatedFile, byte[], short, any> info) = 
-		ElementaryFile(theFileID, ?dedFile, ?dta, activeState, ?sz, ?ifo) &*& info == quad(dedFile, dta, sz, ifo); @*/
+		ElementaryFile(theFileID, ?dedFile, ?data, activeState, ?sz, ?ifo) &*& info == quad(dedFile, data, sz, ifo); @*/
 	/*@ predicate ElementaryFile(short fileID, DedicatedFile parentFile, byte[] data, boolean activeState, short size, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& 
 		this.data |-> data &*& data != null &*& this.size |-> size &*& array_slice(data, 0, data.length, _) &*&
 		size >= 0 &*& size <= data.length &*& info == unit &*& data.length <= Short.MAX_VALUE; @*/
-
-//&*& parentFile.DedicatedFile(?parentFileID, ?parentParentFile, ?parentState, ?parentSiblings, ?parentSnumber)
+		
 	// link to parent DF
 	private DedicatedFile parentFile;
 	// data stored in file
@@ -493,7 +461,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	// current size of data stored in file
 	short size;
 	public ElementaryFile(short fid, DedicatedFile parent, byte[] d) 
-  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& d.length <= Short.MAX_VALUE &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?thesiblings, ?snumber, _, _);
+  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& d.length <= Short.MAX_VALUE &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, _, _);
       	    //@ ensures ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	{
 		super(fid);
@@ -504,8 +472,8 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		//@ close ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	}
 	public ElementaryFile(short fid, DedicatedFile parent, short maxSize) 
-  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?theSiblings, ?snumber, ?siblist, ?info) &*& snumber < DedicatedFile.MAX_SIBLINGS;
-      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, _,  (byte)(snumber + 1), append(siblist, cons(this, nil)), info);
+  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?siblist, ?info) &*& length(siblist) < DedicatedFile.MAX_SIBLINGS;
+      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, append(siblist, cons(this, nil)), info);
 	{
 		super(fid);
 		parentFile = parent;
@@ -523,8 +491,6 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		if (active == true) {
 			//@ open [f/2]File(fid, a, ?info3);
 			//@ open [f/2]ElementaryFile(_, _, _, _, _, ?info4);
-			//@ close [f]ElementaryFile(_, _, _, _, _, info);			
-			//@ open [f]ElementaryFile(_, _, _, _, _, info);
 			return data;
 			//@ close [f]ElementaryFile(fid, pf, d, a, size, info);
 		} else {
@@ -582,15 +548,9 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
 	{
-		////@ open [f]File(fid, state, info);
-		////@ open [f]ElementaryFile(fid, ?d1, ?d2, state, ?d3, ?info2);
-		////@ open [f]this.File(File.class)(fid, state, ?info3);
 		//@ open [f]valid_id(this);
 		return fileID;
 		//@ close [f]valid_id(this);
-		////@ close [f]this.File(File.class)(fid, state, info3);
-		////@ close [f]ElementaryFile(fid, d1, d2, state, d3, info2);
-		////@ close [f]File(fid, state, info);
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
@@ -693,7 +653,7 @@ public final class EidCard extends Applet {
             messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
             previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
             signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
-            masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
+            masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
             cardholderPin |-> ?theCardholderPin &*& OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
             resetPin |-> ?theResetPin &*& OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
             unblockPin |-> ?theUnblockPin &*& OwnerPIN(theUnblockPin, _, _) &*& theUnblockPin != null &*&
@@ -710,8 +670,8 @@ public final class EidCard extends Applet {
             authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, ?theAuthenticationObjectDirectoryFileData, _, _, _) &*& theAuthenticationObjectDirectoryFile != null &*& theAuthenticationObjectDirectoryFileData != null &*& theAuthenticationObjectDirectoryFileData.length == 0x40 &*&  theAuthenticationObjectDirectoryFile.getClass() == ElementaryFile.class &*&
             privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& thePrivateKeyDirectoryFile.ElementaryFile(_, _, ?thePrivateKeyDirectoryFileData, _, _, _) &*& thePrivateKeyDirectoryFile != null &*& thePrivateKeyDirectoryFileData != null &*& thePrivateKeyDirectoryFileData.length == 0xB0 &*& thePrivateKeyDirectoryFile.getClass() == ElementaryFile.class &*&
             certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?theCertificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile != null &*& theCertificateDirectoryFileData != null &*& theCertificateDirectoryFileData.length == 0xB0 &*& theCertificateDirectoryFile.getClass() == ElementaryFile.class &*&
-            belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
-            idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
+            belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
+            idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
             caCertificate |-> ?theCaCertificate &*& theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theCaCertificate.getClass() == ElementaryFile.class &*&
 	    selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
 	    masterSibs == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil))) &*&
@@ -724,7 +684,6 @@ public final class EidCard extends Applet {
 	    idSibs == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(thecaRoleIDFile, cons(thePreferencesFile, cons(thePhotoFile, nil))))))) &*&
 	    selected_file_types(theSelectedFile, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
     	    (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class) &*&
-      	    /*internalAuthenticateCounter |-> ?theInternalAuthenticateCounter &*&*/
 	    signatureAlgorithm |-> ?theSignatureAlgorithm &*&
 	    nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
 	    authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&
@@ -791,16 +750,13 @@ public final class EidCard extends Applet {
 	/* PIN related variables */
 	// offsets within PIN related APDUs
 	private final static byte OFFSET_PIN_HEADER = ISO7816.OFFSET_CDATA;
-	/*VF*private final static byte OFFSET_PIN_DATA = ISO7816.OFFSET_CDATA + 1;*/
-	private final static byte OFFSET_PIN_DATA = (byte)(ISO7816.OFFSET_CDATA + 1);
-	/*VF*private final static byte OFFSET_SECOND_PIN_HEADER = ISO7816.OFFSET_CDATA + 8;*/
-	private final static byte OFFSET_SECOND_PIN_HEADER = (byte)(ISO7816.OFFSET_CDATA + 8);
+	private final static byte OFFSET_PIN_DATA = ISO7816.OFFSET_CDATA + 1;
+	
+	private final static byte OFFSET_SECOND_PIN_HEADER = ISO7816.OFFSET_CDATA + 8;
 
-	/*VF*private final static byte OFFSET_SECOND_PIN_DATA = ISO7816.OFFSET_CDATA + 9;*/
-	private final static byte OFFSET_SECOND_PIN_DATA = (byte)(ISO7816.OFFSET_CDATA + 9);
+	private final static byte OFFSET_SECOND_PIN_DATA = ISO7816.OFFSET_CDATA + 9;
 
-	/*VF*private final static byte OFFSET_SECOND_PIN_DATA_END = ISO7816.OFFSET_CDATA + 15;*/
-	private final static byte OFFSET_SECOND_PIN_DATA_END = (byte)(ISO7816.OFFSET_CDATA + 15);
+	private final static byte OFFSET_SECOND_PIN_DATA_END = ISO7816.OFFSET_CDATA + 15;
 	// 4 different PIN codes
 	protected final static byte PIN_SIZE = 8;
 	protected final static byte CARDHOLDER_PIN = (byte) 0x01;
@@ -857,9 +813,7 @@ public final class EidCard extends Applet {
 	protected final static short DF_BELPIC = (short) 0xDF00;
 	protected final static short DF_ID = (short) 0xDF01;
 	protected MasterFile masterFile;
-	/*VF*protected DedicatedFile belpicDirectory, idDirectory;*/
-	protected DedicatedFile belpicDirectory;
-	protected DedicatedFile idDirectory;
+	protected DedicatedFile belpicDirectory, idDirectory;
 	protected ElementaryFile dirFile;
 	// data under BELPIC directory
 	protected final static short ODF = (short) 0x5031;
@@ -872,17 +826,7 @@ public final class EidCard extends Applet {
 	protected final static short CA_CERTIFICATE = (short) 0x503A;
 	protected final static short ROOT_CA_CERTIFICATE = (short) 0x503B;
 	protected final static short RRN_CERTIFICATE = (short) 0x503C;
-	/*VF*protected ElementaryFile objectDirectoryFile, tokenInfo, authenticationObjectDirectoryFile, privateKeyDirectoryFile, certificateDirectoryFile, authenticationCertificate, nonRepudiationCertificate, caCertificate, rootCaCertificate, rrnCertificate;*/
-	protected ElementaryFile objectDirectoryFile;
-	protected ElementaryFile tokenInfo;
-	protected ElementaryFile authenticationObjectDirectoryFile;
-	protected ElementaryFile privateKeyDirectoryFile;
-	protected ElementaryFile certificateDirectoryFile;
-	protected ElementaryFile authenticationCertificate;
-	protected ElementaryFile nonRepudiationCertificate;
-	protected ElementaryFile caCertificate;
-	protected ElementaryFile rootCaCertificate;
-	protected ElementaryFile rrnCertificate;
+	protected ElementaryFile objectDirectoryFile, tokenInfo, authenticationObjectDirectoryFile, privateKeyDirectoryFile, certificateDirectoryFile, authenticationCertificate, nonRepudiationCertificate, caCertificate, rootCaCertificate, rrnCertificate;
 	// data under ID directory
 	protected final static short IDENTITY = (short) 0x4031;
 	protected final static short SGN_IDENTITY = (short) 0x4032;
@@ -891,14 +835,8 @@ public final class EidCard extends Applet {
 	protected final static short PHOTO = (short) 0x4035;
 	protected final static short CA_ROLE_ID = (short) 0x4038;
 	protected final static short PREFERENCES = (short) 0x4039;
-	/*VF*protected ElementaryFile identityFile, identityFileSignature, addressFile, addressFileSignature, photoFile, caRoleIDFile, preferencesFile;*/
-	protected ElementaryFile identityFile;
-	protected ElementaryFile identityFileSignature;
-	protected ElementaryFile addressFile;
-	protected ElementaryFile addressFileSignature;
-	protected ElementaryFile photoFile;
-	protected ElementaryFile caRoleIDFile;
-	protected ElementaryFile preferencesFile;
+	protected ElementaryFile identityFile, identityFileSignature, addressFile, addressFileSignature, photoFile, caRoleIDFile, preferencesFile;
+
 	/*
 	 * different file operations see ISO 7816-4 table 17+18
 	 */
@@ -935,8 +873,7 @@ public final class EidCard extends Applet {
 	private File selectedFile;
 	// only 5000 internal authenticates can be done and then the activation
 	// PIN needs to be checked again
-	/*VF*private short internalAuthenticateCounter = 5000;*/
-	//private short internalAuthenticateCounter;
+	private short internalAuthenticateCounter = 5000;
 	/**
 	 * called by the JCRE to create an applet instance
 	 */
@@ -965,7 +902,7 @@ public final class EidCard extends Applet {
 	    @*/
       	/*@ ensures dirFile |-> ?theDirFile &*& theDirFile.ElementaryFile(_, _, ?dirFileData, _, _, _) &*& theDirFile != null 
       	              &*& dirFileData != null &*& dirFileData.length == 0x25
-	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, _, 5, ?belpic_siblings, _) &*& theBelpicDirectory != null
+	         &*& belpicDirectory |-> ?theBelpicDirectory &*& theBelpicDirectory.DedicatedFile(_, _, _, ?belpic_siblings, _) &*& theBelpicDirectory != null
 	         &*& tokenInfo |-> ?theTokenInfo &*& theTokenInfo.ElementaryFile(_, _, ?tokenInfoData, _, _, _) &*& theTokenInfo != null
 	              &*& tokenInfoData != null &*& tokenInfoData.length == 0x30
 	         &*& objectDirectoryFile |-> ?theObjectDirectoryFile &*& theObjectDirectoryFile.ElementaryFile(_, _, ?objectDirectoryFileData, _, _, _) &*& theObjectDirectoryFile != null
@@ -976,7 +913,7 @@ public final class EidCard extends Applet {
 	              &*& privateKeyDirectoryFileData != null &*& privateKeyDirectoryFileData.length == 0xB0
 	         &*& certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& theCertificateDirectoryFile.ElementaryFile(_, _, ?certificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile !=  null
 	              &*& certificateDirectoryFileData != null &*& certificateDirectoryFileData.length == 0xB0
-	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, _, 6, ?idDirectory_siblings, _) &*& theIdDirectory != null
+	         &*& idDirectory |-> ?theIdDirectory &*& theIdDirectory.DedicatedFile(_, _, _, ?idDirectory_siblings, _) &*& theIdDirectory != null
 	         &*& identityFile |-> ?theIdentityFile &*& theIdentityFile.ElementaryFile(_, _, ?identityData, _, _, _) &*& theIdentityFile != null
 	              &*& identityData != null &*& identityData.length == 0xD0
 	         &*& identityFileSignature |-> ?theIdentityFileSignature &*& theIdentityFileSignature.ElementaryFile(_, _, ?identitySignatureData, _, _, _) &*& theIdentityFileSignature != null
@@ -989,8 +926,7 @@ public final class EidCard extends Applet {
 	              &*& caRoldIDFileData != null &*& caRoldIDFileData.length == 0x20
 	         &*& preferencesFile |-> ?thePreferencesFile &*& thePreferencesFile.ElementaryFile(_, _, ?preferencesFileData, _, _, _) &*& thePreferencesFile != null
 	              &*& preferencesFileData != null &*& preferencesFileData.length == 100
-	         //&*& caCertificate |-> ?theCaCertificate
-	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, _, _, ?master_siblings, _) &*& theMasterFile != null
+	         &*& masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, ?master_siblings, _) &*& theMasterFile != null
 	         &*& master_siblings == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil)))
 	         &*& belpic_siblings == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile,nil)))))
 	         &*& idDirectory_siblings == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(theCaRoleIDFile, cons(thePreferencesFile, nil))))))
@@ -1372,10 +1308,10 @@ public final class EidCard extends Applet {
 	 * initialize empty files that need to be filled latter using UPDATE BINARY
 	 */
 	private void initializeEmptyLargeFiles() 
-	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, _, ?nb_belpic_sibs, ?belpic_sibs, _) &*& 
-	                nb_belpic_sibs == 5 &*&
-	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, _, ?nb_iddir_sibs, ?iddir_sibs, _) &*& 
-	    		nb_iddir_sibs < 7 &*&
+	    /*@ requires belpicDirectory |-> ?bpd &*& bpd != null &*& bpd.DedicatedFile(_, _, _, ?belpic_sibs, _) &*& 
+	     		length(belpic_sibs) < 6 &*&
+	    		idDirectory |-> ?idd &*& idd != null &*& idd.DedicatedFile(_, _, _, ?iddir_sibs, _) &*& 
+	    		length(iddir_sibs) < 7 &*&
 	    		caCertificate |-> _ &*& rrnCertificate |-> _ &*& rootCaCertificate |-> _ &*& 
 	    		photoFile |-> _ &*& authenticationCertificate |-> _ &*& nonRepudiationCertificate |-> _; @*/
       	    /*@ ensures belpicDirectory |-> bpd &*& 
@@ -1386,8 +1322,8 @@ public final class EidCard extends Applet {
 	    		photoFile |-> ?pf &*&  pf.ElementaryFile(PHOTO, idd, ?d4, true, 0, _) &*& d4 != null &*& d4.length == 3584 &*&
 	    		authenticationCertificate |-> ?ac &*&  ac.ElementaryFile(AUTH_CERTIFICATE, bpd, ?d5, true, 0, _) &*& d5 != null &*& d5.length == 1200 &*&
 	    		nonRepudiationCertificate |-> ?nrc &*&  nrc.ElementaryFile(NONREP_CERTIFICATE, bpd, ?d6, true, 0, _) &*& d6 != null &*& d6.length == 1200 &*&
-	    		idd.DedicatedFile(_, _, _, _, _, append(iddir_sibs, cons(pf, nil)), _) &*& 
-	    		bpd.DedicatedFile(_, _, _, _, (byte) (nb_belpic_sibs + 5), append(append(append(append(append(belpic_sibs, cons(cac, nil)), cons(rrnc, nil)), cons(rootcac, nil)), cons(ac, nil)), cons(nrc, nil)), _); @*/
+	    		idd.DedicatedFile(_, _, _, append(iddir_sibs, cons(pf, nil)), _) &*& 
+	    		bpd.DedicatedFile(_, _, _, append(append(append(append(append(belpic_sibs, cons(cac, nil)), cons(rrnc, nil)), cons(rootcac, nil)), cons(ac, nil)), cons(nrc, nil)), _); @*/
 	{
 		/*
 		 * these 3 certificates are the same for all sample eid card applets
@@ -1469,14 +1405,12 @@ public final class EidCard extends Applet {
 			// check if the requested file exists under the current DF
 			////@ close masterFile.DedicatedFile();
 			//@ MasterFile theMasterFile = masterFile;
-			//@ assert theMasterFile.MasterFile(16128, null, ?x1, ?x2, ?x3, ?x4, ?x5);
-			//@ close theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
+			//@ assert theMasterFile.MasterFile(16128, null, ?x1, ?x2, ?x3);
+			//@ close theMasterFile.DedicatedFile(16128, null, x1, x2, x3);
 			File s = ((DedicatedFile) masterFile).getSibling(fid);
-			//@ open theMasterFile.DedicatedFile(16128, null, x1, x2, x3, x4, x5);
+			//@ open theMasterFile.DedicatedFile(16128, null, x1, x2, x3);
 			//VF /bug
 			if (s != null) {
-				//TODO: get rid of this
-				//@ assert dirFile |-> ?theDirFile &*& belpicDirectory |-> ?theBPD &*& idDirectory |-> ?theIdD &*& s == theDirFile || s == theBPD || s == theIdD;
 				selectedFile = s;
 			//the fid is an elementary file:
 			} else {
@@ -1531,7 +1465,7 @@ public final class EidCard extends Applet {
 				    [1/2]messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
 				    [1/2]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
 				    [1/2]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
-				    [1/2]masterFile |-> ?theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, _, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
+				    [1/2]masterFile |-> ?theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
 				    [1/2]cardholderPin |-> ?theCardholderPin &*& [1/2]OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
 				    [1/2]resetPin |-> ?theResetPin &*& [1/2]OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
 				    [1/2]unblockPin |-> ?theUnblockPin &*& [1/2]OwnerPIN(theUnblockPin, _, _) &*& theUnblockPin != null &*&
@@ -1548,8 +1482,8 @@ public final class EidCard extends Applet {
 				    [1/2]authenticationObjectDirectoryFile |-> ?theAuthenticationObjectDirectoryFile &*& [1/2]theAuthenticationObjectDirectoryFile.ElementaryFile(_, _, ?theAuthenticationObjectDirectoryFileData, _, _, _) &*& theAuthenticationObjectDirectoryFile != null &*& theAuthenticationObjectDirectoryFileData != null &*& theAuthenticationObjectDirectoryFileData.length == 0x40 &*&  theAuthenticationObjectDirectoryFile.getClass() == ElementaryFile.class &*&
 				    [1/2]privateKeyDirectoryFile |-> ?thePrivateKeyDirectoryFile &*& [1/2]thePrivateKeyDirectoryFile.ElementaryFile(_, _, ?thePrivateKeyDirectoryFileData, _, _, _) &*& thePrivateKeyDirectoryFile != null &*& thePrivateKeyDirectoryFileData != null &*& thePrivateKeyDirectoryFileData.length == 0xB0 &*& thePrivateKeyDirectoryFile.getClass() == ElementaryFile.class &*&
 				    [1/2]certificateDirectoryFile |-> ?theCertificateDirectoryFile &*& [1/2]theCertificateDirectoryFile.ElementaryFile(_, _, ?theCertificateDirectoryFileData, _, _, _) &*& theCertificateDirectoryFile != null &*& theCertificateDirectoryFileData != null &*& theCertificateDirectoryFileData.length == 0xB0 &*& theCertificateDirectoryFile.getClass() == ElementaryFile.class &*&
-				    [1/2]belpicDirectory |-> ?theBelpicDirectory &*& [1/2]theBelpicDirectory.DedicatedFile(_, _, _, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
-				    [1/2]idDirectory |-> ?theIdDirectory &*& [1/2]theIdDirectory.DedicatedFile(_, _, _, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
+				    [1/2]belpicDirectory |-> ?theBelpicDirectory &*& [1/2]theBelpicDirectory.DedicatedFile(_, _, _, ?belpicSibs, _) &*& theBelpicDirectory != null &*& theBelpicDirectory.getClass() == DedicatedFile.class &*&
+				    [1/2]idDirectory |-> ?theIdDirectory &*& [1/2]theIdDirectory.DedicatedFile(_, _, _, ?idSibs, _) &*& theIdDirectory != null &*& theIdDirectory.getClass() == DedicatedFile.class &*&
 				    [1/2]caCertificate |-> ?theCaCertificate &*& [1/2]theCaCertificate.ElementaryFile(_, _, _, _, _, _) &*& theCaCertificate.getClass() == ElementaryFile.class &*&
 				    [1/2]selectedFile |-> ?theSelectedFile &*& theSelectedFile != null &*&
 				    masterSibs == cons<File>(theDirFile, cons(theBelpicDirectory, cons(theIdDirectory, nil))) &*&
@@ -1576,9 +1510,24 @@ public final class EidCard extends Applet {
 				        : 
 				      selected_file_types(f, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
 				      f.getClass() == ElementaryFile.class || f.getClass() == MasterFile.class || f.getClass() == DedicatedFile.class			                 
-				    )
-				      
-				    ; @*/
+				    ) &*&
+				    (i == 0 ? 
+				      f == theMasterFile 
+				        :
+				      (i <= 2 ?
+				        f == null || f == theMasterFile || mem(f, masterSibs) 
+				          :
+				        (i <= 4 ?
+				          f == null || mem(f, masterSibs) || mem(f, belpicSibs) || mem(f, idSibs)
+				        :
+				          (i <= 6 ?
+				            f == null || mem(f, belpicSibs) || mem(f, idSibs)
+				              :
+				            false
+				          )
+				        )
+				      )
+				    ); @*/
 		{
 			short fid = Util.makeShort(buffer[(short) (ISO7816.OFFSET_CDATA + i)], buffer[(short) (ISO7816.OFFSET_CDATA + i + 1)]);
 			// MF can be explicitely or implicitely in the path name
@@ -1589,7 +1538,6 @@ public final class EidCard extends Applet {
 				if ((f instanceof ElementaryFile) || f == null)
 					ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
 				//@ open selected_file_types(f, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _);
-//				//@ assert f == masterFile || f == idDirectory || f == belpicDirectory;
 				//@ File oldf = f;
 				/*@ 
 				if(f == masterFile) 
@@ -1651,7 +1599,7 @@ public final class EidCard extends Applet {
 		 * PIN header is "24" (length of PIN = 4) PIN itself is "1234" (4
 		 * digits) fill rest of PIN data with F
 		 */
-		/*VF* byte[] cardhold = { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF }; */
+		/*VF*byte[] cardhold = { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF }; */
 		byte[] cardhold = new byte[] { (byte) 0x24, (byte) 0x12, (byte) 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF };
 		cardholderPin = new OwnerPIN(CARDHOLDER_PIN_TRY_LIMIT, PIN_SIZE);
 		cardholderPin.update(cardhold, (short) 0, PIN_SIZE);
@@ -1726,22 +1674,7 @@ public final class EidCard extends Applet {
 		// initialize file system
 		initializeFileSystem();
 		// initialize place holders for large files (certificates + photo)
-		//<begin VF INLINED>: initializeEmptyLargeFiles();
-		caCertificate = new ElementaryFile(CA_CERTIFICATE, belpicDirectory, (short) 1200);
-		rrnCertificate = new ElementaryFile(RRN_CERTIFICATE, belpicDirectory, (short) 1200);
-		
-		rootCaCertificate = new ElementaryFile(ROOT_CA_CERTIFICATE, belpicDirectory, (short) 1200);
-		/*
-		 * to save some memory we only support 1 photo for all subclasses
-		 * ideally this should be applet specific and have max size 3584 (3.5K)
-		 */
-		photoFile = new ElementaryFile(PHOTO, idDirectory, (short) 3584);
-		/*
-		 * certificate #2 and #3 are applet specific allocate enough memory
-		 */
-		authenticationCertificate = new ElementaryFile(AUTH_CERTIFICATE, belpicDirectory, (short) 1200);
-		nonRepudiationCertificate = new ElementaryFile(NONREP_CERTIFICATE, belpicDirectory, (short) 1200);
-		//<end VF inline>
+		initializeEmptyLargeFiles();
 		// initialize basic keys pair
 		initializeKeyPairs();
 		/*VF* END COPY */
@@ -2368,18 +2301,10 @@ public final class EidCard extends Applet {
 		//@ open [1/2]valid();
 		
 		if (getSignatureType() == NON_REPUDIATION) {		
-			//cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k = nonRepKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		if (getSignatureType() == AUTHENTICATION) {
-			//cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k2 = authKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k2, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		//@ close [1/2]valid();
 		JCSystem.beginTransaction();
@@ -2436,19 +2361,11 @@ public final class EidCard extends Applet {
 		// use the correct key
 		if (getSignatureType() == NON_REPUDIATION) {
 			////cipher.init(nonRepPrivateKey, Cipher.MODE_ENCRYPT); // stond al in comments
-			//cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k = nonRepKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		
 		if (getSignatureType() == AUTHENTICATION) {
-			//cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k2 = authKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k2, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		
 		//@ close [1/2]valid();
@@ -2498,18 +2415,10 @@ public final class EidCard extends Applet {
 		// use the correct key
 		//@ open [1/2]valid();
 		if (getSignatureType() == NON_REPUDIATION) {
-			//cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k = nonRepKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)nonRepKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		if (getSignatureType() == AUTHENTICATION) {
-			//cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
-			/*VF* rewritten due to bug */
-			PrivateKey k2 = authKeyPair.getPrivate();
-			cipher.init((RSAPrivateCrtKey)k2, Cipher.MODE_ENCRYPT);
-			/*VF* /rewritten */
+			cipher.init((RSAPrivateCrtKey)authKeyPair.getPrivate(), Cipher.MODE_ENCRYPT);
 		}
 		//@ close [1/2]valid();
 		JCSystem.beginTransaction();
@@ -2600,8 +2509,8 @@ public final class EidCard extends Applet {
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if (lc != (short) 11)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		//VF bug... byte offset = (ISO7816.OFFSET_CDATA + 0x01);
-		byte offset = (byte)(ISO7816.OFFSET_CDATA + 0x01);
+		byte offset = (ISO7816.OFFSET_CDATA + 0x01);
+		//byte offset = (byte)(ISO7816.OFFSET_CDATA + 0x01);
 		// create keypair using parameters given:
 		// short keyLength = Util.makeShort(buffer[ISO7816.OFFSET_CDATA],
 		// buffer[offset]);
@@ -2671,10 +2580,7 @@ public final class EidCard extends Applet {
 		//@ open [1/2]valid();
 		if (buffer[ISO7816.OFFSET_P2] == AUTHENTICATION){
 			if (getPreviousApduType() != GENERATE_KEY_PAIR) {
-				//VF: bug  authKeyPair.getPublic().clearKey();
-			        PublicKey pk = authKeyPair.getPublic();
-			        pk.clearKey();
-			        //VF: /bug
+				authKeyPair.getPublic().clearKey();
 			        //@ close [1/2]valid();
 				JCSystem.beginTransaction();
 			        //@ open valid();
@@ -2684,22 +2590,11 @@ public final class EidCard extends Applet {
 			        //@ open [1/2]valid();
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}
-			//VF: bug; was origineel:
-			//((RSAPublicKey) authKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
-			//((RSAPublicKey) authKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
-			PublicKey pk = authKeyPair.getPublic();
-			RSAPublicKey rpk = (RSAPublicKey)pk;
-			rpk.getExponent(tempBuffer, (short) 7);
-			rpk.getModulus(tempBuffer, (short) 13);
-			//VF /bug
+			((RSAPublicKey) authKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
+			((RSAPublicKey) authKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
 		}else if (buffer[ISO7816.OFFSET_P2] == NON_REPUDIATION) { 
-			PublicKey tpk; //VF is voor bugs op te lossen
 			if (getPreviousApduType() != GENERATE_KEY_PAIR) {
-				//VF: bug; was origineel:
-				//nonRepKeyPair.getPublic().clearKey();
-				tpk = nonRepKeyPair.getPublic();
-				tpk.clearKey();
-				//VF: /bug
+				nonRepKeyPair.getPublic().clearKey();
 			        //@ close [1/2]valid();
 				JCSystem.beginTransaction();
 			        //@ open valid();
@@ -2709,25 +2604,13 @@ public final class EidCard extends Applet {
 				//@ open [1/2]valid();
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}			
-			//VF: bug; was origineel:
-			//((RSAPublicKey) nonRepKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
-			//((RSAPublicKey) nonRepKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
-			tpk = nonRepKeyPair.getPublic();
-			RSAPublicKey rpk2 = (RSAPublicKey)tpk;
-			rpk2.getExponent(tempBuffer, (short) 7);
-			rpk2.getModulus(tempBuffer, (short) 13);
-			//VF: /bug
-		}else if (buffer[ISO7816.OFFSET_P2] == BASIC) {
-			//VF: bug; was origineel:
-			//((RSAPublicKey) basicKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
-			//((RSAPublicKey) basicKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
+			((RSAPublicKey) nonRepKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
+			((RSAPublicKey) nonRepKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
+		}else if (buffer[ISO7816.OFFSET_P2] == BASIC) {		
 			if (basicKeyPair == null)
 				ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
-			PublicKey tpk3 = basicKeyPair.getPublic();
-			RSAPublicKey rpk3 = (RSAPublicKey)tpk3;
-			rpk3.getExponent(tempBuffer, (short) 7);
-			rpk3.getModulus(tempBuffer, (short) 13);
-			//VF: /bug
+			((RSAPublicKey) basicKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
+			((RSAPublicKey) basicKeyPair.getPublic()).getModulus(tempBuffer, (short) 13);
 		} else {
 			ISOException.throwIt(SW_REFERENCE_DATA_NOT_FOUND);
 		}
@@ -2738,14 +2621,8 @@ public final class EidCard extends Applet {
 		//@ close valid();
 		JCSystem.commitTransaction();
 		//@ open [1/2]valid();
-		//VF: bug; was origineel:
-		// authKeyPair.getPublic().clearKey();
-		// nonRepKeyPair.getPublic().clearKey();
-		PublicKey pkv = authKeyPair.getPublic();
-		pkv.clearKey();
-		pkv = nonRepKeyPair.getPublic();
-		pkv.clearKey();
-		//VF: /bug
+		authKeyPair.getPublic().clearKey();
+		nonRepKeyPair.getPublic().clearKey();
 		// set the actual number of outgoing data bytes
 		apdu.setOutgoingLength(le);
 		// send content of buffer in apdu

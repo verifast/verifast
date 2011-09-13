@@ -5434,7 +5434,15 @@ let verify_program_core (* ?verify_program_core *)
             None -> None
           | Some ((lf, t, vis, binding, final, init, value), fclass) ->
             if binding <> Static then static_error l "Instance field access without target object" None;
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t, None)
+            let constant_value =
+              if final then
+                match ! value with
+                  Some(Some(IntConst(i))) -> Some(i)
+                | _ -> None
+              else
+                None
+            in
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t, constant_value)
       in
       match field_of_class with
         Some result -> result
@@ -6006,7 +6014,15 @@ let verify_program_core (* ?verify_program_core *)
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
       | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Static then static_error l "Accessing a static field via an instance is not supported." None;
-        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t, None)
+        let constant_value =
+              if final then
+                match ! value with
+                  Some(Some(IntConst(i))) -> Some(i)
+                | _ -> None
+              else
+                None
+        in
+        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t, constant_value)
       end
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), IntType, None)
@@ -6015,7 +6031,15 @@ let verify_program_core (* ?verify_program_core *)
         None -> static_error l "No such field" None
       | Some ((_, t, vis, binding, final, init, value), fclass) ->
         if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
-        (WRead (l, w, fclass, f, t, true, value, Real), t, None)
+        let constant_value =
+              if final then
+                match ! value with
+                  Some(Some(IntConst(i))) -> Some(i)
+                | _ -> None
+              else
+                None
+         in
+        (WRead (l, w, fclass, f, t, true, value, Real), t, constant_value)
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
