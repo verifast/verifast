@@ -1131,9 +1131,8 @@ and
       loc *
       expr *
       loop_spec option *
-      expr option *
-      stmt list *
-      loc (* while regel-conditie-lus invariant- lus body - close brace location *)
+      expr option * (* decreases clause *)
+      stmt list
   | BlockStmt of
       loc *
       decl list *
@@ -1579,7 +1578,7 @@ let stmt_loc s =
   | Open (l, _, _, _, _, _, coef) -> l
   | Close (l, _, _, _, _, _, coef) -> l
   | ReturnStmt (l, _) -> l
-  | WhileStmt (l, _, _, _, _, _) -> l
+  | WhileStmt (l, _, _, _, _) -> l
   | Throw (l, _) -> l
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
@@ -2379,8 +2378,8 @@ and
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
-     (inv, dec, b, closeBraceLoc) = parse_loop_core
-  >] -> WhileStmt (l, e, inv, dec, b, closeBraceLoc)
+     (inv, dec, body) = parse_loop_core
+  >] -> WhileStmt (l, e, inv, dec, body)
 | [< '(l, Kwd "for");
      '(_, Kwd "(");
      init_stmts = begin parser
@@ -2396,10 +2395,10 @@ and
      '(_, Kwd ";");
      update_exprs = rep_comma parse_expr;
      '(_, Kwd ")");
-     (inv, dec, b, closeBraceLoc) = parse_loop_core
+     (inv, dec, b) = parse_loop_core
   >] ->
   let cond = match cond with None -> True l | Some e -> e in
-  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs, closeBraceLoc)], closeBraceLoc, ref [])
+  BlockStmt (l, [], init_stmts @ [WhileStmt (l, cond, inv, dec, b @ List.map (fun e -> ExprStmt e) update_exprs)], l, ref [])
 | [< '(l, Kwd "throw"); e = parse_expr; '(_, Kwd ";") >] -> Throw (l, e)
 | [< '(l, Kwd "break"); '(_, Kwd ";") >] -> Break(l)
 | [< '(l, Kwd "try");
@@ -2469,8 +2468,8 @@ and
         | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
-    '(entryBraceLoc, Kwd "{"); b = parse_stmts; '(closeBraceLoc, Kwd "}")
-  >] -> (inv, dec, [BlockStmt(entryBraceLoc, [], b, closeBraceLoc, ref [])], closeBraceLoc)
+    body = parse_stmt;
+  >] -> (inv, dec, [body])
 and
   packagename_of_read l e =
   match e with
@@ -9144,7 +9143,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Open (l, target, g, targs, ps0, ps1, coef) -> []
     | Close (l, target, g, targs, ps0, ps1, coef) -> []
     | ReturnStmt (l, e) -> (match e with None -> [] | Some e -> expr_assigned_variables e)
-    | WhileStmt (l, e, p, d, ss, _) -> expr_assigned_variables e @ block_assigned_variables ss
+    | WhileStmt (l, e, p, d, ss) -> expr_assigned_variables e @ block_assigned_variables ss
     | Throw (l, e) -> expr_assigned_variables e
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
@@ -10045,7 +10044,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (match patopt with None -> () | Some(p) -> pat_expr_mark_addr_taken p locals); 
       cont locals
     | SwitchStmt(_, e, cls) -> expr_mark_addr_taken e locals; List.iter (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_mark_addr_taken e locals); stmts_mark_addr_taken ss locals (fun _ -> ()); | SwitchStmtDefaultClause(_, ss) -> stmts_mark_addr_taken ss locals (fun _ -> ())) cls; cont locals
-    | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> 
+    | WhileStmt(_, e1, loopspecopt, e2, ss) -> 
         expr_mark_addr_taken e1 locals; 
         (match e2 with None -> () | Some(e2) -> expr_mark_addr_taken e2 locals);
         (match loopspecopt with 
@@ -10130,7 +10129,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Open _ | Close _ -> []
     | ReturnStmt(_, Some(e)) -> expr_address_taken e
     | ReturnStmt(_, None) -> []
-    | WhileStmt(_, e1, loopspecopt, e2, ss, _) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
+    | WhileStmt(_, e1, loopspecopt, e2, ss) -> (expr_address_taken e1) @ (match e2 with None -> [] | Some(e2) -> expr_address_taken e2) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
     | BlockStmt(_, decls, ss, _, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
@@ -11836,10 +11835,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true l eo [] return_cont econt
-    | WhileStmt (l, e, None, dec, ss, closeBraceLoc) ->
+    | WhileStmt (l, e, None, dec, ss) ->
       static_error l "Loop invariant required." None
-    | WhileStmt (l, e, Some (LoopInv p), dec, ss, closeBraceLoc) ->
+    | WhileStmt (l, e, Some (LoopInv p), dec, ss) ->
       if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
+      let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
@@ -11886,7 +11886,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end $. fun h' env ->
       let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
       assert_pred rules [] (pn,ilist) h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
-      check_leaks h''' env closeBraceLoc "Loop leaks heap chunks.";
+      check_leaks h''' env endBodyLoc "Loop leaks heap chunks.";
       begin match (t_dec, dec) with
         (None, None) -> ()
       | (Some t_dec, Some dec) ->
@@ -11896,14 +11896,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
-    | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss, closeBraceLoc) ->
+    | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss) ->
       if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
+      let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       let lblenv = ("#break", fun blocks_done sizemap tenv ghostenv h env -> break h env)::lblenv in
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       if not pure then check_ghost ghostenv l e;
-      let [BlockStmt(_, _, ss, _, locals_to_free)] = ss in
-      check_block_declarations ss;
+      let (ss, locals_to_free) = (* do we really need to do this? Aren't locals freed automatically at the end of the loop if the body is a block? *)
+        match ss with
+          BlockStmt(_, _, ss, _, locals_to_free) :: rest -> check_block_declarations ss; (ss @ rest, locals_to_free)
+        | _ -> (ss, ref [])
+      in
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
@@ -11929,7 +11933,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let ghostenv' = List.map (fun (x, _) -> x) old_xs_env @ ghostenv' in
       let check_post h' env' =
         assert_pred rules [] (pn,ilist) h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
-        check_leaks h' env' closeBraceLoc "Loop leaks heap chunks"
+        check_leaks h' env' endBodyLoc "Loop leaks heap chunks"
       in
       let exit_loop h' env' cont =
         check_post h' env';
@@ -11947,7 +11951,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         assume_pred [] (pn,ilist) h ghostenv env post real_unit None None $. fun h ghostenv env ->
         cont tenv''' ghostenv h env
       in
-      let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals closeBraceLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
+      let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals endBodyLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
       let return_cont h' tenv env retval = assert_false h' [] l "Returning out of a requires-ensures loop is not yet supported." None in
       eval_h_nonpure h' env' e $. fun h' env' v ->
       begin fun cont ->
@@ -11970,7 +11974,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       begin fun continue ->
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
-          (fun _ tenv''' _ h' env' -> free_locals closeBraceLoc h' tenv''' env' !locals_to_free (fun h' _ -> continue h' tenv''' env'))
+          (fun _ tenv''' _ h' env' -> free_locals endBodyLoc h' tenv''' env' !locals_to_free (fun h' _ -> continue h' tenv''' env'))
           return_cont
           econt
       end $. fun h' tenv''' env' ->
