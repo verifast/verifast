@@ -136,6 +136,12 @@ let list_remove_dups xs =
   in
   iter [] xs
 
+let try_find p xs =
+  try 
+    Some(List.find p xs)
+  with Not_found -> 
+    None
+  
 let try_extract xs condition =
   let rec try_extract_core xs condition seen =
     match xs with
@@ -1829,7 +1835,7 @@ end
    And Kwd "class" does not match Ident "class".
    *)
 
-type modifier = StaticModifier | FinalModifier | AbstractModifier
+type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
 let parse_decls =
 let rec
@@ -1924,7 +1930,7 @@ and
   parse_java_members cn= parser
   [<'(_, Kwd "}")>] -> []
 | [< '(_, Kwd "/*@"); mems1 = parse_ghost_java_members cn; mems2 = parse_java_members cn >] -> mems1 @ mems2
-| [<v=parse_visibility;m=parse_java_member v cn;mr=parse_java_members cn>] -> m::mr
+| [< m=parse_java_member cn;mr=parse_java_members cn>] -> m::mr
 and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
@@ -1950,13 +1956,14 @@ and
   [< '(l, Kwd "["); '(_, Kwd "]"); t = parse_array_dims (ArrayTypeExpr (l, t)) >] -> t
 | [< >] -> t
 and
-  parse_java_modifier = parser [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
+  parse_java_modifier = parser [< '(_, Kwd "public") >] -> VisibilityModifier(Public) | [< '(_, Kwd "protected") >] -> VisibilityModifier(Protected) | [< '(_, Kwd "private") >] -> VisibilityModifier(Private) | [< '(_, Kwd "static") >] -> StaticModifier | [< '(_, Kwd "final") >] -> FinalModifier | [< '(_, Kwd "abstract") >] -> AbstractModifier
 and
-  parse_java_member vis cn = parser
+  parse_java_member cn = parser
   [< modifiers = rep parse_java_modifier;
      binding = (fun _ -> if List.mem StaticModifier modifiers then Static else Instance);
      final = (fun _ -> List.mem FinalModifier modifiers);
      abstract = (fun _ -> List.mem AbstractModifier modifiers);
+     vis = (fun _ -> (match (try_find (function VisibilityModifier(_) -> true | _ -> false) modifiers) with None -> Package | Some(VisibilityModifier(vis)) -> vis));
      t = parse_return_type;
      member = parser
        [< '(l, Ident x);
@@ -2225,7 +2232,7 @@ and
     (ManifestTypeExpr (_, Void), "") -> false
   | _ -> true
 and
-  parse_param = parser [< t = parse_type; pn = parse_param_name >] ->
+  parse_param = parser [< t = parse_type; pn = parse_param_name; is_array = opt(parser [< '(l, Kwd "[");'(_, Kwd "]") >] -> l) >] ->
     begin match t with
       ManifestTypeExpr (_, Void) -> 
       begin match pn with
@@ -2235,7 +2242,11 @@ and
     | _ -> 
       begin match pn with
         None -> raise (ParseException (type_expr_loc t, "Illegal parameter."));
-      | Some((l, pname)) -> (t, pname)
+      | Some((l, pname)) -> 
+        begin match is_array with
+          None -> (t, pname)
+        | Some(_) -> (ArrayTypeExpr(type_expr_loc t, t), pname)
+        end
       end
     end
 and
