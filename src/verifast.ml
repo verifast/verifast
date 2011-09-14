@@ -603,8 +603,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     with
       Not_found -> let n = String.length id in
       if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
-  and keyword_or_error c =
-    let s = String.make 1 c in
+  and keyword_or_error s =
     try Hashtbl.find (get_kwd_table()) s with
       Not_found -> error "Illegal character"
   in
@@ -686,7 +685,8 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       ghost_range_end();
       stats#overhead ~path:path ~nonGhostLineCount:!non_ghost_line_count ~ghostLineCount:!ghost_line_count ~mixedLineCount:!mixed_line_count;
       None
-    | c -> start_token(); text_junk (); Some (keyword_or_error c)
+    | '*' -> start_token(); text_junk(); begin match text_peek() with '=' -> text_junk(); Some (keyword_or_error "*=") | _ -> Some (keyword_or_error "*") end
+    | c -> start_token(); text_junk (); Some (keyword_or_error (String.make 1 c))
   and ident () =
     match text_peek () with
       ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') ->
@@ -842,7 +842,10 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
           Some (Kwd "/*@")
         | _ -> multiline_comment ()
       )
-    | _ -> Some (keyword_or_error '/')
+    | '=' ->
+      text_junk();
+      Some (keyword_or_error "/=")
+    | _ -> Some (keyword_or_error "/")
   and single_line_comment () =
     match text_peek () with
       '~' -> text_junk (); reportShouldFail (current_loc()); single_line_comment_rest ()
