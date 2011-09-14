@@ -654,11 +654,15 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
          ( reset_buffer (); Some (String (string ())) )
          else
          ( reset_buffer (); store c; ident2 () )
-    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | ':' | '=' | '>' |
+    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '=' | '>' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();
         reset_buffer (); store c; ident2 ()
+    | ':' -> 
+      start_token();
+      text_junk ();
+      Some (keyword_or_error ":")
     | ('0'..'9' as c) ->
         start_token();
         text_junk ();
@@ -10685,61 +10689,63 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           begin match op with
             Add ->
             begin match !ts with
-              Some [IntType; IntType] ->
+              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType]) ->
               check_overflow min_term (ctxt#mk_add v1 v2) max_term
             | Some [PtrType t; IntType] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_term
             | Some [RealType; RealType] ->
               ctxt#mk_real_add v1 v2
-            | Some [ShortType; ShortType] ->
-              check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | Some [Char; Char] ->
-              check_overflow min_term (ctxt#mk_add v1 v2) max_term
-            | Some [UintPtrType; UintPtrType] ->
-              check_overflow min_term (ctxt#mk_add v1 v2) max_term
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Sub ->
             begin match !ts with
-              Some [IntType; IntType] ->
+              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType])->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | Some [PtrType t; IntType] ->
               let n = sizeof l t in
               check_overflow min_term (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_term
             | Some [RealType; RealType] ->
               ctxt#mk_real_sub v1 v2
-            | Some [ShortType; ShortType] ->
-              check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | Some [Char; Char] ->
-              check_overflow min_term (ctxt#mk_sub v1 v2) max_term
-            | Some [UintPtrType; UintPtrType] ->
-              check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Mul ->
             begin match !ts with
-              Some [IntType; IntType] ->
+              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) ->
               check_overflow min_term (ctxt#mk_mul v1 v2) max_term
             | Some [RealType; RealType] ->
               ctxt#mk_real_mul v1 v2
-            | Some [ShortType; ShortType] ->
-              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
-            | Some [Char; Char] ->
-              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Div ->
-            check_overflow min_term (ctxt#mk_div v1 v2) max_term
+            (ctxt#mk_div v1 v2) (* no overflow checking required *)
           | Mod ->
-            check_overflow min_term (ctxt#mk_mod v1 v2) max_term
-          | BitAnd -> ctxt#mk_app bitwise_and_symbol [v1; v2]
-          | BitOr -> ctxt#mk_app bitwise_or_symbol [v1; v2]
-          | BitXor -> ctxt#mk_app bitwise_xor_symbol [v1; v2]
+            let res = (ctxt#mk_mod v1 v2) in
+            begin match lhs_type with
+              IntType -> res
+            | _ -> check_overflow min_term res max_term
+            end
+          | BitAnd -> ctxt#mk_app bitwise_and_symbol [v1; v2] (* no overflow checking required as the abs(result) is less than v1 *)
+          | BitOr -> 
+            let res = ctxt#mk_app bitwise_or_symbol [v1; v2] in
+            begin match lhs_type with
+              IntType -> res
+            | _ -> check_overflow min_term res max_term
+            end
+          | BitXor -> 
+            let res = ctxt#mk_app bitwise_xor_symbol [v1; v2] in
+            begin match lhs_type with
+              IntType -> res
+            | _ -> check_overflow min_term res max_term
+            end
           | ShiftLeft ->
-            check_overflow min_term (ctxt#mk_app shiftleft_symbol [v1;v2]) max_term
+            let res = ctxt#mk_app shiftleft_symbol [v1;v2] in
+            begin match lhs_type with
+              IntType -> res
+            | _ -> check_overflow min_term res max_term
+            end
           | ShiftRight ->
-            check_overflow min_term (ctxt#mk_app shiftright_symbol [v1;v2]) max_term
+            ctxt#mk_app shiftright_symbol [v1;v2] (* no overflow checking required *)
           | _ -> static_error l "Compound assignment not supported for this operator yet." None
           end
           in
