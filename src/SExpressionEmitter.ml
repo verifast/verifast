@@ -322,7 +322,7 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | ExprStmt expr ->
       List [ Symbol "stmt-expression"
            ; sexpr_of_expr expr ]
-    | WhileStmt (loc, cond, invariant, expr, body, _) ->
+    | WhileStmt (loc, cond, invariant, expr, body) ->
       build_list [ Symbol "stmt-while" ]
                  [ "condition", sexpr_of_expr cond
                  ; "invariant", sexpr_of_option sexpr_of_loop_spec invariant

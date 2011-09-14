@@ -979,7 +979,7 @@ type
 
 type
   operator =  (* ?operator *)
-  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
   expr = (* ?expr *)
     True of loc
@@ -1676,7 +1676,7 @@ let expr_flatmap f e = expr_fold (fun state e -> f e @ state) [] e
 
 let common_keywords = [
   "switch"; "case"; ":"; "return"; "for";
-  "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-=";
+  "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
   "||"; "!"; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
@@ -2807,6 +2807,15 @@ and
   [< '(l, Kwd "="); e1 = parse_assign_expr >] -> AssignExpr (l, e0, e1)
 | [< '(l, Kwd "+="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Add, e1, false, ref None, ref None)
 | [< '(l, Kwd "-="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Sub, e1, false, ref None, ref None)
+| [< '(l, Kwd "*="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mul, e1, false, ref None, ref None)
+| [< '(l, Kwd "/="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Div, e1, false, ref None, ref None)
+| [< '(l, Kwd "&="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, And, e1, false, ref None, ref None)
+| [< '(l, Kwd "|="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Or, e1, false, ref None, ref None)
+| [< '(l, Kwd "^="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Xor, e1, false, ref None, ref None)
+| [< '(l, Kwd "%="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, Mod, e1, false, ref None, ref None)
+| [< '(l, Kwd "<<="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftLeft, e1, false, ref None, ref None)
+| [< '(l, Kwd ">>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ShiftRight, e1, false, ref None, ref None)
+(*| [< '(l, Kwd ">>>="); e1 = parse_assign_expr >] -> AssignOpExpr (l, e0, ???, e1, false, ref None, ref None)*)
 | [< >] -> e0
 and
   parse_arglist = parser
@@ -5881,13 +5890,13 @@ let verify_program_core (* ?verify_program_core *)
             end
         end
       end 
-    | AssignOpExpr(l, e1, (Add | Sub as operator), e2, postOp, ts, lhs_type) ->
+    | AssignOpExpr(l, e1, (Add | Sub | Mul as operator), e2, postOp, ts, lhs_type) ->
       let (w1, t1, _) = check e1 in
       lhs_type := Some t1;
       let (w2, t2, _) = check e2 in
       begin
         match t1 with
-          PtrType pt1 ->
+          PtrType pt1 when operator = Add || operator = Sub ->
           begin match t2 with
             PtrType pt2 when operator = Sub ->
             if pt1 <> pt2 then static_error l "Pointers must be of same type" None;
@@ -5899,15 +5908,35 @@ let verify_program_core (* ?verify_program_core *)
             ts:=Some [t1; IntType];
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
-        | IntType | RealType | ShortType | Char | UintPtrType ->
+        | IntType | RealType | ShortType | Char ->
           let (w1, w2, t) = promote l e1 e2 ts in
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
           ts:=Some [t1; ObjType "java.lang.String"];
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
-        | _ -> static_error l ("Operand of addition or subtraction must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
+        | _ -> static_error l ("Operand of addition, subtraction or multiplication must be pointer, integer, char, short, or real number: t1 "^(string_of_type t1)^" t2 "^(string_of_type t2)) None
       end
+    | AssignOpExpr(l, e1, (And | Or | Xor as operator), e2, postOp, ts, lhs_type) ->
+      let (w1, t1, _) = check e1 in
+      lhs_type := Some t1;
+      begin
+        match t1 with
+          Bool ->
+          let w2 = checkt e2 boolt in
+          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+        | IntType | ShortType | Char ->
+          let w2 = checkt e2 IntType in
+          ts := Some [IntType; IntType];
+          (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), IntType, None)
+        | _ -> static_error l ("Operand of &=, |= pr ^= must be boolean, integer, short or byte") None
+      end
+    | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp, ts, lhs_type) ->
+      let w1 = checkt e1 IntType in
+      let w2 = checkt e2 IntType in
+      lhs_type := Some IntType;
+      ts := Some [IntType; IntType];
+      (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), IntType, None)
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
@@ -10614,7 +10643,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       )
       in
       execute_assign_op_expr l h env lhs get_values (ObjType "java.lang.String") cont
-    | AssignOpExpr(l, lhs, op, rhs, postOp, ts, lhs_type) as aoe ->
+    | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) as aoe ->
+      assert(match !lhs_type with None -> false | _ -> true);
+      let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
+          let new_value = 
+            match op with
+              And -> ctxt#mk_and v1 v2
+            | Or -> ctxt#mk_or v1 v2
+            | Xor -> (ctxt#mk_and (ctxt#mk_or v1 v2) (ctxt#mk_not (ctxt#mk_and v1 v2)))
+          in
+          let result_value = if postOp then v1 else new_value in
+          cont h env result_value new_value
+      ))
+      in
+      execute_assign_op_expr l h env lhs get_values boolt cont
+    | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) as aoe ->
         let Some [t1; t2] = ! ts in
         let Some lhs_type = ! lhs_type in
         let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
@@ -10671,6 +10714,29 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
+          | Mul ->
+            begin match !ts with
+              Some [IntType; IntType] ->
+              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
+            | Some [RealType; RealType] ->
+              ctxt#mk_real_mul v1 v2
+            | Some [ShortType; ShortType] ->
+              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
+            | Some [Char; Char] ->
+              check_overflow min_term (ctxt#mk_mul v1 v2) max_term
+            | _ -> static_error l "CompoundAssignment not supported for the given types." None
+            end
+          | Div ->
+            check_overflow min_term (ctxt#mk_div v1 v2) max_term
+          | Mod ->
+            check_overflow min_term (ctxt#mk_mod v1 v2) max_term
+          | BitAnd -> ctxt#mk_app bitwise_and_symbol [v1; v2]
+          | BitOr -> ctxt#mk_app bitwise_or_symbol [v1; v2]
+          | BitXor -> ctxt#mk_app bitwise_xor_symbol [v1; v2]
+          | ShiftLeft ->
+            check_overflow min_term (ctxt#mk_app shiftleft_symbol [v1;v2]) max_term
+          | ShiftRight ->
+            check_overflow min_term (ctxt#mk_app shiftright_symbol [v1;v2]) max_term
           | _ -> static_error l "Compound assignment not supported for this operator yet." None
           end
           in
