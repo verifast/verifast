@@ -336,6 +336,16 @@ let show_ide initialPath prover codeFont traceFont runtime =
     (* buffer#get_iter (`LINEBYTE (line - 1, col - 1)) *)
   in
   let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
+  let apply_tag_by_name tab tagName ~start ~stop =
+    tab#apply_tag_enabled := true;
+    tab#buffer#apply_tag_by_name tagName ~start ~stop;
+    tab#apply_tag_enabled := false
+  in
+  let apply_tag tab tag ~start ~stop =
+    tab#apply_tag_enabled := true;
+    tab#buffer#apply_tag tag ~start ~stop;
+    tab#apply_tag_enabled := false
+  in
   let rec perform_syntax_highlighting tab start stop =
     (* Printf.printf "perform_syntax_highlighting (start: (%d, %d); stop: (%d, %d))\n" start#line start#line_index stop#line stop#line_index; flush stdout; *)
     let buffer = tab#buffer in
@@ -429,6 +439,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let add_buffer() =
     let path = ref None in
     let buffer = GSourceView2.source_buffer () in
+    let apply_tag_enabled = ref false in (* To prevent tag copying when pasting from clipboard *)
+    ignore $. buffer#connect#apply_tag (fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer "apply-tag");
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in
     let _ = buffer#create_tag ~name:"ghostRange" [`FOREGROUND "#CC6600"] in
     let _ = buffer#create_tag ~name:"ghostKeyword" [`WEIGHT `BOLD; `FOREGROUND "#DB9900"] in
@@ -446,6 +458,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let eol = ref (if platform = Windows then "\r\n" else "\n") in
     let useSiteTags = ref [] in
     let tab = object
+      method apply_tag_enabled = apply_tag_enabled
       method path = path
       method eol = eol
       method buffer = buffer
@@ -788,7 +801,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   in
   let apply_tag_at_marks name (tab, mark1, mark2) =
     let buffer = tab#buffer in
-    buffer#apply_tag_by_name name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
+    apply_tag_by_name tab name ~start:(buffer#get_iter_at_mark (`MARK mark1)) ~stop:(buffer#get_iter_at_mark (`MARK mark2))
   in
   let apply_tag_by_loc name ((p1, p2): loc) =
     let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
@@ -796,7 +809,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     assert (path1 = path2);
     let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
     let buffer = tab#buffer in
-    buffer#apply_tag_by_name name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
+    apply_tag_by_name tab name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
   let get_step_of_path selpath =
     let stepItems = match !stepItems with Some stepItems -> stepItems | None -> assert false in
@@ -993,7 +1006,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       end;
       false
     end;
-    useSiteBuffer#apply_tag useSiteTag ~start:(srcpos_iter useSiteBuffer (useSiteLine, useSiteCol)) ~stop:(srcpos_iter useSiteBuffer (useSiteStopLine, useSiteStopCol))
+    apply_tag useSiteTab useSiteTag ~start:(srcpos_iter useSiteBuffer (useSiteLine, useSiteCol)) ~stop:(srcpos_iter useSiteBuffer (useSiteStopLine, useSiteStopCol))
   in
   let ensureHasPath tab =
     match !(tab#path) with
