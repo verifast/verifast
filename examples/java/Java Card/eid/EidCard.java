@@ -1,9 +1,8 @@
 // Note: on this program, VeriFast/Redux is much faster than VeriFast/Z3! (2s versus 70s). To use Redux, use:
 //   vfide -prover redux EidCard.java
-//   verifast -c -allow_assume -prover redux EidCard.java
+//   verifast -c -prover redux EidCard.java
 
 /*
-                           This file is a work in progress!
                            
                                          @@@@                                
                                      @@@@@@@@@@@                             
@@ -1167,10 +1166,6 @@ public final class EidCard extends Applet {
 		// impossible to start reading from offset large than size of file				
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		/* start adding to remove bug: */
-		if (selectedFile == belpicDirectory || selectedFile == idDirectory)
-			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
-		/* end */
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile) selectedFile).getCurrentSize();
 		if (offset > size)

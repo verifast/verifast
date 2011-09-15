@@ -337,6 +337,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   in
   let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
   let rec perform_syntax_highlighting tab start stop =
+    (* Printf.printf "perform_syntax_highlighting (start: (%d, %d); stop: (%d, %d))\n" start#line start#line_index stop#line stop#line_index; flush stdout; *)
     let buffer = tab#buffer in
     let firstLine = buffer#start_iter#get_text ~stop:buffer#start_iter#forward_to_line_end in
     let {file_opt_annot_char=annotChar} = get_file_options firstLine in
@@ -348,10 +349,12 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let start = if start#line_index <> 0 then buffer#start_iter else start in (* Works around an apparent bug in backward_line *)
     let stop = stop#forward_line in
     let startLine = start#line in
-    let startIsInComment = start#has_tag commentTag && not (start#begins_tag (Some commentTag)) in
-    let startIsInGhostRange = start#has_tag ghostRangeTag && not (start#begins_tag (Some ghostRangeTag)) in
-    let stopIsInComment = stop#has_tag commentTag && not (stop#begins_tag (Some commentTag)) in
-    let stopIsInGhostRange = stop#has_tag ghostRangeTag && not (start#begins_tag (Some ghostRangeTag)) in
+    (* Printf.printf "  expanded: (start: (%d, %d); stop: (%d, %d))\n" start#line start#line_index stop#line stop#line_index; flush stdout; *)
+    let startIsInComment = start#has_tag commentTag && not (start#begins_tag (Some commentTag)) || start#ends_tag (Some commentTag) in
+    let startIsInGhostRange = start#has_tag ghostRangeTag && not (start#begins_tag (Some ghostRangeTag)) || start#ends_tag (Some ghostRangeTag) in
+    let stopIsInComment = stop#has_tag commentTag && not (stop#ends_tag (Some commentTag)) || stop#begins_tag (Some commentTag) in
+    let stopIsInGhostRange = stop#has_tag ghostRangeTag && not (stop#ends_tag (Some ghostRangeTag)) || stop#begins_tag (Some ghostRangeTag) in
+    (* Printf.printf "startIsInComment: %B; startIsInGhostRange: %B; stopIsInComment: %B; stopIsInGhostRange: %B\n" startIsInComment startIsInGhostRange stopIsInComment stopIsInGhostRange; flush stdout; *)
     buffer#remove_all_tags ~start:start ~stop:stop;
     let reportRange kind ((_, line1, col1), (_, line2, col2)) =
       buffer#apply_tag_by_name (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
@@ -361,6 +364,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
         make_lexer_core keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
+      (* Printf.printf "!in_comment: %B; !in_ghost_range: %B\n" !in_comment !in_ghost_range; flush stdout; *)
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then
         perform_syntax_highlighting tab stop buffer#end_iter
     in
