@@ -329,7 +329,7 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "unknown", sexpr_of_option sexpr_of_expr expr
                  ; "body", sexpr_of_list sexpr_of_stmt body ]
     | DeclStmt (loc, type_expr, xs) ->
-      let sexpr_of_local (str, expr, address) =
+      let sexpr_of_local (str, is_array, expr, address) =
         let initialization =
           match expr with
             | Some expr -> [ "init", sexpr_of_expr expr ]
