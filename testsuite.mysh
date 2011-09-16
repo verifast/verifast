@@ -127,6 +127,7 @@ cd ..
 cd eid
 verifast -c -disable_overflow_check -prover redux EidCard.java
 cd ..
+verifast -c -allow_assume -prover redux MyApplet.java
 cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java
