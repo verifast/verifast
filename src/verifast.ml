@@ -7143,6 +7143,133 @@ let verify_program_core (* ?verify_program_core *)
 
   (* Region: evaluation *)
   
+  let eval_op l op v1 v2 ts ass_term =
+     let check_overflow l min t max =
+      begin
+      match ass_term with
+        Some assert_term when not disable_overflow_check ->
+        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
+        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
+      | _ -> ()
+      end;
+      t
+    in
+    let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else 
+    match ts with
+      Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
+    | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
+    | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
+    | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
+    | _ -> None
+    in
+    begin match op with
+      And -> ctxt#mk_and v1 v2
+    | Or -> ctxt#mk_or v1 v2
+    | Eq ->
+      let Some [tp1; tp2] = ts in
+      if (tp1, tp2) = (Bool, Bool) then
+        ctxt#mk_iff v1 v2
+      else
+        ctxt#mk_eq v1 v2
+    | Neq -> ctxt#mk_not (ctxt#mk_eq v1 v2)
+    | Add ->
+      let Some [tp1; tp2] = ts in
+      begin match (tp1, tp2) with
+        (IntType, IntType) ->
+        check_overflow l min_int_term (ctxt#mk_add v1 v2) max_int_term
+      | (PtrType t, IntType) ->
+        let n = sizeof l t in
+        check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_ptr_term
+      | (RealType, RealType) ->
+        ctxt#mk_real_add v1 v2
+      | (ShortType, ShortType) ->
+        check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
+      | (Char, Char) ->
+        check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
+      | (UintPtrType, UintPtrType) ->
+        check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
+      | _ -> static_error l "Internal error in eval." None
+      end
+    | Sub ->
+      let Some [tp1; tp2] = ts in
+      begin match (tp1, tp2) with
+        (IntType, IntType) ->
+        check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
+      | (PtrType t, IntType) ->
+        let n = sizeof l t in
+        check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_ptr_term
+      | (RealType, RealType) ->
+        ctxt#mk_real_sub v1 v2
+      | (ShortType, ShortType) ->
+        check_overflow l min_short_term (ctxt#mk_sub v1 v2) max_short_term
+      | (Char, Char) ->
+        check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
+      | (PtrType (Char | Void), PtrType (Char | Void)) ->
+        check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
+      | (UintPtrType, UintPtrType) ->
+        check_overflow l min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
+      end
+    | Mul ->
+      let Some [tp1; tp2] = ts in
+      begin match (tp1, tp2) with
+        (IntType, IntType) ->
+        check_overflow l min_int_term (ctxt#mk_mul v1 v2) max_int_term
+      | (UintPtrType, UintPtrType) ->
+        check_overflow l min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
+      | (RealType, RealType) ->
+        ctxt#mk_real_mul v1 v2
+      end
+    | Le ->
+      let Some [tp1; tp2] = ts in
+      begin match (tp1, tp2) with
+        ((IntType, IntType) | (PtrType _, PtrType _) |
+              (UintPtrType, UintPtrType)) -> ctxt#mk_le v1 v2
+      | (RealType, RealType) -> ctxt#mk_real_le v1 v2
+      end
+    | Lt ->
+      let Some [tp1; tp2] = ts in
+      begin match (tp1, tp2) with
+        ((IntType, IntType) | (PtrType _, PtrType _) |
+              (UintPtrType, UintPtrType)) -> ctxt#mk_lt v1 v2
+      | (RealType, RealType) -> ctxt#mk_real_lt v1 v2
+      end
+    | Div ->
+      begin match ts with
+        Some ([RealType; RealType]) -> static_error l "Realdiv not supported yet in /=." None
+      | Some ([IntType; IntType]) -> 
+        begin match ass_term with
+          Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
+        | None -> ()
+        end;
+        (ctxt#mk_div v1 v2)
+      end
+    | BitAnd | BitXor | BitOr ->
+      let symb = match op with
+          BitAnd -> bitwise_and_symbol
+        | BitXor -> bitwise_xor_symbol
+        | BitOr -> bitwise_or_symbol
+      in
+      let app = ctxt#mk_app symb [v1;v2] in
+      begin match bounds with
+        None -> ()
+      | Some(min_term, max_term) -> 
+        ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+      end;
+      app
+    | ShiftRight -> 
+      let app = ctxt#mk_app shiftright_symbol [v1;v2] in
+      begin match bounds with
+        None -> ()
+      | Some(min_term, max_term) -> 
+        ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+      end;
+      app
+    | Mod -> ctxt#mk_mod v1 v2
+    | ShiftLeft -> ctxt#mk_app shiftleft_symbol [v1;v2]
+    | _ -> static_error l "This operator is not supported in this position." None
+    end
+  in
+  
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
      let evs state es cont =
       let rec iter state vs es =
@@ -7161,24 +7288,6 @@ let verify_program_core (* ?verify_program_core *)
       | _ -> ()
       end;
       t
-    in
-    let mk_mod x y ass_term =
-      let dv = ctxt#mk_div x y in
-      let md = ctxt#mk_mod x y in
-      begin match ass_term with
-        None -> ()
-      | Some(_) -> ignore(ctxt#assume(ctxt#mk_eq (ctxt#mk_add (ctxt#mk_mul y dv) md) x));
-      end;
-      md
-    in
-    let mk_div x y ass_term =
-      let dv = ctxt#mk_div x y in
-      let md = ctxt#mk_mod x y in
-      begin match ass_term with
-        None -> ()
-      | Some(_) -> ignore(ctxt#assume(ctxt#mk_eq (ctxt#mk_add (ctxt#mk_mul y dv) md) x));
-      end;
-      dv
     in
     match e with
       True l -> cont state ctxt#mk_true
@@ -7324,7 +7433,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
         | None -> ()
         end;
-        cont state (mk_div v1 v2 ass_term)
+        cont state (ctxt#mk_div v1 v2)
       end
     | Operation (l, BitAnd, [e1; IntLit(_, i, _)], ts) when le_big_int zero_big_int i && ass_term <> None -> (* optimization *)
       ev state e1 $. fun state v1 ->
@@ -7332,125 +7441,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let app = ctxt#mk_app bitwise_and_symbol [v1;iterm] in
         ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term app) (ctxt#mk_le app iterm)));
         begin if eq_big_int i unit_big_int then
-          ignore (ctxt#assume (ctxt#mk_eq (mk_mod v1 (ctxt#mk_intlit 2) ass_term) app));
+          ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_mod v1 (ctxt#mk_intlit 2)) app));
         end;
         cont state app
     | Operation (l, op, ([e1; e2] as es), ts) ->
-      evs state es $. fun state [v1; v2] ->
-      cont state
-        begin match op with
-          And -> ctxt#mk_and v1 v2
-        | Or -> ctxt#mk_or v1 v2
-        | Eq ->
-          if !ts = Some [Bool; Bool] then
-            ctxt#mk_iff v1 v2
-          else
-            ctxt#mk_eq v1 v2
-        | Neq -> ctxt#mk_not (ctxt#mk_eq v1 v2)
-        | Add ->
-          begin match !ts with
-            Some [IntType; IntType] ->
-            check_overflow l min_int_term (ctxt#mk_add v1 v2) max_int_term
-          | Some [PtrType t; IntType] ->
-            let n = sizeof l t in
-            check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_add v1 (ctxt#mk_mul n v2)) max_ptr_term
-          | Some [RealType; RealType] ->
-            ctxt#mk_real_add v1 v2
-          | Some [ShortType; ShortType] ->
-            check_overflow l min_short_term (ctxt#mk_add v1 v2) max_short_term
-          | Some [Char; Char] ->
-            check_overflow l min_char_term (ctxt#mk_add v1 v2) max_char_term
-          | Some [UintPtrType; UintPtrType] ->
-            check_overflow l min_uint_term (ctxt#mk_add v1 v2) max_uint_term
-          | _ -> static_error l "Internal error in eval." None
-          end
-        | Sub ->
-          begin match !ts with
-            Some [IntType; IntType] ->
-            check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
-          | Some [PtrType t; IntType] ->
-            let n = sizeof l t in
-            check_overflow l (ctxt#mk_intlit 0) (ctxt#mk_sub v1 (ctxt#mk_mul n v2)) max_ptr_term
-          | Some [RealType; RealType] ->
-            ctxt#mk_real_sub v1 v2
-          | Some [ShortType; ShortType] ->
-            check_overflow l min_short_term (ctxt#mk_sub v1 v2) max_short_term
-          | Some [Char; Char] ->
-            check_overflow l min_char_term (ctxt#mk_sub v1 v2) max_char_term
-          | Some [PtrType (Char | Void); PtrType (Char | Void)] ->
-            check_overflow l min_int_term (ctxt#mk_sub v1 v2) max_int_term
-          | Some [UintPtrType; UintPtrType] ->
-            check_overflow l min_uint_term (ctxt#mk_sub v1 v2) max_uint_term
-          end
-        | Mul ->
-          begin match !ts with
-            Some [IntType; IntType] ->
-            check_overflow l min_int_term (ctxt#mk_mul v1 v2) max_int_term
-          | Some [UintPtrType; UintPtrType] ->
-            check_overflow l min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
-          | Some [RealType; RealType] ->
-            ctxt#mk_real_mul v1 v2
-          end
-        | Le ->
-          begin match !ts with
-            Some ([IntType; IntType] | [PtrType _; PtrType _] |
-                  [UintPtrType; UintPtrType]) -> ctxt#mk_le v1 v2
-          | Some [RealType; RealType] -> ctxt#mk_real_le v1 v2
-          end
-        | Lt ->
-          begin match !ts with
-            Some ([IntType; IntType] | [PtrType _; PtrType _] |
-                  [UintPtrType; UintPtrType]) -> ctxt#mk_lt v1 v2
-          | Some [RealType; RealType] -> ctxt#mk_real_lt v1 v2
-          end
-        | BitAnd | BitXor | BitOr ->
-          let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else match !ts with
-            Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
-          | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
-          | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
-          | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
-          | _ -> None
-          in
-          let symb = match op with
-              BitAnd -> bitwise_and_symbol
-            | BitXor -> bitwise_xor_symbol
-            | BitOr -> bitwise_or_symbol
-          in
-          let app = ctxt#mk_app symb [v1;v2] in
-          begin match bounds with
-            None -> ()
-          | Some(min_term, max_term) -> 
-            ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
-          end;
-          app
-        | ShiftRight ->
-          let bounds = if ass_term = None then (* in ghost code, where integer types do not imply limits *) None else match !ts with
-            Some [UintPtrType; _] -> Some (int_zero_term, max_ptr_term)
-          | Some [IntType; _] -> Some (min_int_term, max_int_term)
-          | Some [ShortType; _] -> Some (min_short_term, max_short_term)
-          | Some [Char; _] -> Some (min_char_term, max_char_term)
-          | _ -> None
-          in
-          let app = 
-            match e2 with
-              IntLit(_, i, _) when lt_big_int zero_big_int i && ass_term <> None && ctxt#query (ctxt#mk_le int_zero_term v1) -> mk_div v1 (ctxt#mk_intlit (int_of_big_int (power_int_positive_big_int 2 i))) ass_term
-            | _ -> ctxt#mk_app shiftright_symbol [v1;v2] 
-          in
-          begin match bounds with
-            None -> ()
-          | Some(min_term, max_term) -> 
-            ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
-          end;
-          app
-        | Mod ->
-          mk_mod v1 v2 ass_term
-        | _ ->
-          let symb = match op with
-            | ShiftLeft -> shiftleft_symbol
-            | _ -> static_error l "This operator is not supported in this position" None
-          in
-          ctxt#mk_app symb [v1;v2]
-        end
+      evs state es $. fun state [v1; v2] -> cont state (eval_op l op v1 v2 !ts ass_term) 
     | ArrayLengthExpr (l, e) ->
       ev state e $. fun state t ->
       begin match ass_term with
