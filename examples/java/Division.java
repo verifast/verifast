@@ -23,7 +23,7 @@ class Division {
   }
   
   void bigwiseand_test(int x) 
-    //@ requires true;
+    //@ requires 0 <= x;
     //@ ensures true;
   {
     int tmp = x & 255;

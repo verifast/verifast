@@ -2066,16 +2066,19 @@ public final class EidCard extends Applet {
       	    //@ ensures array_slice(buffer, 0, buffer.length, _) &*& randomBuffer |-> theRandomBuffer &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _);
 	{
 		// 2nd nibble of the PIN header is the length (in digits)
+		int tmp = buffer[OFFSET_PIN_HEADER];
+		if(tmp < 0) { // BUG
+		  return false;
+		}
 		byte pinLength = (byte) (buffer[OFFSET_PIN_HEADER] & 0x0F);
 		// check if PIN length is odd
 		byte oldLength = (byte) (pinLength & 0x01);
 		// divide PIN length by 2 to get the length in bytes
-		//@ assert 2*(pinLength /2) + (pinLength % 2) == pinLength;
 		byte pinLengthInBytes = (byte) (pinLength >> 1);
 		//@ assert 0 <= pinLengthInBytes && pinLengthInBytes < 8;
 		byte i;
 		for (i = 0; i < pinLengthInBytes; i++) 
-			/*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i <= pinLengthInBytes
+			/*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i <= pinLengthInBytes 
 			       &*& randomBuffer |-> ?theRandomBuffer2 &*& theRandomBuffer == theRandomBuffer2 &*& theRandomBuffer2 != null &*& array_slice(theRandomBuffer2, 0, theRandomBuffer2.length, _) &*& theRandomBuffer2.length >= pinLengthInBytes;
 			@*/
 		{
