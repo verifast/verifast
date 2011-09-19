@@ -235,13 +235,16 @@ class z3_context () =
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3.type_ast) = Z3.mk_bound ctxt i tp
     method assume_forall (triggers: Z3.ast list) (tps: Z3.type_ast list) (body: Z3.ast): unit = 
-      let pats = (
-        match triggers with
-          [] -> [| |]
-         | _ -> [|(Z3.mk_pattern ctxt (Array.of_list triggers))|]
-      ) in
-      let quant = (Z3.mk_forall ctxt 0 pats (Array.of_list tps) (Array.init (List.length tps) (Z3.mk_int_symbol ctxt)) (body)) in
-      (* printf "%s\n" (string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt quant)))); *)
-      Z3.assert_cnstr ctxt quant
+      if List.length tps = 0 then
+        Z3.assert_cnstr ctxt body
+      else
+        let pats = (
+          match triggers with
+            [] -> [| |]
+           | _ -> [|(Z3.mk_pattern ctxt (Array.of_list triggers))|]
+        ) in
+        let quant = (Z3.mk_forall ctxt 0 pats (Array.of_list tps) (Array.init (List.length tps) (Z3.mk_int_symbol ctxt)) (body)) in
+        (* printf "%s\n" (string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt quant)))); *)
+        Z3.assert_cnstr ctxt quant
    method simplify (t: Z3.ast): Z3.ast option = Some(Z3.simplify ctxt t)
   end

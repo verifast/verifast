@@ -19,6 +19,10 @@ fixpoint b snd<a, b>(pair<a, b> p) {
     }
 }
 
+fixpoint int abs(int x) {
+  return 0 <= x ? x : - x; 
+}
+
 fixpoint t default_value<t>();
 
 inductive boxed_int = boxed_int(int);
@@ -30,7 +34,7 @@ fixpoint boolean unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value
 lemma_auto(x%y) void modulo_nonnegative(int x, int y);
   requires 0 <= x && 0 < y;
   ensures 0 <= x % y && x % y < y;
-
+  
 lemma_auto void modulo_div(int x, int y);
   requires y != 0;
   ensures y * (x / y) + x % y == x;
@@ -40,11 +44,11 @@ lemma_auto void shiftright_div(int x);
   ensures x >> 1 == x / 2;
 
 lemma_auto(x & y) void bitand_nonnegative(int x, int y);
-  requires 0 <= y;
-  ensures 0 <= (x & y) && (x & y) <= x;
+  requires 0 <= x && 0 <= y;
+  ensures 0 <= (x & y) && (x & y) <= x && (x & y) <= y;
 
 lemma_auto void bitand_modulo(int x);
-  requires true;
+  requires 0 <= x;
   ensures x % 2 == (x & 1);
 
 predicate array_element<T>(T[] array, int index; T value);

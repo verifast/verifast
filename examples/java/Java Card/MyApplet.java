@@ -1,9 +1,3 @@
-// Note: VeriFast/Redux is much faster than VeriFast/Z3 on this applet. Use vfide -prover redux MyApplet.java or verifast -c -allow_assume -prover redux MyApplet.java
-
-// The assume statements in this file represent assumptions that the applet makes about the input.
-// What we are proving here is that in any execution of the applet where the input satisfies these assumptions, the applet does not dereference null pointers,
-// access arrays with indices that are out of bounds, divide by zero, perform arithmetic overflow, violate API contracts, or violate the assertions specified in the code.
-
 package mypackage;
 
 import javacard.framework.*;
@@ -94,9 +88,9 @@ public final class MyApplet extends Applet {
   static final short MAX_LEN_OPTIONAL_DATA = (short) 10;
   static final short MAX_LEN_OPTIONAL_DATA_AND_HEADER = (short)(MAX_LEN_OPTIONAL_DATA + 3);
   static final short SIZE_OPTIONAL_DATA_BUFFER = (short)(3 * MAX_LEN_OPTIONAL_DATA_AND_HEADER);
-  static final short TAG_LANGUAGE_PREFERENCE = (short) 0x1234 ;
-  static final short TAG_ISSUER_CODE_TABLE_INDEX = (short) 0x1234 ;
-  static final short TAG_FCI_ISSUER_DISCRETIONARY_DATA = (short) 0x1234 ;
+  static final short TAG_LANGUAGE_PREFERENCE = (short) 0x5F2D ;
+  static final short TAG_ISSUER_CODE_TABLE_INDEX = (short) 0x9F11 ;
+  static final short TAG_FCI_ISSUER_DISCRETIONARY_DATA = (short) 0xBF0C ;
 
   byte by_NbRecords;
   byte by_MaxNbRecord;
@@ -109,13 +103,13 @@ public final class MyApplet extends Applet {
 
   static final byte bya_FCI[] =
   {
-    (byte)0x12, (byte)21,
-    (byte)0x12, (byte)14,
-    (byte)'X',  (byte)'X', (byte)'X', (byte)'X', (byte)'X',
-    (byte)'X',  (byte)'X', (byte)'X', (byte)'X',
-    (byte)'X',  (byte)'X', (byte)'X', (byte)'X', (byte)'X',
-    (byte)0x12, (byte)3,
-    (byte)0x12, (byte)1,  (byte)1
+    (byte)0x6F, (byte)21,
+    (byte)0x84, (byte)14,
+    (byte)'1',  (byte)'P', (byte)'A', (byte)'Y', (byte)'.',
+    (byte)'S',  (byte)'Y', (byte)'S', (byte)'.',
+    (byte)'D',  (byte)'D', (byte)'F', (byte)'0', (byte)'1',
+    (byte)0xA5, (byte)3,
+    (byte)0x88, (byte)1,  (byte)1
   };
 
     //@ predicate valid() = MyApplet_(this, _, _);
@@ -188,7 +182,7 @@ public final class MyApplet extends Applet {
   public void process(APDU oApdu)
     /*@
     requires
-      current_applet(this) &*&
+        current_applet(this) &*&
       [1/2]valid() &*&
       oApdu != null &*&
       APDU(oApdu, ?buffer) &*&
@@ -196,7 +190,7 @@ public final class MyApplet extends Applet {
     @*/
     /*@
     ensures
-      current_applet(this) &*&
+        current_applet(this) &*&
       [1/2]valid() &*&
       oApdu != null &*&
       APDU(oApdu, buffer) &*&
@@ -323,7 +317,7 @@ public final class MyApplet extends Applet {
     //@ requires current_applet(this) &*& [1/2]valid() &*& oApdu != null &*& APDU(oApdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
     //@ ensures current_applet(this) &*& [1/2]valid() &*& oApdu != null &*& APDU(oApdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
   {
-    byte[] byaApdu = checkIncomingData(oApdu, true, true); // true => personalization must have previously been done
+    byte[] byaApdu = checkIncomingData(oApdu, true, true); // true => perso must have previously been done
     short shLC = sh(byaApdu[ISO7816.OFFSET_LC]) ;
     //@ open is_short_of_byte(_, _);
 
@@ -402,7 +396,7 @@ public final class MyApplet extends Applet {
         [1/2]MyApplet_(this, ?nbRecords, maxSizeRecord) &*&
         array_slice(byaApdu, 0, byaApdu.length, _) &*& 133 <= byaApdu.length &*&
         0 <= i &*& i <= nbRecords &*&
-        (byFreeRecord != 0x7F ? 0 <= byFreeRecord &*& byFreeRecord < i : true);
+        (byFreeRecord != 0x7F ? 0 <= byFreeRecord &*& byFreeRecord < i : true); // TODO: Consider encapsulating this case split
       @*/
     {
       byaRecordData = (byte[]) (o_Records[i]);
@@ -603,6 +597,7 @@ public final class MyApplet extends Applet {
       ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
 
     //@ open is_short_of_byte(shLenRecord, _);
+    // BUG: Util.arrayCopyNonAtomic(byaRecordData, ISO7816.OFFSET_CDATA, byaApdu, (short)0, shLenRecord);
     Util.arrayCopyNonAtomic(byaRecordData, OFF_DATA_IN_RECORD, byaApdu, ISO7816.OFFSET_CDATA, shLenRecord);
 
     short shLE = oApdu.setOutgoing() ;
@@ -620,10 +615,11 @@ public final class MyApplet extends Applet {
     //@ requires true;
     //@ ensures is_short_of_byte(result, byByte) &*& 0 <= result &*& result <= 255;
   {
-    short res = (short) (byByte & 0xFF);
+    int tmp = (byByte & 0xFF);
+    //@ assume (byByte < 0 ? tmp == 256 + byByte : tmp == byByte);
+    short res = (short) tmp;
     return res;
-    //@ assume (byByte < 0 ? res == 256 + byByte : res == byByte);
-         //@ close is_short_of_byte((short) (byByte & 0xFF), byByte);
+    //@ close is_short_of_byte((short) (byByte & 0xFF), byByte);
   }
 }
 
