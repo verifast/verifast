@@ -11,7 +11,7 @@
 # Do not use a higher number of cpus, this would cause a race condition
 # since lnxmod_proxy_autogen must be executed before verifast.
 #
-ocaml str.cma lnxmod_proxy_autogen.ml helloproc_main.c
+ocaml str.cma lnxmod_proxy_autogen.ml helloproc_main.c || echo "Using shipped file"
 let verifast_both
 verifast
 verifast -prover redux

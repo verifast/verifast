@@ -258,6 +258,7 @@ release: test refman
 	xcopy /E /I ..\..\bin bin
 	cd bin
 	copy $(GTKLIB)\..\bin\freetype6.dll
+	copy $(GTKLIB)\..\bin\iconv.dll
 	copy $(GTKLIB)\..\bin\intl.dll
 	copy $(GTKLIB)\..\bin\libatk-1.0-0.dll
 	copy $(GTKLIB)\..\bin\libcairo-2.dll

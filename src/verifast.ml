@@ -627,7 +627,8 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       new_loc_line ();
       if !in_single_line_annotation then (
         in_single_line_annotation := false;
-        ghost_range_end_at (path, !line - 1, !textpos - 1 - old_linepos + 1); (* Do not include the newline in the ghost range; needed to make local syntax highlighting refresh hack work in vfide. *)
+        let end_of_line = if 0 <= !textpos - 2 && text.[!textpos - 2] = '\r' && text.[!textpos - 1] = '\n' then !textpos - 2 else !textpos - 1 in
+        ghost_range_end_at (path, !line - 1, end_of_line - old_linepos + 1); (* Do not include the newline in the ghost range; needed to make local syntax highlighting refresh hack work in vfide. *)
         Some (Kwd "@*/")
       ) else if !ignore_eol then
         next_token ()

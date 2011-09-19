@@ -367,7 +367,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     (* Printf.printf "startIsInComment: %B; startIsInGhostRange: %B; stopIsInComment: %B; stopIsInGhostRange: %B\n" startIsInComment startIsInGhostRange stopIsInComment stopIsInGhostRange; flush stdout; *)
     buffer#remove_all_tags ~start:start ~stop:stop;
     let reportRange kind ((_, line1, col1), (_, line2, col2)) =
-      buffer#apply_tag_by_name (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
+      apply_tag_by_name tab (tag_name_of_range_kind kind) ~start:(srcpos_iter buffer (startLine + line1, col1)) ~stop:(srcpos_iter buffer (startLine + line2, col2))
     in
     let text = start#get_text ~stop:stop in
     let highlight keywords =
