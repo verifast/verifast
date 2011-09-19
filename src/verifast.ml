@@ -5935,17 +5935,14 @@ let verify_program_core (* ?verify_program_core *)
       end
     | AssignOpExpr(l, e1, (And | Or | Xor as operator), e2, postOp, ts, lhs_type) ->
       let (w1, t1, _) = check e1 in
+      let (w2, t2, _) = check e2 in
       lhs_type := Some t1;
-      begin
-        match t1 with
-          Bool ->
-          let w2 = checkt e2 boolt in
-          (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
-        | IntType | ShortType | Char ->
-          let w2 = checkt e2 IntType in
-          ts := Some [IntType; IntType];
-          (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), IntType, None)
-        | _ -> static_error l ("Operand of &=, |= pr ^= must be boolean, integer, short or byte") None
+      ts := Some [t1; t2];
+      begin match (t1, t2) with
+        ((Bool, Bool)) -> (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
+      | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
+        (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), IntType, None)
+       | _ -> static_error l "Arguments to &=, &= and ^= must be boolean or integral types." None
       end
     | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp, ts, lhs_type) ->
       let w1 = checkt e1 IntType in
@@ -10378,7 +10375,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
     in
-    let execute_assign_op_expr l h env lhs get_values t1 cont =
+    let rec execute_assign_op_expr l h env lhs get_values t1 cont =
       match lhs with
         Var(lx, x, _) ->
           check_assign l x;
@@ -10430,6 +10427,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             )
           )
         )
+      | Upcast(e, _, _) -> execute_assign_op_expr l h env e get_values t1 cont
       | _ -> static_error l "Cannot assign to left hand side." None
     in
     match e with
@@ -10689,6 +10687,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             | PtrType t -> ((ctxt#mk_intlit 0), max_ptr_term)
             | _ -> (min_int_term, max_int_term)
           in
+          let bounds = if pure then (* in ghost code, where integer types do not imply limits *) None else 
+            match !ts with
+              Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
+            | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
+            | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
+            | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
+            | _ -> None
+          in
           let new_value = 
           begin match op with
             Add ->
@@ -10722,34 +10728,41 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             | _ -> static_error l "CompoundAssignment not supported for the given types." None
             end
           | Div ->
-            (ctxt#mk_div v1 v2) (* no overflow checking required *)
-          | Mod ->
-            let res = (ctxt#mk_mod v1 v2) in
+            assert_term (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) h env l "Divisor might be zero." None;
+            let res = (ctxt#mk_div v1 v2) in
             begin match lhs_type with
               IntType -> res
             | _ -> check_overflow min_term res max_term
             end
-          | BitAnd -> ctxt#mk_app bitwise_and_symbol [v1; v2] (* no overflow checking required as the abs(result) is less than v1 *)
-          | BitOr -> 
-            let res = ctxt#mk_app bitwise_or_symbol [v1; v2] in
+          | Mod -> (ctxt#mk_mod v1 v2)
+          | BitAnd | BitOr | BitXor ->
+            let symb = match op with
+              BitAnd -> bitwise_and_symbol
+            | BitXor -> bitwise_xor_symbol
+            | BitOr -> bitwise_or_symbol
+            in
+            let app = ctxt#mk_app symb [v1;v2] in
+            begin match bounds with
+              None -> ()
+            | Some(min_term, max_term) -> 
+              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+            end;  
             begin match lhs_type with
-              IntType -> res
-            | _ -> check_overflow min_term res max_term
-            end
-          | BitXor -> 
-            let res = ctxt#mk_app bitwise_xor_symbol [v1; v2] in
-            begin match lhs_type with
-              IntType -> res
-            | _ -> check_overflow min_term res max_term
-            end
+              IntType -> app
+            | _ -> check_overflow min_term app max_term
+            end 
           | ShiftLeft ->
-            let res = ctxt#mk_app shiftleft_symbol [v1;v2] in
+            let app = ctxt#mk_app shiftleft_symbol [v1;v2] in
+            begin match bounds with
+              None -> ()
+            | Some(min_term, max_term) -> 
+              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+            end; 
             begin match lhs_type with
-              IntType -> res
-            | _ -> check_overflow min_term res max_term
+              IntType -> app
+            | _ -> check_overflow min_term app max_term
             end
-          | ShiftRight ->
-            ctxt#mk_app shiftright_symbol [v1;v2] (* no overflow checking required *)
+          | ShiftRight -> ctxt#mk_app shiftright_symbol [v1;v2]
           | _ -> static_error l "Compound assignment not supported for this operator yet." None
           end
           in
@@ -10758,8 +10771,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         execute_assign_op_expr l h env lhs get_values t1 cont
     | e -> 
-      (*eval_core_cps0 eval_core ev state ass_term read_field env e cont*)
-      (* assumes that eval_non_pure_cps does not change the environment *)
       eval_non_pure_cps (fun (h, env) e cont -> eval_h h env e (fun h env t -> cont (h, env) t)) pure (h, env) env e (fun (h, env) v -> cont h env v)
   in
   
