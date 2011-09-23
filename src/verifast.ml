@@ -1253,6 +1253,7 @@ and
   | WCallPred of (* Predicate assertion, after type checking. (W is for well-formed) *)
       loc *
       predref *
+      bool * (* prefref refers to global name *)
       type_ list *
       pat list *
       pat list
@@ -1562,7 +1563,7 @@ let pred_loc p =
     Access (l, e, rhs) -> l
   | WAccess (l, e, tp, rhs) -> l
   | CallPred (l, g, targs, ies, es) -> l
-  | WCallPred (l, g, targs, ies, es) -> l
+  | WCallPred (l, g, _, targs, ies, es) -> l
   | InstCallPred (l, e, g, index, pats) -> l
   | WInstCallPred (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprPred (l, e) -> l
@@ -6408,87 +6409,90 @@ let verify_program_core (* ?verify_program_core *)
     | CallPred (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
       begin fun cont ->
-        match resolve (pn,ilist) l p#name predfammap with
-          Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) ->
-          let ts0 = match file_type path with
-            Java-> list_make arity (ObjType "java.lang.Class")
-          | _   -> list_make arity (PtrType Void)
-          in
-          cont (new predref pname, callee_tparams, ts0, xs, inputParamCount)
-        | None ->
-          begin
-            match try_assoc p#name tenv with
-              None ->
-              begin match
-                match try_assoc p#name predctormap1 with
-                  Some (l, ps1, ps2, body, funcsym, pn, ilist) -> Some (ps1, ps2)
-                | None ->
-                match try_assoc p#name predctormap0 with
-                  Some (PredCtorInfo (l, ps1, ps2, body, funcsym)) -> Some (ps1, ps2)
-                | None -> None
-              with
-                Some (ps1, ps2) ->
-                cont (new predref (p#name), [], List.map snd ps1, List.map snd ps2, None)
+         match try_assoc p#name tenv with
+           Some (PredType (callee_tparams, ts, inputParamCount)) -> cont (new predref (p#name), false, callee_tparams, [], ts, inputParamCount)
+         | None | Some _ ->
+          begin match resolve (pn,ilist) l p#name predfammap with
+            Some (pname, (_, callee_tparams, arity, xs, _, inputParamCount)) ->
+            let ts0 = match file_type path with
+              Java-> list_make arity (ObjType "java.lang.Class")
+            | _   -> list_make arity (PtrType Void)
+            in
+            cont (new predref pname, true, callee_tparams, ts0, xs, inputParamCount)
+          | None ->
+            begin match
+              match try_assoc p#name predctormap1 with
+                Some (l, ps1, ps2, body, funcsym, pn, ilist) -> Some (ps1, ps2)
               | None ->
-                let error () = static_error l ("No such predicate: " ^ p#name) None in
-                begin match try_assoc "this" tenv with
-                  None -> error ()
-                | Some (ObjType cn) ->
-                  let check_call family pmap =
-                    if targs <> [] then static_error l "Incorrect number of type arguments." None;
-                    if ps0 <> [] then static_error l "Incorrect number of indices." None;
-                    let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
-                    let index =
-                      if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
-                        ClassLit (l, cn)
-                      else
-                        get_class_of_this
-                    in
-                    (WInstCallPred (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
-                  in
-                  let rec find_in_interf itf =
-                    let search_interfmap interfmap fallback =
-                      match try_assoc itf interfmap with
-                        Some (li, meths, preds, interfs, pn, ilist) ->
-                        begin match try_assoc p#name preds with
-                          Some (_, pmap, symb) -> [(itf, pmap)]
-                        | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
-                        end
-                      | None -> fallback ()
-                    in
-                    search_interfmap interfmap1 (fun () -> search_interfmap interfmap0 (fun () -> []))
-                  in
-                  let rec find_in_class cn =
-                    let search_classmap classmap proj fallback =
-                      match try_assoc cn classmap with
-                        Some info ->
-                        let (super, interfs, preds) = proj info in
-                        begin match try_assoc p#name preds with
-                          Some (_, pmap, family, symb, body) -> [(family, pmap)]
-                        | None -> find_in_class super @ flatmap find_in_interf interfs
-                        end
-                      | None -> fallback ()
-                    in
-                    search_classmap classmap1
-                      (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
-                      $. fun () ->
-                    search_classmap classmap0
-                      (function ClassInfo (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
-                      $. fun () ->
-                    []
-                  in
-                  begin match find_in_class cn @ find_in_interf cn with
-                    [] -> error ()
-                  | [(family, pmap)] -> check_call family pmap
-                  | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name) None
-                  end
-                | Some(_) -> error ()
+              match try_assoc p#name predctormap0 with
+                Some (PredCtorInfo (l, ps1, ps2, body, funcsym)) -> Some (ps1, ps2)
+              | None -> None
+            with
+              Some (ps1, ps2) ->
+              cont (new predref (p#name), true, [], List.map snd ps1, List.map snd ps2, None)
+            | None ->
+              let error () = 
+                begin match try_assoc p#name tenv with
+                  None ->  static_error l ("No such predicate: " ^ p#name) None 
+                | Some _ -> static_error l ("Variable " ^ p#name ^ " is not of predicate type.") None 
                 end
+              in
+              begin match try_assoc "this" tenv with
+                None -> error ()
+              | Some (ObjType cn) ->
+                let check_call family pmap =
+                  if targs <> [] then static_error l "Incorrect number of type arguments." None;
+                  if ps0 <> [] then static_error l "Incorrect number of indices." None;
+                  let (wps, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) ps in
+                  let index =
+                    if List.mem_assoc cn classmap1 || List.mem_assoc cn classmap0 then
+                      ClassLit (l, cn)
+                    else
+                      get_class_of_this
+                  in
+                  (WInstCallPred (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
+                in
+                let rec find_in_interf itf =
+                  let search_interfmap interfmap fallback =
+                    match try_assoc itf interfmap with
+                      Some (li, meths, preds, interfs, pn, ilist) ->
+                      begin match try_assoc p#name preds with
+                        Some (_, pmap, symb) -> [(itf, pmap)]
+                      | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
+                      end
+                    | None -> fallback ()
+                  in
+                  search_interfmap interfmap1 (fun () -> search_interfmap interfmap0 (fun () -> []))
+                in
+                let rec find_in_class cn =
+                  let search_classmap classmap proj fallback =
+                    match try_assoc cn classmap with
+                      Some info ->
+                      let (super, interfs, preds) = proj info in
+                      begin match try_assoc p#name preds with
+                        Some (_, pmap, family, symb, body) -> [(family, pmap)]
+                      | None -> find_in_class super @ flatmap find_in_interf interfs
+                      end
+                    | None -> fallback ()
+                  in
+                  search_classmap classmap1
+                    (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+                    $. fun () ->
+                  search_classmap classmap0
+                    (function ClassInfo (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+                    $. fun () ->
+                  []
+                in
+                begin match find_in_class cn @ find_in_interf cn with
+                  [] -> error ()
+                | [(family, pmap)] -> check_call family pmap
+                | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name) None
+                end
+              | Some(_) -> error ()
               end
-            | Some (PredType (callee_tparams, ts, inputParamCount)) -> cont (new predref (p#name), callee_tparams, [], ts, inputParamCount)
-            | Some _ -> static_error l ("Variable is not of predicate type: " ^ p#name) None
+            end
           end
-      end $. fun (p, callee_tparams, ts0, xs, inputParamCount) ->
+      end $. fun (p, is_global_predref, callee_tparams, ts0, xs, inputParamCount) ->
       begin
         let (targs, tpenv, inferredTypes) =
           if targs = [] then
@@ -6506,7 +6510,7 @@ let verify_program_core (* ?verify_program_core *)
         let xs' = List.map (instantiate_type tpenv) xs in
         let (wps, tenv) = check_pats (pn,ilist) l tparams tenv xs' ps in
         p#set_domain (ts0 @ xs'); p#set_inputParamCount inputParamCount;
-        (WCallPred (l, p, targs, wps0, wps), tenv, inferredTypes)
+        (WCallPred (l, p, is_global_predref, targs, wps0, wps), tenv, inferredTypes)
       end
     | InstCallPred (l, e, g, index, pats) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
@@ -6751,7 +6755,7 @@ let verify_program_core (* ?verify_program_core *)
       | WReadArray (la, ea, tp, ei) -> assert_expr_fixed fixed ea; assert_expr_fixed fixed ei
       end;
       assume_pat_fixed fixed pv
-    | WCallPred (l, g, targs, pats0, pats) ->
+    | WCallPred (l, g, is_global_predref, targs, pats0, pats) ->
       begin
         match g#inputParamCount with
           None -> static_error l "Preciseness check failure: callee is not precise." (Some "calleeisnotprecise")
@@ -6817,7 +6821,7 @@ let verify_program_core (* ?verify_program_core *)
                   ((sn ^ "_" ^ f, []),
                    ([], l, [], [sn, PtrType (StructType sn); "value", t], Some 1,
                     let r = WRead (l, Var (l, sn, ref (Some LocalVar)), sn, f, t, false, ref (Some None), Real) in
-                    WCallPred (l, p, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
+                    WCallPred (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
                    )
                   )
                 in
@@ -7811,13 +7815,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb(), true), [tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
-    | WCallPred (l, g, targs, pats0, pats) ->
+    | WCallPred (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
-        match try_assoc g#name predfammap with
-          Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
-        | None ->
-          begin match try_assoc g#name env with
-            Some term -> ((term, false), pats0, pats, g#domain, None)
+        if not is_global_predref then 
+          let Some term = try_assoc g#name env in ((term, false), pats0, pats, g#domain, None)
+        else
+          begin match try_assoc g#name predfammap with
+            Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
             let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
@@ -8329,7 +8333,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     match p with
     | WAccess (l, e, tp, rhs) -> access l real_unit_pat e tp (SrcPat rhs)
-    | WCallPred (l, g, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
+    | WCallPred (l, g, _, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
     | WInstCallPred (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
     | ExprPred (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
@@ -8412,7 +8416,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter cs
     | EmpPred l -> cont [] h ghostenv env env' None
     | CoefPred (l, coefpat, WAccess (_, e, tp, rhs)) -> access l (SrcPat coefpat) e tp (SrcPat rhs)
-    | CoefPred (l, coefpat, WCallPred (_, g, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
+    | CoefPred (l, coefpat, WCallPred (_, g, _, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     | CoefPred (l, coefpat, WInstCallPred (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     | WPluginPred (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
@@ -8488,7 +8492,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   (* direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
        (outer_l, outer_symb, outer_formal_targs, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
-     - will replace "contains_edges" in a future commit
   *)
   let pred_fam_contains_edges =
     flatmap
@@ -8508,19 +8511,23 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 [(psymb, pindices, qsymb, [(l, (psymb, true), predinst_tparams, fns, xs, inputFormals, wbody0, [], [], [e], conds)])]
               else
                 []
-            | WCallPred(_, q, qtargs, qfns, qpats) ->
-              begin match try_assoc q#name predfammap with
-                None -> [] (* can this happen? *)
-              | Some (_, qtparams, _, qtps, qsymb, _) ->
-                begin match q#inputParamCount with
-                  None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
-                | Some qInputParamCount ->
-                  let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                  let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                  if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                    [(psymb, pindices, qsymb, [(l, (psymb, true), predinst_tparams, fns, xs, inputFormals, wbody0, qtargs, qIndices, qInputActuals, conds)])]
-                  else
-                    []
+            | WCallPred(_, q, true, qtargs, qfns, qpats) ->
+              begin match try_assoc q#name xs with
+                Some _ -> []
+              | None ->
+                begin match try_assoc q#name predfammap with
+                  None -> [] (* can this happen? *)
+                | Some (_, qtparams, _, qtps, qsymb, _) ->
+                  begin match q#inputParamCount with
+                    None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
+                  | Some qInputParamCount ->
+                    let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                    let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                    if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+                      [(psymb, pindices, qsymb, [(l, (psymb, true), predinst_tparams, fns, xs, inputFormals, wbody0, qtargs, qIndices, qInputActuals, conds)])]
+                    else
+                      []
+                  end
                 end
               end
             | CoefPred(_, LitPat(frac), asn) -> (* extend to arbitrary fractions? *)
@@ -8586,94 +8593,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     close pred_fam_contains_edges
   in
-  
-  let contains_edges =
-    flatmap
-      begin fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) as predinst) ->
-        let (_, _, _, _, symb, _) = List.assoc p predfammap in
-        let fsymbs = List.map term_of_pred_index fns in
-        match inputParamCount with
-          None -> []
-        | Some n ->
-          let inputVars = List.map fst (take n xs) in
-          let rec iter conds wbody =
-            match wbody with
-              WAccess (_, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-              if expr_is_fixed inputVars e then
-                let (_, (_, _, _, [tp; _], symb', _)) = List.assoc (fparent, fname) field_pred_map in
-                [(symb, fsymbs, symb', [], [tp], [e], conds, predinst)]
-              else
-                []
-            | WCallPred (_, g, targs, pats0, pats) ->
-              if pats0 <> [] then [] else
-              begin match try_assoc g#name predfammap with
-                None -> []
-              | Some (_, tparams, _, tps, symb', _) ->
-                begin match g#inputParamCount with
-                  None -> []
-                | Some n' ->
-                  let Some tpenv = zip tparams targs in
-                  let inputArgs = List.map (fun (LitPat e) -> e) (take n' pats) in
-                  if List.for_all (fun e -> expr_is_fixed inputVars e) inputArgs then
-                    [(symb, fsymbs, symb', targs, List.map (instantiate_type tpenv) (take n' tps), inputArgs, conds, predinst)]
-                  else
-                    []
-                end
-              end
-            | Sep (_, asn1, asn2) ->
-              iter conds asn1 @ iter conds asn2
-            | IfPred (_, cond, asn1, asn2) ->
-              if expr_is_fixed inputVars cond then
-                iter (cond::conds) asn1 @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2
-              else
-                iter conds asn1 @ iter conds asn2
-            | SwitchPred (_, _, cs) ->
-              flatmap (fun (SwitchPredClause (_, _, _, _, asn)) -> iter conds asn) cs
-            | _ -> []
-          in
-          iter [] wbody
-      end
-      predinstmap
-  in
-  
- (* let contains_edges2 =
-    List.map
-    (fun ((symb, fsymbs, symb', targs, inputExprTypes, inputArgs, conds, predinst) as edge) ->
-         (symb, fsymbs, symb', (symb', targs, inputExprTypes, inputArgs, conds, predinst) :: [])
-    )
-    contains_edges
-  in
-  
-  let close1 edges =
-    flatmap
-      begin fun ((symb, fsymbs, symb', theway) as edge) ->
-        flatmap 
-        (fun (symb2, fsymbs2, symb2', theway2) -> 
-          if definitely_equal symb' symb2 && symb != symb2' then
-            let new_edge = (symb, fsymbs, symb2', theway @ theway2) in
-            if List.exists (fun (symb3, fsymbs3, symb3', theway3) -> symb3 == symb && symb2' == symb3') edges then
-              []
-            else 
-              [new_edge]
-          else 
-            []
-        )
-        edges
-      end
-    edges
-  in
-  
-  let transitive_contains_edges = 
-    let rec perform_close edges =
-      let new_edges = close1 edges in
-      if(List.length new_edges == 0) then
-        edges
-      else
-        perform_close (edges @ new_edges)
-    in
-    perform_close contains_edges2
-  in*)
-  
+
   let instance_predicate_contains_edges =
     classmap1 |> flatmap
       begin fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
@@ -8688,7 +8608,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   [(cn, symb, symb', [], [List.hd tps], [e], conds, instance_predicate)]
                 else
                   []
-              | WCallPred (_, g, targs, pats0, pats) ->
+              | WCallPred (_, g, true, targs, pats0, pats) ->
                 if pats0 <> [] then [] else
                 begin match try_assoc g#name predfammap with
                   None -> []
@@ -8963,7 +8883,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     end;
     (* auto-open/close rules for chunks that contain other chunks *)
-    List.iter
+    (*List.iter
      begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
         let g = (symb, true) in
         let indexCount = List.length fns in
@@ -9006,38 +8926,65 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           rule
         in
         add_rule symb autoclose_rule;
-       (* let autoopen_rule =
-          let match_func h targs ts =
-            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && chunks_match g' targs' ts' symb' targs ts) h
-          in
-          let exec_func h targs ts cont =
-            let (h, targs, coef, ts) =
-              let rec iter hdone htodo =
-                match htodo with
-                  (Chunk ((g', is_symb), targs', coef', ts', _) as chunk)::htodo ->
-                  if is_symb && chunks_match g' targs' ts' symb' targs ts then
-                    (hdone @ htodo, targs', coef', ts')
-                  else
-                    iter (chunk::hdone) htodo
-              in
-              iter [] h
-            in
-            let (indices, args) = take_drop indexCount ts in
-            let Some tpenv = zip predinst_tparams targs in
-            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) xs args in
-            let ghostenv = [] in
-            with_context (Executing (h, env, l, "Auto-opening predicate")) $. fun () ->
-            assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h ghostenv env ->
-            cont h
-          in
-          let rule h targs terms_are_well_typed ts cont =
-            if match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
-          in
-          rule
-        in
-        add_rule symb' autoopen_rule*)
       end
-      contains_edges;
+      contains_edges;*)
+    (* transitive auto-close rules for precise predicates and predicate families *)
+    List.iter
+      (fun (from_symb, indices, to_symb, path) ->
+        let transitive_auto_close_rule h wanted_targs terms_are_well_typed wanted_indices_and_input_ts cont =
+          let rec can_apply_rule current_targs current_indices current_input_args path =
+            match path with
+              [] -> 
+                begin match try_find
+                  (fun (Chunk (found_symb, found_targs, found_coef, found_ts, _)) ->
+                    predname_eq found_symb (to_symb, true) &&
+                    (for_all2 definitely_equal (take (List.length ((current_indices @ current_input_args))) found_ts) (current_indices @ current_input_args))
+                    (* also check found_coef? *)
+                  )
+                  h
+                with
+                  None -> None
+                | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
+                end
+            | (outer_l, outer_symb, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+              let Some tpenv = zip outer_formal_targs current_targs in
+              let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
+              if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
+                let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args current_input_args in
+                let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
+                let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
+                let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
+                match can_apply_rule new_actual_targs new_actual_indices new_actual_input_args path with
+                  None -> None
+                | Some exec_rule -> Some (fun h cont ->
+                    exec_rule h (fun h coef ->
+                      let rules = ! rules_cell in
+                      let ghostenv = [] in
+                      let checkDummyFracs = true in
+                      (*let coef = real_unit in*)
+                      let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
+                      with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
+                        assert_pred rules tpenv (pn, ilist) h ghostenv env outer_wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
+                          let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
+                          let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
+                          with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
+                            cont (Chunk (outer_symb, current_targs, coef, current_input_args @ outputArgs, None) :: h) coef
+                    )
+                  )
+              else 
+                None (* conditions do not hold, so give up *)
+          in
+          if terms_are_well_typed &&
+             (for_all2 definitely_equal indices (take (List.length indices) wanted_indices_and_input_ts)) (* check that you are actually looking for from_symb at indices *) then
+            match can_apply_rule wanted_targs (take (List.length indices) wanted_indices_and_input_ts) (drop (List.length indices) wanted_indices_and_input_ts) path with
+              None -> cont None
+            | Some exec_rule -> exec_rule h (fun h _ -> cont (Some h))
+          else
+            cont None
+        in
+        add_rule from_symb transitive_auto_close_rule
+      )
+      transitive_contains_edges_;
     (* transitive auto-open rules for precise predicates and predicate families *)
     List.iter 
       (fun (from_symb, indices, to_symb, path) ->
@@ -10139,7 +10086,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       Access(_, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
     | WAccess(_, e, _, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
     | CallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
-    | WCallPred(_, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
+    | WCallPred(_, _, _, _, pats1, pats2) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) (pats1 @ pats2)
     | InstCallPred(_, e, _, index, pats) -> expr_mark_addr_taken e locals; expr_mark_addr_taken index locals; List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats
     | WInstCallPred(_, eopt, _, _, _, _, e, pats) -> 
       (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
@@ -12774,10 +12721,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
       ctxt#assume_forall trigger tps body
-  | (WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+  | (WCallPred(p_loc, p_ref, _, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
-  | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+  | (CoefPred(loc, VarPat(f), WCallPred(p_loc, p_ref, _, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
   | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g) None
