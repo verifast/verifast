@@ -8968,7 +8968,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
-                            cont (Chunk (outer_symb, current_targs, coef, current_input_args @ outputArgs, None) :: h) coef
+                            cont (Chunk (outer_symb, current_targs, coef, current_indices @ current_input_args @ outputArgs, None) :: h) coef
                     )
                   )
               else 
