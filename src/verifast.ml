@@ -5613,6 +5613,8 @@ let verify_program_core (* ?verify_program_core *)
     | Operation (l, (Add | Sub as operator), [e1; e2], ts) ->
       let (w1, t1, value1) = check e1 in
       let (w2, t2, value2) = check e2 in
+      let t1 = unfold_inferred_type t1 in
+      let t2 = unfold_inferred_type t2 in
       begin
         match t1 with
           PtrType pt1 ->
@@ -7986,10 +7988,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           else if ctxt#query (ctxt#mk_real_lt real_zero t) && ctxt#query (ctxt#mk_real_lt t coef0) then
             cont (Chunk (g', targs0, t, ts0, size0)) ghostenv env t [Chunk (g', targs0, ctxt#mk_real_sub coef0 t, ts0, size0)]
           else
-            if inputParamCount = None then
+            None
+            (*if inputParamCount = None then
               None
             else
-              assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0)) (Some "fractionmismatch")
+              assert_false h env l (Printf.sprintf "Fraction mismatch: cannot prove %s == %s or 0 < %s < %s" (ctxt#pprint t) (ctxt#pprint coef0) (ctxt#pprint t) (ctxt#pprint coef0)) (Some "fractionmismatch")*)
       in
       match coefpat with
         SrcPat (LitPat e) -> match_term_coefpat (eval None env e)
@@ -8491,7 +8494,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   (* direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
-       (outer_l, outer_symb, outer_formal_targs, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
+       (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
   *)
   let pred_fam_contains_edges =
     flatmap
@@ -8506,9 +8509,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let rec iter conds wbody =
             match wbody with
               WAccess(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-              if expr_is_fixed inputParameters e then
-                let (_, (_, _, _, [tp; _], qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                [(psymb, pindices, qsymb, [(l, (psymb, true), predinst_tparams, fns, xs, inputFormals, wbody0, [], [], [e], conds)])]
+              if expr_is_fixed inputParameters e || fstatic then
+                let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
+                [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, None, [], [], (if fstatic then [] else [e]), conds)])]
               else
                 []
             | WCallPred(_, q, true, qtargs, qfns, qpats) ->
@@ -8524,12 +8527,34 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     let qIndices = List.map (fun (LitPat e) -> e) qfns in
                     let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
                     if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                      [(psymb, pindices, qsymb, [(l, (psymb, true), predinst_tparams, fns, xs, inputFormals, wbody0, qtargs, qIndices, qInputActuals, conds)])]
+                      [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, None, qtargs, qIndices, qInputActuals, conds)])]
                     else
                       []
                   end
                 end
               end
+            | WInstCallPred(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
+              let (pmap, qsymb) = (* do I really want the qsymb of the static type? I want the root qsymb. *)
+                match try_assoc static_type_name classmap1 with
+                  Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+                  let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+                | None ->
+                  match try_assoc static_type_name classmap0 with
+                    Some (ClassInfo (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
+                    let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+                  | None ->
+                    match try_assoc static_type_name interfmap1 with
+                      Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                    | None ->
+                      let (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                      let (_, pmap, symb) = List.assoc instance_pred_name preds in
+                      (pmap, symb)
+              in
+              if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
+                let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
+                [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, target, [], [index], [], conds)])]
+              end else
+                []
             | CoefPred(_, LitPat(frac), asn) -> (* extend to arbitrary fractions? *)
               if expr_is_fixed inputParameters frac then
                 iter conds asn
@@ -8548,20 +8573,106 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       )
       predinstmap
   in
+   
+  let instance_predicate_contains_edges = 
+    classmap1 |> flatmap 
+      (fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
+        preds |> flatmap
+          (fun ((g, (l, pmap, family, psymb, Some wbody0)) as instance_predicate) ->
+            let pindices = [(List.assoc cn classterms)] in
+            let instpred_tparams = [] in
+            let fns = [cn] in
+            let xs = pmap in
+            let inputParameters = ["this"] in
+            let inputFormals = [] in
+            let rec iter conds wbody =
+              match wbody with
+                WAccess(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
+                if expr_is_fixed inputParameters e || fstatic then
+                  let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
+                  [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, None, [], [], (if fstatic then [] else [e]), conds)])]
+                else
+                  []
+              | WCallPred(_, q, true, qtargs, qfns, qpats) ->
+                begin match try_assoc q#name xs with
+                  Some _ -> []
+                | None ->
+                  begin match try_assoc q#name predfammap with
+                    None -> [] (* can this happen? *)
+                  | Some (_, qtparams, _, qtps, qsymb, _) ->
+                    begin match q#inputParamCount with
+                      None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
+                    | Some qInputParamCount ->
+                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+                        [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, None, qtargs, qIndices, qInputActuals, conds)])]
+                      else
+                        []
+                    end
+                  end
+                end
+              | WInstCallPred(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
+                let (pmap, qsymb) = (* do I really want the qsymb of the static type? I want the root qsymb. *)
+                  match try_assoc static_type_name classmap1 with
+                    Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+                    let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+                  | None ->
+                    match try_assoc static_type_name classmap0 with
+                      Some (ClassInfo (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
+                      let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+                    | None ->
+                      match try_assoc static_type_name interfmap1 with
+                        Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                      | None ->
+                        let (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                        let (_, pmap, symb) = List.assoc instance_pred_name preds in
+                        (pmap, symb)
+                in
+                if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
+                  let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
+                  [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, target, [], [index], [], conds)])]
+                end else
+                  []
+              | CoefPred(_, LitPat(frac), asn) -> (* extend to arbitrary fractions? *)
+                if expr_is_fixed inputParameters frac then
+                  iter conds asn
+                else
+                  []
+              | Sep(_, asn1, asn2) ->
+                (iter conds asn1) @ (iter conds asn2)
+              | IfPred(_, cond, asn1, asn2) ->
+                if expr_is_fixed inputParameters cond then
+                  (iter (cond :: conds) asn1) @ (iter (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
+                else
+                  (iter conds asn1) @ (iter conds asn2) (* replace this with []? *)
+              | _ -> []
+            in
+            iter [] wbody0
+          )
+      )
+  in
   
-  (* fixme: allows duplicate entries *)
+  let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges in
+  
+    (* fixme: allows duplicate entries *)
   let close1_ edges =
     flatmap
     (fun ((from_symb, from_indices, to_symb, path) as edge0) ->
       flatmap 
-        (fun ((from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) as edge1) ->
+        (fun ((from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) as edge1) ->
           if definitely_equal to_symb from_symb0 && from_symb != to_symb0 then
             let rec add_extra_conditions path = 
               match path with
-                [(outer_l, outer_symb, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
-                let extra_conditions: expr list = List.map2 (fun cn e2 -> Operation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ref (Some [ObjType "java.lang.Class"; ObjType "java.lang.Class"]))) outer_actual_indices0 inner_formal_indices in
+                [(outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
+                let extra_conditions: expr list = List.map2 (fun cn e2 -> 
+                    if language = Java then 
+                      Operation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ref (Some [ObjType "java.lang.Class"; ObjType "java.lang.Class"]))
+                    else 
+                      Operation(dummy_loc, Eq, [Var(dummy_loc, cn, ref (Some FuncName)); e2], ref (Some [PtrType Void; PtrType Void]))
+                ) outer_actual_indices0 inner_formal_indices in
                 (* these extra conditions ensure that the actual indices match the expected ones *)
-                [(outer_l, outer_symb, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
+                [(outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
               | head :: rest -> head :: (add_extra_conditions rest)
             in
             let new_path = add_extra_conditions path in
@@ -8591,10 +8702,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       else
         close (new_edges @ edges)
     in
-    close pred_fam_contains_edges
+    close contains_edges
   in
+  
+  (*let _ =
+    print_endline "transitive_edges:";
+    List.iter
+      (fun (from_symb, from_indices, to_symb, path) ->
+        print_endline ((ctxt#pprint from_symb) ^ " -> " ^ (ctxt#pprint to_symb));
+      )
+    contains_edges
+  in*)
 
-  let instance_predicate_contains_edges =
+ (* let instance_predicate_contains_edges =
     classmap1 |> flatmap
       begin fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
         preds |> flatmap
@@ -8638,7 +8758,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             iter [] wbody
           end
       end
-  in
+  in*)
   
   let rules_cell = ref [] in (* A hack to allow the rules to recursively use the rules *)
   
@@ -8932,13 +9052,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule h wanted_targs terms_are_well_typed wanted_indices_and_input_ts cont =
-          let rec can_apply_rule current_targs current_indices current_input_args path =
+          let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
             match path with
               [] -> 
                 begin match try_find
                   (fun (Chunk (found_symb, found_targs, found_coef, found_ts, _)) ->
                     predname_eq found_symb (to_symb, true) &&
-                    (for_all2 definitely_equal (take (List.length ((current_indices @ current_input_args))) found_ts) (current_indices @ current_input_args))
+                    (let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
+                    (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts))
                     (* also check found_coef? *)
                   )
                   h
@@ -8946,15 +9067,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   None -> None
                 | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
                 end
-            | (outer_l, outer_symb, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+            | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let Some tpenv = zip outer_formal_targs current_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
+              let env = match current_this_opt with
+                None -> env
+              | Some t ->  ("this", t) :: env
+              in
               if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args current_input_args in
+                let env = match current_this_opt with
+                  None -> env
+                | Some t -> ("this", t) :: env
+                in
+                let new_this_opt = match inner_target_opt with
+                  None -> None
+                | Some thisExpr -> Some (eval None env thisExpr)
+                in 
                 let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
                 let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
                 let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
-                match can_apply_rule new_actual_targs new_actual_indices new_actual_input_args path with
+                match can_apply_rule new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
                   None -> None
                 | Some exec_rule -> Some (fun h cont ->
                     exec_rule h (fun h coef ->
@@ -8963,20 +9096,38 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       let checkDummyFracs = true in
                       (*let coef = real_unit in*)
                       let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
+                      let env = match current_this_opt with
+                        None -> env
+                      | Some t -> ("this", t) :: env
+                      in
                       with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
                         assert_pred rules tpenv (pn, ilist) h ghostenv env outer_wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
-                            cont (Chunk (outer_symb, current_targs, coef, current_indices @ current_input_args @ outputArgs, None) :: h) coef
+                            cont (Chunk (outer_symb, current_targs, coef, (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs, None) :: h) coef
                     )
                   )
               else 
                 None (* conditions do not hold, so give up *)
           in
+          let wanted_indices = match List.hd path with
+            (_, _, true, _, _, _, _, _, _, _, _, _, _) -> 
+             (take (List.length indices) (List.tl wanted_indices_and_input_ts))
+          | (_, _, false, _, _, _, _, _, _, _, _, _, _) -> 
+             (take (List.length indices) wanted_indices_and_input_ts)
+          in
           if terms_are_well_typed &&
-             (for_all2 definitely_equal indices (take (List.length indices) wanted_indices_and_input_ts)) (* check that you are actually looking for from_symb at indices *) then
-            match can_apply_rule wanted_targs (take (List.length indices) wanted_indices_and_input_ts) (drop (List.length indices) wanted_indices_and_input_ts) path with
+             (for_all2 definitely_equal indices wanted_indices) (* check that you are actually looking for from_symb at indices *) then
+            let (wanted_target_opt, wanted_indices, wanted_inputs) = 
+              match List.hd path with
+                  (_, _, true, _, _, _, _, _, _, _, _, _, _) -> 
+                  (Some (List.hd wanted_indices_and_input_ts), (take (List.length indices) (List.tl wanted_indices_and_input_ts)),
+                  (drop (List.length indices) (List.tl wanted_indices_and_input_ts)))
+                | (_, _, false, _, _, _, _, _, _, _, _, _, _) -> 
+                  (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
+            in
+            match can_apply_rule wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
               None -> cont None
             | Some exec_rule -> exec_rule h (fun h _ -> cont (Some h))
           else
@@ -8989,68 +9140,103 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     List.iter 
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_open_rule h wanted_targs terms_are_well_typed wanted_indices_and_input_ts cont =
-          let rec try_apply_rule_core actual_targs actual_indices actual_input_args path = 
+          let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
             match path with
             | [] ->
-              if for_all2 definitely_equal wanted_indices_and_input_ts (actual_indices @ actual_input_args) then
-                Some (fun h cont -> cont h)
+              if for_all2 definitely_equal wanted_indices_and_input_ts ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) then
+                Some (fun h_opt cont -> begin match h_opt with None -> cont None | Some(h) -> cont (Some h) end)
               else
                 None
-            | (outer_l, outer_symb, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+            | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let (outer_s, _) = outer_symb in
               let actual_input_args = (take (List.length outer_formal_input_args) actual_input_args) in (* to fix first call *)
               let Some tpenv = zip outer_formal_targs actual_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args actual_input_args in
+              let env = match actual_this_opt with
+                  None -> env
+                | Some t -> ("this", t) :: env
+              in
               if (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) then
                 let env = List.map2 (fun (x, tp0) actual -> (x, actual)) outer_formal_input_args actual_input_args in
+                let env = match actual_this_opt with
+                  None -> env
+                | Some t -> ("this", t) :: env
+                in
+                let new_this_opt = match inner_target_opt with
+                  None -> None
+                | Some thisExpr -> Some (eval None env thisExpr)
+                in
                 let new_actual_targs = List.map (fun tp0 -> (instantiate_type tpenv tp0)) inner_formal_targs in
                 let new_actual_indices = List.map (fun index -> (eval None env index)) inner_formal_indices in
                 let new_actual_input_args = List.map (fun input_e -> (eval None env input_e)) inner_input_exprs in
-                match try_apply_rule_core new_actual_targs new_actual_indices new_actual_input_args path with
+                match try_apply_rule_core new_this_opt new_actual_targs new_actual_indices new_actual_input_args path with
                   None -> None
                 | Some(exec_rule) ->
-                  Some (fun h cont ->
-                    (* consume from_symb *)
-                    let (h, found_targs, found_coef, found_ts) =
-                      let rec iter hdone htodo =
-                        match htodo with
-                          [] -> assert false; (* todo: can happen if predicate is only present under conditions that contain non-input variables *)
-                        | (Chunk (found_symb, found_targs, found_coef, found_ts, _) as chunk)::htodo ->
-                          if (predname_eq outer_symb found_symb) && 
-                             (for_all2 definitely_equal (take (List.length (actual_indices @ actual_input_args)) found_ts) (actual_indices @ actual_input_args)) then
-                            (hdone @ htodo, found_targs, found_coef, found_ts)
-                          else
-                            iter (chunk::hdone) htodo
+                  Some (fun h_opt cont ->
+                    begin match h_opt with
+                      None -> cont None
+                    | Some h ->
+                      (* consume from_symb *)
+                      let result_opt =
+                        let rec iter hdone htodo =
+                          match htodo with
+                            [] -> None (* todo: can happen if predicate is only present under conditions that contain non-input variables *)
+                          | (Chunk (found_symb, found_targs, found_coef, found_ts, _) as chunk)::htodo ->
+                            if (predname_eq outer_symb found_symb) && 
+                               (let actuals = ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) in
+                               (for_all2 definitely_equal (take (List.length actuals) found_ts)) actuals) then
+                               Some ((hdone @ htodo, found_targs, found_coef, found_ts))
+                            else
+                              iter (chunk::hdone) htodo
+                        in
+                        iter [] h
                       in
-                      iter [] h
-                    in
-                    (* produce from_symb body *)
-                    let full_env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) outer_formal_args (drop (List.length actual_indices) found_ts) in 
-                    let ghostenv = [] in
-                    with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
-                      assume_pred tpenv (pn,ilist) h ghostenv full_env outer_wbody found_coef None None $. fun h ghostenv env ->
-                        (* perform remaining opens *)
-                        exec_rule h cont
+                      begin match result_opt with
+                        None -> cont None
+                      | Some ((h, found_targs, found_coef, found_ts)) -> 
+                      (* produce from_symb body *)
+                        let full_env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) outer_formal_args (drop ((List.length actual_indices) + (match actual_this_opt with None -> 0 | Some _ -> 1)) found_ts) in 
+                        let full_env = match actual_this_opt with None -> full_env | Some t -> ("this", t) :: full_env in
+                        let ghostenv = [] in
+                        with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
+                          assume_pred tpenv (pn,ilist) h ghostenv full_env outer_wbody found_coef None None $. fun h ghostenv env ->
+                            (* perform remaining opens *)
+                            exec_rule (Some h) cont
+                      end
+                    end
                   )
               else
                 None
           in
-          let rec try_apply_rule hdone htodo = 
-            match htodo with
-              [] -> None
-            | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, _)) as chnk) :: rest 
-                when (predname_eq actual_name (from_symb, true)) && 
-                     (for_all2 definitely_equal (take (List.length indices) actual_ts) indices) ->
-              begin match try_apply_rule_core actual_targs indices (drop (List.length indices) actual_ts) path with
-                None -> try_apply_rule (chnk :: hdone) rest
-              | Some exec_rule -> Some exec_rule
-              end
-            | chnk :: rest -> try_apply_rule (chnk :: hdone) rest
+          let try_apply_rule hdone htodo =
+            let rec try_apply_rule0 hdone htodo = 
+              match htodo with
+                [] -> None
+              | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, _)) as chnk) :: rest 
+                  when (predname_eq actual_name (from_symb, true)) && (
+                       let indices0 = match List.hd path with
+                         (_, _, true, _, _, _, _, _, _, _, _, _, _) ->  (take (List.length indices) (List.tl actual_ts))
+                       | (_, _, false, _, _, _, _, _, _, _, _, _, _) -> (take (List.length indices) actual_ts)
+                       in
+                        (for_all2 definitely_equal indices0 indices)
+                       ) ->
+                let (actual_target_opt, actual_indices, actual_inputs) = 
+                  match List.hd path with
+                    (_, _, true, _, _, _, _, _, _, _, _, _, _) ->  (Some (List.hd actual_ts), indices, (drop (List.length indices) (List.tl actual_ts)))
+                  | (_, _, false, _, _, _, _, _, _, _, _, _, _) -> (None, indices, (drop (List.length indices) actual_ts))
+                in
+                begin match try_apply_rule_core actual_target_opt actual_targs actual_indices actual_inputs path with
+                  None -> try_apply_rule0 (chnk :: hdone) rest
+                | Some exec_rule -> Some exec_rule
+                end
+              | chnk :: rest -> try_apply_rule0 (chnk :: hdone) rest
+            in
+            try_apply_rule0 hdone htodo
           in
           if terms_are_well_typed then
             match try_apply_rule [] h with
               None -> cont None
-            | Some exec_rule -> exec_rule h (fun h -> cont (Some h))
+            | Some exec_rule -> exec_rule (Some h) cont
           else
             cont None
          in
@@ -9058,7 +9244,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       )
       transitive_contains_edges_;
     (* auto-open/close rules for instance predicates *)
-    List.iter
+    (*List.iter
       begin fun (cn, symb, symb', targs, inputExprTypes, inputExprs, conds, (_, (l, xs, family, _, Some wbody))) ->
         let g = (symb, true) in
         let indexCount = 0 in
@@ -9136,7 +9322,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         add_rule symb' autoopen_rule
       end
-      instance_predicate_contains_edges;
+      instance_predicate_contains_edges;*)
     (* rules for closing empty chunks *)
     List.iter
       begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
