@@ -7834,7 +7834,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
       evalpats ghostenv env (pats0 @ pats) types domain (fun ghostenv env ts ->
-        let do_assume_chunk () = assume_chunk h g_symb targs coef g#inputParamCount ts size_first (fun h -> cont h ghostenv env) in
+        let input_param_count = match g#inputParamCount with None -> None | Some c -> Some (c + (List.length pats0)) in
+        let do_assume_chunk () = assume_chunk h g_symb targs coef input_param_count ts size_first (fun h -> cont h ghostenv env) in
         match
           if assuming then None else
           match auto_info with
@@ -8978,6 +8979,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule h wanted_targs terms_are_well_typed wanted_indices_and_input_ts cont =
+          (*let _ = print_endline ("trying to auto-close " ^ (ctxt#pprint to_symb) ^ " to find " ^ (ctxt#pprint from_symb)) in*)
           let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
             match path with
               [] -> 
@@ -9005,13 +9007,16 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                          )
                         empty_preds 
                     then
+                      (*let _ = print_endline "yes, inner is empty" in*)
                       Some (fun h cont -> cont h real_unit)
                     else
+                      (*let _ = print_endline "nope" in*)
                       None
                   end
-                | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
+                | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> (*let _ = print_endline "yes, inner found" in *) Some (fun h cont -> cont h found_coef)
                 end
             | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+              let (outer_s, _) = outer_symb in
               let Some tpenv = zip outer_formal_targs current_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
               let env = match current_this_opt with
@@ -9045,11 +9050,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       | Some t -> ("this", t) :: env
                       in
                       with_context (Executing (h, env, outer_l, "Auto-closing predicate")) $. fun () ->
-                        assert_pred rules tpenv (pn, ilist) h ghostenv env outer_wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
+                        assert_pred rules tpenv (pn, ilist) h ghostenv env outer_wbody checkDummyFracs coef $. fun _ h ghostenv env2 size_first ->
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
-                          let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
+                          let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
-                            cont (Chunk (outer_symb, current_targs, coef, (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs, None) :: h) coef
+                            let input_param_count = match current_this_opt with Some _ -> Some 2 | None -> Some((List.length current_indices) + (List.length current_input_args)) in
+                            assume_chunk h outer_symb current_targs coef input_param_count ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs) None (fun h -> 
+                            cont h coef)
+                            (* todo: properly set the size *)
+                            (*cont (Chunk (outer_symb, current_targs, coef, (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs, None) :: h) coef *)
                     )
                   )
               else 
