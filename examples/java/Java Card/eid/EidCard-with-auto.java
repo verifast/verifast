@@ -672,7 +672,9 @@ public final class EidCard extends Applet {
 	    nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
 	    authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&
 	    basicKeyPair |-> ?theBasicKeyPair &*&
-	    PKCS1_HEADER |-> ?thePKCS1HEADER &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1 &*&
+	    PKCS1_HEADER |-> ?thePKCS1HEADER &*&
+	    //EidCard_PKCS1_HEADER(?thePKCS1HEADER) &*&
+	     thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1 &*&
 	    PKCS1_SHA1_HEADER |-> ?thePKCS1SHA1HEADER &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _) &*& thePKCS1SHA1HEADER.length == 16 &*&
 	    PKCS1_MD5_HEADER |-> ?thePKCS1MD5HEADER &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19 &*&
 	    theDirFile != thePreferencesFile &*& theTokenInfo != thePreferencesFile &*& thePreferencesFile != theObjectDirectoryFile &*& thePreferencesFile != theAuthenticationObjectDirectoryFile &*& thePreferencesFile != thePrivateKeyDirectoryFile
@@ -1545,7 +1547,7 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
 
 		JCSystem.beginTransaction();
-		//@ open [1/2]valid(); // todo
+		////@ open [1/2]valid(); // auto
 		////@ open selected_file_types(f, ?g1, ?g2, ?g3, ?g4, ?g5, ?g6, ?g7, ?g8, ?g9, ?g10, ?g11, ?g12, ?g13, ?g14, ?g15, ?g16, ?g17, ?g18, ?g19, ?g20, ?g21, _);
 		selectedFile = f;
 		////@ close selected_file_types(f, g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19, g20, g21, _);
@@ -2254,7 +2256,7 @@ public final class EidCard extends Applet {
 		// if T=1, store signature in sigBuffer so that it can latter be sent
 		if (APDU.getProtocol() == APDU.PROTOCOL_T1) {
 			JCSystem.beginTransaction();
-			//@ open valid(); // todo
+			//@ open valid(); // todo (???)
 			Util.arrayCopy(buffer, (short) 0, responseBuffer, (short) 0, (short) 128);
 			////@ close valid(); // auto
 			JCSystem.commitTransaction();
@@ -2291,7 +2293,7 @@ public final class EidCard extends Applet {
 		////@ close [1/2]valid(); // auto
 		JCSystem.beginTransaction();
 		
-		//@ open valid(); // todo
+		////@ open valid(); // todo
 		
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as);
@@ -2299,6 +2301,7 @@ public final class EidCard extends Applet {
 		////@ open transient_array(messageBuffer); // auto
 		
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
+		////@ open [1/2]valid();
 		preparePkcs1ClearText(messageBuffer, ALG_MD5_PKCS1, lc);
 		// copy the MD5 hash from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
@@ -2308,7 +2311,7 @@ public final class EidCard extends Applet {
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
-		//@ open [1/2]valid(); // todo
+		////@ open [1/2]valid(); // auto
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as1);
@@ -2352,7 +2355,7 @@ public final class EidCard extends Applet {
 		
 		////@ close [1/2]valid(); // auto
 		JCSystem.beginTransaction();
-		//@ open valid();
+		////@ open valid(); // auto
 		
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as);
@@ -2369,7 +2372,7 @@ public final class EidCard extends Applet {
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
-		//@ open [1/2]valid(); // todo
+		////@ open [1/2]valid(); // auto
 		// generate signature
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as1);
@@ -2404,7 +2407,7 @@ public final class EidCard extends Applet {
 		}
 		////@ close [1/2]valid(); // auto
 		JCSystem.beginTransaction();
-		//@ open valid(); // todo
+		////@ open valid(); // auto
 
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as);
@@ -2420,7 +2423,7 @@ public final class EidCard extends Applet {
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
-		//@ open [1/2]valid(); // todo (?)
+		////@ open [1/2]valid(); // auto
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as1);
 		//@ foreachp_remove(messageBuffer, as1);
@@ -2559,17 +2562,17 @@ public final class EidCard extends Applet {
 		tempBuffer[(short) 10] = (byte) 0x03;
 		tempBuffer[(short) 11] = (byte) 0x81;
 		tempBuffer[(short) 12] = (byte) 0x80;
-		//@ open [1/2]valid(); // auto
+		////@ open [1/2]valid(); // auto
 		if (buffer[ISO7816.OFFSET_P2] == AUTHENTICATION){
 			if (getPreviousApduType() != GENERATE_KEY_PAIR) {
 				authKeyPair.getPublic().clearKey();
 			        ////@ close [1/2]valid(); // auto
 				JCSystem.beginTransaction();
-			        //@ open valid();
+			        ////@ open valid(); // auto
 				setPreviousApduType(OTHER);
 			        ////@ close valid(); // auto
 				JCSystem.commitTransaction();
-			        //@ open [1/2]valid();
+			        ////@ open [1/2]valid(); // auto
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}
 			((RSAPublicKey) authKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
@@ -2579,11 +2582,11 @@ public final class EidCard extends Applet {
 				nonRepKeyPair.getPublic().clearKey();
 			        ////@ close [1/2]valid(); // auto
 				JCSystem.beginTransaction();
-			        //@ open valid();
+			        ////@ open valid(); // auto
 				setPreviousApduType(OTHER);
 				////@ close valid(); // auto
 				JCSystem.commitTransaction();
-				//@ open [1/2]valid();
+				////@ open [1/2]valid(); // auto
 				ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 			}			
 			((RSAPublicKey) nonRepKeyPair.getPublic()).getExponent(tempBuffer, (short) 7);
@@ -2598,11 +2601,11 @@ public final class EidCard extends Applet {
 		}
 	        ////@ close [1/2]valid(); // auto
 		JCSystem.beginTransaction();
-	        //@ open valid();
+	        ////@ open valid(); // auto
 		setPreviousApduType(OTHER);
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
-		//@ open [1/2]valid();
+		////@ open [1/2]valid(); // auto
 		authKeyPair.getPublic().clearKey();
 		nonRepKeyPair.getPublic().clearKey();
 		// set the actual number of outgoing data bytes
@@ -2633,7 +2636,7 @@ public final class EidCard extends Applet {
 		switch (buffer[ISO7816.OFFSET_P2]) {
 		case BASIC:
 			JCSystem.beginTransaction();
-			//@ open valid(); // todo (???)
+			////@ open valid(); // auto
 			basicKeyPair = null;
 			////@ close valid(); // auto
 			JCSystem.commitTransaction();
@@ -2703,7 +2706,7 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		// use the basic private key
 		JCSystem.beginTransaction();
-		//@ open valid(); // todo (???)
+		////@ open valid(); // auto
 		
 		//@ transient_arrays_mem(messageBuffer);
 		//@ assert transient_arrays(?as);
@@ -2780,7 +2783,7 @@ public final class EidCard extends Applet {
 		if (le == 0)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		JCSystem.beginTransaction();
-		//@ open valid(); // todo (???)
+		////@ open valid(); // auto
 		RandomData random = EidCard.randomData;
 		// generate random data and put it into buffer
 		random.generateData(randomBuffer, (short) 0, le);

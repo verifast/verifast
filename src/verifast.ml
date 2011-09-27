@@ -9319,6 +9319,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     get_points_to (pn,ilist) h t f_symb l cont
   in
   
+  let get_full_field (pn,ilist) h t fparent fname l cont =
+    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+    assert_chunk rules (pn,ilist) h [] [] [] l (f_symb, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat t; dummypat] (fun chunk h coef [_; field_value] size ghostenv env env' ->
+      cont h coef t)
+  in
+  
   let current_thread_name = "currentThread" in
   let current_thread_type = IntType in
   
@@ -10702,7 +10708,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let value = get_unique_var_symb "string" (ObjType "java.lang.String") in
       assume_neq value (ctxt#mk_intlit 0) $. fun () ->
       cont h env value
-    | WRead (l, e, fparent, fname, frange, false, fvalue, fghost) ->
+    | WRead (l, e, fparent, fname, frange, false (* is static? *), fvalue, fghost) ->
       eval_h h env e $. fun h env t ->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
@@ -10711,6 +10717,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) env v
       | Some v -> cont h env v
       end
+    | WRead (l, _, fparent, fname, frange, true (* is static? *), fvalue, fghost) when ! fvalue = None || ! fvalue = Some None->
+      let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
+      assert_chunk rules (pn,ilist) h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] (fun chunk h coef [field_value] size ghostenv _ _ ->
+        cont (chunk :: h) env field_value)
     | WReadArray (l, arr, elem_tp, i) when language = Java ->
       eval_h h env arr $. fun h env arr ->
       eval_h h env i $. fun h env i ->
@@ -11379,8 +11389,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           eval_h h env w (fun h env t ->
             let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
             verify_expr true h env None wrhs (fun h env vrhs ->
-            get_field (pn,ilist) h t fparent fname l (fun h coef _ ->
-              if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
+            get_full_field (pn,ilist) h t fparent fname l (fun h coef _ ->
+              assert (definitely_equal coef real_unit);
               cont (Chunk ((f_symb, true), [], real_unit, [t; vrhs], None)::h) env)) econt
           )
         else
