@@ -936,7 +936,7 @@ type type_ = (* ?type_ *)
   | PureFuncType of type_ * type_  (* Curried *)
   | ObjType of string
   | ArrayType of type_
-  | StaticArrayType of type_ (* for array declarations in C *)
+  | StaticArrayType of type_ * int (* for array declarations in C *)
   | BoxIdType (* box type, for shared boxes *)
   | HandleIdType (* handle type, for shared boxes *)
   | AnyType (* supertype of all inductive datatypes; useful in combination with predicate families *)
@@ -2172,7 +2172,16 @@ and
 | [< f = parse_field_core Real >] -> f
 and
   parse_field_core gh = parser
-  [< t = parse_type; '(l, Ident f); '(_, Kwd ";") >] -> Field (l, gh, t, f, Instance, Public, false, None)
+  [< te0 = parse_type; '(l, Ident f);
+     te = parser
+        [< '(_, Kwd ";") >] -> te0
+      | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
+          (match te0 with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
+            if ( (int_of_big_int size) <= 0 ) then
+              raise (ParseException (ls, "Array must have size > 0."));
+            StaticArrayTypeExpr (l, te0, (int_of_big_int size))
+          | _ -> raise (ParseException (l, "Array cannot be of this type.")))
+   >] -> Field (l, gh, te, f, Instance, Public, false, None)
 and
   parse_return_type = parser
   [< t = parse_type >] -> match t with ManifestTypeExpr (_, Void) -> None | _ -> Some t
@@ -2514,14 +2523,16 @@ and
        | [< '(l2, Kwd "{"); es = parse_array_init; xs = comma_rep (parser [< '(_, Ident x); is_array = parse_array_braces; e = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs te is_array >] -> e) >] -> (x, is_array, e, ref false)); '(_, Kwd ";") >] ->
            (match te with ArrayTypeExpr(_, elem_te) -> DeclStmt(l, te, (x, false, Some(NewArrayWithInitializer(l2, elem_te, es)), ref false) :: xs) | _ -> raise (ParseException (l2, "Cannot specify an array initializer for a field whose type is not an array type.")))
     >] -> s
-  | [< '(l2, Kwd "["); (* parse array declaration *)
-       (* TODO: check (size > 0) *)
+  | [< '(_, Kwd "["); (* parse array declaration *)
        e = parser
-             [< '(_, Int size); '(l, Kwd "]") >] -> 
-               (match te with
-                 (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
-                  DeclStmt(l, StaticArrayTypeExpr (l2, te, (int_of_big_int size)), (x, false, None, ref false)::[]))
-           | [< '(_, Kwd "]"); declstmt = parse_decl_stmt_rest (ArrayTypeExpr(type_expr_loc te, te)) x >] -> declstmt
+           [< '(ls, Int size); '(l, Kwd "]") >] -> 
+             (match te with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
+                if ( (int_of_big_int size) <= 0 ) then
+                  raise (ParseException (ls, "Array must have size > 0."));
+                DeclStmt(l, StaticArrayTypeExpr (l, te, (int_of_big_int size)),
+                 (x, false, None, ref false)::[])
+              | _ -> raise (ParseException (l, "Array cannot be of this type.")))
+         | [< '(_, Kwd "]"); declstmt = parse_decl_stmt_rest (ArrayTypeExpr(type_expr_loc te, te)) x >] -> declstmt
              (* should only be parsed like this if language is Java *)
              
 (*         | [< '(_, PreprocessorSymbol size); '(l, Kwd "]") >]
@@ -3214,6 +3225,7 @@ let rec string_of_type t =
   | TypeParam x -> x
   | InferredType t -> begin match !t with None -> "?" | Some t -> string_of_type t end
   | ArrayType(t) -> (string_of_type t) ^ "[]"
+  | StaticArrayType(t, s) -> (string_of_type t) ^ "[" ^ (string_of_int s) ^ "]" 
   | ClassOrInterfaceName(n) -> n (* not a real type; used only during type checking *)
   | PackageName(n) -> n (* not a real type; used only during type checking *)
   | RefType(t) -> "ref " ^ (string_of_type t)
@@ -3446,6 +3458,7 @@ let verify_program_core (* ?verify_program_core *)
     | StructType sn -> assert false
     | ObjType n -> ProverInt
     | ArrayType t -> ProverInt
+    | StaticArrayType (t, s) -> ProverInt
     | PtrType t -> ProverInt
     | FuncType _ -> ProverInt
     | PredType (tparams, ts, inputParamCount) -> ProverInductive
@@ -4315,9 +4328,12 @@ let verify_program_core (* ?verify_program_core *)
     let rec check te =
     match te with
       ManifestTypeExpr (l, t) -> t
-    | (ArrayTypeExpr (l, t) | StaticArrayTypeExpr (l, t, _)) -> 
+    | ArrayTypeExpr (l, t) -> 
         let tp = check t in
         ArrayType(tp)
+    | StaticArrayTypeExpr (l, t, s) ->
+        let tp = check t in
+        StaticArrayType(tp, s)
     | IdentTypeExpr (l, None, id) ->
       if List.mem id tpenv then
         TypeParam id
@@ -5791,7 +5807,7 @@ let verify_program_core (* ?verify_program_core *)
       let w2 = checkt index intt in
       begin match unfold_inferred_type arr_t with
         ArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
-      | StaticArrayType tp -> (WReadArray (l, w1, tp, w2), tp, None)
+      | StaticArrayType (tp, _) -> (WReadArray (l, w1, tp, w2), tp, None)
       | PtrType tp -> (WReadArray (l, w1, tp, w2), tp, None)
       | _ when language = Java -> static_error l "Target of array access is not an array." None
       | _ when language = CLang -> static_error l "Target of array access is not an array or pointer." None
@@ -10173,8 +10189,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match s with
       DeclStmt(_, tp, inits) -> (
         match tp with
-        (* there is always an array chunk generated for a StaticArrayTypeExpr
-           -> add chunk to the list of locals to be freed at end of block *)
+        (* There is always an array chunk generated for a StaticArrayTypeExpr.
+           Hence, we have to add this chunk to the list of locals to be freed
+           at the end of the program block. *)
           StaticArrayTypeExpr(_, _, _) -> (
             (* TODO: handle array initialisers *)
             match inits with (name, _, _, _)::inits -> (
@@ -10580,8 +10597,33 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                  let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
                  cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)])
                | (f, (lf, gh, t))::fds ->
-                 assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
-                 iter h fds
+                 match t with
+                   (* generate "array" chunk for fields of type
+                      StaticArrayType; similar to handling
+                      StaticArrayTypeExpr in DeclStmt *)
+                   StaticArrayType (array_type, array_size) -> (
+                     let (_, _, _, _, c_array_symb, _) = List.assoc "array"
+                       predfammap in
+                     let array_pname = tn ^ "_" ^ f in
+                     let addr = get_unique_var_symb_
+                       "value" (StaticArrayType (array_type, array_size))
+                       (match gh with Ghost -> true | _ -> false) in
+                     let elems = get_unique_var_symb ((array_pname) ^ "_elems")
+                       (InductiveType ("list", [array_type])) in
+                     let h = ((Chunk ((c_array_symb, true),
+                       [array_type], real_unit,
+                       [addr; ctxt#mk_intlit array_size; sizeof l array_type;
+                       (pointee_pred_symb l array_type); elems], None))::h) in
+                     let (_, _, _, _, length_symb) = List.assoc "length"
+                       purefuncmap in
+                     assume_eq (mk_app length_symb [elems]) (ctxt#mk_intlit
+                       array_size) $. fun () ->
+                     assume_field h tn f t gh result (addr) real_unit
+                       $. fun h -> iter h fds )
+                   (* end of StaticArrayType handling *)
+                 | _ -> (
+                     assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
+                 iter h fds )
              in
              iter h fds
            )
@@ -10918,11 +10960,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1)
               [TermPat (List.assoc x env); dummypat]
               (fun _ h _ _ _ _ _ _ -> free_locals_core h locals cont)
-          | StaticArrayType(t) -> (* free array chunks *)
+          | StaticArrayType(t, _) -> (* free array chunks *)
               let (_, _, _, _, c_array_symb, _) = List.assoc "array"
                 predfammap in
               assert_chunk rules (pn, ilist) h [] [] [] closeBraceLoc
-              (c_array_symb, true) [t] real_unit (TermPat real_unit) (Some 1)
+              (c_array_symb, true) [t] real_unit (TermPat real_unit) (Some 4)
               [TermPat (List.assoc x env); dummypat; dummypat; dummypat;
               dummypat]
               (fun _ h _ _ _ _ _ _ -> free_locals_core h locals cont)
@@ -11275,9 +11317,26 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match fds with
               [] -> cont h env
             | (f, (lf, gh, t))::fds ->
-              get_field (pn,ilist) h arg tn f l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions." None; iter h fds)
+              match t with
+                (* if a struct contains fields of StaticArrayType, the
+                   array chunks have to be freed *)
+                StaticArrayType (array_type, array_size) -> (
+                  let (_, _, _, _, c_array_symb, _) = List.assoc "array"
+                    predfammap in
+                  get_field (pn,ilist) h arg tn f l (fun h coef addr ->
+                    if not (definitely_equal coef real_unit)
+                      then assert_false h env l
+                        "Free requires full field chunk permissions." None;
+                  assert_chunk rules (pn, ilist) h [] [] [] l
+                    (c_array_symb, true) [array_type] real_unit real_unit_pat
+                    (Some 4) [TermPat addr;
+                    dummypat; dummypat; dummypat; dummypat]
+                    (fun _ h coef _ _ _ _ _ -> iter h fds) ) )
+                (* all other field types: *)
+              | _ -> (
+              get_field (pn,ilist) h arg tn f l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions." None; iter h fds) )
           in
-          let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
+          let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map) in
           assert_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun _ h coef _ _ _ _ _ ->
             iter h fds
           )
@@ -11352,7 +11411,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let (_, _, _, _, c_array_symb, _) = List.assoc "array"
                 predfammap in
               let addr = get_unique_var_symb_non_ghost
-                (x ^ "_addr") (ArrayType (array_type)) in
+                x (StaticArrayType ((array_type), (array_size))) in
               let elems = get_unique_var_symb (x ^ "_elems")
                 (InductiveType ("list", [(array_type)])) in
               let h = ((Chunk ((c_array_symb, true),
@@ -11367,7 +11426,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                  ../bin/prelude.h is applied: *)
               assume_eq (mk_app length_symb [elems]) (ctxt#mk_intlit
                 (array_size)) $. fun () ->
-              iter h ((x, (StaticArrayType (array_type))) :: tenv)
+              iter h ((x, (StaticArrayType ((array_type), (array_size))))::tenv)
                 ghostenv ((x, addr)::env) xs )
            else (* end of evaluate StaticArrayTypeExpr *)
           if address_taken then
