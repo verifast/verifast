@@ -8492,6 +8492,24 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       predinstmap
   in
   
+  (*let _ =
+    begin print_endline "empty predicates:";
+    List.iter
+      (fun (from_symb, from_indices, conditions_list, _) ->
+        begin 
+          print_endline (ctxt#pprint from_symb);
+          List.iter (fun conds -> 
+            print_endline (string_of_int (List.length conds));
+            (*List.iter (fun con -> print_endline ("    " ^ (ctxt#pprint con))) conds;*)
+            print_endline "  or";
+          ) 
+          conditions_list;
+        end
+      )
+      empty_preds
+    end
+  in*)
+  
   (* direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
        (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
@@ -8712,52 +8730,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         print_endline ((ctxt#pprint from_symb) ^ " -> " ^ (ctxt#pprint to_symb));
       )
     contains_edges
-  in*)
-
- (* let instance_predicate_contains_edges =
-    classmap1 |> flatmap
-      begin fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
-        preds |> flatmap
-          begin fun ((g, (l, pmap, family, symb, Some wbody)) as instance_predicate)->
-            let inputVars = ["this"] in
-            let rec iter conds wbody =
-              match wbody with
-                WAccess (_, WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-                if expr_is_fixed inputVars e then
-                  let (_, (_, _, _, tps, symb', _)) = List.assoc (fparent, fname) field_pred_map in
-                  [(cn, symb, symb', [], [List.hd tps], [e], conds, instance_predicate)]
-                else
-                  []
-              | WCallPred (_, g, true, targs, pats0, pats) ->
-                if pats0 <> [] then [] else
-                begin match try_assoc g#name predfammap with
-                  None -> []
-                | Some (_, tparams, _, tps, symb', _) ->
-                  begin match g#inputParamCount with
-                    None -> []
-                  | Some n' ->
-                    let Some tpenv = zip tparams targs in
-                    let inputArgs = List.map (fun (LitPat e) -> e) (take n' pats) in
-                    if List.for_all (fun e -> expr_is_fixed inputVars e) inputArgs then
-                      [(cn, symb, symb', targs, List.map (instantiate_type tpenv) (take n' tps), inputArgs, conds, instance_predicate)]
-                    else
-                      []
-                  end
-                end
-              | Sep (_, asn1, asn2) ->
-                iter conds asn1 @ iter conds asn2
-              | IfPred (_, cond, asn1, asn2) ->
-                if expr_is_fixed inputVars cond then
-                  iter (cond::conds) asn1 @ iter (Operation (dummy_loc, Not, [cond], ref None)::conds) asn2
-                else
-                  iter conds asn1 @ iter conds asn2
-              | SwitchPred (_, _, cs) ->
-                flatmap (fun (SwitchPredClause (_, _, _, _, asn)) -> iter conds asn) cs
-              | _ -> []
-            in
-            iter [] wbody
-          end
-      end
   in*)
   
   let rules_cell = ref [] in (* A hack to allow the rules to recursively use the rules *)
@@ -9002,52 +8974,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       add_rule array_slice_deep_symb get_slice_deep_rule
       end
     end;
-    (* auto-open/close rules for chunks that contain other chunks *)
-    (*List.iter
-     begin fun (symb, fsymbs, symb', targs, inputExprTypes, inputExprs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
-        let g = (symb, true) in
-        let indexCount = List.length fns in
-        let Some n = inputParamCount in
-        let (inputParams, outputParams) = take_drop n xs in
-        let n' = List.length inputExprs in
-        let chunks_match symb1 targs1 ts1 symb2 targs2 ts2 =
-          symb1 == symb && symb2 == symb' &&
-          let (indices1, args1) = take_drop indexCount ts1 in
-          let inputArgs1 = take n args1 in
-          List.for_all2 definitely_equal indices1 fsymbs &&
-          let Some tpenv = zip predinst_tparams targs1 in
-          let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs1 in
-          targs2 = List.map (instantiate_type tpenv) targs &&
-          let inputArgs2 = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in prover_convert_term (eval None env e) tp0 tp) inputExprs inputExprTypes in
-          List.for_all2 definitely_equal (take n' ts2) inputArgs2 &&
-          List.for_all (fun cond -> ctxt#query (eval None env cond)) conds
-        in
-        let autoclose_rule =
-          let match_func h targs ts =
-            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && coef' == real_unit && chunks_match symb targs ts g' targs' ts') h
-          in
-          let exec_func h targs ts cont =
-            let rules = !rules_cell in
-            let (indices, inputArgs) = take_drop indexCount ts in
-            let Some tpenv = zip predinst_tparams targs in
-            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-            let ghostenv = [] in
-            let checkDummyFracs = true in
-            let coef = real_unit in
-            with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
-            assert_pred rules tpenv (pn,ilist) h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
-            let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
-            with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
-            cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
-          in
-          let rule h targs terms_are_well_typed ts cont =
-            if terms_are_well_typed && match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
-          in
-          rule
-        in
-        add_rule symb autoclose_rule;
-      end
-      contains_edges;*)
     (* transitive auto-close rules for precise predicates and predicate families *)
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
@@ -9064,7 +8990,25 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   )
                   h
                 with
-                  None -> None
+                  None -> begin (* check whether the wanted predicate is an empty predicate? *)
+                    if List.exists 
+                         (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+                           to_symb == symb &&
+                           (for_all2 definitely_equal fsymbs current_indices) &&
+                           (
+                             let Some inputParamCount = inputParamCount in
+                             let Some tpenv = zip predinst_tparams current_targs in
+                             let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) (take inputParamCount xs) current_input_args in 
+                             let env = match current_this_opt with None -> env | Some t -> ("this", t) :: env in
+                             List.exists (fun conds -> (List.for_all (fun cond -> ctxt#query (eval None env cond)) conds)) conds
+                           )
+                         )
+                        empty_preds 
+                    then
+                      Some (fun h cont -> cont h real_unit)
+                    else
+                      None
+                  end
                 | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
                 end
             | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
@@ -9140,12 +9084,16 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     List.iter 
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_open_rule h wanted_targs terms_are_well_typed wanted_indices_and_input_ts cont =
+          (*let _ = print_endline ("trying to auto-open" ^ (ctxt#pprint from_symb) ^ " to find " ^ (ctxt#pprint to_symb)) in*)
           let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
             match path with
             | [] ->
+              (*let _ = print_endline "almost there" in*)
               if for_all2 definitely_equal wanted_indices_and_input_ts ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) then
+                (*let _ = print_endline "yes!" in*)
                 Some (fun h_opt cont -> begin match h_opt with None -> cont None | Some(h) -> cont (Some h) end)
               else
+                (*let _ = print_endline "nope" in*)
                 None
             | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let (outer_s, _) = outer_symb in
@@ -9243,86 +9191,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
          add_rule to_symb transitive_auto_open_rule;
       )
       transitive_contains_edges_;
-    (* auto-open/close rules for instance predicates *)
-    (*List.iter
-      begin fun (cn, symb, symb', targs, inputExprTypes, inputExprs, conds, (_, (l, xs, family, _, Some wbody))) ->
-        let g = (symb, true) in
-        let indexCount = 0 in
-        let n = 1 (*inputParamCount*) in
-        (*let (inputParams, outputParams) = take_drop n xs in*)
-        let inputParams = [("this", ClassOrInterfaceName cn)] in
-        let outputParams = xs in
-        let n' = List.length inputExprs in
-        let chunks_match symb1 targs1 ts1 symb2 targs2 ts2 =
-          symb1 == symb && symb2 == symb' &&
-          let (indices1, args1) = take_drop indexCount ts1 in
-          let inputArgs1 = take n args1 in
-          (*List.for_all2 definitely_equal indices1 fsymbs &&*)
-          let tpenv = [] in
-          let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs1 in
-          targs2 = List.map (instantiate_type tpenv) targs &&
-          let inputArgs2 = List.map2 (fun e tp0 -> let tp = instantiate_type tpenv tp0 in prover_convert_term (eval None env e) tp0 tp) inputExprs inputExprTypes in
-          List.for_all2 definitely_equal (take n' ts2) inputArgs2 &&
-          List.for_all (fun cond -> ctxt#query (eval None env cond)) conds
-        in
-        let autoclose_rule =
-          let match_func h targs ts =
-            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && coef' == real_unit && chunks_match symb targs ts g' targs' ts') h
-          in
-          let exec_func h targs ts cont =
-            let rules = !rules_cell in
-            let (indices, inputArgs) = take_drop indexCount ts in
-            let inputArgs = [List.hd inputArgs] in
-            let tpenv = [] in
-            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
-            let ghostenv = [] in
-            let checkDummyFracs = true in
-            let coef = real_unit in
-            with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
-            assert_pred rules tpenv (pn,ilist) h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
-            let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
-            with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
-            cont (Chunk (g, targs, coef, inputArgs @ [(List.assoc cn classterms)] @ outputArgs, None) :: h)
-          in
-          let rule h targs terms_are_well_typed ts cont =
-            if terms_are_well_typed && match_func h targs ts && definitely_equal (List.assoc cn classterms) (List.nth ts 1) then exec_func h targs ts (fun h -> cont (Some h)) else cont None
-          in
-          rule
-        in
-        add_rule symb autoclose_rule;
-        let autoopen_rule =
-          let match_func h targs ts =
-            List.exists (fun (Chunk ((g', is_symb), targs', coef', ts', _)) -> is_symb && chunks_match g' targs' ts' symb' targs ts && definitely_equal (List.nth ts' 1) (List.assoc cn classterms)) h 
-          in
-          let exec_func h targs ts cont =
-            let (h, targs, coef, ts) =
-              let rec iter hdone htodo =
-                match htodo with
-                  (Chunk ((g', is_symb), targs', coef', ts', _) as chunk)::htodo ->
-                  if is_symb && chunks_match g' targs' ts' symb' targs ts then
-                    (hdone @ htodo, targs', coef', ts')
-                  else
-                    iter (chunk::hdone) htodo
-              in
-              iter [] h
-            in
-            let (indices, args) = take_drop indexCount ts in
-            let args = (List.hd args) :: (drop 2 args) in
-            let tpenv = [] in
-            let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) (("this", ClassOrInterfaceName cn) :: xs) args in
-            let ghostenv = [] in
-            with_context (Executing (h, env, l, "Auto-opening predicate")) $. fun () ->
-            assume_pred tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h ghostenv env ->
-            cont h
-          in
-          let rule h targs terms_are_well_typed ts cont =
-            if match_func h targs ts then exec_func h targs ts (fun h -> cont (Some h)) else cont None
-          in
-          rule
-        in
-        add_rule symb' autoopen_rule
-      end
-      instance_predicate_contains_edges;*)
     (* rules for closing empty chunks *)
     List.iter
       begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
