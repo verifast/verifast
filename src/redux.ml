@@ -1085,8 +1085,8 @@ and context () =
       | Eq (t1, t2) -> self#pprint t1 ^ " = " ^ self#pprint t2
       | Le (t1, t2) -> self#pprint t1 ^ " <= " ^ self#pprint t2
       | Lt (t1, t2) -> self#pprint t1 ^ " < " ^ self#pprint t2
-      | RealLe (t1, t2) -> self#pprint t1 ^ " </ " ^ self#pprint t2
-      | RealLt (t1, t2) -> self#pprint t1 ^ " <=/ " ^ self#pprint t2
+      | RealLe (t1, t2) -> self#pprint t1 ^ " <=/ " ^ self#pprint t2
+      | RealLt (t1, t2) -> self#pprint t1 ^ " </ " ^ self#pprint t2
       | And (t1, t2) -> self#pprint t1 ^ " && " ^ self#pprint t2
       | Or (t1, t2) -> self#pprint t1 ^ " || " ^ self#pprint t2
       | Not t -> "!(" ^ self#pprint t ^ ")"

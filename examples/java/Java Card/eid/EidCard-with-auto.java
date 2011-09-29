@@ -108,7 +108,7 @@ public abstract class File {
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]valid_id(this);
+		////@ open [f]valid_id(this); // auto
 		return fileID;
 		//@ close [f]valid_id(this);
 	}
@@ -166,7 +166,7 @@ public class DedicatedFile extends File {
 		number = 0;
 		////@ assert this.siblings |-> ?siblings; 
 		////@ assert array_slice(siblings, 0, siblings.length, ?siblist);
-		//@ close foreachp(nil, valid_id);
+		////@ close foreachp(nil, valid_id); // auto
 		////@ close DedicatedFile(fid, null, true, nil, _); // auto
 	}
 	public DedicatedFile(short fid, DedicatedFile parent) 
@@ -178,7 +178,7 @@ public class DedicatedFile extends File {
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
 		parent.addSibling(this);
-		//@ close foreachp(nil, valid_id);
+		////@ close foreachp(nil, valid_id); // auto
 		////@ close DedicatedFile(fid, parent, true, nil, _); // auto
 	}
 	public DedicatedFile getParent() 
@@ -203,7 +203,7 @@ public class DedicatedFile extends File {
 			siblings[number++] = s;
 			//@ take_one_more(snumber, update(snumber, s, sb));
 			//@ assert array_slice(thesiblings, _, _, ?sb2);
-			//@ close foreachp(nil, valid_id);
+			////@ close foreachp(nil, valid_id); // auto
 			//@ close foreachp(cons(s, nil), valid_id);
 			//@ foreachp_append(take(snumber, sb), cons(s, nil));	
 		}
@@ -224,15 +224,13 @@ public class DedicatedFile extends File {
 		/*@ invariant i >= 0 &*& [f]this.File(File.class)(fileID, activeState, _) &*& [f]this.parentFile |-> parentFile &*& [f]number |-> (byte) length(siblist) &*& [f]this.siblings |-> thesiblings &*& [f]array_slice(thesiblings, 0, thesiblings.length, sb)
 		      &*& [f]foreachp(siblist, valid_id); @*/
 		{
-			//@ assert 0 <= i &*& i < thesiblings.length;
 			File fl = siblings[i];
 			//@ nth_take(i, snumber, sb);
-			//@ mem_nth(i, siblist);
 			//@ foreachp_remove<File>(fl, siblist);
 			if (fl != null && fl.getFileID() == fid) {
 				//@ foreachp_unremove<File>(fl, siblist);
 				return fl;
-				//@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info);
+				////@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info); // auto
 			}
 			//@ foreachp_unremove<File>(fl, siblist);
 		}
@@ -245,7 +243,7 @@ public class DedicatedFile extends File {
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]valid_id(this);
+		////@ open [f]valid_id(this); // auto
 		File thiz = this;
 		return fileID;
 		//@ close [f]valid_id(this);
@@ -328,11 +326,11 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info);
       	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
-		//@ open [f]DedicatedFile(fileID, parentFile, activeState, siblist, info); // todo
+		///@ open [f]DedicatedFile(fileID, parentFile, activeState, siblist, info); // auto
 		////@ open [f]MasterFile(fileID, parentFile, activeState, siblist, info); // auto
 		return super.getSibling(fid);
 		////@ close [f]MasterFile(fileID, parentFile, activeState, siblist, info); // auto
-		//@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info); // todo
+		////@ close [f]DedicatedFile(fileID, parentFile, activeState, siblist, info); // todo
 	}
 	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
@@ -340,7 +338,7 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]valid_id(this);
+		////@ open [f]valid_id(this); // auto
 		return fileID;
 		//@ close [f]valid_id(this);
 	}
@@ -382,11 +380,11 @@ public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
   	    		&*& length(siblist) < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
  	{
 		
-		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info); // todo
+		////@ open DedicatedFile(fileID, parentFile, activeState, siblist, info); // auto
 		////@ open MasterFile(fileID, parentFile, activeState, siblist, ?info2); // auto
 		super.addSibling(s);
 		////@ close MasterFile(fileID, parentFile, activeState, (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info2); // auto
-		//@ close DedicatedFile(fileID, parentFile, activeState, (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info);
+		////@ close DedicatedFile(fileID, parentFile, activeState, (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist), info);
 	}
 	
 	/*@ lemma void castFileToMaster()
@@ -532,30 +530,32 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	    //@ requires [?f]valid_id(this);
 	    //@ ensures [f]valid_id(this);
 	{
-		//@ open [f]valid_id(this);
+		////@ open [f]valid_id(this); // auto
 		return fileID;
 		//@ close [f]valid_id(this);
 	}
+	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
 	    //@ requires File(?fid, _, ?info);
 	    //@ ensures File(fid, b, info);
 	{
-		//@ open File(fid, _, info); // todo
+		////@ open File(fid, _, info); // auto
 		////@ open ElementaryFile(fid, _, _, _, _, ?info2); // auto
 		super.setActive(b);
 		////@ close ElementaryFile(fid, _, _, _, _, info2); // auto
-		//@ close File(fid, _, info); // todo
+		////@ close File(fid, _, info); // auto
 	}
+	
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public boolean isActive() 
 	    //@ requires [?f]File(?fid, ?state, ?info);
 	    //@ ensures [f]File(fid, state, info) &*& result == state;
 	{
 		////@ open [f]File(fid, _, info); // auto
-		//@ open [f]ElementaryFile(fid, _, _, _, _, ?info2); // todo
+		////@ open [f]ElementaryFile(fid, _, _, _, _, ?info2); // auto
 		boolean b = super.isActive();
-		//@ close [f]ElementaryFile(fid, _, _, _, _, info2); // todo
+		////@ close [f]ElementaryFile(fid, _, _, _, _, info2); // auto
 		////@ close [f]File(fid, _, info); // auto
 		return b;
 	}
@@ -579,8 +579,8 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
     	  requires ElementaryFile(?fid, ?dedFile, ?dta, ?state, ?sz, ?ifo) &*& other.ElementaryFile(?fid2, ?dedFile2, ?dta2, ?state2, ?sz2, ?ifo2);
     	  ensures ElementaryFile(fid, dedFile, dta, state, sz, ifo) &*& other.ElementaryFile(fid2, dedFile2, dta2, state2, sz2, ifo2) &*& this != other;
     	{
-    	   open ElementaryFile(fid, dedFile, dta, state, sz, ifo); // todo (use assume_field)
-    	   open other.ElementaryFile(fid2, dedFile2, dta2, state2, sz2, ifo2); // todo (use assume_field)
+    	   open ElementaryFile(fid, dedFile, dta, state, sz, ifo);
+    	   open other.ElementaryFile(fid2, dedFile2, dta2, state2, sz2, ifo2);
     	}
     	@*/
 }
@@ -970,12 +970,13 @@ public final class EidCard extends Applet {
 		// use P1 and P2 as offset
 		short offset = Util.makeShort(buffer[ISO7816.OFFSET_P1], buffer[ISO7816.OFFSET_P2]);
 		JCSystem.beginTransaction();
-		//@ open valid(); // todo
+		//@ open valid(); // hard to eliminate as the conjunct theIdentityFile.ElementaryFile depends on non-input parameters
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
 		// impossible to start erasing from offset large than size of file
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _);
 		short size = ((ElementaryFile)selectedFile).getCurrentSize();
+		
 		if (offset > size || offset < 0)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		((ElementaryFile) selectedFile).eraseData(offset);
@@ -1185,7 +1186,7 @@ public final class EidCard extends Applet {
 		// getData, maar weet je niet dat het niet-null is.
 		ElementaryFile ef = (ElementaryFile)selectedFile;
 		byte[] bf = ef.getData();
-		//@ open [1/2]ef.ElementaryFile(?d1, ?d2, ?d3, ?d4, ?d5, ?info);
+		//@ open [1/2]ef.ElementaryFile(?d1, ?d2, ?d3, ?d4, ?d5, ?info); // hard to eliminate
 		apdu.sendBytesLong(bf, offset, le);
 		////@ close [1/2]ef.ElementaryFile(d1, d2, d3, d4, d5, info); // auto
 		////@ close [1/2]valid(); // auto
@@ -1218,7 +1219,7 @@ public final class EidCard extends Applet {
 		if (!fileAccessAllowed(UPDATE_BINARY))
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		JCSystem.beginTransaction();
-		//@ open valid(); // todo (implement search in assert_pred_core when part of the required fraction is missing)
+		//@ open valid(); // hard to eliminate
 		//@ open selected_file_types(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ?sf2);
 		/*@ if(selectedFile == masterFile) {
 		  	masterFile.castMasterToFile();
