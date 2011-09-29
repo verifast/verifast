@@ -101,7 +101,7 @@ public abstract class File {
 		fileID = fid;
 		active = true;
 		//@ leak File_fileID(this, _);
-		//@ close valid_id(this);
+		////@ close valid_id(this); // auto
 		////@ close File(fid, true, _); // auto
 	}
 	public short getFileID() 
@@ -110,7 +110,7 @@ public abstract class File {
 	{
 		////@ open [f]valid_id(this); // auto
 		return fileID;
-		//@ close [f]valid_id(this);
+		//@ close [f]valid_id(this); // todo
 	}
 	
 	public void setActive(boolean b)
@@ -164,8 +164,6 @@ public class DedicatedFile extends File {
 		parentFile = null;
 		siblings = new File[MAX_SIBLINGS];
 		number = 0;
-		////@ assert this.siblings |-> ?siblings; 
-		////@ assert array_slice(siblings, 0, siblings.length, ?siblist);
 		////@ close foreachp(nil, valid_id); // auto
 		////@ close DedicatedFile(fid, null, true, nil, _); // auto
 	}
@@ -196,16 +194,15 @@ public class DedicatedFile extends File {
   	    		&*& newSibList == (length(siblist) < MAX_SIBLINGS ? append(siblist, cons(s, nil)) : siblist)
   	    		&*& length(siblist) < MAX_SIBLINGS ? mem(s, newSibList) == true : true; @*/
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info);
-		//@ assert array_slice(?thesiblings, _, _, ?sb);
-		//@ int snumber = length(siblist);
+                ////@ open DedicatedFile(fileID, parentFile, activeState, siblist, info); // auto
 		if (number < MAX_SIBLINGS) {
+			//@ assert array_slice(?thesiblings, _, _, ?sb);
 			siblings[number++] = s;
-			//@ take_one_more(snumber, update(snumber, s, sb));
+			//@ take_one_more(length(siblist), update(length(siblist), s, sb));
 			//@ assert array_slice(thesiblings, _, _, ?sb2);
 			////@ close foreachp(nil, valid_id); // auto
 			//@ close foreachp(cons(s, nil), valid_id);
-			//@ foreachp_append(take(snumber, sb), cons(s, nil));	
+			//@ foreachp_append(take(length(siblist), sb), cons(s, nil));	
 		}
 		
 		///*@ close DedicatedFile(fileID, parentFile, activeState,		 // auto
@@ -217,7 +214,7 @@ public class DedicatedFile extends File {
   	    //@ requires [?f]DedicatedFile(?fileID, ?parentFile, ?activeState, ?siblist, ?info);
       	    //@ ensures [f]DedicatedFile(fileID, parentFile, activeState, siblist, info) &*& result == null ? true : mem(result, siblist) == true;
 	{
-		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info);
+		//@ open DedicatedFile(fileID, parentFile, activeState, siblist, info); // todo (by allowing patterns in wanted terms)
 		//@ assert [f]array_slice(?thesiblings, _, _, ?sb);
 		//@ int snumber = length(siblist);
 		for (byte i = 0; i < number; i++) 
@@ -246,7 +243,7 @@ public class DedicatedFile extends File {
 		////@ open [f]valid_id(this); // auto
 		File thiz = this;
 		return fileID;
-		//@ close [f]valid_id(this);
+		//@ close [f]valid_id(this); // todo
 	}
 	/*VF* METHODE ERBIJ GEZET VOOR VERIFAST */
 	public void setActive(boolean b)
@@ -517,7 +514,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
   	    		&*& dataOffset >= 0 &*& theData != null &*& dataOffset + length <= theData.length; @*/
       	    /*@ ensures ElementaryFile(fid, parent, theData, state, (short)(dataOffset + length), info) &*& array_slice(newData, 0, newData.length, _); @*/
 	{
-		//@ open ElementaryFile(fid, parent, theData, state, thesize, info); // todo (need to use assume_field instead assume_pred)
+		//@ open ElementaryFile(fid, parent, theData, state, thesize, info); // todo 
 		// update size
 		size = (short) (dataOffset + length);
 		// copy new data
@@ -594,7 +591,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
     :
       array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length;
 
-  predicate transient_array_pointer(byte[] buffer, short length) =
+  predicate transient_array_pointer(byte[] buffer, short length;) =
     buffer == null ?
       true
     :
@@ -970,7 +967,7 @@ public final class EidCard extends Applet {
 		// use P1 and P2 as offset
 		short offset = Util.makeShort(buffer[ISO7816.OFFSET_P1], buffer[ISO7816.OFFSET_P2]);
 		JCSystem.beginTransaction();
-		//@ open valid(); // hard to eliminate as the conjunct theIdentityFile.ElementaryFile depends on non-input parameters
+		//@ open valid(); // hard to eliminate as the conjunct selectedFile.ElementaryFile depends on non-input parameters
 		if (selectedFile == masterFile)
 			ISOException.throwIt(ISO7816.SW_FILE_INVALID);
 		// impossible to start erasing from offset large than size of file
@@ -1010,7 +1007,6 @@ public final class EidCard extends Applet {
 		// get the new data
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
-		//@ positive_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		if ((lc == 0) || (byteRead == 0))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -1426,7 +1422,7 @@ public final class EidCard extends Applet {
 		// receive the path name
 		short byteRead = apdu.setIncomingAndReceive();
 		// check Lc
-		//@ masking_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
+		////@ masking_and(buffer[ISO7816.OFFSET_LC], 0x00FF);
 		short lc = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		// it must be a multiple of 2
 		if (((lc & 1) == 1) || ((byteRead & 1) == 1))
@@ -1436,7 +1432,6 @@ public final class EidCard extends Applet {
 		////@ open [1/2]valid(); // auto
 		// use the path name in the APDU data to select a file
 		File f = masterFile;
-		//@ assert lc <= 255;
 		////@ assert [1/2]masterFile |-> ?theMasterFile;
 		for (byte i = 0; i < lc; i += 2) 
 		    /*@ invariant array_slice(buffer, 0, buffer.length, _) &*& i >= 0 &*& i < (lc + 2) &*& 
@@ -1887,7 +1882,6 @@ public final class EidCard extends Applet {
 		 * create the correct exception the status word is of the form 0x63Cx
 		 * with x the number of tries left
 		 */
-//@ 		 or_limits(SW_WRONG_PIN_0_TRIES_LEFT, tries, nat_of_pos(p1(p1(p1(p1_)))));
 		short sw = (short) (SW_WRONG_PIN_0_TRIES_LEFT | tries);
 		ISOException.throwIt(sw);
 	}

@@ -10549,7 +10549,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           eval_h h env w (fun h env target_term ->
             get_field (pn,ilist) h target_term fparent fname l (fun _ _ field_value ->
               get_values h env field_value (fun h env result_value new_value ->
-                get_field (pn,ilist) h target_term fparent fname l (fun h coef field_value ->
+                get_full_field (pn,ilist) h target_term fparent fname l (fun h coef field_value ->
                   if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a field requires full field permission." (Some "writingrequiresfull");
                   cont (Chunk ((f_symb, true), [], real_unit, [target_term; new_value], None)::h) env result_value)
               )
