@@ -8216,7 +8216,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             iter inputParamCount [] pats tps0 tps
           end $. fun ts ->
           match g with
-            (g, true) ->
+            (g, _) ->
             begin match try_assq g rules with
               Some rules ->
               let terms_are_well_typed = List.for_all (function SrcPat (LitPat (WidenedParameterArgument _)) -> false | _ -> true) pats in
