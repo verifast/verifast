@@ -8243,6 +8243,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               match pats with
                 [] -> List.rev args
               | TermPat t::pats -> iter patvars pats (ctxt#pprint t::args)
+              | SrcPat (LitPat (Var (_, x, scope)))::pats when !scope = Some LocalVar -> iter patvars pats ((if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_")::args)
               | SrcPat (LitPat e)::pats -> iter patvars pats ((if patvars = [] || lists_disjoint patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>")::args)
               | SrcPat DummyPat::pats -> iter patvars pats ("_"::args)
               | SrcPat (VarPat x)::pats -> iter (x::patvars) pats ("_"::args)
