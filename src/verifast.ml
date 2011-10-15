@@ -8221,7 +8221,37 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let assert_chunk_recursion_depth = ref 0 in
   
-  let assert_chunk_core rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
+  (** assert_chunk_core (TODO: rename to 'consume_chunk_core') attempts to consume a chunk matching the specified predicate assertion from the specified heap.
+      If no matching chunk is found in the heap, automation rules are tried (e.g. auto-open and auto-close rules).
+      Parameters:
+        rules -- The automation rules
+        h (heap): chunk list -- The heap
+        ghostenv (ghostEnvironment): string list -- The list of ghost variables. Used to check that ghost variables are not used in real code.
+        env (environment): (string * term) list -- The environment that binds variable names to their symbolic value. Updated with new bindings.
+        env' (unboundVariableBindings): (string * term) list -- Bindings of variables that were declared but not bound. (Happens when you do not specify values for all predicate parameters when closing a chunk.)
+        l (sourceLocation): loc -- Appropriate source location to use when reporting an error.
+        g (predicateName): (term * bool) -- Predicate name specified in the predicate assertion.
+        targs (typeArguments): type_ list -- Type arguments specified in the predicate assertion, instantiated with any type variable bindings currently in effect
+        coef (baseCoefficient): term -- Base coefficient in effect. The coefficient specified in the predicate assertion should be multiplied by this base coefficient
+          before comparing with a chunk found in the heap. Typically 1, unless e.g. a coefficient is specified in a close statement ('close [1/2]foo();').
+        coefpat (coefficientPattern): pat0 -- Coefficient specified in the predicate assertion.
+        inputParamCount (inputParameterCount): int option -- If the predicate is precise, specifies the number of input parameters.
+        pats (argumentPatterns): pat0 list -- Predicate arguments specified in the predicate assertion.
+        tps0 (semiinstantiatedParameterTypes): type_ list -- Predicate parameter types, after instantiation with the type arguments specified in the predicate
+          assertion, but without further instantiation. Argument expressions in 'pats' are typechecked against these types and expect that terms are boxed correctly
+          with respect to these types.
+        tps (instantiatedParameterTypes): type_ list -- Predicate parameter types, after instantiation with the type arguments specified in the predicate assertion,
+          as well as any additional type variable bindings currently in effect (e.g. type arguments of an outer predicate, as in 'close foo<int>();').
+        cont: continuation called if successful. Typical call:
+          [cont chunk h coef ts size ghostenv env env']
+            chunk: chunk -- chunk that was consumed (used by the 'leak' command to re-produce all consumed chunks with dummy fraction coefficients)
+            h -- heap obtained by removing the consumed chunk (as well as applying any automation rules)
+            coef, ts, size -- Coefficient, arguments, size of consumed chunk (duplicates info from 'chunk')
+            ghostenv: string list -- Updated ghost environment
+            env: (string * term) list -- Updated environment
+            env': (string * term) list -- Updated list of bindings of declared but unbound variables
+    *)
+  let assert_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps0 tps cont =
     let rec assert_chunk_core_core h =
       let rec iter hprefix h =
         match h with
@@ -8300,7 +8330,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let assert_chunk rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
     let tps = List.map (fun _ -> IntType) pats in (* dummies *)
-    assert_chunk_core rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
+    assert_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   in
   
   let srcpat pat = SrcPat pat in
@@ -8358,7 +8388,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
       let inputParamCount = match g#inputParamCount with None -> None | Some n -> Some (List.length pats0 + n) in
-      assert_chunk_core rules (pn,ilist) h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
+      assert_chunk_core rules h ghostenv env env' l g_symb targs coef coefpat inputParamCount (pats0 @ pats) types domain (fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
       )
@@ -8384,7 +8414,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let index = ev index in
       let types = ObjType tn::ObjType "java.lang.Class"::List.map snd pmap in
       let pats = TermPat target::TermPat index::srcpats pats in
-      assert_chunk_core rules (pn,ilist) h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
+      assert_chunk_core rules h ghostenv env env' l (pred_symb, true) [] coef coefpat (Some 2) pats types types $. fun chunk h coef ts size ghostenv env env' ->
       check_dummy_coefpat l coefpat coef;
       cont [chunk] h ghostenv env env' size
     in
