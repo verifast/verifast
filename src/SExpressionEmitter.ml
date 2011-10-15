@@ -239,43 +239,43 @@ and sexpr_of_pat (pat : pat) : sexpression =
     | VarPat str   -> List [ Symbol "pat-variable"; Symbol str ]
     | DummyPat     -> List [ Symbol "pat-dummy" ]
 
-let rec sexpr_of_pred (pred : pred) : sexpression =
-  match pred with
-    | IfPred (loc, expr, thenp, elsep) ->
+let rec sexpr_of_pred (asn : asn) : sexpression =
+  match asn with
+    | IfAsn (loc, expr, thenp, elsep) ->
       List [ Symbol "pred-if"
            ; sexpr_of_expr expr
            ; sexpr_of_pred thenp
            ; sexpr_of_pred elsep ]
-    | CallPred (loc, predref, types, indices, patterns) ->
+    | PredAsn (loc, predref, types, indices, patterns) ->
       build_list [ Symbol "pred-call-predicate"
                  ; Symbol predref#name ]
                  [ "types", List (List.map sexpr_of_type_expr types)
                  ; "indices", List (List.map sexpr_of_pat indices)
                  ; "arguments", List (List.map sexpr_of_pat patterns) ]
-    | Access (loc, expr, pat) ->
+    | PointsTo (loc, expr, pat) ->
       List [ Symbol "pred-access"
            ; sexpr_of_expr expr
            ; sexpr_of_pat pat ]
-    | EmpPred loc ->
+    | EmpAsn loc ->
       List [ Symbol "pred-empty" ]
     | Sep (loc, l, r) ->
       List [ Symbol "pred-&*&"
            ; sexpr_of_pred l
            ; sexpr_of_pred r ]
-    | ExprPred (loc, expr) ->
+    | ExprAsn (loc, expr) ->
       List [ Symbol "pred-expression"
            ; sexpr_of_expr expr ]
-    | WAccess _       -> unsupported "WAccess"
-    | WCallPred _     -> unsupported "WCallPred"
-    | InstCallPred _  -> unsupported "InstCallPred"
-    | WInstCallPred _ -> unsupported "WInstCallPred"
-    | SwitchPred _    -> unsupported "SwitchPred"
-    | CoefPred _      -> unsupported "CoefPred"
+    | WPointsTo _       -> unsupported "WAccess"
+    | WPredAsn _     -> unsupported "WCallPred"
+    | InstPredAsn _  -> unsupported "InstCallPred"
+    | WInstPredAsn _ -> unsupported "WInstCallPred"
+    | SwitchAsn _    -> unsupported "SwitchPred"
+    | CoefAsn _      -> unsupported "CoefPred"
 
 let sexpr_of_loop_spec (spec : loop_spec) : sexpression =
   match spec with
-    | LoopInv pred     -> List [ Symbol "loop-invariant"
-                               ; sexpr_of_pred pred ]
+    | LoopInv asn     -> List [ Symbol "loop-invariant"
+                               ; sexpr_of_pred asn ]
     | LoopSpec (p, q)  -> List [ Symbol "loop-spec"
                                ; sexpr_of_pred p
                                ; sexpr_of_pred q ]
@@ -353,9 +353,9 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
       in
         build_list [ Symbol "stmt-return" ]
                    expr
-    | Assert (loc, pred) ->
+    | Assert (loc, asn) ->
       List [ Symbol "stmt-assert"
-           ; sexpr_of_pred pred ]
+           ; sexpr_of_pred asn ]
     | NonpureStmt _                          -> unsupported "stmt-NonpureStmt"
     | SwitchStmt _                           -> unsupported "stmt-SwitchStmt"
     | Leak _                                 -> unsupported "stmt-Leak"
