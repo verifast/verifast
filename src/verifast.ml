@@ -1287,7 +1287,12 @@ and
   | SwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
       loc *
       expr *
-      switch_pred_clause list
+      switch_asn_clause list
+  | WSwitchAsn of (* switch over cons van inductive type regel-expr-clauses*)
+      loc *
+      expr *
+      string * (* inductive type (fully qualified) *)
+      switch_asn_clause list
   | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
       loc
   | CoefAsn of (* fractional permission met coeff-predicate*)
@@ -1297,8 +1302,8 @@ and
   | PluginAsn of loc * string
   | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
 and
-  switch_pred_clause = (* ?switch_pred_clause *)
-  | SwitchPredClause of
+  switch_asn_clause = (* ?switch_asn_clause *)
+  | SwitchAsnClause of
       loc * 
       string * 
       string list * 
@@ -1569,7 +1574,8 @@ let asn_loc p =
   | ExprAsn (l, e) -> l
   | Sep (l, p1, p2) -> l
   | IfAsn (l, e, p1, p2) -> l
-  | SwitchAsn (l, e, spcs) -> l
+  | SwitchAsn (l, e, sacs) -> l
+  | WSwitchAsn (l, e, i, sacs) -> l
   | EmpAsn l -> l
   | CoefAsn (l, coef, body) -> l
   | PluginAsn (l, asn) -> l
@@ -2598,7 +2604,7 @@ and
 | [< >] -> []
 and
   parse_switch_pred_clause = parser
-  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchPredClause (l, c, pats, ref None, p)
+  [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); p = parse_pred; '(_, Kwd ";") >] -> SwitchAsnClause (l, c, pats, ref None, p)
 and
   parse_expr stream = parse_assign_expr stream
 and
@@ -6413,8 +6419,8 @@ let verify_program_core (* ?verify_program_core *)
       | None -> ExtensibleClass
   in
   
-  let rec check_pred_core (pn,ilist) tparams tenv p =
-    let check_pred = check_pred_core in
+  let rec check_asn_core (pn,ilist) tparams tenv p =
+    let check_asn = check_asn_core in
     match p with
       PointsTo (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
@@ -6577,13 +6583,13 @@ let verify_program_core (* ?verify_program_core *)
     | ExprAsn (l, e) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprAsn (l, w), tenv, [])
     | Sep (l, p1, p2) ->
-      let (p1, tenv, infTps1) = check_pred (pn,ilist) tparams tenv p1 in
-      let (p2, tenv, infTps2) = check_pred (pn,ilist) tparams tenv p2 in
+      let (p1, tenv, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
+      let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
     | IfAsn (l, e, p1, p2) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
-      let (wp1, _, infTps1) = check_pred (pn,ilist) tparams tenv p1 in
-      let (wp2, _, infTps2) = check_pred (pn,ilist) tparams tenv p2 in
+      let (wp1, _, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
+      let (wp2, _, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
     | SwitchAsn (l, e, cs) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
@@ -6591,7 +6597,7 @@ let verify_program_core (* ?verify_program_core *)
       match t with
       | InductiveType (i, targs) ->
         begin
-        match try_assoc' (pn,ilist) i inductivemap with
+        match try_assoc i inductivemap with
           None -> static_error l "Switch operand is not an inductive value." None
         | Some (_, inductive_tparams, ctormap, _) ->
           let (Some tpenv) = zip inductive_tparams targs in
@@ -6603,8 +6609,8 @@ let verify_program_core (* ?verify_program_core *)
                   [] -> ()
                 | (cn, _)::_ ->
                   static_error l ("Missing case: '" ^ cn ^ "'.") None
-              in (SwitchAsn (l, w, wcs), tenv, infTps)
-            | SwitchPredClause (lc, cn, xs, ref_xsInfo, body)::cs ->
+              in (WSwitchAsn (l, w, i, wcs), tenv, infTps)
+            | SwitchAsnClause (lc, cn, xs, ref_xsInfo, body)::cs ->
               begin
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor." None
@@ -6625,9 +6631,8 @@ let verify_program_core (* ?verify_program_core *)
                 in
                 ref_xsInfo := Some xsInfo;
                 let tenv = xmap @ tenv in
-                let (wbody, _, clauseInfTps) = check_pred (pn,ilist)  tparams tenv body in
-                let Some cn = search' cn (pn,ilist) ctormap in
-                iter (SwitchPredClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
+                let (wbody, _, clauseInfTps) = check_asn (pn,ilist)  tparams tenv body in
+                iter (SwitchAsnClause (lc, cn, xs, ref_xsInfo, wbody)::wcs) (List.remove_assoc cn ctormap) cs (clauseInfTps @ infTps)
               end
           in
           iter [] ctormap cs []
@@ -6637,7 +6642,7 @@ let verify_program_core (* ?verify_program_core *)
     | EmpAsn l -> (p, tenv, [])
     | CoefAsn (l, coef, body) ->
       let (wcoef, tenv') = check_pat_core (pn,ilist) l tparams tenv RealType coef in
-      let (wbody, tenv, infTps) = check_pred (pn,ilist) tparams tenv body in
+      let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
       (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
     | PluginAsn (l, text) ->
       match pluginmap with
@@ -6677,8 +6682,8 @@ let verify_program_core (* ?verify_program_core *)
   
   let fix_inferred_types rs = List.iter fix_inferred_type rs in
   
-  let check_pred (pn,ilist) tparams tenv p =
-    let (wpred, tenv, infTypes) = check_pred_core (pn,ilist) tparams tenv p in
+  let check_asn (pn,ilist) tparams tenv p =
+    let (wpred, tenv, infTypes) = check_asn_core (pn,ilist) tparams tenv p in
     fix_inferred_types infTypes;
     (wpred, tenv)
   in
@@ -6687,7 +6692,7 @@ let verify_program_core (* ?verify_program_core *)
     List.map
       begin
         fun (bcn, (l, boxpmap, inv, amap, hpmap,pn,ilist)) ->
-        let (winv, boxvarmap) = check_pred (pn,ilist) [] boxpmap inv in
+        let (winv, boxvarmap) = check_asn (pn,ilist) [] boxpmap inv in
         let old_boxvarmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxvarmap in
         let amap =
         List.map
@@ -6801,12 +6806,12 @@ let verify_program_core (* ?verify_program_core *)
       let fixed1 = check_pred_precise fixed p1 in
       let fixed2 = check_pred_precise fixed p2 in
       intersect fixed1 fixed2
-    | SwitchAsn (l, e, cs) ->
+    | WSwitchAsn (l, e, i, cs) ->
       assert_expr_fixed fixed e;
       let rec iter fixed' cs =
         match cs with
           [] -> get fixed'
-        | SwitchPredClause (l, c, xs, _, p)::cs ->
+        | SwitchAsnClause (l, c, xs, _, p)::cs ->
           let fixed = check_pred_precise (xs@fixed) p in
           iter (Some (match fixed' with None -> fixed | Some fixed' -> intersect fixed' fixed)) cs
       in
@@ -6894,7 +6899,7 @@ let verify_program_core (* ?verify_program_core *)
       in
       iter2 [] pxs
     in
-    let (wbody, _) = check_pred (pn,ilist) tparams' (xs @ tenv) body in
+    let (wbody, _) = check_asn (pn,ilist) tparams' (xs @ tenv) body in
     begin
       match inputParamCount with
         None -> ()
@@ -6940,7 +6945,7 @@ let verify_program_core (* ?verify_program_core *)
       (
         function
           (g, (l, ps1, ps2, body, funcsym,pn,ilist)) ->
-          let (wbody, _) = check_pred (pn,ilist) [] (ps1 @ ps2) body in
+          let (wbody, _) = check_asn (pn,ilist) [] (ps1 @ ps2) body in
           (g, PredCtorInfo (l, ps1, ps2, wbody, funcsym))
       )
       predctormap1
@@ -6955,7 +6960,7 @@ let verify_program_core (* ?verify_program_core *)
           preds |> List.map
             begin fun (g, (l, pmap, family, symb, Some body)) ->
               let tenv = (current_class, ClassOrInterfaceName cn)::("this", ObjType cn)::pmap in
-              let (wbody, _) = check_pred (pn,ilist) [] tenv body in
+              let (wbody, _) = check_asn (pn,ilist) [] tenv body in
               let fixed = check_pred_precise ["this"] wbody in
               List.iter
                 begin fun (x, t) ->
@@ -7805,7 +7810,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter [] h
   in
 
-  let rec produce_asn_core tpenv (pn,ilist) h ghostenv env p coef size_first size_all (assuming: bool) cont =
+  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -7867,11 +7872,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match frac with
             None -> 
             if coef == real_unit then 
-              produce_asn_core (zip2 tparams targs) (pn, ilist) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+              produce_asn_core (zip2 tparams targs) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
             else
               do_assume_chunk ()
           | Some(f) ->
-            produce_asn_core (zip2 tparams targs) (pn, ilist) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+            produce_asn_core (zip2 tparams targs) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
       )
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       let (pmap, pred_symb) =
@@ -7899,21 +7904,22 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
       cont h ghostenv env
     | ExprAsn (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
-    | Sep (l, p1, p2) -> produce_asn_core tpenv (pn,ilist) h ghostenv env p1 coef size_first size_all assuming (fun h ghostenv env -> produce_asn_core tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all assuming cont)
+    | Sep (l, p1, p2) -> produce_asn_core tpenv h ghostenv env p1 coef size_first size_all assuming (fun h ghostenv env -> produce_asn_core tpenv h ghostenv env p2 coef size_all size_all assuming cont)
     | IfAsn (l, e, p1, p2) ->
       let cont h _ _ = cont h ghostenv env in
       branch
-        (fun _ -> assume (ev e) (fun _ -> produce_asn_core tpenv (pn,ilist) h ghostenv env p1 coef size_all size_all assuming cont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core tpenv (pn,ilist) h ghostenv env p2 coef size_all size_all assuming cont))
-    | SwitchAsn (l, e, cs) ->
+        (fun _ -> assume (ev e) (fun _ -> produce_asn_core tpenv h ghostenv env p1 coef size_all size_all assuming cont))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core tpenv h ghostenv env p2 coef size_all size_all assuming cont))
+    | WSwitchAsn (l, e, i, cs) ->
       let cont h _ _ = cont h ghostenv env in
       let t = ev e in
+      let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
+          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
           branch
             (fun _ ->
-               let Some (_, tparams, _, tps, cs) = try_assoc' (pn,ilist) cn purefuncmap in
+               let (_, (_, tparams, _, tps, cs)) = List.assoc cn ctormap in
                let Some pts = zip pats tps in
                let xts =
                  if tparams = [] then
@@ -7933,17 +7939,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                      pts
                in
                let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
-               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
+               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpAsn l -> cont h ghostenv env
     | CoefAsn (l, DummyPat, body) ->
-      produce_asn_core tpenv (pn,ilist) h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
+      produce_asn_core tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
-      produce_asn_core tpenv (pn,ilist) h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
+      produce_asn_core tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
     | WPluginAsn (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
       let (pluginState, h) =
@@ -7956,7 +7962,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     )
   in
   let produce_asn tpenv (pn,ilist) h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
-    produce_asn_core tpenv (pn,ilist) h ghostenv env p coef size_first size_all false cont
+    produce_asn_core tpenv h ghostenv env p coef size_first size_all false cont
   in
   
   (* Region: consumption of assertions *)
@@ -8329,7 +8335,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
-  let consume_chunk rules (pn,ilist) h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
+  let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
     let tps = List.map (fun _ -> IntType) pats in (* dummies, to indicate that no prover type conversions are needed *)
     consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
   in
@@ -8337,7 +8343,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let srcpat pat = SrcPat pat in
   let srcpats pats = List.map srcpat pats in
   
-  let rec consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' p checkDummyFracs coef cont =
+  let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -8353,7 +8359,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         SrcPat DummyPat -> if not (is_dummy_frac_term coef) then assert_false h env l "Cannot match a non-dummy fraction chunk against a dummy fraction pattern. First leak the chunk using the 'leak' command." None
       | _ -> ()
     in
-    let access l coefpat e tp rhs =
+    let points_to l coefpat e tp rhs =
       match e with
         WRead (lr, e, fparent, fname, frange, fstatic, fvalue, fghost) ->
         let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
@@ -8363,18 +8369,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           else
             (Some 1, [SrcPat (LitPat e); rhs])
         in
-        consume_chunk rules (pn,ilist) h ghostenv env env' l (symb, true) [] coef coefpat inputParamCount pats
+        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat inputParamCount pats
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
-        consume_chunk rules (pn,ilist) h ghostenv env env' l (array_element_symb(), true) [tp] coef coefpat (Some 2) pats $.
+        consume_chunk rules h ghostenv env env' l (array_element_symb(), true) [tp] coef coefpat (Some 2) pats $.
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
     in
-    let callpred l coefpat g targs pats0 pats =
+    let pred_asn l coefpat g targs pats0 pats =
       let (g_symb, pats0, pats, types) =
-        match try_assoc' (pn,ilist) g#name predfammap with
+        match try_assoc g#name predfammap with
           Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
         | None ->
           begin match try_assoc (g#name) env with
@@ -8420,8 +8426,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont [chunk] h ghostenv env env' size
     in
     match p with
-    | WPointsTo (l, e, tp, rhs) -> access l real_unit_pat e tp (SrcPat rhs)
-    | WPredAsn (l, g, _, targs, pats0, pats) -> callpred l real_unit_pat g targs (srcpats pats0) (srcpats pats)
+    | WPointsTo (l, e, tp, rhs) -> points_to l real_unit_pat e tp (SrcPat rhs)
+    | WPredAsn (l, g, _, targs, pats0, pats) -> pred_asn l real_unit_pat g targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
     | ExprAsn (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
@@ -8430,8 +8436,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
    (* | ExprAsn(l, Operation(lo, And, [e1; e2], tps)) ->
-      consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef (fun chunks h ghostenv env env' size ->
-        consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
+      consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef (fun chunks h ghostenv env env' size ->
+        consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
           cont (chunks @ chunks') h ghostenv env env' size
         )
       )
@@ -8441,15 +8447,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       branch
         (fun _ ->
            assume (ev con) (fun _ ->
-             consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef cont))
+             consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef cont))
         (fun _ ->
            assume (ctxt#mk_not (ev con)) (fun _ ->
-             consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef cont))*)
+             consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef cont))*)
     | ExprAsn (l, e) ->
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
-      consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size ->
-        consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
+      consume_asn_core rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size ->
+        consume_asn_core rules tpenv h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
           cont (chunks @ chunks') h ghostenv env env' size
         )
       )
@@ -8459,18 +8465,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
-             consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' p1 checkDummyFracs coef cont))
+             consume_asn_core rules tpenv h ghostenv env env' p1 checkDummyFracs coef cont))
         (fun _ ->
            assume (ctxt#mk_not (ev e)) (fun _ ->
-             consume_asn_core rules tpenv (pn,ilist) h ghostenv env env' p2 checkDummyFracs coef cont))
-    | SwitchAsn (l, e, cs) ->
+             consume_asn_core rules tpenv h ghostenv env env' p2 checkDummyFracs coef cont))
+    | WSwitchAsn (l, e, i, cs) ->
       let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
       let env' = [] in
       let t = ev e in
+      let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
         match cs with
-          SwitchPredClause (lc, cn, pats, patsInfo, p)::cs ->
-          let Some (_, tparams, _, tps, ctorsym) = try_assoc' (pn,ilist) cn purefuncmap in
+          SwitchAsnClause (lc, cn, pats, patsInfo, p)::cs ->
+          let (_, (_, tparams, _, tps, ctorsym)) = List.assoc cn ctormap in
           let Some pts = zip pats tps in
           let (xs, xenv) =
             if tparams = [] then
@@ -8497,14 +8504,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               (xs, xenv)
           in
           branch
-            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core rules tpenv (pn,ilist) h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont))
+            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core rules tpenv h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont))
             (fun _ -> iter cs)
         | [] -> success()
       in
       iter cs
     | EmpAsn l -> cont [] h ghostenv env env' None
-    | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> access l (SrcPat coefpat) e tp (SrcPat rhs)
-    | CoefAsn (l, coefpat, WPredAsn (_, g, _, targs, pat0, pats)) -> callpred l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
+    | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
+    | CoefAsn (l, coefpat, WPredAsn (_, g, _, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     | WPluginAsn (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
@@ -8524,7 +8531,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let consume_asn rules tpenv (pn,ilist) h ghostenv env p checkDummyFracs coef cont =
-    consume_asn_core rules tpenv (pn,ilist) h ghostenv env [] p checkDummyFracs coef (fun chunks h ghostenv env env' size_first -> cont chunks h ghostenv env size_first)
+    consume_asn_core rules tpenv h ghostenv env [] p checkDummyFracs coef (fun chunks h ghostenv env env' size_first -> cont chunks h ghostenv env size_first)
   in
 
   let term_of_pred_index =
@@ -8569,9 +8576,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             | ExprAsn (_, e) when expr_is_fixed inputVars e ->
               cont (e::conds)
             | EmpAsn _ -> cont conds
-            | SwitchAsn(_, e, cases) when expr_is_fixed inputVars e ->
+            | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
-                (fun (SwitchPredClause (l, casename, args, boxinginfo, asn)) ->
+                (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
                   if (List.length args) = 0 then
                     let cond = Operation (l, Eq, [e; Var (l, casename, ref (Some PureCtor))], ref (Some [AnyType; AnyType])) in
                     iter (cond :: conds) asn cont
@@ -9434,7 +9441,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let dummypat = SrcPat DummyPat in
   
   let get_points_to (pn,ilist) h p predSymb l cont =
-    consume_chunk rules (pn,ilist) h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
+    consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
   in
     
@@ -9445,7 +9452,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let get_full_field (pn,ilist) h t fparent fname l cont =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
-    consume_chunk rules (pn,ilist) h [] [] [] l (f_symb, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat t; dummypat] (fun chunk h coef [_; field_value] size ghostenv env env' ->
+    consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat t; dummypat] (fun chunk h coef [_; field_value] size ghostenv env env' ->
       cont h coef t)
   in
   
@@ -9460,9 +9467,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         [] -> List.rev functypemap
       | (ftn, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))::ds ->
         let (pre, post) =
-          let (wpre, tenv) = check_pred (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
+          let (wpre, tenv) = check_asn (pn,ilist) tparams (ftxmap @ xmap @ [("this", PtrType Void); (current_thread_name, current_thread_type)]) pre in
           let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-          let (wpost, tenv) = check_pred (pn,ilist) tparams postmap post in
+          let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
           (wpre, wpost)
         in
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, predfammaps))::functypemap) ds
@@ -9611,9 +9618,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None
       | Some (pre, post) ->
-        let (wpre, pre_tenv) = check_pred (pn,ilist) tparams tenv pre in
+        let (wpre, pre_tenv) = check_asn (pn,ilist) tparams tenv pre in
         let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
-        let (wpost, tenv) = check_pred (pn,ilist) tparams postmap post in
+        let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
         (wpre, pre_tenv, wpost)
     in
     if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported." None;
@@ -9729,11 +9736,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               match co with
                 None -> static_error lm ("Non-fixpoint function must have contract: "^n) None
               | Some (pre, post, epost) ->
-                let (pre, tenv) = check_pred (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
+                let (pre, tenv) = check_asn (pn,ilist) [] ((current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (post, _) = check_pred (pn,ilist) [] postmap post in
+                let (post, _) = check_asn (pn,ilist) [] postmap post in
                 let epost = List.map (fun (tp, epost) -> 
-                  let (epost, _) = check_pred (pn,ilist) [] tenv epost in
+                  let (epost, _) = check_asn (pn,ilist) [] tenv epost in
                   let tp = check_pure_type (pn,ilist) [] tp in
                   (tp, epost)
                 ) epost in
@@ -9818,18 +9825,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let a1' = dynamic_of a1 in
       let a2' = dynamic_of a2 in
       if a1' == a1 && a2' == a2 then asn else IfAsn (l, e, a1', a2')
-    | SwitchAsn (l, e, cs) ->
+    | WSwitchAsn (l, e, i, cs) ->
       let rec iter cs =
         match cs with
           [] -> cs
-        | SwitchPredClause (l, ctor, pats, info, body) as c::cs0 ->
+        | SwitchAsnClause (l, ctor, pats, info, body) as c::cs0 ->
           let body' = dynamic_of body in
-          let c' = if body' == body then c else SwitchPredClause (l, ctor, pats, info, body') in
+          let c' = if body' == body then c else SwitchAsnClause (l, ctor, pats, info, body') in
           let cs0' = iter cs0 in
           if c' == c && cs0' == cs0 then cs else c'::cs0'
       in
       let cs' = iter cs in
-      if cs' == cs then asn else SwitchAsn (l, e, cs')
+      if cs' == cs then asn else WSwitchAsn (l, e, i, cs')
     | CoefAsn (l, coefpat, body) ->
       let body' = dynamic_of body in
       if body' == body then asn else CoefAsn (l, coefpat, body')
@@ -9889,11 +9896,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               match co with
                 None -> None
               | Some (pre, post, epost) ->
-                let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
+                let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                 let postmap = match rt with None -> tenv | Some rt -> ("result", rt)::tenv in
-                let (wpost, _) = check_pred (pn,ilist) [] postmap post in
+                let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                 let wepost = List.map (fun (tp, epost) -> 
-                  let (wepost, _) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
+                  let (wepost, _) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) epost in
                   let tp = check_pure_type (pn,ilist) [] tp in
                   (tp, wepost)
                 ) epost in
@@ -9971,11 +9978,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 match co with
                   None -> static_error lm "Constructor must have contract" None
                 | Some (pre, post, epost) ->
-                  let (wpre, tenv) = check_pred (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
+                  let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
-                  let (wpost, _) = check_pred (pn,ilist) [] postmap post in
+                  let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                   let wepost = List.map (fun (tp, epost) -> 
-                    let (wepost, _) = check_pred (pn,ilist) [] tenv epost in
+                    let (wepost, _) = check_asn (pn,ilist) [] tenv epost in
                     let tp = check_pure_type (pn,ilist) [] tp in
                     (tp, wepost)
                   ) epost in
@@ -10280,7 +10287,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Sep(_, a1, a2) -> ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
     | IfAsn(_, e, a1, a2) -> expr_mark_addr_taken e locals;  ass_mark_addr_taken a1 locals; ass_mark_addr_taken a2 locals
     | SwitchAsn(_, e, cls) -> expr_mark_addr_taken e locals;
-        List.iter (fun (SwitchPredClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+        List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
+    | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
+        List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals;
   in
@@ -10637,9 +10646,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             )
           )
         else
-          consume_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ _ _ [_; field_value] _ _ _ _ ->
+          consume_chunk rules h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ _ _ [_; field_value] _ _ _ _ ->
             get_values h env field_value (fun h env result_value new_value ->
-              consume_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+              consume_chunk rules h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
                 cont (Chunk ((f_symb, true), [], real_unit, [new_value], None)::h) env result_value
             )
       | WReadArray (_, arr, elem_tp, i) when language = Java ->
@@ -10647,9 +10656,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         eval_h h env arr $. fun h env arr ->
         eval_h h env i $. fun h env i ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-          consume_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ _ _ [_; _; elem] _ _ _ _ ->
+          consume_chunk rules h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ _ _ [_; _; elem] _ _ _ _ ->
             get_values h env elem (fun h env result_value new_value ->
-              consume_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
+              consume_chunk rules h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
                 cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; new_value], None)::h) env result_value
             )
       | Deref (_, w, _) ->
@@ -10746,14 +10755,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | Real ->
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          consume_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           check_call [] h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          consume_chunk rules (pn,ilist) h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
           check_call targs h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) env retval
@@ -10869,7 +10878,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     | WRead (l, _, fparent, fname, frange, true (* is static? *), fvalue, fghost) when ! fvalue = None || ! fvalue = Some None->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
-      consume_chunk rules (pn,ilist) h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] (fun chunk h coef [field_value] size ghostenv _ _ ->
+      consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] (fun chunk h coef [field_value] size ghostenv _ _ ->
         cont (chunk :: h) env field_value)
     | WReadArray (l, arr, elem_tp, i) when language = Java ->
       eval_h h env arr $. fun h env arr ->
@@ -10877,7 +10886,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin match try_read_java_array h env l arr i elem_tp with
         None -> 
           let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-          consume_chunk rules (pn,ilist) h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit (SrcPat DummyPat) (Some 2) pats $. fun _ h coef [_; _; elem] _ _ _ _ ->
           let elem_tp = unfold_inferred_type elem_tp in
           cont (Chunk ((array_element_symb(), true), [elem_tp], coef, [arr; i; elem], None)::h) env elem
       | Some (v) -> 
@@ -11054,7 +11063,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | x :: locals -> 
           match List.assoc x tenv with
             RefType(t) -> (* free locals of which the address is taken *)
-              consume_chunk rules (pn, ilist) h [] [] [] closeBraceLoc
+              consume_chunk rules h [] [] [] closeBraceLoc
               (pointee_pred_symb l (match List.assoc x tenv with
               RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1)
               [TermPat (List.assoc x env); dummypat]
@@ -11062,7 +11071,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           | StaticArrayType(t, _) -> (* free array chunks *)
               let (_, _, _, _, c_array_symb, _) = List.assoc "array"
                 predfammap in
-              consume_chunk rules (pn, ilist) h [] [] [] closeBraceLoc
+              consume_chunk rules h [] [] [] closeBraceLoc
               (c_array_symb, true) [t] real_unit (TermPat real_unit) (Some 4)
               [TermPat (List.assoc x env); dummypat; dummypat; dummypat;
               dummypat]
@@ -11308,7 +11317,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let consume_chunk h cont =
             with_context (Executing (h, [], l, "Consuming lemma function pointer chunk")) $. fun () ->
             let args = List.map (fun t -> TermPat t) (fterm::ftargs) in
-            consume_chunk rules (pn,ilist) h ghostenv [] [] l (symb, true) fttargs real_unit dummypat (Some 1) args (fun _ h coef ts chunk_size ghostenv env env' ->
+            consume_chunk rules h ghostenv [] [] l (symb, true) fttargs real_unit dummypat (Some 1) args (fun _ h coef ts chunk_size ghostenv env env' ->
               if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk permission required." None;
               cont h
             )
@@ -11358,7 +11367,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       eval_h h env e $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules (pn,ilist) h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef ts _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef ts _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
       let [_; cs] = ts in
       with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
@@ -11393,7 +11402,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter h fds
       end $. fun h ->
       with_context (Executing (h, env, l, "Consuming struct padding chunk")) $. fun () ->
-      consume_chunk rules (pn,ilist) h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk." None;
       let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
@@ -11426,7 +11435,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     if not (definitely_equal coef real_unit)
                       then assert_false h env l
                         "Free requires full field chunk permissions." None;
-                  consume_chunk rules (pn, ilist) h [] [] [] l
+                  consume_chunk rules h [] [] [] l
                     (c_array_symb, true) [array_type] real_unit real_unit_pat
                     (Some 4) [TermPat addr;
                     dummypat; dummypat; dummypat; dummypat]
@@ -11436,7 +11445,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               get_field (pn,ilist) h arg tn f l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions." None; iter h fds) )
           in
           let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map) in
-          consume_chunk rules (pn,ilist)  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun _ h coef _ _ _ _ _ ->
+          consume_chunk rules  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun _ h coef _ _ _ _ _ ->
             iter h fds
           )
         | _ ->
@@ -11452,7 +11461,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
-      consume_chunk rules (pn,ilist) h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
       let globalChunks =
         List.map (fun (x, (l, tp, global_symb)) -> Chunk ((pointee_pred_symb l tp, true), [], coef, [global_symb; ctxt#mk_intlit 0], None)) globalmap
       in
@@ -11469,14 +11478,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match globals with
             [] -> cont h
           | (x, (lg, tp, global_symb))::globals ->
-            consume_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
             iter h globals
         in
         iter h globalmap
       end $. fun h ->
       begin fun cont ->
         if unloadable then
-          consume_chunk rules (pn,ilist) h [] [] [] l (module_code_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat current_module_term] $. fun _ h _ _ _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (module_code_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat current_module_term] $. fun _ h _ _ _ _ _ _ ->
           cont h
         else
           cont h
@@ -11563,7 +11572,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         else
           let wrhs = check_expr_t (pn,ilist) tparams tenv rhs tp in
           verify_expr true h env None wrhs (fun h env vrhs ->
-          consume_chunk rules (pn,ilist) h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+          consume_chunk rules h ghostenv [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 0) [SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
           cont (Chunk ((f_symb, true), [], real_unit, [vrhs], None)::h) env) econt
       | WReadArray (_, arr, elem_tp, i) when language = Java ->
         if pure then static_error l "Cannot write in a pure context." None;
@@ -11574,7 +11583,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         begin match try_update_java_array h env l arr i elem_tp rhs with
           None -> 
           let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
-          consume_chunk rules (pn,ilist) h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
+          consume_chunk rules h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [_; _; elem] _ _ _ _ ->
           cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; rhs], None)::h) env
         | Some(h) ->
           cont h env
@@ -11589,7 +11598,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         eval_h h env i $. fun h env i ->
         eval_h h env rhs $. fun h env rhs ->
         let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l2 elem_tp); TermPat predsym; SrcPat DummyPat] in
-        consume_chunk rules (pn,ilist) h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
+        consume_chunk rules h ghostenv [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
         (let term = ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n)
          in
            assert_term term h env l2 ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint term)) None);
@@ -11735,12 +11744,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       assert_term t h env le ("Assertion might not hold: " ^ (ctxt#pprint t)) None;
       cont h env
     | Assert (l, p) ->
-      let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
+      let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
       consume_asn rules [] (pn,ilist) h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
         tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
-      let (wp, tenv, _) = check_pred_core (pn,ilist) tparams tenv p in
+      let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
       consume_asn rules [] (pn,ilist) h ghostenv env wp false real_unit (fun chunks h ghostenv env size ->
         let coef = get_dummy_frac_term () in
         let chunks = List.map (fun (Chunk (g, targs, _, args, size)) -> Chunk (g, targs, coef, args, size)) chunks in
@@ -11845,7 +11854,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
       let wpats = (List.map (function (LitPat e) -> (TermPat (eval_non_pure true h env e)) | wpat -> SrcPat wpat) wpats) in
       let pats = pats0 @ wpats in
-      consume_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit (SrcPat coefpat) inputParamCount pats (fun _ h coef ts chunk_size ghostenv env [] ->
+      consume_chunk rules h ghostenv env [] l g_symb targs real_unit (SrcPat coefpat) inputParamCount pats (fun _ h coef ts chunk_size ghostenv env [] ->
         let ts = drop dropcount ts in
         let env' =
           List.map
@@ -11888,7 +11897,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           coef
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
-      consume_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat inputParamCount (srcpats wpats) (fun _ h coef ts chunk_size ghostenv env [] ->
+      consume_chunk rules h ghostenv env [] l g_symb targs real_unit dummypat inputParamCount (srcpats wpats) (fun _ h coef ts chunk_size ghostenv env [] ->
         let coef1 = ctxt#mk_real_mul splitcoef coef in
         let coef2 = ctxt#mk_real_mul (ctxt#mk_real_sub real_unit splitcoef) coef in
         let h = Chunk (g_symb, targs, coef1, ts, None)::Chunk (g_symb, targs, coef2, ts, None)::h in
@@ -11921,8 +11930,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (inpats, outpats) = take_drop inputParamCount pats in
       List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions." None) inpats;
       let pats = srcpats pats in
-      consume_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef1 ts1 _ ghostenv env [] ->
-        consume_chunk rules (pn,ilist) h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef2 ts2 _ _ _ [] ->
+      consume_chunk rules h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef1 ts1 _ ghostenv env [] ->
+        consume_chunk rules h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef2 ts2 _ _ _ [] ->
           let (Some tpairs) = zip ts1 ts2 in
           let (ints, outts) = take_drop inputParamCount tpairs in
           let merged_chunk = Chunk (g_symb, targs, ctxt#mk_real_add coef1 coef2, ts1, None) in
@@ -11944,7 +11953,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       let Some (_, _, _, pts, g_symb, _) = try_assoc' (pn,ilist) bcn predfammap in
       let (pats, tenv) = check_pats (pn,ilist) l tparams tenv pts pats in
-      consume_chunk rules (pn,ilist) h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun _ h coef ts _ ghostenv env [] ->
+      consume_chunk rules h ghostenv env [] l (g_symb, true) [] real_unit dummypat None (srcpats pats) $. fun _ h coef ts _ ghostenv env [] ->
       if not (definitely_equal coef real_unit) then static_error l "Disposing a box requires full permission." None;
       let boxId::argts = ts in
       let Some boxArgMap = zip boxpmap argts in
@@ -11965,7 +11974,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let Some (_, _, _, _, hpn_symb, _) = try_assoc' (pn,ilist) hpn predfammap in
               let handlePat::argPats = wpats in
               let pats = handlePat::TermPat boxId::argPats in
-              consume_chunk rules (pn,ilist) h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun _ h coef ts _ ghostenv env [] ->
+              consume_chunk rules h ghostenv env [] l (hpn_symb, true) [] real_unit dummypat None pats $. fun _ h coef ts _ ghostenv env [] ->
               if not (definitely_equal coef real_unit) then static_error l "Disposing a handle predicate requires full permission." None;
               let env = List.filter (fun (x, t) -> x <> "#boxId") env in
               let handleId::_::hpArgs = ts in
@@ -12222,7 +12231,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if not pure then check_ghost ghostenv l e;
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-      let (p, tenv') = check_pred (pn,ilist) tparams tenv p in
+      let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
       consume_asn rules [] (pn,ilist) h ghostenv env p true real_unit $. fun _ h _ _ _ ->
       let lblenv =
@@ -12286,10 +12295,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
-      let (pre, tenv') = check_pred (pn,ilist) tparams tenv pre in
+      let (pre, tenv') = check_asn (pn,ilist) tparams tenv pre in
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
       let tenv'' = old_xs_tenv @ tenv' in
-      let (post, tenv''') = check_pred (pn,ilist) tparams tenv'' post in
+      let (post, tenv''') = check_asn (pn,ilist) tparams tenv'' post in
       let dec = match dec with None -> None | Some e -> Some (check_expr_t (pn,ilist) tparams tenv' e intt) in
       let ghostenv' = ghostenv in
       let env' = env in
@@ -12502,7 +12511,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         Some x->x
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
-      consume_chunk rules (pn,ilist) h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
+      consume_chunk rules h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
         if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement." None;
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
@@ -12520,7 +12529,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         let (pre_hp_pats, tenv) = check_pats (pn,ilist) lch tparams tenv (HandleIdType::List.map (fun (x, t) -> t) pre_handlePred_parammap) pre_hp_pats in
         let (pre_handleId_pat::pre_hpargs_pats) = srcpats pre_hp_pats in
-        consume_chunk rules (pn,ilist) h ghostenv (("#boxId", boxId)::env) [] lch (pre_handlepred_symb, true) [] real_unit dummypat None (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
+        consume_chunk rules h ghostenv (("#boxId", boxId)::env) [] lch (pre_handlepred_symb, true) [] real_unit dummypat None (pre_handleId_pat::TermPat boxId::pre_hpargs_pats)
           (fun _ h coef ts chunk_size ghostenv env [] ->
              if not (coef == real_unit) then assert_false h env lch "Handle predicate coefficient must be 1." None;
              let (handleId::_::pre_handlePredArgs) = ts in
@@ -12809,7 +12818,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           let (inv, ss) =
             let some_inv l inv ss =
-              let (inv, tenv) = check_pred (pn,ilist) tparams tenv inv in
+              let (inv, tenv) = check_asn (pn,ilist) tparams tenv inv in
               (Some (l, inv, tenv), ss)
             in
             match ss with
@@ -12974,7 +12983,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match ps with
       [] -> cont h
     | (_, x, t, addr) :: ps ->
-      consume_chunk rules (pn,ilist) h [] [] [] l (pointee_pred_symb l t, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
+      consume_chunk rules h [] [] [] l (pointee_pred_symb l t, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat addr; dummypat] (fun chunk h coef [_; t] size ghostenv env env' -> cleanup_heapy_locals_core (pn, ilist) l h env ps cont)
     in
     match ps with
       [] -> cont h
@@ -13034,7 +13043,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           if unloadable && not in_pure_context then
             let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
             with_context (Executing (h, env, l, "Consuming code fraction")) $. fun () ->
-            consume_chunk rules (pn,ilist) h [] [] [] l (module_code_symb, true) [] real_unit (SrcPat DummyPat) (Some 1) [TermPat current_module_term] $. fun _ h coef _ _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (module_code_symb, true) [] real_unit (SrcPat DummyPat) (Some 1) [TermPat current_module_term] $. fun _ h coef _ _ _ _ _ ->
             let half = real_mul l real_half coef in
             cont (Chunk ((module_code_symb, true), [], half, [current_module_term], None)::h) (("currentCodeFraction", RealType)::tenv) ("currentCodeFraction"::ghostenv) (("currentCodeFraction", half)::env)
           else
