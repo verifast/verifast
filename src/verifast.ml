@@ -7961,7 +7961,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   in
-  let produce_asn tpenv (pn,ilist) h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
+  let produce_asn tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
     produce_asn_core tpenv h ghostenv env p coef size_first size_all false cont
   in
   
@@ -8530,7 +8530,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     )
   in
   
-  let consume_asn rules tpenv (pn,ilist) h ghostenv env p checkDummyFracs coef cont =
+  let consume_asn rules tpenv h ghostenv env p checkDummyFracs coef cont =
     consume_asn_core rules tpenv h ghostenv env [] p checkDummyFracs coef (fun chunks h ghostenv env env' size_first -> cont chunks h ghostenv env size_first)
   in
 
@@ -8934,7 +8934,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                           | Some (LitPat (RealLit(_, n))) -> ctxt#mk_real_mul coef (ctxt#mk_reallit_of_num ((num_of_big_int unit_big_int) // n))
                           | Some _ -> coef (* todo *)
                         in
-                        consume_asn rules tpenv (pn, ilist) h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
+                        consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
@@ -9035,7 +9035,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                         let full_env = match actual_this_opt with None -> full_env | Some t -> ("this", t) :: full_env in
                         let ghostenv = [] in
                         with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
-                          produce_asn tpenv (pn,ilist) h ghostenv full_env outer_wbody found_coef None None $. fun h ghostenv env ->
+                          produce_asn tpenv h ghostenv full_env outer_wbody found_coef None None $. fun h ghostenv env ->
                             (* perform remaining opens *)
                             exec_rule (Some h) cont
                       end
@@ -9103,7 +9103,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let checkDummyFracs = true in
             let coef = real_unit in
             with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
-            consume_asn rules tpenv (pn,ilist) h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
+            consume_asn rules tpenv h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
             let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
             with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
@@ -9188,7 +9188,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let (pn,ilist) = ("", []) in
               let ghostenv = [] in
               let Some env = zip (List.map fst xs) [a; elem; v] in
-              produce_asn tpenv (pn,ilist) h ghostenv env wbody coef None None $. fun h _ _ ->
+              produce_asn tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
               cont (Some h)
       in
       let get_slice_rule h [elem_tp] terms_are_well_typed [arr; istart; iend] cont =
@@ -9305,7 +9305,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   let env = [xinfo, info; xelem, elem] in
                   let rules = !rules_cell in
                   with_context (Executing (h, env, asn_loc wbody, "Auto-closing array slice")) $. fun () ->
-                  consume_asn rules tpenv (pn,ilist) h ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
+                  consume_asn rules tpenv h ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
                   match try_assoc xvalue env with
                     None -> cont None
                   | Some v -> cont'' v h
@@ -9551,23 +9551,23 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
-    produce_asn tpenv0 (pn,ilist) [] [] env0 pre0 real_unit None None (fun h _ env0 ->
+    produce_asn tpenv0 [] [] env0 pre0 real_unit None None (fun h _ env0 ->
       let bs = zip2 xmap env0_0 in
       let env = currentThreadEnv @ List.map (fun ((p, _), (p0, v)) -> (p, v)) bs @ env00 in
-      consume_asn rules tpenv (pn,ilist) h [] env pre true real_unit (fun _ h _ env _ ->
+      consume_asn rules tpenv h [] env pre true real_unit (fun _ h _ env _ ->
         let (env, env0) =
           match rt with
             None -> (env, env0)
           | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
         in
-        produce_asn tpenv (pn,ilist) h [] env post real_unit None None (fun h _ _ ->
-          consume_asn rules tpenv0 (pn,ilist) h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
+        produce_asn tpenv h [] env post real_unit None None (fun h _ _ ->
+          consume_asn rules tpenv0 h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
             check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
           )
         );
         List.iter (fun (exceptp, epost) ->
           if not (is_unchecked_exception_type exceptp) then
-            produce_asn tpenv (pn,ilist) h [] env epost real_unit None None (fun h _ _ ->
+            produce_asn tpenv h [] env epost real_unit None None (fun h _ _ ->
               let rec handle_exception handlers =
                 match handlers with
                 | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
@@ -9575,7 +9575,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   branch
                    (fun () ->
                       if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
-                      consume_asn rules tpenv0 (pn,ilist) h [] env0 epost0 true real_unit (fun _ h ghostenv env size_first -> ())
+                      consume_asn rules tpenv0 h [] env0 epost0 true real_unit (fun _ h ghostenv env size_first -> ())
                    )
                    (fun () ->
                      if not (is_subtype_of_ exceptp handler_tp) then
@@ -10498,7 +10498,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
     (fun cont -> if language = Java then with_context (Executing (h, env, l, "Verifying call")) cont else cont ()) $. fun () ->
     with_context PushSubcontext (fun () ->
-      consume_asn rules tpenv (pn,ilist) h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size ->
+      consume_asn rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size ->
         let _ =
           match leminfo with
             None -> ()
@@ -10554,7 +10554,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           (fun () -> match epost with
               None -> ()
             | Some(epost) ->
-                List.iter (fun (tp, post) -> produce_asn tpenv (pn,ilist) h ghostenv' env' post real_unit None None $. fun h _ _ ->
+                List.iter (fun (tp, post) -> produce_asn tpenv h ghostenv' env' post real_unit None None $. fun h _ _ ->
                   with_context PopSubcontext $. fun () ->
                   let e = get_unique_var_symb_ "excep" tp false in
                   (econt l h env tp e)
@@ -10562,7 +10562,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 epost
           )
           (fun () ->
-            produce_asn tpenv (pn,ilist) h ghostenv' env'' post real_unit None None $. fun h _ _ ->
+            produce_asn tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
             with_context PopSubcontext $. fun () ->
             cont h env r))
       )
@@ -11259,7 +11259,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
                 let pre_env = [("this", fterm)] @ currentThreadEnv @ ftargenv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x0, t0)) fparams in
-                produce_asn tpenv ("",[]) h [] pre_env pre real_unit None None $. fun h _ ft_env ->
+                produce_asn tpenv h [] pre_env pre real_unit None None $. fun h _ ft_env ->
                 with_context PopSubcontext $. fun () ->
                 let tenv = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x, tp)) fparams @ tenv in
                 let ghostenv = List.map (fun (x, x0, tp, t, t0, x1, tp1) -> x) fparams @ ghostenv in
@@ -11274,7 +11274,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
                 let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams in
-                consume_asn rules [] ("",[]) h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
+                consume_asn rules [] h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
                 let (f_env, ft_env, tenv, ghostenv, env) =
                   match rt1 with
                     None -> (f_env, ft_env, tenv, ghostenv, env)
@@ -11294,14 +11294,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     in
                     (f_env, ft_env, tenv, ghostenv, env)
                 in
-                produce_asn [] ("",[]) h [] f_env post1 real_unit None None $. fun h _ _ ->
+                produce_asn [] h [] f_env post1 real_unit None None $. fun h _ _ ->
                 with_context PopSubcontext $. fun () ->
                 begin fun tcont ->
                   verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss_after tcont return_cont econt
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, closeBraceLoc, "Consuming function type postcondition")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
-                consume_asn rules tpenv ("",[]) h [] ft_env post true real_unit $. fun _ h _ _ _ ->
+                consume_asn rules tpenv h [] ft_env post true real_unit $. fun _ h _ _ _ ->
                 with_context PopSubcontext $. fun () ->
                 check_leaks h [] closeBraceLoc "produce_function_pointer_chunk body leaks heap chunks"
               end;
@@ -11745,12 +11745,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont h env
     | Assert (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
-      consume_asn rules [] (pn,ilist) h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
+      consume_asn rules [] h ghostenv env wp false real_unit (fun _ _ ghostenv env _ ->
         tcont sizemap tenv ghostenv h env
       )
     | Leak (l, p) ->
       let (wp, tenv, _) = check_asn_core (pn,ilist) tparams tenv p in
-      consume_asn rules [] (pn,ilist) h ghostenv env wp false real_unit (fun chunks h ghostenv env size ->
+      consume_asn rules [] h ghostenv env wp false real_unit (fun chunks h ghostenv env size ->
         let coef = get_dummy_frac_term () in
         let chunks = List.map (fun (Chunk (g, targs, _, args, size)) -> Chunk (g, targs, coef, args, size)) chunks in
         tcont sizemap tenv ghostenv (chunks @ h) env
@@ -11866,7 +11866,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let env' = env0 @ env' in
         let body_size = match chunk_size with Some (PredicateChunkSize k) -> Some (PredicateChunkSize (k - 1)) | _ -> None in
         with_context PushSubcontext (fun () ->
-          produce_asn tpenv (pn,ilist) h ghostenv env' p coef body_size body_size (fun h _ _ ->
+          produce_asn tpenv h ghostenv env' p coef body_size body_size (fun h _ _ ->
             with_context PopSubcontext (fun () -> tcont sizemap tenv' ghostenv h env)
           )
         )
@@ -11959,7 +11959,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let Some boxArgMap = zip boxpmap argts in
       let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
       with_context PushSubcontext $. fun () ->
-      produce_asn [] (pn,ilist) h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
+      produce_asn [] h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
       let rec dispose_handles tenv ghostenv h env handleClauses cont =
         match handleClauses with
           [] -> cont tenv ghostenv h env
@@ -12098,7 +12098,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let env' = flatmap (function (p, pat, tp0, tp, Some t) -> [(p, prover_convert_term t tp tp0)] | _ -> []) ps in
       let env' = bs0 @ env' in
       with_context PushSubcontext (fun () ->
-        consume_asn rules tpenv (pn,ilist) h ghostenv env' p true coef (fun _ h p_ghostenv p_env size_first ->
+        consume_asn rules tpenv h ghostenv env' p true coef (fun _ h p_ghostenv p_env size_first ->
           with_context (Executing (h, p_env, lpred, "Inferring chunk arguments")) $. fun () ->
           let ts =
             List.map
@@ -12159,7 +12159,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
       with_context PushSubcontext $. fun () ->
-      consume_asn rules [] (pn,ilist) h ghostenv boxArgMap inv true real_unit $. fun _ h _ boxVarMap _ ->
+      consume_asn rules [] h ghostenv boxArgMap inv true real_unit $. fun _ h _ boxVarMap _ ->
       let boxIdTerm = get_unique_var_symb x BoxIdType in
       begin fun cont ->
         let rec iter handleChunks handleClauses =
@@ -12233,7 +12233,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
-      consume_asn rules [] (pn,ilist) h ghostenv env p true real_unit $. fun _ h _ _ _ ->
+      consume_asn rules [] h ghostenv env p true real_unit $. fun _ h _ _ _ ->
       let lblenv =
         List.map
           begin fun (lbl, cont) ->
@@ -12244,7 +12244,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let return_cont h'' tenv env retval = return_cont (h'' @ h) tenv env retval in
       let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let env = bs @ env in
-      produce_asn [] (pn,ilist) [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
+      produce_asn [] [] ghostenv env p real_unit None None $. fun h' ghostenv' env' ->
       begin fun cont ->
         match dec with
           None -> cont None
@@ -12270,7 +12270,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           econt
       end $. fun h' env ->
       let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
-      consume_asn rules [] (pn,ilist) h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
+      consume_asn rules [] h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
       check_leaks h''' env endBodyLoc "Loop leaks heap chunks.";
       begin match (t_dec, dec) with
         (None, None) -> ()
@@ -12302,11 +12302,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let dec = match dec with None -> None | Some e -> Some (check_expr_t (pn,ilist) tparams tenv' e intt) in
       let ghostenv' = ghostenv in
       let env' = env in
-      consume_asn rules [] (pn,ilist) h ghostenv env pre true real_unit $. fun _ h ghostenv env _ ->
+      consume_asn rules [] h ghostenv env pre true real_unit $. fun _ h ghostenv env _ ->
       let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let old_xs_env = List.map (fun (x, t) -> ("old_" ^ x, t)) bs in
       let env' = bs @ env' in
-      produce_asn [] (pn,ilist) [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
+      produce_asn [] [] ghostenv' env' pre real_unit None None $. fun h' ghostenv' env' ->
       begin fun cont ->
         match dec with
           None -> cont None
@@ -12317,7 +12317,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let env' = old_xs_env @ env' in
       let ghostenv' = List.map (fun (x, _) -> x) old_xs_env @ ghostenv' in
       let check_post h' env' =
-        consume_asn rules [] (pn,ilist) h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
+        consume_asn rules [] h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
         check_leaks h' env' endBodyLoc "Loop leaks heap chunks"
       in
       let exit_loop h' env' cont =
@@ -12333,7 +12333,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             env
         in
         let ghostenv = List.map (fun (x, _) -> x) old_xs_tenv @ ghostenv in
-        produce_asn [] (pn,ilist) h ghostenv env post real_unit None None $. fun h ghostenv env ->
+        produce_asn [] h ghostenv env post real_unit None None $. fun h ghostenv env ->
         cont tenv''' ghostenv h env
       in
       let lblenv = List.map (fun (lbl, cont) -> (lbl, fun blocks_done sizemap ttenv _ h' env' -> free_locals endBodyLoc h' ttenv env' !locals_to_free (fun h' _ -> exit_loop h' env' (cont blocks_done sizemap)))) lblenv in
@@ -12364,7 +12364,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           econt
       end $. fun h' tenv''' env' ->
       let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
-      consume_asn rules [] (pn,ilist) h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
+      consume_asn rules [] h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
       begin match (t_dec, dec) with
         (None, None) -> ()
       | (Some t_dec, Some dec) ->
@@ -12385,7 +12385,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end
           env''
       in
-      produce_asn [] (pn,ilist) h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
+      produce_asn [] h' ghostenv'' env'' post real_unit None None $. fun h' _ _ ->
       let env' = bs' @ env' in
       List.iter (function PureStmt _ -> () | s -> static_error (stmt_loc s) "Only pure statements are allowed after the recursive call." None) ss_after;
       let ss_after_xs = block_assigned_variables ss_after in
@@ -12549,7 +12549,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
              let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
              with_context PushSubcontext $. fun () ->
-             produce_asn [] (pn,ilist) h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
+             produce_asn [] h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
              with_context PopSubcontext $. fun () ->
              assume (eval ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxVarMap) pre_handlePred_inv) (fun () ->
                let nonpureStmtCount = ref 0 in
@@ -12594,7 +12594,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                          List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
                      end
                  in
-                 consume_asn rules [] (pn,ilist) h ghostenv post_boxArgMap inv true real_unit $. fun _ h _ post_boxVarMap _ ->
+                 consume_asn rules [] h ghostenv post_boxArgMap inv true real_unit $. fun _ h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure." None;
@@ -12755,7 +12755,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         (true, _) when pure -> assert_false h env (l()) "Loops are not allowed in a pure context." None
       | (true, None) -> assert_false h env (l()) "Loop invariant required." None
       | (_, Some (l, inv, tenv)) ->
-        consume_asn rules [] (pn,ilist) h ghostenv env inv true real_unit (fun _ h _ _ _ ->
+        consume_asn rules [] h ghostenv env inv true real_unit (fun _ h _ _ _ ->
           check_leaks h env l "Loop leaks heap chunks."
         )
       | (false, None) ->
@@ -12895,7 +12895,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 end
                 env
             in
-            produce_asn [] (pn,ilist) [] ghostenv env inv real_unit None None (fun h ghostenv env ->
+            produce_asn [] [] ghostenv env inv real_unit None None (fun h ghostenv env ->
               let blocks_done = block::blocks_done in
               verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont econt
             )
@@ -13024,7 +13024,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
       check_should_fail () $. fun _ ->
-      produce_asn [] (pn, ilist) [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env ->
+      produce_asn [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env ->
         let (prolog, ss) =
           if in_pure_context then
             ([], ss)
@@ -13050,7 +13050,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             cont h tenv ghostenv env
         end $. fun h tenv ghostenv env ->
         let do_return h env_post =
-          consume_asn rules [] (pn,ilist) h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
+          consume_asn rules [] h ghostenv env_post post true real_unit (fun _ h ghostenv env size_first ->
             cleanup_heapy_locals (pn, ilist) closeBraceLoc h env heapy_ps (fun h ->
               check_leaks h env closeBraceLoc "Function leaks heap chunks."
             )
@@ -13111,7 +13111,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         branch
           (fun () ->
             if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
-              consume_asn rules [] (pn,ilist) h ghostenv env epost true real_unit (fun _ h ghostenv env size_first -> ())
+              consume_asn rules [] h ghostenv env epost true real_unit (fun _ h ghostenv env size_first -> ())
           )
           (fun () ->
             if not (is_subtype_of_ exceptp handler_tp) then
@@ -13138,14 +13138,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
         let (in_pure_context, leminfo, ghostenv) = (false, None, []) in
         begin
-          produce_asn [] (pn,ilist) [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
+          produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let this = get_unique_var_symb "this" (ObjType cn) in
           begin fun cont ->
             if cfin = FinalClass then assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [this]) (List.assoc cn classterms)) cont else cont ()
           end $. fun () ->
           let do_body h ghostenv env =
             let do_return h env_post =
-              consume_asn rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
+              consume_asn rules [] h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
               check_leaks h env closeBraceLoc "Function leaks heap chunks."
             in
             let return_cont h tenv2 env2 retval =
@@ -13246,9 +13246,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end $. fun tenv ->
           let (sizemap, indinfo) = switch_stmt ss env in
           let tenv = match rt with None ->tenv | Some rt -> ("#result", rt)::tenv in
-          produce_asn [] (pn,ilist) [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
+          produce_asn [] [] ghostenv env pre real_unit None None $. fun h ghostenv env ->
           let do_return h env_post =
-            consume_asn rules [] (pn,ilist) h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
+            consume_asn rules [] h ghostenv env_post post true real_unit $. fun _ h ghostenv env size_first ->
             check_leaks h env closeBraceLoc "Function leaks heap chunks."
           in
           let return_cont h tenv2 env2 retval =
@@ -13350,10 +13350,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
                       with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
                         with_context PushSubcontext $. fun () ->
-                          produce_asn [] (pn,ilist) [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
+                          produce_asn [] [] [] pre_boxargs boxinv real_unit None None $. fun _ _ pre_boxvars ->
                             let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
                             let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
-                            produce_asn [] (pn,ilist) [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
+                            produce_asn [] [] [] post_boxargs boxinv real_unit None None $. fun _ _ post_boxvars ->
                               with_context PopSubcontext $. fun () ->
                                 let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
                                 let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
