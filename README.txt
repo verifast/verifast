@@ -1,156 +1,148 @@
-How to build VeriFast on Win32
-============================== 
+Welcome to the VeriFast codebase!
+=================================
 
-In order to build VeriFast on an x86 Windows machine, you need to
-1) Install the required software packages
-2) Set environment variables
-3) Run nmake in the src directory
+Map of the codebase
+-------------------
 
-1) Install Required Software Packages
-=====================================
+testsuite.mysh
+    The test suite. Should cover all features. When you commit a change,
+    please add a test case to the test suite that tests your change. This also
+    serves as useful documentation for your change and makes it easier to
+    audit your commit.
+    Note: test cases that work with both Z3 and Redux should start with
+    'verifast_both'. Test cases that work only with Z3 should start with
+    'ifnotmac verifast'. Test cases that work only with Redux should start
+    with 'verifast -prover redux'.
+src -- The source code (written in OCaml)
+    generate_vfversion.ml
+        A build-time utility that generates vfversion.ml containing the
+        current date.
 
-You can either use tools2.zip, which contains all required tools (except Visual Studio),
-or you can do a manual install.
+    plugins.ml, plugins_private.ml, plugins2.ml
+        Preliminary support for logic plugins (not to be confused with prover
+        plugins). See examples/plugin/.
+    DynType.ml
+        Implements safe dynamic typecasts in OCaml
+    proverapi.ml
+        Abstract interface between SMT solvers and VeriFast
+    z3prover.ml
+        Implements the prover API using the Z3 SMT solver
+    simplex.ml
+        A decision procedure for linear rational arithmetic; used by Redux
+    redux.ml
+        The Redux SMT solver; a modified partial implementation of the
+        Simplify technical report by Detlefs, Nelson, et al. Sometimes
+        faster than Z3. Also useful on platforms where no Z3 binary is
+        available (like MacOS).
+    verifast.ml
+        The core module; performs the actual verification.
+        *See extra info at the top of verifast.ml!*
+    verifastPluginZ3.ml
+        Registers the Z3 proverapi implementation as a prover plugin with
+        VeriFast. (OCaml modules can contain toplevel code. On program startup
+        all toplevel code of all modules is executed in the order in which the
+        modules appear in the compiler command line that was used to build the
+        executable.)
+    verifastPluginRedux.ml
+        Registers the Redux proverapi implementation as a prover plugin with
+        VeriFast
+    vfconsole.ml
+        The main module for the VeriFast command-line tool
+    Fonts_default.ml
+        VeriFast IDE configuration values, such as the default font name
+    Fonts_mac.ml
+        VeriFast IDE configuration values for MacOS
+    vfide.ml
+        The main module for the VeriFast IDE
 
-i) Use tools2.zip
-----------------
+    dlsymtool.ml
+        Tool for generating stub files and manifests for DLL scenarios. See
+        the BeepDriver and MockKernel examples
 
-Simply download tools2.zip from https://dnetcode.cs.kuleuven.be/attachments/download/60/tools2.zip and unzip it to C:\.
+    mysh.ml
+        A very simple script runner. Used to run the test suite. The
+        executable ships with the VeriFast release.
 
-Note: unfortunately, the tools are not relocatable. I installed them to C:\, so you MUST unzip them to C:\ as well.
+    vfstrip.ml
+        Tool that takes a C or Java source file with VeriFast annotations
+        on standard input and outputs a version without annotations. Used to
+        generate the files in tutorial/ from the files in tutorial_solutions/.
 
-ii) Manual install
-------------------
+    Makefile
+        The makefile for Windows builds (for use by NMAKE, Microsoft's make
+        utility that ships with Visual Studio).
+        The default target builds bin/verifast.exe and bin/vfide.exe and
+        runs the test suite.
+    GNUmakefile
+        The makefile for Linux and MacOS builds (for use by GNU make).
+        The default target builds bin/verifast and bin/vfide and runs the
+        test suite.
 
-You also need Microsoft Visual C++ 8.0 (Visual Studio 2005) or newer.
+    mvf.bat
+        Shorthand for 'nmake ..\bin\verifast.exe'
+        Note: you should usually just type 'nmake'.
+    mide.bat
+        Shorthand for 'nmake ..\bin\vfide.exe'
+        Note: you should usually just type 'nmake'.
+bin
+    Contains files that will ship in the release. Most of these are
+    described in examples/index.html.
+doc/tutorial
+    The VeriFast tutorial
+examples
+    The source files used by the test suite. Contains mostly small test cases
+    but also a few larger examples. See examples/index.html for descriptions.
+    These ship with the release.
+    java
+        Java test cases and examples
+help
+    HTML documents that ship with the release and that are launched by the
+    VeriFast IDE when the user clicks on the question mark button in the
+    error message bar.
+tests/errors
+    Some negative test cases. These test that VeriFast doesn't simply always
+    report "0 errors found". Uses VeriFast's should_fail feature.
+    Specifically, if a source line has a comment of the form //~ on it,
+    VeriFast remembers that line number as a should_fail line. If VeriFast
+    subsequently detects an error on that line, it does not report it.
+    On the other hand, if VeriFast does not detect an error on that line,
+    it reports a should_fail error.
 
-A. OCaml 3.11 or newer
-B. Flexdll 0.21 or newer
-C. Cygwin; GNU make (to build Camlidl)
-D. Camlidl 1.05 or newer
-E. Z3 1.3.6 or newer
-F. LablGTK with GtkSourceView
+How to build
+------------
 
-A. OCaml
---------
+See the appropriate README.xyz.txt file for your platform.
 
-VeriFast is written in O'Caml.
+Commit guidelines
+-----------------
+- Please always add a test case for your change.
+- Please always build and run the test suite before committing.
+- Please review your diffs before committing. In the TortoiseSVN commit
+  dialog, right-click on a modified file to see a diff. In the TortoiseSVN
+  diff viewer, you can easily revert spurious diff lines (with e.g. just
+  whitespace changes) by right-clicking on the diff line.
+- Keep your checkout clean so that you can easily spot unversioned files
+  that you need to svn add.
+- Adhere to the existing coding style. When inserting code, mimic the
+  style of the surrounding code.
 
-1) Download the OCaml 3.11 Windows binaries (for the Microsoft Visual C++ toolchain) and install it.
-2) Add the bin directory to your PATH
-3) set OCAMLLIB=C:\Ocaml\lib
+How to understand the codebase
+------------------------------
 
-B. Flexdll
-----------
+Most of the code is in src/verifast.ml. See the top of that file for more
+help on how to understand that file.
 
-Flexdll is a flexible, Unix-like linker used by O'Caml.
+Obviously, before trying to understand the codebase, you should be familiar
+with VeriFast from a user's perspective. Go through the VeriFast Tutorial
+(in doc/tutorial) and do the exercises. (Unfortunately, not all features
+are documented yet. However, all features are tested in the test suite. You
+might want to have a look at all examples in the test suite.)
+For Java features, see the Java Card tutorial in doc/javacard-tutorial.
 
-1) Download it and unzip it
-2) Put it in your PATH
+You should also be familiar with the symbolic execution approach and
+understand why it is sound. A formalization of the core of the approach is
+in the "Course notes" TR which you can find on the website. Frederic is
+working on an improved and more readable formalization.
 
-C. Cygwin
----------
-
-Cygwin is needed to build Camlidl, which is needed for the Z3 O'Caml binding. VeriFast uses the Z3 SMT solver.
-
-1) Install Cygwin
-2) Install the GNU make package
-
-D. Camlidl
-----------
-
-Camlidl is needed for the Z3 O'Caml binding. VeriFast uses the Z3 SMT solver.
-
-1) Download and unzip the CamlIDL sources .zip file from http://caml.inria.fr/pub/old_caml_site/camlidl/
-
-2) Install CamlIDL as per the README file. Or see here.
-  Unfortunately, this requires Cygwin. Important: before starting Cygwin, set the CYGWIN=nontsec environment variable.
-  In a Cygwin shell started from a Visual Studio command prompt (so that the Visual C++ compiler (cl.exe) is in the PATH):
-  3.1) Copy config/Makefile.win32 to config/Makefile
-  3.2) If your Ocaml is not in C:\Ocaml, edit OCAMLLIB and BINDIR in config/Makefile
-  3.3) Do
-
-           where link
-
-       to check that Visual C++'s LINK.EXE is not hidden by GCC 'link'. If it is, do
-
-           export PATH=/cygdrive/c/Program\ Files/Microsoft\ Visual\ Studio\ 9.0/VC/bin:$PATH
-
-  3.4) Do 'make all'
-  3.5) Assuming you have write access to your Ocaml installation, do 'make install'
-
-E. Z3
------
-
-VeriFast uses the Z3 SMT solver.
-
-1) Download and run the Z3 .msi file from http://research.microsoft.com/projects/z3/
-
-2) Build the Z3 Ocaml API
-  4.1) In Z3's ocaml directory, issue the following commands (do not use build.cmd):
-
-           ocamlopt -ccopt "/DWIN32 /I ..\include" -c z3_stubs.c z3.mli z3.ml
-           ocamlopt -a -o z3.cmxa ..\bin\z3.lib z3_stubs.obj z3.cmx ole32.lib libcamlidl.lib
-
-  4.2) Optionally, test it
-    a) Go to Z3's examples\ocaml directory
-    b) Issue the following command:
-
-           ocamlopt -o test_mlapi.exe -I ..\..\ocaml z3.cmxa test_mlapi.ml
-
-    c) Run exec.cmd
-
-F. LablGTK with GtkSourceView
------------------------------
-
-VeriFast requires:
-- The GTK user interface toolkit
-- The GtkSourceView editor widget for GTK, and its dependencies
-- The LablGtk OCaml binding for GTK
-- The LablGtkSourceView OCaml binding for GtkSourceView
-
-LablGtkSourceView is included in the LablGtk source release but not in the
-Win32 binary release. Therefore, LablGtk must be built from source. Unfortunately,
-the Makefile does not work out of the box and some tweaking in various places is
-required.
-
-To get the various input files required to build and run LablGtk and
-LablGtkSourceView, download the following files and unpack all of them into C:\GTK:
-- glade3-3.6.7-with-GTK+.exe
-- libxml2_2.7.4-1_win32.zip
-- libxml2-dev_2.7.4-1_win32.zip
-- gtksourceview-2.6.2.zip
-- gtksourceview-dev-2.6.2.zip
-- lablgtk-2.14.0.tar.gz
-
-You need to create C:\gtk\bin\libgtksourceview-2.0-0.lib as follows:
-- dumpbin /exports libgtksourceview-2.0-0.dll > exports.txt
-- using awk, turn exports.txt into libgtksourceview-2.0-0.def
-- using the lib tool, turn libgtksourceview-2.0-0.def into libgtksourceview-2.0-0.lib
-
-Then build lablgtk with gtksourceview, tweaking the sources as necessary.
-
-Before running a program that uses GTK, put the GTK DLLs in your PATH:
-
-set PATH=<gtkdir>\bin;%PATH%
-
-2) Set Environment Variables
-============================
-
-In order to build and run VeriFast, a number of environment variables need to be set. You can do this conveniently by creating a settings.bat file. Do
-
-copy settings.bat.example settings.bat
-
-and edit settings.bat to update the paths as appropriate for your setup.
-(If you unzipped tools.zip, most paths are already correct.)
-
-It is convenient to create a "VeriFast Command Prompt" by copying the "Command Prompt" shortcut and modifying the command line to read as follows:
-
-C:\WINDOWS\system32\cmd.exe /k C:\verifast\settings.bat
-
-3) Run Nmake
-============
-
-Go to the src directory, and run nmake. You will get verifast.exe and vfide.exe in the bin directory.
-The makefile will also run the test suite.
-You might want to put the bin directory in your PATH.
+Also see the NFM 2011 invited paper on the website for details on
+fractional permissions, autosplitting, automerging, and precise predicates.
