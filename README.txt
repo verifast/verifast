@@ -136,7 +136,10 @@ Obviously, before trying to understand the codebase, you should be familiar
 with VeriFast from a user's perspective. Go through the VeriFast Tutorial
 (in doc/tutorial) and do the exercises. (Unfortunately, not all features
 are documented yet. However, all features are tested in the test suite. You
-might want to have a look at all examples in the test suite.)
+might want to have a look at all examples in the test suite. See
+examples/index.html for a description of each test case.
+You can most easily browse through the examples at
+http://www.cs.kuleuven.be/~bartj/verifast/examples/)
 For Java features, see the Java Card tutorial in doc/javacard-tutorial.
 
 You should also be familiar with the symbolic execution approach and
