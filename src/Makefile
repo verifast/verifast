@@ -282,6 +282,7 @@ release: test refman
 	copy $(GTKLIB)\..\bin\zlib1.dll
 	copy $(Z3)\bin\z3.dll
 	xcopy /E $(Z3)\bin\Microsoft.VC90.CRT .
+	copy "$(MSVC10REDIST)\MSVCR100.DLL"
 	cd ..
 	mkdir etc
 	cd etc
