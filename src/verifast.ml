@@ -1,31 +1,77 @@
+(*
+
+Welcome to the VeriFast codebase
+================================
+
+How to understand this codebase?
+
+- This program is written in OCaml. Know OCaml.
+  Read all docs at http://caml.inria.fr/.
+  Familiarize yourself with the precedence of operators.
+  Caveats:
+  - Subexpression evaluation order is unspecified. Use let x = ... in ... to enforce ordering.
+  - 'begin ... end' is alternative syntax for '(...)'. Coding guideline: use 'begin ... end' for multiline expressions.
+  - 'if ... then ...; ...' parses as '(if ... then ...); ...'. To fix: 'if ... then begin ...; ... end'
+  - OCaml supports structural equality 'x = y' (like 'equals' in Java) and reference equality 'x == y' (like '==' in Java).
+    Similarly, 'x <> y' is structural inequality and 'x != y' is reference inequality.
+  - All variables are immutable. For mutability, use ref cells. Ref cell assignment: 'x := y'; getting the value of a ref cell: '!x'.
+
+- VeriFast uses OCaml lists extensively. Familiarize yourself with the List module. See library docs at http://caml.inria.fr.
+  Additional list manipulation functions are defined at the top of this file. Familiarize yourself with them.
+
+You can get an outline of this file in Notepad++ by copying the text
+"Region:" to the clipboard and choosing TextFX->Viz->Hide Lines without (clipboard) text.
+Get all lines back by choosing TextFX->Viz->Show Between-Selected or All-Reset Lines.
+
+*)
+
 open Proverapi
 open Big_int
 open Printf
-open Num
-
-(* You can get an outline of this file in Notepad++ by copying the text
- * "Region:" to the clipboard and choosing
- * TextFX->Viz->Hide Lines without (clipboard) text
- * Get all lines back by choosing
- * TextFX->Viz->Show Between-Selected or All-Reset Lines
- *)
+open Num (* rational numbers *)
 
 (* Region: General-purpose utility functions *)
 
 let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 
+(** Same as fprintf followed by a flush. *)
 let fprintff format = kfprintf (fun chan -> flush chan) format
+(** Same as printf followed by a flush. *)
 let printff format = fprintff stdout format
 
 (** Keeps manifests produced by the compilation phase, for use during the linking phase. Avoids writing manifest files to disk. *)
 let manifest_map: (string * string list) list ref = ref []
 let jardeps_map: (string * string list) list ref = ref []
 
-(** Facilitates continuation-passing-style programming. *)
+(** Facilitates continuation-passing-style programming.
+    For example, if you have a function 'foo x y cont', you can call it as follows: 'foo x y (fun z -> ...)'
+    But if you nest the continuations deeply, you get lots of indentation and lots of parentheses at the end. The $. operator allows
+    you to write this as follows:
+    foo x y $. fun z ->
+    foo x' y' $. fun z' ->
+    ...
+  *)
 let ($.) f x = f x
 
+(** Improves readability of list processing.
+    Before:
+    let xs' =
+      List.map begin fun x ->
+          ...
+          ...
+        end
+        xs
+     Notice that you have to go all the way to the end to find out which is list is being operated on.
+     After:
+     let xs' =
+       xs |> List.map begin fun x ->
+         ...
+         ...
+       end
+  *)
 let (|>) x f = f x
 
+(** Like List.for_all2, except returns false if the lists have different length. *)
 let rec for_all2 p xs ys =
   match (xs, ys) with
     ([], []) -> true
@@ -41,8 +87,19 @@ let for_all_take2 f n xs ys =
   in
   iter n xs ys
 
+(** Returns those elements of [xs] that also appear in [ys]. *)
 let intersect xs ys = List.filter (fun x -> List.mem x ys) xs
-let flatmap f xs = List.concat (List.map f xs)
+
+(* Same as [List.concat (List.map f xs)], except perhaps slightly faster. *)
+let rec flatmap (f: 'a -> 'b list) (xs: 'a list): 'b list =
+  match xs with
+    [] -> []
+  | x::xs0 ->
+    match f x with
+      [] -> flatmap f xs0
+    | ys -> ys @ flatmap f xs0
+
+(** Returns the first element of [flatmap f xs], or None if there is none. Calls [f] only as many times as necessary. *)
 let rec head_flatmap f xs =
   match xs with
     [] -> None
@@ -50,7 +107,11 @@ let rec head_flatmap f xs =
     match f x with
       [] -> head_flatmap f xs
     | y::ys -> Some y
-let extract f xs =
+
+(** Returns either None if f returns None for all elements of xs,
+    or Some (y, xs0) where y is the value of f and xs0 is xs after removing the first element for which f returned Some _.
+    Useful for extracting a chunk from a heap. *)
+let extract (f: 'a -> 'b option) (xs: 'a list) =
   let rec iter xs' xs =
     match xs with
       [] -> None
@@ -61,8 +122,12 @@ let extract f xs =
   in
   iter [] xs
 
+(** Drops the first n elements of xs *)
 let rec drop n xs = if n = 0 then xs else drop (n - 1) (List.tl xs)
+
+(** Takes the first n elements of xs *)
 let rec take n xs = if n = 0 then [] else match xs with x::xs -> x::take (n - 1) xs
+
 (* Same as [(take n xs, drop n xs)] *)
 let take_drop n xs =
   let rec iter left right k =
@@ -79,6 +144,7 @@ let rec list_make n x = if n = 0 then [] else x::list_make (n - 1) x
 
 let remove f xs = List.filter (fun x -> not (f x)) xs
 
+(** True if xs has no diplicates. *)
 let rec distinct xs =
   match xs with
     [] -> true
@@ -96,7 +162,8 @@ let rec try_assoc x xys =
     [] -> None
   | (x', y)::xys when x' = x -> Some y
   | _::xys -> try_assoc x xys
-  
+
+(** Same as [try_assoc], except returns the binding [(x, y)] instead of just [y]. *)
 let rec try_assoc0 x xys =
   match xys with
     [] -> None
@@ -120,7 +187,8 @@ let try_assoc_i x xys =
   in
   iter 0 xys
 
-let imap f xs =
+(** Like [List.map], except also passes the index of each element to f. *)
+let imap (f: int -> 'a -> 'b) (xs: 'a list): 'b list =
   let rec imapi i xs =
     match xs with
       [] -> []
@@ -141,7 +209,7 @@ let try_find p xs =
     Some(List.find p xs)
   with Not_found -> 
     None
-  
+
 let try_extract xs condition =
   let rec try_extract_core xs condition seen =
     match xs with
@@ -165,7 +233,7 @@ let chop_suffix s s0 =
 let chop_suffix_opt s s0 =
   match chop_suffix s s0 with None -> s | Some s -> s
 
-(** Same as [try_assoc x (xys1 @ xys2)] *)
+(** Same as [try_assoc x (xys1 @ xys2)] but without performing the append operation. *)
 let try_assoc2 x xys1 xys2 =
   match try_assoc x xys1 with
     None -> try_assoc x xys2
