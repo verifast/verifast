@@ -3890,6 +3890,7 @@ let verify_program_core (* ?verify_program_core *)
       * type_ map (* parameters *)
       * termnode (* predicate symbol *)
     type interface_info =
+      InterfaceInfo of
         loc
       * (signature * interface_method_info) list
       * interface_inst_pred_info map
@@ -4699,7 +4700,7 @@ let verify_program_core (* ?verify_program_core *)
       | None -> begin match try_assoc x interfmap1 with
           Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
-            Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+            Some (InterfaceInfo (_, _, _, interfaces, _, _)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
           | None -> false 
           end
         end
@@ -5368,17 +5369,19 @@ let verify_program_core (* ?verify_program_core *)
             in
             let (family, symb) =
               let preds_in_itf tn =
-                let check_itfmap itfmap fallback =
+                let check_itfmap get_preds itfmap fallback =
                   begin match try_assoc tn itfmap with
-                    Some (li, methods, preds, interfs, pn, ilist) ->
-                    begin match try_assoc g preds with
+                    Some info ->
+                    begin match try_assoc g (get_preds info) with
                       Some (l, pmap, symb) -> [(tn, pmap, symb)]
                     | None -> []
                     end
                   | None -> fallback ()
                   end
                 in
-                check_itfmap interfmap1 (fun () -> check_itfmap interfmap0 (fun () -> []))
+                check_itfmap (function (li, methods, preds, interfs, pn, ilist) -> preds) interfmap1 $. fun () ->
+                check_itfmap (function InterfaceInfo (li, methods, preds, interfs, pn, ilist) -> preds) interfmap0 $. fun () ->
+                []
               in
               let rec preds_in_class cn =
                 if cn = "" then [] else
@@ -5564,7 +5567,7 @@ let verify_program_core (* ?verify_program_core *)
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let (_, meths, _, interfs, _, _) = List.assoc tn interfmap in
+      let InterfaceInfo (_, meths, _, interfs, _, _) = List.assoc tn interfmap in
       let declared_methods = flatmap
         begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract)) ->
           if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, Instance, v, abstract))] else []
@@ -6635,16 +6638,19 @@ let verify_program_core (* ?verify_program_core *)
                   (WInstPredAsn (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
                 in
                 let rec find_in_interf itf =
-                  let search_interfmap interfmap fallback =
+                  let search_interfmap get_interfs_and_preds interfmap fallback =
                     match try_assoc itf interfmap with
-                      Some (li, meths, preds, interfs, pn, ilist) ->
+                      Some info ->
+                      let (interfs, preds) = get_interfs_and_preds info in
                       begin match try_assoc p#name preds with
                         Some (_, pmap, symb) -> [(itf, pmap)]
                       | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
                       end
                     | None -> fallback ()
                   in
-                  search_interfmap interfmap1 (fun () -> search_interfmap interfmap0 (fun () -> []))
+                  search_interfmap (function (li, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
+                  search_interfmap (function InterfaceInfo (li, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap0 $. fun () ->
+                  []
                 in
                 let rec find_in_class cn =
                   let search_classmap classmap proj fallback =
@@ -6726,7 +6732,7 @@ let verify_program_core (* ?verify_program_core *)
               end
             | None ->
               begin match try_assoc cn interfmap0 with
-                Some (_, methods, preds, interfs, pn, ilist) ->
+                Some (InterfaceInfo (_, methods, preds, interfs, pn, ilist)) ->
                 begin match try_assoc g preds with
                   Some (_, pmap, symb) -> check_call cn pmap
                 | None -> error ()
@@ -8049,7 +8055,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match try_assoc tn interfmap1 with
               Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8571,7 +8577,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match try_assoc tn interfmap1 with
               Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8824,7 +8830,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     match try_assoc static_type_name interfmap1 with
                       Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                     | None ->
-                      let (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                      let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
                       let (_, pmap, symb) = List.assoc instance_pred_name preds in
                       (pmap, symb)
               in
@@ -8908,7 +8914,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       match try_assoc static_type_name interfmap1 with
                         Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                       | None ->
-                        let (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                        let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
                         let (_, pmap, symb) = List.assoc instance_pred_name preds in
                         (pmap, symb)
                 in
@@ -9874,7 +9880,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin fun (ifn, (l, specs, preds, interfs, pn, ilist)) ->
         let rec iter mmap meth_specs =
           match meth_specs with
-            [] -> (ifn, (l, List.rev mmap, preds, interfs, pn, ilist))
+            [] -> (ifn, InterfaceInfo (l, List.rev mmap, preds, interfs, pn, ilist))
           | MethSpec (lm, gh, rt, n, ps, co, fb, v)::meths ->
             let xmap =
               let rec iter xm xs =
@@ -9916,10 +9922,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
-    interfmap1 |> List.iter begin function (i, (l1,meths1,preds1,interfs1, pn1,ilist1)) ->
+    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,meths1,preds1,interfs1, pn1,ilist1)) ->
       match try_assoc i interfmap0 with
       | None -> ()
-      | Some (l0,meths0,preds0,interfs0, pn0,ilist0) ->
+      | Some (InterfaceInfo (l0,meths0,preds0,interfs0, pn0,ilist0)) ->
         let rec match_meths meths0 meths1=
           match meths0 with
             [] -> if meths1 <> [] then static_error l1 ".java file does not correctly implement .javaspec file: interface declares more methods" None
@@ -9937,14 +9943,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
       let interf_specs_for_sign sign itf =
-                    let (_, meths, _,  _, _, _) = List.assoc itf map1 in
+                    let InterfaceInfo (_, meths, _,  _, _, _) = List.assoc itf map1 in
                     match try_assoc sign meths with
                       None -> []
                     | Some spec -> [(itf, spec)]
       in
       match map0 with
         [] -> map1
-      | (i, (l,meths,preds,interfs, pn,ilist)) as elem::rest ->
+      | (i, InterfaceInfo (l,meths,preds,interfs, pn,ilist)) as elem::rest ->
         List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,epost,v,abstract)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
           List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
@@ -10004,7 +10010,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let (_, meths, _,  _, _, _) = List.assoc itf interfmap in
+        let InterfaceInfo (_, meths, _,  _, _, _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -10948,7 +10954,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v)
         | _ ->
-          let (_, methods, _, _, _, _) = List.assoc tn interfmap in
+          let InterfaceInfo (_, methods, _, _, _, _) = List.assoc tn interfmap in
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, Instance, v)
       in
