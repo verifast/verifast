@@ -3895,8 +3895,6 @@ let verify_program_core (* ?verify_program_core *)
       * (signature * interface_method_info) list
       * interface_inst_pred_info map
       * string list (* superinterfaces *)
-      * string (* package name *)
-      * import list
     type class_info =
       ClassInfo of
         loc
@@ -4700,7 +4698,7 @@ let verify_program_core (* ?verify_program_core *)
       | None -> begin match try_assoc x interfmap1 with
           Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
-            Some (InterfaceInfo (_, _, _, interfaces, _, _)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+            Some (InterfaceInfo (_, _, _, interfaces)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
           | None -> false 
           end
         end
@@ -5380,7 +5378,7 @@ let verify_program_core (* ?verify_program_core *)
                   end
                 in
                 check_itfmap (function (li, methods, preds, interfs, pn, ilist) -> preds) interfmap1 $. fun () ->
-                check_itfmap (function InterfaceInfo (li, methods, preds, interfs, pn, ilist) -> preds) interfmap0 $. fun () ->
+                check_itfmap (function InterfaceInfo (li, methods, preds, interfs) -> preds) interfmap0 $. fun () ->
                 []
               in
               let rec preds_in_class cn =
@@ -5567,7 +5565,7 @@ let verify_program_core (* ?verify_program_core *)
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let InterfaceInfo (_, meths, _, interfs, _, _) = List.assoc tn interfmap in
+      let InterfaceInfo (_, meths, _, interfs) = List.assoc tn interfmap in
       let declared_methods = flatmap
         begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract)) ->
           if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, Instance, v, abstract))] else []
@@ -6649,7 +6647,7 @@ let verify_program_core (* ?verify_program_core *)
                     | None -> fallback ()
                   in
                   search_interfmap (function (li, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
-                  search_interfmap (function InterfaceInfo (li, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap0 $. fun () ->
+                  search_interfmap (function InterfaceInfo (li, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
                   []
                 in
                 let rec find_in_class cn =
@@ -6732,7 +6730,7 @@ let verify_program_core (* ?verify_program_core *)
               end
             | None ->
               begin match try_assoc cn interfmap0 with
-                Some (InterfaceInfo (_, methods, preds, interfs, pn, ilist)) ->
+                Some (InterfaceInfo (_, methods, preds, interfs)) ->
                 begin match try_assoc g preds with
                   Some (_, pmap, symb) -> check_call cn pmap
                 | None -> error ()
@@ -8055,7 +8053,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match try_assoc tn interfmap1 with
               Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, methods, preds, interfs) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8577,7 +8575,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match try_assoc tn interfmap1 with
               Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, methods, preds, interfs) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8830,7 +8828,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     match try_assoc static_type_name interfmap1 with
                       Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                     | None ->
-                      let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                      let InterfaceInfo (li, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
                       let (_, pmap, symb) = List.assoc instance_pred_name preds in
                       (pmap, symb)
               in
@@ -8914,7 +8912,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       match try_assoc static_type_name interfmap1 with
                         Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                       | None ->
-                        let InterfaceInfo (li, methods, preds, interfs, pn, ilist) = List.assoc static_type_name interfmap0 in
+                        let InterfaceInfo (li, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
                         let (_, pmap, symb) = List.assoc instance_pred_name preds in
                         (pmap, symb)
                 in
@@ -9687,7 +9685,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     check_breakpoint [] env l
   in
   
-  let check_func_header_compat (pn,ilist) l msg env00 (k, tparams, rt, xmap, atomic, pre, post, epost) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0, epost0) =
+  let check_func_header_compat l msg env00 (k, tparams, rt, xmap, atomic, pre, post, epost) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0, epost0) =
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.") None;
@@ -9823,7 +9821,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let cenv0 = [("this", fterm)] @ ftargenv in
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
-            check_func_header_compat (pn,ilist) l "Function type implementation check: " env0
+            check_func_header_compat l "Function type implementation check: " env0
               (k, tparams, rt, xmap, atomic, pre, post, [])
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, []);
             if gh = Real then
@@ -9860,7 +9858,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               static_error l "Duplicate function implementation." None
           | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat (pn,ilist) l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post, []) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0, []);
+            check_func_header_compat l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post, []) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0, []);
             iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
@@ -9880,7 +9878,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin fun (ifn, (l, specs, preds, interfs, pn, ilist)) ->
         let rec iter mmap meth_specs =
           match meth_specs with
-            [] -> (ifn, InterfaceInfo (l, List.rev mmap, preds, interfs, pn, ilist))
+            [] -> (ifn, InterfaceInfo (l, List.rev mmap, preds, interfs))
           | MethSpec (lm, gh, rt, n, ps, co, fb, v)::meths ->
             let xmap =
               let rec iter xm xs =
@@ -9922,10 +9920,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
-    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,meths1,preds1,interfs1, pn1,ilist1)) ->
+    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,meths1,preds1,interfs1)) ->
       match try_assoc i interfmap0 with
       | None -> ()
-      | Some (InterfaceInfo (l0,meths0,preds0,interfs0, pn0,ilist0)) ->
+      | Some (InterfaceInfo (l0,meths0,preds0,interfs0)) ->
         let rec match_meths meths0 meths1=
           match meths0 with
             [] -> if meths1 <> [] then static_error l1 ".java file does not correctly implement .javaspec file: interface declares more methods" None
@@ -9933,7 +9931,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             match try_assoc sign meths1 with
               None-> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare method " ^ string_of_sign sign) None
             | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,v1,abstract1) ->
-              check_func_header_compat (pn1,ilist1) lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
+              check_func_header_compat lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
         match_meths meths0 meths1
@@ -9943,14 +9941,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
       let interf_specs_for_sign sign itf =
-                    let InterfaceInfo (_, meths, _,  _, _, _) = List.assoc itf map1 in
+                    let InterfaceInfo (_, meths, _,  _) = List.assoc itf map1 in
                     match try_assoc sign meths with
                       None -> []
                     | Some spec -> [(itf, spec)]
       in
       match map0 with
         [] -> map1
-      | (i, InterfaceInfo (l,meths,preds,interfs, pn,ilist)) as elem::rest ->
+      | (i, InterfaceInfo (l,meths,preds,interfs)) as elem::rest ->
         List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,epost,v,abstract)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
           List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
@@ -9965,7 +9963,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let ("this", thisType)::xmap = xmap in
             let ("this", _)::xmap' = xmap' in
             let thisTerm = get_unique_var_symb "this" thisType in
-            check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
+            check_func_header_compat l "Method specification check: " [("this", thisTerm)]
               (Regular, [], rt, xmap, false, pre, post, epost)
               (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost');
             pop();
@@ -10010,7 +10008,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let InterfaceInfo (_, meths, _,  _, _, _) = List.assoc itf interfmap in
+        let InterfaceInfo (_, meths, _,  _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -10088,7 +10086,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   let ("this", _)::xmap' = xmap' in
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
-                    check_func_header_compat (pn,ilist) l "Method specification check: " [("this", thisTerm)]
+                    check_func_header_compat l "Method specification check: " [("this", thisTerm)]
                       (Regular, [], rt, xmap, false, pre, post, epost)
                       (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost')
                   );
@@ -10249,7 +10247,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   None-> iter rest (elem::meths1)
                 | Some(lm1,gh1,rt1,xmap1,pre1,pre_tenv1,post1,epost1,pre_dyn1,post_dyn1,epost_dyn1,ss1,fb1,v1,_,abstract1) -> 
                   let epost1: (type_ * asn) list = epost1 in
-                  check_func_header_compat (pn1,ilist1) lm1 "Method implementation check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
+                  check_func_header_compat lm1 "Method implementation check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
                   if ss0=None then meths_impl:=(fst sign0,lm0)::!meths_impl;
                   iter rest meths1
             in
@@ -10266,7 +10264,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 | Some(lm1,xmap1,pre1,pre_tenv1,post1,epost1,ss1,v1) ->
                   let epost1: (type_ * asn) list = epost1 in
                   let rt= None in
-                  check_func_header_compat (pn1,ilist1) lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1, epost1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0, epost0);
+                  check_func_header_compat lm1 "Constructor implementation check: " [] (Regular,[],rt, ("this", ObjType cn)::xmap1,false, pre1, post1, epost1) (Regular, [], rt, ("this", ObjType cn)::xmap0, false, [], [], pre0, post0, epost0);
                   if ss0=None then cons_impl:=(cn,lm0)::!cons_impl;
                   iter rest constr1
             in
@@ -10954,7 +10952,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) meths in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v)
         | _ ->
-          let InterfaceInfo (_, methods, _, _, _, _) = List.assoc tn interfmap in
+          let InterfaceInfo (_, methods, _, _) = List.assoc tn interfmap in
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, Instance, v)
       in
