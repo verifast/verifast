@@ -1764,7 +1764,7 @@ let common_keywords = [
   "||"; "!"; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
-  "truncating"; "typedef"
+  "truncating"; "typedef"; "do"
 ]
 
 let ghost_keywords = [
@@ -2475,6 +2475,10 @@ and
 | [< '(l, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      (inv, dec, body) = parse_loop_core
   >] -> WhileStmt (l, e, inv, dec, body)
+| [< '(l, Kwd "do"); (inv, dec, body) = parse_loop_core; '(lwhile, Kwd "while"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+  (* "do S while (E);" is translated to "while (true) { S if (E) {} else break; }" *)
+  (* CAVEAT: If we ever add support for 'continue' statements, then this translation is not sound. *)
+  WhileStmt (l, True l, inv, dec, body @ [IfStmt (lwhile, e, [], [Break lwhile])])
 | [< '(l, Kwd "for");
      '(_, Kwd "(");
      init_stmts = begin parser
