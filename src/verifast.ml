@@ -11320,11 +11320,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       match resolve (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, FuncInfo (funenv, Some fterm, _, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
-        if body' = None then register_prototype_used l fn;
+        if body' = None then register_prototype_used lf fn;
         if stmt_ghostness = Ghost then begin
           match leminfo with
             None -> ()
