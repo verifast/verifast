@@ -21,8 +21,13 @@
 .provides prelude.h#chars_split
 .provides prelude.h#chars_join
 .provides prelude.h#chars_to_integer
-.provides prelude.h#integer_to_chars
+.provides prelude.h#chars_to_u_integer
+.provides prelude.h#chars_to_u_character
 .provides prelude.h#chars_to_pointer
+.provides prelude.h#chars_to_u_pointer
+.provides prelude.h#integer_to_chars
+.provides prelude.h#u_integer_to_chars
+.provides prelude.h#u_character_to_chars
 .provides prelude.h#pointer_to_chars
 .provides stdio.h#fopen
 .provides stdio.h#fclose

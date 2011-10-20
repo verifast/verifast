@@ -445,6 +445,7 @@ let readFile path =
   let chan = open_in_bin path in
   let count = ref 0 in
   let rec iter () =
+
     let buf = String.create 60000 in
     let result = input chan buf 0 60000 in
     count := !count + result;
@@ -2621,6 +2622,7 @@ and
     (* end of parse array declaration *)
   | [< xs = comma_rep (parser [< '(_, Ident x); is_array = parse_array_braces; e = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs te is_array >] -> e) >] -> (x, is_array, e, ref false)); '(l, Kwd ";") >] ->
     DeclStmt(l, te, (x, false, None, ref false)::xs)
+
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
