@@ -3864,14 +3864,15 @@ let verify_program_core (* ?verify_program_core *)
       * (type_ * asn) list (* throws clauses *)
       * visibility
       * bool (* is abstract *)
-    type field_info =
-        loc
-      * type_
-      * visibility
-      * method_binding
-      * bool (* final *)
-      * expr option
-      * constant_value option option ref
+    type field_info = {
+        fl: loc;
+        ft: type_;
+        fvis: visibility;
+        fbinding: method_binding;
+        ffinal: bool;
+        finit: expr option;
+        fvalue: constant_value option option ref
+      }
     type ctor_info =
         loc
       * type_ map (* parameters *)
@@ -4451,10 +4452,10 @@ let verify_program_core (* ?verify_program_core *)
       begin fun (sn, (l,abstract,fin,meths,fds,constr,super,interfs,preds,pn,ilist)) ->
         let rec iter fmap fds =
           match fds with
-            [] -> (sn, (l,abstract,fin,meths,Some (List.rev fmap),constr,super,interfs,preds,pn,ilist))
-          | Field (lf, _, t, f, binding, vis, final, init)::fds ->
+            [] -> (sn, (l,abstract,fin,meths, List.rev fmap,constr,super,interfs,preds,pn,ilist))
+          | Field (fl, _, t, f, fbinding, fvis, ffinal, finit)::fds ->
             if List.mem_assoc f fmap then
-              static_error lf "Duplicate field name." None
+              static_error fl "Duplicate field name." None
             else
               let rec check_type te =
                 match te with
@@ -4475,7 +4476,7 @@ let verify_program_core (* ?verify_program_core *)
                   end
                 | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
               in
-              iter ((f, (lf, check_type t, vis, binding, final, init, ref None))::fmap) fds
+              iter ((f, {fl; ft=check_type t; fvis; fbinding; ffinal; finit; fvalue=ref None})::fmap) fds
         in
         iter [] fds
       end
@@ -5175,21 +5176,17 @@ let verify_program_core (* ?verify_program_core *)
 
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
-    Java-> flatmap
-      (fun (cn, (_,_,_,_, fds_opt,_,_,_,_,_,_)) ->
-         match fds_opt with
-           None -> []
-         | Some fds ->
-           List.map
-             begin fun (fn, (l, t, vis, binding, final, init, value)) ->
-              ((cn, fn),
-               match binding with
-                 Static -> mk_predfam (cn ^ "_" ^ fn) l [] 0 [t] (Some 0)
-               | Instance -> mk_predfam (cn ^ "_" ^ fn) l [] 0 [ObjType cn; t] (Some 1))
-             end
-             fds
-      )
-      classmap1
+      Java ->
+      classmap1 |> flatmap begin fun (cn, (_,_,_,_, fds,_,_,_,_,_,_)) ->
+        fds |> List.map begin fun (fn, {fl; ft; fbinding}) ->
+          let predfam =
+            match fbinding with
+              Static -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ft] (Some 0)
+            | Instance -> mk_predfam (cn ^ "_" ^ fn) fl [] 0 [ObjType cn; ft] (Some 1)
+          in
+          ((cn, fn), predfam)
+        end
+      end
     | _ ->
     flatmap
       (fun (sn, (_, fds_opt, _)) ->
@@ -5511,7 +5508,7 @@ let verify_program_core (* ?verify_program_core *)
   
   let rec lookup_class_field cn fn =
     match try_assoc cn (classmap1) with
-      Some (_,_,_,_, Some fds,_, super ,_,_,_,_) ->
+      Some (_,_,_,_, fds,_, super ,_,_,_,_) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
       | None -> lookup_class_field super fn
@@ -5635,16 +5632,16 @@ let verify_program_core (* ?verify_program_core *)
         | Some ObjType cn ->
           match lookup_class_field cn x with
             None -> None
-          | Some ((lf, t, vis, binding, final, init, value), fclass) ->
+          | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
             let constant_value =
-              if final then
-                match ! value with
+              if ffinal then
+                match !fvalue with
                   Some(Some(IntConst(i))) -> Some(i)
                 | _ -> None
               else
                 None
             in
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, t, binding = Static, value, Real), t, constant_value)
+            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, Real), ft, constant_value)
       in
       match field_of_this with
         Some result -> result
@@ -5655,17 +5652,17 @@ let verify_program_core (* ?verify_program_core *)
         | Some (ClassOrInterfaceName cn) ->
           match lookup_class_field cn x with
             None -> None
-          | Some ((lf, t, vis, binding, final, init, value), fclass) ->
-            if binding <> Static then static_error l "Instance field access without target object" None;
+          | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+            if fbinding <> Static then static_error l "Instance field access without target object" None;
             let constant_value =
-              if final then
-                match ! value with
+              if ffinal then
+                match !fvalue with
                   Some(Some(IntConst(i))) -> Some(i)
                 | _ -> None
               else
                 None
             in
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, t, true, value, Real), t, constant_value)
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, ft, true, fvalue, Real), ft, constant_value)
       in
       match field_of_class with
         Some result -> result
@@ -6261,34 +6258,34 @@ let verify_program_core (* ?verify_program_core *)
       begin
       match lookup_class_field cn f with
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
-      | Some ((_, t, vis, binding, final, init, value), fclass) ->
-        if binding = Static then static_error l "Accessing a static field via an instance is not supported." None;
+      | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+        if fbinding = Static then static_error l "Accessing a static field via an instance is not supported." None;
         let constant_value =
-              if final then
-                match ! value with
+              if ffinal then
+                match !fvalue with
                   Some(Some(IntConst(i))) -> Some(i)
                 | _ -> None
               else
                 None
         in
-        (WRead (l, w, fclass, f, t, false, ref (Some None), Real), t, constant_value)
+        (WRead (l, w, fclass, f, ft, false, ref (Some None), Real), ft, constant_value)
       end
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), IntType, None)
     | ClassOrInterfaceName cn ->
       begin match lookup_class_field cn f with
         None -> static_error l "No such field" None
-      | Some ((_, t, vis, binding, final, init, value), fclass) ->
-        if binding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
+      | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+        if fbinding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
         let constant_value =
-              if final then
-                match ! value with
+              if ffinal then
+                match !fvalue with
                   Some(Some(IntConst(i))) -> Some(i)
                 | _ -> None
               else
                 None
          in
-        (WRead (l, w, fclass, f, t, true, value, Real), t, constant_value)
+        (WRead (l, w, fclass, f, ft, true, fvalue, Real), ft, constant_value)
       end
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
@@ -6416,23 +6413,17 @@ let verify_program_core (* ?verify_program_core *)
   
   let classmap1 =
     List.map
-      begin fun (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
-        let fds_opt =
-          match fds_opt with
-            None -> fds_opt
-          | Some fds ->
-            let fds =
-              List.map
-                begin function
-                  (f, (l, t, vis, Static, final, Some e, value)) ->
-                    (f, (l, t, vis, Static, final, Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e t), value))
-                | fd -> fd
-                end
-                fds
-            in
-            Some fds
+      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
+        let fds =
+          List.map
+            begin function
+              (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
+                (f, {fd with finit=Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e ft)})
+            | fd -> fd
+            end
+            fds
         in
-        (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist))
+        (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist))
       end
       classmap1
   in
@@ -6504,31 +6495,28 @@ let verify_program_core (* ?verify_program_core *)
     and eval_field callers ((cn, fn) as f) =
       if List.mem f callers then raise NotAConstant;
       match try_assoc cn classmap1 with
-        Some (l, abstract, fin, meths, Some fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+        Some (l, abstract, fin, meths, fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
         match try_assoc cn classmap0 with
           Some {cfds} -> eval_field_body (f::callers) (List.assoc fn cfds)
-    and eval_field_body callers (l, t, vis, binding, final, init, value) =
-      match !value with
+    and eval_field_body callers {fbinding; ffinal; finit; fvalue} =
+      match !fvalue with
         Some None -> raise NotAConstant
       | Some (Some v) -> v
       | None ->
-        match (binding, final, init) with
+        match (fbinding, ffinal, finit) with
           (Static, true, Some e) ->
           begin try
             let v = eval callers e in
-            value := Some (Some v);
+            fvalue := Some (Some v);
             v
-          with NotAConstant -> value := Some None; raise NotAConstant
+          with NotAConstant -> fvalue := Some None; raise NotAConstant
           end
-        | _ -> value := Some None; raise NotAConstant
+        | _ -> fvalue := Some None; raise NotAConstant
     in
     List.iter
-      begin fun (cn, (l, abstract, fin, meths, fds_opt, constr, super, interfs, preds, pn, ilist)) ->
-        match fds_opt with
-          None -> ()
-        | Some fds ->
-          List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> ()) fds
+      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
+        List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> ()) fds
       end
       classmap1
   end;
@@ -10130,19 +10118,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       begin fun (cn, (l, abstract, fin, meths, fds, ctors, super, interfs, preds, pn, ilist)) ->
         let rec iter cmap ctors =
           match ctors with
-            [] ->
-            (cn,
-             {cl      = l;
-              cabstract = abstract;
-              cfinal    = fin;
-              cmeths  = meths;
-              cfds   = get fds;
-              cctors    = List.rev cmap;
-              csuper    = super;
-              cinterfs  = interfs;
-              cpreds    = preds;
-              cpn  = pn;
-              cilist  = ilist})
+            [] -> (cn, {cl=l; cabstract=abstract; cfinal=fin; cmeths=meths; cfds=fds; cctors=List.rev cmap; csuper=super; cinterfs=interfs; cpreds=preds; cpn=pn; cilist=ilist})
             | Cons (lm, ps, co, ss, v)::ctors ->
               let xmap =
                 let rec iter xm xs =
@@ -10201,17 +10177,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let _::super_pre_tenv = super_pre_tenv in (* Chop off the current_class entry *)
           let post =
             List.fold_left
-              begin fun post (f, (lf, t, vis, binding, final, init, value)) ->
-                if binding = Static then
+              begin fun post (f, {fl; ft; fbinding}) ->
+                if fbinding = Static then
                   post
                 else
                   let default_value =
-                    match t with
-                      Bool -> False lf
-                    | IntType | ShortType | Char -> IntLit (lf, zero_big_int, ref (Some t))
-                    | ObjType _ | ArrayType _ -> Null lf
+                    match ft with
+                      Bool -> False fl
+                    | IntType | ShortType | Char -> IntLit (fl, zero_big_int, ref (Some ft))
+                    | ObjType _ | ArrayType _ -> Null fl
                   in
-                  Sep (l, post, WPointsTo (lf, WRead (lf, Var (lf, "this", ref (Some LocalVar)), cn, f, t, false, ref (Some None), Real), t, LitPat default_value))
+                  Sep (l, post, WPointsTo (fl, WRead (fl, Var (fl, "this", ref (Some LocalVar)), cn, f, ft, false, ref (Some None), Real), ft, LitPat default_value))
               end
               super_post
               fds
@@ -10244,10 +10220,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let rec iter fds0 fds1=
             match fds0 with
               [] -> fds1
-            | (f0, (lf0,t0,vis0,binding0,final0,init0,value0)) as elem::rest ->
+            | (f0, {ft=t0; fvis=vis0; fbinding=binding0; ffinal=final0; finit=init0; fvalue=value0}) as elem::rest ->
               match try_assoc f0 fds1 with
                 None-> iter rest (elem::fds1)
-              | Some(lf1,t1,vis1,binding1,final1,init1,value1) ->
+              | Some {fl=lf1; ft=t1; fvis=vis1; fbinding=binding1; ffinal=final1; finit=init1; fvalue=value1} ->
                 let v1 = ! value0 in
                 let v2 = ! value1 in
                 if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 (*|| v1 <> v2*) then static_error lf1 "Duplicate field" None;
@@ -10311,9 +10287,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let fds =
           List.map
             begin function
-              (f, (l, t, vis, Instance, final, Some e, value)) ->
-                let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
-                (f, (l, t, vis, Instance, final, Some (check_expr_t (pn,ilist) [] [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] e t), value))
+              (f, ({ft; fbinding=Instance; finit=Some e} as fd)) ->
+              let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+              let tenv = [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] in
+              let w = check_expr_t (pn,ilist) [] tenv e ft in
+              (f, {fd with finit=Some w})
             | fd -> fd
             end
             fds
@@ -13360,7 +13338,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               match fds with
                 [] -> verify_cont (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss
                      (fun sizemap tenv ghostenv h env -> return_cont h tenv env None) return_cont econt
-              | (f, (lf, t, vis, binding, final, init, value))::fds ->
+              | (f, {ft=t; fbinding=binding; finit=init})::fds ->
                 if binding = Instance then begin
                   match init with 
                     None ->
