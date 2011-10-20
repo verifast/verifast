@@ -10834,10 +10834,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun chunk h coef (_::args) _ _ _ _ ->
           if not (definitely_equal coef real_unit) then assert_false h env l "Full lemma function pointer chunk required." None;
+          let targs = List.map unfold_inferred_type targs in
           check_call targs h args $. fun h env retval ->
-          cont (Chunk ((predsymb, true), [], real_unit, fterm::args, None)::h) env retval
+          cont (chunk::h) env retval
       end
     | NewObject (l, cn, args) ->
       if pure then static_error l "Object creation is not allowed in a pure context" None;
