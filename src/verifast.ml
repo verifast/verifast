@@ -3745,7 +3745,7 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: check_file *)
   
-  let module MapTypes = struct
+  let module CheckFileTypes = struct
     type 'a map = (string * 'a) list
     type struct_field_info =
         loc
@@ -3823,23 +3823,44 @@ let verify_program_core (* ?verify_program_core *)
       * (stmt list * loc (* closing brace *) ) option option (* body; None if prototype; Some None if ? *)
       * method_binding (* always Static; TODO: remove *)
       * visibility (* always Public; TODO: remove *)
+    type func_type_info =
+        loc
+      * ghostness
+      * string list (* type parameters *)
+      * type_ option (* return type *)
+      * type_ map (* parameters of the function type *)
+      * type_ map (* parameters of the function *)
+      * asn (* precondition *)
+      * asn (* postcondition *)
+      * pred_fam_info map (* the is_xyz predicate, if any *)
     type signature = string * type_ list
     type method_info =
         loc
       * ghostness
       * type_ option
-      * type_ map
-      * asn
-      * type_ map
-      * asn
-      * (type_ * asn) list
-      * asn
-      * asn
-      * (type_ * asn) list
-      * (stmt list * loc) option option
+      * type_ map (* parameters *)
+      * asn (* precondition *)
+      * type_ map (* type environment after precondition *)
+      * asn (* postcondition *)
+      * (type_ * asn) list (* throws clauses *)
+      * asn (* dynamic precondition (= precondition for dynamically bound calls) *)
+      * asn (* dynamic postcondition (= postcondition for dynamically bound calls) *)
+      * (type_ * asn) list (* dynamic throws clauses *)
+      * (stmt list * loc) option option (* body *)
       * method_binding
       * visibility
       * bool (* is override *)
+      * bool (* is abstract *)
+    type interface_method_info =
+        loc
+      * ghostness
+      * type_ option (* return type *)
+      * type_ map (* parameters *)
+      * asn (* precondition *)
+      * type_ map (* type environment after precondition *)
+      * asn (* postcondition *)
+      * (type_ * asn) list (* throws clauses *)
+      * visibility
       * bool (* is abstract *)
     type field_info =
         loc
@@ -3864,6 +3885,17 @@ let verify_program_core (* ?verify_program_core *)
       * string (* family (= class or interface that first declared the predicate) *)
       * termnode
       * asn option
+    type interface_inst_pred_info =
+        loc
+      * type_ map (* parameters *)
+      * termnode (* predicate symbol *)
+    type interface_info =
+        loc
+      * (signature * interface_method_info) list
+      * interface_inst_pred_info map
+      * string list (* superinterfaces *)
+      * string (* package name *)
+      * import list
     type class_info =
       ClassInfo of
         loc
@@ -3877,8 +3909,62 @@ let verify_program_core (* ?verify_program_core *)
       * inst_pred_info map
       * string (* package name *)
       * import list
+    type plugin_info = (* logic plugins, e.g. to enable the use of Philippa Gardner's context logic for reasoning about tree data structures *)
+        (  Plugins.plugin
+         * termnode Plugins.plugin_instance)
+      * termnode (* predicate symbol for plugin chunk *)
+    type box_action_info =
+        loc
+      * type_ map (* parameters *)
+      * expr (* precondition *)
+      * expr (* postcondition *)
+    type box_handle_predicate_info =
+        loc
+      * type_ map (* parameters *)
+      * expr (* invariant *)
+      * preserved_by_clause list
+    type box_info = (* shared boxes *)
+        loc
+      * type_ map (* box parameters *)
+      * asn (* invariant *)
+      * type_ map (* variables bound by invariant *)
+      * box_action_info map
+      * box_handle_predicate_info map
+    type maps =
+        struct_info map
+      * enum_info map
+      * global_info map
+      * inductive_info map
+      * pure_func_info map
+      * pred_ctor_info map
+      * malloc_block_pred_info map
+      * ((string * string) * field_pred_info) list
+      * pred_fam_info map
+      * pred_inst_map
+      * type_ map (* typedefmap *)
+      * func_type_info map
+      * func_info map
+      * box_info map
+      * class_info map
+      * interface_info map
+      * termnode map (* classterms *)
+      * termnode map (* interfaceterms *)
+      * plugin_info map
+    
+    type implemented_prototype_info =
+        string
+      * loc
+    type implemented_function_type_info =
+        string (* function name *)
+      * loc (* function location *)
+      * string (* function type name *)
+      * string list (* function type arguments; only module names are supported *)
+      * bool (* function is declared in an unloadable module *)
+    type check_file_output =
+        implemented_prototype_info list
+      * implemented_function_type_info list
   end in
-  let open MapTypes in
+  let open CheckFileTypes in
   
   (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
   let headermap = ref [] in
@@ -3898,7 +3984,7 @@ let verify_program_core (* ?verify_program_core *)
         true if the file being checked specifies a module used by the module being verified
         false if the file being checked specifies the module being verified
     *)
-  let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list) =
+  let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
   let
     (structmap0: struct_info map),
     (enummap0: enum_info map),
@@ -3910,15 +3996,15 @@ let verify_program_core (* ?verify_program_core *)
     (field_pred_map0: ((string * string) * field_pred_info) list),
     (predfammap0: pred_fam_info map),
     (predinstmap0: pred_inst_map),
-    typedefmap0,
-    functypemap0,
+    (typedefmap0: type_ map),
+    (functypemap0: func_type_info map),
     (funcmap0: func_info map),
-    boxmap0,
+    (boxmap0: box_info map),
     (classmap0: class_info map),
-    interfmap0,
-    classterms0,
-    interfaceterms0,
-    pluginmap0 =
+    (interfmap0: interface_info map),
+    (classterms0: termnode map),
+    (interfaceterms0: termnode map),
+    (pluginmap0: plugin_info map): maps =
   
     let append_nodups xys xys0 string_of_key l elementKind =
       let rec iter xys =
