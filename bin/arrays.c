@@ -170,28 +170,18 @@ lemma void u_char_array_to_chars(void *ptr)
     }
 }
 
-// Whether it should be here or next to its friends in prelude.h is arguably.
-lemma void character_to_chars(void *p)
-    requires [?f]character(p, _);
-    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(char);
-{
-    assert [f]character(p, ?c);
-    close [f]chars(p+1, nil);
-    close [f]chars(p, cons(c, nil));
-}
-
 lemma void char_array_to_chars(void *ptr)
     requires [?f]array<char>(ptr, ?array_nb_items, sizeof(char), character, ?elems);
-    ensures
-        [f]chars(ptr, ?chars_elems)
-        &*& length(chars_elems) == array_nb_items * sizeof(char);
+    ensures [f]chars(ptr, elems) &*& array_nb_items == length(elems);
 {
-    produce_lemma_function_pointer_chunk(character_to_chars)
-        : any_to_chars<char>(character, sizeof(char))(args)
-    {
-        call();
-    }{
-        array_to_chars(ptr);
+    open array<char>(ptr, array_nb_items, sizeof(char), character, elems);
+    if (array_nb_items != 0){
+        char_array_to_chars(ptr + sizeof(char));
+        assert [f]chars(ptr + sizeof(char), ?tail);
+        assert [f]character(ptr, ?head);
+        close [f]chars(ptr, cons(head, tail));
+    }else{
+        close [f]chars(ptr, nil);
     }
 }
 
@@ -272,7 +262,6 @@ ensures
     open [f]chars(ptr, _);
 }
 
-
 lemma void chars_to_u_int_array(void *ptr, int array_nb_items)
     requires
         [?f]chars(ptr, ?orig_elems)
@@ -328,30 +317,20 @@ lemma void chars_to_int_array(void *ptr, int array_nb_items)
     }
 }
 
-// Whether it should be here or next to its friends in prelude.h is arguably.
-lemma void chars_to_character(void *p)
-    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(char);
-    ensures [f]character(p, _);
-{
-    open chars(p, cs);
-    open chars(p+1, _);
-}
-
-
 lemma void chars_to_char_array(void *ptr)
     requires
-        [?f]chars(ptr, ?orig_elems);
+        [?f]chars(ptr, ?elems);
     ensures
-        [f]array<char>(ptr, length(orig_elems), sizeof(char), character, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(char) == length(orig_elems)
-        &*& length(orig_array_elems) == length(orig_elems);
+        [f]array<char>(ptr, length(elems), sizeof(char), character, elems);
 {
-    produce_lemma_function_pointer_chunk(chars_to_character)
-        : chars_to_any<char>(character, sizeof(char))(args)
-    {
-        call();
-    }{
-        chars_to_array(ptr, length(orig_elems));
+    open chars(ptr, elems);
+    if (length(elems) != 0){
+        chars_to_char_array(ptr + sizeof(char));
+        assert [f]array<char>(ptr + sizeof(char), length(elems) - 1, sizeof(unsigned char), character, ?tail);
+        assert [f]character(ptr, ?head);
+        close [f]array<char>(ptr, length(elems), sizeof(char), character, cons(head, tail));
+    }else{
+        close [f]array<char>(ptr, 0, sizeof(char), character, nil);
     }
 }
 

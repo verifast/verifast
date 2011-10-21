@@ -61,9 +61,7 @@ lemma void u_char_array_to_chars(void *ptr);
 
 lemma void char_array_to_chars(void *ptr);
     requires [?f]array<char>(ptr, ?array_nb_items, sizeof(char), character, ?elems);
-    ensures
-        [f]chars(ptr, ?chars_elems)
-        &*& length(chars_elems) == array_nb_items * sizeof(char);
+    ensures [f]chars(ptr, elems) &*& array_nb_items == length(elems);
 
 lemma void int_array_to_chars(void *ptr);
     requires [?f]array<int>(ptr, ?array_nb_items, sizeof(int), integer, ?elems);
@@ -102,12 +100,8 @@ lemma void chars_to_int_array(void *ptr, int array_nb_items);
         &*& length(orig_array_elems) == array_nb_items;
 
 lemma void chars_to_char_array(void *ptr);
-    requires
-        [?f]chars(ptr, ?orig_elems);
-    ensures
-        [f]array<char>(ptr, length(orig_elems), sizeof(char), character, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(char) == length(orig_elems)
-        &*& length(orig_array_elems) == length(orig_elems);
+    requires [?f]chars(ptr, ?elems);
+    ensures [f]array<char>(ptr, length(elems), sizeof(char), character, elems);
 
 @*/
 
