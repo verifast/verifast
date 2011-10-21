@@ -154,6 +154,15 @@ lemma void u_int_array_to_chars(void *ptr)
     }
 }
 
+lemma void u_character_to_chars(void *p)
+    requires [?f]u_character(p, _);
+    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
+{
+    u_character_to_character(p);
+    assert [f]character(p, ?u_char_content);
+    close [f]chars(p+sizeof(char), nil);
+    close [f]chars(p, cons(u_char_content, nil));
+}
 
 lemma void u_char_array_to_chars(void *ptr)
     requires [?f]array<unsigned char>(ptr, ?array_nb_items, sizeof(unsigned char), u_character, ?elems);
@@ -279,6 +288,15 @@ lemma void chars_to_u_int_array(void *ptr, int array_nb_items)
     }{
         chars_to_array(ptr, array_nb_items);
     }
+}
+
+lemma void chars_to_u_character(void *p)
+    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
+    ensures  [f]u_character(p, _); 
+{
+    open chars(p, cs);
+    open chars(p + sizeof(char), _);
+    character_to_u_character(p);
 }
 
 lemma void chars_to_u_char_array(void *ptr)

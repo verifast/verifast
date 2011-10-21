@@ -105,10 +105,6 @@ lemma void chars_to_u_integer(void *p);
     requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
     ensures [f]u_integer(p, _);
 
-lemma void chars_to_u_character(void *p);
-    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
-    ensures [f]u_character(p, _);
-
 lemma void chars_to_pointer(void *p);
     requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(void *);
     ensures [f]pointer(p, pointer_of_chars(cs));
@@ -122,14 +118,18 @@ lemma void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
     ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
 
-lemma void u_character_to_chars(void *p);
-    requires [?f]u_character(p, _);
-    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned char);
-
 lemma void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
     ensures [f]chars(p, chars_of_pointer(v)) &*& length(chars_of_pointer(v)) == sizeof(void *);
 
+// u_character to/from character
+lemma void u_character_to_character(void *p);
+    requires [?f]u_character(p, _);
+    ensures [f]character(p, _);
+
+lemma void character_to_u_character(void *p);
+    requires [?f]character(p, _);
+    ensures [f]u_character(p, _);
 @*/
 
 /*@
