@@ -107,18 +107,18 @@ lemma void ints_unseparate(int *array, int i, list<int> xs)
 
 
 // ---- Arrays to chars ---- //
-typedef lemma void something_to_chars<T>(predicate(void *p; T) something, int length)(void *p);
-    requires [?f]something(p, _);
+typedef lemma void any_to_chars<T>(predicate(void *p; T) any_pred, int length)(void *p);
+    requires [?f]any_pred(p, _);
     ensures [f]chars(p, ?cs) &*& length(cs) == length;
 
 lemma void array_to_chars<T>(void *ptr)
     requires
         [?f]array<T>(ptr, ?array_nb_items, ?array_item_size, ?array_item_pred, ?array_elems)
-        &*& is_something_to_chars(?convertor, array_item_pred, array_item_size);
+        &*& is_any_to_chars(?convertor, array_item_pred, array_item_size);
     ensures
         [f]chars(ptr, ?chars_elems)
         &*& length(chars_elems) == array_nb_items * array_item_size
-        &*& is_something_to_chars(convertor, array_item_pred, array_item_size);
+        &*& is_any_to_chars(convertor, array_item_pred, array_item_size);
 {
     if (array_nb_items == 0){
         open array<T>(ptr, 0, array_item_size, array_item_pred, array_elems);
@@ -146,7 +146,7 @@ lemma void u_int_array_to_chars(void *ptr)
 
 {
     produce_lemma_function_pointer_chunk(u_integer_to_chars)
-        : something_to_chars<unsigned int>(u_integer, sizeof(unsigned int))(args)
+        : any_to_chars<unsigned int>(u_integer, sizeof(unsigned int))(args)
     {
         call();
     }{
@@ -162,7 +162,7 @@ lemma void u_char_array_to_chars(void *ptr)
         &*& length(chars_elems) == array_nb_items * sizeof(unsigned char);
 {
     produce_lemma_function_pointer_chunk(u_character_to_chars)
-        : something_to_chars<unsigned char>(u_character, sizeof(unsigned char))(args)
+        : any_to_chars<unsigned char>(u_character, sizeof(unsigned char))(args)
     {
         call();
     }{
@@ -187,7 +187,7 @@ lemma void char_array_to_chars(void *ptr)
         &*& length(chars_elems) == array_nb_items * sizeof(char);
 {
     produce_lemma_function_pointer_chunk(character_to_chars)
-        : something_to_chars<char>(character, sizeof(char))(args)
+        : any_to_chars<char>(character, sizeof(char))(args)
     {
         call();
     }{
@@ -202,7 +202,7 @@ lemma void int_array_to_chars(void *ptr)
         &*& length(chars_elems) == array_nb_items * sizeof(int);
 {
     produce_lemma_function_pointer_chunk(integer_to_chars)
-        : something_to_chars<int>(integer, sizeof(int))(args)
+        : any_to_chars<int>(integer, sizeof(int))(args)
     {
         call();
     }{
@@ -213,13 +213,13 @@ lemma void int_array_to_chars(void *ptr)
 
 // ---- chars to arrays ---- //
 
-typedef lemma void chars_to_something<T>(predicate(void *p; T) something, int length)(void *p);
+typedef lemma void chars_to_any<T>(predicate(void *p; T) any_pred, int length)(void *p);
     requires [?f]chars(p, ?cs) &*& length(cs) == length;
-    ensures [f]something(p, _);
+    ensures [f]any_pred(p, _);
 
 lemma void chars_to_array<T>(void *ptr, int array_nb_items)
     requires
-        is_chars_to_something<T>(?convertor, ?array_item_pred, ?array_item_length)
+        is_chars_to_any<T>(?convertor, ?array_item_pred, ?array_item_length)
         &*& [?f]chars(ptr, ?orig_elems)
         &*& array_nb_items >= 0
         &*& array_nb_items * array_item_length == length(orig_elems)
@@ -230,7 +230,7 @@ ensures
     [f]array<T>(ptr, array_nb_items, array_item_length, array_item_pred, ?array_elems)
     &*& length(array_elems) * array_item_length == length(orig_elems)
     &*& length(array_elems) == array_nb_items
-    &*& is_chars_to_something(convertor, array_item_pred, array_item_length);
+    &*& is_chars_to_any(convertor, array_item_pred, array_item_length);
 {
     // We can't use induction here:
     // - Induction on chars isn't recognised because I call chars_split instead of opening chars
@@ -255,7 +255,7 @@ ensures
             // end.
             
             &*& array_ptr == ptr + (array_nb_items - length(array_elems)) * array_item_length
-            &*& is_chars_to_something(convertor, array_item_pred, array_item_length)
+            &*& is_chars_to_any(convertor, array_item_pred, array_item_length)
         ;
         decreases array_nb_items - length(array_elems); // the variant.
     {
@@ -284,7 +284,7 @@ lemma void chars_to_u_int_array(void *ptr, int array_nb_items)
         &*& length(orig_array_elems) == array_nb_items;
 {
     produce_lemma_function_pointer_chunk(chars_to_u_integer)
-        : chars_to_something<unsigned int>(u_integer, sizeof(unsigned int))(args)
+        : chars_to_any<unsigned int>(u_integer, sizeof(unsigned int))(args)
     {
         call();
     }{
@@ -301,7 +301,7 @@ lemma void chars_to_u_char_array(void *ptr)
         &*& length(orig_array_elems) == length(orig_elems);
 {
     produce_lemma_function_pointer_chunk(chars_to_u_character)
-        : chars_to_something<unsigned char>(u_character, sizeof(unsigned char))(args)
+        : chars_to_any<unsigned char>(u_character, sizeof(unsigned char))(args)
     {
         call();
     }{
@@ -320,7 +320,7 @@ lemma void chars_to_int_array(void *ptr, int array_nb_items)
         &*& length(orig_array_elems) == array_nb_items;
 {
     produce_lemma_function_pointer_chunk(chars_to_integer)
-        : chars_to_something<int>(integer, sizeof(int))(args)
+        : chars_to_any<int>(integer, sizeof(int))(args)
     {
         call();
     }{
@@ -347,7 +347,7 @@ lemma void chars_to_char_array(void *ptr)
         &*& length(orig_array_elems) == length(orig_elems);
 {
     produce_lemma_function_pointer_chunk(chars_to_character)
-        : chars_to_something<char>(character, sizeof(char))(args)
+        : chars_to_any<char>(character, sizeof(char))(args)
     {
         call();
     }{
