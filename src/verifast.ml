@@ -3144,30 +3144,16 @@ let parse_jarspec_file_core path =
   in
   (jarspecs, javaspecs)
 
-let rec parse_jarspec_file path =
-  let (jar_file_paths, direct_javaspec_file_paths) = parse_jarspec_file_core path in
-  let transitive_javaspec_file_paths =
-    let rec all_specs jar_file_paths =
-      match jar_file_paths with
-        [] -> direct_javaspec_file_paths
-      | jar_file_path::jar_file_paths ->
-        let (_, all_javaspec_file_paths) = parse_jarspec_file (jar_file_path ^ "spec") in
-        all_javaspec_file_paths @ all_specs jar_file_paths
-    in
-    all_specs jar_file_paths
-  in
-  (direct_javaspec_file_paths, transitive_javaspec_file_paths)
-
 let parse_jarsrc_file_core path =
   let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
-  let (jarspecs, lines) =
-    let rec iter jarspecs lines =
+  let (jars, lines) =
+    let rec iter jars lines =
       match lines with
         line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".jar" ->
-        iter (concat_if_relative dirPath (expand_path line)::jarspecs) lines
+        iter (concat_if_relative dirPath (expand_path line)::jars) lines
       | _ ->
-        (List.rev jarspecs, lines)
+        (List.rev jars, lines)
     in
     iter [] lines
   in
@@ -3189,31 +3175,7 @@ let parse_jarsrc_file_core path =
     | _ ->
       raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in
-  (jarspecs, javas, main_class)
-
-let parse_jarsrc_file path =
-  let l = file_loc path in
-  let (jar_file_paths, java_file_paths, main_class) = parse_jarsrc_file_core path in
-  let main_class =
-    match main_class with
-      None ->
-      ("", dummy_loc)
-    | Some main_class ->
-      (main_class, file_loc path)
-  in
-  let (direct_source_files, transitive_javaspec_files) =
-    let rec iter jar_file_paths =
-      match jar_file_paths with
-        [] -> ([], [])
-      | jar_file_path::jar_file_paths ->
-        let (direct_javaspec_file_paths, transitive_javaspec_file_paths) = parse_jarspec_file (jar_file_path ^ "spec") in
-        let transitive_javaspec_file_paths = List.map (fun path -> (l, path)) transitive_javaspec_file_paths in
-        let (direct_source_files, transitive_javaspec_files) = iter jar_file_paths in
-        (direct_javaspec_file_paths @ direct_source_files, transitive_javaspec_file_paths @ transitive_javaspec_files)
-    in
-    iter jar_file_paths
-  in
-  (main_class, java_file_paths @ direct_source_files, transitive_javaspec_files, jar_file_paths)
+  (jars, javas, main_class)
 
 (* Region: some auxiliary types and functions *)
 
@@ -3969,12 +3931,12 @@ let verify_program_core (* ?verify_program_core *)
   let open CheckFileTypes in
   
   (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
-  let headermap = ref [] in
+  let headermap: ((loc * string) list * maps) map ref = ref [] in
   let spec_classes= ref [] in
   let spec_lemmas= ref [] in
   let meths_impl= ref [] in
   let cons_impl= ref [] in
-  let main_meth= ref [] in
+  let main_classes: loc map ref = ref [] in (* classes that implement a main method *)
   
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
@@ -3986,7 +3948,7 @@ let verify_program_core (* ?verify_program_core *)
         true if the file being checked specifies a module used by the module being verified
         false if the file being checked specifies the module being verified
     *)
-  let rec check_file (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
+  let rec check_file (filepath: string) (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
   let
     (structmap0: struct_info map),
     (enummap0: enum_info map),
@@ -4050,12 +4012,10 @@ let verify_program_core (* ?verify_program_core *)
       match headers with
         [] -> (maps0, headers_included)
       | (l, header_path)::headers ->
-    if file_type path <> Java then
         if List.mem header_path ["bool.h"; "assert.h"; "limits.h"] then
           merge_header_maps include_prelude maps0 headers_included headers
         else
         begin
-          if Filename.basename header_path <> header_path then static_error l "Include path should not include directory." None;
           let localpath = Filename.concat basedir header_path in
           let (basedir, relpath, path) =
             if Sys.file_exists localpath then
@@ -4065,7 +4025,7 @@ let verify_program_core (* ?verify_program_core *)
               if Sys.file_exists systempath then
                 (bindir, header_path, systempath)
               else
-                static_error l "No such file." None
+                static_error l (Printf.sprintf "No such file: '%s'" localpath) None
           in
           if List.mem path headers_included then
             merge_header_maps include_prelude maps0 headers_included headers
@@ -4074,9 +4034,24 @@ let verify_program_core (* ?verify_program_core *)
             let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
-                let (headers', ds) = parse_header_file basedir relpath reportRange reportShouldFail in
                 let header_is_import_spec = Filename.chop_extension (Filename.basename header_path) <> Filename.chop_extension (Filename.basename program_path) in
-                let (_, maps) = check_file header_is_import_spec include_prelude basedir headers' ds in
+                let (headers', ds) =
+                  match language with
+                    CLang ->
+                    parse_header_file basedir relpath reportRange reportShouldFail
+                  | Java ->
+                    let (jars, javaspecs) = parse_jarspec_file_core path in
+                    let ds = List.map (fun javaspec -> parse_java_file javaspec reportRange reportShouldFail) javaspecs in
+                    if not header_is_import_spec then begin
+                      let (classes, lemmas) = extract_specs ds in
+                      spec_classes := classes;
+                      spec_lemmas := lemmas
+                    end;
+                    let l = file_loc path in
+                    let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in
+                    (jarspecs, ds)
+                in
+                let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
@@ -4084,41 +4059,6 @@ let verify_program_core (* ?verify_program_core *)
             in
             let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included headers' in
             merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) headers
-          end
-        end
-    else (* JAVA DEEL*)
-          begin
-          let localpath = Filename.concat basedir header_path in
-          let (basedir, relpath, path) =
-            if Sys.file_exists localpath then
-              (basedir, Filename.concat "." header_path, localpath)
-            else
-              let systempath = Filename.concat bindir header_path in
-              if Sys.file_exists systempath then
-                (bindir, header_path, systempath)
-              else
-                static_error l ("No such file: "^systempath) None
-          in
-          if List.mem path headers_included then
-            merge_header_maps include_prelude maps0 headers_included headers
-          else
-          if Filename.check_suffix path ".javaspec" then (* javaspec files van andere jar's*)
-            begin
-            merge_header_maps include_prelude maps0 (path::headers_included) headers
-            end
-          else (* laatste el v lijst v headers is path naar jarspec van eigen jar*)
-          begin
-            let headers_included = path::headers_included in
-            let (jarspecs,allspecs)= parse_jarspec_file path in
-            let allspecs= remove (fun x -> List.mem x headers_included)(list_remove_dups allspecs) in
-            let (classes,lemmas)=extract_specs ((List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) jarspecs))in
-            let (headers',ds) = ([],(List.map (fun x -> (parse_java_file x reportRange reportShouldFail)) allspecs)) in
-            let is_import_spec = false in (* TODO: Fix this so that .jarspecs for imported .jars are checked separately with is_import_spec = true *)
-            let (_, maps) = check_file is_import_spec include_prelude basedir [] ds in
-            headermap := (path, (headers', maps))::!headermap;
-            spec_classes:=classes;
-            spec_lemmas:=lemmas;
-            (merge_maps l maps maps0, headers_included)
           end
         end
     in
@@ -4132,12 +4072,12 @@ let verify_program_core (* ?verify_program_core *)
             if rtpath = "nort" then (maps0, []) else
             match try_assoc rtpath !headermap with
               | None -> 
-                let (_,allspecs)= parse_jarspec_file rtpath in
-                let allspecs =
-                  if options.option_allow_assume then Filename.concat rtdir "_assume.javaspec"::allspecs else allspecs
+                let ([], javaspecs) = parse_jarspec_file_core rtpath in
+                let javaspecs =
+                  if options.option_allow_assume then Filename.concat rtdir "_assume.javaspec"::javaspecs else javaspecs
                 in
-                let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) allspecs in
-                let (_, maps0) = check_file true false bindir [] ds in
+                let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javaspecs in
+                let (_, maps0) = check_file rtpath true false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->
@@ -10103,7 +10043,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
             if n = "main" then begin
               match (pre, post) with
-                (ExprAsn (_, True _), ExprAsn (_, True _)) | (EmpAsn _, EmpAsn _) -> main_meth := (cn, l)::!main_meth
+                (ExprAsn (_, True _), ExprAsn (_, True _)) | (EmpAsn _, EmpAsn _) -> main_classes := (cn, l)::!main_classes
               | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'" None
             end;
             iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, super_specs <> [], abstract))::mmap) meths
@@ -10330,7 +10270,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       classmap1
   end;
   
-  if file_type path=Java then begin
+  if file_type path=Java && filepath = path then begin
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
@@ -10344,7 +10284,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     check_spec_lemmas !spec_lemmas prototypes_implemented
   end;
   
-  if file_type path=Java then begin
+  if file_type path=Java && filepath = path then begin
     let rec check_spec_classes classes meths_impl cons_impl=
       match classes with
         [] -> (match meths_impl with
@@ -13558,24 +13498,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   (* Region: top-level stuff *)
   
-  let main_file = ref ("",dummy_loc) in
+  let main_class = ref None in
   let jardeps = ref [] in
   let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type path with
         | Java -> 
           if Filename.check_suffix path ".jarsrc" then
-            let (main,impllist,jarlist,jdeps) = parse_jarsrc_file path in
-            let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) impllist in
-            let specpath = Filename.chop_extension path ^ ".jarspec" in
-            main_file := main;
-            jardeps := jdeps;
-            if Sys.file_exists specpath then
-              (jarlist@[(dummy_loc,specpath)],ds)
-            else
-              ([],ds)
+            let (jars, javas, mainClass) = parse_jarsrc_file_core path in
+            let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javas in
+            let specPath = Filename.chop_extension path ^ ".jarspec" in
+            main_class := mainClass;
+            let l = file_loc path in
+            let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
+            if Sys.file_exists specPath then begin
+              let (specJars, _) = parse_jarspec_file_core specPath in
+              jardeps := specJars @ jars;
+              ((l, specPath) :: jarspecs, ds)
+            end else
+              (jarspecs, ds)
           else
-            ([],[parse_java_file path reportRange reportShouldFail])
+            ([], [parse_java_file path reportRange reportShouldFail])
         | CLang ->
           if Filename.check_suffix path ".h" then
             parse_header_file "" path reportRange reportShouldFail
@@ -13585,7 +13528,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     emitter_callback ds;
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (linker_info, _) = check_file false true programDir headers ds in
+      let (linker_info, _) = check_file path false true programDir headers ds in
       linker_info
     in
     begin
@@ -13598,15 +13541,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   stats#appendProverStats ctxt#stats;
 
-  let _=
-    let rec iter (file,l) mainlist=
-      match mainlist with
-        [] -> static_error l "no main method was found" None
-      | (cn,l)::_ when cn=file -> ()
-      | _::rest -> iter (file,l) rest
-    in
-    if !main_file<>("",dummy_loc) then
-    iter !main_file !main_meth
+  let () =
+    match !main_class with
+      None -> ()
+    | Some mainClass ->
+      match try_assoc mainClass !main_classes with
+        None -> static_error (file_loc path) "No such main class" None
+      | Some l -> ()
   in
   
   let create_jardeps_file() =
