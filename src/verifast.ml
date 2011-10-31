@@ -108,6 +108,14 @@ let rec head_flatmap f xs =
       [] -> head_flatmap f xs
     | y::ys -> Some y
 
+let rec head_flatmap_option f xs =
+  match xs with
+    [] -> None
+  | x::xs ->
+    match f x with
+      None -> head_flatmap_option f xs
+    | Some y as result -> result
+
 (** Returns either None if f returns None for all elements of xs,
     or Some (y, xs0) where y is the value of f and xs0 is xs after removing the first element for which f returned Some _.
     Useful for extracting a chunk from a heap. *)
@@ -1397,17 +1405,6 @@ and
       visibility *
       bool (* is declared abstract? *)
 and
-  meth_spec = (* ?meth_spec *)
-  | MethSpec of
-      loc * 
-      ghostness * 
-      type_expr option * 
-      string * 
-      (type_expr * string) list * 
-      (asn * asn * ((type_expr * asn) list)) option * 
-      method_binding * 
-      visibility
-and
   cons = (* ?cons *)
   | Cons of
       loc * 
@@ -1441,7 +1438,13 @@ and
       string (* superclass *) *
       string list (* itfs *) *
       instance_pred_decl list
-  | Interface of loc * string * string list * meth_spec list * instance_pred_decl list
+  | Interface of 
+      loc *
+      string *
+      string list *
+      field list *
+      meth list *
+      instance_pred_decl list
   | PredFamilyDecl of
       loc *
       string *
@@ -1533,10 +1536,6 @@ and
   | MethMember of meth
   | ConsMember of cons
   | PredMember of instance_pred_decl
-and
-  interface_member = (* ?interface_member *)
-  | MethSpecMember of meth_spec
-  | PredSpecMember of instance_pred_decl
 
 let func_kind_of_ghostness gh =
   match gh with
@@ -1931,8 +1930,8 @@ let rec
      ds = begin parser
        [< '(l, Kwd "class"); '(_, Ident s); super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); il = parse_extended_interfaces;  mem = parse_interface_members cn; ds = parse_decls >]
-       -> Interface (l, cn, il, methspecs mem, predspecs mem)::ds
+     | [< '(l, Kwd "interface"); '(_, Ident cn); il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls >]
+       -> Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
      | [< d = parse_decl; ds = parse_decls >] -> d@ds
      | [< >] -> []
      end
@@ -1979,31 +1978,9 @@ and
 and
   instance_preds mems = flatmap (function PredMember p -> [p] | _ -> []) mems
 and
-  methspecs ms = flatmap (function MethSpecMember m -> [m] | _ -> []) ms
-and
-  predspecs ms = flatmap (function PredSpecMember p -> [p] | _ -> []) ms
-and
   parse_interface_visibility = parser
   [<'(_, Kwd "public")>] -> Public
 | [<>] -> Public
-and
-  parse_interface_members cn=parser
-  [<'(_, Kwd "}")>] -> []
-| [< '(_, Kwd "/*@"); ms1 = parse_ghost_interface_members cn; ms2 = parse_interface_members cn >] -> ms1 @ ms2
-| [<v=parse_interface_visibility;m=parse_interface_meth v cn Real;mr=parse_interface_members cn>] -> MethSpecMember m::mr
-and
-  parse_ghost_interface_members cn = parser
-  [< '(_, Kwd "@*/") >] -> []
-| [< vis = parse_interface_visibility; m = begin parser
-       [< '(l, Kwd "predicate"); '(_, Ident p); ps = parse_paramlist; '(_, Kwd ";") >] -> PredSpecMember (InstancePredDecl (l, p, ps, None))
-     | [< '(l, Kwd "lemma"); m = parse_interface_meth vis cn Ghost >] -> MethSpecMember m
-     end;
-     ms = parse_ghost_interface_members cn
-  >] -> m::ms
-and
-  parse_interface_meth vis cn gh = parser
-[< t=parse_return_type;'(l,Ident f);ps = parse_paramlist;'(_, Kwd ";"); co = opt parse_spec>]
-    -> MethSpec(l,gh,t,f,(IdentTypeExpr(l, None, cn),"this")::ps, (match co with None -> None | Some(pre, post) -> Some (pre, post, [])), Instance,vis)
 and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
@@ -2019,7 +1996,12 @@ and
   parse_ghost_java_members cn = parser
   [< '(_, Kwd "@*/") >] -> []
 | [< vis = parse_visibility; m = begin parser
-       [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist; '(_, Kwd "="); p = parse_pred; '(_, Kwd ";") >] -> PredMember (InstancePredDecl (l, g, ps, Some p))
+       [< '(l, Kwd "predicate"); '(_, Ident g); ps = parse_paramlist;
+          body = begin parser
+            [< '(_, Kwd "="); p = parse_pred >] -> Some p
+          | [< >] -> None
+          end;
+          '(_, Kwd ";") >] -> PredMember (InstancePredDecl (l, g, ps, body))
      | [< '(l, Kwd "lemma"); t = parse_return_type; '(l, Ident x); (ps, co, ss) = parse_method_rest >] ->
        let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
        MethMember (Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
@@ -3857,6 +3839,7 @@ let verify_program_core (* ?verify_program_core *)
     type interface_info =
       InterfaceInfo of
         loc
+      * field_info map
       * (signature * interface_method_info) list
       * interface_inst_pred_info map
       * string list (* superinterfaces *)
@@ -4334,7 +4317,7 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter (pn,il) ifdm classlist ds =
       match ds with
         [] -> (ifdm, classlist)
-      | (Interface (l, i, interfs, meth_specs, pred_specs))::ds -> let i= full_name pn i in 
+      | (Interface (l, i, interfs, fields, meths, pred_specs))::ds -> let i= full_name pn i in 
         if List.mem_assoc i ifdm then
           static_error l ("There exists already an interface with this name: "^i) None
         else
@@ -4351,7 +4334,7 @@ let verify_program_core (* ?verify_program_core *)
             in
             check_interfs interfs
           in
-          iter (pn,il) ((i, (l,meth_specs,pred_specs,interfs,pn,il))::ifdm) classlist ds
+          iter (pn, il) ((i, (l, fields, meths, pred_specs, interfs, pn, il))::ifdm) classlist ds
       | (Class (l, abstract, fin, i, meths,fields,constr,super,interfs,preds))::ds -> 
         let i= full_name pn i in
         if List.mem_assoc i ifdm then
@@ -4639,9 +4622,9 @@ let verify_program_core (* ?verify_program_core *)
         Some {csuper=super; cinterfs=interfaces} ->
         is_subtype_of super y || List.exists (fun itf -> is_subtype_of itf y) interfaces
       | None -> begin match try_assoc x interfmap1 with
-          Some(_, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+          Some (_, _, _, _, interfaces, _, _) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
         | None -> begin match try_assoc x interfmap0 with
-            Some (InterfaceInfo (_, _, _, interfaces)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
+            Some (InterfaceInfo (_, _, _, _, interfaces)) -> List.exists (fun itf -> is_subtype_of itf y) interfaces
           | None -> false 
           end
         end
@@ -5259,10 +5242,10 @@ let verify_program_core (* ?verify_program_core *)
   
   let interfmap1 =
     interfmap1 |> List.map
-      begin fun (tn, (li, methods, preds, interfs, pn, ilist)) ->
+      begin fun (tn, (li, fields, methods, preds, interfs, pn, ilist)) ->
         let rec iter predmap preds =
           match preds with
-            [] -> (tn, (li, methods, List.rev predmap, interfs, pn, ilist))
+            [] -> (tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist))
           | InstancePredDecl (l, g, ps, body)::preds ->
             if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
@@ -5316,8 +5299,8 @@ let verify_program_core (* ?verify_program_core *)
                   | None -> fallback ()
                   end
                 in
-                check_itfmap (function (li, methods, preds, interfs, pn, ilist) -> preds) interfmap1 $. fun () ->
-                check_itfmap (function InterfaceInfo (li, methods, preds, interfs) -> preds) interfmap0 $. fun () ->
+                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> preds) interfmap1 $. fun () ->
+                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> preds) interfmap0 $. fun () ->
                 []
               in
               let rec preds_in_class cn =
@@ -5446,24 +5429,61 @@ let verify_program_core (* ?verify_program_core *)
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name." None; i) is 
   in
   
+  let interfmap1 =
+    interfmap1 |> List.map begin function (i, (l, fields, meths, preds, supers, pn, ilist)) ->
+      let fieldmap =
+        fields |> List.map begin function Field (fl, fghost, ft, f, _, _, _, finit) ->
+          if fghost = Ghost then static_error fl "Interface ghost fields are not supported." None;
+          let ft = check_pure_type (pn,ilist) [] ft in
+          (f, {fl; ft; fvis=Public; fbinding=Static; ffinal=true; finit; fvalue=ref None})
+        end
+      in
+      (i, (l, fieldmap, meths, preds, supers, pn, ilist))
+    end
+  in
+  
   let rec lookup_class_field cn fn =
-    match try_assoc cn (classmap1) with
-      Some (_,_,_,_, fds,_, super ,_,_,_,_) ->
+    match try_assoc cn classmap1 with
+      Some (_, _, _, _, fds, _, super, itfs, _, _, _) ->
       begin match try_assoc fn fds with
         None when cn = "java.lang.Object" -> None
-      | None -> lookup_class_field super fn
-      | Some(f) -> Some((f, cn))
+      | Some f -> Some (f, cn)
+      | None ->
+      match lookup_class_field super fn with
+        Some _ as result -> result
+      | None ->
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) itfs
       end
     | None -> 
-    begin match try_assoc cn classmap0 with
-      Some {cfds; csuper} ->
+    match try_assoc cn classmap0 with
+      Some {cfds; csuper; cinterfs} ->
       begin match try_assoc fn cfds with
         None when cn = "java.lang.Object" -> None
-      | None -> lookup_class_field csuper fn
-      | Some(f) -> Some((f, cn))
+      | Some f -> Some (f, cn)
+      | None ->
+      match lookup_class_field csuper fn with
+        Some _ as result -> result
+      | None ->
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) cinterfs
       end
-    | None -> None
-    end
+    | None ->
+    match try_assoc cn interfmap1 with
+      Some (_, fds, _, _, supers, _, _) ->
+      begin match try_assoc fn fds with
+        Some f -> Some (f, cn)
+      | None ->
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) supers
+      end
+    | None ->
+    match try_assoc cn interfmap0 with
+      Some (InterfaceInfo (_, fds, _, _, supers)) ->
+      begin match try_assoc fn fds with
+        Some f -> Some (f, cn)
+      | None ->
+      head_flatmap_option (fun cn -> lookup_class_field cn fn) supers
+      end
+    | None ->
+    None
   in
 
   let is_package x =
@@ -5504,7 +5524,7 @@ let verify_program_core (* ?verify_program_core *)
         in
         declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
       | None ->
-      let InterfaceInfo (_, meths, _, interfs) = List.assoc tn interfmap in
+      let InterfaceInfo (_, fields, meths, _, interfs) = List.assoc tn interfmap in
       let declared_methods = flatmap
         begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract)) ->
           if mn' = mn then [(sign, (tn, lm, gh, rt, xmap, pre, post, epost, Instance, v, abstract))] else []
@@ -6437,8 +6457,16 @@ let verify_program_core (* ?verify_program_core *)
       match try_assoc cn classmap1 with
         Some (l, abstract, fin, meths, fds, const, super, interfs, preds, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
       | None ->
-        match try_assoc cn classmap0 with
-          Some {cfds} -> eval_field_body (f::callers) (List.assoc fn cfds)
+      match try_assoc cn classmap0 with
+        Some {cfds} -> eval_field_body (f::callers) (List.assoc fn cfds)
+      | None ->
+      match try_assoc cn interfmap1 with
+        Some (li, fds, meths, preds, interfs, pn, ilist) -> eval_field_body (f::callers) (List.assoc fn fds)
+      | None ->
+      match try_assoc cn interfmap0 with
+        Some (InterfaceInfo (li, fields, meths, preds, interfs)) -> eval_field_body (f::callers) (List.assoc fn fields)
+      | None ->
+      assert false
     and eval_field_body callers {fbinding; ffinal; finit; fvalue} =
       match !fvalue with
         Some None -> raise NotAConstant
@@ -6454,11 +6482,11 @@ let verify_program_core (* ?verify_program_core *)
           end
         | _ -> fvalue := Some None; raise NotAConstant
     in
-    List.iter
-      begin fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) ->
-        List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> ()) fds
-      end
-      classmap1
+    let compute_fields fds =
+      fds |> List.iter (fun (f, fbody) -> try ignore $. eval_field_body [] fbody with NotAConstant -> ())
+    in
+    classmap1 |> List.iter (fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) -> compute_fields fds);
+    interfmap1 |> List.iter (fun (ifn, (li, fds, meths, preds, interfs, pn, ilist)) -> compute_fields fds)
   end;
   
   (* Region: type checking of assertions *)
@@ -6583,8 +6611,8 @@ let verify_program_core (* ?verify_program_core *)
                       end
                     | None -> fallback ()
                   in
-                  search_interfmap (function (li, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
-                  search_interfmap (function InterfaceInfo (li, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
+                  search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
+                  search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
                   []
                 in
                 let rec find_in_class cn =
@@ -6660,14 +6688,14 @@ let verify_program_core (* ?verify_program_core *)
             end
           | None ->
             begin match try_assoc cn interfmap1 with
-              Some (_, methods, preds, intefs, pn, ilist) ->
+              Some (_, fields, methods, preds, intefs, pn, ilist) ->
               begin match try_assoc g preds with
                 Some (_, pmap, symb) -> check_call cn pmap
               | None -> error ()
               end
             | None ->
               begin match try_assoc cn interfmap0 with
-                Some (InterfaceInfo (_, methods, preds, interfs)) ->
+                Some (InterfaceInfo (_, fields, methods, preds, interfs)) ->
                 begin match try_assoc g preds with
                   Some (_, pmap, symb) -> check_call cn pmap
                 | None -> error ()
@@ -7988,9 +8016,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, methods, preds, interfs) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8510,9 +8538,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
             | None ->
-              let InterfaceInfo (li, methods, preds, interfs) = List.assoc tn interfmap0 in
+              let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
               let (_, pmap, symb) = List.assoc g preds in
               (pmap, symb)
       in
@@ -8763,9 +8791,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
                   | None ->
                     match try_assoc static_type_name interfmap1 with
-                      Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                      Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                     | None ->
-                      let InterfaceInfo (li, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
+                      let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
                       let (_, pmap, symb) = List.assoc instance_pred_name preds in
                       (pmap, symb)
               in
@@ -8847,9 +8875,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
                     | None ->
                       match try_assoc static_type_name interfmap1 with
-                        Some (li, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                        Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                       | None ->
-                        let InterfaceInfo (li, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
+                        let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
                         let (_, pmap, symb) = List.assoc instance_pred_name preds in
                         (pmap, symb)
                 in
@@ -9812,11 +9840,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let interfmap1 =
     List.map
-      begin fun (ifn, (l, specs, preds, interfs, pn, ilist)) ->
+      begin fun (ifn, (l, fieldmap, specs, preds, interfs, pn, ilist)) ->
+        let mmap =
         let rec iter mmap meth_specs =
           match meth_specs with
-            [] -> (ifn, InterfaceInfo (l, List.rev mmap, preds, interfs))
-          | MethSpec (lm, gh, rt, n, ps, co, fb, v)::meths ->
+            [] -> List.rev mmap
+          | Meth (lm, gh, rt, n, ps, co, body, binding, _, _)::meths ->
+            if body <> None then static_error lm "Interface method cannot have body" None;
+            if binding = Static then static_error lm "Interface method cannot be static" None;
             let xmap =
               let rec iter xm xs =
                 match xs with
@@ -9845,9 +9876,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 ) epost in
                 (pre, tenv, post, epost)
             in
-            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, true))::mmap) meths
+            iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, Public, true))::mmap) meths
         in
         iter [] specs
+        in
+        (ifn, InterfaceInfo (l, fieldmap, mmap, preds, interfs))
       end
       interfmap1
   in
@@ -9857,10 +9890,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
-    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,meths1,preds1,interfs1)) ->
+    interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,fields1,meths1,preds1,interfs1)) ->
       match try_assoc i interfmap0 with
       | None -> ()
-      | Some (InterfaceInfo (l0,meths0,preds0,interfs0)) ->
+      | Some (InterfaceInfo (l0,fields0,meths0,preds0,interfs0)) ->
+        let rec match_fields fields0 fields1 =
+          match fields0 with
+            [] -> if fields1 <> [] then static_error l1 ".java file does not correct implement .javaspec file: interface declares more fields" None
+          | (fn, f0)::fields0 ->
+            match try_assoc fn fields1 with
+              None -> static_error l1 (".java file does not correctly implement .javaspec file: interface does not declare field " ^ fn) None
+            | Some f1 ->
+              if f1.ft <> f0.ft then static_error f1.fl ".java file does not correctly implement .javaspec file: field type does not match" None;
+              if !(f1.fvalue) <> !(f0.fvalue) then static_error f1.fl ".java file does not correctly implement .javaspec file: field value does not match" None;
+              match_fields fields0 (List.remove_assoc fn fields1)
+        in
         let rec match_meths meths0 meths1=
           match meths0 with
             [] -> if meths1 <> [] then static_error l1 ".java file does not correctly implement .javaspec file: interface declares more methods" None
@@ -9871,6 +9915,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               check_func_header_compat lm1 "Method specification check: " [] (func_kind_of_ghostness gh1,[],rt1, xmap1,false, pre1, post1, epost1) (func_kind_of_ghostness gh0, [], rt0, xmap0, false, [], [], pre0, post0, epost0);
               match_meths meths0 (List.remove_assoc sign meths1)
         in
+        match_fields fields0 fields1;
         match_meths meths0 meths1
     end
   in
@@ -9878,14 +9923,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
       let interf_specs_for_sign sign itf =
-                    let InterfaceInfo (_, meths, _,  _) = List.assoc itf map1 in
+                    let InterfaceInfo (_, fields, meths, _,  _) = List.assoc itf map1 in
                     match try_assoc sign meths with
                       None -> []
                     | Some spec -> [(itf, spec)]
       in
       match map0 with
         [] -> map1
-      | (i, InterfaceInfo (l,meths,preds,interfs)) as elem::rest ->
+      | (i, InterfaceInfo (l,fields,meths,preds,interfs)) as elem::rest ->
         List.iter (fun (sign, (lm,gh,rt,xmap,pre,pre_tenv,post,epost,v,abstract)) ->
           let superspecs = List.flatten (List.map (fun i -> (interf_specs_for_sign sign i)) interfs) in
           List.iter (fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
@@ -9945,7 +9990,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
       let interf_specs_for_sign sign itf =
-        let InterfaceInfo (_, meths, _,  _) = List.assoc itf interfmap in
+        let InterfaceInfo (_, _, meths, _,  _) = List.assoc itf interfmap in
         match try_assoc sign meths with
           None -> []
         | Some spec -> [(itf, spec)]
@@ -10887,7 +10932,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract) = List.assoc (m, pts) cmeths in
           (lm, gh, rt, xmap, pre_dyn, post_dyn, epost_dyn, fb, v)
         | _ ->
-          let InterfaceInfo (_, methods, _, _) = List.assoc tn interfmap in
+          let InterfaceInfo (_, _, methods, _, _) = List.assoc tn interfmap in
           let (lm, gh, rt, xmap, pre, pre_tenv, post, epost, v, abstract) = List.assoc (m, pts) methods in
           (lm, gh, rt, xmap, pre, post, epost, Instance, v)
       in

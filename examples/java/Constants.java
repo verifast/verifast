@@ -41,3 +41,33 @@ class Foo {
     }
     public static final int FOO = 12345;
 }
+
+interface Baz {
+    int ONE = 1;
+    int TWO = 2;
+}
+
+class BazUser1 {
+    static void user()
+        //@ requires true;
+        //@ ensures true;
+    {
+        assert Baz.ONE == 1;
+    }
+}
+
+class BazUser2 implements Baz {
+    void instanceMethod()
+        //@ requires true;
+        //@ ensures true;
+    {
+        assert TWO == 2;
+    }
+    
+    static void staticMethod()
+        //@ requires true;
+        //@ ensures true;
+    {
+        assert TWO == 2;
+    }
+}
