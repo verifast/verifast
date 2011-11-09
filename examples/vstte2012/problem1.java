@@ -1,5 +1,3 @@
-
-
 /*@
 fixpoint boolean is_sorted(list<boolean> vs) {
   switch(vs) {
@@ -44,6 +42,21 @@ lemma void update_drop<t>(list<t> xs, int i, t v, int j)
       }
   }
 }
+
+fixpoint list<t> execute_swaps<t>(list<pair<int, int> > swaps, list<t> xs) {
+  switch(swaps) {
+    case nil: return xs;
+    case cons(h, t):
+      return switch(h) {
+        case pair(i, j): return update(j, nth(i, execute_swaps(t, xs)), update(i, nth(j,  execute_swaps(t, xs)), execute_swaps(t, xs)));
+      };
+  }
+}
+
+predicate exists<t>(t v) = true;
+
+predicate is_perm<t>(list<t> xs, list<t> ys) =
+  exists<list<pair<int, int> > >(?swaps) &*& execute_swaps(swaps, xs) == ys;
 @*/
 
 class Problem1 {
@@ -58,16 +71,20 @@ class Problem1 {
   
   static void two_way_sort(boolean[] a) 
     //@ requires array_slice(a, 0, a.length, ?vs);
-    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true;
+    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true &*& is_perm(vs, vs2);
   {
     int i = 0;
     int j = a.length - 1;
+    //@ close exists(nil);
+    //@ close is_perm(vs, vs);
     while(i <= j) 
       /*@ invariant 0 <= i && i <= a.length &*& -1 <= j &*& j < a.length &*& j - i >= -1 &*&
           array_slice(a, 0, a.length, ?xs) &*& 
           all_eq(take(i, xs), false) == true &*&
-          all_eq(drop(j + 1, xs), true) == true; 
+          all_eq(drop(j + 1, xs), true) == true &*&
+          is_perm(vs, xs); 
           @*/
+      //@ decreases j - i + 1;
     {
       if(! a[i]) {
         //@ take_one_more(i, xs);
@@ -78,6 +95,10 @@ class Problem1 {
       } else {
         swap(a, i, j);
         //@ assert array_slice(a, 0, a.length, ?ys);
+        //@ open is_perm(vs, xs);
+        //@ open exists(?swaps);
+        //@ close exists(cons(pair(i, j), swaps));
+        //@ close is_perm(vs, ys);
         //@ take_one_more(i, ys);
         //@ drop_n_plus_one(j, ys);
         //@ update_drop(xs, i, nth(j, xs), j+1);
