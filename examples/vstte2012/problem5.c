@@ -1,0 +1,299 @@
+#include "stdlib.h"
+//@ #include "lset.h"
+
+struct vertex;
+
+struct vertex_set {
+    struct vertex *value;
+    struct vertex_set *next;
+};
+
+/*@
+predicate vsnode(struct vertex_set* node; struct vertex_set* next, struct vertex* value) = 
+    malloc_block_vertex_set(node) &*& node != 0 &*& 
+    node->value |-> value &*&
+    node->next |-> next;
+
+predicate vsseg(struct vertex_set* from, struct vertex_set* to; list<struct vertex*> values) = 
+    from == to ? values == nil : vsnode(from, ?next, ?value) &*& vsseg(next, to, ?values2) &*& values == cons(value, values2);
+
+predicate vs(struct vertex_set* node; list<struct vertex*> values) = 
+    vsseg(node, 0, values);
+
+//TODO:
+lemma void vsseg_append(struct vertex_set* from, struct vertex_set* to);
+    requires vsseg(from, to, ?vs) &*& vsnode(to, ?next, ?v) &*& vs(next, ?vs2);
+    ensures vsseg(from, next, snoc(vs, v)) &*& vs(next, vs2);
+
+lemma void append_cons_r<t>(list<t> l1, t v, list<t> l2)
+    requires true;
+    ensures append(l1, cons(v, l2)) == append(snoc(l1, v), l2);
+{
+    switch(l1) {
+        case nil:
+        case cons(h,t): append_cons_r(t, v, l2);
+    }
+}
+
+@*/
+
+struct vertex_set *vs_empty() 
+   //@ requires true;
+   //@ ensures vs(result, lset_empty());
+{ 
+    //@ close vs(0, nil);
+    return 0; 
+}
+
+bool vs_isempty(struct vertex_set* vs) 
+   //@ requires vs(vs, ?l);
+   //@ ensures vs(vs, l) &*& result == (l == lset_empty());
+{
+    //@ open vsseg(vs, 0, l);
+    //@ if(vs == 0) assert l == nil;
+    //@ close vs(vs, l);
+    return vs == 0;
+}
+
+struct vertex_set *vs_add(struct vertex_set* vs, struct vertex* v) 
+   //@ requires vs(vs, ?l);
+   //@ ensures vs(result, lset_add(l, v));
+{ 
+    struct vertex_set *res = malloc(sizeof(struct vertex_set));
+    if(res == 0) abort();
+    res->value = v;
+    res->next = vs;
+    //@ close vsnode(res, vs, v);
+    //@ close vs(res, cons(v, l));
+    return res; 
+}
+
+struct vertex_set *vs_singleton(struct vertex* v) 
+   //@ requires true;
+   //@ ensures vs(result, lset_singleton(v));
+{ 
+    struct vertex_set* e = vs_empty();
+    return vs_add(e, v);
+}
+
+struct vertex_set *vs_remove(struct vertex_set* vs, struct vertex* v) 
+   //@ requires vs(vs, ?l);
+   //@ ensures vs(result, lset_remove(l, v));
+{ 
+    //@ open vsseg(vs, 0, l);
+    if(vs == 0) {
+        //@ close vs(vs, l); 
+        return 0;
+    } else {
+        //@ open vsnode(vs, ?vsn, ?vsv);
+        struct vertex_set* next = vs->next;
+        struct vertex_set* newnext = vs_remove(next, v);
+        if(vs->value == v) {
+            free(vs);
+            return newnext;
+        } else {
+            if(next != newnext) {
+                vs->next = newnext;
+            } 
+            //@ close vsnode(vs, newnext, vsv);
+            //@ close vs(vs, lset_remove(l, v));
+            return vs;
+        }
+    }
+}
+
+bool vs_contains(struct vertex_set* vs, struct vertex* v) 
+    //@ requires vs(vs, ?l);
+    //@ ensures vs(vs, l) &*& result == lset_contains(l, v);
+{
+    //@ open vsseg(vs, 0, l);
+    if(vs == 0) { 
+        //@ close vs(vs, l);
+        return false;
+    } else {
+        //@ open vsnode(vs, ?next, ?value);
+        if(vs->value == v) {
+            //@ close vsnode(vs, next, value);
+            //@ close vs(vs, l);
+            return true;
+        } else {
+            bool result = vs_contains(vs->next, v);
+            //@ close vsnode(vs, next, value);
+            //@ close vs(vs, l);
+            return result;
+        }
+    }
+}
+
+void vs_dispose(struct vertex_set* vs) 
+    //@ requires vs(vs, ?l);
+    //@ ensures true;
+{
+    while(vs != 0)
+        //@ invariant vs(vs, ?l2); 
+    {
+        //@ open vs(vs, l2);
+        //@ open vsnode(vs, _, _);
+        struct vertex_set* next = vs->next;
+        free(vs);
+        vs = next;
+    }
+    //@open vs(0, _);
+}
+
+struct vertex {
+    struct vertex_set* succ;
+};
+
+/*@
+
+predicate vertex(struct vertex* v, list<struct vertex*> allvs) = 
+    malloc_block_vertex(v) &*& v != 0 &*&
+    v->succ |-> ?succ &*&
+    vs(succ, ?vs) &*&
+    lset_subset(vs, allvs) == true;
+
+predicate_ctor gvertex(list<struct vertex*> allvs) (struct vertex* v) = 
+    vertex(v, allvs);
+    
+predicate graph(list<struct vertex*> allvs) =
+    foreach(allvs, gvertex(allvs));
+@*/
+
+
+int bfs(struct vertex* source, struct vertex* dest) 
+   //@ requires graph(?allvs) &*& lset_contains(allvs, source) == true &*& lset_contains(allvs, dest) == true;
+   //@ ensures graph(allvs);
+{
+    struct vertex_set* visited = vs_singleton(source);
+    struct vertex_set* current = vs_singleton(source);
+    struct vertex_set* new = vs_empty();
+    int distance = 0;
+    while(!vs_isempty(current)) 
+    /*@ invariant graph(allvs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*& 
+            lset_subset(visitedv, allvs) == true &*& lset_subset(currentv, visitedv) == true &*& lset_subset(newv, visitedv) == true;
+    @*/
+    {
+        //@ open vsseg(current, 0, currentv);
+        //@ assert current != 0;
+        //@ open vsnode(current, _, _);
+        struct vertex *v = current->value;
+        //@ close vsnode(current, _, v);
+        //@ close vs(current, currentv);        
+        current = vs_remove(current, v);
+        
+        //@ lset_subset_contains(currentv, visitedv, v);
+        //@ lset_subset_contains(visitedv, allvs, v);
+        if(v == dest) 
+        {
+            vs_dispose(current);
+            vs_dispose(visited);
+            vs_dispose(new);
+            return distance;
+        }
+        
+        //@ open graph(allvs);
+        //@ assert lset_contains(allvs, v) == true;
+        //@ foreach_remove(v, allvs);
+        //@ open gvertex(allvs)(v);
+        //@ open vertex(v, allvs);
+        struct vertex_set* h = v->succ;
+        struct vertex_set* succs = v->succ;
+        //new new = union(old new, diff(succs, visited)); 
+        //new visited = union(old visited, succs)); 
+        //@ assert vs(h, ?succsv);
+        //@ close vsseg(h, h, nil);
+        /*@
+            if(! lset_equals(visitedv, lset_union(visitedv, nil)) ) {
+                lset_equals_contains_conv(visitedv, lset_union(visitedv, nil));
+                open exwitness(?x);
+                lset_union_contains(visitedv, nil, x);
+                assert false;
+            }
+        @*/
+        /*@    
+            if(! lset_equals(newv, lset_union(newv, lset_diff(nil, visitedv))) ) {
+                lset_equals_contains_conv(newv, lset_union(newv, lset_diff(nil, visitedv)));
+                open exwitness(?x);
+                lset_union_contains(newv, lset_diff(nil, visitedv), x);
+                lset_diff_contains(nil, visitedv, x);
+                assert false;
+            }
+        @*/
+        while(succs != 0)
+        /*@ invariant vsseg(h, succs, ?succsvl) &*& vs(succs, ?succsvr) &*& succsv == append(succsvl, succsvr) &*&
+                vs(visited, ?visitedv2) &*& lset_equals(visitedv2, lset_union(visitedv, succsvl)) == true &*& 
+                vs(new, ?newv2) &*& lset_equals(newv2, lset_union(newv, lset_diff(succsvl, visitedv))) == true;
+        @*/
+        {
+            //@ open vsseg(succs, 0, succsvr);
+            //@ open vsnode(succs, _, _);
+            struct vertex* w = succs->value;
+            //@ lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), w);
+            //@ lset_union_contains(visitedv, succsvl, w);
+            if(!vs_contains(visited, w)) 
+            {
+                //@ assert lset_contains(visitedv2, w) == false;
+                //@ assert lset_contains(visitedv, w) == false;
+                visited = vs_add(visited, w);
+                new = vs_add(new, w);
+            } else {
+                //@ assert lset_contains(visitedv2, w) == true;
+            }
+            //@ struct vertex_set* oldsuccs = succs;
+            succs = succs->next;
+            //@ close vsnode(oldsuccs, succs, w);
+            //@ assert vs(succs, ?newsuccsvr);
+            //@ vsseg_append(h, oldsuccs);
+            //@ append_cons_r(succsvl, w, newsuccsvr);
+            //@ assert vs(visited, ?visitedv3) &*& vs(new, ?newv3); 
+            /*@ 
+                if(! lset_equals(visitedv3, lset_union(visitedv, snoc(succsvl, w))) ) {
+                    lset_equals_contains_conv(visitedv3, lset_union(visitedv, snoc(succsvl, w)));
+                    open exwitness(?x);
+                    lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), x);
+                    lset_union_contains(visitedv, succsvl, x);
+                    lset_union_contains(visitedv, snoc(succsvl, w), x);
+                    lset_union_contains(succsvl, lset_singleton(w), x);
+                    lset_add_contains(visitedv2, w, x);
+                    assert false;
+                }
+            @*/
+            /*@ 
+                if(! lset_equals(newv3, lset_union(newv, lset_diff(snoc(succsvl, w), visitedv))) ) {
+                    lset_equals_contains_conv(newv3, lset_union(newv, lset_diff(snoc(succsvl, w), visitedv)));
+                    open exwitness(?x);
+                    lset_equals_contains(newv2, lset_union(newv, lset_diff(succsvl, visitedv)), x);
+                    lset_union_contains(newv, lset_diff(succsvl, visitedv), x);
+                    lset_diff_contains(succsvl, visitedv, x);
+                    lset_union_contains(newv, lset_diff(snoc(succsvl, w), visitedv), x);
+                    lset_diff_contains(snoc(succsvl, w), visitedv, x);
+                    lset_union_contains(succsvl, lset_singleton(w), x);
+                    lset_add_contains(newv2, w, x);
+                    assert false;
+                }
+            @*/
+        }
+        //@ open vs(succs, _);
+        //@ open vsseg(succs, 0, _);
+        //@ close vertex(v, allvs);
+        //@ close gvertex(allvs)(v);
+        //@ foreach_unremove(v, allvs);
+        //@ close graph(allvs);
+        
+        if(vs_isempty(current)) {
+            vs_dispose(current);
+            current = new;
+            new = vs_empty();
+            if(distance == INT_MAX) abort();
+            distance = distance + 1;
+        }
+        
+        //@ assert vs(current, ?currentv2) &*& vs(new, ?newv3) &*& vs(visited, ?visitedv3);
+        //@ assert lset_subset(visitedv3, allvs) == true;
+        //@ assert lset_subset(currentv2, visitedv) == true;
+        //@ assert lset_subset(newv3, visitedv) == true;
+        
+    }
+    return -1;
+}
