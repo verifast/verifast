@@ -1,27 +1,90 @@
 
 
+/*@
+fixpoint boolean is_sorted(list<boolean> vs) {
+  switch(vs) {
+    case nil: return true;
+    case cons(h, t):
+      return switch(t) { 
+        case nil: return true; 
+        case cons(h0, t0): return (h == false || h0 == true) && is_sorted(t);
+      };
+  }
+}
+
+lemma void is_sorted_lemma(list<boolean> vs, int i)
+  requires 0 <= i && i <= length(vs) &*& all_eq(take(i, vs), false) == true &*& all_eq(drop(i, vs), true) == true;
+  ensures is_sorted(vs) == true;
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      switch(t) {
+        case nil:
+        case cons(h0, t0):
+          if(i == 0) {
+            is_sorted_lemma(t, 0);
+          } else {
+            is_sorted_lemma(t, i -1);
+          }
+      }
+  }
+}
+
+lemma void update_drop<t>(list<t> xs, int i, t v, int j)
+  requires 0 <= i && i < length(xs) &*& 0 <= j &*& i < j;
+  ensures drop(j, update(i, v, xs)) == drop(j, xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i == 0) {
+      } else {
+        update_drop(t, i - 1, v, j - 1);
+      }
+  }
+}
+@*/
+
 class Problem1 {
+  static void swap(boolean[] a, int i, int j) 
+    //@ requires array_slice(a, 0, a.length, ?vs) &*& 0 <= i &*& i < a.length &*& 0 <= j &*& j < a.length;
+    //@ ensures array_slice(a, 0, a.length, update(j, nth(i, vs), update(i, nth(j, vs), vs)));
+  {
+    boolean tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  
   static void two_way_sort(boolean[] a) 
     //@ requires array_slice(a, 0, a.length, ?vs);
-    //@ ensures array_slice(a, 0, a.length, ?vs2);
+    //@ ensures array_slice(a, 0, a.length, ?vs2) &*& is_sorted(vs2) == true;
   {
     int i = 0;
     int j = a.length - 1;
     while(i <= j) 
-      /*@ invariant 0 <= i && i <= a.length &*& -1 <= j &*& j < a.length &*& 
-          array_slice(a, 0, a.length, ?xs); @*/ // &*&
-          //all_eq(take(i, xs), false) == true &*&
-          //all_eq(drop(j + 1, xs), true) == true; 
+      /*@ invariant 0 <= i && i <= a.length &*& -1 <= j &*& j < a.length &*& j - i >= -1 &*&
+          array_slice(a, 0, a.length, ?xs) &*& 
+          all_eq(take(i, xs), false) == true &*&
+          all_eq(drop(j + 1, xs), true) == true; 
+          @*/
     {
       if(! a[i]) {
+        //@ take_one_more(i, xs);
         i++;
       } else if (a[j]) {
+        //@ drop_n_plus_one(j, xs);
         j--;
       } else {
         swap(a, i, j);
-        i++;
+        //@ assert array_slice(a, 0, a.length, ?ys);
+        //@ take_one_more(i, ys);
+        //@ drop_n_plus_one(j, ys);
+        //@ update_drop(xs, i, nth(j, xs), j+1);
+        i++;       
         j--;
       }
     }
+    //@ is_sorted_lemma(xs, i);
   }
 }
