@@ -47,7 +47,7 @@ fixpoint option<term> step(term t) {
             case S: return switch(step(leftright)) {
                 case none: return switch(step(right)) { 
                   case none: return none; // value
-                  case some(reduced): return some(apply(apply(S, leftright), right)); // rec
+                  case some(reduced): return some(apply(apply(S, leftright), reduced)); // rec
                 };
                 case some(reduced): return some(apply(apply(S, reduced), right)); // rec
               };
@@ -178,34 +178,35 @@ lemma void step_with_noS_decreases_size(term t)
                     case none: switch(step(leftright)) {
                       case none: switch(step(right)) {
                         case none:                         
-                        case some(reduced):  // rec
+                        case some(reduced): step_with_noS_decreases_size(right);// rec
                       };
-                      case some(reduced): return some(apply(apply(apply(K, leftleftright), reduced), right)); // rec
+                      case some(reduced): step_with_noS_decreases_size(leftright); // rec
                     };
-                    case some(reduced): return some(apply(apply(apply(K, reduced), leftright), right)); // rec
+                    case some(reduced): step_with_noS_decreases_size(leftleftright); // rec
                   };
-                case S: return switch(step(leftleftright)) {
-                  case none: return switch(step(leftright)) {
-                    case none: return switch(step(right)) {
-                      case none: return some(apply(apply(leftleftright, right), apply(leftright, right))); // step
-                      case some(reduced): return some(apply(apply(apply(S, leftleftright), leftright), reduced)); // rec
+                case S: switch(step(leftleftright)) {
+                  case none: switch(step(leftright)) {
+                    case none: switch(step(right)) {
+                      case none: some(apply(apply(leftleftright, right), apply(leftright, right))); // step
+                      case some(reduced): some(apply(apply(apply(S, leftleftright), leftright), reduced)); // rec
                     };
-                    case some(reduced): return some(apply(apply(apply(S, leftleftright), reduced), right)); // rec
+                    case some(reduced): some(apply(apply(apply(S, leftleftright), reduced), right)); // rec
                   };
-                  case some(reduced): return some(apply(apply(apply(S, reduced), leftright), right)); // rec
+                  case some(reduced): some(apply(apply(apply(S, reduced), leftright), right)); // rec
                 };
-                case apply(leftleftleftleft, leftleftleftright): return switch(step(leftleftleft)) {
-                  case none: return switch(step(leftleftright)) {
-                    case none: return switch(step(leftright)) {
-                      case none: return switch(step(right)) {
-                        case none: return none;
-                        case some(reduced): return some(apply(apply(apply(leftleftleft, leftleftright), leftright), reduced)); // rec
+                case apply(leftleftleftleft, leftleftleftright): 
+                switch(step(leftleftleft)) {
+                  case none: switch(step(leftleftright)) {
+                    case none: switch(step(leftright)) {
+                      case none: switch(step(right)) {
+                        case none: 
+                        case some(reduced): step_with_noS_decreases_size(right); // rec
                       };
-                      case some(reduced): return some(apply(apply(apply(leftleftleft, leftleftright), reduced), right)); // rec
+                      case some(reduced): step_with_noS_decreases_size(leftright); // rec
                     };
-                    case some(reduced): return some(apply(apply(apply(leftleftleft, reduced), leftright), right)); // rec
+                    case some(reduced): step_with_noS_decreases_size(leftleftright); // rec
                   };
-                  case some(reduced): return some(apply(apply(apply(reduced, leftleftright), leftright), right)); // rec
+                  case some(reduced): step_with_noS_decreases_size(leftleftleft); // rec
                 }; 
               };
           };
@@ -223,7 +224,7 @@ predicate term(Term t; term state) =
     (type == 2 ? 
       state == S
       :
-      (t.left |-> ?first &*& t.right |-> ?second &*& [_]term(first, ?state1) &*& [_]term(second, ?state2) &*& state == apply(state1, state2)));
+      (t.left |-> ?first &*& t.right |-> ?second &*& first != null &*& second != null &*& [_]term(first, ?state1) &*& [_]term(second, ?state2) &*& state == apply(state1, state2)));
 
 predicate exists<t>(t v) = true;
 @*/
@@ -264,6 +265,10 @@ class Term {
     //@ requires [_]term(left, ?state1) &*& [_]term(right, ?state2);
     //@ ensures result != null &*& [_]term(result, apply(state1, state2));
   {
+    //@ open [?f1]term(left, state1);
+    //@ close [f1]term(left, state1);
+    //@ open [?f2]term(right, state2);
+    //@ close [f2]term(right, state2);
     Term res = new Term(3, left, right);
     //@ close [1]term(res, apply(state1, state2));
     return res;
@@ -286,8 +291,7 @@ class Term {
           return createApply(t.left, reduced);
         }
       } else { // ((_, _), _)
-      //@ assume(false);
-        if(t.left.left.type == 2) {
+        if(t.left.left.type == 1) {
           Term reduced = do_step(t.left.right);
           if(reduced == null) {
             reduced = do_step(t.right);
@@ -299,8 +303,76 @@ class Term {
           } else {
             return createApply(createApply(t.left.left, reduced), t.right);
           }
-        } else {
-          
+        } else if(t.left.left.type == 2) {
+          Term reduced = do_step(t.left.right);
+          if(reduced == null) {
+            reduced = do_step(t.right);
+            if(reduced == null) {
+              return null;
+            } else {
+              return createApply(createApply(t.left.left, t.left.right), reduced);
+            }
+          } else {
+            return createApply(createApply(t.left.left, reduced), t.right);
+          }
+        } else { // (((_, _), _), _)
+          if(t.left.left.left.type == 1) {
+            Term reduced = do_step(t.left.left.right);
+            if(reduced == null) {
+              reduced = do_step(t.left.right);
+              if(reduced == null) {
+                reduced = do_step(t.right);
+                if(reduced == null) {
+                  return null;
+                } else {
+                  return createApply(t.left, reduced);
+                }
+              } else {
+                 return createApply(createApply(createApply(t.left.left.left, t.left.left.right), reduced), t.right);
+              }
+            } else {
+              return createApply(createApply(createApply(t.left.left.left, reduced), t.left.right), t.right);
+            }
+          } else if(t.left.left.left.type == 2) {
+             Term reduced = do_step(t.left.left.right);
+             if(reduced == null) {
+               reduced = do_step(t.left.right);
+               if(reduced == null) {
+                 reduced = do_step(t.right);
+                 if(reduced == null) {
+                   return createApply(createApply(t.left.left.right, t.right), createApply(t.left.right, t.right));
+                 } else {
+                   return createApply(t.left, reduced);
+                 }
+               } else {
+                  return createApply(createApply(createApply(t.left.left.left, t.left.left.right), reduced), t.right);
+               }
+             } else {
+               return createApply(createApply(createApply(t.left.left.left, reduced), t.left.right), t.right);
+             }
+          } else { // ((((_, _), _), _))
+            Term reduced = do_step(t.left.left.left);
+            if(reduced == null) {
+               reduced = do_step(t.left.left.right);
+               if(reduced == null) {
+                 reduced = do_step(t.left.right);
+                 if(reduced == null) {
+                   reduced = do_step(t.right);
+                   if(reduced == null) {
+                     return null;
+                   } else {
+                     return createApply(t.left, reduced);
+                   }
+                 } else {
+                   return createApply(createApply(t.left.left, reduced), t.right);
+                 }
+               } else {
+                 return createApply(createApply(createApply(t.left.left.left, reduced), t.left.right), t.right);
+               }
+            } else {
+              return createApply(createApply(createApply(reduced, t.left.left.right), t.left.right), t.right);
+            }
+          }
         }
       }
     }
@@ -333,6 +405,7 @@ class Term {
     Term curr = t;
     while(true) 
       //@ invariant [_]term(curr, ?state2) &*& noS(state2) == true &*& nsteps(count, state) == state2;
+      //@ decreases size(state2);
     {
       Term newCur = do_step(curr);
       if(newCur == null) { 
@@ -342,6 +415,7 @@ class Term {
       //@ count = succ(count); 
       curr = newCur;
       //@ step_preserves_noS(state2);
+      //@ step_with_noS_decreases_size(state2);
     }
   }
 }
