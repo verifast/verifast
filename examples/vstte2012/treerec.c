@@ -79,7 +79,7 @@ lemma void max_le_max(int d1, int d2, list<int> ds)
 }
 
 lemma void build_rec_sound(nat n, int d, list<int> s)
-    requires d + int_of_nat(n) > fold_left(0, max_func, s);
+    requires true;
     ensures
         switch (build_rec(n, d, s)) {
             case fail: return true;
@@ -100,13 +100,6 @@ lemma void build_rec_sound(nat n, int d, list<int> s)
                          switch (build_rec(n0, d+1, s)) {
                              case fail:
                              case success(l, s2):
-                                 fold_left_append(0, max_func, depths(d+1, l), s2);
-                                 assert d + int_of_nat(n) == d+1 + int_of_nat(n0);
-                                 assert fold_left(0, max_func, s) == fold_left(fold_left(0, max_func, depths(d+1, l)), max_func, s2);
-                                 le_max(0, depths(d+1, l));
-                                 assert 0 <= fold_left(0, max_func, depths(d+1, l));
-                                 max_le_max(0, fold_left(0, max_func, depths(d+1, l)), s2);
-                                 assert fold_left(0, max_func, s2) <= fold_left(fold_left(0, max_func, depths(d+1, l)), max_func, s2);
                                  build_rec_sound(n0, d+1, s2);
                                  switch (build_rec(n0, d+1, s2)) {
                                      case fail:
@@ -119,4 +112,46 @@ lemma void build_rec_sound(nat n, int d, list<int> s)
     }
 }
 
+fixpoint int min_func(int x, int y) { return x < y ? x : y; }
+
+lemma void depths_head(int d, tree t)
+    requires true;
+    ensures switch (depths(d, t)) { case nil: return false; case cons(dsh, dst): return d <= dsh; };
+{
+    switch (t) {
+        case leaf:
+        case node(l, r):
+            depths_head(d+1, l);
+    }
+}
+
+lemma void build_rec_complete(nat n, int d, tree t, list<int> s0)
+    requires 0 <= d &*& fold_left(0, max_func, depths(d, t)) < d + int_of_nat(n);
+    ensures build_rec(n, d, append(depths(d, t), s0)) == success(t, s0);
+{
+    switch (n) {
+        case zero:
+            depths_head(d, t);
+            le_max(max_func(d, head(depths(d, t))), tail(depths(d, t)));
+            assert d + int_of_nat(n) == d;
+        case succ(n0):
+            switch (t) {
+                case leaf:
+                    assert true;
+                case node(l, r):
+                    depths_head(d+1, l);
+                    
+                    fold_left_append(0, max_func, depths(d+1, l), depths(d+1, r));
+                    le_max(fold_left(0, max_func, depths(d+1, l)), depths(d+1, r));
+                    append_assoc(depths(d+1, l), depths(d+1, r), s0);
+                    build_rec_complete(n0, d+1, l, append(depths(d+1, r), s0));
+                    
+                    le_max(0, depths(d+1, l));
+                    max_le_max(0, fold_left(0, max_func, depths(d+1, l)), depths(d+1, r));
+                    build_rec_complete(n0, d+1, r, s0);
+            }
+    }
+}
+
 @*/
+
