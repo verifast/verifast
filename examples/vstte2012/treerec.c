@@ -36,6 +36,20 @@ fixpoint result build_rec(nat n, int d, list<int> s) {
    }
 }
 
+lemma void harness()
+    requires true;
+    ensures true;
+{
+    nat n0 = zero;
+    nat n1 = succ(n0);
+    nat n2 = succ(n1);
+    nat n3 = succ(n2);
+    nat n4 = succ(n3);
+    
+    assert build_rec(n4, 0, cons(1, cons(3, cons(3, cons(2, nil))))) == success(node(leaf, node(node(leaf, leaf), leaf)), nil);
+    assert build_rec(n4, 0, cons(1, cons(3, cons(2, cons(2, nil))))) == fail;
+}
+
 fixpoint int max_func(int x, int y) { return x < y ? y : x; }
 
 lemma void le_max(int d, list<int> ds)
