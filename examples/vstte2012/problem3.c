@@ -316,3 +316,22 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	return elem;
 		
 }
+
+struct ring_buffer *harness(int x, int y, int z)
+//@ requires true;
+//@ ensures result != 0 ? ring_buffer(result, 2, _, 0, nil) : true;
+{
+	struct ring_buffer *b = ring_buffer_create(2);
+	if (b == 0) return 0;
+	ring_buffer_push(b, x);
+	ring_buffer_push(b, y);
+	int h = ring_buffer_pop(b);
+	//@ assert h == x;
+	ring_buffer_push(b, z);
+	h = ring_buffer_pop(b);
+	//@ assert h == y;
+	h = ring_buffer_pop(b);
+	//@ assert h == z;
+	return b;
+	
+}
