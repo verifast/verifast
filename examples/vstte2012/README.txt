@@ -1,11 +1,19 @@
-See VSTTE website for what should be in here!!
 
+Team members:
+Bart Jacobs <bart.jacobs@cs.kuleuven.be>
+Jan Smans <jan.smans@cs.kuleuven.be>
+Dries Vanoverberghe <Dries.Vanoverberghe@cs.kuleuven.be>
+Willem Penninckx <willem.penninckx@cs.kuleuven.be>
+
+VeriFast (and vfide) is available for free from
+http://people.cs.kuleuven.be/~bart.jacobs/verifast/
 
 
 Problem 3
 ---------
 The solution implements and verifies all functions (create, clear, head, push,
-pop) and the test harness. Absence of integer overflow is verified.
+pop) and the test harness. Verified properties include safety, behavior,
+and absence of integer overflow.
 To verify, open in vfide and press F5.
 The lemma tail_of_singleton_is_nil is currently unverified.
 
