@@ -224,18 +224,21 @@ requires l1 == cons(item, nil) &*& append(l1, l2) == l3;
 ensures tail(l3) == l2;
 {
 }
-
-
-
 @*/
+
+/*@
+lemma void tail_of_singleton_is_nil<t>(list<t> l);
+requires length(l) == 1;
+ensures tail(l) == nil;
+// Meh. Prove doesn't work yet. XXX
+@*/
+
 
 // i.e. remove from beginning of queue
 int ring_buffer_pop(struct ring_buffer *ring_buffer)
 /*@ requires
 	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
 	&*& len > 0 // you can't pop nonexisting elements
-
-	&*& bighead_size(size, first, len) != 1 // No become unsplitted support yet. XXX
 	;
 @*/
 //@ ensures ring_buffer(ring_buffer, size, first == size - 1 ? 0 : first + 1, len-1, tail(elems)) &*& result == head(elems);
@@ -246,35 +249,40 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	//@ int  newfirst = first + 1 == size ? 0 : first + 1;
 	//@ assert ring_buffer->fields |-> ?fields;
 	
-	//@ open array(ring_buffer->fields + first, _, _, _, _);
+	//@ open array(ring_buffer->fields + first, _, _, _, ?elems_bighead);
 	elem = *(ring_buffer->fields + take_at);
 	ring_buffer->len = ring_buffer->len - 1;
 	ring_buffer->first = ring_buffer->first + 1;
 	if (ring_buffer->first == ring_buffer->size) ring_buffer->first = 0; // XXX hmm why can we also assign "first = ..." here if first is ghost??
 
-	//@ close array<int>(ring_buffer->fields + take_at + 1, 0, sizeof(int), integer, nil);
-
-	// TODO: Takes wrong subarray if bighead_size == 1.
-	//@ close array<int>(fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
 	
 	/*@
 	if (bighead_size(size, first, len) == 1){
-		// TODO
-	}else if (is_split_up_fp(size, first, len)){
-		array_merge(ring_buffer->fields + bigtail_size(size, first, len));
-		if ( ! is_split_up_fp(size, newfirst, len-1)){
-			// convert to non-split up data structure
-			
-			// zero-size leading emptyness
-			close array<int>(fields, 0, sizeof(int), integer, nil);
-			assert bighead_size(size, first, len) == 1;
-			//assert false;
-		}
-	}else{
-		// Make trailing emptyness a bit larger
-		assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
+		assert newfirst == 0;
+		tail_of_singleton_is_nil(elems_bighead);
 		
-		array_merge(ring_buffer->fields);
+		close array<int>(fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
+		array_merge(fields + len-1);
+	}else{
+		close array<int>(ring_buffer->fields + take_at + 1, 0, sizeof(int), integer, nil);
+
+		close array<int>(fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
+		if (is_split_up_fp(size, first, len)){
+			array_merge(ring_buffer->fields + bigtail_size(size, first, len));
+			if ( ! is_split_up_fp(size, newfirst, len-1)){
+				// convert to non-split up data structure
+			
+				// zero-size leading emptyness
+				close array<int>(fields, 0, sizeof(int), integer, nil);
+				assert bighead_size(size, first, len) == 1;
+				//assert false;
+			}
+		}else{
+			// Make trailing emptyness a bit larger
+			assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
+		
+			array_merge(ring_buffer->fields);
+		}
 	}
 	@*/
 	//@close ring_buffer(ring_buffer, size, newfirst, len-1,  tail(elems));
