@@ -233,18 +233,6 @@ ensures tail(l3) == l2;
 lemma void tail_of_singleton_is_nil<t>(list<t> l);
 requires length(l) == 1;
 ensures tail(l) == nil;
-/*
-{
-	switch(l) {
-		case nil:
-			assert false;
-		case cons(head, x):
-			assert length(x) == 0;
-		case cons(head, cons(_, _)):
-			assert false;
-	}
-}
-*/
 @*/
 
 void ring_buffer_clear(struct ring_buffer *ring_buffer)
@@ -257,6 +245,18 @@ void ring_buffer_clear(struct ring_buffer *ring_buffer)
 	ring_buffer->len = 0;
 	//@ array_split(ring_buffer->fields,first);
 	//@ close ring_buffer(ring_buffer, size, first, 0, nil);
+	
+}
+
+
+int ring_buffer_head(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems) &*& len > 0;
+//@ ensures ring_buffer(ring_buffer, size, first, len, elems) &*& result == head(elems);
+{
+	//@ open ring_buffer(ring_buffer, size, first, len, elems);
+	//@ open array(ring_buffer->fields + ring_buffer->first, _, _, _, _);
+	return *(ring_buffer->fields + ring_buffer->first);
+	//@ close ring_buffer(ring_buffer, size, first, len, elems);
 	
 }
 
