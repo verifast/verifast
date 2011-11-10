@@ -240,9 +240,9 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
 	&*& len > 0 // you can't pop nonexisting elements
 
-
 	// XXX
 	&*& len > 1 // no become-empty support yet
+	&*& first + len == size // No hit-the-edge support yet.
 	;
 @*/
 //@ ensures ring_buffer(ring_buffer, size, first == size - 1 ? 0 : first + 1, len-1, tail(elems)) &*& result == head(elems);
@@ -252,17 +252,19 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	int elem;
 	
 	//@ assert ring_buffer->fields |-> ?fields;
+	
+	// first reason about two cases, then join them. XXX
+	//@ open array(ring_buffer->fields + first, _, _, _, _); // Open bigtail
+	elem = *(ring_buffer->fields + take_at);
+	//@ close array<int>(ring_buffer->fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
+		
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len)){
+		//@ array_merge(ring_buffer->fields + bigtail_size(size, first, len));
 		
-		//@ assume(false); // XXX
-	}else{
-		//@ open array(ring_buffer->fields + first, _, _, _, _); // Open stuff in empty_stuff_empty
-		elem = *(ring_buffer->fields + take_at);
-		
+	}else{		
 		// Make trailing emptyness a bit larger
 		//@ assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
 		
-		//@ close array<int>(ring_buffer->fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
 		//@ array_merge(ring_buffer->fields);
 	}
 	ring_buffer->len = ring_buffer->len - 1;
