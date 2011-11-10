@@ -507,7 +507,21 @@ lemma void nat_le_not_eq(nat x, nat y)
   requires nat_le(x, y) == true &*& x != y;
   ensures nat_le(x, prev(y)) == true;
 {
-  assume(false); // easy
+  switch (x) {
+    case zero:
+    case succ(x0):
+      switch (y) {
+        case zero:
+        case succ(y0):
+          switch (y0) {
+            case zero:
+              nat_le_both(x, y);
+            case succ(y00):
+          }
+          nat_le_not_eq(x0, y0);
+          
+      }
+  }
 }
 
 

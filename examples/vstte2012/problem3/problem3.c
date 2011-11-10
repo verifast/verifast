@@ -153,9 +153,19 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 }
 
 /*@
-lemma void tail_of_singleton_is_nil<t>(list<t> l);
-requires length(l) == 1;
-ensures tail(l) == nil;
+lemma void tail_of_singleton_is_nil<t>(list<t> l)
+  requires length(l) == 1;
+  ensures tail(l) == nil;
+{
+  switch (l) {
+    case nil:
+    case cons(lh, lt):
+      switch (lt) {
+        case nil:
+        case cons(lth, ltt):
+      }
+  }
+}
 @*/
 
 void ring_buffer_clear(struct ring_buffer *ring_buffer)
@@ -268,4 +278,12 @@ void harness(int x, int y, int z)
 	//@ assert h == z;
 	ring_buffer_dispose(b);
 	
+}
+
+int main() //@ : main
+//@ requires true;
+//@ ensures true;
+{
+  harness(1, 2, 3);
+  return 0;
 }

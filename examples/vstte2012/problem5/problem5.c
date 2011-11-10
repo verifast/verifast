@@ -17,16 +17,51 @@ predicate vsnode(struct vertex_set* node; struct vertex_set* next, struct vertex
     node->value |-> value &*&
     node->next |-> next;
 
+lemma void vsnode_distinct(struct vertex_set *n1, struct vertex_set *n2)
+    requires vsnode(n1, ?n1n, ?n1v) &*& vsnode(n2, ?n2n, ?n2v);
+    ensures vsnode(n1, n1n, n1v) &*& vsnode(n2, n2n, n2v) &*& n1 != n2;
+{
+    open vsnode(n1, n1n, n1v);
+    open vsnode(n2, n2n, n2v);
+}
+
 predicate vsseg(struct vertex_set* from, struct vertex_set* to; list<struct vertex*> values) = 
     from == to ? values == nil : vsnode(from, ?next, ?value) &*& vsseg(next, to, ?values2) &*& values == cons(value, values2);
 
 predicate vs(struct vertex_set* node; list<struct vertex*> values) = 
     vsseg(node, 0, values);
 
-//TODO:
-lemma void vsseg_append(struct vertex_set* from, struct vertex_set* to);
+lemma void vsseg_append(struct vertex_set* from, struct vertex_set* to)
     requires vsseg(from, to, ?vs) &*& vsnode(to, ?next, ?v) &*& vs(next, ?vs2);
     ensures vsseg(from, next, snoc(vs, v)) &*& vs(next, vs2);
+{
+    open vsseg(from, to, vs);
+    if (from == to) {
+        open vs(next, vs2);
+        open vsseg(next, 0, vs2);
+        if (next == 0) {
+            open vsnode(to, next, v);
+            close vsnode(to, next, v);
+        } else
+            vsnode_distinct(to, next);
+        close vsseg(next, 0, vs2);
+        close vs(next, vs2);
+        close vsseg(from, next, snoc(vs, v));
+    } else {
+        assert vsseg(?from2, to, ?vst);
+        open vs(next, vs2);
+        open vsseg(next, 0, vs2);
+        if (next == 0) {
+            open vsnode(from, from2, ?vf);
+            close vsnode(from, from2, vf);
+        } else
+            vsnode_distinct(from, next);
+        close vsseg(next, 0, vs2);
+        close vs(next, vs2);
+        vsseg_append(from2, to);
+        close vsseg(from, next, snoc(vs, v));
+    }
+}
 
 lemma void append_cons_r<t>(list<t> l1, t v, list<t> l2)
     requires true;
@@ -184,16 +219,159 @@ fixpoint b assoc2<a, b>(a x, list<a> xs, list<b> ys) {
     }
 }
 
-lemma void foreach2_remove<a, b>(a x, list<a> xs);
+lemma void foreach2_length<a, b>(list<a> xs)
+    requires foreach2<a, b>(xs, ?ys, ?p);
+    ensures foreach2<a, b>(xs, ys, p) &*& length(ys) == length(xs);
+{
+    open foreach2(xs, ys, p);
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            foreach2_length(xs0);
+    }
+    close foreach2(xs, ys, p);
+}
+
+lemma void foreach2_remove<a, b>(a x, list<a> xs)
     requires foreach2<a, b>(xs, ?ys, ?p) &*& mem(x, xs) == true;
     ensures foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), p) &*& p(x, assoc2(x, xs, ys)) &*& length(ys) == length(xs);
+{
+    open foreach2(xs, ys, p);
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+                foreach2_length(xs0);
+            } else {
+                foreach2_remove(x, xs0);
+                close foreach2(remove(x, xs), remove2(x, xs, ys), p);
+            }
+    }
+}
 
-lemma void foreach2_unremove<a, b>(a x, list<a> xs, list<b> ys);
-    requires foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), ?p) &*& length(ys) == length(xs) &*& p(x, assoc2(x, xs, ys));
+lemma void foreach2_unremove<a, b>(a x, list<a> xs, list<b> ys)
+    requires foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), ?p) &*& mem(x, xs) == true &*& length(ys) == length(xs) &*& p(x, assoc2(x, xs, ys));
     ensures foreach2<a, b>(xs, ys, p);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+                close foreach2(xs, ys, p);
+            } else {
+                switch (ys) { case nil: case cons(y0, ys0): }
+                open foreach2(remove(x, xs), remove2(x, xs, ys), p);
+                foreach2_unremove(x, xs0, tail(ys));
+                close foreach2(xs, ys, p);
+            }
+    }
+}
+
+lemma void foreach2_update<a, b>(a x, b y, list<a> xs, list<b> ys)
+    requires foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), ?p) &*& mem(x, xs) == true &*& length(ys) == length(xs) &*& p(x, y);
+    ensures foreach2<a, b>(xs, update2(x, y, xs, ys), p);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+                close foreach2(xs, update2(x, y, xs, ys), p);
+            } else {
+                switch (ys) { case nil: case cons(y0, ys0): }
+                open foreach2(remove(x, xs), remove2(x, xs, ys), p);
+                foreach2_update(x, y, xs0, tail(ys));
+                close foreach2(xs, update2(x, y, xs, ys), p);
+            }
+    }
+}
 
 predicate graph(list<struct vertex *> allvs, list<list<struct vertex *> > succs) =
+    distinct(allvs) == true &*&
     foreach2(allvs, succs, gvertex(allvs));
+
+lemma void lset_subset_add_r<t>(list<t> s1, list<t> s2, t el)
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(s1, lset_add(s2, el)) == true;
+{
+    switch(s1) {
+        case nil:
+        case cons(h,t):
+            lset_subset_add_r(t, s2, el);
+    }
+}
+
+lemma void graph_add_vertex(vertex v, list<vertex> allvs)
+    requires foreach2(?vs, ?edges, gvertex(allvs)) &*& v->succ |-> ?succ;
+    ensures foreach2(vs, edges, gvertex(cons(v, allvs))) &*& v->succ |-> succ &*& !mem(v, vs);
+{
+    open foreach2(vs, edges, _);
+    switch (vs) {
+        case nil:
+        case cons(v0, vs0):
+            open gvertex(allvs)(v0, head(edges));
+            open vertex(v0, head(edges), allvs);
+            lset_subset_add_r(head(edges), allvs, v);
+            close vertex(v0, head(edges), cons(v, allvs));
+            close gvertex(cons(v, allvs))(v0, head(edges));
+            graph_add_vertex(v, allvs);
+    }
+    close foreach2(vs, edges, gvertex(cons(v, allvs)));
+}
+
+lemma void create_graph()
+    requires true;
+    ensures graph(nil, nil);
+{
+    close foreach2(nil, nil, gvertex(nil));
+    close graph(nil, nil);
+}
+
+@*/
+
+vertex add_vertex()
+    //@ requires graph(?allvs, ?allsuccs);
+    //@ ensures graph(cons(result, allvs), cons(nil, allsuccs)) &*& distinct(cons(result, allvs)) == true;
+{
+    vertex v = malloc(sizeof(struct vertex));
+    if (v == 0) abort();
+    v->succ = 0;
+    return v;
+    //@ open graph(allvs, allsuccs);
+    //@ graph_add_vertex(v, allvs);
+    //@ close vertex(v, nil, cons(v, allvs));
+    //@ close gvertex(cons(v, allvs))(v, nil);
+    //@ close foreach2(cons(v, allvs), cons(nil, allsuccs), gvertex(cons(v, allvs)));
+    //@ close graph(cons(v, allvs), cons(nil, allsuccs));
+}
+
+/*@
+
+fixpoint list<b> update2<a, b>(a x, b y, list<a> xs, list<b> ys) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x0, xs0): return x0 == x ? cons(y, tail(ys)) : cons(head(ys), update2(x, y, xs0, tail(ys)));
+    }
+}
+            
+@*/
+
+void add_edge(vertex v1, vertex v2)
+    //@ requires graph(?allvs, ?allsuccs) &*& mem(v1, allvs) == true &*& mem(v2, allvs) == true;
+    //@ ensures graph(allvs, update2(v1, cons(v2, assoc2(v1, allvs, allsuccs)), allvs, allsuccs));
+{
+    //@ open graph(allvs, allsuccs);
+    //@ foreach2_remove(v1, allvs);
+    //@ open gvertex(allvs)(v1, ?succs);
+    //@ open vertex(v1, succs, allvs);
+    struct vertex_set *succ = vs_add(v1->succ, v2);
+    v1->succ = succ;
+    //@ close vertex(v1, cons(v2, succs), allvs);
+    //@ close gvertex(allvs)(v1, cons(v2, succs));
+    //@ foreach2_update(v1, cons(v2, succs), allvs, allsuccs);
+    //@ close graph(allvs, update2(v1, cons(v2, assoc2(v1, allvs, allsuccs)), allvs, allsuccs));
+}
+
+/*@
 
 fixpoint list<struct vertex *> get_succs(list<struct vertex *> vs, list<list<struct vertex *> > edges, struct vertex *v) {
     return assoc2(v, vs, edges);
@@ -222,9 +400,16 @@ fixpoint bool has_mindist(vertex source, list<vertex> vs, list<list<vertex> > ed
       switch (n) { case zero: return true; case succ(n0): return !mem(v, reachn(n0, source, vs, edges)); };
 }
 
-lemma void forall_lset_remove<t>(list<t> xs, fixpoint(t, bool) p, t x);
+lemma void forall_lset_remove<t>(list<t> xs, fixpoint(t, bool) p, t x)
     requires forall(xs, p) == true;
     ensures forall(lset_remove(xs, x), p) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            forall_lset_remove(xs0, p, x);
+    }
+}
 
 lemma void mem_concat_map<a, b>(fixpoint(a, list<b>) f, list<a> xs, a x, b y)
     requires mem(x, xs) == true &*& mem(y, f(x)) == true;
@@ -456,4 +641,45 @@ int bfs(struct vertex* source, struct vertex* dest)
     vs_dispose(new);
     vs_dispose(visited);
     return -1;
+}
+
+/*@
+
+lemma void note(bool b)
+    requires b;
+    ensures b;
+{
+}
+
+@*/
+
+int main() //@ : main
+    //@ requires true;
+    //@ ensures true;
+{
+    //@ create_graph();
+    vertex v1 = add_vertex();
+    vertex v2 = add_vertex();
+    vertex v3 = add_vertex();
+    vertex v4 = add_vertex();
+    add_edge(v1, v2);
+    add_edge(v2, v3);
+    add_edge(v3, v4);
+    add_edge(v2, v4);
+    int d = bfs(v1, v4);
+    //@ note(nat_of_int(3) == succ(succ(succ(zero))));
+    assert(d != 0);
+    assert(d != 1);
+    // TODO: Prove d == 2
+    
+    vertex v5 = add_vertex();
+    d = bfs(v1, v5);
+    assert(d != 0);
+    assert(d != 1);
+    assert(d != 2);
+    assert(d != 3);
+    // TODO: Prove d < 0
+    
+    return 0;
+    //@ leak graph(_, _);
 }

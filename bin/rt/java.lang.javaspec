@@ -63,7 +63,7 @@ lemma_auto void array_element_inv<T>();
 
 lemma_auto void array_slice_inv<T>();
     requires [?f]array_slice<T>(?array, ?start, ?end, ?elems);
-    ensures [f]array_slice<T>(array, start, end, elems) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end;
+    ensures [f]array_slice<T>(array, start, end, elems) &*& array != null &*& 0 <= start &*& start <= end &*& end <= array.length &*& start + length(elems) == end &*& end <= Integer.MAX_VALUE;
 
 lemma_auto void array_slice_deep_inv<T, A, V>();
     requires [?f]array_slice_deep<T, A, V>(?array, ?start, ?end, ?p, ?info, ?elems, ?vs);

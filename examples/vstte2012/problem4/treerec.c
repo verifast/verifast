@@ -409,7 +409,7 @@ lemma void note(bool b)
 
 @*/
 
-int main()
+int main() //@ : main
     //@ requires true;
     //@ ensures true;
 {
