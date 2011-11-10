@@ -3,7 +3,7 @@
 #include "listex.h"
 
 /*
-Terminology: if the array is STUFF1_empty_STUFF2, then bighead = stuff2, bigtail == stuff1.
+Terminology: if the array is STUFF1_empty_STUFF2, then bighead refers to stuff2, bigtail refers to stuff1.
 */
 
 struct ring_buffer{
@@ -20,23 +20,8 @@ bool is_split_up(int size, int first, int len)
 	return first > size - len;
 }
 /*@
-fixpoint bool size_is_ok(int size){
-	return size * 4 < INT_MAX;
-}
-
 fixpoint bool is_split_up_fp(int size, int first, int len){
 	return first + len > size;
-}
-
-fixpoint bool is_inside(int size, int first, int len, int needle){
-	return is_split_up_fp(size, first, len) ?
-		// it's split up: BIGTAILemptyBIGHEAD
-		// Check if it's not in "empty"
-		! ( (needle < first && needle >= (first + len) - size)	)
-	:
-		// it's not split up: emptySTUFFempty.
-		// Check if it's in stuff:
-		needle >= first && needle < first + len;	
 }
 
 fixpoint int bighead_size(int size, int first, int len){
@@ -49,60 +34,7 @@ fixpoint int bigtail_size(int size, int first, int len){
 }
 
 
-
-// Convert the "nth element in the array" to the "nth element in the queue"
-fixpoint int array_id_to_queue_id(int size, int first, int len, int array_id){
-	return
-		! is_inside(size, first, len, array_id) ?
-			-1 // Caller is wrong. Put garbage to find it more easily.
-		:
-			is_split_up_fp(size, first, len) ?
-				array_id >= first ? // It's in capitalcased STUFF-part of stuff_emptySTUFF (=bighead)
-					array_id - first
-				: // It's in capitalcased part of STUFF_empty_stuff (=bigtail)
-					array_id + (size - first)
-			:
-				array_id - first
-	;
-}
-
-// I dislike catching by-one errors. Testing is faster.
-lemma void is_inside_test()
-	requires true;
-	ensures true;
-{
-	assert is_inside(10, 3, 3, 3) == true;
-	assert is_inside(10, 3, 3, 5) == true;
-	assert is_inside(10, 3, 3, 6) == false;
-	assert is_inside(10, 3, 3, 2) == false;
-	
-	assert is_inside(7, 5, 3, 4) == false;
-	assert is_inside(7, 5, 3, 1) == false;
-	assert is_inside(7, 5, 3, 0) == true;
-	assert is_inside(7, 5, 3, 6) == true;
-	
-	assert is_inside(7, 5, 0, 6) == false;
-	assert is_inside(7, 5, 0, 4) == false;
-	assert is_inside(7, 5, 0, 0) == false;
-}
-lemma void array_id_to_queue_id_test()
-	requires true;
-	ensures true;
-{
-	assert array_id_to_queue_id(6,0,3,0) == 0;
-	assert array_id_to_queue_id(6,1,3,1) == 0;
-	assert array_id_to_queue_id(6,3,5,3) == 0;
-	assert array_id_to_queue_id(6,3,5,4) == 1;
-	assert array_id_to_queue_id(6,3,5,1) == 4;
-}
-
-// Ow this exists already. Nice.
-//lemma void append_assoc<t>(list<t>l1, list<t> l2, list<t> l3);
-//requires true;
-//ensures append(l1, append(l2, l3)) == append(append(l1, l2), l3);
-
 predicate ring_buffer(struct ring_buffer *buffer, int size, int first, int len, list<int> items) =
-	
 	size >= 0 && size * 4 < INT_MAX
 	&*& len <= size
 	&*& first >= 0 && first < size
@@ -220,15 +152,6 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	//@ close ring_buffer(ring_buffer, size, first, len+1, append(items, cons(element, nil)));
 }
 
-
-/*@
-lemma void test_appendtail<t>(list<t> l1, list<t> l2, t item, list<t> l3)
-requires l1 == cons(item, nil) &*& append(l1, l2) == l3;
-ensures tail(l3) == l2;
-{
-}
-@*/
-
 /*@
 lemma void tail_of_singleton_is_nil<t>(list<t> l);
 requires length(l) == 1;
@@ -245,7 +168,6 @@ void ring_buffer_clear(struct ring_buffer *ring_buffer)
 	ring_buffer->len = 0;
 	//@ array_split(ring_buffer->fields,first);
 	//@ close ring_buffer(ring_buffer, size, first, 0, nil);
-	
 }
 
 
@@ -317,12 +239,24 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 		
 }
 
-struct ring_buffer *harness(int x, int y, int z)
+void ring_buffer_dispose(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, _, _, _, _);
+//@ ensures true;
+{
+	//@ open ring_buffer(ring_buffer, _, _, _, _);
+	//@ array_merge(ring_buffer->fields);
+	//@ array_merge(ring_buffer->fields);
+	//@ int_array_to_chars(ring_buffer->fields);
+	free(ring_buffer->fields);
+	free(ring_buffer);
+}
+
+void harness(int x, int y, int z)
 //@ requires true;
-//@ ensures result != 0 ? ring_buffer(result, 2, _, 0, nil) : true;
+//@ ensures true;
 {
 	struct ring_buffer *b = ring_buffer_create(2);
-	if (b == 0) return 0;
+	if (b == 0) return;
 	ring_buffer_push(b, x);
 	ring_buffer_push(b, y);
 	int h = ring_buffer_pop(b);
@@ -332,6 +266,6 @@ struct ring_buffer *harness(int x, int y, int z)
 	//@ assert h == y;
 	h = ring_buffer_pop(b);
 	//@ assert h == z;
-	return b;
+	ring_buffer_dispose(b);
 	
 }
