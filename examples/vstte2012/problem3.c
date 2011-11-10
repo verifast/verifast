@@ -147,16 +147,6 @@ predicate ring_buffer(struct ring_buffer *buffer, int size, int first, int len, 
 	
 @*/
 
-/*@
-// XXX Why is this missing in arrays.h??? (probably because of generics<t> and sizeof(t)?)
-lemma void chars_to_pointer_array(void *ptr);
-    requires
-        [?f]chars(ptr, ?orig_elems);
-    ensures
-        [f]array<void*>(ptr, length(orig_elems), sizeof(void*), pointer, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(void*) == length(orig_elems)
-        &*& length(orig_array_elems) == length(orig_elems);
-@*/
 
 struct ring_buffer *ring_buffer_create(int size)
 //@ requires size >= 1 &*& size * sizeof(int) < INT_MAX;
@@ -215,7 +205,6 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 		}
 		@*/
 		
-		
 	}else{
 		//@ assert ! is_split_up_fp(size, first, len) == true;
 		put_at = ring_buffer->first + ring_buffer->len;
@@ -228,10 +217,16 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	//@ close ring_buffer(ring_buffer, size, first, len+1, append(items, cons(element, nil)));
 }
 
-/* @  // XXX hm need this?
-lemma void array_split_last<t>(void *a)
-requires array<t>(a, ?size, ?elemsize, ?pred, ?elems) &*& size > 0;
-ensures array<t>(a, size-1, elemsize, pred, tail(elems)) &*& pred(a + elemsize * size - 1, 
+
+/*@
+lemma void test_appendtail<t>(list<t> l1, list<t> l2, t item, list<t> l3)
+requires l1 == cons(item, nil) &*& append(l1, l2) == l3;
+ensures tail(l3) == l2;
+{
+}
+
+
+
 @*/
 
 // i.e. remove from beginning of queue
@@ -240,9 +235,7 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
 	&*& len > 0 // you can't pop nonexisting elements
 
-	// XXX
-	&*& len > 1 // no become-empty support yet
-	&*& first + len == size // No hit-the-edge support yet.
+	&*& bighead_size(size, first, len) != 1 // No become unsplitted support yet. XXX
 	;
 @*/
 //@ ensures ring_buffer(ring_buffer, size, first == size - 1 ? 0 : first + 1, len-1, tail(elems)) &*& result == head(elems);
@@ -250,27 +243,42 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	//@ open ring_buffer(ring_buffer, _, _, _, _);
 	int take_at = ring_buffer->first;
 	int elem;
-	
+	//@ int  newfirst = first + 1 == size ? 0 : first + 1;
 	//@ assert ring_buffer->fields |-> ?fields;
 	
-	// first reason about two cases, then join them. XXX
-	//@ open array(ring_buffer->fields + first, _, _, _, _); // Open bigtail
+	//@ open array(ring_buffer->fields + first, _, _, _, _);
 	elem = *(ring_buffer->fields + take_at);
-	//@ close array<int>(ring_buffer->fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
-		
-	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len)){
-		//@ array_merge(ring_buffer->fields + bigtail_size(size, first, len));
-		
-	}else{		
-		// Make trailing emptyness a bit larger
-		//@ assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
-		
-		//@ array_merge(ring_buffer->fields);
-	}
 	ring_buffer->len = ring_buffer->len - 1;
 	ring_buffer->first = ring_buffer->first + 1;
 	if (ring_buffer->first == ring_buffer->size) ring_buffer->first = 0; // XXX hmm why can we also assign "first = ..." here if first is ghost??
-	//@ close ring_buffer(ring_buffer, size, first + 1 == size ? 0 : first + 1, len-1,  tail(elems));
+
+	//@ close array<int>(ring_buffer->fields + take_at + 1, 0, sizeof(int), integer, nil);
+
+	// TODO: Takes wrong subarray if bighead_size == 1.
+	//@ close array<int>(fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
+	
+	/*@
+	if (bighead_size(size, first, len) == 1){
+		// TODO
+	}else if (is_split_up_fp(size, first, len)){
+		array_merge(ring_buffer->fields + bigtail_size(size, first, len));
+		if ( ! is_split_up_fp(size, newfirst, len-1)){
+			// convert to non-split up data structure
+			
+			// zero-size leading emptyness
+			close array<int>(fields, 0, sizeof(int), integer, nil);
+			assert bighead_size(size, first, len) == 1;
+			//assert false;
+		}
+	}else{
+		// Make trailing emptyness a bit larger
+		assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
+		
+		array_merge(ring_buffer->fields);
+	}
+	@*/
+	//@close ring_buffer(ring_buffer, size, newfirst, len-1,  tail(elems));
+	
 	return elem;
 		
 }
