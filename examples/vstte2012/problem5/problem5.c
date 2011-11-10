@@ -199,7 +199,12 @@ fixpoint list<struct vertex *> get_succs(list<struct vertex *> vs, list<list<str
     return assoc2(v, vs, edges);
 }
 
-fixpoint list<a> concat<a>(list<list<a> > xs) { return fold_left(nil, append, xs); }
+fixpoint list<a> concat<a>(list<list<a> > xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x0, xs0): return append(x0, concat(xs0));
+    }
+}
 
 fixpoint list<struct vertex *> reachn(nat n, struct vertex *source, list<struct vertex *> vs, list<list<struct vertex *> > edges) {
     switch (n) {
@@ -221,9 +226,30 @@ lemma void forall_lset_remove<t>(list<t> xs, fixpoint(t, bool) p, t x);
     requires forall(xs, p) == true;
     ensures forall(lset_remove(xs, x), p) == true;
 
-lemma void reachn_succ(nat n, vertex source, list<vertex> vs, list<list<vertex> > edges, vertex v, vertex w);
+lemma void mem_concat_map<a, b>(fixpoint(a, list<b>) f, list<a> xs, a x, b y)
+    requires mem(x, xs) == true &*& mem(y, f(x)) == true;
+    ensures mem(y, concat(map(f, xs))) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+                assert concat(map(f, xs)) == append(f(x0), concat(map(f, xs0)));
+            } else {
+                mem_concat_map(f, xs0, x, y);
+            }
+            lset_union_contains(f(x0), concat(map(f, xs0)), y);
+    }
+}
+
+lemma void reachn_succ(nat n, vertex source, list<vertex> vs, list<list<vertex> > edges, vertex v, vertex w)
     requires mem(v, reachn(n, source, vs, edges)) == true &*& mem(w, assoc2(v, vs, edges)) == true;
     ensures mem(w, reachn(succ(n), source, vs, edges)) == true;
+{
+    assert mem(w, get_succs(vs, edges, v)) == true;
+    mem_concat_map((get_succs)(vs, edges), reachn(n, source, vs, edges), v, w);
+    lset_union_contains(concat(map((get_succs)(vs, edges), reachn(n, source, vs, edges))), reachn(n, source, vs, edges), w);
+}
 
 @*/
 
