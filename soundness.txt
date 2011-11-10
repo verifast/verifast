@@ -14,6 +14,7 @@ Known VeriFast unsoundnesses:
   does not affect the value at the other location.
   VeriFast does not check that the program obeys strict aliasing rules. Therefore, VeriFast is currently unsound for gcc -O2.
   However, this unsoundness does not apply to gcc -O2 -fno-strict-aliasing.
+- The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
 
 Java Programs
 =============
