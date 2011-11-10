@@ -239,20 +239,23 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 /*@ requires
 	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
 	&*& len > 0 // you can't pop nonexisting elements
-	// XXX No start-wrapping support yet
-	&*& len + first < size - 2
+
+
+	// XXX
+	&*& len > 1 // no become-empty support yet
 	;
 @*/
-//@ ensures ring_buffer(ring_buffer, size, first+1, len-1, tail(elems)) &*& result == head(elems);
+//@ ensures ring_buffer(ring_buffer, size, first == size - 1 ? 0 : first + 1, len-1, tail(elems)) &*& result == head(elems);
 {
-	int take_at;
-	int elem;
 	//@ open ring_buffer(ring_buffer, _, _, _, _);
+	int take_at = ring_buffer->first;
+	int elem;
+	
 	//@ assert ring_buffer->fields |-> ?fields;
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len)){
+		
 		//@ assume(false); // XXX
 	}else{
-		take_at = ring_buffer->first;
 		//@ open array(ring_buffer->fields + first, _, _, _, _); // Open stuff in empty_stuff_empty
 		elem = *(ring_buffer->fields + take_at);
 		
@@ -264,7 +267,8 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
 	}
 	ring_buffer->len = ring_buffer->len - 1;
 	ring_buffer->first = ring_buffer->first + 1;
-	//@ close ring_buffer(ring_buffer, size, first+1, len-1,  tail(elems));
+	if (ring_buffer->first == ring_buffer->size) ring_buffer->first = 0; // XXX hmm why can we also assign "first = ..." here if first is ghost??
+	//@ close ring_buffer(ring_buffer, size, first + 1 == size ? 0 : first + 1, len-1,  tail(elems));
 	return elem;
 		
 }
