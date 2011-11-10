@@ -79,7 +79,7 @@ lemma void char_limits(char *pc);
 
 lemma void chars_limits(char *array);
     requires [?f]chars(array, ?cs);
-    ensures [f]chars(array, cs) &*& cs == nil ? true : true == ((char *)0 <= array) &*& array + length(cs) <= (char *)UINTPTR_MAX;
+    ensures [f]chars(array, cs) &*& cs == nil ? true : true == ((char *)0 < array) &*& array + length(cs) <= (char *)UINTPTR_MAX;
 
 lemma void chars_split(char *array, int offset);
    requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= length(cs);
