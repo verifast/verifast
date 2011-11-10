@@ -189,7 +189,7 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	&*& len < size // you can't push more elements if it's already full.
 	;
 @*/
-//@ ensures ring_buffer(ring_buffer, size, first, len+1, ?items2) &*& append(items, cons(element, nil)) == items2; //take(len, items2) == items;
+//@ ensures ring_buffer(ring_buffer, size, first, len+1, ?items2) &*& append(items, cons(element, nil)) == items2;
 {
 
 	//@ open ring_buffer(ring_buffer, size, first, len, items);
@@ -197,7 +197,6 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	
 	int put_at;
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len+1)){
-		///@ assert is_split_up_fp(size, first, len) == true;
 		put_at = ring_buffer->len - (ring_buffer->size - ring_buffer->first);
 		
 		//@ assert array<int>(fields, bigtail_size(size, first, len), sizeof(int), integer, ?bigtail_elems);
@@ -229,6 +228,43 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
 	//@ close ring_buffer(ring_buffer, size, first, len+1, append(items, cons(element, nil)));
 }
 
+/* @  // XXX hm need this?
+lemma void array_split_last<t>(void *a)
+requires array<t>(a, ?size, ?elemsize, ?pred, ?elems) &*& size > 0;
+ensures array<t>(a, size-1, elemsize, pred, tail(elems)) &*& pred(a + elemsize * size - 1, 
+@*/
 
 // i.e. remove from beginning of queue
-//void *ring_buffer_pop(struct ring_buffer *ring_buffer)
+int ring_buffer_pop(struct ring_buffer *ring_buffer)
+/*@ requires
+	ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems)
+	&*& len > 0 // you can't pop nonexisting elements
+	// XXX No start-wrapping support yet
+	&*& len + first < size - 2
+	;
+@*/
+//@ ensures ring_buffer(ring_buffer, size, first+1, len-1, tail(elems)) &*& result == head(elems);
+{
+	int take_at;
+	int elem;
+	//@ open ring_buffer(ring_buffer, _, _, _, _);
+	//@ assert ring_buffer->fields |-> ?fields;
+	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len)){
+		//@ assume(false); // XXX
+	}else{
+		take_at = ring_buffer->first;
+		//@ open array(ring_buffer->fields + first, _, _, _, _); // Open stuff in empty_stuff_empty
+		elem = *(ring_buffer->fields + take_at);
+		
+		// Make trailing emptyness a bit larger
+		//@ assert array<int>(fields + first + len, size - first - len, sizeof(int), integer, ?trailing_emptyness_data);
+		
+		//@ close array<int>(ring_buffer->fields + take_at, 1, sizeof(int), integer, cons(elem, nil)); // array size one
+		//@ array_merge(ring_buffer->fields);
+	}
+	ring_buffer->len = ring_buffer->len - 1;
+	ring_buffer->first = ring_buffer->first + 1;
+	//@ close ring_buffer(ring_buffer, size, first+1, len-1,  tail(elems));
+	return elem;
+		
+}
