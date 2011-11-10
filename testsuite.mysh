@@ -173,6 +173,9 @@ verifast_both -c -disable_overflow_check problem3.java
 ifnotmac verifast -c -disable_overflow_check problem4.java
 verifast_both -c -disable_overflow_check problem5.java
 cd ..
+cd vstte2012
+mysh < run.mysh
+cd ..
 cd vacid-0
 ifnotmac verifast -c -disable_overflow_check Problem3.c
 cd ..
