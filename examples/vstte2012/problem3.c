@@ -233,9 +233,32 @@ ensures tail(l3) == l2;
 lemma void tail_of_singleton_is_nil<t>(list<t> l);
 requires length(l) == 1;
 ensures tail(l) == nil;
-// Meh. Prove doesn't work yet. XXX
+/*
+{
+	switch(l) {
+		case nil:
+			assert false;
+		case cons(head, x):
+			assert length(x) == 0;
+		case cons(head, cons(_, _)):
+			assert false;
+	}
+}
+*/
 @*/
 
+void ring_buffer_clear(struct ring_buffer *ring_buffer)
+//@ requires ring_buffer(ring_buffer, ?size, ?first, ?len, ?elems);
+//@ ensures ring_buffer(ring_buffer, size, first, 0, nil);
+{
+	//@ open ring_buffer(ring_buffer, size, first, len, elems);
+	//@ array_merge(ring_buffer->fields);
+	//@ array_merge(ring_buffer->fields);
+	ring_buffer->len = 0;
+	//@ array_split(ring_buffer->fields,first);
+	//@ close ring_buffer(ring_buffer, size, first, 0, nil);
+	
+}
 
 // i.e. remove from beginning of queue
 int ring_buffer_pop(struct ring_buffer *ring_buffer)
