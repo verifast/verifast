@@ -217,6 +217,14 @@ fixpoint bool has_mindist(vertex source, list<vertex> vs, list<list<vertex> > ed
       switch (n) { case zero: return true; case succ(n0): return !mem(v, reachn(n0, source, vs, edges)); };
 }
 
+lemma void forall_lset_remove<t>(list<t> xs, fixpoint(t, bool) p, t x);
+    requires forall(xs, p) == true;
+    ensures forall(lset_remove(xs, x), p) == true;
+
+lemma void reachn_succ(nat n, vertex source, list<vertex> vs, list<list<vertex> > edges, vertex v, vertex w);
+    requires mem(v, reachn(n, source, vs, edges)) == true &*& mem(w, assoc2(v, vs, edges)) == true;
+    ensures mem(w, reachn(succ(n), source, vs, edges)) == true;
+
 @*/
 
 
@@ -251,6 +259,8 @@ int bfs(struct vertex* source, struct vertex* dest)
         //@ close vsnode(current, _, v);
         //@ close vs(current, currentv);        
         current = vs_remove(current, v);
+        //@ forall_lset_remove(currentv, (lset_contains)(reachn(nat_of_int(distance), source, allvs, allsuccs)), v);
+        //@ assert vs(current, ?currentvnew) &*& forall(currentvnew, (lset_contains)(reachn(nat_of_int(distance), source, allvs, allsuccs))) == true;
         
         if(v == dest) 
         {
@@ -294,7 +304,7 @@ int bfs(struct vertex* source, struct vertex* dest)
         /*@ invariant vsseg(h, succs, ?succsvl) &*& vs(succs, ?succsvr) &*& succsv == append(succsvl, succsvr) &*&
                 vs(visited, ?visitedv2) &*& lset_equals(visitedv2, lset_union(visitedv, succsvl)) == true &*& 
                 vs(new, ?newv2) &*& lset_equals(newv2, lset_union(newv, lset_diff(succsvl, visitedv))) == true &*&
-                forall(newv, (lset_contains)(reachn(succ(nat_of_int(distance)), source, allvs, allsuccs))) == true;
+                forall(newv2, (lset_contains)(reachn(succ(nat_of_int(distance)), source, allvs, allsuccs))) == true;
         @*/
         {
             //@ open vsseg(succs, 0, succsvr);
@@ -308,6 +318,13 @@ int bfs(struct vertex* source, struct vertex* dest)
                 //@ assert lset_contains(visitedv, w) == false;
                 visited = vs_add(visited, w);
                 new = vs_add(new, w);
+                //@ assert succsv == assoc2(v, allvs, allsuccs);
+                //@ assert mem(w, succsvr) == true;
+                //@ lset_union_contains(succsvl, succsvr, w);
+                //@ assert mem(w, succsv) == true;
+                //@ assert mem(v, allvs) == true &*& mem(w, assoc2(v, allvs, allsuccs)) == true;
+                //@ reachn_succ(nat_of_int(distance), source, allvs, allsuccs, v, w);
+                //@ assert mem(w, reachn(succ(nat_of_int(distance)), source, allvs, allsuccs)) == true;
             } else {
                 //@ assert lset_contains(visitedv2, w) == true;
             }
