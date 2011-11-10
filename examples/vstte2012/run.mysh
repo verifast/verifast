@@ -3,6 +3,9 @@ verifast -prover redux -allow_assume -c -disable_overflow_check problem1.java
 cd ..
 cd problem2
 verifast -c -allow_assume problem2.java
+cd values
+verifast -prover redux -c Combinators.java
+cd ..
 cd ..
 cd problem3
 verifast -c problem3.c
