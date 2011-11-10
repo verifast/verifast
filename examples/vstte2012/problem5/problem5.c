@@ -4,6 +4,8 @@
 
 struct vertex;
 
+typedef struct vertex *vertex;
+
 struct vertex_set {
     struct vertex *value;
     struct vertex_set *next;
@@ -210,6 +212,11 @@ typedef lemma void not_reachable(struct vertex *source, list<struct vertex *> vs
     requires mem(v, reachn(n, source, vs, edges)) == true;
     ensures false;
 
+fixpoint bool has_mindist(vertex source, list<vertex> vs, list<list<vertex> > edges, nat n, vertex v) {
+    return mem(v, reachn(n, source, vs, edges)) &&
+      switch (n) { case zero: return true; case succ(n0): return !mem(v, reachn(n0, source, vs, edges)); };
+}
+
 @*/
 
 
@@ -221,8 +228,7 @@ int bfs(struct vertex* source, struct vertex* dest)
        result < 0 ?
            is_not_reachable(?lem, source, allvs, allsuccs, dest)
        :
-           mem(dest, reachn(nat_of_int(result), source, allvs, allsuccs)) == true &*&
-           result == 0 || !mem(dest, reachn(nat_of_int(result - 1), source, allvs, allsuccs));
+           has_mindist(source, allvs, allsuccs, nat_of_int(result), dest) == true;
    @*/
 {
     struct vertex_set* visited = vs_singleton(source);
@@ -231,7 +237,10 @@ int bfs(struct vertex* source, struct vertex* dest)
     int distance = 0;
     while(!vs_isempty(current)) 
     /*@ invariant graph(allvs, allsuccs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*& 
-            lset_subset(visitedv, allvs) == true &*& lset_subset(currentv, visitedv) == true &*& lset_subset(newv, visitedv) == true;
+            lset_subset(visitedv, allvs) == true &*& lset_subset(currentv, visitedv) == true &*& lset_subset(newv, visitedv) == true &*&
+            forall(currentv, (has_mindist)(source, allvs, allsuccs, nat_of_int(distance))) == true &*&
+            forall(newv, (has_mindist)(source, allvs, allsuccs, succ(nat_of_int(distance)))) == true &*&
+            forall(visitedv, (lset_contains)(reachn(nat_of_int(distance), source, allvs, allsuccs))) == true;
     @*/
     {
         //@ open vsseg(current, 0, currentv);
