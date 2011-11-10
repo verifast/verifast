@@ -1,3 +1,12 @@
+/*
+The specification below proves:
+  1. safety (no array indexing errors)
+  2. termination (via loop decreases: j - i + 1)
+  3. behavior 
+    (a) the resulting array is sorted (postcondition: is_sorted(vs2))
+    (b) the resulting array is a permutation of the original array (postcondition: is_perm(vs, vs2))
+*/
+
 /*@
 fixpoint boolean is_sorted(list<boolean> vs) {
   switch(vs) {

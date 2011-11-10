@@ -1,3 +1,8 @@
+/*
+The specification below proves 2.1, 2.2 and 2.3 (see comments below for more details).
+*/
+
+
 /*=== lemmas/methods related to 2.1 start here ===*/
 
 /* key idea: 
