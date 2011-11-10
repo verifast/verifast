@@ -147,30 +147,64 @@ struct vertex {
 
 /*@
 
-predicate vertex(struct vertex* v, list<struct vertex*> allvs) = 
+predicate vertex(struct vertex* v, list<struct vertex *> succs, list<struct vertex *> allvs) = 
     malloc_block_vertex(v) &*& v != 0 &*&
     v->succ |-> ?succ &*&
-    vs(succ, ?vs) &*&
-    lset_subset(vs, allvs) == true;
+    vs(succ, succs) &*&
+    lset_subset(succs, allvs) == true;
 
-predicate_ctor gvertex(list<struct vertex*> allvs) (struct vertex* v) = 
-    vertex(v, allvs);
-    
-predicate graph(list<struct vertex*> allvs) =
-    foreach(allvs, gvertex(allvs));
+predicate_ctor gvertex(list<struct vertex*> allvs)(struct vertex *v, list<struct vertex *> succs) =
+    vertex(v, succs, allvs);
+
+predicate foreach2<a, b>(list<a> xs, list<b> ys, predicate(a, b) p) =
+    switch (xs) {
+        case nil: return ys == nil;
+        case cons(x, xs0): return
+            switch (ys) {
+                case nil: return false;
+                case cons(y, ys0): return
+                    p(x, y) &*& foreach2(xs0, ys0, p);
+            };
+    };
+
+fixpoint list<b> remove2<a, b>(a x, list<a> xs, list<b> ys) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x0, xs0): return x0 == x ? tail(ys) : cons(head(ys), remove2(x, xs0, tail(ys)));
+    }
+}
+
+fixpoint b assoc2<a, b>(a x, list<a> xs, list<b> ys) {
+    switch (xs) {
+        case nil: return default_value;
+        case cons(x0, xs0): return x0 == x ? head(ys) : assoc2(x, xs0, tail(ys));
+    }
+}
+
+lemma void foreach2_remove<a, b>(a x, list<a> xs);
+    requires foreach2<a, b>(xs, ?ys, ?p) &*& mem(x, xs) == true;
+    ensures foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), p) &*& p(x, assoc2(x, xs, ys)) &*& length(ys) == length(xs);
+
+lemma void foreach2_unremove<a, b>(a x, list<a> xs, list<b> ys);
+    requires foreach2<a, b>(remove(x, xs), remove2(x, xs, ys), ?p) &*& length(ys) == length(xs) &*& p(x, assoc2(x, xs, ys));
+    ensures foreach2<a, b>(xs, ys, p);
+
+predicate graph(list<struct vertex *> allvs, list<list<struct vertex *> > succs) =
+    foreach2(allvs, succs, gvertex(allvs));
+
 @*/
 
 
 int bfs(struct vertex* source, struct vertex* dest) 
-   //@ requires graph(?allvs) &*& lset_contains(allvs, source) == true &*& lset_contains(allvs, dest) == true;
-   //@ ensures graph(allvs);
+   //@ requires graph(?allvs, ?allsuccs) &*& lset_contains(allvs, source) == true &*& lset_contains(allvs, dest) == true;
+   //@ ensures graph(allvs, allsuccs);
 {
     struct vertex_set* visited = vs_singleton(source);
     struct vertex_set* current = vs_singleton(source);
     struct vertex_set* new = vs_empty();
     int distance = 0;
     while(!vs_isempty(current)) 
-    /*@ invariant graph(allvs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*& 
+    /*@ invariant graph(allvs, allsuccs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*& 
             lset_subset(visitedv, allvs) == true &*& lset_subset(currentv, visitedv) == true &*& lset_subset(newv, visitedv) == true;
     @*/
     {
@@ -190,13 +224,13 @@ int bfs(struct vertex* source, struct vertex* dest)
             return distance;
         }
         
-        //@ open graph(allvs);
+        //@ open graph(allvs, allsuccs);
         //@ lset_subset_contains(currentv, visitedv, v);
         //@ lset_subset_contains(visitedv, allvs, v);
         //@ assert lset_contains(allvs, v) == true;
-        //@ foreach_remove(v, allvs);
-        //@ open gvertex(allvs)(v);
-        //@ open vertex(v, allvs);
+        //@ foreach2_remove(v, allvs);
+        //@ open gvertex(allvs)(v, ?vsuccs);
+        //@ open vertex(v, vsuccs, allvs);
         struct vertex_set* h = v->succ;
         struct vertex_set* succs = v->succ;
         //new new = union(old new, diff(succs, visited)); 
@@ -281,10 +315,10 @@ int bfs(struct vertex* source, struct vertex* dest)
         //@ append_nil(succsv);
         //@ assert succsv == succsvl;
         
-        //@ close vertex(v, allvs);
-        //@ close gvertex(allvs)(v);
-        //@ foreach_unremove(v, allvs);
-        //@ close graph(allvs);
+        //@ close vertex(v, vsuccs, allvs);
+        //@ close gvertex(allvs)(v, vsuccs);
+        //@ foreach2_unremove(v, allvs, allsuccs);
+        //@ close graph(allvs, allsuccs);
         
         if(vs_isempty(current)) {
             vs_dispose(current);
