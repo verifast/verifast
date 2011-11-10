@@ -1,0 +1,15 @@
+cd problem1
+verifast -prover redux -allow_assume -c -disable_overflow_check problem1.java
+cd ..
+cd problem2
+verifast -c -allow_assume problem2.java
+cd ..
+cd problem3
+verifast -c problem3.c
+cd ..
+cd problem4
+verifast -c treerec_list.c treerec_tree.c treerec.c
+cd ..
+cd problem5
+verifast -c listex2.c lset.c problem5.c
+cd ..
