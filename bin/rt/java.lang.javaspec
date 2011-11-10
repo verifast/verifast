@@ -7,6 +7,8 @@ inductive unit = unit;
 
 inductive pair<a, b> = pair(a, b);
 
+inductive option<t> = none | some(t);
+
 fixpoint a fst<a, b>(pair<a, b> p) {
     switch (p) {
         case pair(x, y): return x;

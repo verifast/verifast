@@ -9,7 +9,16 @@ fixpoint int int_of_nat(nat n) {
     }
 }
 
+fixpoint boolean is_even(nat n) {
+  switch(n) {
+    case zero: return true;
+    case succ(n0): return ! is_even(n0);
+  }
+}
+
 fixpoint nat nat_of_int(int n);
+
+
 
 lemma_auto(int_of_nat(nat_of_int(n))) void int_of_nat_of_int(int n);
     requires 0 <= n;
@@ -30,11 +39,19 @@ lemma_auto void nat_of_int_zero();
 lemma_auto(succ(nat_of_int(x))) void succ_int(int x);
   requires 0 <= x;
   ensures nat_of_int(x + 1) == succ(nat_of_int(x));
+
+
   
 fixpoint nat prev(nat n){
   switch(n) {
     case zero: return zero;
     case succ(n0): return n0;
   }
-} lemma void minuslemma(int x, int y);  requires 0 < x && x <= y;  ensures succ(nat_of_int(y - x)) == nat_of_int(y - int_of_nat(prev(nat_of_int(x))));
+} 
+
+lemma void minuslemma(int x, int y);
+  requires 0 < x && x <= y;
+  ensures succ(nat_of_int(y - x)) == nat_of_int(y - int_of_nat(prev(nat_of_int(x))));
+
+
 @*/
