@@ -182,8 +182,6 @@ int bfs(struct vertex* source, struct vertex* dest)
         //@ close vs(current, currentv);        
         current = vs_remove(current, v);
         
-        //@ lset_subset_contains(currentv, visitedv, v);
-        //@ lset_subset_contains(visitedv, allvs, v);
         if(v == dest) 
         {
             vs_dispose(current);
@@ -193,6 +191,8 @@ int bfs(struct vertex* source, struct vertex* dest)
         }
         
         //@ open graph(allvs);
+        //@ lset_subset_contains(currentv, visitedv, v);
+        //@ lset_subset_contains(visitedv, allvs, v);
         //@ assert lset_contains(allvs, v) == true;
         //@ foreach_remove(v, allvs);
         //@ open gvertex(allvs)(v);
@@ -201,7 +201,7 @@ int bfs(struct vertex* source, struct vertex* dest)
         struct vertex_set* succs = v->succ;
         //new new = union(old new, diff(succs, visited)); 
         //new visited = union(old visited, succs)); 
-        //@ assert vs(h, ?succsv);
+        //@ assert vs(h, ?succsv) &*& lset_subset(succsv, allvs) == true;
         //@ close vsseg(h, h, nil);
         /*@
             if(! lset_equals(visitedv, lset_union(visitedv, nil)) ) {
@@ -274,8 +274,13 @@ int bfs(struct vertex* source, struct vertex* dest)
                 }
             @*/
         }
+        //@ assert succs == 0;
         //@ open vs(succs, _);
         //@ open vsseg(succs, 0, _);
+        //@ assert succsvr == nil;
+        //@ append_nil(succsv);
+        //@ assert succsv == succsvl;
+        
         //@ close vertex(v, allvs);
         //@ close gvertex(allvs)(v);
         //@ foreach_unremove(v, allvs);
@@ -289,11 +294,52 @@ int bfs(struct vertex* source, struct vertex* dest)
             distance = distance + 1;
         }
         
-        //@ assert vs(current, ?currentv2) &*& vs(new, ?newv3) &*& vs(visited, ?visitedv3);
-        //@ assert lset_subset(visitedv3, allvs) == true;
-        //@ assert lset_subset(currentv2, visitedv) == true;
-        //@ assert lset_subset(newv3, visitedv) == true;
+        //@ assert vs(current, ?currentv2) &*& vs(new, ?newv3);
+        /*@ if(!lset_subset(visitedv2, allvs)) {
+                lset_subset_contains_conv(visitedv2, allvs);
+                open exwitness(?x);
+                lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), x);
+                lset_union_contains(visitedv, succsvl, x);
+                lset_subset_contains(succsvl, allvs, x); 
+                lset_subset_contains(visitedv, allvs, x); 
+                assert false;
+            }
+        @*/
+        /*@ if(!lset_subset(currentv2, visitedv2)) {
+                lset_subset_contains_conv(currentv2, visitedv2);
+                open exwitness(?x);
+                lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), x);
+                lset_union_contains(visitedv, succsvl, x);
+                if(currentv2 == newv2) {
+                    lset_subset_contains(newv, visitedv, x);
+                    lset_equals_contains(newv2, lset_union(newv, lset_diff(succsvl, visitedv)), x);
+                    lset_union_contains(newv, lset_diff(succsvl, visitedv), x);
+                    lset_diff_contains(succsvl, visitedv, x);
+                } else {
+                    lset_remove_contains(currentv, v, x);
+                    lset_subset_contains(currentv, visitedv, x);
+                }
+                assert false;
         
+            }
+        @*/
+        /*@ if(!lset_subset(newv3, visitedv2)) {
+                lset_subset_contains_conv(newv3, visitedv2);
+                open exwitness(?x);
+                lset_equals_contains(visitedv2, lset_union(visitedv, succsvl), x);
+                lset_union_contains(visitedv, succsvl, x);
+                if(newv3 != lset_empty()) {
+                    lset_subset_contains(newv, visitedv, x);
+                    lset_equals_contains(newv2, lset_union(newv, lset_diff(succsvl, visitedv)), x);
+                    lset_union_contains(newv, lset_diff(succsvl, visitedv), x);
+                    lset_diff_contains(succsvl, visitedv, x);
+                }
+                assert false;
+            }
+        @*/
     }
+    vs_dispose(current);
+    vs_dispose(new);
+    vs_dispose(visited);
     return -1;
 }
