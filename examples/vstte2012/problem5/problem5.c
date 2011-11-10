@@ -1,5 +1,6 @@
 #include "stdlib.h"
 //@ #include "lset.h"
+//@ #include "nat.h"
 
 struct vertex;
 
@@ -192,12 +193,37 @@ lemma void foreach2_unremove<a, b>(a x, list<a> xs, list<b> ys);
 predicate graph(list<struct vertex *> allvs, list<list<struct vertex *> > succs) =
     foreach2(allvs, succs, gvertex(allvs));
 
+fixpoint list<struct vertex *> get_succs(list<struct vertex *> vs, list<list<struct vertex *> > edges, struct vertex *v) {
+    return assoc2(v, vs, edges);
+}
+
+fixpoint list<a> concat<a>(list<list<a> > xs) { return fold_left(nil, append, xs); }
+
+fixpoint list<struct vertex *> reachn(nat n, struct vertex *source, list<struct vertex *> vs, list<list<struct vertex *> > edges) {
+    switch (n) {
+        case zero: return cons(source, nil);
+        case succ(n0): return append(concat(map((get_succs)(vs, edges), reachn(n0, source, vs, edges))), reachn(n0, source, vs, edges));
+    }
+}
+
+typedef lemma void not_reachable(struct vertex *source, list<struct vertex *> vs, list<list<struct vertex *> > edges, struct vertex *v)(nat n);
+    requires mem(v, reachn(n, source, vs, edges)) == true;
+    ensures false;
+
 @*/
 
 
 int bfs(struct vertex* source, struct vertex* dest) 
    //@ requires graph(?allvs, ?allsuccs) &*& lset_contains(allvs, source) == true &*& lset_contains(allvs, dest) == true;
-   //@ ensures graph(allvs, allsuccs);
+   /*@
+   ensures
+       graph(allvs, allsuccs) &*&
+       result < 0 ?
+           is_not_reachable(?lem, source, allvs, allsuccs, dest)
+       :
+           mem(dest, reachn(nat_of_int(result), source, allvs, allsuccs)) == true &*&
+           result == 0 || !mem(dest, reachn(nat_of_int(result - 1), source, allvs, allsuccs));
+   @*/
 {
     struct vertex_set* visited = vs_singleton(source);
     struct vertex_set* current = vs_singleton(source);
