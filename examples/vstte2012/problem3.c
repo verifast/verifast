@@ -184,30 +184,37 @@ struct ring_buffer *ring_buffer_create(int size)
 
 // i.e. add to end of queue.
 void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
-/*@ requires ring_buffer(ring_buffer, ?size, ?first, ?len, ?items)
-	// XXX extra stuff to make it more easy:
-	&*& len < size - 2 &*& first + len < size - 1;
+/*@ requires
+	ring_buffer(ring_buffer, ?size, ?first, ?len, ?items)
+	&*& len < size // you can't push more elements if it's already full.
+	;
 @*/
 //@ ensures ring_buffer(ring_buffer, size, first, len+1, ?items2) &*& append(items, cons(element, nil)) == items2; //take(len, items2) == items;
 {
 
 	//@ open ring_buffer(ring_buffer, size, first, len, items);
 	//@ assert ring_buffer->fields |-> ?fields;
+	
 	int put_at;
 	if (is_split_up(ring_buffer->size, ring_buffer->first, ring_buffer->len+1)){
-		//@ assert is_split_up_fp(size, first, len) == true;
+		///@ assert is_split_up_fp(size, first, len) == true;
 		put_at = ring_buffer->len - (ring_buffer->size - ring_buffer->first);
 		
 		//@ assert array<int>(fields, bigtail_size(size, first, len), sizeof(int), integer, ?bigtail_elems);
-		//@ assert array<int>(fields + first, _, _, _, ?bighead_elems);
+		//@ assert array<int>(fields + first, bighead_size(size, first, len), _, _, ?bighead_elems);
+
 		//@ open array<int>(ring_buffer->fields + bigtail_size(size, first, len), size - len, sizeof(int), integer, _); // open <s>happyness</s>emptyness.
 		*(ring_buffer->fields+put_at) = element;
-		// append to bigtail:
+
 		//@ close array<int>(ring_buffer->fields+put_at, 1, sizeof(int), integer, cons(element, nil)); // array of size one
-		
 		//@ append_assoc(bighead_elems, bigtail_elems, cons(element, nil));
 		
-		//@ array_merge<int>(ring_buffer->fields);
+		/*@
+		// Only need to merge if there is something to merge width, i.e. this is not the first element of bigtail.
+		if (is_split_up_fp(size,first,len)){
+			array_merge<int>(ring_buffer->fields);
+		}
+		@*/
 		
 		
 	}else{
