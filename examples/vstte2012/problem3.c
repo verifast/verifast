@@ -14,10 +14,10 @@ struct ring_buffer{
 };
 
 bool is_split_up(int size, int first, int len)
-//@ requires size * 4 < INT_MAX &*& len <= size;
+//@ requires size * 4 < INT_MAX &*& len <= size &*& len >= 0;
 //@ ensures result == is_split_up_fp(size, first, len);
 {
-	return first + len > size;
+	return first > size - len;
 }
 /*@
 fixpoint bool size_is_ok(int size){
@@ -114,9 +114,10 @@ predicate ring_buffer(struct ring_buffer *buffer, int size, int first, int len, 
 	&*& buffer->first |-> first
 	&*& buffer->len |-> len
 	
-	&*& malloc_block(fields, 4 * size)
+	&*& malloc_block(fields, sizeof(int) * size)
 	&*& malloc_block_ring_buffer(buffer)
-	
+
+	&*& fields + size <= (void*)UINTPTR_MAX
 	
 	&*& is_split_up_fp(size, first, len) ?
 	
@@ -163,11 +164,13 @@ struct ring_buffer *ring_buffer_create(int size)
 		free(ring_buffer);
 		return 0;
 	}
+	//@ chars_limits((void*)fields);
 	//@ chars_to_int_array(fields, size);
 	ring_buffer->fields =  fields;
 	ring_buffer->size = size;
 	ring_buffer->first = 0;
 	ring_buffer->len = 0;
+	
 	//@ close ring_buffer(ring_buffer, size, 0, 0, nil);
 	return ring_buffer;
 }
