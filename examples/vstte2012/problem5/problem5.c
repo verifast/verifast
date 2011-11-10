@@ -225,10 +225,11 @@ int bfs(struct vertex* source, struct vertex* dest)
    /*@
    ensures
        graph(allvs, allsuccs) &*&
-       result < 0 ?
-           is_not_reachable(?lem, source, allvs, allsuccs, dest)
-       :
-           has_mindist(source, allvs, allsuccs, nat_of_int(result), dest) == true;
+//       result < 0 ?
+//           is_not_reachable(?lem, source, allvs, allsuccs, dest)
+//       :
+//           has_mindist(source, allvs, allsuccs, nat_of_int(result), dest) == true;
+       result < 0 || mem(dest, reachn(nat_of_int(result), source, allvs, allsuccs));
    @*/
 {
     struct vertex_set* visited = vs_singleton(source);
@@ -236,11 +237,11 @@ int bfs(struct vertex* source, struct vertex* dest)
     struct vertex_set* new = vs_empty();
     int distance = 0;
     while(!vs_isempty(current)) 
-    /*@ invariant graph(allvs, allsuccs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*& 
+    /*@ invariant graph(allvs, allsuccs) &*& vs(visited, ?visitedv) &*& vs(current, ?currentv) &*& vs(new, ?newv) &*&
+            0 <= distance &*&
             lset_subset(visitedv, allvs) == true &*& lset_subset(currentv, visitedv) == true &*& lset_subset(newv, visitedv) == true &*&
-            forall(currentv, (has_mindist)(source, allvs, allsuccs, nat_of_int(distance))) == true &*&
-            forall(newv, (has_mindist)(source, allvs, allsuccs, succ(nat_of_int(distance)))) == true &*&
-            forall(visitedv, (lset_contains)(reachn(nat_of_int(distance), source, allvs, allsuccs))) == true;
+            forall(currentv, (lset_contains)(reachn(nat_of_int(distance), source, allvs, allsuccs))) == true &*&
+            forall(newv, (lset_contains)(reachn(succ(nat_of_int(distance)), source, allvs, allsuccs))) == true;
     @*/
     {
         //@ open vsseg(current, 0, currentv);
@@ -292,7 +293,8 @@ int bfs(struct vertex* source, struct vertex* dest)
         while(succs != 0)
         /*@ invariant vsseg(h, succs, ?succsvl) &*& vs(succs, ?succsvr) &*& succsv == append(succsvl, succsvr) &*&
                 vs(visited, ?visitedv2) &*& lset_equals(visitedv2, lset_union(visitedv, succsvl)) == true &*& 
-                vs(new, ?newv2) &*& lset_equals(newv2, lset_union(newv, lset_diff(succsvl, visitedv))) == true;
+                vs(new, ?newv2) &*& lset_equals(newv2, lset_union(newv, lset_diff(succsvl, visitedv))) == true &*&
+                forall(newv, (lset_contains)(reachn(succ(nat_of_int(distance)), source, allvs, allsuccs))) == true;
         @*/
         {
             //@ open vsseg(succs, 0, succsvr);
