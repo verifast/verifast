@@ -9,6 +9,7 @@ cd ..
 cd ..
 cd problem3
 verifast -c problem3.c
+verifast -disable_overflow_check -c problem3_alt.c
 cd ..
 cd problem4
 verifast -c treerec_list.c treerec_tree.c treerec.c
