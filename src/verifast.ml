@@ -7085,7 +7085,8 @@ let verify_program_core (* ?verify_program_core *)
       begin fun (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist)) ->
         let preds =
           preds |> List.map
-            begin fun (g, (l, pmap, family, symb, Some body)) ->
+            begin function
+              (g, (l, pmap, family, symb, Some body)) ->
               let tenv = (current_class, ClassOrInterfaceName cn)::("this", ObjType cn)::pmap in
               let (wbody, _) = check_asn (pn,ilist) [] tenv body in
               let fixed = check_pred_precise ["this"] wbody in
@@ -7095,6 +7096,7 @@ let verify_program_core (* ?verify_program_core *)
                 end
                 pmap;
               (g, (l, pmap, family, symb, Some wbody))
+            | pred -> pred
             end
         in
         (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
@@ -8830,7 +8832,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     classmap1 |> flatmap 
       (fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
         preds |> flatmap
-          (fun ((g, (l, pmap, family, psymb, Some wbody0)) as instance_predicate) ->
+          (fun ((g, (l, pmap, family, psymb, wbody_opt)) as instance_predicate) ->
+            match wbody_opt with None -> [] | Some wbody0 ->
             let pindices = [(List.assoc cn classterms)] in
             let instpred_tparams = [] in
             let fns = [cn] in
@@ -11920,7 +11923,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             Some {cpreds} ->
             begin match try_assoc g cpreds with
               None -> static_error l "No such predicate instance" None
-            | Some (lp, pmap, family, symb, Some body) -> (pmap, symb, body)
+            | Some (lp, pmap, family, symb, body_opt) ->
+              match body_opt with
+                None -> static_error l "Predicate does not have a body" None
+              | Some body -> (pmap, symb, body)
             end
           | None -> static_error l "Target of predicate instance call must be of class type" None
         in
@@ -12152,7 +12158,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             Some {cpreds} ->
             begin match try_assoc g cpreds with
               None -> static_error l "No such predicate instance" None
-            | Some (lp, pmap, family, symb, Some body) -> (lp, pmap, symb, body)
+            | Some (lp, pmap, family, symb, body_opt) ->
+              match body_opt with
+                None -> static_error l "Predicate does not have a body" None
+              | Some body -> (lp, pmap, symb, body)
             end
           | None -> static_error l "Target of predicate instance call must be of class type" None
         in

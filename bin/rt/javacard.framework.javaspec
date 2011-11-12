@@ -137,7 +137,7 @@ predicate_family shareable_interface_object(Class c)(Shareable sio, Applet owner
 
 class Applet {
     
-    //@ predicate valid() = false;
+    //@ predicate valid();
     
     public Applet();
         //@ requires true;
