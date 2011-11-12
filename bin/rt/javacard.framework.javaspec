@@ -10,8 +10,30 @@
 package javacard.framework;
 
 class CardRuntimeException extends RuntimeException {}
-class APDUException extends CardRuntimeException {}
-class SystemException extends CardRuntimeException {}
+
+class APDUException extends CardRuntimeException {
+    
+    public static final short BAD_LENGTH = 3;
+    public static final short BUFFER_BOUNDS = 2;
+    public static final short ILLEGAL_USE = 1;
+    public static final short IO_ERROR = 4;
+    public static final short NO_T0_GETRESPONSE = 170;
+    public static final short NO_T0_REISSUE = 172;
+    public static final short T1_IFD_ABORT = 171;
+    
+}
+
+class SystemException extends CardRuntimeException {
+    
+    public static final short ILLEGAL_AID = 4;
+    public static final short ILLEGAL_TRANSIENT = 3;
+    public static final short ILLEGAL_USE = 6;
+    public static final short ILLEGAL_VALUE = 1;
+    public static final short NO_RESOURCE = 5;
+    public static final short NO_TRANSIENT_SPACE = 2;
+    
+}
+
 class SecurityException extends RuntimeException {}
 
 class ISOException extends RuntimeException {
@@ -35,6 +57,26 @@ lemma_auto void APDU_inv();
 @*/
 
 class APDU {
+    
+    public static final byte PROTOCOL_MEDIA_CONTACTLESS_TYPE_A = -128;
+    public static final byte PROTOCOL_MEDIA_CONTACTLESS_TYPE_B = -112;
+    public static final byte PROTOCOL_MEDIA_DEFAULT = 0;
+    public static final byte PROTOCOL_MEDIA_MASK = -16;
+    public static final byte PROTOCOL_MEDIA_USB = -96;
+    public static final byte PROTOCOL_T0 = 0;
+    public static final byte PROTOCOL_T1 = 1;
+    public static final byte PROTOCOL_TYPE_MASK = 15;
+    public static final byte STATE_ERROR_IO = -3;
+    public static final byte STATE_ERROR_NO_T0_GETRESPONSE = -1;
+    public static final byte STATE_ERROR_NO_T0_REISSUE = -4;
+    public static final byte STATE_ERROR_T1_IFD_ABORT = -2;
+    public static final byte STATE_FULL_INCOMING = 2;
+    public static final byte STATE_FULL_OUTGOING = 6;
+    public static final byte STATE_INITIAL = 0;
+    public static final byte STATE_OUTGOING = 3;
+    public static final byte STATE_OUTGOING_LENGTH_KNOWN = 4;
+    public static final byte STATE_PARTIAL_INCOMING = 1;
+    public static final byte STATE_PARTIAL_OUTGOING = 5;
     
     public byte[] getBuffer();
         //@ requires APDU(this, ?buffer);
@@ -67,8 +109,6 @@ class APDU {
     public static byte getProtocol();
         //@ requires true;
         //@ ensures true;
-    
-    public static final byte PROTOCOL_T1 = 0x1;
     
 }
 
@@ -175,6 +215,13 @@ class Applet {
 
 class JCSystem {
     
+    public static final byte CLEAR_ON_DESELECT = 2;
+    public static final byte CLEAR_ON_RESET = 1;
+    public static final byte MEMORY_TYPE_PERSISTENT = 0;
+    public static final byte MEMORY_TYPE_TRANSIENT_DESELECT = 2;
+    public static final byte MEMORY_TYPE_TRANSIENT_RESET = 1;
+    public static final byte NOT_A_TRANSIENT_OBJECT = 0;
+    
     public static AID lookupAID(byte[] buffer, short offset, byte length);
         //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
         //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
@@ -197,8 +244,6 @@ class JCSystem {
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
         //@ requires registered_applets(?as);
         //@ ensures registered_applets(as) &*& result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true;
-    
-    public static final byte CLEAR_ON_DESELECT = 2;
     
 }
 
