@@ -25,7 +25,7 @@ public final class EPhone extends Applet {
     @*/
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _ &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
+    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _ &*& system();
     //@ ensures true;
     {
         EPhone Ephone = new EPhone();

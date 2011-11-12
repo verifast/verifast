@@ -126,13 +126,33 @@ interface Shareable {}
 
 /*@
 
-fixpoint boolean is_transient_array(byte[] a);
-predicate transient_arrays(; list<byte[]> arrays);
-predicate transient_array(byte[] a;) = array_slice(a, 0, a.length, _);
+fixpoint boolean is_transient_boolean_array(boolean[] a);
+predicate transient_boolean_arrays(; list<boolean[]> arrays);
+predicate transient_boolean_array(boolean[] a;) = array_slice(a, 0, a.length, _);
+lemma void transient_boolean_arrays_mem(boolean[] a);
+    requires transient_boolean_arrays(?as) &*& is_transient_boolean_array(a) == true;
+    ensures transient_boolean_arrays(as) &*& mem(a, as) == true;
 
-lemma void transient_arrays_mem(byte[] a);
-    requires transient_arrays(?as) &*& is_transient_array(a) == true;
-    ensures transient_arrays(as) &*& mem(a, as) == true;
+fixpoint boolean is_transient_byte_array(byte[] a);
+predicate transient_byte_arrays(; list<byte[]> arrays);
+predicate transient_byte_array(byte[] a;) = array_slice(a, 0, a.length, _);
+lemma void transient_byte_arrays_mem(byte[] a);
+    requires transient_byte_arrays(?as) &*& is_transient_byte_array(a) == true;
+    ensures transient_byte_arrays(as) &*& mem(a, as) == true;
+
+fixpoint boolean is_transient_short_array(short[] a);
+predicate transient_short_arrays(; list<short[]> arrays);
+predicate transient_short_array(short[] a;) = array_slice(a, 0, a.length, _);
+lemma void transient_short_arrays_mem(short[] a);
+    requires transient_short_arrays(?as) &*& is_transient_short_array(a) == true;
+    ensures transient_short_arrays(as) &*& mem(a, as) == true;
+
+fixpoint boolean is_transient_Object_array(Object[] a);
+predicate transient_Object_arrays(; list<Object[]> arrays);
+predicate transient_Object_array(Object[] a;) = array_slice(a, 0, a.length, _);
+lemma void transient_Object_arrays_mem(Object[] a);
+    requires transient_Object_arrays(?as) &*& is_transient_Object_array(a) == true;
+    ensures transient_Object_arrays(as) &*& mem(a, as) == true;
 
 predicate registered_applets(; list<Applet> as);
 
@@ -160,7 +180,11 @@ lemma void set_current_applet(Applet applet);
 predicate current_applet0(; Applet applet) =
     system_current_applet(applet) &*& registered_applets(?as) &*& mem(applet, as) == true &*& foreachp(remove(applet, as), semi_valid) &*& system_in_transaction(false);
 
-predicate system(;) = transient_arrays(?as) &*& foreachp(as, transient_array);
+predicate system(;) =
+    transient_boolean_arrays(?booleanArrays) &*& foreachp(booleanArrays, transient_boolean_array) &*&
+    transient_byte_arrays(?byteArrays) &*& foreachp(byteArrays, transient_byte_array) &*&
+    transient_short_arrays(?shortArrays) &*& foreachp(shortArrays, transient_short_array) &*&
+    transient_Object_arrays(?objectArrays) &*& foreachp(objectArrays, transient_Object_array);
 
 predicate current_applet(; Applet applet) =
     current_applet0(applet) &*& system();
@@ -237,9 +261,21 @@ class JCSystem {
         //@ requires in_transaction(?a) &*& a.valid();
         //@ ensures current_applet(a) &*& [1/2]a.valid();
     
+    public static boolean[] makeTransientBooleanArray(short length, byte event);
+        //@ requires transient_boolean_arrays(?as) &*& foreachp(as, transient_boolean_array);
+        //@ ensures result != null &*& result.length == length &*& transient_boolean_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_boolean_array) &*& is_transient_boolean_array(result) == true;
+    
     public static byte[] makeTransientByteArray(short length, byte event);
-        //@ requires transient_arrays(?as) &*& foreachp(as, transient_array);
-        //@ ensures result != null &*& result.length == length &*& transient_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_array) &*& is_transient_array(result) == true;
+        //@ requires transient_byte_arrays(?as) &*& foreachp(as, transient_byte_array);
+        //@ ensures result != null &*& result.length == length &*& transient_byte_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_byte_array) &*& is_transient_byte_array(result) == true;
+    
+    public static short[] makeTransientShortArray(short length, byte event);
+        //@ requires transient_short_arrays(?as) &*& foreachp(as, transient_short_array);
+        //@ ensures result != null &*& result.length == length &*& transient_short_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_short_array) &*& is_transient_short_array(result) == true;
+    
+    public static Object[] makeTransientObjectArray(short length, byte event);
+        //@ requires transient_Object_arrays(?as) &*& foreachp(as, transient_Object_array);
+        //@ ensures result != null &*& result.length == length &*& transient_Object_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_Object_array) &*& is_transient_Object_array(result) == true;
     
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
         //@ requires registered_applets(?as);

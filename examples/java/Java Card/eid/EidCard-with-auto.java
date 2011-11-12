@@ -595,7 +595,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
     buffer == null ?
       true
     :
-      array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length &*& is_transient_array(buffer) == true;
+      array_slice(buffer, 0, buffer.length, _) &*& buffer.length == length &*& is_transient_byte_array(buffer) == true;
 
   predicate selected_file_types(File theSelectedFile, MasterFile theMasterFile, DedicatedFile theBelpicDirectory, DedicatedFile theIdDirectory, ElementaryFile theIdentityFile, ElementaryFile theIdentityFileSignature, ElementaryFile theAddressFile, ElementaryFile theAddressFileSignature, ElementaryFile thePhotoFile, 
 	  ElementaryFile thecaRoleIDFile, ElementaryFile theDirFile, ElementaryFile theTokenInfo, ElementaryFile theObjectDirectoryFile, ElementaryFile theAuthenticationObjectDirectoryFile, ElementaryFile thePrivateKeyDirectoryFile, ElementaryFile theCaCertificate, ElementaryFile theCertificateDirectoryFile, ElementaryFile theRrnCertificate, ElementaryFile theRootCaCertificate, ElementaryFile theAuthenticationCertificate, ElementaryFile theNonRepudationCertificate, ElementaryFile thePreferencesFile; ElementaryFile theSelectedFile2) = 
@@ -631,9 +631,9 @@ public final class EidCard extends Applet {
             responseBuffer |-> ?theResponseBuffer &*& theResponseBuffer != null &*& array_slice(theResponseBuffer, 0, theResponseBuffer.length, _) &*& theResponseBuffer.length == 128 &*&
             randomData |-> ?theRandomData &*& theRandomData != null &*&
             cipher |-> ?theCipher &*& theCipher != null &*&
-            messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
-            previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
-            signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
+            messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_byte_array(theMessageBuffer) == true &*&
+            previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_byte_array(thePreviousApduType) == true &*&
+            signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_byte_array(theSignatureType) == true &*&
             masterFile |-> ?theMasterFile &*& theMasterFile.MasterFile(0x3F00, null, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
             cardholderPin |-> ?theCardholderPin &*& OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
             resetPin |-> ?theResetPin &*& OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
@@ -1439,9 +1439,9 @@ public final class EidCard extends Applet {
 				    [1/2]responseBuffer |-> ?theResponseBuffer &*& theResponseBuffer != null &*& [1/2]array_slice(theResponseBuffer, 0, theResponseBuffer.length, _) &*& theResponseBuffer.length == 128 &*&
 				    [1/2]randomData |-> ?theRandomData &*& theRandomData != null &*&
 				    [1/2]cipher |-> ?theCipher &*& theCipher != null &*&
-				    [1/2]messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_array(theMessageBuffer) == true &*&
-				    [1/2]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*&
-				    [1/2]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*&
+				    [1/2]messageBuffer |-> ?theMessageBuffer &*& theMessageBuffer != null &*& theMessageBuffer.length == 128 &*& is_transient_byte_array(theMessageBuffer) == true &*&
+				    [1/2]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_byte_array(thePreviousApduType) == true &*&
+				    [1/2]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_byte_array(theSignatureType) == true &*&
 				    [1/2]masterFile |-> ?theMasterFile &*& [1/2]theMasterFile.MasterFile(0x3F00, null, _, ?masterSibs, _) &*& theMasterFile != null &*& theMasterFile.getClass() == MasterFile.class &*&
 				    [1/2]cardholderPin |-> ?theCardholderPin &*& [1/2]OwnerPIN(theCardholderPin, _, _) &*& theCardholderPin != null &*& 
 				    [1/2]resetPin |-> ?theResetPin &*& [1/2]OwnerPIN(theResetPin, _, _) &*& theResetPin != null &*&
@@ -1623,7 +1623,7 @@ public final class EidCard extends Applet {
     	       &*& EidCard_PKCS1_HEADER(?thePKCS1HEADER) &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1
     	       &*& EidCard_PKCS1_SHA1_HEADER(?thePKCS1SHA1HEADER) &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _)&*& thePKCS1SHA1HEADER.length == 16
     	       &*& EidCard_PKCS1_MD5_HEADER(?thePKCS1MD5HEADER) &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19
-    	       &*& transient_arrays(?ta) &*& foreachp(ta, transient_array); @*/
+    	       &*& system(); @*/
     	//@ ensures true;
 	{
 		//@ open transient_array_pointer(mb, 128);
@@ -2290,10 +2290,10 @@ public final class EidCard extends Applet {
 		
 		////@ open valid(); // todo
 		
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as);
 		//@ foreachp_remove(messageBuffer, as);
-		////@ open transient_array(messageBuffer); // auto
+		////@ open transient_byte_array(messageBuffer); // auto
 		
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
 		////@ open [1/2]valid();
@@ -2301,19 +2301,19 @@ public final class EidCard extends Applet {
 		// copy the MD5 hash from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
 
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as);
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
 		////@ open [1/2]valid(); // auto
 		// generate signature
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as1);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as1);
 		//@ foreachp_remove(messageBuffer, as1);
-		//@ open transient_array(messageBuffer);
+		//@ open transient_byte_array(messageBuffer);
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as1);
 
 		////@ close [1/2]valid(); // auto
@@ -2352,29 +2352,29 @@ public final class EidCard extends Applet {
 		JCSystem.beginTransaction();
 		////@ open valid(); // auto
 		
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as);
 		//@ foreachp_remove(messageBuffer, as);
-		////@ open transient_array(messageBuffer); // auto
+		////@ open transient_byte_array(messageBuffer); // auto
 
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
 		preparePkcs1ClearText(messageBuffer, ALG_SHA1_PKCS1, lc);
 		// copy the SHA1 hash from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
 
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as);
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
 		////@ open [1/2]valid(); // auto
 		// generate signature
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as1);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as1);
 		//@ foreachp_remove(messageBuffer, as1);
-		////@ open transient_array(messageBuffer); // auto
+		////@ open transient_byte_array(messageBuffer); // auto
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
-		//@ close transient_array(messageBuffer); // todo
+		//@ close transient_byte_array(messageBuffer); // todo
 		//@ foreachp_unremove(messageBuffer, as1);
 		////@ close [1/2]valid(); // auto
 	}
@@ -2404,28 +2404,28 @@ public final class EidCard extends Applet {
 		JCSystem.beginTransaction();
 		////@ open valid(); // auto
 
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as);
 		//@ foreachp_remove(messageBuffer, as);
-		//@ open transient_array(messageBuffer);
+		//@ open transient_byte_array(messageBuffer);
 
 		// prepare the message buffer to the PKCS#1 (v1.5) structure
 		preparePkcs1ClearText(messageBuffer, ALG_PKCS1, lc);
 		// copy the clear text from the APDU to the message buffer
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA), messageBuffer, (short) (128 - lc), lc);
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as);
 
 		////@ close valid(); // auto
 		JCSystem.commitTransaction();
 		////@ open [1/2]valid(); // auto
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as1);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as1);
 		//@ foreachp_remove(messageBuffer, as1);
-		////@ open transient_array(messageBuffer); // auto
+		////@ open transient_byte_array(messageBuffer); // auto
 		// generate signature
 		cipher.doFinal(messageBuffer, (short) 0, (short) 128, buffer, (short) 0);
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as1);
 		////@ close [1/2]valid(); // auto
 	}
@@ -2703,10 +2703,10 @@ public final class EidCard extends Applet {
 		JCSystem.beginTransaction();
 		////@ open valid(); // auto
 		
-		//@ transient_arrays_mem(messageBuffer);
-		//@ assert transient_arrays(?as);
+		//@ transient_byte_arrays_mem(messageBuffer);
+		//@ assert transient_byte_arrays(?as);
 		//@ foreachp_remove(messageBuffer, as);
-		//@ open transient_array(messageBuffer);
+		//@ open transient_byte_array(messageBuffer);
 
 		if (basicKeyPair == null)
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
@@ -2730,7 +2730,7 @@ public final class EidCard extends Applet {
 		}
 		// decrement internal authenticate counter
 		//internalAuthenticateCounter--;
-		//@ close transient_array(messageBuffer);
+		//@ close transient_byte_array(messageBuffer);
 		//@ foreachp_unremove(messageBuffer, as);
 		
 		////@ close valid(); // auto
@@ -2818,56 +2818,56 @@ public final class EidCard extends Applet {
 	 * set the previous APDU type to a certain value
 	 */
 	private void setPreviousApduType(byte type) 
-  	    //@ requires previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
-      	    //@ ensures previousApduType |-> thePreviousApduType &*& thePreviousApduType != null &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
+  	    //@ requires previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_byte_array(thePreviousApduType) == true &*& transient_byte_arrays(?ta) &*& foreachp(ta, transient_byte_array);
+      	    //@ ensures previousApduType |-> thePreviousApduType &*& thePreviousApduType != null &*& transient_byte_arrays(ta) &*& foreachp(ta, transient_byte_array);
 	{
-		//@ transient_arrays_mem(thePreviousApduType);
+		//@ transient_byte_arrays_mem(thePreviousApduType);
 		//@ foreachp_remove(thePreviousApduType, ta);
-		//@ open transient_array(thePreviousApduType);
+		//@ open transient_byte_array(thePreviousApduType);
 		previousApduType[0] = type;
-		//@ close transient_array(thePreviousApduType); // todo
+		//@ close transient_byte_array(thePreviousApduType); // todo
 		//@ foreachp_unremove(thePreviousApduType, ta);
 	}
 	/**
 	 * return the previous APDU type
 	 */
 	private byte getPreviousApduType() 
-  	    //@ requires [?f]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_array(thePreviousApduType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
-  	    //@ ensures [f]previousApduType |-> thePreviousApduType &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
+  	    //@ requires [?f]previousApduType |-> ?thePreviousApduType &*& thePreviousApduType != null &*& thePreviousApduType.length == 1 &*& is_transient_byte_array(thePreviousApduType) == true &*& transient_byte_arrays(?ta) &*& foreachp(ta, transient_byte_array);
+  	    //@ ensures [f]previousApduType |-> thePreviousApduType &*& transient_byte_arrays(ta) &*& foreachp(ta, transient_byte_array);
 	{
-		//@ transient_arrays_mem(thePreviousApduType);
+		//@ transient_byte_arrays_mem(thePreviousApduType);
 		//@ foreachp_remove(thePreviousApduType, ta);
-		//@ open transient_array(thePreviousApduType);
+		//@ open transient_byte_array(thePreviousApduType);
 		return previousApduType[0];
-		//@ close transient_array(thePreviousApduType);
+		//@ close transient_byte_array(thePreviousApduType);
 		//@ foreachp_unremove(thePreviousApduType, ta);
 	}
 	/**
 	 * set the signature type to a certain value
 	 */
 	private void setSignatureType(byte type) 
-  	    //@ requires signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
-      	    //@ ensures signatureType |-> theSignatureType &*& is_transient_array(theSignatureType) == true &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
+  	    //@ requires signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_byte_array(theSignatureType) == true &*& transient_byte_arrays(?ta) &*& foreachp(ta, transient_byte_array);
+      	    //@ ensures signatureType |-> theSignatureType &*& is_transient_byte_array(theSignatureType) == true &*& transient_byte_arrays(ta) &*& foreachp(ta, transient_byte_array);
 	{
-		//@ transient_arrays_mem(theSignatureType);
+		//@ transient_byte_arrays_mem(theSignatureType);
 		//@ foreachp_remove(theSignatureType, ta);
-		//@ open transient_array(theSignatureType);
+		//@ open transient_byte_array(theSignatureType);
 		signatureType[0] = type;
-		//@ close transient_array(theSignatureType);
+		//@ close transient_byte_array(theSignatureType);
 		//@ foreachp_unremove(theSignatureType, ta);
 	}
 	/**
 	 * return the signature type
 	 */
 	private byte getSignatureType() 
-  	    //@ requires [?f]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_array(theSignatureType) == true &*& transient_arrays(?ta) &*& foreachp(ta, transient_array);
-      	    //@ ensures [f]signatureType |-> theSignatureType &*& transient_arrays(ta) &*& foreachp(ta, transient_array);
+  	    //@ requires [?f]signatureType |-> ?theSignatureType &*& theSignatureType != null &*& theSignatureType.length == 1 &*& is_transient_byte_array(theSignatureType) == true &*& transient_byte_arrays(?ta) &*& foreachp(ta, transient_byte_array);
+      	    //@ ensures [f]signatureType |-> theSignatureType &*& transient_byte_arrays(ta) &*& foreachp(ta, transient_byte_array);
 	{
-		//@ transient_arrays_mem(theSignatureType);
+		//@ transient_byte_arrays_mem(theSignatureType);
 		//@ foreachp_remove(theSignatureType, ta);
-		//@ open transient_array(theSignatureType);
+		//@ open transient_byte_array(theSignatureType);
 		return signatureType[0];
-		//@ close transient_array(theSignatureType);
+		//@ close transient_byte_array(theSignatureType);
 		//@ foreachp_unremove(theSignatureType, ta);
 	}
 	
