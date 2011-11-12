@@ -67,7 +67,7 @@ let () =
   | _ -> failwith "Please do not run this script directly; run build.ml instead."
   end;
   let (release, revision) = List.hd releases in
-  let exportdir = ".." // "exportdir"
+  let exportdir = ".." // "exportdir" in
   if Sys.file_exists exportdir then rm_Rf exportdir;
   sh (sprintf "svn export https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk@%d %s" revision exportdir);
   if Sys.file_exists "GNUmakefile.settings" then sh (sprintf "cp GNUmakefile.settings %s" exportdir);
