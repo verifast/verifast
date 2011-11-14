@@ -21,6 +21,7 @@ predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
 	&*& first >= 0 && first < size
 	&*& length(items) == len
 	&*& len <= size  
+	&*& fields + size <= (void*)UINTPTR_MAX
 	
 	&*& malloc_block(fields, 4 * size)
 	&*& malloc_block_ring_buffer(buffer)
@@ -45,6 +46,7 @@ struct ring_buffer *ring_buffer_create(int size)
 		free(ring_buffer);
 		return 0;
 	}
+	//@ chars_limits((void*)fields);	
 	//@ chars_to_int_array(fields, size);
 	ring_buffer->fields =  fields;
 	ring_buffer->size = size;
@@ -324,3 +326,11 @@ void test (int x, int y, int z)
     ring_buffer_dispose(b);
 }
 
+
+int main() //@ : main
+//@ requires true;
+//@ ensures true;
+{
+  test(1, 2, 3);
+  return 0;
+}

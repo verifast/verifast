@@ -9,7 +9,7 @@ cd ..
 cd ..
 cd problem3
 verifast -prover redux listex.o arrays.o problem3.c
-ifnotmac verifast -disable_overflow_check -c problem3_alt.c
+ifnotmac verifast listex.o arrays.o problem3_alt.c
 cd ..
 cd problem4
 verifast -prover redux listex.o treerec_list.c treerec_tree.c treerec.c
