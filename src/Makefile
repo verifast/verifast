@@ -13,24 +13,26 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe 
 	cd src
 	time < nl.txt
 
+# Verify the shipped modules with Redux so that we know the Mac build works
+
 ..\bin\list.vfmanifest: ..\bin\list.h ..\bin\list.c
 	cd ..\bin
-	verifast -c -emit_vfmanifest list.c
+	verifast -prover redux -c -emit_vfmanifest list.c
 	cd ..\src
 
 ..\bin\raw_ghost_lists.vfmanifest: ..\bin\raw_ghost_lists.h ..\bin\raw_ghost_lists.c
 	cd ..\bin
-	verifast -c -emit_vfmanifest raw_ghost_lists.c
+	verifast -prover redux -c -emit_vfmanifest raw_ghost_lists.c
 	cd ..\src
 
 ..\bin\listex.vfmanifest: ..\bin\listex.h ..\bin\listex.c
 	cd ..\bin
-	verifast -c -emit_vfmanifest listex.c
+	verifast -prover redux -c -emit_vfmanifest listex.c
 	cd ..\src
 
 ..\bin\arrays.vfmanifest: ..\bin\arrays.h ..\bin\arrays.c
 	cd ..\bin
-	verifast -c -emit_vfmanifest arrays.c
+	verifast -prover redux -c -emit_vfmanifest arrays.c
 	cd ..\src
 
 clean:

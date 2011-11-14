@@ -221,8 +221,8 @@ lemma void chars_to_array<T>(void *ptr, int array_nb_items)
         is_chars_to_any<T>(?convertor, ?array_item_pred, ?array_item_length)
         &*& [?f]chars(ptr, ?orig_elems)
         &*& array_nb_items >= 0
+        &*& (array_item_length == 1 ? true : array_item_length == 2 ? true : array_item_length == 4 ? true : array_item_length == 8)
         &*& array_nb_items * array_item_length == length(orig_elems)
-        &*& array_item_length == 1 || array_item_length == 2 || array_item_length == 4 || array_item_length == 8
         //&*& array_item_length > 0 // Doesn't work, but e.g. "==4" works.
     ;
 ensures

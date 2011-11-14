@@ -21,7 +21,7 @@ bool is_split_up(int size, int first, int len)
 }
 /*@
 fixpoint bool is_split_up_fp(int size, int first, int len){
-	return first + len > size;
+	return first > size - len;
 }
 
 fixpoint int bighead_size(int size, int first, int len){

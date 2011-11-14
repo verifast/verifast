@@ -164,6 +164,7 @@ lemma void build_rec0_n_le(nat n0, nat n1, int d, list<int> ds)
 {
     switch (n1) {
         case zero:
+            switch (n0) { case zero: case succ(n00): }
         case succ(n10):
             switch (n0) {
                 case zero:
@@ -207,6 +208,12 @@ lemma void build_rec0_n_le(nat n0, nat n1, int d, list<int> ds)
     }
 }
 
+lemma void note(bool b)
+    requires b;
+    ensures b;
+{
+}
+
 lemma void build_rec1_eq(int d, list<int> s)
     requires true;
     ensures
@@ -234,7 +241,8 @@ lemma void build_rec1_eq(int d, list<int> s)
             } else if (h == d) {
             } else {
                 le_max(max_func(0, h), s1);
-                assert fold_left(0, max_func, s) >= h;
+                note(fold_left(0, max_func, s) >= h);
+                assert h > d;
                 assert fold_left(0, max_func, s) > d;
                 build_rec0_n_le(succ(nat_of_int(fold_left(0, max_func, s) - d - 1)), nat_of_int(fold_left(0, max_func, s) - d), d+1, s);
                 switch (build_rec1(d+1, s)) {
@@ -398,16 +406,6 @@ char *check_tree(struct tree *t, char *spec)
         return 0;
     }
 }
-
-/*@
-
-lemma void note(bool b)
-    requires b;
-    ensures b;
-{
-}
-
-@*/
 
 int main() //@ : main
     //@ requires true;

@@ -2,18 +2,18 @@ cd problem1
 verifast -prover redux -c problem1.java
 cd ..
 cd problem2
-verifast -c problem2.java
+verifast -prover redux -c problem2.java
 cd values
 verifast -prover redux -c Combinators.java
 cd ..
 cd ..
 cd problem3
-verifast listex.o arrays.o problem3.c
-verifast -disable_overflow_check -c problem3_alt.c
+verifast -prover redux listex.o arrays.o problem3.c
+ifnotmac verifast -disable_overflow_check -c problem3_alt.c
 cd ..
 cd problem4
-verifast listex.o treerec_list.c treerec_tree.c treerec.c
+verifast -prover redux listex.o treerec_list.c treerec_tree.c treerec.c
 cd ..
 cd problem5
-verifast listex.o listex2.c lset.c problem5.c
+verifast -prover redux listex.o listex2.c lset.c problem5.c
 cd ..
