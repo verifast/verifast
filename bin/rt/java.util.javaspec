@@ -21,27 +21,13 @@ fixpoint boolean distinct<t>(list<t> xs) {
     }
 }
 
-lemma_auto(distinct(xs)) void distinct_tail<t>(list<t> xs)
+lemma_auto(distinct(xs)) void distinct_tail<t>(list<t> xs);
 requires distinct(xs) == true;
 ensures distinct(tail(xs)) == true;
-{
-	switch (xs) {
-		case nil:
-		case cons(x, xs0):
-			distinct_tail(xs0);
-	}
-}
 
-lemma_auto(fst_list(xs)) void equal_length<t1, t2>(list<pair<t1, t2> > xs)
+lemma_auto(fst_list(xs)) void equal_length<t1, t2>(list<pair<t1, t2> > xs);
  requires true;
  ensures length(xs) == length(fst_list(xs)) && length(xs) == length(snd_list(xs));
-{
-	switch (xs) {
-		case nil:
-		case cons(x0, xs0):
-			equal_length(xs0);
-	}
-}
 
 predicate list(List l, list<Object> val);
 

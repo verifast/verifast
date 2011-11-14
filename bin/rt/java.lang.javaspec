@@ -117,15 +117,45 @@ public class Object {
 
 public class Class {}
 
-public class Throwable {}
+public class Throwable {
 
-public class Exception extends Throwable {}
+    public Throwable();
+        //@ requires emp;
+        //@ ensures emp;
+    
+}
 
-public class Error extends Throwable {}
+public class Exception extends Throwable {
 
-public class InterruptedException {}
+    public Exception();
+        //@ requires emp;
+        //@ ensures emp;
+    
+}
 
-public class IOException extends Exception {}
+public class Error extends Throwable {
+
+    public Error();
+        //@ requires emp;
+        //@ ensures emp;
+    
+}
+
+public class InterruptedException {
+
+    public InterruptedException();
+        //@ requires emp;
+        //@ ensures emp;
+    
+}
+
+public class IOException extends Exception {
+    
+    public IOException();
+        //@ requires emp;
+        //@ ensures emp;
+    
+}
 
 public class ClosedChannelException extends IOException {}
 

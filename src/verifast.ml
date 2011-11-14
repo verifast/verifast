@@ -3932,6 +3932,9 @@ let verify_program_core (* ?verify_program_core *)
         false if the file being checked specifies the module being verified
     *)
   let rec check_file (filepath: string) (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
+  
+  let is_jarspec = Filename.check_suffix filepath ".jarspec" in
+  
   let
     (structmap0: struct_info map),
     (enummap0: enum_info map),
@@ -8920,7 +8923,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     (fun ((from_symb, from_indices, to_symb, path) as edge0) ->
       flatmap 
         (fun ((from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) as edge1) ->
-          if definitely_equal to_symb from_symb0 then
+          if to_symb == from_symb0 then
             let rec add_extra_conditions path = 
               match path with
                 [(outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
@@ -10055,6 +10058,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 Some (wpre, tenv, wpost, wepost, wpre_dyn, wpost_dyn, wepost_dyn)
             in
             let super_specs = if fb = Static then [] else super_specs_for_sign sign super interfs in
+            if not is_jarspec then
             List.iter
               begin fun (tn, (lsuper, gh', rt', xmap', pre', pre_tenv', post', epost', vis', abstract')) ->
                 if gh <> gh' then
@@ -10147,6 +10151,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   (* Default constructor insertion *)
 
   let classmap1 =
+    if is_jarspec then classmap1 else
     let rec iter classmap1_done classmap1_todo =
       match classmap1_todo with
         [] -> List.rev classmap1_done
