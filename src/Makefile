@@ -1,5 +1,6 @@
 # Note: Do not use executable names with dots in them. (See <http://caml.inria.fr/mantis/view.php?id=4719>.)
 
+PATH=$(MAKEDIR)\..\bin;$(PATH)
 OPT_OPTIONS=-g
 
 test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest
