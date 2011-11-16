@@ -10826,7 +10826,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       assume (ctxt#mk_eq (ctxt#mk_app arraylength_symbol [at]) length) $. fun () ->
       cont (Chunk ((array_slice_symb, true), [elem_tp], real_unit, [at; ctxt#mk_intlit 0; length; elems], None)::h) env at
     in
-    let rec execute_assign_op_expr l h env lhs get_values t1 cont =
+    let rec execute_assign_op_expr l h env lhs get_values cont =
       match lhs with
         Var(lx, x, _) ->
           check_assign l x;
@@ -10865,9 +10865,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               consume_chunk rules h ghostenv [] [] l (array_element_symb(), true) [elem_tp] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
                 cont (Chunk ((array_element_symb(), true), [elem_tp], real_unit, [arr; i; new_value], None)::h) env result_value
             )
-      | Deref (_, w, _) ->
+      | Deref (_, w, pointeeType) ->
         if pure then static_error l "Cannot write in a pure context." None;
-        let pointeeType = t1 in
+        let Some pointeeType = !pointeeType in
         eval_h h env w (fun h env target_term ->
           let predSymb = pointee_pred_symb l pointeeType in
           get_points_to (pn,ilist) h target_term predSymb l (fun _ _ stored_value ->
@@ -11131,7 +11131,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         cont h env result_value new_value
       )
       in
-      execute_assign_op_expr l h env lhs get_values (ObjType "java.lang.String") cont
+      execute_assign_op_expr l h env lhs get_values cont
     | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) as aoe ->
       assert(match !lhs_type with None -> false | _ -> true);
       let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
@@ -11145,7 +11145,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           cont h env result_value new_value
       ))
       in
-      execute_assign_op_expr l h env lhs get_values boolt cont
+      execute_assign_op_expr l h env lhs get_values cont
     | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) as aoe ->
         let Some [t1; t2] = ! ts in
         let Some lhs_type = ! lhs_type in
@@ -11249,7 +11249,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let result_value = if postOp then v1 else new_value in
           cont h env result_value new_value))
         in
-        execute_assign_op_expr l h env lhs get_values t1 cont
+        execute_assign_op_expr l h env lhs get_values cont
     | e -> 
       eval_non_pure_cps (fun (h, env) e cont -> eval_h h env e (fun h env t -> cont (h, env) t)) pure (h, env) env e (fun (h, env) v -> cont h env v)
   in
