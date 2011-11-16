@@ -122,7 +122,11 @@ class AID {
     
 }
 
-interface Shareable {}
+interface Shareable {
+
+    //@ predicate Shareable(Applet owner);
+
+}
 
 /*@
 
@@ -195,8 +199,6 @@ predicate in_transaction0(; Applet applet) =
 predicate in_transaction(; Applet applet) =
     in_transaction0(applet) &*& system();
 
-predicate_family shareable_interface_object(Class c)(Shareable sio, Applet owner);
-
 @*/
 
 class Applet {
@@ -233,7 +235,7 @@ class Applet {
     
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter);
         //@ requires registered_applets(?as) &*& mem<Applet>(this, as) == true &*& AID(clientAID);
-        //@ ensures registered_applets(as) &*& AID(clientAID) &*& result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true;
+        //@ ensures registered_applets(as) &*& AID(clientAID) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
     
 }
 
@@ -279,7 +281,7 @@ class JCSystem {
     
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
         //@ requires registered_applets(?as);
-        //@ ensures registered_applets(as) &*& result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true;
+        //@ ensures registered_applets(as) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
     
 }
 

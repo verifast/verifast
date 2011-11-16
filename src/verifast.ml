@@ -3835,6 +3835,7 @@ let verify_program_core (* ?verify_program_core *)
     type interface_inst_pred_info =
         loc
       * type_ map (* parameters *)
+      * string (* family (= class or interface that first declared the predicate) *)
       * termnode (* predicate symbol *)
     type interface_info =
       InterfaceInfo of
@@ -5244,11 +5245,13 @@ let verify_program_core (* ?verify_program_core *)
   let predfammap = predfammap1 @ predfammap0 in (* TODO: Check for name clashes here. *)
   
   let interfmap1 =
-    interfmap1 |> List.map
-      begin fun (tn, (li, fields, methods, preds, interfs, pn, ilist)) ->
-        let rec iter predmap preds =
+    let rec iter_interfs interfmap1_done interfmap1_todo =
+      match interfmap1_todo with
+        [] -> List.rev interfmap1_done
+      | (tn, (li, fields, methods, preds, interfs, pn, ilist))::interfmap1_todo ->
+        let rec iter_preds predmap preds =
           match preds with
-            [] -> (tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist))
+            [] -> iter_interfs ((tn, (li, fields, methods, List.rev predmap, interfs, pn, ilist))::interfmap1_done) interfmap1_todo
           | InstancePredDecl (l, g, ps, body)::preds ->
             if List.mem_assoc g predmap then static_error l "Duplicate predicate name." None;
             let pmap =
@@ -5262,10 +5265,36 @@ let verify_program_core (* ?verify_program_core *)
               in
               iter [] ps
             in
-            iter ((g, (l, pmap, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None))))::predmap) preds
+            let (family, symb) =
+              let rec preds_in_itf tn =
+                let check_itfmap get_preds_and_itfs itfmap fallback =
+                  begin match try_assoc tn itfmap with
+                    Some info ->
+                    let (preds, itfs) = get_preds_and_itfs info in
+                    begin match try_assoc g preds with
+                      Some (l, pmap, family, symb) -> [(family, pmap, symb)]
+                    | None -> flatmap preds_in_itf itfs
+                    end
+                  | None -> fallback ()
+                  end
+                in
+                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> (preds, interfs)) interfmap1_done $. fun () ->
+                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> (preds, interfs)) interfmap0 $. fun () ->
+                []
+              in
+              match flatmap preds_in_itf interfs with
+                [] -> (tn, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None)))
+              | [(family, pmap0, symb)] ->
+                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
+                  static_error l "Predicate override check: parameter count mismatch" None;
+                (family, symb)
+              | _ -> static_error l "Ambiguous override: multiple overridden predicates" None
+            in
+            iter_preds ((g, (l, pmap, family, symb))::predmap) preds
         in
-        iter [] preds
-      end
+        iter_preds [] preds
+    in
+    iter_interfs [] interfmap1
   in
   
   let classmap1 =
@@ -5291,19 +5320,20 @@ let verify_program_core (* ?verify_program_core *)
               iter [] ps
             in
             let (family, symb) =
-              let preds_in_itf tn =
-                let check_itfmap get_preds itfmap fallback =
+              let rec preds_in_itf tn =
+                let check_itfmap get_preds_and_itfs itfmap fallback =
                   begin match try_assoc tn itfmap with
                     Some info ->
-                    begin match try_assoc g (get_preds info) with
-                      Some (l, pmap, symb) -> [(tn, pmap, symb)]
-                    | None -> []
+                    let (preds, itfs) = get_preds_and_itfs info in
+                    begin match try_assoc g preds with
+                      Some (l, pmap, family, symb) -> [(family, pmap, symb)]
+                    | None -> flatmap preds_in_itf itfs
                     end
                   | None -> fallback ()
                   end
                 in
-                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> preds) interfmap1 $. fun () ->
-                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> preds) interfmap0 $. fun () ->
+                check_itfmap (function (li, fields, methods, preds, interfs, pn, ilist) -> (preds, interfs)) interfmap1 $. fun () ->
+                check_itfmap (function InterfaceInfo (li, fields, methods, preds, interfs) -> (preds, interfs)) interfmap0 $. fun () ->
                 []
               in
               let rec preds_in_class cn =
@@ -6609,7 +6639,7 @@ let verify_program_core (* ?verify_program_core *)
                       Some info ->
                       let (interfs, preds) = get_interfs_and_preds info in
                       begin match try_assoc p#name preds with
-                        Some (_, pmap, symb) -> [(itf, pmap)]
+                        Some (_, pmap, family, symb) -> [(family, pmap)]
                       | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
                       end
                     | None -> fallback ()
@@ -6693,14 +6723,14 @@ let verify_program_core (* ?verify_program_core *)
             begin match try_assoc cn interfmap1 with
               Some (_, fields, methods, preds, intefs, pn, ilist) ->
               begin match try_assoc g preds with
-                Some (_, pmap, symb) -> check_call cn pmap
+                Some (_, pmap, family, symb) -> check_call family pmap
               | None -> error ()
               end
             | None ->
               begin match try_assoc cn interfmap0 with
                 Some (InterfaceInfo (_, fields, methods, preds, interfs)) ->
                 begin match try_assoc g preds with
-                  Some (_, pmap, symb) -> check_call cn pmap
+                  Some (_, pmap, family, symb) -> check_call family pmap
                 | None -> error ()
                 end
               | None -> assert false
@@ -8021,10 +8051,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
             | None ->
               let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
-              let (_, pmap, symb) = List.assoc g preds in
+              let (_, pmap, family, symb) = List.assoc g preds in
               (pmap, symb)
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
@@ -8543,10 +8573,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let (_, pmap, _, symb, _) = List.assoc g cpreds in (pmap, symb)
           | None ->
             match try_assoc tn interfmap1 with
-              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc g preds in (pmap, symb)
+              Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc g preds in (pmap, symb)
             | None ->
               let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc tn interfmap0 in
-              let (_, pmap, symb) = List.assoc g preds in
+              let (_, pmap, family, symb) = List.assoc g preds in
               (pmap, symb)
       in
       let target = match e_opt with None -> List.assoc "this" env | Some e -> ev e in
@@ -8796,10 +8826,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
                   | None ->
                     match try_assoc static_type_name interfmap1 with
-                      Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                      Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                     | None ->
                       let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
-                      let (_, pmap, symb) = List.assoc instance_pred_name preds in
+                      let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
                       (pmap, symb)
               in
               if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
@@ -8881,10 +8911,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
                     | None ->
                       match try_assoc static_type_name interfmap1 with
-                        Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+                        Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
                       | None ->
                         let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
-                        let (_, pmap, symb) = List.assoc instance_pred_name preds in
+                        let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
                         (pmap, symb)
                 in
                 if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin

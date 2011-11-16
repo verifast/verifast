@@ -128,7 +128,7 @@ public final class EPhone extends Applet {
           //@ assert registered_applets(?as);
           //@ foreachp_unremove<Applet>(this,as);
           //@ mem_registered_applets_is(this);
-          //@ assert shareable_interface_object(sio.getClass())(sio, ?a);
+          //@ assert sio.Shareable(?a);
           //@ set_current_applet(a);
           //@ foreachp_remove<Applet>(a,as);
           //@ open full_valid(a);

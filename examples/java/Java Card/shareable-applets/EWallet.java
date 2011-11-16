@@ -2,10 +2,10 @@ package wallet;
 
 import javacard.framework.*;
 
-//@ predicate_family_instance shareable_interface_object(EWallet.class)(Shareable sio, EWallet owner) = sio == owner;
-
 public final class EWallet extends Applet implements EWalletInterface {
 
+    //@ predicate Shareable(Applet owner) = owner == this;
+    
     //CLA byte
     static final byte EWallet_CLA =(byte)0x80;
 
@@ -232,24 +232,24 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public void verify(byte[] pincode, short offset, byte length) 
-    //@ requires array_slice(pincode, 0, pincode.length,_) &*& shareable_interface_object(this.getClass())(this, ?a) &*& in_transaction(a) &*& a.valid();
-    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& shareable_interface_object(this.getClass())(this, a) &*& in_transaction(a) &*& a.valid();
+    //@ requires array_slice(pincode, 0, pincode.length,_) &*& Shareable(?a) &*& in_transaction(a) &*& a.valid();
+    //@ ensures array_slice(pincode, 0, pincode.length,_) &*& Shareable(a) &*& in_transaction(a) &*& a.valid();
     {
-    	//@ open shareable_interface_object(EWallet.class)(this, _);
+    	//@ open Shareable(_);
     	//@ open valid();
     	if (offset < 0 || length < 0 || offset + length > pincode.length)
     	    ISOException.throwIt(ISO7816.SW_WRONG_DATA);
         if ( pin.check(pincode, /*(short)0*/ offset, length) == false )
             ISOException.throwIt(SW_VERIFICATION_FAILED);
         //@ close valid();
-    	//@ close shareable_interface_object(EWallet.class)(this, this);
+    	//@ close Shareable(this);
     }
 
     public void debit(byte debitAmount) 
-    //@ requires 0 <= debitAmount &*& shareable_interface_object(this.getClass())(this, ?a) &*& in_transaction(a) &*& a.valid();
-    //@ ensures shareable_interface_object(this.getClass())(this, a) &*& in_transaction(a) &*& a.valid();
+    //@ requires 0 <= debitAmount &*& Shareable(?a) &*& in_transaction(a) &*& a.valid();
+    //@ ensures Shareable(a) &*& in_transaction(a) &*& a.valid();
     {
-    	//@ open shareable_interface_object(EWallet.class)(this, _);
+    	//@ open Shareable(_);
     	//@ open valid();
         if (!pin.isValidated())
             ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
@@ -270,13 +270,13 @@ public final class EWallet extends Applet implements EWalletInterface {
 	//@ open valid();
         balance = newBalance;
         //@ close valid();
-    	//@ close shareable_interface_object(EWallet.class)(this, this);
+    	//@ close Shareable(this);
     }
 
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter)
     	//@ requires registered_applets(?as) &*& mem<Applet>(this,as) == true &*& AID(clientAID);
     	/*@ ensures registered_applets(as) &*& mem<Applet>(this,as) == true &*& AID(clientAID) &*&
-    	        result == null ? true : shareable_interface_object(result.getClass())(result, ?a) &*& mem<Applet>(a, as) == true; @*/
+    	        result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true; @*/
     {
     	if(clientAID == null)
     	    return null;
@@ -289,7 +289,7 @@ public final class EWallet extends Applet implements EWalletInterface {
         if(parameter != (byte)0x01)
             return null;
 
-	//@ close shareable_interface_object(EWallet.class)(this, this);
+	//@ close Shareable(this);
         return (Shareable)this;
     }
 }
