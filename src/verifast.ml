@@ -3506,8 +3506,8 @@ let verify_program_core (* ?verify_program_core *)
   let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
   let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
   let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
-  let shiftleft_symbol = mk_symbol "shiftleft" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
-  let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in
+  let shiftleft_int32_symbol = mk_symbol "shiftleft_int32" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in (* shift left and truncate to 32-bit signed integer; Java's "<<" operator on two ints *)
+  let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
   let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp in
   let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp in
   
@@ -5822,6 +5822,7 @@ let verify_program_core (* ?verify_program_core *)
     | Operation (l, (ShiftLeft | ShiftRight as op), [e1; e2], ts) ->
       let w1 = checkt e1 IntType in
       let w2 = checkt e2 IntType in
+      ts := Some [IntType; IntType];
       (Operation (l, op, [w1; w2], ts), IntType, None)
     | IntLit (l, n, t) -> (e, (match !t with None -> t := Some intt; intt | Some t -> t), Some n)
     | RealLit(l, n) -> (e, RealType, None)
@@ -6129,7 +6130,8 @@ let verify_program_core (* ?verify_program_core *)
        | _ -> static_error l "Arguments to &=, &= and ^= must be boolean or integral types." None
       end
     | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp, ts, lhs_type) ->
-      let w1 = checkt e1 IntType in
+      let (w1, t1, _) = check e1 in
+      if t1 <> IntType then static_error (expr_loc e1) "Variable of type int expected" None;
       let w2 = checkt e2 IntType in
       lhs_type := Some IntType;
       ts := Some [IntType; IntType];
@@ -7452,7 +7454,7 @@ let verify_program_core (* ?verify_program_core *)
       end;
       app
     | Mod -> ctxt#mk_mod v1 v2
-    | ShiftLeft -> ctxt#mk_app shiftleft_symbol [v1;v2]
+    | ShiftLeft when ts = Some [IntType; IntType] -> ctxt#mk_app shiftleft_int32_symbol [v1;v2]
     | _ -> static_error l "This operator is not supported in this position." None
     end
   in
@@ -10753,6 +10755,28 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
+  let module LValues = struct
+    type lvalue =
+      LocalVar of loc * string
+    | GlobalVar of loc * string
+    | Field of
+        loc
+      * termnode option (* target struct instance or object; None if static *)
+      * string (* parent, i.e. name of struct or class *)
+      * string (* field name *)
+      * type_ (* range, i.e. field type *)
+      * ghostness
+    | ArrayElement of
+        loc
+      * termnode (* array *)
+      * type_ (* element type *)
+      * termnode (* index *)
+    | Deref of (* C dereference operator, e.g. *p *)
+        loc
+      * termnode
+      * type_ (* pointee type *)
+  end in
+  
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e (fun h env v -> cont h env v) econt in
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
@@ -10854,7 +10878,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             )
           )
         )
-      | Upcast(e, _, _) -> execute_assign_op_expr l h env e get_values t1 cont
       | _ -> static_error l "Cannot assign to left hand side." None
     in
     match e with
@@ -11208,12 +11231,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               IntType -> app
             | _ -> check_overflow min_term app max_term
             end 
-          | ShiftLeft ->
-            let app = ctxt#mk_app shiftleft_symbol [v1;v2] in
+          | ShiftLeft when !ts = Some [IntType; IntType] ->
+            let app = ctxt#mk_app shiftleft_int32_symbol [v1;v2] in
             begin match bounds with
               None -> ()
             | Some(min_term, max_term) -> 
-              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_term app) (ctxt#mk_le app max_term)));
+              ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term app) (ctxt#mk_le app max_int_term)));
             end; 
             begin match lhs_type with
               IntType -> app
