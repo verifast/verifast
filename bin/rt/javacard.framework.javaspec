@@ -120,6 +120,10 @@ class AID {
         //@ requires [?f1]AID(this) &*& [?f2]array_slice(bArray, offset, offset + length, ?elems);
         //@ ensures [f1]AID(this) &*& [f2]array_slice(bArray, offset, offset + length, elems);
     
+    public boolean equals(Object other);
+        //@ requires true;
+        //@ ensures true;
+    
 }
 
 interface Shareable {
@@ -218,7 +222,7 @@ class Applet {
         //@ ensures true;
     
     public void register(byte[] bArray, short bOffset, byte bLength);
-        //@ requires this.valid() &*& system();
+        //@ requires this.valid() &*& system() &*& array_slice(bArray, bOffset, bLength, _);
         //@ ensures true;
     
     public boolean select();
@@ -234,8 +238,8 @@ class Applet {
         //@ ensures current_applet(this) &*& [1/2]this.valid() &*& APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
     
     public Shareable getShareableInterfaceObject(AID clientAID, byte parameter);
-        //@ requires registered_applets(?as) &*& mem<Applet>(this, as) == true &*& AID(clientAID);
-        //@ ensures registered_applets(as) &*& AID(clientAID) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
+        //@ requires [1/2]this.valid() &*& registered_applets(?as) &*& foreachp(remove(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& AID(clientAID);
+        //@ ensures [1/2]this.valid() &*& registered_applets(as) &*& foreachp(remove(this, as), semi_valid) &*& AID(clientAID) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
     
 }
 
@@ -251,6 +255,10 @@ class JCSystem {
     public static AID lookupAID(byte[] buffer, short offset, byte length);
         //@ requires [?f]array_slice(buffer, offset, offset + length, ?elems);
         //@ ensures [f]array_slice(buffer, offset, offset + length, elems);
+    
+    public static AID getPreviousContextAID();
+        //@ requires true;
+        //@ ensures true;
     
     public static void beginTransaction();
         //@ requires current_applet0(?a);
@@ -280,14 +288,29 @@ class JCSystem {
         //@ ensures result != null &*& result.length == length &*& transient_Object_arrays(cons(result, as)) &*& foreachp(cons(result, as), transient_Object_array) &*& is_transient_Object_array(result) == true;
     
     public static Shareable getAppletShareableInterfaceObject(AID serverAID, byte parameter);
-        //@ requires registered_applets(?as);
-        //@ ensures registered_applets(as) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
+        /*@
+        requires
+            system_in_transaction(?inTx) &*& system_current_applet(?a) &*& registered_applets(?as) &*&
+            inTx ?
+                foreachp(remove(a, as), full_valid) &*& a.valid()
+            :
+                foreachp(remove(a, as), semi_valid) &*& [1/2]a.valid();
+        @*/
+        /*@
+        ensures
+            system_in_transaction(inTx) &*& system_current_applet(a) &*& registered_applets(as) &*&
+            (inTx ?
+                foreachp(remove(a, as), full_valid) &*& a.valid()
+            :
+                foreachp(remove(a, as), semi_valid) &*& [1/2]a.valid()) &*&
+            result == null ? true : result.Shareable(?a0) &*& mem<Applet>(a0, as) == true;
+        @*/
     
 }
 
 class Util {
     
-    public static final byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+    public static byte arrayCompare(byte[] src, short srcOff, byte[] dest, short destOff, short length);
         //@ requires [?f1]array_slice(src, srcOff, srcOff + length, ?elems1) &*& [?f2]array_slice(dest, destOff, destOff + length, ?elems2);
         //@ ensures [f1]array_slice(src, srcOff, srcOff + length, elems1) &*& [f2]array_slice(dest, destOff, destOff + length, elems2);
     
@@ -295,22 +318,26 @@ class Util {
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _) &*& !is_persistent_object(dest);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
     
-    public static final short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
+    public static short arrayCopy(byte[] src, short srcOff, byte[] dest, short destOff, short length);
         //@ requires [?f]array_slice(src, srcOff, srcOff + length, ?elems) &*& array_slice(dest, destOff, destOff + length, _);
         //@ ensures [f]array_slice(src, srcOff, srcOff + length, elems) &*& array_slice(dest, destOff, destOff + length, elems) &*& result == destOff + length;
     
-    public static final short getShort(byte[] bArray, short bOff);
+    public static short getShort(byte[] bArray, short bOff);
         //@ requires [?f]array_slice(bArray, bOff, bOff + 2, ?elems);
         //@ ensures [f]array_slice(bArray, bOff, bOff + 2, elems);
     
     // Note: Calling this method on a persistent object is sound only if the call is the only update operation in the transaction. This is not yet enforced by VeriFast.
-    public static final void arrayFillNonAtomic(byte[] bArray, short bOff, short bLen, byte bValue);
+    public static void arrayFillNonAtomic(byte[] bArray, short bOff, short bLen, byte bValue);
         //@ requires array_slice(bArray, bOff, bOff + bLen, _);
         //@ ensures array_slice(bArray, bOff, bOff + bLen, _); // Because of the non-atomic nature of this call, it is crucial for soundness that this postcondition does not specify the new value of the array elements.
     
-    public static final short makeShort(byte b1, byte b2);
+    public static short makeShort(byte b1, byte b2);
         //@ requires true;
         //@ ensures true;
+    
+    public static short setShort(byte[] dest, short offset, short value)
+        //@ requires array_slice(dest, offset, offset + 2, _);
+        //@ ensures array_slice(dest, offset, offset + 2, _);
     
 }
 

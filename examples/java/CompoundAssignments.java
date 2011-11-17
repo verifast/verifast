@@ -8,6 +8,10 @@ class CompoundAssignments {
     int x = 0;
     x += (++x) + (++x) + (x+=1);
     //@ assert x == 6;
+    int y = 0;
+    int z = 0;
+    int t = (x = 2) + (y = 3) + (z = 4);
+    assert t == 9 && x == 2 && y == 3 && z == 4;
   }
   
   void test2() 

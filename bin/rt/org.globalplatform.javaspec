@@ -1,15 +1,73 @@
 package org.globalplatform;
 
+import javacard.framework.*;
+
+public interface SecureChannel {
+    
+    short decryptData(byte[] buffer, short offset, short length);
+        //@ requires array_slice(buffer, offset, offset + length, _);
+        //@ ensures array_slice(buffer, offset, offset + length, _) &*& 0 <= result &*& result <= length;
+    
+    short processSecurity(APDU apdu);
+        //@ requires APDU(apdu, ?buffer) &*& array_slice(buffer, 0, buffer.length, _);
+        //@ ensures APDU(apdu, buffer) &*& array_slice(buffer, 0, buffer.length, _);
+    
+    short unwrap(byte[] buffer, short offset, short length);
+        //@ requires array_slice(buffer, offset, offset + length, _);
+        //@ ensures array_slice(buffer, offset, offset + length, _) &*& 0 <= result;
+    
+}
+
+public interface SecureChannelx extends SecureChannel {
+    
+    void setSecurityLevel(byte bSecurityLevel);
+        //@ requires true;
+        //@ ensures true;
+    
+}
+
 public class GPSystem {
-	public static byte getCardContentState();
-	//@ requires true;
-	//@ ensures true;
-	
-	public static boolean setCardContentState(byte bState)
-	//@ requires true;
-	//@ ensures true;
-	
-	public static final byte APPLICATION_SELECTABLE = 0x7;
-	public static final byte CARD_SECURED = 0xf;
-	public static final byte CARD_LOCKED = 0x7f;
+    
+    public static final byte APPLICATION_INSTALLED = 3;
+    public static final byte APPLICATION_LOCKED = (byte)0x80;
+    public static final byte APPLICATION_SELECTABLE = 7;
+    public static final byte CARD_INITIALIZED = 7;
+    public static final byte CARD_LOCKED = 127;
+    public static final byte CARD_OP_READY = 1;
+    public static final byte CARD_SECURED = 15;
+    public static final byte CARD_TERMINATED = (byte)0xff;
+    public static final byte CVM_ETSI_PIN_APP_1 = 1;
+    public static final byte CVM_ETSI_PIN_APP_2 = 2;
+    public static final byte CVM_ETSI_PIN_APP_3 = 3;
+    public static final byte CVM_ETSI_PIN_APP_4 = 4;
+    public static final byte CVM_ETSI_PIN_APP_5 = 5;
+    public static final byte CVM_ETSI_PIN_APP_6 = 6;
+    public static final byte CVM_ETSI_PIN_APP_7 = 7;
+    public static final byte CVM_ETSI_PIN_APP_8 = 8;
+    public static final byte CVM_GLOBAL_PIN = 0x11;
+    public static final byte FAMILY_AUTHORITY = (byte)0x83;
+    public static final byte FAMILY_CVM = (byte)0x82;
+    public static final byte FAMILY_HTTP_ADMINISTRATION = (byte)0x84;
+    public static final byte FAMILY_HTTP_REPORT = (byte)0x85;
+    public static final byte FAMILY_SECURE_CHANNEL = (byte)0x81;
+    public static final byte FAMILY_USSM = (byte)0xA0;
+    public static final byte GLOBAL_SERVICE_IDENTIFIER = (byte)0x80;
+    public static final byte SECURITY_DOMAIN_PERSONALIZED = 0x0F;
+    
+    public static byte getCardContentState();
+        //@ requires true;
+        //@ ensures true;
+    
+    public static byte getCardState();
+        //@ requires true;
+        //@ ensures true;
+    
+    public static SecureChannel getSecureChannel();
+        //@ requires true;
+        //@ ensures result != null;
+    
+    public static boolean setCardContentState(byte state);
+        //@ requires true;
+        //@ ensures true;
+    
 }
