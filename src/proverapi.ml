@@ -3,6 +3,10 @@ open Num
 
 type assume_result = Unknown | Unsat
 
+let string_of_assume_result = function
+  | Unknown -> "unknown"
+  | Unsat   -> "unsat"
+
 type ctor_symbol = CtorByOrdinal of int | NumberCtor of num
 type symbol_kind = Ctor of ctor_symbol | Fixpoint of int | Uninterp
 
