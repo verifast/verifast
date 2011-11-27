@@ -2110,12 +2110,23 @@ and
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
 (* parse globals; assumes globals start with keyword static: *)
-| [< '(_, Kwd "static"); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
-  ( try match t with
+| [< '(_, Kwd "static"); te0 = parse_type; '(l, Ident x);
+     te = parser
+(* TODO: we have almost identical code for parsing C array declarations in
+   three places now. This should be cleaned up. *)
+        [< '(_, Kwd ";") >] -> te0
+      | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
+          (match te0 with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
+            if ( (int_of_big_int size) <= 0 ) then
+              raise (ParseException (ls, "Array must have size > 0."));
+            StaticArrayTypeExpr (l, te0, (int_of_big_int size))
+          | _ -> raise (ParseException (l, "Array cannot be of this type.")))
+  >] ->
+  ( try match te with
      ManifestTypeExpr (_, Void) ->
       raise (ParseException (l, "A global cannot be of type void."))
     with
-     Match_failure _ -> [Global(l, t, x, None)] )
+     Match_failure _ -> [Global(l, te, x, None)] )
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -4570,38 +4581,10 @@ let verify_program_core (* ?verify_program_core *)
       )
       structdeclmap
   in
-  
-  let globaldeclmap =
-    let rec iter gdm ds =
-      match ds with
-        [] -> gdm
-      | Global(l, te, x, None) :: ds-> (* typecheck the rhs *)
-        begin
-          match try_assoc x globalmap0 with
-            Some(_) -> static_error l "Duplicate global variable name." None
-          | None -> ()
-        end;
-        begin
-          match try_assoc x gdm with
-            Some (_) -> static_error l "Duplicate global variable name." None
-          | None -> 
-            let tp = check_pure_type ("",[]) [] te in
-            let global_symb = get_unique_var_symb x (PtrType tp) in
-            iter ((x, (l, tp, global_symb)) :: gdm) ds
-        end
-      | _::ds -> iter gdm ds
-    in
-    match ps with
-      [PackageDecl(_,"",[],ds)] -> iter [] ds
-    | _ when file_type path=Java -> []
-  in
-  
+   
   let structmap = structmap1 @ structmap0 in
   
   let enummap = enummap1 @ enummap0 in
-  
-  let globalmap1 = globaldeclmap in
-  let globalmap = globalmap1 @ globalmap0 in
   
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh, tparams, ftps)) ->
@@ -4644,6 +4627,46 @@ let verify_program_core (* ?verify_program_core *)
     | _ -> false
   in
 
+  (* Region: globaldeclmap *)
+  
+  let globaldeclmap =
+    let rec iter gdm ds =
+      match ds with
+        [] -> gdm
+      | Global(l, te, x, None) :: ds-> (* typecheck the rhs *)
+        begin
+          match try_assoc x globalmap0 with
+            Some(_) -> static_error l "Duplicate global variable name." None
+          | None -> ()
+        end;
+        begin
+          match try_assoc x gdm with
+            Some (_) -> static_error l "Duplicate global variable name." None
+          | None -> 
+            match te with
+              StaticArrayTypeExpr (_, array_texpr, array_size) -> (
+                (* Generate (StaticArrayType ((array_type), (array_size))) *)
+                let array_type = match (array_texpr) with
+                  ManifestTypeExpr (_, t) -> t in
+                let addr = get_unique_var_symb
+                  x (StaticArrayType ((array_type), (array_size))) in
+                iter ((x, (l, (StaticArrayType ((array_type), (array_size))),
+                  addr)) :: gdm) ds ) (* end of StaticArrayTypeExpr *)
+            | _ -> ( (* variables of all other types: *)
+                let tp = check_pure_type ("",[]) [] te in
+                let global_symb = get_unique_var_symb x (PtrType tp) in
+                iter ((x, (l, tp, global_symb)) :: gdm) ds )
+        end
+      | _::ds -> iter gdm ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> []
+  in
+
+  let globalmap1 = globaldeclmap in
+  let globalmap = globalmap1 @ globalmap0 in
+ 
   (* Region: type compatibility checker *)
   
   let rec compatible_pointees t t0 =
@@ -7503,7 +7526,9 @@ let verify_program_core (* ?verify_program_core *)
               None -> static_error l "Cannot mention global variables in this context." None
             | Some (read_field, read_static_field, deref_pointer, read_array) ->
               let Some((_, tp, symbol)) = try_assoc x globalmap in 
-              deref_pointer l symbol tp
+              match tp with
+                StaticArrayType (_, _) -> symbol
+              | _ -> deref_pointer l symbol tp
           end
         | ModuleName -> List.assoc x modulemap
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
@@ -8365,7 +8390,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         h
     in
     match slices with
-      None -> 
+      None ->
         begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
           None -> assert_false h env l "No matching array chunk" None
         | Some v -> v
@@ -11734,7 +11759,38 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
       let globalChunks =
-        List.map (fun (x, (l, tp, global_symb)) -> Chunk ((pointee_pred_symb l tp, true), [], coef, [global_symb; ctxt#mk_intlit 0], None)) globalmap
+        List.map (fun (x, (l, tp, global_symb)) ->
+          match tp with
+            StaticArrayType (array_type, array_size) -> (
+              (* For C arrays we have to add some assumptions and a chunk: *)
+              let (_, _, _, _, c_array_symb, _) = List.assoc "array"
+                predfammap in
+              let elems = get_unique_var_symb (x ^ "_elems")
+                (InductiveType ("list", [(array_type)])) in 
+              let (_, _, _, _, length_symb) = List.assoc "length"
+                purefuncmap in
+              let assume t =
+                stats#proverAssume;
+                (* push_context (Assuming t); (* TODO: shouldn't push?! *) *)
+                match ctxt#assume t with
+                  Unknown -> ()
+                | Unsat ->  ( raise (SymbolicExecutionError
+                    (pprint_context_stack !contextStack, ctxt#pprint t, l,
+                    "Internal error in array handling.", None)) ) in
+              begin
+                assume (ctxt#mk_eq (mk_app length_symb [elems])
+                  (ctxt#mk_intlit array_size));
+                Chunk ((c_array_symb, true),
+                  [(array_type)], real_unit,
+                  [global_symb; ctxt#mk_intlit (array_size);
+                  sizeof l (array_type);
+                  (pointee_pred_symb l (array_type));
+                  elems], None)
+              end ) (* end of StaticArrayType *)
+          | _ -> ( (* all other global variables: *)
+              Chunk ((pointee_pred_symb l tp, true), [], coef,
+                [global_symb; ctxt#mk_intlit 0], None) )
+        ) globalmap
       in
       let codeChunks =
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
@@ -11778,15 +11834,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               verify_expr false h env (Some x) w (fun h env v -> cont h env v !address_taken) econt
           end $. fun h env v address_taken ->
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-          if (match te with (* evaluate StaticArrayTypeExpr *)
-                StaticArrayTypeExpr (_, _, _) -> true
-              | _ -> false) then
-            ( let array_texpr = match te with
-                StaticArrayTypeExpr (_, texpr, _) -> texpr in
+          match te with
+            StaticArrayTypeExpr (_, array_texpr, array_size) -> (
+              (* Generate C array chunks *)
               let array_type = match (array_texpr) with
                 ManifestTypeExpr (_, t) -> t in
-              let array_size = match te with
-                StaticArrayTypeExpr (_, _, s) -> s in
               let (_, _, _, _, c_array_symb, _) = List.assoc "array"
                 predfammap in
               let addr = get_unique_var_symb_non_ghost
@@ -11806,16 +11858,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               assume_eq (mk_app length_symb [elems]) (ctxt#mk_intlit
                 (array_size)) $. fun () ->
               iter h ((x, (StaticArrayType ((array_type), (array_size))))::tenv)
-                ghostenv ((x, addr)::env) xs )
-           else (* end of evaluate StaticArrayTypeExpr *)
-          if address_taken then
-            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in 
-            let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
-            if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
-            iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
-          else
-            iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs 
-      in
+                ghostenv ((x, addr)::env) xs ) (* end of StaticArrayTypeExpr *)
+          | _ -> ( (* all other types *)
+              if address_taken then
+                let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in 
+                let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
+                if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
+                iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
+              else
+                iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs ) in
       iter h tenv ghostenv env xs
     | ExprStmt e ->
       let (w, _) = check_expr (pn,ilist) tparams tenv e in

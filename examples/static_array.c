@@ -9,10 +9,27 @@ struct struct_with_array
   int y;
  };
 
-int main(int argc, char **argv)
-//@ requires 0 <= argc &*& [_]char_array(argv, argc);
+static int ar2 [55];
+
+void mod_ar2 (void)
+/*@ requires array<int>(&ar2, 55, 4, integer, ?elems)
+    &*& nth (1, elems) >= 0 &*& nth (1, elems) <= 50
+    &*& nth (26, elems) >= 0 &*& nth (26, elems) <= 50;
+  @*/
+/*@ ensures array<int>(&ar2, 55, 4, integer,
+      update (1, nth (1, elems) + nth (26, elems), elems));
+  @*/
+ {
+  ar2[ 1] = ar2[ 1] + ar2[26];
+  return;
+ }
+
+
+int main(int argc, char **argv) //@ : main_full(static_array)
+//@ requires module(static_array, true);
 //@ ensures result == 0;
  {
+//@ open_module();
   struct struct_with_array *s;
   int    i = 1;
   int    ar1 [55];
@@ -47,6 +64,21 @@ int main(int argc, char **argv)
    { t += s->ar[0]; }
 
   free (s);
+
+
+  /* global array */
+  ar2[ 0] = 1;
+  ar2[ 1] = 5;
+  ar2[ 2] = 0;
+  ar2[26] = 2;
+  mod_ar2 ();
+
+  if (ar2[i] == 7)
+   { t += ar2[2]; }
+   else
+   { t += ar2[0]; }
+
+//@ leak array(&ar2, 55, 4, _, _);
 
 
   return (t);
