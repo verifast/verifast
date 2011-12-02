@@ -82,7 +82,7 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
         memcpy(newChars, buffer->chars, buffer->length);
         //@ chars_join(newChars);
         //@ chars_join(bufferChars);
-        free(buffer->chars);
+        free((void *)buffer->chars);
         buffer->chars = newChars;
     }
     //@ chars_split(buffer->chars, buffer->length);
@@ -179,7 +179,7 @@ void string_buffer_dispose(struct string_buffer *buffer)
     //@ ensures emp;
 {
     //@ open string_buffer(buffer);
-    free(buffer->chars);
+    free((void *)buffer->chars);
     free(buffer);
 }
 

@@ -257,7 +257,7 @@ void ring_buffer_dispose(struct ring_buffer *ring_buffer)
 	//@ array_merge(ring_buffer->fields);
 	//@ array_merge(ring_buffer->fields);
 	//@ int_array_to_chars(ring_buffer->fields);
-	free(ring_buffer->fields);
+	free((void *)ring_buffer->fields);
 	free(ring_buffer);
 }
 

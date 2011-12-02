@@ -83,5 +83,5 @@ void process(int n)
     //@ open foreach(_, _);
     
     //@ stop_counting(integer, &cell);
-    free(threads);
+    free((void *)threads);
 }

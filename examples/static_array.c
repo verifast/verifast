@@ -1,4 +1,3 @@
-
 #include "stdlib.h"
 #include <stdio.h>
 
@@ -8,6 +7,35 @@ struct struct_with_array
   int ar [55];
   int y;
  };
+
+//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& array<int>(&s->ar, 55, sizeof(int), integer, _) &*& s->y |-> _;
+
+struct mystruct {
+  struct struct_with_array s1;
+  int s2;
+};
+
+//@ predicate mystruct(struct mystruct *s;) = struct_with_array(&s->s1) &*& s->s2 |-> _;
+
+static struct mystruct my_global_nested_struct;
+
+void foo()
+  //@ requires mystruct(&my_global_nested_struct);
+  //@ ensures mystruct(&my_global_nested_struct);
+{
+  struct mystruct my_local_nested_struct;
+  //@ open mystruct(_);
+  //@ open struct_with_array(_);
+  assert(&my_global_nested_struct != &my_local_nested_struct);
+  struct mystruct *sh = malloc(sizeof(struct mystruct));
+  if (sh == 0) abort();
+  assert(sh != &my_global_nested_struct);
+  assert(sh != &my_local_nested_struct);
+  (&(&my_global_nested_struct)->s1)->ar[10] = 100;
+  (&(&my_local_nested_struct)->s1)->ar[10] = 200;
+  (&sh->s1)->ar[10] = 300;
+  free(sh);
+}
 
 static int ar2 [55];
 
@@ -29,7 +57,9 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 //@ requires module(static_array, true);
 //@ ensures result == 0;
  {
-//@ open_module();
+  //@ open_module();
+  foo();
+
   struct struct_with_array *s;
   int    i = 1;
   int    ar1 [55];
@@ -78,8 +108,8 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    else
    { t += ar2[0]; }
 
-//@ leak array(&ar2, 55, 4, _, _);
-
+  //@ close_module();
+  //@ leak module(static_array, _);
 
   return (t);
  }

@@ -37,7 +37,6 @@ int main()
 {
     int *cell = malloc(sizeof(int));
     if (cell == 0) abort();
-    //@ chars_to_integer(cell);
     int n = read_int();
     *cell = n;
     /*@
@@ -52,7 +51,6 @@ int main()
     thread_join(t);
     //@ open integer2(cell, n + 1)();
     int n1 = *cell;
-    //@ integer_to_chars(cell);
     free(cell);
     assert(n1 == n + 1);
     return 0;

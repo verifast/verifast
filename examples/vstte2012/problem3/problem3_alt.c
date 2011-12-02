@@ -63,7 +63,7 @@ void ring_buffer_dispose(struct ring_buffer *ring_buffer)
     //@ open ring_buffer(ring_buffer, size, items);
     int* fields = ring_buffer->fields;
     //@ int_array_to_chars(fields);
-    free(fields);
+    free((void *)fields);
     free(ring_buffer);
 }
 

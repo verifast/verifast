@@ -24,7 +24,7 @@ int main(int argc, char** argv) //@ : main
     puts(buffer);
     res = fgets(buffer, 100, fp);
   }
-  free(buffer);
+  free((void *)buffer);
   fclose(fp);
   return 0;
 }

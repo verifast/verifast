@@ -350,7 +350,6 @@ int main()
     s -> data = d;
 
     //@ close create_tlock_ghost_arg(datainv(d));
-    //@ chars_to_integer(d);
     //@ close datainv(d)();
     struct tlock * ml = mylock_create();
     s -> lock = ml;
@@ -376,7 +375,6 @@ int main()
     free(s);
     mylock_dispose(ml);
     //@ open datainv (d)();
-    //@ integer_to_chars(d);
     free (d);
     return 0;
 }

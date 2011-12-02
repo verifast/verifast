@@ -126,7 +126,7 @@ void list_add(struct arraylist *a, void *v)
     a->data = newData;
     a->capacity = capacity + 100;
     //@ chars_join((void*) data);
-    free(data);
+    free((void *)data);
     //@ char_list_to_pointers(vs);
   }
   size = a->size;
@@ -196,7 +196,7 @@ void list_dispose(struct arraylist* a)
   int capacity = a->capacity;
   //@ pointer_array_to_chars(data);
   //@ chars_join((void*) data);
-  free(data);
+  free((void *)data);
   free(a);
 }
 

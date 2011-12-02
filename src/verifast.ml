@@ -1140,6 +1140,7 @@ and
   | InstanceOfExpr of loc * expr * type_expr
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
+  | InitializerList of loc * expr list
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -4643,19 +4644,9 @@ let verify_program_core (* ?verify_program_core *)
           match try_assoc x gdm with
             Some (_) -> static_error l "Duplicate global variable name." None
           | None -> 
-            match te with
-              StaticArrayTypeExpr (_, array_texpr, array_size) -> (
-                (* Generate (StaticArrayType ((array_type), (array_size))) *)
-                let array_type = match (array_texpr) with
-                  ManifestTypeExpr (_, t) -> t in
-                let addr = get_unique_var_symb
-                  x (StaticArrayType ((array_type), (array_size))) in
-                iter ((x, (l, (StaticArrayType ((array_type), (array_size))),
-                  addr)) :: gdm) ds ) (* end of StaticArrayTypeExpr *)
-            | _ -> ( (* variables of all other types: *)
-                let tp = check_pure_type ("",[]) [] te in
-                let global_symb = get_unique_var_symb x (PtrType tp) in
-                iter ((x, (l, tp, global_symb)) :: gdm) ds )
+            let tp = check_pure_type ("",[]) [] te in
+            let global_symb = get_unique_var_symb x (PtrType tp) in
+            iter ((x, (l, tp, global_symb)) :: gdm) ds
         end
       | _::ds -> iter gdm ds
     in
@@ -7189,12 +7180,13 @@ let verify_program_core (* ?verify_program_core *)
       structmap
   in
   
-  let sizeof l t =
+  let rec sizeof l t =
     match t with
       Void | Char | UChar -> ctxt#mk_intlit 1
     | IntType | UintPtrType -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
+    | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
   in
   
@@ -7231,6 +7223,8 @@ let verify_program_core (* ?verify_program_core *)
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   in
   
+  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb in
+  
   let lazy_value f =
     let cell = ref None in
     fun () ->
@@ -7238,7 +7232,7 @@ let verify_program_core (* ?verify_program_core *)
         None -> let result = f() in cell := Some result; result
       | Some result -> result
   in
-  let lazy_predfamsymb name = lazy_value (fun () -> let (_, _, _, _, symb, _) = List.assoc name predfammap in symb) in
+  let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name) in
   
   let array_element_symb = lazy_predfamsymb "java.lang.array_element" in
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice" in
@@ -7273,6 +7267,11 @@ let verify_program_core (* ?verify_program_core *)
   let mk_append l1 l2 =
     let (_, _, _, _, append_symb) = List.assoc "append" purefuncmap in
     mk_app append_symb [l1; l2]
+  in
+  
+  let mk_length l =
+    let (_, _, _, _, length_symb) = List.assoc "length" purefuncmap in
+    mk_app length_symb [l]
   in
   
   let contextStack = ref [] in
@@ -7692,6 +7691,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       else
         ev state e $. fun state v ->
         begin
+          match frange with
+            StaticArrayType (elemTp, elemCount) ->
+            cont state (field_address l v fparent fname)
+          | _ ->
           match read_field with
             None -> static_error l "Cannot use field dereference in this context." None
           | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_field l v fparent fname)
@@ -8363,19 +8366,23 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
     u_char_pred_symb
   in
-
+  
+  let try_pointee_pred_symb pointeeType =
+    match pointeeType with
+      PtrType _ -> Some (pointer_pred_symb ())
+    | IntType -> Some (int_pred_symb ())
+    | UintPtrType -> Some (u_int_pred_symb ())
+    | Char -> Some (char_pred_symb ())
+    | UChar -> Some (u_char_pred_symb ())
+    | _ -> None
+  in
   
   let pointee_pred_symb l pointeeType =
-    match pointeeType with
-      PtrType _ -> pointer_pred_symb ()
-    | IntType -> int_pred_symb ()
-    | UintPtrType -> u_int_pred_symb ()
-    | Char -> char_pred_symb ()
-    | UChar -> u_char_pred_symb ()
-    | _ -> static_error l ("Dereferencing pointers of type " ^
-            string_of_type pointeeType ^ " is not yet supported.") None
+    match try_pointee_pred_symb pointeeType with
+      Some symb -> symb
+    | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
   in
-
+  
   let read_c_array h env l a i tp =
     let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
     let predsym = pointee_pred_symb l tp in
@@ -9636,14 +9643,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
 
   let dummypat = SrcPat DummyPat in
   
-  let get_points_to (pn,ilist) h p predSymb l cont =
+  let get_points_to h p predSymb l cont =
     consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
   in
     
-  let get_field (pn,ilist) h t fparent fname l cont =
+  let get_field h t fparent fname l cont =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
-    get_points_to (pn,ilist) h t f_symb l cont
+    get_points_to h t f_symb l cont
   in
   
   let get_full_field (pn,ilist) h t fparent fname l cont =
@@ -9654,6 +9661,86 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let current_thread_name = "currentThread" in
   let current_thread_type = IntType in
+  
+  (** Used to produce malloc'ed, global, local, or nested C variables/objects. *)
+  let rec produce_c_object l coef addr tp init allowGhostFields h cont =
+    match tp with
+      StaticArrayType (elemTp, elemCount) ->
+      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+      let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+      begin match try_pointee_pred_symb elemTp with
+        Some elemPred ->
+        let length = ctxt#mk_intlit elemCount in
+        assume_eq (mk_length elems) length $. fun () ->
+        cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; sizeof l elemTp; elemPred; elems], None)::h)
+      | None -> (* Produce a character array of the correct size *)
+        let length = sizeof l tp in
+        assume_eq (mk_length elems) length $. fun () ->
+        cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
+      end
+    | StructType sn ->
+      let fields =
+        match List.assoc sn structmap with
+          (_, None, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
+        | (_, Some fds, _) -> fds
+      in
+      let rec iter h fields =
+        match fields with
+          [] -> cont h
+        | (f, (lf, gh, t))::fields ->
+          if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
+          match t with
+            StaticArrayType (_, _) | StructType _ ->
+            produce_c_object l coef (field_address l addr sn f) t None allowGhostFields h $. fun h ->
+            iter h fields
+          | _ ->
+            assume_field h sn f t gh addr (get_unique_var_symb_ "value" t (gh = Ghost)) coef $. fun h ->
+            iter h fields
+      in
+      iter h fields
+    | _ ->
+      let value = match init with Some (InitializerList (_, [])) -> ctxt#mk_intlit 0 | _ -> get_unique_var_symb "value" tp in
+      cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
+  in
+  
+  let rec consume_c_object l addr tp h cont =
+    match tp with
+      StaticArrayType (elemTp, elemCount) ->
+      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+      begin match try_pointee_pred_symb elemTp with
+        Some elemPred ->
+        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); TermPat (sizeof l elemTp); TermPat elemPred; dummypat] in
+        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      | None ->
+        let pats = [TermPat addr; TermPat (sizeof l tp); TermPat (ctxt#mk_intlit 1); TermPat (char_pred_symb ()); dummypat] in
+        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      end
+    | StructType sn ->
+      let fields =
+        match List.assoc sn structmap with
+          (_, None, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
+        | (_, Some fds, _) -> fds
+      in
+      let rec iter h fields =
+        match fields with
+          [] -> cont h
+        | (f, (lf, gh, t))::fields ->
+          match t with
+            StaticArrayType (_, _) | StructType _ ->
+            consume_c_object l (field_address l addr sn f) t h $. fun h ->
+            iter h fields
+          | _ ->
+            get_field h addr sn f l $. fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h [] l "Full field chunk permission required" None;
+            iter h fields
+      in
+      iter h fields
+    | _ ->
+      consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
+      cont h
+  in
   
   (* Region: function contracts *)
   
@@ -10508,20 +10595,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   let rec stmt_mark_addr_taken s locals cont =
     match s with
-      DeclStmt(_, tp, inits) -> (
-        match tp with
+      DeclStmt(_, tp, inits) ->
+      List.iter (fun (_, _, e, _) -> match e with None -> () | Some(e) -> expr_mark_addr_taken e locals) inits;
+      let (block, locals)::rest = locals in
+      begin match tp with
         (* There is always an array chunk generated for a StaticArrayTypeExpr.
            Hence, we have to add this chunk to the list of locals to be freed
            at the end of the program block. *)
-          StaticArrayTypeExpr(_, _, _) -> (
-            (* TODO: handle array initialisers *)
-            match inits with (name, _, _, _)::inits -> (
-              match locals with
-                [] -> () (* should never happen *)
-              | (block, head) :: rest -> block := name :: (!block)) );
-        (* all others: parse initialisers *)
-        | _ -> (List.iter (fun (_, _, e, _) -> match e with None -> () | Some(e) -> expr_mark_addr_taken e locals) inits) );
-      let ((block, locals) :: rest) = locals in
+        StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _) ->
+        (* TODO: handle array initialisers *)
+        block := List.map (fun (name, _, _, _) -> name) inits @ !block
+      | _ ->
+        ()
+      end;
       cont ((block, (List.map (fun (x, is_array, e, addrtaken) -> (x, addrtaken)) inits) @ locals) :: rest)
     | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
     | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
@@ -10846,7 +10932,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | Some(symb) -> 
           has_heap_effects();
           let predSymb = pointee_pred_symb l tpx in
-          get_points_to (pn,ilist) h symb predSymb l (fun h coef _ ->
+          get_points_to h symb predSymb l (fun h coef _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
@@ -10962,61 +11048,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont 
-    | WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
-      let fds =
-        match try_assoc tn structmap with
-          None -> static_error l "No such struct" None
-        | Some (_, None, _) -> static_error l "Argument of sizeof cannot be struct type declared without a body." None
-        | Some (_, Some fds, _) -> fds
-      in
-      let resultType = PtrType (StructType tn) in
-      let result = get_unique_var_symb (match xo with None -> tn | Some x -> x) resultType in
+    | WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) ->
+      if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+      let t = check_pure_type (pn,ilist) tparams te in
+      let resultType = PtrType t in
+      let result = get_unique_var_symb (match xo with None -> (match t with StructType tn -> tn | _ -> "address") | Some x -> x) resultType in
       let cont h = cont h env result in
       branch
-        (fun () ->
-           assume_eq result (ctxt#mk_intlit 0) (fun () ->
-             cont h
-           )
-        )
-        (fun () ->
-           assume_neq result (ctxt#mk_intlit 0) (fun () ->
-             let rec iter h fds =
-               match fds with
-                 [] ->
-                 let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map)in
-                 cont (h @ [Chunk ((malloc_block_symb, true), [], real_unit, [result], None)])
-               | (f, (lf, gh, t))::fds ->
-                 match t with
-                   (* generate "array" chunk for fields of type
-                      StaticArrayType; similar to handling
-                      StaticArrayTypeExpr in DeclStmt *)
-                   StaticArrayType (array_type, array_size) -> (
-                     let (_, _, _, _, c_array_symb, _) = List.assoc "array"
-                       predfammap in
-                     let array_pname = tn ^ "_" ^ f in
-                     let addr = get_unique_var_symb_
-                       "value" (StaticArrayType (array_type, array_size))
-                       (match gh with Ghost -> true | _ -> false) in
-                     let elems = get_unique_var_symb ((array_pname) ^ "_elems")
-                       (InductiveType ("list", [array_type])) in
-                     let h = ((Chunk ((c_array_symb, true),
-                       [array_type], real_unit,
-                       [addr; ctxt#mk_intlit array_size; sizeof l array_type;
-                       (pointee_pred_symb l array_type); elems], None))::h) in
-                     let (_, _, _, _, length_symb) = List.assoc "length"
-                       purefuncmap in
-                     assume_eq (mk_app length_symb [elems]) (ctxt#mk_intlit
-                       array_size) $. fun () ->
-                     assume_field h tn f t gh result (addr) real_unit
-                       $. fun h -> iter h fds )
-                   (* end of StaticArrayType handling *)
-                 | _ -> (
-                     assume_field h tn f t gh result (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit $. fun h ->
-                 iter h fds )
-             in
-             iter h fds
-           )
-        )
+        begin fun () ->
+          assume_eq result (ctxt#mk_intlit 0) $. fun () ->
+          cont h
+        end
+        begin fun () ->
+          assume_neq result (ctxt#mk_intlit 0) $. fun () ->
+          produce_c_object l real_unit result t None true h $. fun h ->
+          match t with
+            StructType sn ->
+            let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
+            cont (Chunk ((malloc_block_symb, true), [], real_unit, [result], None)::h)
+          | _ ->
+            cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
+        end
     | WFunPtrCall (l, g, args) ->
       let (PtrType (FuncType ftn)) = List.assoc g tenv in
       has_heap_effects ();
@@ -11151,12 +11203,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont h env value
     | WRead (l, e, fparent, fname, frange, false (* is static? *), fvalue, fghost) ->
       eval_h h env e $. fun h env t ->
+      begin match frange with
+        StaticArrayType (elemTp, elemCount) ->
+        cont h env (field_address l t fparent fname)
+      | _ ->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
       begin match lookup_points_to_chunk_core h f_symb t with
         None -> (* Try the heavyweight approach; this might trigger a rule (i.e. an auto-open or auto-close) and rewrite the heap. *)
-        get_points_to (pn,ilist) h t f_symb l $. fun h coef v ->
+        get_points_to h t f_symb l $. fun h coef v ->
         cont (Chunk ((f_symb, true), [], coef, [t; v], None)::h) env v
       | Some v -> cont h env v
+      end
       end
     | WRead (l, _, fparent, fname, frange, true (* is static? *), fvalue, fghost) when ! fvalue = None || ! fvalue = Some None->
       let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
@@ -11354,30 +11411,25 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     stats#stmtExec;
     let l = stmt_loc s in
     let free_locals closeBraceLoc h tenv env locals cont =
-      let rec free_locals_core h locals cont =
+      let rec free_locals_core h locals =
         match locals with
           [] -> cont h env
-        | x :: locals when not (List.mem_assoc x env) -> free_locals_core h locals cont
-        | x :: locals -> 
-          match List.assoc x tenv with
-            RefType(t) -> (* free locals of which the address is taken *)
-              consume_chunk rules h [] [] [] closeBraceLoc
-              (pointee_pred_symb l (match List.assoc x tenv with
-              RefType(t) -> t), true) [] real_unit (TermPat real_unit) (Some 1)
-              [TermPat (List.assoc x env); dummypat]
-              (fun _ h _ _ _ _ _ _ -> free_locals_core h locals cont)
-          | StaticArrayType(t, _) -> (* free array chunks *)
-              let (_, _, _, _, c_array_symb, _) = List.assoc "array"
-                predfammap in
-              consume_chunk rules h [] [] [] closeBraceLoc
-              (c_array_symb, true) [t] real_unit (TermPat real_unit) (Some 4)
-              [TermPat (List.assoc x env); dummypat; dummypat; dummypat;
-              dummypat]
-              (fun _ h _ _ _ _ _ _ -> free_locals_core h locals cont)
+        | x::locals ->
+          match try_assoc x env with
+            None ->
+            free_locals_core h locals
+          | Some addr ->
+            match List.assoc x tenv with
+              StaticArrayType (elemTp, elemCount) as t ->
+              consume_c_object closeBraceLoc addr t h $. fun h ->
+              free_locals_core h locals
+            | RefType t -> (* free locals of which the address is taken *)
+              consume_c_object closeBraceLoc addr t h $. fun h ->
+              free_locals_core h locals
       in
       match locals with
         [] -> cont h env
-      | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals_core h locals cont)
+      | _ -> with_context (Executing (h, env, closeBraceLoc, "Freeing locals.")) (fun _ -> free_locals_core h locals)
     in
     let rec check_block_declarations ss =
       let rec check_after_initial_declarations ss = 
@@ -11439,7 +11491,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         None -> cont h (update env x w)
       | Some(symb) -> 
           let predSymb = pointee_pred_symb l tpx in
-          get_points_to (pn,ilist) h symb predSymb l (fun h coef _ ->
+          get_points_to h symb predSymb l (fun h coef _ ->
             if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
@@ -11672,14 +11724,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
       if not (definitely_equal (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
         assert_false h env l "Could not prove that length of character array equals size of struct." None;
-      let rec iter h fds =
-        match fds with
-          [] ->
-          cont (h @ [Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)]) env
-        | (f, (lf, gh, t))::fds ->
-          assume_field h sn f t gh pointerTerm (get_unique_var_symb_ "value" t (match gh with Ghost -> true | _ -> false)) real_unit (fun h -> iter h fds)
-      in
-      iter h fds
+      produce_c_object l real_unit pointerTerm (StructType sn) None false h $. fun h ->
+      cont (Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)::h) env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
@@ -11688,17 +11734,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." None in
       let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." None in
       eval_h h env e $. fun h env pointerTerm ->
-      begin fun cont ->
-        let rec iter h fds =
-          match fds with
-            [] -> cont h
-          | (f, (_, gh, t))::fds ->
-            get_field (pn,ilist) h pointerTerm sn f l $. fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full field chunk permissions." None;
-            iter h fds
-        in
-        iter h fds
-      end $. fun h ->
+      consume_c_object l pointerTerm (StructType sn) h $. fun h ->
       with_context (Executing (h, env, l, "Consuming struct padding chunk")) $. fun () ->
       consume_chunk rules h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk." None;
@@ -11711,41 +11747,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
-          [(arg, PtrType (StructType tn))] ->
-          let _ = if pure then static_error l "Cannot call a non-pure function from a pure context." None in
-          let fds =
-            match List.assoc tn structmap with
-              (ls, Some fmap, _) -> fmap
-            | _ -> static_error l "Freeing an object of a struct type declared without a body is not supported." None
-          in
+          [(arg, PtrType t)] when t <> Void && t <> Char ->
+          if pure then static_error l "Cannot call a non-pure function from a pure context." None;
           let arg = ev arg in
-          let rec iter h fds =
-            match fds with
-              [] -> cont h env
-            | (f, (lf, gh, t))::fds ->
-              match t with
-                (* if a struct contains fields of StaticArrayType, the
-                   array chunks have to be freed *)
-                StaticArrayType (array_type, array_size) -> (
-                  let (_, _, _, _, c_array_symb, _) = List.assoc "array"
-                    predfammap in
-                  get_field (pn,ilist) h arg tn f l (fun h coef addr ->
-                    if not (definitely_equal coef real_unit)
-                      then assert_false h env l
-                        "Free requires full field chunk permissions." None;
-                  consume_chunk rules h [] [] [] l
-                    (c_array_symb, true) [array_type] real_unit real_unit_pat
-                    (Some 4) [TermPat addr;
-                    dummypat; dummypat; dummypat; dummypat]
-                    (fun _ h coef _ _ _ _ _ -> iter h fds) ) )
-                (* all other field types: *)
-              | _ -> (
-              get_field (pn,ilist) h arg tn f l (fun h coef _ -> if not (definitely_equal coef real_unit) then assert_false h env l "Free requires full field chunk permissions." None; iter h fds) )
-          in
-          let (_, (_, _, _, _, malloc_block_symb, _)) = (List.assoc tn malloc_block_pred_map) in
-          consume_chunk rules  h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] (fun _ h coef _ _ _ _ _ ->
-            iter h fds
-          )
+          consume_c_object l arg t h $. fun h ->
+          begin match t with
+            StructType sn ->
+            let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
+            consume_chunk rules h [] [] [] l (malloc_block_symb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg] $. fun _ h _ _ _ _ _ _ ->
+            cont h env
+          | _ ->
+            consume_chunk rules h [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] $. fun _ h _ _ _ _ _ _ ->
+            cont h env
+          end
         | _ ->
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
           verify_expr false h env None w (fun h env _ -> cont h env) econt
@@ -11760,44 +11774,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
-      let globalChunks =
-        List.map (fun (x, (l, tp, global_symb)) ->
-          match tp with
-            StaticArrayType (array_type, array_size) -> (
-              (* For C arrays we have to add some assumptions and a chunk: *)
-              let (_, _, _, _, c_array_symb, _) = List.assoc "array"
-                predfammap in
-              let elems = get_unique_var_symb (x ^ "_elems")
-                (InductiveType ("list", [(array_type)])) in 
-              let (_, _, _, _, length_symb) = List.assoc "length"
-                purefuncmap in
-              let assume t =
-                stats#proverAssume;
-                (* push_context (Assuming t); (* TODO: shouldn't push?! *) *)
-                match ctxt#assume t with
-                  Unknown -> ()
-                | Unsat ->  ( raise (SymbolicExecutionError
-                    (pprint_context_stack !contextStack, ctxt#pprint t, l,
-                    "Internal error in array handling.", None)) ) in
-              begin
-                assume (ctxt#mk_eq (mk_app length_symb [elems])
-                  (ctxt#mk_intlit array_size));
-                Chunk ((c_array_symb, true),
-                  [(array_type)], real_unit,
-                  [global_symb; ctxt#mk_intlit (array_size);
-                  sizeof l (array_type);
-                  (pointee_pred_symb l (array_type));
-                  elems], None)
-              end ) (* end of StaticArrayType *)
-          | _ -> ( (* all other global variables: *)
-              Chunk ((pointee_pred_symb l tp, true), [], coef,
-                [global_symb; ctxt#mk_intlit 0], None) )
-        ) globalmap
-      in
+      let init = Some (InitializerList (l, [])) in (* Hack to indicate that all globals should have their initial value. *)
+      begin fun cont ->
+        let rec iter h globals =
+          match globals with
+            [] -> cont h
+          | (x, (_, tp, addr))::globals ->
+            produce_c_object l coef addr tp init true h $. fun h ->
+            iter h globals
+        in
+        iter h globalmap
+      end $. fun h ->
       let codeChunks =
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
       in
-      cont (codeChunks @ globalChunks @ h) env
+      cont (codeChunks @ h) env
     | ExprStmt (CallExpr (l, "close_module", [], [], args, Static)) ->
       if args <> [] then static_error l "close_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
@@ -11806,15 +11797,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let rec iter h globals =
           match globals with
             [] -> cont h
-          | (x, (lg, tp, global_symb))::globals ->
-            match tp with
-              StaticArrayType (elemTp, size) ->
-              let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-              consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) [TermPat global_symb; TermPat (ctxt#mk_intlit size); TermPat (sizeof l elemTp); TermPat (pointee_pred_symb l elemTp); SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
-              iter h globals
-            | _ ->
-              consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
-              iter h globals
+          | (x, (lg, tp, addr))::globals ->
+            consume_c_object l addr tp h $. fun h ->
+            iter h globals
         in
         iter h globalmap
       end $. fun h ->
@@ -11834,47 +11819,36 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (x, is_array, e, address_taken)::xs ->
           let t = if is_array then ArrayType(t) else t in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
-          begin fun cont ->
-            match e with
-              None -> cont h env (get_unique_var_symb_non_ghost x t) !address_taken
-            | Some e ->
-              let w = check_expr_t (pn,ilist) tparams tenv e t in
-              verify_expr false h env (Some x) w (fun h env v -> cont h env v !address_taken) econt
-          end $. fun h env v address_taken ->
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
-          match te with
-            StaticArrayTypeExpr (_, array_texpr, array_size) -> (
-              (* Generate C array chunks *)
-              let array_type = match (array_texpr) with
-                ManifestTypeExpr (_, t) -> t in
-              let (_, _, _, _, c_array_symb, _) = List.assoc "array"
-                predfammap in
-              let addr = get_unique_var_symb_non_ghost
-                x (StaticArrayType ((array_type), (array_size))) in
-              let elems = get_unique_var_symb (x ^ "_elems")
-                (InductiveType ("list", [(array_type)])) in
-              let h = ((Chunk ((c_array_symb, true),
-                [(array_type)], real_unit,
-                [addr; ctxt#mk_intlit (array_size);
-                sizeof l (array_type);
-                (pointee_pred_symb l (array_type));
-                elems], None)) :: h) in
-              let (_, _, _, _, length_symb) = List.assoc "length"
-                purefuncmap in
-              (* this makes sure that "lemma_auto void array_inv" from
-                 ../bin/prelude.h is applied: *)
-              assume_eq (mk_app length_symb [elems]) (ctxt#mk_intlit
-                (array_size)) $. fun () ->
-              iter h ((x, (StaticArrayType ((array_type), (array_size))))::tenv)
-                ghostenv ((x, addr)::env) xs ) (* end of StaticArrayTypeExpr *)
-          | _ -> ( (* all other types *)
-              if address_taken then
-                let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in 
-                let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
-                if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
-                iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
-              else
-                iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs ) in
+          match t with
+            StaticArrayType (elemTp, elemCount) ->
+            if pure then static_error l "Cannot declare a local array in a ghost context." None;
+            if e <> None then static_error l "Array initializers are not yet supported." None;
+            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType elemTp) in
+            produce_c_object l real_unit addr t None true h $. fun h ->
+            iter h ((x, t)::tenv) ghostenv ((x, addr)::env) xs
+          | StructType sn ->
+            if pure then static_error l "Cannot declare a local struct instance in a ghost context." None;
+            if e <> None then static_error l "Initializers for struct instances are not yet supported." None;
+            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
+            produce_c_object l real_unit addr t None true h $. fun h ->
+            iter h ((x, RefType t)::tenv) ghostenv ((x, addr)::env) xs
+          | _ ->
+            begin fun cont ->
+              match e with
+                None -> cont h env (get_unique_var_symb_non_ghost x t)
+              | Some e ->
+                let w = check_expr_t (pn,ilist) tparams tenv e t in
+                verify_expr false h env (Some x) w (fun h env v -> cont h env v) econt
+            end $. fun h env v ->
+            if !address_taken then
+              let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
+              let h = ((Chunk ((pointee_pred_symb l t, true), [], real_unit, [addr; v], None)) :: h) in
+              if pure then static_error l "Taking the address of a ghost variable is not allowed." None;
+              iter h ((x, RefType(t)) :: tenv) ghostenv ((x, addr)::env) xs
+            else
+              iter h ((x, t) :: tenv) ghostenv ((x, v)::env) xs
+      in
       iter h tenv ghostenv env xs
     | ExprStmt e ->
       let (w, _) = check_expr (pn,ilist) tparams tenv e in

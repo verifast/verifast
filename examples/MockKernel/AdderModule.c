@@ -72,7 +72,7 @@ void adder_close(void *file)
     //@ close [f]adderDeviceState();
 }
 
-static struct file_ops *adderOps;
+static struct file_ops adderOps;
 static struct device *adderDevice;
 
 /*@
@@ -80,9 +80,8 @@ static struct device *adderDevice;
 predicate adderState(struct module *self, int deviceCount) =
     [1/2]module_code(AdderModule) &*&
     deviceCount == 1 &*&
-    pointer(&adderOps, ?adderOps_) &*& malloc_block_file_ops(adderOps_) &*&
     pointer(&adderDevice, ?adderDevice_) &*&
-    kernel_device(adderDevice_, self, adderName, ?adderNameChars, adderOps_, adderDeviceState) &*&
+    kernel_device(adderDevice_, self, adderName, ?adderNameChars, &adderOps, adderDeviceState) &*&
     length(adderNameChars) == 11;
 
 @*/
@@ -93,9 +92,7 @@ void module_dispose(struct module *self)
 {
     //@ open adderState(self, deviceCount);
     unregister_device(adderDevice);
-    //@ assert pointer(&adderOps, ?adderOps_);
-    //@ open file_ops(adderOps_, _, _);
-    free(adderOps);
+    //@ open file_ops(&adderOps, _, _);
     //@ open adderDeviceState();
     lock_dispose(adderLock);
     //@ open adderLockInv();
@@ -182,18 +179,16 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     adderLock = create_lock();
     //@ close adderDeviceState();
     
-    adderOps = malloc(sizeof(struct file_ops));
-    if (adderOps == 0) abort();
-    adderOps->open_ = adder_open;
-    adderOps->read = adder_read;
-    adderOps->write = adder_write;
-    adderOps->close_ = adder_close;
+    (&adderOps)->open_ = adder_open;
+    (&adderOps)->read = adder_read;
+    (&adderOps)->write = adder_write;
+    (&adderOps)->close_ = adder_close;
     //@ produce_function_pointer_chunk device_open(adder_open)(adderDeviceState, adderFile)() { call(); }
     //@ produce_function_pointer_chunk device_read(adder_read)(adderFile)(file) { call(); }
     //@ produce_function_pointer_chunk device_write(adder_write)(adderFile)(file, value) { call(); }
     //@ produce_function_pointer_chunk device_close(adder_close)(adderDeviceState, adderFile)(file) { call(); }
-    //@ close file_ops(adderOps, adderDeviceState, adderFile);
-    adderDevice = register_device(self, adderName, adderOps);
+    //@ close file_ops(&adderOps, adderDeviceState, adderFile);
+    adderDevice = register_device(self, adderName, &adderOps);
     
     //@ close kernel_module_state(adderState);
     //@ produce_function_pointer_chunk module_dispose_(module_dispose)(adderState, AdderModule)(self_) { call(); }
