@@ -5732,7 +5732,7 @@ let verify_program_core (* ?verify_program_core *)
         (e, IntType, None)
       | None ->
       match try_assoc' (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, tp, None)
+      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, (match tp with StaticArrayType (elemTp, n) -> PtrType elemTp | _ -> tp), None)
       | None ->
       match try_assoc x modulemap with
       | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
@@ -7521,14 +7521,16 @@ let verify_program_core (* ?verify_program_core *)
         | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->
+          let Some((_, tp, symbol)) = try_assoc x globalmap in 
+          begin match tp with
+            StaticArrayType (_, _) -> symbol
+          | _ -> 
           begin
             match read_field with
               None -> static_error l "Cannot mention global variables in this context." None
             | Some (read_field, read_static_field, deref_pointer, read_array) ->
-              let Some((_, tp, symbol)) = try_assoc x globalmap in 
-              match tp with
-                StaticArrayType (_, _) -> symbol
-              | _ -> deref_pointer l symbol tp
+              deref_pointer l symbol tp
+          end
           end
         | ModuleName -> List.assoc x modulemap
         | PureFuncName -> let (lg, tparams, t, tps, (fsymb, vsymb)) = List.assoc x purefuncmap in vsymb
@@ -11805,8 +11807,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match globals with
             [] -> cont h
           | (x, (lg, tp, global_symb))::globals ->
-            consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
-            iter h globals
+            match tp with
+              StaticArrayType (elemTp, size) ->
+              let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+              consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) [TermPat global_symb; TermPat (ctxt#mk_intlit size); TermPat (sizeof l elemTp); TermPat (pointee_pred_symb l elemTp); SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+              iter h globals
+            | _ ->
+              consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat global_symb; SrcPat DummyPat] $. fun _ h _ _ _ _ _ _ ->
+              iter h globals
         in
         iter h globalmap
       end $. fun h ->

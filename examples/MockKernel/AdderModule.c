@@ -3,9 +3,11 @@
 #include "MockKernel.h"
 #include "stdlib.h"
 
+//@ #include "arrays.h"
+
 //@ unloadable_module;
 
-static char *adderName;
+static char adderName[11];
 
 static int acc;
 static struct lock *adderLock;
@@ -78,10 +80,9 @@ static struct device *adderDevice;
 predicate adderState(struct module *self, int deviceCount) =
     [1/2]module_code(AdderModule) &*&
     deviceCount == 1 &*&
-    pointer(&adderName, ?adderName_) &*& malloc_block(adderName_, 11) &*&
     pointer(&adderOps, ?adderOps_) &*& malloc_block_file_ops(adderOps_) &*&
     pointer(&adderDevice, ?adderDevice_) &*&
-    kernel_device(adderDevice_, self, adderName_, ?adderNameChars, adderOps_, adderDeviceState) &*&
+    kernel_device(adderDevice_, self, adderName, ?adderNameChars, adderOps_, adderDeviceState) &*&
     length(adderNameChars) == 11;
 
 @*/
@@ -95,11 +96,11 @@ void module_dispose(struct module *self)
     //@ assert pointer(&adderOps, ?adderOps_);
     //@ open file_ops(adderOps_, _, _);
     free(adderOps);
-    free(adderName);
     //@ open adderDeviceState();
     lock_dispose(adderLock);
     //@ open adderLockInv();
     return;
+    //@ chars_to_char_array(adderName);
     //@ close_module();
 }
 
@@ -149,9 +150,8 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     @*/
 {
     //@ open_module();
-    adderName = malloc(11);
-    if (adderName == 0) abort();
-    //@ malloc_block_limits(adderName);
+    //@ char_array_to_chars(adderName);
+    //@ chars_limits(adderName);
     //@ chars_to_chars2(adderName);
     *(adderName + 0) = '/';
     *(adderName + 1) = 'd';
