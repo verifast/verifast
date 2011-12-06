@@ -7,7 +7,7 @@
 
 //@ unloadable_module;
 
-static char adderName[11];
+static char adderName[11] = "/dev/adder";
 
 static int acc;
 static struct lock *adderLock;
@@ -72,7 +72,7 @@ void adder_close(void *file)
     //@ close [f]adderDeviceState();
 }
 
-static struct file_ops adderOps;
+static struct file_ops adderOps = {adder_open, adder_read, adder_write, adder_close};
 static struct device *adderDevice;
 
 /*@
@@ -148,41 +148,12 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
 {
     //@ open_module();
     //@ char_array_to_chars(adderName);
-    //@ chars_limits(adderName);
-    //@ chars_to_chars2(adderName);
-    *(adderName + 0) = '/';
-    *(adderName + 1) = 'd';
-    *(adderName + 2) = 'e';
-    *(adderName + 3) = 'v';
-    *(adderName + 4) = '/';
-    *(adderName + 5) = 'a';
-    *(adderName + 6) = 'd';
-    *(adderName + 7) = 'd';
-    *(adderName + 8) = 'e';
-    *(adderName + 9) = 'r';
-    *(adderName + 10) = 0;
-    //@ close chars2(adderName + 10, 1, _);
-    //@ close chars2(adderName + 9, 2, _);
-    //@ close chars2(adderName + 8, 3, _);
-    //@ close chars2(adderName + 7, 4, _);
-    //@ close chars2(adderName + 6, 5, _);
-    //@ close chars2(adderName + 5, 6, _);
-    //@ close chars2(adderName + 4, 7, _);
-    //@ close chars2(adderName + 3, 8, _);
-    //@ close chars2(adderName + 2, 9, _);
-    //@ close chars2(adderName + 1, 10, _);
-    //@ close chars2(adderName, 11, _);
-    //@ chars2_to_chars(adderName);
     
     //@ close adderLockInv();
     //@ close create_lock_ghost_args(adderLockInv, nil, nil);
     adderLock = create_lock();
     //@ close adderDeviceState();
     
-    (&adderOps)->open_ = adder_open;
-    (&adderOps)->read = adder_read;
-    (&adderOps)->write = adder_write;
-    (&adderOps)->close_ = adder_close;
     //@ produce_function_pointer_chunk device_open(adder_open)(adderDeviceState, adderFile)() { call(); }
     //@ produce_function_pointer_chunk device_read(adder_read)(adderFile)(file) { call(); }
     //@ produce_function_pointer_chunk device_write(adder_write)(adderFile)(file, value) { call(); }

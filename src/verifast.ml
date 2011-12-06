@@ -43,6 +43,11 @@ let printff format = fprintff stdout format
 let manifest_map: (string * string list) list ref = ref []
 let jardeps_map: (string * string list) list ref = ref []
 
+let option_map f x =
+  match x with
+    None -> None
+  | Some x -> Some (f x)
+
 (** Facilitates continuation-passing-style programming.
     For example, if you have a function 'foo x y cont', you can call it as follows: 'foo x y (fun z -> ...)'
     But if you nest the continuations deeply, you get lots of indentation and lots of parentheses at the end. The $. operator allows
@@ -1501,7 +1506,7 @@ and
       handle_pred_decl list
   (* enum def met line - name - elements *)
   | EnumDecl of loc * string * (string * expr option) list
-  | Global of loc * type_expr * string * (expr option)
+  | Global of loc * type_expr * string * expr option
   | UnloadableModuleDecl of loc
   | LoadPluginDecl of loc * loc * string
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
@@ -1631,6 +1636,7 @@ let rec expr_loc e =
   | InstanceOfExpr(l, e, tp) -> l
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _) -> l
+  | InitializerList (l, _) -> l
 
 let asn_loc p =
   match p with
@@ -2112,22 +2118,30 @@ and
   [EnumDecl(l, n, elems)]
 (* parse globals; assumes globals start with keyword static: *)
 | [< '(_, Kwd "static"); te0 = parse_type; '(l, Ident x);
-     te = parser
-(* TODO: we have almost identical code for parsing C array declarations in
-   three places now. This should be cleaned up. *)
-        [< '(_, Kwd ";") >] -> te0
-      | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]"); '(_, Kwd ";") >] ->
-          (match te0 with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
-            if ( (int_of_big_int size) <= 0 ) then
-              raise (ParseException (ls, "Array must have size > 0."));
-            StaticArrayTypeExpr (l, te0, (int_of_big_int size))
-          | _ -> raise (ParseException (l, "Array cannot be of this type.")))
+     te = begin parser
+     (* TODO: we have almost identical code for parsing C array declarations in
+        three places now. This should be cleaned up. *)
+     | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]") >] ->
+       begin match te0 with
+         ManifestTypeExpr (_, _) | PtrTypeExpr (_, _) ->
+         if int_of_big_int size <= 0 then
+           raise (ParseException (ls, "Array must have size > 0."));
+         StaticArrayTypeExpr (l, te0, (int_of_big_int size))
+       | _ ->
+         raise (ParseException (l, "Array cannot be of this type."))
+       end
+     | [< >] -> te0
+     end;
+     init = begin parser
+       [< '(_, Kwd "="); e = parse_expr >] -> Some e
+     | [< >] -> None
+     end;
+     '(_, Kwd ";")
   >] ->
-  ( try match te with
-     ManifestTypeExpr (_, Void) ->
-      raise (ParseException (l, "A global cannot be of type void."))
-    with
-     Match_failure _ -> [Global(l, te, x, None)] )
+  begin match te with
+    ManifestTypeExpr (_, Void) -> raise (ParseException (l, "A global cannot be of type void."))
+  | _ -> [Global(l, te, x, init)]
+  end
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -2806,6 +2820,7 @@ and
   end
 | [< '(l, Kwd "++"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Add, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
 | [< '(l, Kwd "--"); e = parse_expr_suffix >] -> AssignOpExpr (l, e, Sub, IntLit (l, unit_big_int, ref None), false, ref None, ref None)
+| [< '(l, Kwd "{"); es = rep_comma parse_expr; '(_, Kwd "}") >] -> InitializerList (l, es)
 and
   parse_switch_expr_clauses = parser
   [< c = parse_switch_expr_clause; cs = parse_switch_expr_clauses >] -> c::cs
@@ -3719,6 +3734,7 @@ let verify_program_core (* ?verify_program_core *)
         loc
       * type_
       * termnode (* address symbol *)
+      * expr option ref (* initializer *)
     type func_symbol =
         symbol
       * termnode (* function as value (for use with "apply") *)
@@ -4634,7 +4650,7 @@ let verify_program_core (* ?verify_program_core *)
     let rec iter gdm ds =
       match ds with
         [] -> gdm
-      | Global(l, te, x, None) :: ds-> (* typecheck the rhs *)
+      | Global(l, te, x, init) :: ds -> (* typecheck the rhs *)
         begin
           match try_assoc x globalmap0 with
             Some(_) -> static_error l "Duplicate global variable name." None
@@ -4646,7 +4662,7 @@ let verify_program_core (* ?verify_program_core *)
           | None -> 
             let tp = check_pure_type ("",[]) [] te in
             let global_symb = get_unique_var_symb x (PtrType tp) in
-            iter ((x, (l, tp, global_symb)) :: gdm) ds
+            iter ((x, (l, tp, global_symb, ref init)) :: gdm) ds
         end
       | _::ds -> iter gdm ds
     in
@@ -5723,7 +5739,7 @@ let verify_program_core (* ?verify_program_core *)
         (e, IntType, None)
       | None ->
       match try_assoc' (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol)) -> scope := Some GlobalName; (e, (match tp with StaticArrayType (elemTp, n) -> PtrType elemTp | _ -> tp), None)
+      | Some ((l, tp, symbol, init)) -> scope := Some GlobalName; (e, (match tp with StaticArrayType (elemTp, n) -> PtrType elemTp | _ -> tp), None)
       | None ->
       match try_assoc x modulemap with
       | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
@@ -6261,7 +6277,7 @@ let verify_program_core (* ?verify_program_core *)
       match List.assoc sn structmap with
         (_, Some fds, _) ->
         begin
-          match try_assoc' (pn,ilist) f fds with
+          match try_assoc f fds with
             None -> static_error l ("No such field in struct '" ^ sn ^ "'.") None
           | Some (_, gh, t) -> (WRead (l, w, sn, f, t, false, ref (Some None), gh), t, None)
         end
@@ -6440,6 +6456,47 @@ let verify_program_core (* ?verify_program_core *)
       end
       classmap1
   in
+  
+  let rec check_c_initializer e tp =
+    match tp, e with
+    | StaticArrayType (Char, n), StringLit (ls, s) ->
+      if String.length s + 1 > n then static_error ls "String literal does not fit inside character array." None;
+      e
+    | StaticArrayType (elemTp, elemCount), InitializerList (ll, es) ->
+      let rec iter n es =
+        match es with
+          [] -> []
+        | e::es ->
+          if n = 0 then static_error ll "Initializer list too long." None;
+          let e = check_c_initializer e elemTp in
+          let es = iter (n - 1) es in
+          e::es
+      in
+      InitializerList (ll, iter elemCount es)
+    | StructType sn, InitializerList (ll, es) ->
+      let fds =
+        match List.assoc sn structmap with
+          (_, Some fds, _) -> fds
+        | _ -> static_error ll "Cannot initialize struct declared without a body." None
+      in
+      let rec iter fds es =
+        match fds, es with
+          _, [] -> []
+        | (_, (_, Ghost, _))::fds, es -> iter fds es
+        | (_, (_, _, tp))::fds, e::es ->
+          let e = check_c_initializer e tp in
+          let es = iter fds es in
+          e::es
+        | _ -> static_error ll "Initializer list too long." None
+      in
+      InitializerList (ll, iter fds es)
+    | tp, e ->
+      check_expr_t ("", []) [] [] e tp
+  in
+  
+  globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
+    ref_init := option_map (fun e -> check_c_initializer e tp) !ref_init
+  end;
   
   (* Region: Computing constant field values *)
   
@@ -7274,6 +7331,25 @@ let verify_program_core (* ?verify_program_core *)
     mk_app length_symb [l]
   in
   
+  let rec mk_zero_list n =
+    assert (0 <= n);
+    if n = 0 then
+      mk_nil ()
+    else
+      mk_cons Char (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
+  in
+  
+  let mk_char_list_of_c_string size s =
+    let n = String.length s in
+    let rec iter k =
+      if k = n then
+        mk_zero_list (size - n)
+      else
+        mk_cons Char (ctxt#mk_intlit (Char.code s.[k])) (iter (k + 1))
+    in
+    iter 0
+  in
+  
   let contextStack = ref [] in
   
   let push_context msg = let _ = contextStack := msg::!contextStack in () in
@@ -7520,7 +7596,7 @@ let verify_program_core (* ?verify_program_core *)
         | PredFamName -> let Some (_, _, _, _, symb, _) = try_assoc x predfammap in symb
         | EnumElemName n -> ctxt#mk_intlit_of_string (string_of_big_int n)
         | GlobalName ->
-          let Some((_, tp, symbol)) = try_assoc x globalmap in 
+          let Some((_, tp, symbol, init)) = try_assoc x globalmap in 
           begin match tp with
             StaticArrayType (_, _) -> symbol
           | _ -> 
@@ -7724,7 +7800,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           ev state e $. fun state v ->
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
-          let Some (l, tp, symbol) = try_assoc x globalmap in cont state symbol
+          let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
@@ -9667,7 +9743,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-      let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+      let elems =
+        match elemTp, init with
+          Char, Some (Some (StringLit (_, s))) ->
+          mk_char_list_of_c_string elemCount s
+        | _, Some (Some (InitializerList (ll, es))) ->
+          let rec iter n es =
+            match es with
+              [] -> mk_zero_list n
+            | e::es ->
+              mk_cons elemTp (eval None [] e) (iter (n - 1) es)
+          in
+          iter elemCount es
+        | _ ->
+          get_unique_var_symb "elems" (InductiveType ("list", [elemTp]))
+      in
       begin match try_pointee_pred_symb elemTp with
         Some elemPred ->
         let length = ctxt#mk_intlit elemCount in
@@ -9684,22 +9774,52 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           (_, None, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
         | (_, Some fds, _) -> fds
       in
-      let rec iter h fields =
+      let inits =
+        match init with
+          Some (Some (InitializerList (_, es))) -> Some (Some es)
+        | Some None -> Some None (* Initialize to default value (= zero) *)
+        | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
+      in
+      let rec iter h fields inits =
         match fields with
           [] -> cont h
         | (f, (lf, gh, t))::fields ->
           if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
+          let init, inits =
+            if gh = Ghost then None, inits else
+            match inits with
+              Some (Some (e::es)) -> Some (Some e), Some (Some es)
+            | Some (None | Some []) -> Some None, Some None
+            | _ -> None, None
+          in
           match t with
             StaticArrayType (_, _) | StructType _ ->
-            produce_c_object l coef (field_address l addr sn f) t None allowGhostFields h $. fun h ->
-            iter h fields
+            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields h $. fun h ->
+            iter h fields inits
           | _ ->
-            assume_field h sn f t gh addr (get_unique_var_symb_ "value" t (gh = Ghost)) coef $. fun h ->
-            iter h fields
+            let value =
+              match init with
+                Some None ->
+                begin match provertype_of_type t with
+                  ProverBool -> ctxt#mk_false
+                | ProverInt -> ctxt#mk_intlit 0
+                | ProverReal -> real_zero
+                | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
+                end
+              | Some (Some e) -> eval None [] e
+              | None -> get_unique_var_symb_ "value" t (gh = Ghost)
+            in
+            assume_field h sn f t gh addr value coef $. fun h ->
+            iter h fields inits
       in
-      iter h fields
+      iter h fields inits
     | _ ->
-      let value = match init with Some (InitializerList (_, [])) -> ctxt#mk_intlit 0 | _ -> get_unique_var_symb "value" tp in
+      let value =
+        match init with
+          Some None -> ctxt#mk_intlit 0
+        | Some (Some e) -> eval None [] e
+        | None -> get_unique_var_symb "value" tp
+      in
       cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
   in
   
@@ -10922,7 +11042,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         begin
           match try_assoc' (pn, ilist) x globalmap with
             None -> static_error l ("No such variable: "^x) None
-          | Some((l, tp, symbol)) -> (tp, Some(symbol))
+          | Some((l, tp, symbol, init)) -> (tp, Some(symbol))
         end 
       | Some tp -> (tp, None) 
     in
@@ -11176,20 +11296,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
         let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
         let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
-        let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-        let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
-        let rec string_to_term s = 
-          if String.length s == 0 then
-            mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); mk_app nil_symb []]
-          else
-            mk_app cons_symb [ctxt#mk_boxed_int (ctxt#mk_intlit (Char.code (String.get s 0))); string_to_term (String.sub s 1 (String.length s - 1))]
-        in
         let coef = get_dummy_frac_term () in
         assume (mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) (fun () ->     (* mem(0, cs) == true *)
           assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) (fun () ->
-            assume (ctxt#mk_eq (string_to_term s) cs) (fun () ->
+            assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s + 1) s) cs) (fun () ->
               cont (Chunk ((chars_symb, true), [], coef, [value; cs], None)::h) env value
             )
           )
@@ -11482,7 +11594,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         begin
           match try_assoc' (pn, ilist) x globalmap with
             None -> static_error l ("No such variable: "^x) None
-          | Some((l, tp, symbol)) -> (tp, Some(symbol))
+          | Some((l, tp, symbol, init)) -> (tp, Some(symbol))
         end 
       | Some tp -> (tp, None) 
     in
@@ -11774,13 +11886,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
-      let init = Some (InitializerList (l, [])) in (* Hack to indicate that all globals should have their initial value. *)
       begin fun cont ->
         let rec iter h globals =
           match globals with
             [] -> cont h
-          | (x, (_, tp, addr))::globals ->
-            produce_c_object l coef addr tp init true h $. fun h ->
+          | (x, (_, tp, addr, init))::globals ->
+            produce_c_object l coef addr tp (Some !init) true h $. fun h ->
             iter h globals
         in
         iter h globalmap
@@ -11797,7 +11908,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let rec iter h globals =
           match globals with
             [] -> cont h
-          | (x, (lg, tp, addr))::globals ->
+          | (x, (lg, tp, addr, init))::globals ->
             consume_c_object l addr tp h $. fun h ->
             iter h globals
         in

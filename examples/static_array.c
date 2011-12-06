@@ -4,11 +4,11 @@
 struct struct_with_array
  {
   int x;
-  int ar [55];
+  int ar [7];
   int y;
  };
 
-//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& array<int>(&s->ar, 55, sizeof(int), integer, _) &*& s->y |-> _;
+//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& array<int>(&s->ar, 7, sizeof(int), integer, _) &*& s->y |-> _;
 
 struct mystruct {
   struct struct_with_array s1;
@@ -17,7 +17,7 @@ struct mystruct {
 
 //@ predicate mystruct(struct mystruct *s;) = struct_with_array(&s->s1) &*& s->s2 |-> _;
 
-static struct mystruct my_global_nested_struct;
+static struct mystruct my_global_nested_struct = {{42, {420, 421, 422, 423, 424, 425, 426}, -3}, -99};
 
 void foo()
   //@ requires mystruct(&my_global_nested_struct);
@@ -31,9 +31,9 @@ void foo()
   if (sh == 0) abort();
   assert(sh != &my_global_nested_struct);
   assert(sh != &my_local_nested_struct);
-  (&(&my_global_nested_struct)->s1)->ar[10] = 100;
-  (&(&my_local_nested_struct)->s1)->ar[10] = 200;
-  (&sh->s1)->ar[10] = 300;
+  (&(&my_global_nested_struct)->s1)->ar[5] = 100;
+  (&(&my_local_nested_struct)->s1)->ar[5] = 200;
+  (&sh->s1)->ar[5] = 300;
   free(sh);
 }
 
@@ -52,12 +52,24 @@ void mod_ar2 (void)
   return;
  }
 
+void check (bool b)
+  //@ requires b;
+  //@ ensures true;
+{
+  assert(b);
+}
 
 int main(int argc, char **argv) //@ : main_full(static_array)
 //@ requires module(static_array, true);
 //@ ensures result == 0;
  {
   //@ open_module();
+  check((&(&my_global_nested_struct)->s1)->x == 42);
+  check((&(&my_global_nested_struct)->s1)->ar[0] == 420);
+  check((&(&my_global_nested_struct)->s1)->ar[6] == 426);
+  check((&(&my_global_nested_struct)->s1)->y == -3);
+  check((&my_global_nested_struct)->s2 == -99);
+  
   foo();
 
   struct struct_with_array *s;
@@ -85,8 +97,8 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   s->ar[ 0] = 1;
   s->ar[ 1] = 5;
   s->ar[ 2] = 0;
-  s->ar[26] = 2;
-  s->ar[ 1] = s->ar[ 1] + s->ar[26];
+  s->ar[ 6] = 2;
+  s->ar[ 1] = s->ar[ 1] + s->ar[ 6];
 
   if (s->ar[i] == 7)
    { t += s->ar[2]; }
