@@ -1,5 +1,8 @@
-#include "stdlib.h"
+#include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
+
+#include "bool.h"
 
 struct struct_with_array
  {
