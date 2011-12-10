@@ -1188,8 +1188,7 @@ and
       stmt
   | DeclStmt of (* enkel declaratie *)
       loc *
-      type_expr *
-      (string * bool (* is array? *) * expr option * bool ref (* indicates whether address is taken *)) list
+      (loc * type_expr * string * expr option * bool ref (* indicates whether address is taken *)) list
   | ExprStmt of expr
   | IfStmt of (* if  regel-conditie-branch1-branch2  *)
       loc *
@@ -1661,7 +1660,7 @@ let stmt_loc s =
     PureStmt (l, _) -> l
   | NonpureStmt (l, _, _) -> l
   | ExprStmt e -> expr_loc e
-  | DeclStmt (l, _, _) -> l
+  | DeclStmt (l, _) -> l
   | IfStmt (l, _, _, _) -> l
   | SwitchStmt (l, _, _) -> l
   | Assert (l, _) -> l
@@ -1915,7 +1914,7 @@ module Scala = struct
     parse_expr stream = parse_rel_expr stream
   and
     parse_stmt = parser
-      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, t, [x, false, Some(e), ref false])
+      [< '(l, Kwd "var"); '(_, Ident x); t = parse_type_ann; '(_, Kwd "="); e = parse_expr; '(_, Kwd ";") >] -> DeclStmt (l, [l, t, x, Some(e), ref false])
     | [< '(l, Kwd "assert"); a = parse_asn; '(_, Kwd ";") >] -> Assert (l, a)
 
 end
@@ -2046,12 +2045,17 @@ and
             [< (ps, co, ss) = parse_method_rest >] ->
             let ps = if binding = Instance then (IdentTypeExpr (l, None, cn), "this")::ps else ps in
             MethMember (Meth (l, Real, t, x, ps, co, ss, binding, vis, abstract))
-          | [< is_array = parse_array_braces;
-               t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
-               init = opt(parser [< '(_, Kwd "="); e = parse_declaration_rhs t is_array >] -> e);
-               rest = parse_field_declaration_rest t; '(_, Kwd ";")
+          | [< t = id (match t with None -> raise (ParseException (l, "A field cannot be void.")) | Some(t) -> t);
+               tx = parse_array_braces t;
+               init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
+               ds = comma_rep (parse_declarator t); '(_, Kwd ";")
             >] ->
-            FieldMember (Field (l, Real, (if is_array then ArrayTypeExpr(type_expr_loc t, t) else t), x, binding, vis, final, init) :: (List.map (fun (l, is_array, x, init) -> Field (l, Real, (if is_array then ArrayTypeExpr(type_expr_loc t, t) else t), x, binding, vis, final, init)) rest))
+            let fds =
+              ((l, tx, x, init, ref false)::ds) |> List.map begin fun (l, tx, x, init, _) ->
+                Field (l, Real, tx, x, binding, vis, final, init)
+              end
+            in
+            FieldMember fds
        >] -> member
      | [< (ps, co, ss) = parse_method_rest >] ->
        let l =
@@ -2071,22 +2075,16 @@ and parse_array_init = parser
   [< '(_, Kwd ","); '(_, Kwd "}") >] -> []
 | [< '(_, Kwd "}") >] -> []
 | [< e = parse_expr; es = parse_array_init_rest; '(_, Kwd "}") >] -> e :: es
-and parse_declaration_rhs te is_array = parser
-  [< '(linit, Kwd "{"); es = parse_array_init >] -> (if is_array then NewArrayWithInitializer (linit, te, es) else 
-    (match te with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> raise (ParseException (linit, "Cannot specify an array initializer for a field whose type is not an array type."))))
+and parse_declaration_rhs te = parser
+  [< '(linit, Kwd "{"); es = parse_array_init >] ->
+  (match te with ArrayTypeExpr (_, elem_te) -> NewArrayWithInitializer (linit, elem_te, es) | _ -> InitializerList (linit, es))
 | [< e = parse_expr >] -> e
 and
-  parse_field_declaration_rest t = parser
-    [< '(_, Kwd ","); 
-       '(l, Ident x);
-       is_array = parse_array_braces;
-       init = begin parser
-                 [< '(_, Kwd "="); e = parse_declaration_rhs t is_array >] -> Some e
-               | [< >] -> None;
-       end;
-       rest = parse_field_declaration_rest t;
-    >] -> (l, is_array, x, init) :: rest
-| [< >] -> []
+  parse_declarator t = parser
+  [< '(l, Ident x);
+     tx = parse_array_braces t;
+     init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
+  >] -> (l, tx, x, init, ref false)
 and
   parse_method_rest = parser
   [< ps = parse_paramlist;
@@ -2122,14 +2120,9 @@ and
      (* TODO: we have almost identical code for parsing C array declarations in
         three places now. This should be cleaned up. *)
      | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]") >] ->
-       begin match te0 with
-         ManifestTypeExpr (_, _) | PtrTypeExpr (_, _) ->
-         if int_of_big_int size <= 0 then
-           raise (ParseException (ls, "Array must have size > 0."));
-         StaticArrayTypeExpr (l, te0, (int_of_big_int size))
-       | _ ->
-         raise (ParseException (l, "Array cannot be of this type."))
-       end
+       if int_of_big_int size <= 0 then
+         raise (ParseException (ls, "Array must have size > 0."));
+       StaticArrayTypeExpr (l, te0, (int_of_big_int size))
      | [< >] -> te0
      end;
      init = begin parser
@@ -2493,10 +2486,10 @@ and
      init_stmts = begin parser
        [< e = parse_expr;
           ss = parser
-            [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> [s]
+            [< '(l, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) l x >] -> [s]
           | [< es = comma_rep parse_expr; '(_, Kwd ";") >] -> List.map (fun e -> ExprStmt e) (e::es)
        >] -> ss
-     | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te x >] -> [s]
+     | [< te = parse_type; '(l, Ident x); s = parse_decl_stmt_rest te l x >] -> [s]
      | [< '(_, Kwd ";") >] -> []
      end;
      cond = opt parse_expr;
@@ -2548,14 +2541,14 @@ and
 | [< e = parse_expr; s = parser
     [< '(_, Kwd ";") >] ->
     begin match e with
-      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), [x, false, Some(rhs), ref false])
+      AssignExpr (l, Operation (llhs, Mul, [Var (lt, t, _); Var (lx, x, _)], _), rhs) -> DeclStmt (l, [l, PtrTypeExpr (llhs, IdentTypeExpr (lt, None, t)), x, Some(rhs), ref false])
     | _ -> ExprStmt e
     end
   | [< '(l, Kwd ":") >] -> (match e with Var (_, lbl, _) -> LabelStmt (l, lbl) | _ -> raise (ParseException (l, "Label must be identifier.")))
-  | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) x >] -> s
+  | [< '(lx, Ident x); s = parse_decl_stmt_rest (type_expr_of_expr e) lx x >] -> s
   >] -> s
 (* parse variable declarations: *)
-| [< te = parse_type; '(_, Ident x); s2 = parse_decl_stmt_rest te x >] ->
+| [< te = parse_type; '(lx, Ident x); s2 = parse_decl_stmt_rest te lx x >] ->
   ( try match te with
      ManifestTypeExpr (l, Void) ->
       raise (ParseException (l, "A variable cannot be of type void."))
@@ -2592,11 +2585,19 @@ and
   | ArrayTypeExpr' (l, e) -> ArrayTypeExpr (l, type_expr_of_expr e)
   | Read(l, e, name) -> IdentTypeExpr(l, Some(packagename_of_read l e), name)
   | e -> raise (ParseException (expr_loc e, "Type expected."))
-and parse_array_braces = parser
-  [<   '(_, Kwd "["); '(_, Kwd "]") >] -> true
-| [< >] -> false
+and parse_array_braces te = parser
+  [< '(l, Kwd "[");
+     te = begin parser
+       [< '(lsize, Int size) >] ->
+       if sign_big_int size <= 0 then raise (ParseException (lsize, "Array must have size > 0."));
+       StaticArrayTypeExpr (l, te, int_of_big_int size)
+     | [< >] ->
+       ArrayTypeExpr (l, te)
+     end;
+     '(_, Kwd "]") >] -> te
+| [< >] -> te
 and
-  parse_decl_stmt_rest te x = parser 
+  parse_decl_stmt_rest te lx x = parser
     [< '(l, Kwd "=");
        s = parser
          [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
@@ -2604,33 +2605,15 @@ and
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
          CreateHandleStmt (l, x, hpn, e)
-      (* | [< e = parse_declaration_rhs te false >] -> e*)
-       | [< rhs = parse_declaration_rhs te false; xs = comma_rep (parser [< '(_, Ident x); is_array = parse_array_braces; e = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs te is_array >] -> e) >] -> (x, is_array, e, ref false)); '(_, Kwd ";") >] ->
-         DeclStmt (l, te, (x, false, Some(rhs), ref false)::xs)
-       | [< '(l2, Kwd "{"); es = parse_array_init; xs = comma_rep (parser [< '(_, Ident x); is_array = parse_array_braces; e = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs te is_array >] -> e) >] -> (x, is_array, e, ref false)); '(_, Kwd ";") >] ->
-           (match te with ArrayTypeExpr(_, elem_te) -> DeclStmt(l, te, (x, false, Some(NewArrayWithInitializer(l2, elem_te, es)), ref false) :: xs) | _ -> raise (ParseException (l2, "Cannot specify an array initializer for a field whose type is not an array type.")))
+       | [< rhs = parse_declaration_rhs te; ds = comma_rep (parse_declarator te); '(_, Kwd ";") >] ->
+         DeclStmt (l, (l, te, x, Some(rhs), ref false)::ds)
     >] -> s
-  | [< '(_, Kwd "["); (* parse array declaration *)
-       e = parser
-           [< '(ls, Int size); '(l, Kwd "]") >] -> 
-             (match te with (ManifestTypeExpr (_, _) | PtrTypeExpr (_, _)) ->
-                if ( (int_of_big_int size) <= 0 ) then
-                  raise (ParseException (ls, "Array must have size > 0."));
-                DeclStmt(l, StaticArrayTypeExpr (l, te, (int_of_big_int size)),
-                 (x, false, None, ref false)::[])
-              | _ -> raise (ParseException (l, "Array cannot be of this type.")))
-         | [< '(_, Kwd "]"); declstmt = parse_decl_stmt_rest (ArrayTypeExpr(type_expr_loc te, te)) x >] -> declstmt
-             (* should only be parsed like this if language is Java *)
-             
-(*         | [< '(_, PreprocessorSymbol size); '(l, Kwd "]") >]
-               -> (* TODO: size defined by macro *)
-           | [< '(l, Kwd "]") >]
-               -> (* TODO: size defined by array initialiser *) *)
-    >] -> e
-    (* end of parse array declaration *)
-  | [< xs = comma_rep (parser [< '(_, Ident x); is_array = parse_array_braces; e = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs te is_array >] -> e) >] -> (x, is_array, e, ref false)); '(l, Kwd ";") >] ->
-    DeclStmt(l, te, (x, false, None, ref false)::xs)
-
+  | [< tx = parse_array_braces te;
+       init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs tx >] -> e);
+       ds = comma_rep (parse_declarator te);
+       '(_, Kwd ";")
+    >] ->
+    DeclStmt(type_expr_loc te, (lx, tx, x, init, ref false)::ds)
 and
   parse_switch_stmt_clauses = parser
   [< c = parse_switch_stmt_clause; cs = parse_switch_stmt_clauses >] -> c::cs
@@ -8588,6 +8571,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end $. fun () ->
         let message =
           let predname = match g with (g, _) -> ctxt#pprint g in
+          let targs =
+            match targs with
+              [] -> ""
+            | _ -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type targs))
+          in
           let args =
             let rec iter patvars pats args =
               match pats with
@@ -8600,7 +8588,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             in
             String.concat ", " (iter [] pats [])
           in
-          Printf.sprintf "No matching heap chunks: %s(%s)" predname args
+          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs args
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
@@ -9681,7 +9669,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       PureStmt (l, s) -> assigned_variables s
     | NonpureStmt (l, _, s) -> assigned_variables s
     | ExprStmt e -> expr_assigned_variables e
-    | DeclStmt (l, t, xs) -> flatmap (fun (x, _, e, _) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
+    | DeclStmt (l, xs) -> flatmap (fun (_, _, x, e, _) -> (match e with None -> [] | Some e -> expr_assigned_variables e)) xs
     | IfStmt (l, e, ss1, ss2) -> expr_assigned_variables e @ block_assigned_variables ss1 @ block_assigned_variables ss2
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body) ->
       expr_assigned_variables e @
@@ -9743,30 +9731,58 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-      let elems =
-        match elemTp, init with
-          Char, Some (Some (StringLit (_, s))) ->
-          mk_char_list_of_c_string elemCount s
-        | _, Some (Some (InitializerList (ll, es))) ->
-          let rec iter n es =
-            match es with
-              [] -> mk_zero_list n
-            | e::es ->
-              mk_cons elemTp (eval None [] e) (iter (n - 1) es)
-          in
-          iter elemCount es
-        | _ ->
-          get_unique_var_symb "elems" (InductiveType ("list", [elemTp]))
-      in
-      begin match try_pointee_pred_symb elemTp with
-        Some elemPred ->
-        let length = ctxt#mk_intlit elemCount in
-        assume_eq (mk_length elems) length $. fun () ->
-        cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; sizeof l elemTp; elemPred; elems], None)::h)
-      | None -> (* Produce a character array of the correct size *)
-        let length = sizeof l tp in
+      let produce_char_array_chunk h addr elemCount =
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Char])) in
+        let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) (sizeof l elemTp) in
         assume_eq (mk_length elems) length $. fun () ->
         cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
+      in
+      let produce_array_chunk addr elems elemCount =
+        match try_pointee_pred_symb elemTp with
+          Some elemPred ->
+          let length = ctxt#mk_intlit elemCount in
+          assume_eq (mk_length elems) length $. fun () ->
+          cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; sizeof l elemTp; elemPred; elems], None)::h)
+        | None -> (* Produce a character array of the correct size *)
+          produce_char_array_chunk h addr elemCount
+      in
+      begin match elemTp, init with
+        Char, Some (Some (StringLit (_, s))) ->
+        produce_array_chunk addr (mk_char_list_of_c_string elemCount s) elemCount
+      | (StructType _ | StaticArrayType (_, _)), Some (Some (InitializerList (ll, es))) ->
+        let size = sizeof l elemTp in
+        let rec iter h i es =
+          let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) size) in
+          match es with
+            [] ->
+            produce_char_array_chunk h addr (elemCount - i)
+          | e::es ->
+            begin fun cont ->
+              match elemTp with
+                StructType sn ->
+                (* Generate struct padding chunk for array elements. *)
+                let (_, _, padding_predsymb_opt) = List.assoc sn structmap in
+                match padding_predsymb_opt with
+                  None -> cont h
+                | Some padding_predsymb ->
+                  cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
+              | _ -> cont h
+            end $. fun h ->
+            produce_c_object l coef addr elemTp (Some (Some e)) false h $. fun h ->
+            iter h (i + 1) es
+        in
+        iter h 0 es
+      | _, Some (Some (InitializerList (ll, es))) ->
+        let rec iter n es =
+          match es with
+            [] -> mk_zero_list n
+          | e::es ->
+            mk_cons elemTp (eval None [] e) (iter (n - 1) es)
+        in
+        produce_array_chunk addr (iter elemCount es) elemCount
+      | _ ->
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+        produce_array_chunk addr elems elemCount
       end
     | StructType sn ->
       let fields =
@@ -9834,7 +9850,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         cont h
       | None ->
         let pats = [TermPat addr; TermPat (sizeof l tp); TermPat (ctxt#mk_intlit 1); TermPat (char_pred_symb ()); dummypat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h [] [] [] l (c_array_symb, true) [Char] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
         cont h
       end
     | StructType sn ->
@@ -10687,6 +10703,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | ArrayTypeExpr'(_, e) ->  expr_mark_addr_taken e locals
     | AssignExpr(_, e1, e2) ->  expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
     | AssignOpExpr(_, e1, _, e2, _, _, _) -> expr_mark_addr_taken e1 locals;  expr_mark_addr_taken e2 locals
+    | InitializerList(_, es) -> List.iter (fun e -> expr_mark_addr_taken e locals) es
   and pat_expr_mark_addr_taken pat locals = 
     match pat with
       LitPat(e) -> expr_mark_addr_taken e locals
@@ -10715,20 +10732,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   let rec stmt_mark_addr_taken s locals cont =
     match s with
-      DeclStmt(_, tp, inits) ->
-      List.iter (fun (_, _, e, _) -> match e with None -> () | Some(e) -> expr_mark_addr_taken e locals) inits;
-      let (block, locals)::rest = locals in
-      begin match tp with
-        (* There is always an array chunk generated for a StaticArrayTypeExpr.
-           Hence, we have to add this chunk to the list of locals to be freed
-           at the end of the program block. *)
-        StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _) ->
-        (* TODO: handle array initialisers *)
-        block := List.map (fun (name, _, _, _) -> name) inits @ !block
-      | _ ->
-        ()
+      DeclStmt(_, ds) ->
+      let (block, mylocals)::rest = locals in
+      ds |> List.iter begin fun (_, tp, x, e, _) ->
+        begin match e with None -> () | Some(e) -> expr_mark_addr_taken e locals end;
+        begin match tp with
+          (* There is always an array chunk generated for a StaticArrayTypeExpr.
+             Hence, we have to add this chunk to the list of locals to be freed
+             at the end of the program block. *)
+          StaticArrayTypeExpr (_, _, _) | StructTypeExpr (_, _) ->
+          (* TODO: handle array initialisers *)
+          block := x::!block
+        | _ -> ()
+        end
       end;
-      cont ((block, (List.map (fun (x, is_array, e, addrtaken) -> (x, addrtaken)) inits) @ locals) :: rest)
+      cont ((block, List.map (fun (lx, tx, x, e, addrtaken) -> (x, addrtaken)) ds @ mylocals) :: rest)
     | BlockStmt(_, _, ss, _, locals_to_free) -> stmts_mark_addr_taken ss ((locals_to_free, []) :: locals) (fun _ -> cont locals)
     | ExprStmt(e) -> expr_mark_addr_taken e locals; cont locals
     | PureStmt(_, s) ->  stmt_mark_addr_taken s locals cont
@@ -10816,6 +10834,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | ArrayTypeExpr'(_, e) -> expr_address_taken e
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _, _, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
+    | InitializerList (_, es) -> flatmap expr_address_taken es
   in
   
   let rec stmt_address_taken s =
@@ -10823,7 +10842,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match s with
       PureStmt(_, s) -> stmt_address_taken s
     | NonpureStmt(_, _, s) -> stmt_address_taken s
-    | DeclStmt(_, _, inits) -> List.flatten (List.map (fun (_, _, e, _) -> match e with None -> [] | Some(e) -> expr_address_taken e) inits)
+    | DeclStmt(_, ds) -> List.flatten (List.map (fun (_, _, _, e, _) -> match e with None -> [] | Some(e) -> expr_address_taken e) ds)
     | ExprStmt(e) -> expr_address_taken e
     | IfStmt(_, e, ss1, ss2) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) (ss1 @ ss2)))
     | SwitchStmt(_, e, cls) -> (expr_address_taken e) @ (List.flatten (List.map (fun cl -> match cl with SwitchStmtClause(_, e, ss) -> (expr_address_taken e) @ (List.flatten (List.map (fun s -> stmt_address_taken s) ss)) | SwitchStmtDefaultClause(_, ss) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))) cls))
@@ -11547,8 +11566,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let rec check_after_initial_declarations ss = 
         match ss with
           [] -> ()
-        | DeclStmt(l, _, inits) :: rest -> 
-          inits |> List.iter begin fun (_, _, _, addresstaken) ->
+        | DeclStmt(l, ds) :: rest -> 
+          ds |> List.iter begin fun (_, _, _, _, addresstaken) ->
               if !addresstaken then
                 static_error l "A local variable whose address is taken must be declared at the start of a block." None
             end;
@@ -11701,10 +11720,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   match ss_after with
                     [] -> static_error l "'call();' statement expected" None
                   | ExprStmt (CallExpr (lc, "call", [], [], [], Static))::ss_after -> (List.rev ss_before, lc, None, ss_after)
-                  | DeclStmt (ld, te, [x, is_array, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
+                  | DeclStmt (ld, [lx, tx, x, Some(CallExpr (lc, "call", [], [], [], Static)), _])::ss_after ->
                     if List.mem_assoc x tenv then static_error ld "Variable hides existing variable" None;
-                    let te = if is_array then ArrayTypeExpr(ld, te) else te in
-                    let t = check_pure_type (pn,ilist) tparams te in
+                    let t = check_pure_type (pn,ilist) tparams tx in
                     begin match rt1 with
                       None -> static_error ld "Function does not return a value" None
                     | Some rt1 ->
@@ -11922,28 +11940,30 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           cont h
       end $. fun h ->
       cont (Chunk ((module_symb, true), [], real_unit, [current_module_term; ctxt#mk_false], None)::h) env
-    | DeclStmt (l, te, xs) ->
-      let t = check_pure_type (pn,ilist) tparams te in
+    | DeclStmt (ld, xs) ->
       let rec iter h tenv ghostenv env xs =
         match xs with
           [] -> tcont sizemap tenv ghostenv h env
-        | (x, is_array, e, address_taken)::xs ->
-          let t = if is_array then ArrayType(t) else t in
+        | (l, te, x, e, address_taken)::xs ->
+          let t = check_pure_type (pn,ilist) tparams te in
           if List.mem_assoc x tenv then static_error l ("Declaration hides existing local variable '" ^ x ^ "'.") None;
           let ghostenv = if pure then x::ghostenv else List.filter (fun y -> y <> x) ghostenv in
+          let produce_object envTp =
+            if pure then static_error l "Cannot declare a variable of this type in a ghost context." None;
+            let init =
+              match e with
+                None -> None
+              | Some e -> Some (Some (check_c_initializer e t))
+            in
+            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType Void) in
+            produce_c_object l real_unit addr t init true h $. fun h ->
+            iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
+          in
           match t with
             StaticArrayType (elemTp, elemCount) ->
-            if pure then static_error l "Cannot declare a local array in a ghost context." None;
-            if e <> None then static_error l "Array initializers are not yet supported." None;
-            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType elemTp) in
-            produce_c_object l real_unit addr t None true h $. fun h ->
-            iter h ((x, t)::tenv) ghostenv ((x, addr)::env) xs
+            produce_object t
           | StructType sn ->
-            if pure then static_error l "Cannot declare a local struct instance in a ghost context." None;
-            if e <> None then static_error l "Initializers for struct instances are not yet supported." None;
-            let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType t) in
-            produce_c_object l real_unit addr t None true h $. fun h ->
-            iter h ((x, RefType t)::tenv) ghostenv ((x, addr)::env) xs
+            produce_object (RefType t)
           | _ ->
             begin fun cont ->
               match e with
@@ -12365,9 +12385,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           | None -> static_error l "Target of predicate instance call must be of class type" None
         in
         let index = List.assoc cn classterms in
-        (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index])
+        (lpred, [], [], pmap, [("this", target)], (symb, true), body, [target; index], Some 1)
       in
-      let (lpred, targs, tpenv, ps, bs0, g_symb, p, ts0) =
+      let (lpred, targs, tpenv, ps, bs0, g_symb, p, ts0, inputParamCount) =
         match target with
           Some target ->
           let (target, targetType) = check_expr (pn,ilist) tparams tenv target in
@@ -12398,7 +12418,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               Java -> List.map (fun cn -> List.assoc cn classterms) fns
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
-            (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0)
+            (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0, inputParamCount)
           | None -> static_error l "No such predicate instance." None
           end
         | None ->
@@ -12421,7 +12441,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               in
               let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               if targs <> [] then static_error l "Incorrect number of type arguments." None;
-              (lpred, [], [], ps2, bs0, (g_symb, false), body, [])
+              (lpred, [], [], ps2, bs0, (g_symb, false), body, [], None)
           end
       in
       let ps =
@@ -12475,7 +12495,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           with_context (Executing (h, env, l, "Producing predicate chunk")) $. fun () ->
           let env = List.fold_left (fun env0 (env, t) -> merge_tenvs l env env0) env ts in
           let ts = List.map (fun (env, t) -> t) ts in
-          cont (Chunk (g_symb, targs, coef, ts0 @ ts, None)::h) env
+          produce_chunk h g_symb targs coef inputParamCount (ts0 @ ts) None $. fun h ->
+          cont h env
         )
       )
     | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
@@ -12915,7 +12936,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                          match s with
                            ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
                          | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
-                         | DeclStmt (lcall, xtype, [x, false, Some(CallExpr (_, g, _, _, _, _)), _]) -> g
+                         | DeclStmt (lcall, [_, xtype, x, Some(CallExpr (_, g, _, _, _, _)), _]) -> g
                          | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call." None
                        in
                        match try_assoc funcname funcmap with

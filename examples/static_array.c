@@ -4,12 +4,33 @@
 
 #include "bool.h"
 
+//@ #include "arrays.h"
+
+void check (bool b)
+  //@ requires b;
+  //@ ensures true;
+{
+  assert(b);
+}
+
 struct struct_with_array
  {
   int x;
   int ar [7];
   int y;
  };
+
+void check_local_inits()
+  //@ requires true;
+  //@ ensures true;
+{
+  struct struct_with_array foo = {123, {2, 3, 5, 7, 11, 13, 17}, 456};
+  char buf[3] = {1, 2, 3};
+  
+  check((&foo)->x == 123);
+  check((&foo)->ar[6] == 17);
+  check(buf[1] == 2);
+}
 
 //@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& array<int>(&s->ar, 7, sizeof(int), integer, _) &*& s->y |-> _;
 
@@ -55,12 +76,7 @@ void mod_ar2 (void)
   return;
  }
 
-void check (bool b)
-  //@ requires b;
-  //@ ensures true;
-{
-  assert(b);
-}
+static struct struct_with_array bigArray[10] = {{100, {1,2,3,4}, 200}, {300, {5,6,7}, 400}}; // Incomplete initializer lists; remaining elements get default value.
 
 int main(int argc, char **argv) //@ : main_full(static_array)
 //@ requires module(static_array, true);
@@ -72,6 +88,15 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   check((&(&my_global_nested_struct)->s1)->ar[6] == 426);
   check((&(&my_global_nested_struct)->s1)->y == -3);
   check((&my_global_nested_struct)->s2 == -99);
+  
+  struct struct_with_array *bigArrayPtr = bigArray;
+  //@ open [1/2]struct_with_array_x(bigArrayPtr + 1, 300);
+  //@ integer_to_chars((void *)(bigArrayPtr + 1));
+  //@ chars_limits((void *)(bigArrayPtr + 1));
+  //@ chars_to_integer((void *)(bigArrayPtr + 1));
+  //@ close [1/2]struct_with_array_x(bigArrayPtr + 1, _);
+  check((bigArrayPtr + 1)->x == 300);
+  check((bigArrayPtr + 1)->ar[2] == 7);
   
   foo();
 
@@ -123,6 +148,15 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    else
    { t += ar2[0]; }
 
+  //@ open_struct(bigArrayPtr);
+  //@ assert chars((void *)bigArrayPtr, ?cs) &*& length(cs) == sizeof(struct struct_with_array);
+  //@ chars_to_char_array(bigArrayPtr);
+  //@ open_struct(bigArrayPtr + 1);
+  //@ assert chars((void *)(bigArrayPtr + 1), ?cs2) &*& length(cs2) == sizeof(struct struct_with_array);
+  //@ chars_to_char_array(bigArrayPtr + 1);
+  //@ array_merge(bigArrayPtr + 1);
+  //@ array_merge(bigArrayPtr);
+  //@ assert array<char>((void *)bigArrayPtr, sizeof(struct struct_with_array) * 10, 1, character, _);
   //@ close_module();
   //@ leak module(static_array, _);
 

@@ -381,7 +381,6 @@ void iter_dispose(struct iter *i)
     //@ open llist_with_node(l, v0, ?n, v);
     //@ lseg2_lseg_append(n);
     //@ close [f1]llist(l, v0);
-    //@ merge_fractions llist(l, _);
     free(i);
 }
 

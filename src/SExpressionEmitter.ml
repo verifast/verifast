@@ -328,8 +328,8 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                  ; "invariant", sexpr_of_option sexpr_of_loop_spec invariant
                  ; "unknown", sexpr_of_option sexpr_of_expr expr
                  ; "body", sexpr_of_list sexpr_of_stmt body ]
-    | DeclStmt (loc, type_expr, xs) ->
-      let sexpr_of_local (str, is_array, expr, address) =
+    | DeclStmt (loc, xs) ->
+      let sexpr_of_local (lx, tx, str, expr, address) =
         let initialization =
           match expr with
             | Some expr -> [ "init", sexpr_of_expr expr ]
@@ -343,8 +343,7 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
                    ( initialization @ address )
       in
       build_list [ Symbol "stmt-declaration" ]
-                 [ "type", sexpr_of_type_expr type_expr
-                 ; "locals", sexpr_of_list sexpr_of_local xs ]
+                 [ "locals", sexpr_of_list sexpr_of_local xs ]
     | ReturnStmt (loc, expr) ->
       let expr =
         match expr with
