@@ -113,6 +113,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
+  let runPreprocessor = ref false in
   let simplifyTerms = ref true in
   let current_tab = ref None in
   let showLineNumbers enable =
@@ -163,6 +164,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
+      GAction.add_toggle_action "RunPreprocessor" ~label:"Run preprocessor" ~active:false ~callback:(fun toggleAction -> runPreprocessor := toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
@@ -210,6 +212,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='CheckOverflow' />
+          <menuitem action='RunPreprocessor' />
           <menuitem action='SimplifyTerms' />
         </menu>
         <menu action='TopWindow'>
@@ -1137,7 +1140,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_emit_manifest = false;
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;
-                option_runtime = runtime
+                option_runtime = runtime;
+                option_run_preprocessor = !runPreprocessor
               }
               in
               verify_program prover false options path reportRange reportUseSite breakpoint;

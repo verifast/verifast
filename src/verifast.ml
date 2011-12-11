@@ -48,6 +48,30 @@ let option_map f x =
     None -> None
   | Some x -> Some (f x)
 
+let zip xs ys =
+  let rec iter xs ys zs =
+    match (xs, ys) with
+      ([], []) -> Some (List.rev zs)
+    | (x::xs, y::ys) -> iter xs ys ((x, y)::zs)
+    | _ -> None
+  in
+  iter xs ys []
+  
+let rec zip2 xs ys =
+  match (xs, ys) with
+    ([], _) -> []
+  | (_, []) -> []
+  | (x :: xs, y :: ys) -> (x, y) :: (zip2 xs ys)
+
+let do_finally tryBlock finallyBlock =
+  let result =
+    try
+      tryBlock()
+    with e -> finallyBlock(); raise e
+  in
+  finallyBlock();
+  result
+
 (** Facilitates continuation-passing-style programming.
     For example, if you have a function 'foo x y cont', you can call it as follows: 'foo x y (fun z -> ...)'
     But if you nest the continuations deeply, you get lots of indentation and lots of parentheses at the end. The $. operator allows
@@ -495,6 +519,9 @@ type srcpos = ((string * string) * int * int) (* ?srcpos *)
 (** A range of source code: start position, end position *)
 type loc = (srcpos * srcpos) (* ?loc *)
 
+let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
+let dummy_loc = (dummy_srcpos, dummy_srcpos)
+
 exception ParseException of loc * string
 
 (** Like the Stream module of the O'Caml library, except that it supports a limited form of backtracking using [push].
@@ -504,6 +531,13 @@ module Stream = struct
   exception Error of string
   type 'a t = (int -> 'a option) * (int ref) * ('a option list ref)
   let from f = (f, ref 0, ref [])
+  let of_list xs =
+    let xs = ref xs in
+    from begin fun _ ->
+      match !xs with
+        [] -> None
+      | x::xs0 -> xs := xs0; Some x
+    end
   let peek (f, counter, buffer) =
     match !buffer with
       tok::_ -> tok
@@ -653,10 +687,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   
   let ghost_range_start: srcpos option ref = ref (if inGhostRange then Some (current_srcpos()) else None) in
 
-  let is_include_directive s = 
-      ( let x = String.compare s "include" in
-        if x = 0 then true else false ) in
-
   let in_include_directive = ref false in
  
   let ignore_eol = ref true in
@@ -699,7 +729,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       let t = Hashtbl.find (get_kwd_table()) id in
       if isAlpha then
         reportRange (if !ghost_range_start = None then KeywordRange else GhostKeywordRange) (current_loc());
-      if is_include_directive id then in_include_directive := true; 
+      if id = "include" then in_include_directive := true; 
       t
     with
       Not_found -> let n = String.length id in
@@ -1003,6 +1033,283 @@ let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
   let {file_opt_annot_char=annotChar} = get_file_options text in
   let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail annotChar in
   (loc, ignore_eol, token_stream)
+
+(* The preprocessor *)
+
+let make_preprocessor make_lexer basePath relPath =
+  let macros = Hashtbl.create 10 in
+  let streams = ref [] in
+  let callers = ref [[]] in
+  let paths = ref [] in
+  let locs = ref [] in
+  let loc = ref dummy_loc in
+  let push_lexer basePath relPath =
+    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath in
+    lexer_ignore_eol := false;
+    streams := stream::!streams;
+    callers := List.hd !callers::!callers;
+    paths := (basePath, relPath)::!paths;
+    locs := loc::!locs
+  in
+  let push_list newCallers body =
+    streams := Stream.of_list body::!streams;
+    callers := (newCallers @ List.hd !callers)::!callers;
+    paths := List.hd !paths::!paths;
+    locs := List.hd !locs::!locs
+  in
+  let pop_stream () =
+    streams := List.tl !streams;
+    callers := List.tl !callers;
+    paths := List.tl !paths;
+    locs := List.tl !locs
+  in
+  push_lexer basePath relPath;
+  let basePath, relPath = (), () in (* Hide the variables *)
+  let pp_ignore_eol = ref true in
+  let next_at_start_of_line = ref true in
+  let peek () = loc := List.hd !locs (); Stream.peek (List.hd !streams) in
+  let junk () = Stream.junk (List.hd !streams) in
+  let error msg = raise (Stream.Error msg) in
+  let syntax_error () = error "Preprocessor syntax error" in
+  let rec skip_block () =
+    let at_start_of_line = !next_at_start_of_line in
+    next_at_start_of_line := false;
+    match peek () with
+      None -> ()
+    | Some (_, Eol) -> junk (); next_at_start_of_line := true; skip_block ()
+    | Some (_, Kwd "#") when at_start_of_line ->
+      junk ();
+      begin match peek () with
+        Some (_, Kwd ("endif"|"else"|"elif")) -> ()
+      | Some (_, Kwd ("ifdef"|"ifndef"|"if")) -> junk (); skip_branches (); skip_block ()
+      | Some _ -> junk (); skip_block ()
+      | None -> ()
+      end
+    | _ -> junk (); skip_block ()
+  and skip_branches () =
+    skip_block ();
+    match peek () with
+      None -> syntax_error ()
+    | Some (_, Kwd "endif") -> junk (); ()
+    | _ -> junk (); skip_branches ()
+  in
+  let rec skip_branch () =
+    skip_block ();
+    begin match peek () with
+      Some (_, Kwd "endif") -> junk (); ()
+    | Some (_, Kwd "elif") -> junk (); conditional ()
+    | Some (_, Kwd "else") -> junk (); ()
+    | None -> ()
+    end
+  and conditional () =
+    let rec condition () =
+      match peek () with
+        None | Some (_, Eol) -> []
+      | Some (l, Ident "defined") ->
+        let check x = (if Hashtbl.mem macros x then (l, Int unit_big_int) else (l, Int zero_big_int))::condition () in
+        junk ();
+        begin match peek () with
+          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          junk ();
+          check x
+        | Some (_, Kwd "(") ->
+          junk ();
+          begin match peek () with
+            Some (_, (Ident x | PreprocessorSymbol x)) ->
+            junk ();
+            begin match peek () with
+              Some (_, Kwd ")") ->
+              junk ();
+              check x
+            | _ -> syntax_error ()
+            end
+          | _ -> syntax_error ()
+          end
+        | _ -> syntax_error ()
+        end
+      | Some t -> junk (); t::condition ()
+    in
+    let condition = condition () in
+    let condition = macro_expand [] condition in
+    (* TODO: Support operators *)
+    let isTrue =
+      match condition with
+        [(_, Int n)] -> sign_big_int n <> 0
+      | _ -> error "Operators in preprocessor conditions are not yet supported."
+    in
+    if isTrue then () else skip_branch ()
+  and next_token () =
+    let at_start_of_line = !next_at_start_of_line in
+    next_at_start_of_line := false;
+    match peek () with
+      None -> pop_stream (); if !streams = [] then None else next_token ()
+    | Some t ->
+    match t with
+      (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
+    | (l, Kwd "#") when at_start_of_line ->
+      junk ();
+      begin match peek () with
+      | None -> next_token ()
+      | Some (l, Kwd "include") ->
+        junk ();
+        begin match peek () with
+        | Some (l, String s) ->
+          junk ();
+          if List.mem s ["bool.h"; "assert.h"; "limits.h"] then next_token () else
+          let basePath0, relPath0 = List.hd !paths in
+          let localRelPath = Filename.concat (Filename.dirname relPath0) s in
+          let basePath, relPath =
+            if Sys.file_exists (Filename.concat basePath0 localRelPath) then
+              basePath0, localRelPath
+            else
+              let sysPath = Filename.concat bindir s in
+              if Sys.file_exists sysPath then
+                bindir, s
+              else
+                error "No such file"
+          in
+          push_lexer basePath relPath;
+          next_at_start_of_line := true;
+          next_token ()
+        | _ -> error "Filename expected"
+        end
+      | Some (l, Kwd "define") ->
+        junk ();
+        begin match peek () with
+          Some (lx, Ident x) | Some (lx, PreprocessorSymbol x) ->
+          junk ();
+          let params =
+            match peek () with
+              Some (_, Kwd "(") ->
+              junk ();
+              let params =
+                match peek () with
+                  Some (_, Kwd ")") -> junk (); []
+                | Some (_, Ident x) | Some (_, PreprocessorSymbol x) ->
+                  junk ();
+                  let rec params () =
+                    match peek () with
+                      Some (_, Kwd ")") -> junk (); []
+                    | Some (_, Kwd ",") ->
+                      junk ();
+                      begin match peek () with
+                        Some (_, Ident x) | Some (_, PreprocessorSymbol x) -> junk (); x::params ()
+                      | _ -> error "Macro parameter expected"
+                      end
+                  in
+                  x::params ()
+                | _ -> error "Macro definition syntax error"
+              in
+              Some params
+            | _ -> None
+          in
+          let rec body () =
+            match peek () with
+              None | Some (_, Eol) -> []
+            | Some t -> junk (); t::body ()
+          in
+          let body = body () in
+          Hashtbl.replace macros x (params, body);
+          next_token ()
+        | _ -> error "Macro definition syntax error"
+        end
+      | Some (l, Kwd "undef") ->
+        junk ();
+        begin match peek () with
+          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          junk ();
+          Hashtbl.remove macros x;
+          next_token ()
+        | _ -> syntax_error ()
+        end
+      | Some (l, Kwd ("ifdef"|"ifndef" as cond)) ->
+        junk ();
+        begin match peek () with
+          Some (_, (Ident x | PreprocessorSymbol x)) ->
+          junk ();
+          if Hashtbl.mem macros x <> (cond = "ifdef") then
+            skip_branch ();
+          next_token ()
+        | _ -> syntax_error ()
+        end
+      | Some (l, Kwd "if") ->
+        junk ();
+        conditional ();
+        next_token ()
+      | Some (l, Kwd ("elif"|"else")) ->
+        junk ();
+        skip_branches ();
+        next_token ()
+      | Some (l, Kwd "endif") -> junk (); next_token ()
+      | _ -> syntax_error ()
+      end
+    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem macros x && not (List.mem x (List.hd !callers)) ->
+      junk ();
+      let (params, body) = Hashtbl.find macros x in
+      begin match params with
+        None -> push_list [x] body; next_token ()
+      | Some params ->
+        match peek () with
+          Some (_, Kwd "(") ->
+          junk ();
+          let args =
+            let rec term parenDepth =
+              match peek () with
+                None -> syntax_error ()
+              | Some ((_, Kwd ")") as t) -> junk (); t::if parenDepth = 1 then arg () else term (parenDepth - 1)
+              | Some ((_, Kwd "(") as t) -> junk (); t::term (parenDepth + 1)
+              | Some t -> junk (); t::term parenDepth
+            and arg () =
+              match peek () with
+                Some (_, Kwd (")"|",")) -> []
+              | Some ((_, Kwd "(") as t) -> term 0
+              | None -> syntax_error ()
+              | Some t -> junk (); t::arg ()
+            in
+            let rec args () =
+              match peek () with
+                Some (_, Kwd ")") -> junk (); []
+              | Some (_, Kwd ",") -> junk (); let arg = arg () in arg::args ()
+            in
+            let arg = arg () in arg::args ()
+          in
+          let args = List.map (macro_expand []) args in
+          let bindings =
+            match params, args with
+              [], ([]|[[]]) -> []
+            | _ ->
+              match zip params args with
+                None -> error "Incorrect number of macro arguments"
+              | Some bs -> bs
+          in
+          let body =
+            body |> flatmap begin function
+              (_, (Ident x|PreprocessorSymbol x)) as t ->
+              begin match try_assoc x bindings with
+                None -> [t]
+              | Some value -> value
+              end
+            | t -> [t]
+            end
+          in
+          push_list [x] body; next_token ()
+        | _ -> Some t
+      end
+    | t -> junk (); Some t
+  and macro_expand newCallers tokens =
+    let oldStreams = !streams in
+    streams := [];
+    push_list newCallers tokens;
+    let rec get_tokens ts =
+      match next_token () with
+        None -> List.rev ts
+      | Some t -> get_tokens (t::ts)
+    in
+    let ts = get_tokens [] in
+    streams := oldStreams;
+    ts
+  in
+  ((fun () -> !loc), pp_ignore_eol, Stream.from (fun _ -> next_token ()))
 
 (* Some types for dealing with constants *)
 
@@ -1581,8 +1888,6 @@ http://blogs.msdn.com/msbuild/archive/2006/11/03/msbuild-visual-studio-aware-err
 and
 http://www.gnu.org/prep/standards/standards.html#Errors
 *)
-let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
-  let dummy_loc = (dummy_srcpos, dummy_srcpos)
   
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
@@ -1803,7 +2108,7 @@ let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
-  "volatile"; "register"
+  "volatile"; "register"; "ifdef"; "elif"; "undef"
 ]
 
 let java_keywords = [
@@ -3024,11 +3329,15 @@ let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_
 in
   parse_include_directives
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) = (* ?parse_c_file *)
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (runPreprocessor: bool): ((loc * string) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
-  let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (Filename.dirname path, Filename.basename path) (readFile path) reportRange reportShouldFail in
+  let make_lexer basePath relPath =
+    let text = readFile (Filename.concat basePath relPath) in
+    make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange reportShouldFail
+  in
+  let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer in
+  let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) in
   let parse_c_file =
     parser
       [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
@@ -3300,30 +3609,6 @@ exception SymbolicExecutionError of string context list * string * loc * string 
 
 let full_name pn n = if pn = "" then n else pn ^ "." ^ n
 
-let zip xs ys =
-  let rec iter xs ys zs =
-    match (xs, ys) with
-      ([], []) -> Some (List.rev zs)
-    | (x::xs, y::ys) -> iter xs ys ((x, y)::zs)
-    | _ -> None
-  in
-  iter xs ys []
-  
-let rec zip2 xs ys =
-  match (xs, ys) with
-    ([], _) -> []
-  | (_, []) -> []
-  | (x :: xs, y :: ys) -> (x, y) :: (zip2 xs ys)
-
-let do_finally tryBlock finallyBlock =
-  let result =
-    try
-      tryBlock()
-    with e -> finallyBlock(); raise e
-  in
-  finallyBlock();
-  result
-
 type options = {
   option_verbose: int;
   option_disable_overflow_check: bool;
@@ -3331,7 +3616,8 @@ type options = {
   option_emit_manifest: bool;
   option_allow_assume: bool;
   option_simplify_terms: bool;
-  option_runtime: string option
+  option_runtime: string option;
+  option_run_preprocessor: bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
@@ -13813,7 +14099,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           if Filename.check_suffix path ".h" then
             parse_header_file "" path reportRange reportShouldFail
           else
-            parse_c_file path reportRange reportShouldFail
+            parse_c_file path reportRange reportShouldFail options.option_run_preprocessor
     in
     emitter_callback ds;
     let result =
