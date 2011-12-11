@@ -588,11 +588,32 @@ let string_of_range_kind = function
       Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.
   *)
 let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
-  let annotEnd = Printf.sprintf "%c*/" annotChar in
   let textlength = String.length text in
   let textpos = ref 0 in
+  let line = ref 1 in
+  let linepos = ref 0 in
+  
+  let new_loc_line () =
+      line := !line + 1;
+      linepos := !textpos
+  in
+  
+  let rec skip_backslashed_newlines () =
+    let pos = !textpos in
+    if pos < textlength - 1 && text.[pos] = '\\' && (text.[pos + 1] = '\n' || text.[pos + 1] = '\r') then begin
+      if text.[pos + 1] = '\r' && pos < textlength - 2 && text.[pos + 2] = '\n' then
+        textpos := pos + 3
+      else
+        textpos := pos + 2;
+      new_loc_line ();
+      skip_backslashed_newlines ()
+    end
+  in
+  
   let text_peek () = if !textpos = textlength then '\000' else text.[!textpos] in
-  let text_junk () = incr textpos in
+  let text_junk () = incr textpos; skip_backslashed_newlines () in
+  
+  let annotEnd = Printf.sprintf "%c*/" annotChar in
   
   let in_comment = ref inComment in
   let in_ghost_range = ref inGhostRange in
@@ -622,8 +643,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     let s = String.sub !buffer 0 !bufpos in buffer := initial_buffer; s
   in
 
-  let line = ref 1 in
-  let linepos = ref 0 in  (* Stream count at start of line *)
   let tokenpos = ref 0 in
   let token_srcpos = ref (path, 1, 1) in
 
@@ -693,10 +712,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     tokenpos := !textpos;
     token_srcpos := current_srcpos()
   in
-  let new_loc_line () =
-      line := !line + 1;
-      linepos := !textpos
-  in
   let rec next_token () =
     if !in_comment then
     begin
@@ -726,9 +741,10 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         text_junk ();
         if text_peek () = '\010' then text_junk ();
         new_line ()
-    |('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255') ->
+    | ('A'..'Z' | 'a'..'z' | '_' | '\128'..'\255') as c ->
         start_token();
         text_junk ();
+        reset_buffer (); store c;
         ident ()
     | '(' -> start_token(); text_junk (); Some(ident_or_keyword "(" false)
     | ('<' as c) ->
@@ -777,9 +793,9 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | c -> start_token(); text_junk (); Some (keyword_or_error (String.make 1 c))
   and ident () =
     match text_peek () with
-      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') ->
-      text_junk (); ident ()
-    | _ -> Some (ident_or_keyword (String.sub text !tokenpos (!textpos - !tokenpos)) true)
+      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') as c ->
+      text_junk (); store c; ident ()
+    | _ -> Some (ident_or_keyword (get_string ()) true)
   and ident2 () =
     match text_peek () with
       ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '/' | ':' | '<' | '=' |
