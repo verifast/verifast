@@ -12287,6 +12287,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (w, _) = check_expr (pn,ilist) tparams tenv e in
       verify_expr false h env None w (fun h env _ -> cont h env) econt
     | IfStmt (l, e, ss1, ss2) ->
+      if not pure then begin
+        begin match ss1 with [PureStmt (lp, _)] -> static_error lp "Pure statement not allowed here." None | _ -> () end;
+        begin match ss2 with [PureStmt (lp, _)] -> static_error lp "Pure statement not allowed here." None | _ -> () end;
+      end;
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in
       let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
       (eval_h_nonpure h env w ( fun h env w ->
@@ -12897,6 +12901,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | WhileStmt (l, e, None, dec, ss) ->
       static_error l "Loop invariant required." None
     | WhileStmt (l, e, Some (LoopInv p), dec, ss) ->
+      if not pure then begin
+        match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
+      end;
       if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
@@ -12956,6 +12963,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
       end
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss) ->
+      if not pure then begin
+        match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
+      end;
       if pure && (match dec with None -> true | _ -> false) then static_error l "Loops without a measure are not supported in a pure context." None;
       let endBodyLoc = match ss with BlockStmt(_, _, _, closeBraceLoc, _) :: _ -> closeBraceLoc | _-> l in
       let break h env = cont h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in

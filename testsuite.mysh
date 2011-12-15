@@ -236,6 +236,7 @@ verifast_both -c -allow_should_fail inhabited_tparams.c
 verifast_both -c -allow_should_fail inductive_welldefined.c
 verifast_both -c -allow_should_fail predtype_contra.c
 verifast_both -c -allow_should_fail fixpoint_recursive_value.c
+verifast_both -c -allow_should_fail if_while_component_pure.c
 verifast -c -allow_should_fail erasure.c
 verifast -c -allow_should_fail erasure2.c
 verifast -c -allow_should_fail erasure3.c
