@@ -41,9 +41,9 @@ struct mystruct {
 
 //@ predicate mystruct(struct mystruct *s;) = struct_with_array(&s->s1) &*& s->s2 |-> _;
 
-static struct mystruct my_global_nested_struct = {{42, {420, 421, 422, 423, 424, 425, 426}, -3}, -99};
+struct mystruct my_global_nested_struct = {{42, {420, 421, 422, 423, 424, 425, 426}, -3}, -99};
 
-void foo()
+static void foo()
   //@ requires mystruct(&my_global_nested_struct);
   //@ ensures mystruct(&my_global_nested_struct);
 {

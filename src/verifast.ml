@@ -2435,27 +2435,7 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-(* parse globals; assumes globals start with keyword static: *)
-| [< '(_, Kwd "static"); te0 = parse_type; '(l, Ident x);
-     te = begin parser
-     (* TODO: we have almost identical code for parsing C array declarations in
-        three places now. This should be cleaned up. *)
-     | [< '(_, Kwd "["); '(ls, Int size); '(_, Kwd "]") >] ->
-       if int_of_big_int size <= 0 then
-         raise (ParseException (ls, "Array must have size > 0."));
-       StaticArrayTypeExpr (l, te0, (int_of_big_int size))
-     | [< >] -> te0
-     end;
-     init = begin parser
-       [< '(_, Kwd "="); e = parse_expr >] -> Some e
-     | [< >] -> None
-     end;
-     '(_, Kwd ";")
-  >] ->
-  begin match te with
-    ManifestTypeExpr (_, Void) -> raise (ParseException (l, "A global cannot be of type void."))
-  | _ -> [Global(l, te, x, init)]
-  end
+| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 | [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
 and
   parse_pure_decls = parser
@@ -2543,14 +2523,25 @@ and
 | [< >] -> []
 and
   parse_func_rest k t = parser
-  [< '(l, Ident g); tparams = parse_type_params_general; ps = parse_paramlist; f =
-    (parser
-       [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] -> Func (l, k, tparams, t, g, ps, atomic, ft, co, None,Static,Public)
-     | [< (atomic, ft, co) = parse_spec_clauses;
-          '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >]
-          -> 
+  [<
+    '(l, Ident g);
+    tparams = parse_type_params_general;
+    decl = parser
+      [<
+        ps = parse_paramlist;
+        f = parser
+          [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] ->
+          Func (l, k, tparams, t, g, ps, atomic, ft, co, None, Static, Public)
+        | [< (atomic, ft, co) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
           Func (l, k, tparams, t, g, ps, atomic, ft, co, Some (ss, closeBraceLoc), Static, Public)
-    ) >] -> f
+      >] -> f
+    | [<
+        () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);
+        t = parse_array_braces (get t);
+        init = opt (parser [< '(_, Kwd "="); e = parse_declaration_rhs t >] -> e);
+        '(_, Kwd ";")
+      >] -> Global (l, t, g, init)
+  >] -> decl
 and
   parse_ctors_suffix = parser
   [< '(_, Kwd "|"); cs = parse_ctors >] -> cs
