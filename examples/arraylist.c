@@ -42,7 +42,7 @@ lemma void merge_pointer_array(void* data, int i);
 predicate arraylist(struct arraylist *a, list<void*> vs) =
   a->data |-> ?data &*& a->size |-> ?size &*& a->capacity |-> ?capacity &*&
   malloc_block_arraylist(a) &*& malloc_block(data, capacity * sizeof(void*)) &*& 0<=size &*& size <= capacity &*& size == length(vs) &*&
-  pointer_array(data, vs) &*& chars((void*) data + (size * sizeof(void*)), ?unused) &*& length(unused) == 4 * (capacity - size);
+  pointer_array(data, vs) &*& chars((void*) data + (size * sizeof(void*)), ?unused) &*& length(unused) == sizeof(int) * (capacity - size);
 @*/
 
 struct arraylist *create_arraylist() 
@@ -113,6 +113,7 @@ void list_add(struct arraylist *a, void *v)
   void** data = 0;
   //@ open arraylist(a, vs);
   if(a->capacity <= a->size) {
+  //@ assume(false);
     data = a->data;
     size = a->size;
     int capacity = a->capacity;
@@ -132,7 +133,7 @@ void list_add(struct arraylist *a, void *v)
   size = a->size;
   data = a->data;
   //@ assert chars((void*) data + (size * sizeof(void*)), ?unused); 
-  //@ chars_split((void*) (data + size), 4);
+  //@ chars_split((void*) (data + size), sizeof(void*));
   //@ chars_to_pointer(data + size);
   * (data + size) = v;
   //@ assert data + size + 1 == data + size + 1;
@@ -178,7 +179,7 @@ void list_remove_nth(struct arraylist *a, int n)
   //@ assert size == length(vs);
   shift(data + (n), size - n - 1);
   //@ merge_pointer_array(data, n);
-  //@ chars_join((void*)data + (size - 1)*4);
+  //@ chars_join((void*)data + (size - 1)*sizeof(void*));
   //@ switch(drop(n, vs)) { case nil: case cons(h0, t0): }
   a->size = a->size - 1;
   //@ assert length(tail(drop(n, vs))) == length(vs) - n - 1;

@@ -29,6 +29,7 @@
 .provides prelude.h#u_character_to_character
 .provides prelude.h#character_to_u_character
 .provides prelude.h#pointer_to_chars
+.provides prelude.h#chars_to_intarray
 .provides stdio.h#fopen
 .provides stdio.h#fclose
 .provides stdio.h#fgets

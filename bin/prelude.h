@@ -19,6 +19,8 @@ predicate array<t>(void* a, int n, int elemsize, predicate(t*; t) q; list<t> ele
   :
     q(a, ?elem) &*& array<t>(a + elemsize, n - 1, elemsize, q, ?elems0) &*& elems == cons(elem, elems0);
     
+
+    
 lemma_auto void array_inv<t>();
     requires array<t>(?a, ?n, ?size, ?q, ?elems);
     ensures array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
@@ -130,6 +132,12 @@ lemma void u_character_to_character(void *p);
 lemma void character_to_u_character(void *p);
     requires [?f]character(p, _);
     ensures [f]u_character(p, _);
+
+
+
+lemma void chars_to_intarray(void* a, int n);
+  requires chars(a, ?cs) &*& length(cs) == n * sizeof(int);
+  ensures array<int>(a, n, sizeof(int), integer, _);
 @*/
 
 /*@
