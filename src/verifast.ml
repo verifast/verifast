@@ -8753,7 +8753,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match slices with
       None ->
         begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
-          None -> assert_false h env l "No matching array chunk" None
+          None -> assert_false h env l ("No matching array chunk: array<" ^
+                  (string_of_type tp) ^ ">(" ^ (ctxt#pprint a) ^ ", 0<=" ^
+                  (ctxt#pprint i) ^ "<n, " ^ (ctxt#pprint (sizeof l tp)) ^
+                  ", _, _).") None
         | Some v -> v
         end
     | Some v -> v
@@ -11158,7 +11161,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
       (fun l p t -> deref_pointer h env l p t),
-      (fun l a i -> read_java_array h env l a i)
+      (fun l a i -> read_array h env l a i)
     in
     eval_core_cps ev state assert_term (Some read_field) env e cont
   in
@@ -11169,7 +11172,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (fun l t f -> read_field h env l t f),
       (fun l f -> read_static_field h env l f),
       (fun l p t -> deref_pointer h env l p t),
-      (fun l a i -> read_java_array h env l a i)
+      (fun l a i -> read_array h env l a i)
     in
     eval_core assert_term (Some read_field) env e
   in

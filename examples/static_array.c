@@ -117,6 +117,7 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    else
    { t = ar1[0]; }
 
+  assert (ar1[26] == 2);
 
   /* array inside a struct */
   s = malloc (sizeof (struct struct_with_array));
@@ -133,6 +134,8 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    else
    { t += s->ar[0]; }
 
+  assert (s->ar[0] == 1);
+
   free (s);
 
 
@@ -147,6 +150,8 @@ int main(int argc, char **argv) //@ : main_full(static_array)
    { t += ar2[2]; }
    else
    { t += ar2[0]; }
+
+  assert (ar2[1] == 7);
 
   //@ open_struct(bigArrayPtr);
   //@ assert chars((void *)bigArrayPtr, ?cs) &*& length(cs) == sizeof(struct struct_with_array);
