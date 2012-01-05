@@ -3475,15 +3475,27 @@ let parse_jarsrc_file_core path =
     in
     iter [] lines
   in
-  let main_class =
+  let (provides, lines) =
+    let rec iter provides lines =
+      match lines with
+        line::lines when startswith line "provides " ->
+        let provide = String.sub line (String.length "provides ") (String.length line - String.length "provides ") in
+        iter (provide::provides) lines
+      | _ ->
+        (List.rev provides, lines)
+    in
+    iter [] lines
+  in
+  let provides =
     match lines with
-      [] -> None
+      [] -> provides
     | [line] when startswith line "main-class " ->
-      Some (String.sub line (String.length "main-class ") (String.length line - String.length "main-class "))
+      let mainClass = String.sub line (String.length "main-class ") (String.length line - String.length "main-class ") in
+      provides @ ["main_class " ^ mainClass]
     | _ ->
       raise (ParseException (file_loc path, "A .jarsrc file must consists of a list of .jar file paths followed by a list of .java file paths, optionally followed by a line of the form \"main-class mymainpackage.MyMainClass\""))
   in
-  (jars, javas, main_class)
+  (jars, javas, provides)
 
 (* Region: some auxiliary types and functions *)
 
@@ -3608,7 +3620,8 @@ type options = {
   option_allow_assume: bool;
   option_simplify_terms: bool;
   option_runtime: string option;
-  option_run_preprocessor: bool
+  option_run_preprocessor: bool;
+  option_keep_provide_files: bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
@@ -4224,7 +4237,6 @@ let verify_program_core (* ?verify_program_core *)
   let spec_lemmas= ref [] in
   let meths_impl= ref [] in
   let cons_impl= ref [] in
-  let main_classes: loc map ref = ref [] in (* classes that implement a main method *)
   
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
@@ -6592,6 +6604,14 @@ let verify_program_core (* ?verify_program_core *)
          in
         (WRead (l, w, fclass, f, ft, true, fvalue, Real), ft, constant_value)
       end
+    | PackageName pn ->
+      let name = pn ^ "." ^ f in
+      if List.mem_assoc name classmap1 || List.mem_assoc name interfmap1 || List.mem_assoc name classmap0 || List.mem_assoc name interfmap0 then
+        (e, ClassOrInterfaceName name, None)
+      else if is_package name then
+        (e, PackageName name, None)
+      else
+        static_error l "No such type or package" None
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
   in
@@ -10675,11 +10695,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 | [] -> static_error lm "Method must have contract" None
             in
             let ss = match ss with None -> None | Some ss -> Some (Some ss) in
-            if n = "main" then begin
-              match (pre, post) with
-                (ExprAsn (_, True _), ExprAsn (_, True _)) | (EmpAsn _, EmpAsn _) -> main_classes := (cn, l)::!main_classes
-              | _ -> static_error lm "The contract of the main method must be 'requires true; ensures true;'" None
-            end;
             iter ((sign, (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, super_specs <> [], abstract))::mmap) meths
         in
         iter [] meths
@@ -14078,18 +14093,29 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   (* Region: top-level stuff *)
   
-  let main_class = ref None in
   let jardeps = ref [] in
+  let provide_files = ref [] in
   let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type path with
         | Java -> 
           if Filename.check_suffix path ".jarsrc" then
-            let (jars, javas, mainClass) = parse_jarsrc_file_core path in
+            let l = file_loc path in
+            let (jars, javas, provides) = parse_jarsrc_file_core path in
+            let provide_javas =
+              provides |> imap begin fun i provide ->
+                let provide_file = Printf.sprintf "%s_provide%d.java" (Filename.chop_extension path) i in
+                let cmdLine = Printf.sprintf "%s > %s" provide provide_file in
+                let exitCode = Sys.command cmdLine in
+                if exitCode <> 0 then
+                  raise (static_error l (Printf.sprintf "Provide %d: command '%s' failed with exit code %d" i cmdLine exitCode) None);
+                provide_file
+              end
+            in
+            provide_files := provide_javas;
+            let javas = javas @ provide_javas in
             let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javas in
             let specPath = Filename.chop_extension path ^ ".jarspec" in
-            main_class := mainClass;
-            let l = file_loc path in
             let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
             if Sys.file_exists specPath then begin
               let (specJars, _) = parse_jarspec_file_core specPath in
@@ -14119,17 +14145,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     result
   in
   
+  if not options.option_keep_provide_files then begin
+    !provide_files |> List.iter Sys.remove
+  end;
+  
   stats#appendProverStats ctxt#stats;
 
-  let () =
-    match !main_class with
-      None -> ()
-    | Some mainClass ->
-      match try_assoc mainClass !main_classes with
-        None -> static_error (file_loc path) "No such main class" None
-      | Some l -> ()
-  in
-  
   let create_jardeps_file() =
     let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
     if emit_manifest then

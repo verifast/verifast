@@ -1141,7 +1141,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;
                 option_runtime = runtime;
-                option_run_preprocessor = !runPreprocessor
+                option_run_preprocessor = !runPreprocessor;
+                option_keep_provide_files = true
               }
               in
               verify_program prover false options path reportRange reportUseSite breakpoint;
