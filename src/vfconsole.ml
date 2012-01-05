@@ -148,6 +148,7 @@ let _ =
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
   let runPreprocessor = ref false in
+  let provides = ref [] in
   let keepProvideFiles = ref false in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
@@ -162,6 +163,7 @@ let _ =
             ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, ""
             ; "-run_preprocessor", Set runPreprocessor, ""
+            ; "-provides", String (fun path -> provides := !provides @ [path]), ""
             ; "-keep_provide_files", Set keepProvideFiles, ""
             ; "-emit_sexpr",
               String begin fun str ->
@@ -190,6 +192,7 @@ let _ =
           option_simplify_terms = !simplifyTerms;
           option_runtime = !runtime;
           option_run_preprocessor = !runPreprocessor;
+          option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles
         } in
         print_endline filename;

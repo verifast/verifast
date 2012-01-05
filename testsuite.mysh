@@ -111,7 +111,7 @@ cd nio_gameserver
 ifnotmac verifast -c GameServer.jarsrc
 cd ..
 cd chatbot
-verifast_both -disable_overflow_check -c Bot.java
+verifast_both -disable_overflow_check -c -provides "main_class chatbot.Bot" Bot.java
 cd ..
 cd Iterator
 verifast_both -c it.jarsrc

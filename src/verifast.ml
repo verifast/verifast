@@ -3621,6 +3621,7 @@ type options = {
   option_simplify_terms: bool;
   option_runtime: string option;
   option_run_preprocessor: bool;
+  option_provides: string list;
   option_keep_provide_files: bool
 } (* ?options *)
 
@@ -14098,33 +14099,37 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type path with
-        | Java -> 
-          if Filename.check_suffix path ".jarsrc" then
-            let l = file_loc path in
-            let (jars, javas, provides) = parse_jarsrc_file_core path in
-            let provide_javas =
-              provides |> imap begin fun i provide ->
-                let provide_file = Printf.sprintf "%s_provide%d.java" (Filename.chop_extension path) i in
-                let cmdLine = Printf.sprintf "%s > %s" provide provide_file in
-                let exitCode = Sys.command cmdLine in
-                if exitCode <> 0 then
-                  raise (static_error l (Printf.sprintf "Provide %d: command '%s' failed with exit code %d" i cmdLine exitCode) None);
-                provide_file
-              end
-            in
-            provide_files := provide_javas;
-            let javas = javas @ provide_javas in
-            let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javas in
-            let specPath = Filename.chop_extension path ^ ".jarspec" in
-            let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
-            if Sys.file_exists specPath then begin
-              let (specJars, _) = parse_jarspec_file_core specPath in
-              jardeps := specJars @ jars;
-              ((l, specPath) :: jarspecs, ds)
-            end else
-              (jarspecs, ds)
-          else
-            ([], [parse_java_file path reportRange reportShouldFail])
+        | Java ->
+          let l = file_loc path in
+          let (headers, javas, provides) =
+            if Filename.check_suffix path ".jarsrc" then
+              let (jars, javas, provides) = parse_jarsrc_file_core path in
+              let specPath = Filename.chop_extension path ^ ".jarspec" in
+              let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
+              if Sys.file_exists specPath then begin
+                let (specJars, _) = parse_jarspec_file_core specPath in
+                jardeps := specJars @ jars;
+                ((l, specPath) :: jarspecs, javas, provides)
+              end else
+                (jarspecs, javas, provides)
+            else
+              ([], [path], [])
+          in
+          let provides = provides @ options.option_provides in
+          let provide_javas =
+            provides |> imap begin fun i provide ->
+              let provide_file = Printf.sprintf "%s_provide%d.java" (Filename.chop_extension path) i in
+              let cmdLine = Printf.sprintf "%s > %s" provide provide_file in
+              let exitCode = Sys.command cmdLine in
+              if exitCode <> 0 then
+                raise (static_error l (Printf.sprintf "Provide %d: command '%s' failed with exit code %d" i cmdLine exitCode) None);
+              provide_file
+            end
+          in
+          provide_files := provide_javas;
+          let javas = javas @ provide_javas in
+          let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javas in
+          (headers, ds)
         | CLang ->
           if Filename.check_suffix path ".h" then
             parse_header_file "" path reportRange reportShouldFail
