@@ -3,6 +3,10 @@
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 
+value caml_stopwatch_getpid() {
+    return copy_int32(GetCurrentProcessId());
+}
+
 value caml_lock_process_to_processor_1() {
     HANDLE currentProcess = GetCurrentProcess();
     SetProcessAffinityMask(currentProcess, 1);

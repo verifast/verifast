@@ -161,7 +161,7 @@ verifast_both -c Spouse.java
 verifast_both -c Spouse2.java
 verifast_both -c SpouseFinal.java
 verifast_both -c Stack.java
-verifast_both -c -disable_overflow_check StaticFields.java
+verifast_both -c -disable_overflow_check -provides "main_class Program" StaticFields.java
 verifast_both -c ThreadRun.java
 verifast_both -c Tree.java
 verifast_both -c SuperConstructorCall.java

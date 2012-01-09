@@ -3124,9 +3124,20 @@ and
   parse_switch_expr_clause = parser
   [< '(l, Kwd "case"); '(_, Ident c); pats = (parser [< '(_, Kwd "("); '(lx, Ident x); xs = parse_more_pats >] -> x::xs | [< >] -> []); '(_, Kwd ":"); '(_, Kwd "return"); e = parse_expr; '(_, Kwd ";") >] -> SwitchExprClause (l, c, pats, e)
 and
+  expr_to_class_name e =
+    match e with
+      Var (_, x, _) -> x
+    | Read (_, e, f) -> expr_to_class_name e ^ "." ^ f
+    | _ -> raise (ParseException (expr_loc e, "Class name expected"))
+and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd "."); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+| [< '(l, Kwd ".");
+     e = begin parser
+       [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+     | [< '(_, Kwd "class"); e = parse_expr_suffix_rest (ClassLit (l, expr_to_class_name e0)) >] -> e
+     end
+  >] -> e
 | [< '(l, Kwd "["); 
      e = begin parser
        [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
@@ -6735,6 +6746,22 @@ let verify_program_core (* ?verify_program_core *)
     iter [] fixpointmap1
   in
   
+  (* Static field initializers cannot have side-effects; otherwise, class initialization would be tricky to verify. *)
+  let check_static_field_initializer e =
+    let rec iter e =
+      match e with
+        True _ | False _ | Null _ | Var _ | IntLit _ | RealLit _ | StringLit _ | ClassLit _ -> ()
+      | Operation (l, _, es, _) -> List.iter iter es
+      | NewArray (l, t, e) -> iter e
+      | NewArrayWithInitializer (l, t, es) -> List.iter iter es
+      | CastExpr (l, _, _, e) -> iter e
+      | Upcast (e, _, _) -> iter e
+      | WRead (_, e, _, _, _, _, _, _) -> iter e
+      | _ -> static_error (expr_loc e) "This expression form is not supported in a static field initializer." None
+    in
+    iter e
+  in
+  
   (* Region: Type checking of field initializers for static fields *)
   
   let classmap1 =
@@ -6744,7 +6771,9 @@ let verify_program_core (* ?verify_program_core *)
           List.map
             begin function
               (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
-                (f, {fd with finit=Some (check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e ft)})
+                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e ft in
+                check_static_field_initializer e;
+                (f, {fd with finit=Some e})
             | fd -> fd
             end
             fds
@@ -11323,6 +11352,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
+  let default_value t =
+    match t with
+     Bool -> ctxt#mk_false
+    | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
+    | _ -> get_unique_var_symb_non_ghost "value" t
+  in
+
+  
   let module LValues = struct
     type lvalue =
       Var of loc * string * ident_scope option ref
@@ -12211,6 +12248,37 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       set_verbosity (int_of_big_int n);
       cont h env;
       set_verbosity oldv
+    | ExprStmt (CallExpr (l, "init_class", [], [], args, Static)) when pure ->
+      let cn =
+        match args with
+          [LitPat (ClassLit (l, cn))] ->
+          let cn = check_classname (pn, ilist) (l, cn) in
+          cn
+        | [] ->
+          let ClassOrInterfaceName cn = List.assoc current_class tenv in
+          cn
+        | _ -> static_error l "Syntax error. Syntax: 'init_class(MyClass.class);'." None
+      in
+      let (_, _, _, _, token_psymb, _) = List.assoc "java.lang.class_init_token" predfammap in
+      let classterm = List.assoc cn classterms in
+      consume_chunk rules h [] [] [] l (token_psymb, true) [] real_unit real_unit_pat (Some 1) [TermPat classterm] $. fun _ h _ _ _ _ _ _ ->
+      let {cfds} = List.assoc cn classmap in
+      let rec iter h1 fds =
+        match fds with
+          [] -> cont (h1 @ h) env
+        | (fn, {ft;fbinding;finit;fvalue})::fds when fbinding = Static && !fvalue = Some None ->
+          begin fun cont ->
+            match finit with
+              None -> cont h1 [] (default_value ft)
+            | Some e -> eval_h h1 [] e cont
+          end $. fun h1 [] v ->
+          let (_, (_, _, _, _, symb, _)) = List.assoc (cn, fn) field_pred_map in
+          produce_chunk h1 (symb, true) [] real_unit (Some 0) [v] None $. fun h1 ->
+          iter h1 fds
+        | _::fds ->
+          iter h1 fds
+      in
+      iter h cfds
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
@@ -13878,12 +13946,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 if binding = Instance then begin
                   match init with 
                     None ->
-                     let default_value t =
-                      match t with
-                       Bool -> ctxt#mk_false
-                      | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
-                      | _ -> get_unique_var_symb_non_ghost "value" t
-                    in
                     assume_field h cn f t Real this (default_value t) real_unit $. fun h ->
                     iter h fds
                   | Some(e) -> 
@@ -14116,9 +14178,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               ([], [path], [])
           in
           let provides = provides @ options.option_provides in
+          let token = (* A string to make the provide files unique *)
+            if options.option_keep_provide_files then "" else Printf.sprintf "_%ld" (Stopwatch.getpid ())
+          in
           let provide_javas =
             provides |> imap begin fun i provide ->
-              let provide_file = Printf.sprintf "%s_provide%d.java" (Filename.chop_extension path) i in
+              let provide_file = Printf.sprintf "%s_provide%d%s.java" (Filename.chop_extension path) i token in
               let cmdLine = Printf.sprintf "%s > %s" provide provide_file in
               let exitCode = Sys.command cmdLine in
               if exitCode <> 0 then

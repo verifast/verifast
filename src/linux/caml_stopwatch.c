@@ -2,6 +2,11 @@
 #include <sched.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
+#include <unistd.h>
+
+value caml_stopwatch_getpid() {
+    return copy_int32(getpid());
+}
 
 #if defined(__i386__)
 

@@ -1,3 +1,5 @@
+external getpid: unit -> int32 = "caml_stopwatch_getpid"
+
 (** Locks this process to processor 1.
   * This potentially improves the accuracy of timing results on multicore systems.
   * This module uses the RDTSC (read timestamp counter) instruction; these counters might not run in lockstep on the different processors of a system. *)
