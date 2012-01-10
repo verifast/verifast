@@ -2631,7 +2631,7 @@ public final class EidCard extends Applet {
 		switch (buffer[ISO7816.OFFSET_P2]) {
 		case BASIC:
 			JCSystem.beginTransaction();
-			////@ open valid(); // auto
+			//@ open valid();
 			basicKeyPair = null;
 			////@ close valid(); // auto
 			JCSystem.commitTransaction();
