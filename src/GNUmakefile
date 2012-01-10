@@ -74,7 +74,7 @@ SET_ENV = export PATH=$(CWD)/../bin/:$$PATH; \
 all: build test
 
 build: env \
-       ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/dlsymtool \
+       ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/java_card_applet ../bin/dlsymtool \
        ../bin/vfstrip ../bin/list.vfmanifest \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
        ../bin/arrays.vfmanifest
@@ -134,6 +134,9 @@ distclean: clean
 
 ../bin/main_class: main_class.ml
 	ocamlopt.opt -o ../bin/main_class main_class.ml
+
+../bin/java_card_applet: java_card_applet.ml
+	ocamlopt.opt -o ../bin/java_card_applet java_card_applet.ml
 
 ../bin/dlsymtool: dlsymtool.ml
 	ocamlopt.opt -o ../bin/dlsymtool dlsymtool.ml

@@ -3,7 +3,7 @@
 PATH=$(MAKEDIR)\..\bin;$(PATH)
 OPT_OPTIONS=-g
 
-test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest
+test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\java_card_applet.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest
 	time < nl.txt
 	cd ..
 	cd examples\plugin
@@ -61,6 +61,9 @@ tabhunt: tabhunter.exe
 
 ..\bin\main_class.exe: main_class.ml
 	ocamlopt.opt -o ..\bin\main_class.exe main_class.ml
+
+..\bin\java_card_applet.exe: java_card_applet.ml
+	ocamlopt.opt -o ..\bin\java_card_applet.exe java_card_applet.ml
 
 ..\bin\dlsymtool.exe: dlsymtool.ml
 	ocamlopt.opt -o ..\bin\dlsymtool.exe dlsymtool.ml
