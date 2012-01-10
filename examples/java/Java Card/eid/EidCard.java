@@ -872,7 +872,7 @@ public final class EidCard extends Applet {
 	 * called by the JCRE to create an applet instance
 	 */
 	public static void install(byte[] bArray, short bOffset, byte bLength) 
-  	    //@ requires false;
+  	    //@ requires class_init_token(EidCard.class) &*& system();
       	    //@ ensures true;
 	{
 		// create a eID card applet instance
@@ -1630,15 +1630,11 @@ public final class EidCard extends Applet {
 	 * needs to be protected so that it can be invoked by subclasses
 	 */
 	protected EidCard() 
-    	/*@ requires EidCard_randomData(_) &*& EidCard_cipher(_) &*& EidCard_messageBuffer(?mb) &*& EidCard_nonRepKeyPair(_) 
-    	       &*& EidCard_basicKeyPair(_) &*& EidCard_authKeyPair(_) &*& transient_array_pointer(mb, 128) 
-    	       &*& EidCard_PKCS1_HEADER(?thePKCS1HEADER) &*& thePKCS1HEADER != null &*& array_slice(thePKCS1HEADER, 0, thePKCS1HEADER.length, _) &*& thePKCS1HEADER.length == 1
-    	       &*& EidCard_PKCS1_SHA1_HEADER(?thePKCS1SHA1HEADER) &*& thePKCS1SHA1HEADER != null &*& array_slice(thePKCS1SHA1HEADER, 0, thePKCS1SHA1HEADER.length, _)&*& thePKCS1SHA1HEADER.length == 16
-    	       &*& EidCard_PKCS1_MD5_HEADER(?thePKCS1MD5HEADER) &*& thePKCS1MD5HEADER != null &*& array_slice(thePKCS1MD5HEADER, 0, thePKCS1MD5HEADER.length, _) &*& thePKCS1MD5HEADER.length == 19
-    	       &*& system(); @*/
+    	/*@ requires
+    	       class_init_token(EidCard.class) &*& system(); @*/
     	//@ ensures true;
 	{
-		//@ open transient_array_pointer(mb, 128);
+		//@ init_class();
 		//internalAuthenticateCounter = 5000;
 
 		randomBuffer = new byte[256];

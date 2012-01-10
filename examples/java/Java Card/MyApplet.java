@@ -11,10 +11,15 @@ import visa.openplatform.*;
 
 /*@
 
-predicate length_value_record(byte[] array, int start, list<byte> value; int end) =
-  array[start] |-> ?length &*& 0 <= length &*&
-  end == start + 1 + length &*&
-  array_slice(array, start + 1, end, value);
+predicate length_value_record(list<byte> values, int start; int end) =
+    start < length(values) &*&
+    0 <= nth(start, values) &*&
+    start + 1 + nth(start, values) <= length(values) &*&
+    end == start + 1 + nth(start, values);
+
+predicate element(list<byte> values, int offset; byte value) =
+    offset < length(values) &*&
+    value == nth(offset, values);
 
 predicate optional_data_records(byte[] array, int start, int count;) =
     count == 0 ?
@@ -149,29 +154,35 @@ public final class MyApplet extends Applet {
   public static void install(byte[] byaBuffer, short shOffset, byte byLength) throws ISOException /*@ ensures true; @*/
     /*@
     requires
-      system() &*& bya_FCI |-> ?fci &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*&
+      system() &*& class_init_token(MyApplet.class) &*&
       byaBuffer != null &*&
       shOffset >= 0 &*&
-      length_value_record(byaBuffer, shOffset, ?instanceAID, ?privilegesStart) &*&
-      length_value_record(byaBuffer, privilegesStart, ?privileges, ?paramsStart) &*&
-      byaBuffer[paramsStart + 1] |-> ?paramsLength &*&
-      byaBuffer[paramsStart + 2] |-> ?maxNbRecord &*& maxNbRecord >= 0 &*&
-      byaBuffer[paramsStart + 3] |-> ?maxSizeRecord &*& maxSizeRecord >= 6 &*&
-      paramsStart + 3 <= 127;
+      array_slice(byaBuffer, shOffset, byLength, ?values) &*&
+      length_value_record(values, 0, ?privilegesStart) &*&
+      length_value_record(values, privilegesStart, ?paramsStart) &*&
+      element(values, paramsStart + 1, ?paramsLength) &*&
+      element(values, paramsStart + 2, ?maxNbRecord) &*& maxNbRecord >= 0 &*&
+      element(values, paramsStart + 3, ?maxSizeRecord) &*& maxSizeRecord >= 6 &*&
+      shOffset + paramsStart + 3 <= 32767;
     @*/
     //@ ensures true;
   {
+    //@ init_class();
     short shIndex = shOffset;
     byte byMaxNbRecord   = DEF_MAX_ENTRIES ;
     byte byMaxSizeRecord = DEF_MAX_ENTRY_SIZE;
 
-    //@ open length_value_record(byaBuffer, shOffset, _, privilegesStart);
-    //@ open length_value_record(byaBuffer, privilegesStart, _, _);
+    //@ open length_value_record(values, 0, privilegesStart);
+    //@ open length_value_record(values, privilegesStart, _);
     shIndex += (byaBuffer[shIndex]+1);
     shIndex += (byaBuffer[shIndex]+1);
 
     ++shIndex;
-    byte byOffRecParam = (byte)shIndex ;
+    // BUG: byte byOffRecParam = (byte)shIndex ; The Java Card spec does not guarantee that the offset fits in a byte.
+    short byOffRecParam = shIndex ;
+    //@ open element(values, shIndex - shOffset, _);
+    //@ open element(values, shIndex + 1 - shOffset, _);
+    //@ open element(values, shIndex + 2 - shOffset, _);
     byte byLenRecParam = byaBuffer[shIndex] ;
     //
     if (byLenRecParam != 0)

@@ -44,9 +44,10 @@ public final class EWallet extends Applet implements EWalletInterface {
     @*/
 
     private EWallet () 
-    //@ requires pin |-> _ &*& pinnb |-> _ &*& balance |-> _;
+    //@ requires class_init_token(EWallet.class);
     //@ ensures valid();
     {
+        //@ init_class();
     	
         pin = new OwnerPIN(PIN_TRY_LIMIT, MAX_PIN_SIZE);
 	pinnb = new byte[] {(byte)1,(byte)1,(byte)1,(byte)1};
@@ -57,7 +58,7 @@ public final class EWallet extends Applet implements EWalletInterface {
     }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) 
-    //@ requires pin |-> _ &*& pinnb |-> _ &*& balance |-> _ &*& system();
+    //@ requires class_init_token(EWallet.class) &*& system();
     //@ ensures true;
     {
         EWallet wallet = new EWallet();

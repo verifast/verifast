@@ -118,19 +118,19 @@ verifast_both -c it.jarsrc
 verifast_both -c prog.jarsrc
 cd ..
 cd Java Card
-verifast_both -c JavaCard.java
+verifast_both -c -provides "java_card_applet MyApplet 5,1,2,3,4,5,0,1,20" JavaCard.java
 verifast_both -c -provides "java_card_applet echo.Echo" Echo.java
-verifast_both -c Store.java
-verifast -c -prover redux Addressbook.java
+verifast_both -c -provides "java_card_applet Store.Store" Store.java
+verifast -c -prover redux -provides "java_card_applet Addressbook.Addressbook" Addressbook.java
 cd shareable-applets
-verifast_both -c wallet.jarsrc
+verifast_both -c -provides "java_card_applet wallet.EPhone" wallet.jarsrc
 cd ..
 cd eid
-verifast -c -disable_overflow_check -prover redux EidCard.java
-verifast -c -prover redux EidCard-with-auto.java
+verifast -c -disable_overflow_check -prover redux -provides "java_card_applet be.fedict.eidapplet.EidCard" EidCard.java
+verifast -c -prover redux -provides "java_card_applet be.fedict.eidapplet.EidCard" EidCard-with-auto.java
 cd ..
-verifast -c -allow_assume -prover redux MyApplet.java
-verifast -c -allow_assume -prover redux MyApplet-with-auto.java
+verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.MyApplet 5,1,2,3,4,5,0,3,2,10,10" MyApplet.java
+verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.MyApplet 5,1,2,3,4,5,0,3,2,10,10" MyApplet-with-auto.java
 cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java

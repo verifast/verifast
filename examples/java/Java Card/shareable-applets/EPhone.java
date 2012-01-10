@@ -25,7 +25,7 @@ public final class EPhone extends Applet {
     @*/
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _ &*& system();
+    //@ requires class_init_token(EPhone.class) &*& system();
     //@ ensures true;
     {
         EPhone Ephone = new EPhone();
@@ -33,9 +33,10 @@ public final class EPhone extends Applet {
     }
 
     protected EPhone() 
-    //@ requires balance |-> _ &*& ewallet_aid_bytes |-> _;
+    //@ requires class_init_token(EPhone.class);
     //@ ensures valid();
     {
+        //@ init_class();
         balance = 0;
         ewallet_aid_bytes = new byte[] {(byte)0xA8, (byte)0xB6, (byte)0xD1, (byte)0x26, (byte)0xB1, (byte)0xB3};
         //@ close valid();

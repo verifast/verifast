@@ -2,10 +2,15 @@ import javacard.framework.*;
 
 /*@
 
-predicate length_value_record(byte[] array, int start, int end) =
-    array[start] |-> ?length &*& 0 <= length &*&
-    end == start + 1 + length &*&
-    array_slice(array, start + 1, end, _);
+predicate length_value_record(list<byte> values, int start; int end) =
+    start < length(values) &*&
+    0 <= nth(start, values) &*&
+    start + 1 + nth(start, values) <= length(values) &*&
+    end == start + 1 + nth(start, values);
+
+predicate element(list<byte> values, int offset; byte value) =
+    offset < length(values) &*&
+    value == nth(offset, values);
 
 @*/
 
@@ -20,31 +25,41 @@ public final class MyApplet extends Applet {
     
     @*/
     
+    // Example init data:
+    // 5,1,2,3,4,5,  // AID
+    // 0,  // info
+    // 1,20 // applet data
     public static void install(byte[] array, short offset, byte length)
         /*@
         requires
-            someByteArray |-> _ &*& // TODO: Eliminate this
-            length_value_record(array, offset, ?infoStart) &*&
-            length_value_record(array, infoStart, ?appletDataStart) &*&
-            array[appletDataStart] |-> ?appletDataLength &*&
-            array[appletDataStart + 1] |-> ?bufferSize &*& 20 <= bufferSize &*&
-            appletDataStart + 1 <= 32767 &*&
+            class_init_token(MyApplet.class) &*&
+            array_slice(array, offset, length, ?values) &*&
+            length_value_record(values, 0, ?oInfo) &*&
+            length_value_record(values, oInfo, ?oAppData) &*&
+            element(values, oAppData, _) &*&
+            element(values, oAppData + 1, ?bufferSize) &*&
+            20 <= bufferSize &*&
+            offset + length <= 32767 &*&
             system();
         @*/
         //@ ensures true;
     {
+        //@ init_class(MyApplet.class);
+        
         // make all my allocations here, so I do not run
         // out of memory later
         MyApplet theApplet = new MyApplet();
         
         // check incoming parameter data
-        //@ open length_value_record(array, offset, infoStart);
+        //@ open length_value_record(values, 0, oInfo);
         byte iLen = array[offset]; // aid length
-        //@ open length_value_record(array, infoStart, appletDataStart);
         offset = (short)(offset + iLen + 1);
+        //@ open length_value_record(values, oInfo, oAppData);
         byte cLen = array[offset]; // info length
         offset = (short)(offset + cLen + 1);
+        //@ open element(values, oAppData, _);
         byte aLen = array[offset]; // applet data length
+        //@ open element(values, oAppData + 1, _);
         // read first applet data byte
         byte bLen = array[(short)(offset + 1)];
         if (bLen != 0) {

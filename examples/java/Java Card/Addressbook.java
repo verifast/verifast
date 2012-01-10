@@ -60,7 +60,7 @@ public final class Addressbook extends Applet {
     @*/ 
 
     public static void install(byte[] bArray, short bOffset, byte bLength)
-    //@ requires zeros |-> _ &*& phoneNbs |-> _ &*& emptyPhoneNbs |-> _ &*& groupnames |-> _ &*& groupnbs |-> _ &*& emptyGroups |-> _  &*& filteredNames |-> _  &*& system();
+    //@ requires class_init_token(Addressbook.class) &*& system();
     //@ ensures true;
     {
         Addressbook addressbook = new Addressbook();
@@ -68,9 +68,10 @@ public final class Addressbook extends Applet {
     }
 
     protected Addressbook()
-    //@ requires zeros |-> _ &*& phoneNbs |-> _ &*& emptyPhoneNbs |-> _ &*& groupnames |-> _ &*& groupnbs |-> _ &*& emptyGroups |-> _ &*& filteredNames |-> _;
+    //@ requires class_init_token(Addressbook.class);
     //@ ensures valid();
     {
+        //@ init_class();
         phoneNbs = new byte[400];
         emptyPhoneNbs = new short[20];
         zeros = new byte[20];

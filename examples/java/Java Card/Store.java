@@ -18,9 +18,10 @@ public final class Store extends Applet {
     @*/
     
     public static void install(byte[] bArray, short bOffset, byte bLength)
-        //@ requires value |-> _  &*& system();
+        //@ requires class_init_token(Store.class) &*& system();
         //@ ensures true;
     {
+        //@ init_class();
         Store store = new Store();
         store.register();
     }
