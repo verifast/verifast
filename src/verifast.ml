@@ -12278,7 +12278,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | _::fds ->
           iter h1 fds
       in
-      iter h cfds
+      iter [] cfds
     | ExprStmt (CallExpr (l, "open_module", [], [], args, Static)) ->
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
