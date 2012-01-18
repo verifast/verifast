@@ -1,4 +1,4 @@
-package be.fedict.eidapplet;
+package be.fedict.neweidapplet;
 
 /*@
 

@@ -1,4 +1,4 @@
-package be.fedict.eidapplet;
+package be.fedict.neweidapplet;
 
 public /*VF*ADDED*/final class MasterFile extends DedicatedFile {
 	//@ predicate File(short theFileID, boolean activeState, triple<DedicatedFile, list<File>, any> info) = MasterFile(theFileID, ?dedFile, activeState, ?siblist, ?oinfo) &*& info == triple(dedFile, siblist, oinfo);

@@ -1,6 +1,6 @@
 // Note: on this program, VeriFast/Redux is much faster than VeriFast/Z3! (2s versus 70s). To use Redux, use:
-//   vfide -prover redux EidCard.java
-//   verifast -c -prover redux EidCard.java
+//   vfide -prover redux NewEidCard.java
+//   verifast -c -prover redux NewEidCard.java
 
 /*
                            
@@ -60,7 +60,7 @@
  * License along with this software; if not, see 
  * http://www.gnu.org/licenses/.
  */
-package be.fedict.eidapplet;
+package be.fedict.neweidapplet;
 
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateKey;
@@ -71,7 +71,6 @@ import javacardx.crypto.Cipher;
 import org.globalplatform.GPSystem;
 
 /*VF*ADDED FOLLOWING IMPORTS*/
-import javacard.framework.Applet;
 import javacard.framework.*;
 import javacard.security.PrivateKey;
 import javacard.security.PublicKey;
@@ -119,7 +118,7 @@ import javacard.security.PublicKey;
 
 //@ predicate eq<T>(T t1; T t2) = t2 == t1;
 
-public final class EidCard extends Applet {
+public final class NewEidCard extends Applet {
 	/*@
 	
           predicate valid() =
@@ -355,11 +354,11 @@ public final class EidCard extends Applet {
 	 * called by the JCRE to create an applet instance
 	 */
 	public static void install(byte[] bArray, short bOffset, byte bLength) 
-  	    //@ requires class_init_token(EidCard.class) &*& system();
+  	    //@ requires class_init_token(NewEidCard.class) &*& system();
       	    //@ ensures true;
 	{
 		// create a eID card applet instance
-		new EidCard();
+		new NewEidCard();
 	}
 	
 	/**
@@ -831,7 +830,7 @@ public final class EidCard extends Applet {
 		 * basicKeyPair is static (so same for all applets) so only allocate
 		 * memory once
 		 */
-		if (EidCard.basicKeyPair != null && authKeyPair != null && nonRepKeyPair != null) {
+		if (NewEidCard.basicKeyPair != null && authKeyPair != null && nonRepKeyPair != null) {
 			return;
 		}
 		
@@ -1108,13 +1107,13 @@ public final class EidCard extends Applet {
 	
 	/**
 	 * private constructor - called by the install method to instantiate a
-	 * EidCard instance
+	 * NewEidCard instance
 	 * 
 	 * needs to be protected so that it can be invoked by subclasses
 	 */
-	protected EidCard() 
+	protected NewEidCard() 
     	/*@ requires
-    	       class_init_token(EidCard.class) &*& system(); @*/
+    	       class_init_token(NewEidCard.class) &*& system(); @*/
     	//@ ensures true;
 	{
 		//@ init_class();
@@ -1123,14 +1122,14 @@ public final class EidCard extends Applet {
 		randomBuffer = new byte[256];
 		responseBuffer = new byte[128];
 		// initialize these objects once for the superclass
-		// otherwise we have RAM problems when running multiple EidCard applets
-		if (EidCard.randomData == null)
-			EidCard.randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-		if (EidCard.cipher == null)
-			EidCard.cipher = Cipher.getInstance(Cipher.ALG_RSA_NOPAD, false);
+		// otherwise we have RAM problems when running multiple NewEidCard applets
+		if (NewEidCard.randomData == null)
+			NewEidCard.randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+		if (NewEidCard.cipher == null)
+			NewEidCard.cipher = Cipher.getInstance(Cipher.ALG_RSA_NOPAD, false);
 		Cipher c =  Cipher.getInstance(Cipher.ALG_RSA_NOPAD, false);
-		if (EidCard.messageBuffer == null)
-			EidCard.messageBuffer = JCSystem.makeTransientByteArray((short) 128, JCSystem.CLEAR_ON_DESELECT);
+		if (NewEidCard.messageBuffer == null)
+			NewEidCard.messageBuffer = JCSystem.makeTransientByteArray((short) 128, JCSystem.CLEAR_ON_DESELECT);
 		// make these transient objects so that they are stored in RAM
 		previousApduType = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
 		signatureType = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
@@ -2270,7 +2269,7 @@ public final class EidCard extends Applet {
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		JCSystem.beginTransaction();
 		//@ open valid();
-		RandomData random = EidCard.randomData;
+		RandomData random = NewEidCard.randomData;
 		// generate random data and put it into buffer
 		random.generateData(randomBuffer, (short) 0, le);
 		// set the actual number of outgoing data bytes

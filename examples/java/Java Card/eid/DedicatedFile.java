@@ -1,4 +1,4 @@
-package be.fedict.eidapplet;
+package be.fedict.neweidapplet;
 
 /*@
 predicate file_element(File child;) = child == null ? true : [1/2]child.File(_, _, _);
