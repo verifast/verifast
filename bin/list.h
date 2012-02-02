@@ -245,6 +245,16 @@ lemma_auto(length(update(i, y, xs))) void length_update<t>(int i, t y, list<t> x
   requires true;
   ensures length(update(i, y, xs)) == length(xs);
 
+fixpoint bool all_eq<t>(list<t> xs, t x) {
+    switch (xs) {
+        case nil: return true;
+        case cons(x0, xs0): return x0 == x && all_eq(xs0, x);
+    }
+}
+
+lemma void all_eq_nth<t>(list<t> xs, t x, int i);
+    requires all_eq(xs, x) && 0 <= i &*& i < length(xs);
+    ensures nth(i, xs) == x;
 
 @*/
 

@@ -22,6 +22,8 @@ int main() //@ : main_full(globals)
     //@ ensures true;
 {
     //@ open_module();
+    int x0 = x;
+    assert(x0 == 0);
     x = 7;
     struct counter *ctr = malloc(sizeof(struct counter));
     if (ctr == 0) abort();

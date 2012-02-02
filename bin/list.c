@@ -320,4 +320,18 @@ lemma void length_update<t>(int i, t y, list<t> xs)
   }
 }
 
+lemma void all_eq_nth<t>(list<t> xs, t x, int i)
+    requires all_eq(xs, x) && 0 <= i &*& i < length(xs);
+    ensures nth(i, xs) == x;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (i == 0) {
+            } else {
+                all_eq_nth(xs0, x, i - 1);
+            }
+    }
+}
+
 @*/

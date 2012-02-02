@@ -7631,6 +7631,11 @@ let verify_program_core (* ?verify_program_core *)
     mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
   in
   
+  let mk_all_eq elem_tp xs x =
+    let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
+    mk_app all_eq_symb [xs; apply_conversion (provertype_of_type elem_tp) ProverInductive x]
+  in
+  
   let rec mk_list elem_tp elems =
     match elems with
       [] -> mk_nil()
@@ -10080,6 +10085,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let produce_char_array_chunk h addr elemCount =
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [Char])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) (sizeof l elemTp) in
+        begin fun cont ->
+          if init <> None then
+            assume (mk_all_eq Char elems (ctxt#mk_intlit 0)) cont
+          else
+            cont ()
+        end $. fun () ->
         assume_eq (mk_length elems) length $. fun () ->
         cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
       in
@@ -10128,6 +10139,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         produce_array_chunk addr (iter elemCount es) elemCount
       | _ ->
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+        begin fun cont ->
+          match init, elemTp with
+            Some _, (IntType|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
+            assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
+          | _ ->
+            cont ()
+        end $. fun () ->
         produce_array_chunk addr elems elemCount
       end
     | StructType sn ->

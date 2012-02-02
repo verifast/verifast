@@ -140,6 +140,9 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
 
   /* global array */
+  //@ assert array(&ar2, _, _, _, ?ar2Elems);
+  //@ all_eq_nth(ar2Elems, 0, 0);
+  check(ar2[0] == 0);
   ar2[ 0] = 1;
   ar2[ 1] = 5;
   ar2[ 2] = 0;
