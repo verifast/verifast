@@ -126,7 +126,8 @@ int main() //@ : main
         spouse = person_get_spouse(p);
         //@ spouse_diff(p);
         if(spouse != 0) {
-          //@ ghost_list_member_handle_lemma();
+          //@ assert ghost_list_member_handle(?id, ?d);
+          //@ ghost_list_member_handle_lemma(id, d);
           //@ remove_diff_mem(ps, p, spouse);
           //@ foreach_remove(spouse, remove(p, ps));
           //@ open person_ctor(gid)(spouse);
@@ -157,7 +158,8 @@ int main() //@ : main
         spouse = person_get_spouse(p);
         //@ spouse_diff(p);
         if(spouse != 0) {
-          //@ ghost_list_member_handle_lemma();
+          //@ assert ghost_list_member_handle(?id, ?d);
+          //@ ghost_list_member_handle_lemma(id, d);
           //@ remove_nth_mem(ps, index, spouse);
           //@ foreach_remove(spouse, remove_nth(index, ps));
           //@ open person_ctor(gid)(spouse);

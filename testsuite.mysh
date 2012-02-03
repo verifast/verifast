@@ -29,6 +29,7 @@ verifast_both char.c
 mysh < chat.mysh
 verifast_both Composite.c
 verifast_both composite4.c
+verifast_both -c -disable_overflow_check composite5.c
 verifast_both -c contains.c
 verifast_both -c contains_deep.c
 verifast_both -c contrib.c
