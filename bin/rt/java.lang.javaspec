@@ -201,10 +201,35 @@ public class Integer {
 
 }
 
+/*@
+
+inductive array_slice_elems =
+  array_slice_bytes(list<byte>)
+| array_slice_ints(list<int>);
+
+inductive array_slice_elemtype = array_slice_byte | array_slice_int;
+
+predicate array_slice_dynamic(array_slice_elemtype type, Object array, int start, int end; array_slice_elems elems) =
+    switch (type) {
+        case array_slice_byte: return array_slice<byte>(^array, start, end, ?bs) &*& elems == array_slice_bytes(bs);
+        case array_slice_int: return array_slice<int>(^array, start, end, ?is) &*& elems == array_slice_ints(is);
+    };
+
+predicate arraycopy_elemtype(array_slice_elemtype type) = true;
+
+@*/
+
 public class System {
     public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types. - Support overlapping slices.
-        //@ requires [?f]array_slice<byte>(^src, srcPos, srcPos + length, ?bs) &*& array_slice<byte>(^dest, destPos, destPos + length, _);
-        //@ ensures [f]array_slice<byte>(^src, srcPos, srcPos + length, bs) &*& array_slice<byte>(^dest, destPos, destPos + length, bs);
+        /*@
+        requires
+            arraycopy_elemtype(?type) &*&
+            [?f]array_slice_dynamic(type, src, srcPos, srcPos + length, ?elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, _);
+        @*/
+        /*@
+        ensures
+            [f]array_slice_dynamic(type, src, srcPos, srcPos + length, elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, elems);
+        @*/
 }
 
 public class String{
@@ -214,6 +239,9 @@ public class String{
   public String(byte[] src);
     //@ requires [?f]array_slice(src, 0, src.length, ?bs);
     //@ ensures [f]array_slice(src, 0, src.length, bs);
+  public String(byte[] src, int offset, int length);
+    //@ requires [?f]array_slice(src, offset, offset + length, ?bs);
+    //@ ensures [f]array_slice(src, offset, offset + length, bs);
   public boolean equals(String other);
     //@ requires true;
     //@ ensures true;

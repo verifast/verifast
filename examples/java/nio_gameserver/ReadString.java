@@ -79,17 +79,12 @@ public class ReadString implements Runnable {
             maxCharsToRead = maxCharsToRead - charsRead;
             
             if(charsRead > 0) {
-		    byte[] t = new byte[buffer.position()-1];
-		    System.arraycopy(r, 0, t, 0, buffer.position()-1);
-		    readSoFar = readSoFar + new String(t);
+		    readSoFar = readSoFar + new String(r, 0, buffer.position() - 1);
             }
 
-            byte[] dest = new byte[buffer.position()];
-            System.arraycopy(r, 0, dest, 0, buffer.position());
-                        
             boolean containsNL = false;
-            if(dest.length > 0) {
-                containsNL = dest[dest.length-1] == 10 || dest[dest.length-1] == 13;
+            if(remaining > 0) {
+                containsNL = r[r.length-1] == 10 || r[r.length-1] == 13;
             }
 
             if(charsRead == -1 && !containsNL && maxCharsToRead > 0) {
