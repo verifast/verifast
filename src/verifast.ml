@@ -5013,6 +5013,7 @@ let verify_program_core (* ?verify_program_core *)
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
+    | (StaticArrayType _, PtrType _) -> ()
     | (UChar, IntType) -> ()
     | (UChar, ShortType) -> ()
     | (UChar, UShortType) -> ()
@@ -6039,7 +6040,7 @@ let verify_program_core (* ?verify_program_core *)
         (e, IntType, None)
       | None ->
       match try_assoc' (pn, ilist) x globalmap with
-      | Some ((l, tp, symbol, init)) -> scope := Some GlobalName; (e, (match tp with StaticArrayType (elemTp, n) -> PtrType elemTp | _ -> tp), None)
+      | Some ((l, tp, symbol, init)) -> scope := Some GlobalName; (e, tp, None)
       | None ->
       match try_assoc x modulemap with
       | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
