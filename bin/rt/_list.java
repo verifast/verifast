@@ -284,6 +284,20 @@ lemma void drop_take_remove_nth<t>(list<t> xs, int n)
     }
 }
 
+lemma_auto void index_of_nonnegative<t>(t x, list<t> xs)
+    requires true;
+    ensures 0 <= index_of(x, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+            } else {
+                index_of_nonnegative(x, xs0);
+            }
+    }
+}
+
 lemma void mem_index_of<t>(t x, list<t> xs)
     requires mem(x, xs) == true;
     ensures 0 <= index_of(x, xs) &*& index_of(x, xs) < length(xs);
@@ -580,6 +594,59 @@ lemma void take_update<t>(t v, int i, list<t> xs, int j)
         }
       }
   }
+}
+
+lemma void remove_remove_nth<t>(t x, list<t> xs)
+    requires true;
+    ensures remove(x, xs) == remove_nth(index_of(x, xs), xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+            } else {
+                remove_remove_nth(x, xs0);
+            }
+    }
+}
+
+lemma void index_of_nth<t>(int i, list<t> xs)
+    requires 0 <= i &*& i < length(xs);
+    ensures index_of(nth(i, xs), xs) <= i;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (i == 0) {
+            } else {
+                index_of_nth(i - 1, xs0);
+            }
+    }
+}
+
+lemma void nth_index_of<t>(t x, list<t> xs)
+    requires index_of(x, xs) < length(xs);
+    ensures nth(index_of(x, xs), xs) == x;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+            } else {
+                nth_index_of(x, xs0);
+            }
+    }
+}
+
+lemma void mem_remove_eq<t>(t x, list<t> xs)
+    requires true;
+    ensures !mem(x, xs) == (remove(x, xs) == xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            mem_remove_eq(x, xs0);
+    }
 }
 
 @*/

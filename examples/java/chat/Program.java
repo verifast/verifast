@@ -12,18 +12,17 @@ public class Program {
     {
         Room room = new Room();
         //@ close room_ctor(room)();
-        //@ close n_times(0, room_ctor(room));
-        //@ close n_times(1, room_ctor(room));
+        //@ one_time(room_ctor(room));
         Semaphore roomLock = new Semaphore(1);
+        //@ roomLock.leakHandle();
         ServerSocket serverSocket = new ServerSocket(12345);
 
         while (true)
-            //@ invariant semaphore(?f, roomLock, ?p, room_ctor(room)) &*& ServerSocket(serverSocket);
+            //@ invariant [_]roomLock.Semaphore(room_ctor(room)) &*& serverSocket.ServerSocket();
         {
             Socket socket = serverSocket.accept();
-            //@ semaphore_split(roomLock); // tweede versie split moeten toevoegen want: semaphore_split_detailed(roomLock, f/2, 0) werkt niet.
             Session session = new Session(room, roomLock, socket);
-            //@ close thread_run_pre(Session.class)(session, unit);
+            //@ close session.pre();
             Thread t = new Thread(session);
             t.start();
         }

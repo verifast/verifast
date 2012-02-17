@@ -6980,6 +6980,48 @@ let verify_program_core (* ?verify_program_core *)
       | None -> ExtensibleClass
   in
   
+  let check_inst_pred_asn l cn g check_call error =
+    let rec find_in_interf itf =
+      let search_interfmap get_interfs_and_preds interfmap fallback =
+        match try_assoc itf interfmap with
+          Some info ->
+          let (interfs, preds) = get_interfs_and_preds info in
+          begin match try_assoc g preds with
+            Some (_, pmap, family, symb) -> [(family, pmap)]
+          | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
+          end
+        | None -> fallback ()
+      in
+      search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
+      search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
+      []
+    in
+    let rec find_in_class cn =
+      let search_classmap classmap proj fallback =
+        match try_assoc cn classmap with
+          Some info ->
+          let (super, interfs, preds) = proj info in
+          begin match try_assoc g preds with
+            Some (_, pmap, family, symb, body) -> [(family, pmap)]
+          | None -> find_in_class super @ flatmap find_in_interf interfs
+          end
+        | None -> fallback ()
+      in
+      search_classmap classmap1
+        (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
+        $. fun () ->
+      search_classmap classmap0
+        (function {csuper; cinterfs; cpreds} -> (csuper, cinterfs, cpreds))
+        $. fun () ->
+      []
+    in
+    begin match find_in_class cn @ find_in_interf cn with
+      [] -> error ()
+    | [(family, pmap)] -> check_call family pmap
+    | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
+    end
+  in
+  
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let check_asn = check_asn_core in
     match p with
@@ -7037,45 +7079,7 @@ let verify_program_core (* ?verify_program_core *)
                   in
                   (WInstPredAsn (l, None, cn, get_class_finality cn, family, p#name, index, wps), tenv, [])
                 in
-                let rec find_in_interf itf =
-                  let search_interfmap get_interfs_and_preds interfmap fallback =
-                    match try_assoc itf interfmap with
-                      Some info ->
-                      let (interfs, preds) = get_interfs_and_preds info in
-                      begin match try_assoc p#name preds with
-                        Some (_, pmap, family, symb) -> [(family, pmap)]
-                      | None -> List.flatten (List.map (fun i -> find_in_interf i) interfs)
-                      end
-                    | None -> fallback ()
-                  in
-                  search_interfmap (function (li, fields, meths, preds, interfs, pn, ilist) -> (interfs, preds)) interfmap1 $. fun () ->
-                  search_interfmap (function InterfaceInfo (li, fields, meths, preds, interfs) -> (interfs, preds)) interfmap0 $. fun () ->
-                  []
-                in
-                let rec find_in_class cn =
-                  let search_classmap classmap proj fallback =
-                    match try_assoc cn classmap with
-                      Some info ->
-                      let (super, interfs, preds) = proj info in
-                      begin match try_assoc p#name preds with
-                        Some (_, pmap, family, symb, body) -> [(family, pmap)]
-                      | None -> find_in_class super @ flatmap find_in_interf interfs
-                      end
-                    | None -> fallback ()
-                  in
-                  search_classmap classmap1
-                    (function (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) -> (super, interfs, preds))
-                    $. fun () ->
-                  search_classmap classmap0
-                    (function {csuper; cinterfs; cpreds} -> (csuper, cinterfs, cpreds))
-                    $. fun () ->
-                  []
-                in
-                begin match find_in_class cn @ find_in_interf cn with
-                  [] -> error ()
-                | [(family, pmap)] -> check_call family pmap
-                | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" p#name) None
-                end
+                check_inst_pred_asn l cn p#name check_call error
               | Some(_) -> error ()
               end
             end
@@ -7110,38 +7114,7 @@ let verify_program_core (* ?verify_program_core *)
           (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
         let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
-        begin match try_assoc cn classmap1 with
-          Some (_, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-          begin match try_assoc g preds with
-            Some (_, pmap, family, symb, body) -> check_call family pmap
-          | None -> error ()
-          end
-        | None ->
-          begin match try_assoc cn classmap0 with
-            Some {cpreds} ->
-            begin match try_assoc g cpreds with
-              Some (_, pmap, family, symb, body) -> check_call family pmap
-            | None -> error ()
-            end
-          | None ->
-            begin match try_assoc cn interfmap1 with
-              Some (_, fields, methods, preds, intefs, pn, ilist) ->
-              begin match try_assoc g preds with
-                Some (_, pmap, family, symb) -> check_call family pmap
-              | None -> error ()
-              end
-            | None ->
-              begin match try_assoc cn interfmap0 with
-                Some (InterfaceInfo (_, fields, methods, preds, interfs)) ->
-                begin match try_assoc g preds with
-                  Some (_, pmap, family, symb) -> check_call family pmap
-                | None -> error ()
-                end
-              | None -> assert false
-              end
-            end
-          end
-        end
+        check_inst_pred_asn l cn g check_call error
       | _ -> static_error l "Target of instance predicate assertion must be of class type" None
       end
     | ExprAsn (l, e) ->

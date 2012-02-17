@@ -1,6 +1,5 @@
 package java.lang;
 
-
 /*@
 
 inductive unit = unit;
@@ -8,6 +7,13 @@ inductive unit = unit;
 inductive pair<a, b> = pair(a, b);
 
 inductive option<t> = none | some(t);
+
+fixpoint t the<t>(option<t> o) {
+    switch (o) {
+        case none: return default_value;
+        case some(v): return v;
+    }
+}
 
 fixpoint a fst<a, b>(pair<a, b> p) {
     switch (p) {
@@ -22,7 +28,7 @@ fixpoint b snd<a, b>(pair<a, b> p) {
 }
 
 fixpoint int abs(int x) {
-  return 0 <= x ? x : - x; 
+    return 0 <= x ? x : - x; 
 }
 
 fixpoint t default_value<t>();
@@ -34,24 +40,24 @@ inductive boxed_bool = boxed_bool(boolean);
 fixpoint boolean unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): return value; } }
 
 lemma_auto(x%y) void modulo_nonnegative(int x, int y);
-  requires 0 <= x && 0 < y;
-  ensures 0 <= x % y && x % y < y;
+    requires 0 <= x && 0 < y;
+    ensures 0 <= x % y && x % y < y;
   
 lemma_auto void modulo_div(int x, int y);
-  requires y != 0;
-  ensures y * (x / y) + x % y == x;
+    requires y != 0;
+    ensures y * (x / y) + x % y == x;
 
 lemma_auto void shiftright_div(int x);
-  requires 0 <= x;
-  ensures x >> 1 == x / 2;
+    requires 0 <= x;
+    ensures x >> 1 == x / 2;
 
 lemma_auto(x & y) void bitand_nonnegative(int x, int y);
-  requires 0 <= x && 0 <= y;
-  ensures 0 <= (x & y) && (x & y) <= x && (x & y) <= y;
+    requires 0 <= x && 0 <= y;
+    ensures 0 <= (x & y) && (x & y) <= x && (x & y) <= y;
 
 lemma_auto void bitand_modulo(int x);
-  requires 0 <= x;
-  ensures x % 2 == (x & 1);
+    requires 0 <= x;
+    ensures x % 2 == (x & 1);
 
 predicate class_init_token(Class c;);
 
@@ -107,20 +113,22 @@ lemma void array_slice_deep_empty_close<T, A, V>(T[] array, int start, predicate
     requires array != null &*& 0 <= start &*& start <= array.length;
     ensures array_slice_deep<T, A, V>(array, start, start, p, a, nil, nil);
 
+predicate exists<t>(t x) = true;
+
 @*/
 
 public class Object {
-
+    
     public Object();
         //@ requires emp;
         //@ ensures emp;
-
+    
 }
 
 public class Class {}
 
 public class Throwable {
-
+    
     public Throwable();
         //@ requires emp;
         //@ ensures emp;
@@ -128,7 +136,7 @@ public class Throwable {
 }
 
 public class Exception extends Throwable {
-
+    
     public Exception();
         //@ requires emp;
         //@ ensures emp;
@@ -136,7 +144,7 @@ public class Exception extends Throwable {
 }
 
 public class Error extends Throwable {
-
+    
     public Error();
         //@ requires emp;
         //@ ensures emp;
@@ -144,7 +152,7 @@ public class Error extends Throwable {
 }
 
 public class InterruptedException {
-
+    
     public InterruptedException();
         //@ requires emp;
         //@ ensures emp;
@@ -162,15 +170,15 @@ public class IOException extends Exception {
 public class ClosedChannelException extends IOException {}
 
 public class RuntimeException extends Exception {
-
+    
     public RuntimeException();
         //@ requires true;
         //@ ensures true;
-
+    
     public RuntimeException(Object innerException);
         //@ requires true;
         //@ ensures true;
-
+    
 }
 
 public class ArrayIndexOutOfBoundsException extends RuntimeException {
@@ -180,17 +188,21 @@ public class NullPointerException extends RuntimeException {
 }
 
 public class Byte {
+    
     public static final byte MIN_VALUE = -128;
     public static final byte MAX_VALUE = 127;
+    
 }
 
 public class Short {
+    
     public static final short MIN_VALUE = -32768;
     public static final short MAX_VALUE = 32767;
+    
 }
 
 public class Integer {
-
+    
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
     
@@ -198,7 +210,6 @@ public class Integer {
         //@ requires s != null;
         //@ ensures true;
     
-
 }
 
 /*@
@@ -220,6 +231,7 @@ predicate arraycopy_elemtype(array_slice_elemtype type) = true;
 @*/
 
 public class System {
+    
     public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types. - Support overlapping slices.
         /*@
         requires
@@ -230,97 +242,106 @@ public class System {
         ensures
             [f]array_slice_dynamic(type, src, srcPos, srcPos + length, elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, elems);
         @*/
+    
 }
 
 public class String{
-  public String();
-    //@ requires emp;
-    //@ ensures true;
-  public String(byte[] src);
-    //@ requires [?f]array_slice(src, 0, src.length, ?bs);
-    //@ ensures [f]array_slice(src, 0, src.length, bs);
-  public String(byte[] src, int offset, int length);
-    //@ requires [?f]array_slice(src, offset, offset + length, ?bs);
-    //@ ensures [f]array_slice(src, offset, offset + length, bs);
-  public boolean equals(String other);
-    //@ requires true;
-    //@ ensures true;
-  public int indexOf(String other);
-    //@ requires true;
-    //@ ensures result>=(-1);
-  public String substring(int begin,int end);
-    //@ requires begin>=0;
-    //@ ensures result!=null;
-  public int length();
-    //@ requires true;
-    //@ ensures result>=0;
-  public boolean matches(String regex);
-    //@ requires true;
-    //@ ensures true;
-  public boolean contains(String regex);
-    //@ requires true;
-    //@ ensures true;
-  public static String valueOf(int value);
-    //@ requires true;
-    //@ ensures result != null;
-  public byte[] getBytes();
-    //@ requires true;
-    //@ ensures result != null &*& array_slice(result, 0, result.length, _) &*& 0 <= result.length;
-  public String trim();
-    //@ requires true;
-    //@ ensures result != null;
+
+    public String();
+        //@ requires emp;
+        //@ ensures true;
+    
+    public String(byte[] src);
+        //@ requires [?f]array_slice(src, 0, src.length, ?bs);
+        //@ ensures [f]array_slice(src, 0, src.length, bs);
+    
+    public boolean equals(String other);
+        //@ requires true;
+        //@ ensures true;
+    
+    public int indexOf(String other);
+        //@ requires true;
+        //@ ensures result >= (-1);
+    
+    public String substring(int begin, int end);
+        //@ requires begin >= 0;
+        //@ ensures result != null;
+    
+    public int length();
+        //@ requires true;
+        //@ ensures result >= 0;
+    
+    public boolean matches(String regex);
+        //@ requires true;
+        //@ ensures true;
+    
+    public boolean contains(String regex);
+        //@ requires true;
+        //@ ensures true;
+    
+    public static String valueOf(int value);
+        //@ requires true;
+        //@ ensures result != null;
+    
+    public byte[] getBytes();
+        //@ requires true;
+        //@ ensures result != null &*& array_slice(result, 0, result.length, _) &*& 0 <= result.length;
+    
+    public String trim();
+        //@ requires true;
+        //@ ensures result != null;
+    
 }
-
-/*@
-
-predicate_family thread_run_pre(Class c)(Runnable run, any info);
-predicate_family thread_run_post(Class c)(Runnable run, any info);
-
-@*/
 
 public interface Runnable {
+    
+    //@ predicate pre();
+    //@ predicate post();
+    
     public void run();
-        //@ requires thread_run_pre(this.getClass())(this, ?info);
-        //@ ensures thread_run_post(this.getClass())(this, info);
+        //@ requires pre();
+        //@ ensures post();
+    
 }
-
-/*@
-
-predicate thread(Thread thread, Runnable run);
-predicate thread_started(Thread thread, Runnable run, any info);
-
-@*/
 
 public class Thread {
+    
     static final int MAX_PRIORITY = 10;
     
-    public Thread(Runnable run);
+    //@ predicate Thread(Runnable r, boolean started);
+    
+    public Thread(Runnable r);
         //@ requires true;
-        //@ ensures thread(this, run);
+        //@ ensures Thread(r, false);
     
     void start();
-        //@ requires thread(this, ?run) &*& thread_run_pre(run.getClass())(run, ?info);
-        //@ ensures thread_started(this, run, info);
-        
+        //@ requires Thread(?r, false) &*& r.pre();
+        //@ ensures Thread(r, true);
+    
     void setPriority(int newPriority);
-        //@ requires thread(this, ?run);
-        //@ ensures thread(this, run);
+        //@ requires Thread(?r, false);
+        //@ ensures Thread(r, false);
+    
 }
 
-/*@
-predicate string_buffer(StringBuffer buffer);
-@*/
 public class StringBuffer{
-  StringBuffer();
-    //@ requires emp;
-    //@ ensures string_buffer(this);
-  StringBuffer append(StringBuffer b);
-    //@ requires string_buffer(this) &*& [?f]string_buffer(b);
-    //@ ensures string_buffer(this) &*& [f]string_buffer(b) &*& result==this;
-  StringBuffer append(String string);
-    //@ requires string_buffer(this);
-    //@ ensures string_buffer(this) &*& result==this;
-  String toString();
-    //@ requires [?f]string_buffer(this);
-    //@ ensures [f]string_buffer(this) &*& result!=null;
+    
+    //@ predicate StringBuffer();
+    
+    StringBuffer();
+        //@ requires emp;
+        //@ ensures StringBuffer();
+    
+    StringBuffer append(StringBuffer b);
+        //@ requires StringBuffer() &*& [?f]b.StringBuffer();
+        //@ ensures StringBuffer() &*& [f]b.StringBuffer() &*& result == this;
+    
+    StringBuffer append(String string);
+        //@ requires StringBuffer();
+        //@ ensures StringBuffer() &*& result == this;
+    
+    String toString();
+        //@ requires [?f]StringBuffer();
+        //@ ensures [f]StringBuffer() &*& result != null;
+    
 }

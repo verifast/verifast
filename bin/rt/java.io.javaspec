@@ -1,134 +1,141 @@
 package java.io;
 
-/*@
-
-predicate_family InputStream(Class c)(InputStream stream, any info);
-predicate InputStreamReader(InputStreamReader reader, InputStream stream, any info);
-predicate_family Reader(Class c)(Reader r, any info);
-predicate BufferedReader(BufferedReader reader, Reader reader0, any info);
-
-inductive InputStreamReader_info = InputStreamReader_info(InputStream, any);
-
-lemma void InputStreamReader_upcast(InputStreamReader r);
-    requires InputStreamReader(r, ?stream, ?info);
-    ensures Reader(r.getClass())(r, InputStreamReader_info(stream, info));
-
-lemma void InputStreamReader_downcast(InputStreamReader r, InputStream stream, any info);
-    requires Reader(r.getClass())(r, InputStreamReader_info(stream, info));
-    ensures InputStreamReader(r, stream, info);
-
-lemma void InputStreamReader_dispose(InputStreamReader r);
-    requires InputStreamReader(r, ?stream, ?info);
-    ensures InputStream(stream.getClass())(stream, info);
-
-lemma void BufferedReader_dispose(BufferedReader r);
-    requires BufferedReader(r, ?reader, ?info);
-    ensures Reader(reader.getClass())(reader, info);
-
-@*/
-
 public class IOException {}
 
 public interface InputStream {
-   public int read();
-   	//@ requires InputStream(this.getClass())(this, ?info);
-   	//@ ensures InputStream(this.getClass())(this, info);
-   public void close();
-   	//@ requires InputStream(this.getClass())(this, ?info);
-   	//@ ensures emp;
+    
+    //@ predicate InputStream();
+    
+    public int read();
+        //@ requires InputStream();
+        //@ ensures InputStream();
+    
+    public void close();
+        //@ requires InputStream();
+        //@ ensures emp;
+    
 }
 
 public interface Reader {
+    
+    //@ predicate Reader();
+    
 }
 
 public class InputStreamReader implements Reader {
-    public InputStreamReader(InputStream stream);
-        //@ requires InputStream(stream.getClass())(stream, ?info);
-        //@ ensures InputStreamReader(this, stream, info);
+    
+    //@ predicate InputStreamReader(InputStream s);
+    
+    public InputStreamReader(InputStream s);
+        //@ requires s.InputStream();
+        //@ ensures Reader() &*& [_]InputStreamReader(s);
+    
+    /*@
+    
+    lemma void destroy();
+        requires Reader() &*& [_]InputStreamReader(?s);
+        ensures s.InputStream();
+    
+    @*/
+    
 }
 
 public class BufferedReader implements Reader {
+    
+    //@ predicate BufferedReader(Reader r);
+    
     public BufferedReader(Reader r);
-        //@ requires Reader(r.getClass())(r, ?info);
-        //@ ensures BufferedReader(this, r, info);
+        //@ requires r.Reader();
+        //@ ensures Reader() &*& [_]BufferedReader(r);
     
     public String readLine();
-        //@ requires BufferedReader(this, ?reader, ?info);
-        //@ ensures BufferedReader(this, reader, info) &*& result!=null;
+        //@ requires Reader();
+        //@ ensures Reader() &*& result != null;
+    
+    /*@
+    
+    lemma void destroy();
+        requires Reader() &*& [_]BufferedReader(?r);
+        ensures r.Reader();
+    
+    @*/
+    
 }
 
-/*@
-
-predicate_family OutputStream(Class c)(OutputStream stream, any info);
-predicate OutputStreamWriter(OutputStreamWriter w, OutputStream s, any info);
-predicate_family Writer(Class c)(Writer w, any info);
-predicate BufferedWriter(BufferedWriter w, Writer writer, any info);
-predicate PrintWriter(PrintWriter w, Writer writer, any info);
-
-inductive OutputStreamWriter_info = OutputStreamWriter_info(OutputStream, any);
-inductive BufferedWriter_info = BufferedWriter_info(Writer, any);
-
-lemma void OutputStreamWriter_upcast(OutputStreamWriter w);
-    requires OutputStreamWriter(w, ?stream, ?info);
-    ensures Writer(w.getClass())(w, OutputStreamWriter_info(stream, info));
-
-lemma void OutputStreamWriter_downcast(OutputStreamWriter w, OutputStream stream, any info);
-    requires Writer(w.getClass())(w, OutputStreamWriter_info(stream, info));
-    ensures OutputStreamWriter(w, stream, info);
-
-lemma void OutputStreamWriter_dispose(OutputStreamWriter w);
-    requires OutputStreamWriter(w, ?stream, ?info);
-    ensures OutputStream(stream.getClass())(stream, info);
-
-lemma void BufferedWriter_upcast(BufferedWriter w);
-    requires BufferedWriter(w, ?writer, ?info);
-    ensures Writer(w.getClass())(w, BufferedWriter_info(writer, info));
-
-lemma void BufferedWriter_downcast(BufferedWriter w, Writer writer, any info);
-    requires Writer(w.getClass())(w, BufferedWriter_info(writer, info));
-    ensures BufferedWriter(w, writer, info);
-
-lemma void BufferedWriter_dispose(BufferedWriter w);
-    requires BufferedWriter(w, ?writer, ?info);
-    ensures Writer(writer.getClass())(writer, info);
-
-lemma void PrintWriter_dispose(PrintWriter w);
-    requires PrintWriter(w, ?writer, ?info);
-    ensures Writer(writer.getClass())(writer, info);
-
-@*/
-
 public interface OutputStream {
+    
+    //@ predicate OutputStream();
+    
 }
 
 public interface Writer {
+    
+    //@ predicate Writer();
+    
     public void write(String text);
-        //@ requires Writer(this.getClass())(this, ?info);
-        //@ ensures Writer(this.getClass())(this, info);
+        //@ requires Writer();
+        //@ ensures Writer();
     
     public void flush();
-        //@ requires Writer(this.getClass())(this, ?info);
-        //@ ensures Writer(this.getClass())(this, info);
+        //@ requires Writer();
+        //@ ensures Writer();
+    
 }
 
 public class OutputStreamWriter implements Writer {
+    
+    //@ predicate OutputStreamWriter(OutputStream s);
+    
     public OutputStreamWriter(OutputStream s);
-        //@ requires OutputStream(s.getClass())(s, ?info);
-        //@ ensures OutputStreamWriter(this, s, info);
+        //@ requires s.OutputStream();
+        //@ ensures Writer() &*& [_]OutputStreamWriter(s);
+    
+    /*@
+    
+    lemma void destroy();
+        requires Writer() &*& [_]OutputStreamWriter(?s);
+        ensures s.OutputStream();
+    
+    @*/
+    
 }
 
 public class BufferedWriter implements Writer {
+    
+    //@ predicate BufferedWriter(Writer w);
+    
     public BufferedWriter(Writer w);
-        //@ requires Writer(w.getClass())(w, ?info);
-        //@ ensures BufferedWriter(this, w, info);
+        //@ requires w.Writer();
+        //@ ensures Writer() &*& [_]BufferedWriter(w);
+    
+    /*@
+    
+    lemma void destroy();
+        requires Writer() &*& [_]BufferedWriter(?w);
+        ensures w.Writer();
+    
+    @*/
+    
 }
 
-public class PrintWriter {
+public class PrintWriter implements Writer {
+    
+    //@ predicate PrintWriter(Writer w);
+    
     public PrintWriter(Writer w, boolean autoFlush);
-        //@ requires Writer(w.getClass())(w, ?info);
-        //@ ensures PrintWriter(this, w, info);
+        //@ requires w.Writer();
+        //@ ensures Writer() &*& [_]PrintWriter(w);
     
     public void println(String text);
-        //@ requires PrintWriter(this, ?w, ?info);
-        //@ ensures PrintWriter(this, w, info);
+        //@ requires Writer();
+        //@ ensures Writer();
+    
+    /*@
+    
+    lemma void destroy();
+        requires Writer() &*& [_]PrintWriter(?w);
+        ensures w.Writer();
+    
+    @*/
+    
 }

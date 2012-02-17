@@ -7,7 +7,7 @@ import java.util.*;
 /*@
 
 predicate member(Member member) =
-    member.nick |-> ?nick &*& member.writer |-> ?writer &*& writer != null &*& Writer(writer.getClass())(writer, _);
+    member.nick |-> ?nick &*& [1/2]member.writer |-> ?writer &*& writer != null &*& writer.Writer();
 
 lemma void member_distinct(Member m1,Member m2)
     requires member(m1) &*& member(m2);
@@ -40,8 +40,8 @@ class Member {
     Writer writer;
     
     public Member(String nick, Writer writer)
-        //@ requires writer != null &*& Writer(writer.getClass())(writer, _);
-        //@ ensures member(this);
+        //@ requires writer != null &*& writer.Writer();
+        //@ ensures member(this) &*& [1/2]this.writer |-> writer;
     {
         this.nick = nick;
         this.writer = writer;

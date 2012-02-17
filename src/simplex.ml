@@ -96,7 +96,7 @@ and ['tag] row context own c =
       begin
         match live_terms with
           [(col, coef)] ->
-          if col#owner#tag <> None && sign_num constant = 0 && coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
+          if owner#tag <> None && col#owner#tag <> None && sign_num constant = 0 && coef#value =/ num_of_int 1 then context#propagate_equality owner col#owner
         | [] -> if owner#tag <> None then context#propagate_eq_constant owner constant else if owner#nonzero && sign_num constant = 0 then context#set_unsat
         | _ -> ()
       end;

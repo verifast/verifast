@@ -100,8 +100,6 @@ predicate term(Term t; term state) =
       state == S
       :
       (t.left |-> ?first &*& t.right |-> ?second &*& first != null &*& second != null &*& [_]term(first, ?state1) &*& [_]term(second, ?state2) &*& state == apply(state1, state2)));
-
-predicate exists<t>(t v) = true;
 @*/
 
 class Term {

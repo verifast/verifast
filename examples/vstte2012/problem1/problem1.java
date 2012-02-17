@@ -62,8 +62,6 @@ fixpoint list<t> execute_swaps<t>(list<pair<int, int> > swaps, list<t> xs) {
   }
 }
 
-predicate exists<t>(t v) = true;
-
 predicate is_perm<t>(list<t> xs, list<t> ys) =
   exists<list<pair<int, int> > >(?swaps) &*& execute_swaps(swaps, xs) == ys;
 @*/

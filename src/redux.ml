@@ -934,7 +934,7 @@ and context () =
       | [] -> failwith "Popstack is empty"
 
     method add_redex n =
-      redexes <- n::redexes
+      redexes <- redexes @ [n] (* Add to end; order matters due to axiom precondition checks. *)
     
     method add_implication p q =
       let is = implications in

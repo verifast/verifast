@@ -209,6 +209,10 @@ fixpoint int index_of<t>(t x, list<t> xs) {
     }
 }
 
+lemma_auto void index_of_nonnegative<t>(t x, list<t> xs);
+    requires true;
+    ensures 0 <= index_of(x, xs);
+
 lemma void mem_index_of<t>(t x, list<t> xs);
     requires mem(x, xs) == true;
     ensures 0 <= index_of(x, xs) &*& index_of(x, xs) < length(xs);
@@ -314,4 +318,21 @@ lemma void take_one_more<t>(int i, list<t> xs);
 lemma_auto(take(j, update(i, v, xs))) void take_update<t>(t v, int i, list<t> xs, int j);
   requires 0 <= i && i < length(xs) && 0 <= j && j <= i;
   ensures take(j, xs) == take(j, update(i, v, xs));
+
+lemma void remove_remove_nth<t>(t x, list<t> xs);
+    requires true;
+    ensures remove(x, xs) == remove_nth(index_of(x, xs), xs);
+
+lemma void index_of_nth<t>(int i, list<t> xs);
+    requires 0 <= i &*& i < length(xs);
+    ensures index_of(nth(i, xs), xs) <= i;
+
+lemma void nth_index_of<t>(t x, list<t> xs);
+    requires index_of(x, xs) < length(xs);
+    ensures nth(index_of(x, xs), xs) == x;
+
+lemma void mem_remove_eq<t>(t x, list<t> xs);
+    requires true;
+    ensures mem(x, xs) != (remove(x, xs) == xs);
+
 @*/

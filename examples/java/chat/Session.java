@@ -5,30 +5,51 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
+class ListUtil {
+    
+    static void remove(List l, Object o) // Like l.remove(o), except uses identity comparison instead of .equals().
+        //@ requires l.List(?es);
+        //@ ensures l.List(remove(o, es));
+    {
+        for (int i = 0; i < l.size(); i++)
+            //@ invariant l.List(es) &*& 0 <= i &*& i <= index_of(o, es);
+        {
+            if (l.get(i) == o) {
+                l.remove(i);
+                //@ remove_remove_nth(o, es);
+                //@ index_of_nth(i, es);
+                break;
+            }
+            //@ if (index_of(o, es) == i) { nth_index_of(o, es); }
+        }
+        //@ if (mem(o, es)) { mem_index_of(o, es); } else { mem_remove_eq(o, es); }
+    }
+    
+}
+
 /*@
 
 predicate_ctor room_ctor(Room room)() = room(room);
 
-predicate session(Session session) =
-    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo)
-    &*& roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
-
-predicate_family_instance thread_run_pre(Session.class)(Session session, any info) = session(session);
-
-predicate_family_instance thread_run_post(Session.class)(Session session, any info) = true;
+predicate session(Session session;) =
+    session.room |-> ?room &*& session.room_lock |-> ?roomLock &*& session.socket |-> ?socket &*& socket != null &*& socket.Socket(?i, ?o)
+    &*& roomLock != null &*& [_]roomLock.Semaphore(room_ctor(room)) &*& i.InputStream() &*& o.OutputStream();
 
 @*/
 
-public class Session implements Runnable {
+public final class Session implements Runnable {
     Room room;
     Semaphore room_lock;
     Socket socket;
     
+    //@ predicate pre() = session(this);
+    //@ predicate post() = true;
+    
     public Session(Room room, Semaphore roomLock, Socket socket)
         /*@
         requires
-            roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*&
-            socket != null &*& Socket(socket, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+            roomLock != null &*& [_]roomLock.Semaphore(room_ctor(room)) &*&
+            socket != null &*& socket.Socket(?i, ?o) &*& i.InputStream() &*& o.OutputStream();
         @*/
         //@ ensures session(this);
     {
@@ -41,11 +62,11 @@ public class Session implements Runnable {
     public void run_with_nick(Room room, Semaphore roomLock, BufferedReader reader, Writer writer, String nick) throws InterruptedException /*@ ensures true; @*/, IOException /*@ ensures true; @*/
         /*@
         requires
-            roomLock != null &*& semaphore(?f, roomLock, ?p, room_ctor(room)) &*& room!= null &*& room(room) &*&
-            reader != null &*& BufferedReader(reader, ?reader0, ?reader0Info) &*&
-            writer != null &*& Writer(writer.getClass())(writer, ?writerInfo);
+            roomLock != null &*& [_]roomLock.Semaphore(room_ctor(room)) &*& room != null &*& room(room) &*&
+            reader != null &*& reader.Reader() &*&
+            writer != null &*& writer.Writer();
         @*/
-        //@ ensures semaphore(f, roomLock, p + 1, room_ctor(room)) &*& BufferedReader(reader, reader0, reader0Info) &*& Writer(writer.getClass())(writer, writerInfo);
+        //@ ensures [_]roomLock.Semaphore(room_ctor(room)) &*& reader.Reader() &*& writer.Writer();
     {
         Member member = null;
         String joinMessage = nick + " has joined the room.";
@@ -64,13 +85,15 @@ public class Session implements Runnable {
             //@ close room(room);
         }
         //@ close room_ctor(room)();
+        //@ roomLock.makeHandle();
         roomLock.release();
         
         {
             String message = reader.readLine();
             while (message != null)
-                //@ invariant BufferedReader(reader, reader0, reader0Info) &*& semaphore(f, roomLock, p+1, room_ctor(room)) ;
+                //@ invariant reader.Reader() &*& [_]roomLock.Semaphore(room_ctor(room));
             {
+                //@ roomLock.makeHandle();
                 roomLock.acquire();
                 //@ open room_ctor(room)();
                 room.broadcast_message(nick + " says: " + message);
@@ -86,8 +109,8 @@ public class Session implements Runnable {
         {
             List membersList = room.members;
             //@ assert foreach<Member>(?members, @member);
-            //@ assume(mem<Member>(member, members));
-            membersList.remove(member);
+            //@ assume(mem<Member>(member, members)); // TODO: Eliminate using a ghost list.
+            ListUtil.remove(membersList, member);
             //@ foreach_remove<Member>(member, members);
         }
         //@ close room(room);
@@ -98,13 +121,11 @@ public class Session implements Runnable {
         roomLock.release();
         
         //@ open member(member);
-        //@ assert Writer(?memberWriterClass)(?memberWriter, ?memberWriterInfo);
-        //@ assume(memberWriterClass == memberWriter.getClass() && memberWriter == writer && memberWriterInfo == writerInfo);
     }
     
     public void run()
-        //@ requires thread_run_pre(Session.class)(this, ?info);
-        //@ ensures thread_run_post(Session.class)(this, info);
+        //@ requires pre();
+        //@ ensures post();
     {
         try {
             this.runCore();
@@ -116,32 +137,26 @@ public class Session implements Runnable {
     }
     
     public void runCore() throws InterruptedException /*@ ensures true; @*/, IOException /*@ ensures true; @*/
-        //@ requires thread_run_pre(Session.class)(this, ?info);
-        //@ ensures thread_run_post(Session.class)(this, info);
+        //@ requires pre();
+        //@ ensures post();
     {
-        //@ open thread_run_pre(Session.class)(this,info);
+        //@ open pre();
         //@ open session(this);
         Room room = this.room;
         Semaphore roomLock = this.room_lock;
         Socket socket = this.socket;
         InputStream in = socket.getInputStream();
-        //@ assert InputStream(in.getClass())(in, ?inInfo);
         InputStreamReader reader0 = new InputStreamReader(in);
-        //@ InputStreamReader_upcast(reader0);
         BufferedReader reader = new BufferedReader(reader0);
-        //@ assert BufferedReader(reader, reader0, ?readerInfo);
         OutputStream out = socket.getOutputStream();
-        //@ assert OutputStream(out.getClass())(out, ?outInfo);
         OutputStreamWriter writer0 = new OutputStreamWriter(out);
-        //@ OutputStreamWriter_upcast(writer0);
         BufferedWriter writer1 = new BufferedWriter(writer0);
-        //@ BufferedWriter_upcast(writer1);
         Writer writer = writer1;
-        //@ assert Writer(writer.getClass())(writer, ?writerInfo);
         
         writer.write("Welcome to the chat room.\r\n");
         writer.write("The following members are present: ");
         
+        //@ roomLock.makeHandle();
         roomLock.acquire();
         //@ open room_ctor(room)();
         //@ open room(room);
@@ -150,18 +165,16 @@ public class Session implements Runnable {
             //@ assert foreach<Member>(?members, @member);
             Iterator iter = membersList.iterator();
             boolean hasNext = iter.hasNext();
-            //@ length_nonnegative(members);
             while (hasNext)
                 /*@
                 invariant
-                    Writer(writer.getClass())(writer, writerInfo) &*&
-                    iter(iter, 1, membersList, list_wrapper, members, ?i) &*& foreach(members, @member)
-                    &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
+                    writer.Writer() &*&
+                    iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter)
+                    &*& foreach(members, @member) &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
                 @*/
             {
                 Object o = iter.next();
                 Member member = (Member)o;
-                //@ mem_nth(i, members);
                 //@ foreach_remove<Member>(member, members);
                 //@ open member(member);
                 writer.write(member.nick);
@@ -172,8 +185,7 @@ public class Session implements Runnable {
             }
             writer.write("\r\n");
             writer.flush();
-            //@ iter_dispose(iter);
-            //@ open list_wrapper(membersList, members);
+            //@ membersList.destroyIterator();
         }
         
         //@ close room(room);
@@ -183,7 +195,7 @@ public class Session implements Runnable {
         {
             boolean done = false;
             while (!done)
-                //@ invariant Writer(writer.getClass())(writer, writerInfo) &*& BufferedReader(reader, reader0, readerInfo) &*& semaphore(?f, roomLock, ?p, room_ctor(room));
+                //@ invariant writer.Writer() &*& reader.Reader() &*& [_]roomLock.Semaphore(room_ctor(room));
             {
                 writer.write("Please enter your nick: \r\n");
                 writer.flush();
@@ -192,6 +204,7 @@ public class Session implements Runnable {
                     if (nick == null) {
                         done = true;
                     } else {
+                        //@ roomLock.makeHandle();
                         roomLock.acquire();
                         //@ open room_ctor(room)();
                         {
@@ -210,14 +223,11 @@ public class Session implements Runnable {
             }
         }
         
-        //@ BufferedReader_dispose(reader);
-        //@ InputStreamReader_downcast(reader0, in, inInfo);
-        //@ InputStreamReader_dispose(reader0);
-        //@ BufferedWriter_downcast(writer1, writer0, OutputStreamWriter_info(out, outInfo));
-        //@ BufferedWriter_dispose(writer1);
-        //@ OutputStreamWriter_downcast(writer0, out, outInfo);
-        //@ OutputStreamWriter_dispose(writer0);
+        //@ reader.destroy();
+        //@ reader0.destroy();
+        //@ writer1.destroy();
+        //@ writer0.destroy();
         socket.close();
-        //@ close thread_run_post(Session.class)(this,info);
+        //@ close post();
     }
 }

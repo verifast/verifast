@@ -6,7 +6,7 @@ import java.util.*;
 /*@
 
 predicate room(Room room) =
-    room.members |-> ?membersList &*& membersList != null &*& foreach<Member>(?members, member) &*& list(membersList, members);
+    room.members |-> ?membersList &*& membersList != null &*& foreach<Member>(?members, member) &*& membersList.List(members);
 
 @*/
 
@@ -33,17 +33,15 @@ public class Room {
         Iterator iter = membersList.iterator();
         boolean hasMember = false;
         boolean hasNext = iter.hasNext();
-        //@ length_nonnegative(members);
         while (hasNext && !hasMember)
             /*@
             invariant
-                iter(iter, 1, membersList, list_wrapper, members, ?i) &*& foreach(members, @member)
+                iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter) &*& foreach(members, @member)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
             Object o = iter.next();
             Member member = (Member)o;
-            //@ mem_nth(i, members);
             //@ foreach_remove<Member>(member, members);
             //@ open member(member);
             hasMember = nick.equals(member.nick);
@@ -51,8 +49,7 @@ public class Room {
             //@ foreach_unremove<Member>(member, members);
             hasNext = iter.hasNext();
         }
-        //@ iter_dispose(iter);
-        //@ open list_wrapper(membersList, members);
+        //@ membersList.destroyIterator();
         //@ close room(this);
         return hasMember;
     }
@@ -70,7 +67,7 @@ public class Room {
         while (hasNext)
             /*@
             invariant
-                foreach<Member>(?members, @member) &*& iter(iter, 1, membersList, list_wrapper, members, ?i)
+                foreach<Member>(?members, @member) &*& iter.Iterator((seq_of_list)(members), _, ?i) &*& List_iterating(membersList.getClass())(membersList, members, 1, iter)
                 &*& hasNext == (i < length(members)) &*& 0 <= i &*& i <= length(members);
             @*/
         {
@@ -87,8 +84,7 @@ public class Room {
             //@ foreach_unremove<Member>(member, members);
             hasNext = iter.hasNext();
         }
-        //@ iter_dispose(iter);
-        //@ open list_wrapper(membersList, members);
+        //@ membersList.destroyIterator();
         //@ close room(this);
     }
 }

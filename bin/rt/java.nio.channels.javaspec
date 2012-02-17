@@ -4,151 +4,206 @@ import java.util.*;
 import java.nio.*;
 import java.net.*;
 
-/*@ 
-predicate selector(Selector selector, list<pair<SelectionKey, SelectableChannel> > keys, list<pair<SelectionKey, SelectableChannel> > cancelledKeys, Set s);
-@*/
-
-
 public class Selector {
-	public int select() throws IOException /*@ ensures true; @*/;
-	//@ requires selector(this, ?keys1, ?cancelledKeys, ?s) &*& set(s, _);
-	/*@ ensures 0 <= result &*& selector(this, ?keys2, nil, s) &*& set(s, ?selectedKeys) &*& remove_all(cancelledKeys, keys1) == keys2; @*/
-	
-	public Set selectedKeys();
-	//@ requires selector(this, ?keys, ?cancelledKeys, ?s) &*& set(s, ?selectedKeys);
-	/*@ ensures result != null &*& subset<Object>(fst_list(remove_all(cancelledKeys, keys)), selectedKeys) == true &*& result == s 
-		&*& selector(this, keys, cancelledKeys, s) 
-		&*& set(s, selectedKeys) &*& not_null(selectedKeys) == true &*& distinct(selectedKeys) == true; @*/
+    
+    /*@
+    
+    predicate Selector(list<pair<SelectionKey, SelectableChannel> > keys, list<pair<SelectionKey, SelectableChannel> > cancelledKeys, Set selectedKeysSet);
+    
+    @*/
+    
+    public int select() throws IOException /*@ ensures true; @*/;
+        //@ requires Selector(?keys1, ?cancelledKeys, ?s) &*& s.Set(_);
+        /*@ ensures 0 <= result &*& Selector(?keys2, nil, s) &*& s.Set(?selectedKeys) &*& remove_all(cancelledKeys, keys1) == keys2; @*/
+    
+    public Set selectedKeys();
+        //@ requires Selector(?keys, ?cancelledKeys, ?s) &*& s.Set(?selectedKeys);
+        /*@
+        ensures
+            Selector(keys, cancelledKeys, s)
+            &*& result == s &*& s.Set(selectedKeys) &*& not_null(selectedKeys) == true &*& distinct(selectedKeys) == true
+            &*& subset<Object>(fst_list(remove_all(cancelledKeys, keys)), selectedKeys) == true;
+        @*/
 
-	static Selector open();
-	//@ requires true;
-	//@ ensures result != null &*& selector(result, nil, nil, ?s) &*& set(s, nil);
-	
-	public Selector wakeup();
-	//@ requires true;
-	//@ ensures result == this;
+    static Selector open();
+        //@ requires true;
+        //@ ensures result.Selector(nil, nil, ?s) &*& s.Set(nil);
+    
+    public Selector wakeup();
+        //@ requires true;
+        //@ ensures result == this;
+    
 }
 
-//@ predicate channel(SelectableChannel channel, int registrations);
-
-/*@
-lemma void channel_unique(SelectableChannel channel);
-    requires channel(channel, ?r1) &*& channel(channel, ?r2);
-    ensures false;
-@*/
-
 public class SelectableChannel {
-	public SelectionKey register(Selector sel, int ops);
-	//@ requires sel != null &*& channel(this, ?r) &*& selector(sel, ?keys, ?cancelledKeys, ?s);
-	/*@ ensures selectionkey(result, this, sel) &*& channel(this, (r+1)) &*& result != null
-			&*& selector(sel, ?newKeys, cancelledKeys, s) &*& in_map(result, remove_all(cancelledKeys, newKeys)) == this 
-                        &*& contains_key(result, remove_all(cancelledKeys, keys)) == true ? 
-                        	newKeys == keys 
-                        		: 
-                        	newKeys == append(keys, cons(pair(result, this), nil)); @*/
+    
+    //@ predicate Channel(int registrations);
+    
+    public SelectionKey register(Selector sel, int ops);
+        //@ requires Channel(?r) &*& sel.Selector(?keys, ?cancelledKeys, ?s);
+        /*@
+        ensures
+            Channel(r + 1) &*&
+            result.SelectionKey(this, sel) &*&
+            sel.Selector(?newKeys, cancelledKeys, s) &*&
+            in_map(result, remove_all(cancelledKeys, newKeys)) == this &*&
+            contains_key(result, remove_all(cancelledKeys, keys)) == true ?
+                newKeys == keys 
+            :
+                newKeys == append(keys, cons(pair(result, this), nil));
+        @*/
+    
+    /*@
+    
+    lemma void unique();
+        requires [?f]Channel(?n);
+        ensures [f]Channel(n) &*& f <= 1;
+    
+    @*/
+    
 }
 
 public class SocketChannel extends SelectableChannel {
-	public int write(ByteBuffer src);
-	//@ requires [?f]channel(this, ?r) &*& src != null &*& bytebuffer(src, ?cap, ?lim, ?pos);
-	//@ ensures [f]channel(this, r) &*& bytebuffer(src, cap, lim, pos+result) &*& 0 <= result &*& result <= (lim - pos);
+    
+    public int write(ByteBuffer src);
+        //@ requires [?f]Channel(?r) &*& src.ByteBuffer(?cap, ?lim, ?pos);
+        //@ ensures [f]Channel(r) &*& src.ByteBuffer(cap, lim, pos + result) &*& 0 <= result &*& result <= lim - pos;
 
-	public SelectionKey register(Selector sel, int ops);
-	//@ requires sel != null &*& channel(this, ?r) &*& selector(sel, ?keys, ?cancelledKeys, ?s);
-	/*@ ensures selectionkey(result, this, sel) &*& channel(this, (r+1)) &*& result != null
-			&*& selector(sel, ?newKeys, cancelledKeys, s) &*& in_map(result, remove_all(cancelledKeys, newKeys)) == this 
-                        &*& contains_key(result, remove_all(cancelledKeys, keys)) == true ? 
-                        	newKeys == keys 
-                        		: 
-                        	newKeys == append(keys, cons(pair(result, this), nil)) &*& contains_key(result, keys) == false; @*/
-                        	
-	public int read(ByteBuffer dst);
-	//@ requires dst != null &*& bytebuffer(dst, ?cap, ?lim, ?pos) &*& [?f]channel(this, ?r);
-	//@ ensures bytebuffer(dst, cap, lim, pos+result) &*& [f]channel(this, r) &*& 0 <= result &*& result <= (lim - pos);
+    public SelectionKey register(Selector sel, int ops);
+        //@ requires Channel(?r) &*& sel.Selector(?keys, ?cancelledKeys, ?s);
+        /*@
+        ensures
+            Channel(r + 1) &*&
+            result.SelectionKey(this, sel) &*&
+            sel.Selector(?newKeys, cancelledKeys, s) &*&
+            in_map(result, remove_all(cancelledKeys, newKeys)) == this &*&
+            contains_key(result, remove_all(cancelledKeys, keys)) == true ?
+                newKeys == keys
+            : 
+                newKeys == append(keys, cons(pair(result, this), nil)) &*& contains_key(result, keys) == false;
+        @*/
+    
+    public int read(ByteBuffer dst);
+        //@ requires [?f]Channel(?r) &*& dst.ByteBuffer(?cap, ?lim, ?pos);
+        //@ ensures dst.ByteBuffer(cap, lim, pos + result) &*& [f]Channel(r) &*& 0 <= result &*& result <= lim - pos;
 
-	public void close();
-	//@ requires [?f]channel(this, 0);
-	//@ ensures emp;
-	
-	public final SelectableChannel configureBlocking(boolean block);
-	//@ requires [?f]channel(this, ?r);
-	//@ ensures [f]channel(this, r);
-	
-	public boolean isOpen();
-	//@ requires [?f]channel(this, ?r);
-	//@ ensures [f]channel(this, r);
+    public void close();
+        //@ requires [?f]Channel(0);
+        //@ ensures emp;
+    
+    public final SelectableChannel configureBlocking(boolean block);
+        //@ requires [?f]Channel(?r);
+        //@ ensures [f]Channel(r);
+    
+    public boolean isOpen();
+        //@ requires [?f]Channel(?r);
+        //@ ensures [f]Channel(r);
+    
+    /*@
+    
+    lemma void unique();
+        requires [?f]Channel(?r);
+        ensures [f]Channel(r) &*& f <= 1;
+    
+    @*/
+    
 }
 
-//@ predicate selectionkey(SelectionKey key, SelectableChannel channel, Selector selector);
-
 public class SelectionKey {
-	static final int OP_READ = 1;
-	static final int OP_ACCEPT = 16;
-	static final int OP_WRITE = 4; 
-	
-	public void cancel();
-	/*@ requires selectionkey(this, ?channel, ?selector) &*& channel(channel, ?r) &*& selector(selector, ?keys, ?cancelledKeys, ?s); @*/ 
-	/*@ ensures selectionkey(this, channel, selector) &*& contains_key(this, cancelledKeys) ? 
-					selector(selector, keys, cancelledKeys, s) &*& channel(channel, r) : 
-					selector(selector, keys, cons(pair(this, channel), cancelledKeys), s) &*& channel(channel, r-1); @*/
-
-	public boolean isValid();
-	//@ requires selectionkey(this, ?channel, ?selector) &*& selector(selector, ?keys, ?cancelledKeys, ?s);
-	//@ ensures selectionkey(this, channel, selector) &*& selector(selector, keys, cancelledKeys, s) &*& contains_key(this, cancelledKeys) == !result;
-	
-	public final boolean isReadable();
-	//@ requires selectionkey(this, ?channel, ?selector);
-	//@ ensures selectionkey(this, channel, selector);
-	
-	public final boolean isWritable();
-	//@ requires selectionkey(this, ?channel, ?selector);
-	//@ ensures selectionkey(this, channel, selector);
-	
-	public final boolean isAcceptable();
-	//@ requires selectionkey(this, ?channel, ?selector);
-	//@ ensures selectionkey(this, channel, selector);
-				
-	public SelectableChannel channel(); 
-	/*@ requires selectionkey(this, ?channel, ?selector) &*& selector(selector, ?keys, ?cancelledKeys, ?s); @*/
-	/*@ ensures selectionkey(this, channel, selector) &*& result == channel &*& result != null &*& selector(selector, keys, cancelledKeys, s)
-		 &*& channel == in_map(this, keys); @*/
+    
+    static final int OP_READ = 1;
+    static final int OP_ACCEPT = 16;
+    static final int OP_WRITE = 4; 
+    
+    //@ predicate SelectionKey(SelectableChannel channel, Selector selector);
+    
+    public void cancel();
+        //@ requires SelectionKey(?channel, ?selector) &*& channel.Channel(?r) &*& selector.Selector(?keys, ?cancelledKeys, ?s);
+        /*@
+        ensures
+            SelectionKey(channel, selector) &*& contains_key(this, cancelledKeys) ?
+                selector.Selector(keys, cancelledKeys, s) &*& channel.Channel(r)
+            :
+                selector.Selector(keys, cons(pair(this, channel), cancelledKeys), s) &*& channel.Channel(r - 1);
+        @*/
+    
+    public boolean isValid();
+        //@ requires SelectionKey(?channel, ?selector) &*& selector.Selector(?keys, ?cancelledKeys, ?s);
+        //@ ensures SelectionKey(channel, selector) &*& selector.Selector(keys, cancelledKeys, s) &*& contains_key(this, cancelledKeys) == !result;
+    
+    public final boolean isReadable();
+        //@ requires SelectionKey(?channel, ?selector);
+        //@ ensures SelectionKey(channel, selector);
+    
+    public final boolean isWritable();
+        //@ requires SelectionKey(?channel, ?selector);
+        //@ ensures SelectionKey(channel, selector);
+    
+    public final boolean isAcceptable();
+        //@ requires SelectionKey(?channel, ?selector);
+        //@ ensures SelectionKey(channel, selector);
+                
+    public SelectableChannel channel(); 
+        //@ requires SelectionKey(?channel, ?selector) &*& selector.Selector(?keys, ?cancelledKeys, ?s);
+        /*@
+        ensures
+            SelectionKey(channel, selector) &*& selector.Selector(keys, cancelledKeys, s) &*&
+            result == channel &*& result != null &*& channel == in_map(this, keys);
+        @*/
+    
 } 
 
 public class ServerSocketChannel extends SelectableChannel {
-	public static ServerSocketChannel open();
-	//@ requires true;
-	//@ ensures result != null &*& channel(result, 0);
-	
-	public final SelectableChannel configureBlocking(boolean block);
-	//@ requires channel(this, ?r);
-	//@ ensures channel(this, r);
-	
-	public ServerSocket socket();
-	//@ requires channel(this, ?r);
-	//@ ensures channel_socket_binding(this, result, r) &*& channel(this, r) &*& result != null;
-	
-	public SelectionKey register(Selector sel, int ops);
-	//@ requires sel != null &*& channel(this, ?r) &*& selector(sel, ?keys, ?cancelledKeys, ?s);
-	/*@ ensures selectionkey(result, this, sel) &*& channel(this, (r+1)) &*& result != null
-			&*& selector(sel, ?newKeys, cancelledKeys, s) &*& in_map(result, remove_all(cancelledKeys, newKeys)) == this 
-                        &*& contains_key(result, remove_all(cancelledKeys, keys)) == true ? 
-                        	newKeys == keys 
-                        		: 
-                        	newKeys == append(keys, cons(pair(result, this), nil)); @*/
-	
-	public SocketChannel accept();
-	//@ requires channel(this, ?r);
-	//@ ensures result != null &*& channel(result, 0) &*& channel(this, r);
+    
+    //@ predicate ServerSocketChannel(ServerSocket socket);
+    //@ predicate residue(int registrations);
+    
+    public static ServerSocketChannel open();
+        //@ requires true;
+        //@ ensures result.Channel(0) &*& [_]result.ServerSocketChannel(_);
+    
+    public final SelectableChannel configureBlocking(boolean block);
+        //@ requires Channel(?r);
+        //@ ensures Channel(r);
+    
+    public ServerSocket socket();
+        //@ requires [_]ServerSocketChannel(?s);
+        //@ ensures result == s;
+    
+    /*@
+    
+    lemma void toServerSocket();
+        requires Channel(?r) &*& [_]ServerSocketChannel(?s);
+        ensures s.ServerSocket() &*& residue(r);
+    
+    lemma void fromServerSocket();
+        requires residue(?r) &*& [_]ServerSocketChannel(?s) &*& s.ServerSocket();
+        ensures Channel(r);
+    
+    @*/
+    
+    public SelectionKey register(Selector sel, int ops);
+        //@ requires Channel(?r) &*& sel.Selector(?keys, ?cancelledKeys, ?s);
+        /*@
+        ensures
+            result.SelectionKey(this, sel) &*& Channel(r + 1) &*&
+            sel.Selector(?newKeys, cancelledKeys, s) &*& in_map(result, remove_all(cancelledKeys, newKeys)) == this &*&
+            contains_key(result, remove_all(cancelledKeys, keys)) == true ?
+                newKeys == keys
+            :
+                newKeys == append(keys, cons(pair(result, this), nil));
+        @*/
+    
+    public SocketChannel accept();
+        //@ requires Channel(?r);
+        //@ ensures Channel(r) &*& result.Channel(0);
+    
+    /*@
+    
+    lemma void unique();
+        requires [?f]Channel(?r);
+        ensures [f]Channel(r) &*& f <= 1;
+    
+    @*/
+    
 }
-
-/*@
-predicate channel_socket_binding(ServerSocketChannel channel, ServerSocket socket, int r);
-
-lemma void cast_to_serversocket(ServerSocketChannel channel, ServerSocket socket);
-	requires channel_socket_binding(channel, socket, _) &*& channel(channel, ?r);
-	ensures channel_socket_binding(channel, socket, r) &*& ServerSocket(socket);
-	
-lemma void cast_to_serversocketchannel(ServerSocketChannel channel, ServerSocket socket);
-	requires channel_socket_binding(channel, socket, ?r) &*& ServerSocket(socket);
-	ensures channel_socket_binding(channel, socket, r) &*& channel(channel, r);
-@*/

@@ -2,56 +2,56 @@ package java.net;
 
 import java.io.*;
 
-public class SocketAddress {
-
-}
-
-//@ predicate inetsocketaddress(InetSocketAddress address);
+public class SocketAddress {}
 
 public class InetSocketAddress extends SocketAddress {
-	public InetSocketAddress(int port);
-	//@ requires true;
-	//@ ensures inetsocketaddress(this);
+    
+    public InetSocketAddress(int port);
+        //@ requires true;
+        //@ ensures true;
+    
 }
 
-/*@
-
-predicate ServerSocket(ServerSocket serverSocket);
-predicate Socket(Socket socket, InputStream inputStream, any inputStreamInfo, OutputStream outputStream, any outputStreamInfo);
-
-@*/
-
 public class Socket {
+    
+    //@ predicate Socket(InputStream i, OutputStream o);
+    
     public Socket(String host, int port);
         //@ requires emp;
-        //@ ensures Socket(this, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        //@ ensures Socket(?i, ?o) &*& i.InputStream() &*& o.OutputStream();
     
     public InputStream getInputStream();
-        //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo);
-        //@ ensures Socket(this, in, inInfo, out, outInfo) &*& result == in;
+        //@ requires Socket(?i, ?o);
+        //@ ensures Socket(i, o) &*& result == i;
     
     public OutputStream getOutputStream();
-        //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo);
-        //@ ensures Socket(this, in, inInfo, out, outInfo) &*& result == out;
+        //@ requires Socket(?i, ?o);
+        //@ ensures Socket(i, o) &*& result == o;
     
     public void shutdownOutput();
-        //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo);
-        //@ ensures Socket(this, in, inInfo, out, outInfo);
+        //@ requires Socket(?i, ?o);
+        //@ ensures Socket(i, o);
     
     public void close();
-        //@ requires Socket(this, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
+        //@ requires Socket(?i, ?o) &*& i.InputStream() &*& o.OutputStream();
         //@ ensures emp;
+    
 }
 
 public class ServerSocket {
+    
+    //@ predicate ServerSocket();
+    
     public ServerSocket(int port);
         //@ requires emp;
-        //@ ensures ServerSocket(this);
+        //@ ensures ServerSocket();
     
     public Socket accept();
-        //@ requires ServerSocket(this);
-        //@ ensures result!= null &*& ServerSocket(this) &*& Socket(result, ?in, ?inInfo, ?out, ?outInfo) &*& InputStream(in.getClass())(in, inInfo) &*& OutputStream(out.getClass())(out, outInfo);
-	public void bind(SocketAddress endpoint) throws IOException /*@ ensures true; @*/;
-		//@ requires ServerSocket(this);
-		//@ ensures ServerSocket(this);
+        //@ requires ServerSocket();
+        //@ ensures ServerSocket() &*& result.Socket(?i, ?o) &*& i.InputStream() &*& o.OutputStream();
+    
+    public void bind(SocketAddress endpoint) throws IOException /*@ ensures true; @*/;
+        //@ requires ServerSocket();
+        //@ ensures ServerSocket();
+    
 }

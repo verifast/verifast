@@ -3,12 +3,12 @@ import java.util.*;
 
 class Program {
     static void readLinesIntoList(BufferedReader reader, List list)
-        //@ requires BufferedReader(reader, ?reader0, ?info) &*& reader != null &*& list(list, _) &*& list != null;
-        //@ ensures BufferedReader(reader, reader0, info) &*& list(list, _);
+        //@ requires reader.Reader() &*& list.List(_);
+        //@ ensures reader.Reader() &*& list.List(_);
     {
         boolean repeat = true;
         do
-            //@ invariant BufferedReader(reader, reader0, info) &*& list(list, _);
+            //@ invariant reader.Reader() &*& list.List(_);
         {
             String line = reader.readLine();
             if (line == null)

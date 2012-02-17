@@ -105,12 +105,6 @@ cd java
 cd chat
 verifast_both -c -allow_assume chat.jarsrc
 cd ..
-cd gameserver
-verifast_both -c gameserver.jarsrc
-cd ..
-cd nio_gameserver
-ifnotmac verifast -c GameServer.jarsrc
-cd ..
 cd chatbot
 verifast_both -disable_overflow_check -c -provides "main_class chatbot.Bot" Bot.java
 cd ..
@@ -146,7 +140,6 @@ verifast_both -c -allow_should_fail CompoundAssignments.java
 verifast_both -c -allow_should_fail Division.java
 verifast_both -c ConstantExpressions.java
 verifast_both -disable_overflow_check -c Contrib.jarsrc
-verifast_both -disable_overflow_check -c Contrib_box.jarsrc
 verifast_both -c DefaultCtor.java
 verifast_both -c DoWhile.java
 verifast_both -c Downcast.java
@@ -155,7 +148,6 @@ verifast_both -c hello.scala
 verifast_both -c -disable_overflow_check InstanceOf.java
 verifast_both -c InterfaceLemmas.java
 verifast_both -c Iterator.java
-verifast_both -c -disable_overflow_check LemmaPointer.java
 verifast_both -allow_assume -disable_overflow_check -c map.java
 verifast_both -c -disable_overflow_check NestedExprTest.java
 verifast_both -c -disable_overflow_check Recell.java

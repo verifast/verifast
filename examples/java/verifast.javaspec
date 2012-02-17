@@ -1,0 +1,60 @@
+package verifast;
+
+public class JoinableRunnable implements Runnable {
+    
+    //@ predicate JoinableRunnable(Runnable runnable, boolean closed);
+    
+    /*@
+    
+    lemma void closeIt()
+        requires JoinableRunnable(?runnable, false) &*& runnable.pre();
+        ensures JoinableRunnable(runnable, true) &*& pre();
+    
+    @*/
+    
+}
+
+public class ThreadingHelper {
+    
+    public static JoinableRunnable createJoinableRunnable(Runnable r);
+        //@ requires true;
+        //@ ensures result.JoinableRunnable(r, false);
+    
+    public static void join(Thread t, JoinableRunnable r);
+        //@ requires t.Thread(r, true) &*& r.JoinableRunnable(?r0, true);
+        //@ ensures r0.post();
+    
+}
+
+public interface CriticalSection {
+    
+    //@ predicate pre(predicate() payload);
+    //@ predicate post();
+    
+    void run();
+        //@ requires pre(?payload) &*& payload();
+        //@ ensures post() &*& payload();
+    
+}
+
+public final class Monitor {
+    
+    //@ predicate Monitor(predicate() payload);
+    
+    public Monitor();
+        //@ requires exists<predicate()>(?payload) &*& payload();
+        //@ ensures Monitor(payload);
+    
+    public void sync(CriticalSection body);
+        //@ requires [?f]Monitor(?payload) &*& body.pre(payload);
+        //@ ensures [f]Monitor(payload) &*& body.post();
+    
+    /*@
+    
+    lemma void destroy();
+        requires Monitor(?payload);
+        ensures payload();
+    
+    @*/
+    
+}

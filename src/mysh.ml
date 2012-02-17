@@ -1,3 +1,7 @@
+let push xs x = xs := x::!xs
+
+let (|>) x f = f x
+
 let max_processes =
   match Sys.argv with
     [| _; "-cpus"; n |] -> int_of_string n
@@ -18,7 +22,7 @@ let macros = ref []
 
 let processes_started_count = ref 0
 let active_processes_count = ref 0
-let failed_processes_count = ref 0
+let failed_processes_log: string list list ref = ref []
 let queue = Queue.create ()
 let queueNonempty = Condition.create ()
 let queueMutex = Mutex.create ()
@@ -55,14 +59,14 @@ let pump_events () =
   Mutex.unlock queueMutex
 
 let rec exec_lines filepath file lineno =
-  if !failed_processes_count = 0 then
+  if !failed_processes_log = [] then
   let error msg =
     failwith (Printf.sprintf "mysh: %s: line %d: %s" filepath lineno msg)
   in
   try
     let line = read_line_canon file in
     let rec exec_line line =
-      if !failed_processes_count = 0 then begin
+      if !failed_processes_log = [] then begin
       print_endline line;
       match parse_cmdline line with
         ["cd"; dir] -> Sys.chdir dir
@@ -98,8 +102,14 @@ let rec exec_lines filepath file lineno =
         let cin = Unix.open_process_in line in
         let t = Thread.create
           begin fun () ->
+            let output = ref [] in
+            push output line;
             try
-              while true do do_print_line (Printf.sprintf "[%d]%s" pid (input_line cin)) done
+              while true do
+                let line = input_line cin in
+                push output line;
+                do_print_line (Printf.sprintf "[%d]%s" pid line)
+              done
             with End_of_file -> ();
             let status = Unix.close_process_in cin in
             let time1 = Unix.gettimeofday() in
@@ -107,12 +117,12 @@ let rec exec_lines filepath file lineno =
             if status <> Unix.WEXITED 0 then begin
               let msg =
                 match status with
-                  Unix.WEXITED n -> Printf.sprintf "Process %d terminated with exit code %d" pid n
-                | Unix.WSIGNALED n -> Printf.sprintf "Process %d terminated because of signal %d" pid n
-                | Unix.WSTOPPED n -> Printf.sprintf "Process %d stopped because of signal %d" pid n
+                  Unix.WEXITED n -> Printf.sprintf "=== Process %d terminated with exit code %d ===" pid n
+                | Unix.WSIGNALED n -> Printf.sprintf "=== Process %d terminated because of signal %d ===" pid n
+                | Unix.WSTOPPED n -> Printf.sprintf "=== Process %d stopped because of signal %d ===" pid n
               in
               do_print_line msg;
-              enqueue (fun () -> incr failed_processes_count)
+              enqueue (fun () -> push failed_processes_log (msg::List.rev !output))
             end;
             enqueue (fun () -> decr active_processes_count)
           end
@@ -132,5 +142,9 @@ let () =
   while !active_processes_count > 0 do pump_events () done;
   let time1 = Unix.gettimeofday() in
   Printf.printf "Total execution time: %f seconds\n" (time1 -. time0);
-  Printf.printf "%d failed processes\n" !failed_processes_count;
-  if !failed_processes_count > 0 then exit 1
+  List.rev !failed_processes_log |> List.iter begin fun lines ->
+    print_newline ();
+    List.iter print_endline lines
+  end;
+  Printf.printf "\n%d failed processes\n" (List.length !failed_processes_log);
+  if !failed_processes_log <> [] then exit 1
