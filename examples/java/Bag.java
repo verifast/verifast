@@ -99,10 +99,11 @@ class Bag {
     a = new int[n];
 
     // Some magic to deal with System.arraycopy's polymorphism over the array element type.
-    //@ close arraycopy_elemtype(array_slice_int);
     //@ close array_slice_dynamic(array_slice_int, input, 0, n, _);
     //@ close array_slice_dynamic(array_slice_int, a, 0, n, _);
+    //@ close arraycopy_pre(array_slice_int, false, 1, input, 0, n, _, a, 0);
     System.arraycopy(input, 0, a, 0, n);
+    //@ open arraycopy_post(_, _, _, _, _, _, _, _, _);
     //@ open array_slice_dynamic(_, a, _, _, _);
   }
   

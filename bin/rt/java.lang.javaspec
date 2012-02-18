@@ -216,32 +216,66 @@ public class Integer {
 
 inductive array_slice_elems =
   array_slice_bytes(list<byte>)
-| array_slice_ints(list<int>);
+| array_slice_ints(list<int>)
+| array_slice_Objects(list<Object>);
 
-inductive array_slice_elemtype = array_slice_byte | array_slice_int;
+fixpoint array_slice_elems take_dynamic(int n, array_slice_elems es) {
+    switch (es) {
+        case array_slice_bytes(bs): return array_slice_bytes(take(n, bs));
+        case array_slice_ints(is): return array_slice_ints(take(n, is));
+        case array_slice_Objects(os): return array_slice_Objects(take(n, os));
+    }
+}
+
+fixpoint array_slice_elems drop_dynamic(int n, array_slice_elems es) {
+    switch (es) {
+        case array_slice_bytes(bs): return array_slice_bytes(drop(n, bs));
+        case array_slice_ints(is): return array_slice_ints(drop(n, is));
+        case array_slice_Objects(os): return array_slice_Objects(drop(n, os));
+    }
+}
+
+inductive array_slice_elemtype = array_slice_byte | array_slice_int | array_slice_Object;
 
 predicate array_slice_dynamic(array_slice_elemtype type, Object array, int start, int end; array_slice_elems elems) =
     switch (type) {
         case array_slice_byte: return array_slice<byte>(^array, start, end, ?bs) &*& elems == array_slice_bytes(bs);
         case array_slice_int: return array_slice<int>(^array, start, end, ?is) &*& elems == array_slice_ints(is);
+        case array_slice_Object: return array_slice<Object>(^array, start, end, ?os) &*& elems == array_slice_Objects(os);
     };
 
-predicate arraycopy_elemtype(array_slice_elemtype type) = true;
+predicate arraycopy_pre(array_slice_elemtype type, boolean overlap, real frac, Object src, int srcPos, int length, array_slice_elems elems, Object dest, int destPos;) =
+    overlap ?
+        dest == src &*&
+        srcPos <= destPos ?
+            [frac]array_slice_dynamic(type, src, srcPos, destPos, take_dynamic(destPos - srcPos, elems)) &*&
+            array_slice_dynamic(type, src, destPos, srcPos + length, drop_dynamic(destPos - srcPos, elems)) &*&
+            array_slice_dynamic(type, src, srcPos + length, destPos + length, _)
+        :
+            array_slice_dynamic(type, src, destPos, srcPos, _) &*&
+            array_slice_dynamic(type, src, srcPos, destPos + length, take_dynamic(destPos + length - srcPos, elems)) &*&
+            [frac]array_slice_dynamic(type, src, destPos + length, srcPos + length, drop_dynamic(destPos + length - srcPos, elems))
+    :
+        [frac]array_slice_dynamic(type, src, srcPos, srcPos + length, elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, _);
+
+predicate arraycopy_post(array_slice_elemtype type, boolean overlap, real frac, Object src, int srcPos, int length, array_slice_elems elems, Object dest, int destPos;) =
+    overlap ?
+        srcPos <= destPos ?
+            [frac]array_slice_dynamic(type, src, srcPos, destPos, take_dynamic(destPos - srcPos, elems)) &*&
+            array_slice_dynamic(type, src, destPos, destPos + length, elems)
+        :
+            array_slice_dynamic(type, src, destPos, destPos + length, elems) &*&
+            [frac]array_slice_dynamic(type, src, destPos + length, srcPos + length, drop_dynamic(destPos + length - srcPos, elems))
+    :
+        [frac]array_slice_dynamic(type, src, srcPos, srcPos + length, elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, elems);
 
 @*/
 
 public class System {
     
-    public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types. - Support overlapping slices.
-        /*@
-        requires
-            arraycopy_elemtype(?type) &*&
-            [?f]array_slice_dynamic(type, src, srcPos, srcPos + length, ?elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, _);
-        @*/
-        /*@
-        ensures
-            [f]array_slice_dynamic(type, src, srcPos, srcPos + length, elems) &*& array_slice_dynamic(type, dest, destPos, destPos + length, elems);
-        @*/
+    public static void arraycopy(Object src, int srcPos, Object dest, int destPos, int length); // TODO: - Support more element types.
+        //@ requires arraycopy_pre(?type, ?overlap, ?frac, src, srcPos, length, ?elems, dest, destPos);
+        //@ ensures arraycopy_post(type, overlap, frac, src, srcPos, length, elems, dest, destPos);
     
 }
 

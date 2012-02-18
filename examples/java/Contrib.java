@@ -4,8 +4,8 @@ import verifast.*;
 class Counter {
     
     int value;
-    int c1; // Should be a ghost field.
-    int c2; // Should be a ghost field.
+    //@ int c1;
+    //@ int c2;
     
 }
 
@@ -46,7 +46,7 @@ final class Session1 implements Runnable {
         lock.acquire();
         //@ open Counter(counter)();
         counter.value++;
-        counter.c1++;
+        //@ counter.c1++;
         //@ close Counter(counter)();
         lock.release();
     }
@@ -80,7 +80,7 @@ final class Session2 implements Runnable {
         lock.acquire();
         //@ open Counter(counter)();
         counter.value++;
-        counter.c2++;
+        //@ counter.c2++;
         //@ close Counter(counter)();
         lock.release();
     }

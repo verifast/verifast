@@ -2332,6 +2332,8 @@ and
      | [< '(l, Kwd "lemma"); t = parse_return_type; '(l, Ident x); (ps, co, ss) = parse_method_rest >] ->
        let ps = (IdentTypeExpr (l, None, cn), "this")::ps in
        MethMember (Meth (l, Ghost, t, x, ps, co, ss, Instance, vis, false))
+     | [< binding = (parser [< '(_, Kwd "static") >] -> Static | [< >] -> Instance); t = parse_type; '(l, Ident x); '(_, Kwd ";") >] ->
+       FieldMember [Field (l, Ghost, t, x, binding, vis, false, None)]
      end;
      mems = parse_ghost_java_members cn
   >] -> m::mems
@@ -4139,6 +4141,7 @@ let verify_program_core (* ?verify_program_core *)
       * bool (* is abstract *)
     type field_info = {
         fl: loc;
+        fgh: ghostness;
         ft: type_;
         fvis: visibility;
         fbinding: method_binding;
@@ -4702,42 +4705,6 @@ let verify_program_core (* ?verify_program_core *)
     iter' ([],[]) ps
   in
   
-  let classmap1 =
-    List.map
-      begin fun (sn, (l,abstract,fin,meths,fds,constr,super,interfs,preds,pn,ilist)) ->
-        let rec iter fmap fds =
-          match fds with
-            [] -> (sn, (l,abstract,fin,meths, List.rev fmap,constr,super,interfs,preds,pn,ilist))
-          | Field (fl, _, t, f, fbinding, fvis, ffinal, finit)::fds ->
-            if List.mem_assoc f fmap then
-              static_error fl "Duplicate field name." None
-            else
-              let rec check_type te =
-                match te with
-                  ManifestTypeExpr (_, IntType) -> IntType
-                | ManifestTypeExpr (_, Char) -> Char
-                | ManifestTypeExpr (_, Bool) -> Bool
-                | ManifestTypeExpr (_, ShortType) -> ShortType
-                | ArrayTypeExpr (l, tp) -> 
-                    let elem_tp = check_type tp in ArrayType(elem_tp)
-                | IdentTypeExpr(lt, pac, sn) ->
-                  let full_name = match pac with None -> sn | Some(pac) -> pac ^ "." ^ sn in
-                  begin match search2' full_name (pn,ilist) classmap1 classmap0 with
-                    Some s -> ObjType s
-                  | None ->
-                    match search2' full_name (pn,ilist) interfmap1 interfmap0 with
-                      Some s -> ObjType s
-                    | None -> static_error lt ("No such class or interface: "^full_name) None
-                  end
-                | _ -> static_error (type_expr_loc te) "Invalid field type or field type component in class." None
-              in
-              iter ((f, {fl; ft=check_type t; fvis; fbinding; ffinal; finit; fvalue=ref None})::fmap) fds
-        in
-        iter [] fds
-      end
-      classmap1
-  in
-  
   let inductive_arities =
     List.map (fun (i, (l, tparams, _)) -> (i, (l, List.length tparams))) inductivedeclmap
     @ List.map (fun (i, (l, tparams, _, _)) -> (i, (l, List.length tparams))) inductivemap0
@@ -4830,6 +4797,21 @@ let verify_program_core (* ?verify_program_core *)
   let typedefmap = typedefmap1 @ typedefmap0 in
   
   let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap1 (pn,ilist) tpenv te in
+  
+  let classmap1 =
+    List.map
+      begin fun (sn, (l,abstract,fin,meths,fds,constr,super,interfs,preds,pn,ilist)) ->
+        let rec iter fmap fds =
+          match fds with
+            [] -> (sn, (l,abstract,fin,meths, List.rev fmap,constr,super,interfs,preds,pn,ilist))
+          | Field (fl, fgh, t, f, fbinding, fvis, ffinal, finit)::fds ->
+            if List.mem_assoc f fmap then static_error fl "Duplicate field name." None;
+            iter ((f, {fl; fgh; ft=check_pure_type (pn,ilist) [] t; fvis; fbinding; ffinal; finit; fvalue=ref None})::fmap) fds
+        in
+        iter [] fds
+      end
+      classmap1
+  in
   
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
@@ -5796,10 +5778,9 @@ let verify_program_core (* ?verify_program_core *)
   let interfmap1 =
     interfmap1 |> List.map begin function (i, (l, fields, meths, preds, supers, pn, ilist)) ->
       let fieldmap =
-        fields |> List.map begin function Field (fl, fghost, ft, f, _, _, _, finit) ->
-          if fghost = Ghost then static_error fl "Interface ghost fields are not supported." None;
+        fields |> List.map begin function Field (fl, fgh, ft, f, _, _, _, finit) ->
           let ft = check_pure_type (pn,ilist) [] ft in
-          (f, {fl; ft; fvis=Public; fbinding=Static; ffinal=true; finit; fvalue=ref None})
+          (f, {fl; fgh; ft; fvis=Public; fbinding=Static; ffinal=true; finit; fvalue=ref None})
         end
       in
       (i, (l, fieldmap, meths, preds, supers, pn, ilist))
@@ -5956,7 +5937,7 @@ let verify_program_core (* ?verify_program_core *)
         | Some ObjType cn ->
           match lookup_class_field cn x with
             None -> None
-          | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+          | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
             let constant_value =
               if ffinal then
                 match !fvalue with
@@ -5965,7 +5946,7 @@ let verify_program_core (* ?verify_program_core *)
               else
                 None
             in
-            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, Real), ft, constant_value)
+            Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
       in
       match field_of_this with
         Some result -> result
@@ -5976,7 +5957,7 @@ let verify_program_core (* ?verify_program_core *)
         | Some (ClassOrInterfaceName cn) ->
           match lookup_class_field cn x with
             None -> None
-          | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+          | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
             if fbinding <> Static then static_error l "Instance field access without target object" None;
             let constant_value =
               if ffinal then
@@ -5986,7 +5967,7 @@ let verify_program_core (* ?verify_program_core *)
               else
                 None
             in
-            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, ft, true, fvalue, Real), ft, constant_value)
+            Some (WRead (l, Var (l, current_class, ref (Some LocalVar)), fclass, x, ft, true, fvalue, fgh), ft, constant_value)
       in
       match field_of_class with
         Some result -> result
@@ -6588,7 +6569,7 @@ let verify_program_core (* ?verify_program_core *)
       begin
       match lookup_class_field cn f with
         None -> static_error l ("No such field in class '" ^ cn ^ "'.") None
-      | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+      | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
         if fbinding = Static then static_error l "Accessing a static field via an instance is not supported." None;
         let constant_value =
               if ffinal then
@@ -6598,14 +6579,14 @@ let verify_program_core (* ?verify_program_core *)
               else
                 None
         in
-        (WRead (l, w, fclass, f, ft, false, ref (Some None), Real), ft, constant_value)
+        (WRead (l, w, fclass, f, ft, false, ref (Some None), fgh), ft, constant_value)
       end
     | ArrayType _ when f = "length" ->
       (ArrayLengthExpr (l, w), IntType, None)
     | ClassOrInterfaceName cn ->
       begin match lookup_class_field cn f with
         None -> static_error l "No such field" None
-      | Some ({ft; fbinding; ffinal; fvalue}, fclass) ->
+      | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
         if fbinding = Instance then static_error l "You cannot access an instance field without specifying a target object." None;
         let constant_value =
               if ffinal then
@@ -6615,7 +6596,7 @@ let verify_program_core (* ?verify_program_core *)
               else
                 None
          in
-        (WRead (l, w, fclass, f, ft, true, fvalue, Real), ft, constant_value)
+        (WRead (l, w, fclass, f, ft, true, fvalue, fgh), ft, constant_value)
       end
     | PackageName pn ->
       let name = pn ^ "." ^ f in

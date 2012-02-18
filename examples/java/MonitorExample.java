@@ -3,7 +3,7 @@ import verifast.*;
 class Cell
 {
     Monitor monitor;
-    int min; // Should be a ghost field.
+    //@ int min;
     int value;
 }
 
@@ -82,7 +82,7 @@ class ReaderCriticalSection implements CriticalSection {
         if (cell.value < lastValue)
             assert false;
         lastValue = cell.value;
-        cell.min = lastValue;
+        //@ cell.min = lastValue;
         //@ close Cell(cell)();
         //@ close post();
     }
