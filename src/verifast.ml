@@ -4080,6 +4080,7 @@ let verify_program_core (* ?verify_program_core *)
       * loc
       * string list (* type parameters *)
       * (string * type_) list (* parameters *)
+      * termnode (* predicate family symbol *)
       * int option (* input parameter count *)
       * asn (* body *)
     type pred_inst_map = ((string * string list) (* predicate name and indices *) * pred_inst_info) list
@@ -5933,9 +5934,8 @@ let verify_program_core (* ?verify_program_core *)
       if language <> Java then cont () else
       let field_of_this =
         match try_assoc "this" tenv with
-          None -> None
         | Some ObjType cn ->
-          match lookup_class_field cn x with
+          begin match lookup_class_field cn x with
             None -> None
           | Some ({fgh; ft; fbinding; ffinal; fvalue}, fclass) ->
             let constant_value =
@@ -5947,6 +5947,8 @@ let verify_program_core (* ?verify_program_core *)
                 None
             in
             Some (WRead (l, Var (l, "this", ref (Some LocalVar)), fclass, x, ft, fbinding = Static, fvalue, fgh), ft, constant_value)
+          end
+        | _ -> None
       in
       match field_of_this with
         Some result -> result
@@ -7357,10 +7359,11 @@ let verify_program_core (* ?verify_program_core *)
               function
                 (f, (l, Real, t)) ->
                 begin
+                let (g, (_, _, _, _, symb, _)) = List.assoc (sn, f) field_pred_map in
                 let predinst p =
                   p#set_inputParamCount (Some 1);
-                  ((sn ^ "_" ^ f, []),
-                   ([], l, [], [sn, PtrType (StructType sn); "value", t], Some 1,
+                  ((g, []),
+                   ([], l, [], [sn, PtrType (StructType sn); "value", t], symb, Some 1,
                     let r = WRead (l, Var (l, sn, ref (Some LocalVar)), sn, f, t, false, ref (Some None), Real) in
                     WPredAsn (l, p, true, [], [], [LitPat (AddressOf (l, r)); LitPat (Var (l, "value", ref (Some LocalVar)))])
                    )
@@ -7386,10 +7389,10 @@ let verify_program_core (* ?verify_program_core *)
   in
   
   let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
-    let (p, predfam_tparams, arity, ps, inputParamCount) =
+    let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
       match resolve (pn,ilist) l p predfammap with
         None -> static_error l ("No such predicate family: "^p) None
-      | Some (p, (_, predfam_tparams, arity, ps, _, inputParamCount)) -> (p, predfam_tparams, arity, ps, inputParamCount)
+      | Some (p, (_, predfam_tparams, arity, ps, psymb, inputParamCount)) -> (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in
     check_tparams l tparams predinst_tparams;
     let tpenv =
@@ -7431,7 +7434,7 @@ let verify_program_core (* ?verify_program_core *)
              static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'.") None)
           outps
     end;
-    ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))
+    ((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody))
   in
   
   let predinstmap1 = 
@@ -9114,8 +9117,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let predinstmap_by_predfamsymb =
     flatmap
-      begin fun ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) ->
-        let (_, _, _, _, symb, _) = List.assoc p predfammap in
+      begin fun ((p, fns), (env, l, predinst_tparams, xs, symb, inputParamCount, wbody)) ->
         if fns = [] && predinst_tparams = [] && env = [] then
           [(symb, (xs, wbody))]
         else
@@ -9127,8 +9129,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   (* Those predicate instances that, under certain conditions on the input parameters, are likely to be closeable. *)
   let empty_preds =
     flatmap
-      begin fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody)) as predinst) ->
-        let (_, _, _, _, symb, _) = List.assoc p predfammap in
+      begin fun (((p, fns), (env, l, predinst_tparams, xs, symb, inputParamCount, wbody)) as predinst) ->
         let fsymbs = List.map term_of_pred_index fns in
         match inputParamCount with
           None -> []
@@ -9190,8 +9191,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   *)
   let pred_fam_contains_edges =
     flatmap
-      (fun (((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody0)) as predinst) ->
-        let (_, _, _, _, psymb, _) = List.assoc p predfammap in
+      (fun (((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody0)) as predinst) ->
         let pindices = List.map term_of_pred_index fns in
         match inputParamCount with
           None -> [] (* predicate is not precise *)
@@ -9447,7 +9447,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 with
                   None -> begin (* check whether the wanted predicate is an empty predicate? *)
                     if List.exists 
-                         (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+                         (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
                            to_symb == symb &&
                            (for_all2 definitely_equal fsymbs current_indices) &&
                            (
@@ -9654,7 +9654,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       transitive_contains_edges_;
     (* rules for closing empty chunks *)
     List.iter
-      begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+      begin fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
         let g = (symb, true) in
         let indexCount = List.length fns in
         let Some n = inputParamCount in
@@ -10227,7 +10227,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
 
   let is_empty_chunk name targs frac args =
     List.exists
-    (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, inputParamCount, wbody))) ->
+    (fun (symb, fsymbs, conds, ((p, fns), (env, l, predinst_tparams, xs, _, inputParamCount, wbody))) ->
       predname_eq (symb, true) name &&
       let indexCount = List.length fns in
       let Some n = inputParamCount in
@@ -12535,7 +12535,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               | _ -> funcnameterm_of funcmap fn
             in
             match try_assoc (g, fns) predinstmap with
-              Some (predenv, _, predinst_tparams, ps, _, p) ->
+              Some (predenv, _, predinst_tparams, ps, g_symb, inputParamCount, p) ->
               let (targs, tpenv) =
                 let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
                 match zip predinst_tparams targs with
@@ -12764,7 +12764,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           begin
           match try_assoc (g, fns) predinstmap with
-            Some (predenv, l, predinst_tparams, ps, inputParamCount, body) ->
+            Some (predenv, l, predinst_tparams, ps, g_symb, inputParamCount, body) ->
             let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
