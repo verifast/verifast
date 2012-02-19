@@ -1564,7 +1564,6 @@ and
       loc *
       string *
       expr list *
-      bool (* atomic *) *
       stmt list *
       loc (* close brace of body *) *
       (loc * expr list) option *
@@ -1800,7 +1799,7 @@ and
       type_expr option *  (* return type *)
       string *  (* name *)
       (type_expr * string) list *  (* parameters *)
-      bool (* atomic *) *
+      bool (* nonghost_callers_only *) *
       (string * type_expr list * (loc * string) list) option (* implemented function type, with function type type arguments and function type arguments *) *
       (asn * asn) option *  (* contract *)
       (stmt list * loc (* Close brace *)) option *  (* body *)
@@ -1994,7 +1993,7 @@ let stmt_loc s =
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
   | BlockStmt (l, ds, ss, _, _) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _, _, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l
@@ -2098,7 +2097,7 @@ let ghost_keywords = [
   "predicate"; "requires"; "|->"; "&*&"; "inductive"; "fixpoint";
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
-  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "atomic";
+  "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "load_plugin"
@@ -2157,7 +2156,7 @@ let peek_in_ghost_range p stream =
   | _ -> raise Stream.Failure
 
 type spec_clause = (* ?spec_clause *)
-  AtomicClause
+  NonghostCallersOnlyClause
 | FuncTypeClause of string * type_expr list * (loc * string) list
 | RequiresClause of asn
 | EnsuresClause of asn
@@ -2532,10 +2531,10 @@ and
       [<
         ps = parse_paramlist;
         f = parser
-          [< '(_, Kwd ";"); (atomic, ft, co) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, atomic, ft, co, None, Static, Public)
-        | [< (atomic, ft, co) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, atomic, ft, co, Some (ss, closeBraceLoc), Static, Public)
+          [< '(_, Kwd ";"); (nonghost_callers_only, ft, co) = parse_spec_clauses >] ->
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, None, Static, Public)
+        | [< (nonghost_callers_only, ft, co) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, Some (ss, closeBraceLoc), Static, Public)
       >] -> f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);
@@ -2669,7 +2668,7 @@ and
 | [< >] -> []
 and
   parse_pure_spec_clause = parser
-  [< '(_, Kwd "atomic") >] -> AtomicClause
+  [< '(_, Kwd "nonghost_callers_only") >] -> NonghostCallersOnlyClause
 | [< '(_, Kwd ":"); '(li, Ident ft); targs = parse_type_args li; ftargs = parse_functypeclause_args >] -> FuncTypeClause (ft, targs, ftargs)
 | [< '(_, Kwd "requires"); p = parse_pred; '(_, Kwd ";") >] -> RequiresClause p
 | [< '(_, Kwd "ensures"); p = parse_pred; '(_, Kwd ";") >] -> EnsuresClause p
@@ -2682,15 +2681,15 @@ and
     let in_count = ref 0 in
     let out_count = ref 0 in
     let clause_stream = Stream.from (fun _ -> try let clause = Some (parse_spec_clause token_stream) in in_count := !in_count + 1; clause with Stream.Failure -> None) in
-    let atomic = (parser [< 'AtomicClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
+    let nonghost_callers_only = (parser [< 'NonghostCallersOnlyClause >] -> out_count := !out_count + 1; true | [< >] -> false) clause_stream in
     let ft = (parser [< 'FuncTypeClause (ft, fttargs, ftargs) >] -> out_count := !out_count + 1; Some (ft, fttargs, ftargs) | [< >] -> None) clause_stream in
     let pre_post = (parser [< 'RequiresClause pre; 'EnsuresClause post; >] -> out_count := !out_count + 2; Some (pre, post) | [< >] -> None) clause_stream in
-    if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: atomic clause (optional), function type clause (optional), contract (optional).");
-    (atomic, ft, pre_post)
+    if !in_count > !out_count then raise (Stream.Error "The number, kind, or order of specification clauses is incorrect. Expected: nonghost_callers_only clause (optional), function type clause (optional), contract (optional).");
+    (nonghost_callers_only, ft, pre_post)
 and
   parse_spec = parser
-    [< (atomic, ft, pre_post) = parse_spec_clauses >] ->
-    match (atomic, ft, pre_post) with
+    [< (nonghost_callers_only, ft, pre_post) = parse_spec_clauses >] ->
+    match (nonghost_callers_only, ft, pre_post) with
       (false, None, None) -> raise Stream.Failure
     | (false, None, (Some (pre, post))) -> (pre, post)
     | _ -> raise (Stream.Error "Incorrect kind, number, or order of specification clauses. Expected: requires clause, ensures clause.")
@@ -2707,8 +2706,8 @@ and
      (l, ds, ss, locals_to_free) = (parser
        [< '((sp1, _), Kwd "/*@");
           b = parser
-            [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
-          | [< ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> (l, ds, ss, ref [])
+          | [< d = parse_pure_decl; ds = parse_pure_decls; '(_, Kwd "@*/"); ss = parse_stmts >] -> (l, d @ ds, ss, ref [])
+          | [< s = parse_stmt0; '((_, sp2), Kwd "@*/"); ss = parse_stmts >] -> (l, [], PureStmt ((sp1, sp2), s)::ss, ref [])
        >] -> b
      | [< ds = parse_pure_decls; ss = parse_stmts >] -> (l, ds, ss, ref []));
      '(closeBraceLoc, Kwd "}")
@@ -2829,7 +2828,7 @@ and
 | [< s = parse_block_stmt >] -> s
 | [< '(lcb, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
      '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
-     '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; atomic = (parser [< '(_, Kwd "atomic") >] -> true | [< >] -> false);
+     '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist;
      '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}");
      post_bp_args =
        opt
@@ -2841,12 +2840,7 @@ and
          end;
      '(lph, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
      '(_, Kwd ";") >] ->
-     begin
-       match (atomic, post_bp_args) with
-       | (true, Some (lpb, _)) -> raise (ParseException (lpb, "An atomic perform_action statement must not include a producing_box_predicate clause."))
-       | _ -> ()
-     end;
-     PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
+     PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
 | [< '(l, Kwd ";") >] -> NoopStmt l
 | [< '(l, Kwd "super"); s = parser 
      [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))
@@ -4005,7 +3999,7 @@ let verify_program_core (* ?verify_program_core *)
                 | Some _ -> false
       end in
       iter (pn,ilist) (Class(l,abstract,fin,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
-    | Func(l,Lemma(_),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis) as elem ::rest->
+    | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,None,fb,vis) as elem ::rest->
       let fn = full_name pn fn in
       iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
@@ -4093,7 +4087,7 @@ let verify_program_core (* ?verify_program_core *)
       * string list (* type parameters *)
       * type_ option
       * (string * type_) list (* parameters *)
-      * bool (* is an atomic function? (deprecated) *)
+      * bool (* nonghost_callers_only *)
       * asn (* precondition *)
       * (string * type_) list (* type environment after precondition *)
       * asn (* postcondition *)
@@ -5077,7 +5071,7 @@ let verify_program_core (* ?verify_program_core *)
             )
         in
         citer 0 [] pfm ctors
-      | Func (l, Fixpoint, tparams, rto, g, ps, atomic, functype, contract, body_opt,Static,Public)::ds ->
+      | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, body_opt,Static,Public)::ds ->
         let g = full_name pn g in
         if List.mem_assoc g pfm || List.mem_assoc g purefuncmap0 then static_error l ("Duplicate pure function name: "^g) None;
         check_tparams l [] tparams;
@@ -5086,7 +5080,7 @@ let verify_program_core (* ?verify_program_core *)
             None -> static_error l "Return type of fixpoint functions cannot be void." None
           | Some rt -> (check_pure_type (pn,ilist) tparams rt)
         in
-        if atomic then static_error l "A fixpoint function cannot be atomic." None;
+        if nonghost_callers_only then static_error l "A fixpoint function cannot be marked nonghost_callers_only." None;
         if functype <> None then static_error l "Fixpoint functions cannot implement a function type." None;
         if contract <> None then static_error l "Fixpoint functions cannot have a contract." None;
         let pmap =
@@ -5753,7 +5747,7 @@ let verify_program_core (* ?verify_program_core *)
         begin fun (PackageDecl (_, pn, _, ds)) ->
           flatmap
             begin function
-              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, atomic, ft, c, b,Static,Public)) -> [full_name pn g]
+              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, b,Static,Public)) -> [full_name pn g]
             | _ -> []
             end
             ds
@@ -6204,7 +6198,7 @@ let verify_program_core (* ?verify_program_core *)
           (WFunCall (l, g, [], es), PtrType (StructType tn), None)
         | _ ->
         match resolve (pn,ilist) l g funcmap with
-          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v)) ->
+          Some (g, FuncInfo (funenv, fterm, lg, k, callee_tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fbf, v)) ->
           let (targs, tpenv) = process_targes callee_tparams in
           let rt0 = match tr with None -> Void | Some rt -> rt in
           let rt = instantiate_type tpenv rt0 in
@@ -7388,12 +7382,7 @@ let verify_program_core (* ?verify_program_core *)
       structmap1
   in
   
-  let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
-    let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
-      match resolve (pn,ilist) l p predfammap with
-        None -> static_error l ("No such predicate family: "^p) None
-      | Some (p, (_, predfam_tparams, arity, ps, psymb, inputParamCount)) -> (p, predfam_tparams, arity, ps, psymb, inputParamCount)
-    in
+  let check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
     check_tparams l tparams predinst_tparams;
     let tpenv =
       match zip predfam_tparams (List.map (fun x -> TypeParam x) predinst_tparams) with
@@ -7435,6 +7424,15 @@ let verify_program_core (* ?verify_program_core *)
           outps
     end;
     ((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody))
+  in
+  
+  let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
+    let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
+      match resolve (pn,ilist) l p predfammap with
+        None -> static_error l ("No such predicate family: "^p) None
+      | Some (p, (_, predfam_tparams, arity, ps, psymb, inputParamCount)) -> (p, predfam_tparams, arity, ps, psymb, inputParamCount)
+    in
+    check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
   in
   
   let predinstmap1 = 
@@ -9996,7 +9994,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
     | BlockStmt (l, ds, ss, _, _) -> block_assigned_variables ss
-    | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, atomic, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
+    | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
     | MergeFractionsStmt (l, p, targs, pats) -> []
@@ -10261,7 +10259,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     check_breakpoint [] env l
   in
   
-  let check_func_header_compat l msg env00 (k, tparams, rt, xmap, atomic, pre, post, epost) (k0, tparams0, rt0, xmap0, atomic0, tpenv0, cenv0, pre0, post0, epost0) =
+  let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0) =
     if k <> k0 then 
       if (not (is_lemma k)) || (not (is_lemma k0)) then
         static_error l (msg ^ "Not the same kind of function.") None;
@@ -10284,7 +10282,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         )
         (zip2 xmap xmap0)
     end;
-    if atomic <> atomic0 then static_error l (msg ^ "Atomic clauses do not match.") None;
+    if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
     push();
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
@@ -10335,7 +10333,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let functypes_implemented = ref [] in
   
-  let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs atomic functype_opt contract_opt body =
+  let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt body =
     if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported." None;
     check_tparams l tparams0 tparams;
     let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
@@ -10361,7 +10359,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
         (wpre, pre_tenv, wpost)
     in
-    if atomic && body <> None then static_error l "Implementing atomic functions is not yet supported." None;
+    if nonghost_callers_only then begin
+      match k with
+        Regular -> static_error l "Only lemma functions can be marked nonghost_callers_only." None
+      | Lemma(true, _) -> static_error l "Lemma functions marked nonghost_callers_only cannot be autolemmas." None
+      | Lemma(false, _) -> ()
+    end;
     let functype_opt =
       match functype_opt with
         None -> None
@@ -10398,7 +10401,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let k' = match gh with Real -> Regular | Ghost -> Lemma(true, None) in
             let xmap0 = List.map (fun (x, t) -> (x, instantiate_type fttpenv t)) xmap0 in
             check_func_header_compat l "Function type implementation check: " env0
-              (k, tparams, rt, xmap, atomic, pre, post, [])
+              (k, tparams, rt, xmap, nonghost_callers_only, pre, post, [])
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, []);
             if gh = Real then
             begin
@@ -10417,25 +10420,25 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, atomic, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
         let fterm = Some (List.assoc fn funcnameterms) in
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-          check_func_header pn ilist [] [] [] l k tparams rt fn fterm xs atomic functype_opt contract_opt body
+          check_func_header pn ilist [] [] [] l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt body
         in
         begin
           let body' = match body with None -> None | Some body -> Some (Some body) in
           match try_assoc2 fn funcmap funcmap0 with
-            None -> iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, _, Some _,Static,Public)) ->
+            None -> iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) prototypes_implemented ds
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, _, Some _,Static,Public)) ->
             if body = None then
               static_error l "Function prototype must precede function implementation." None
             else
               static_error l "Duplicate function implementation." None
-          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, atomic0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public)) ->
+          | Some (FuncInfo ([], fterm0, l0, k0, tparams0, rt0, xmap0, nonghost_callers_only0, pre0, pre_tenv0, post0, functype_opt0, None,Static,Public)) ->
             if body = None then static_error l "Duplicate function prototype." None;
-            check_func_header_compat l "Function prototype implementation check: " [] (k, tparams, rt, xmap, atomic, pre, post, []) (k0, tparams0, rt0, xmap0, atomic0, [], [], pre0, post0, []);
-            iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, atomic, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
+            check_func_header_compat l "Function prototype implementation check: " [] (k, tparams, rt, xmap, nonghost_callers_only, pre, post, []) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, [], [], pre0, post0, []);
+            iter pn ilist ((fn, FuncInfo ([], fterm, l, k, tparams, rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body',Static,Public))::funcmap) ((fn, l0)::prototypes_implemented) ds
         end
       | _::ds -> iter pn ilist funcmap prototypes_implemented ds
     in
@@ -10927,7 +10930,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
-      | Func(l,Lemma(auto, trigger),tparams,rt,fn,arglist,atomic,ftype,contract,None,fb,vis)::rest ->
+      | Func(l,Lemma(auto, trigger),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,None,fb,vis)::rest ->
           if List.mem (fn,l) impl then
             let impl'= remove (fun (x,l0) -> x=fn && l=l0) impl in
             check_spec_lemmas rest impl'
@@ -11322,7 +11325,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   
   let funcnameterm_of funcmap fn =
-    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
+    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   in
   
   let default_value t =
@@ -11434,13 +11437,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         LValues.Var (l, x, scope) ->
         eval_h h env (Var (l, x, scope)) cont
       | LValues.Field (l, target, fparent, fname, tp, fvalue, fghost, f_symb) ->
-        let pats0 =
-          match target with
-            Some target -> [TermPat target]
-          | None -> []
-        in
-        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 1) (pats0 @ [dummypat]) $. fun chunk h _ [_; value] _ _ _ _ ->
-        cont (chunk::h) env value
+        begin match target with
+          Some target ->
+          consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun chunk h _ [_; value] _ _ _ _ ->
+          cont (chunk::h) env value
+        | None ->
+          consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit dummypat (Some 0) [dummypat] $. fun chunk h _ [value] _ _ _ _ ->
+          cont (chunk::h) env value
+        end
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         let pats = [TermPat arr; TermPat i; SrcPat DummyPat] in
         consume_chunk rules h [] [] [] l (array_element_symb(), true) [elem_tp] real_unit dummypat (Some 2) pats $. fun chunk h _ [_; _; value] _ _ _ _ ->
@@ -11602,11 +11606,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end;
       check_correct None None [] args (lm, [], rt, xmap, [], pre, post, Some epost, v) cont
     | WFunCall (l, g, targs, es) ->
-      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, atomic, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
+      let FuncInfo (funenv, fterm, lg, k, tparams, tr, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fbf, v) = List.assoc g funcmap in
       has_heap_effects ();
       if body = None then register_prototype_used lg g;
       if pure && k = Regular then static_error l "Cannot call regular functions in a pure context." None;
       if not pure && is_lemma k then static_error l "Cannot call lemma functions in a non-pure context." None;
+      if nonghost_callers_only && leminfo <> None then static_error l "A lemma function marked nonghost_callers_only cannot be called from a lemma function." None;
       check_correct xo (Some g) targs es (lg, tparams, tr, ps, funenv, pre, post, None, v) cont
     | NewArray(l, tp, e) ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
@@ -11961,7 +11966,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       match resolve (pn,ilist) l fn funcmap with
         None -> static_error l "No such function." None
-      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
+      | Some (fn, FuncInfo (funenv, Some fterm, lf, k, f_tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body',fb,v)) ->
         if stmt_ghostness = Ghost && not (is_lemma k) then static_error l "Not a lemma function." None;
         if stmt_ghostness = Real && k <> Regular then static_error l "Regular function expected." None;
         if f_tparams <> [] then static_error l "Taking the address of a function with type parameters is not yet supported." None;
@@ -12075,7 +12080,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 end $. fun sizemap tenv ghostenv h env ->
                 with_context (Executing (h, env, callLoc, "Verifying function call")) $. fun () ->
                 with_context PushSubcontext $. fun () ->
-                let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams in
+                let pre1_env = currentThreadEnv @ List.map (fun (x, x0, tp, t, t0, x1, tp1) -> (x1, t)) fparams @ funenv in
                 consume_asn rules [] h [] pre1_env pre1 true real_unit $. fun _ h _ f_env _ ->
                 let (f_env, ft_env, tenv, ghostenv, env) =
                   match rt1 with
@@ -12522,8 +12527,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let target = ev target in
           open_instance_predicate target target_cn
         | None ->
-        match resolve (pn,ilist) l g predfammap with
-          Some (g, (_, _, _, _, g_symb, inputParamCount)) ->
+        let open_pred_inst0 g =
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x))-> (l,x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
           | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
@@ -12544,16 +12548,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               in
               let ps = List.map (fun (x, t) -> (x, t, instantiate_type tpenv t)) ps in
               let inputParamCount = match inputParamCount with None -> None | Some n -> Some (List.length fns + n) in
-              (targs, tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p, inputParamCount)
-            | None -> static_error l "No such predicate instance." None
+              Some (targs, tpenv, (g_symb, true), List.map (fun fn -> TermPat (index_term fn)) fns, List.length fns, ps, predenv, p, inputParamCount)
+            | None ->
+              None
           end
+        in
+        let open_pred_inst g = 
+          match resolve (pn,ilist) l g predfammap with
+            Some (g, _) -> open_pred_inst0 g
+          | None ->
+          match try_assoc g tenv with
+            Some (PredType _) -> open_pred_inst0 g
+          | _ -> None
+        in
+        match open_pred_inst g with
+          Some result -> result
         | None ->
           begin
           match try_assoc' (pn,ilist) g predctormap with
             None ->
-            let error () = static_error l "No such predicate or predicate constructor." None in
             begin match try_assoc "this" tenv with
-              None -> error ()
+              None -> static_error l "No such predicate instance." None
             | Some (ObjType target_cn) ->
               let this = List.assoc "this" env in
               open_instance_predicate this target_cn
@@ -12756,15 +12771,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let target = ev target in
           close_instance_predicate target target_cn
         | None ->
-        match resolve (pn,ilist) l g predfammap with
-          Some (g, (lpred, _, _, _, g_symb, inputParamCount)) ->
+        let close_pred_inst0 g =
           let fns = match file_type path with
             Java-> check_classnamelist (pn,ilist) (List.map (function LitPat (ClassLit (l, x)) -> (l, x) | _ -> static_error l "Predicate family indices must be class names." None) pats0)
           | _ -> List.map (function LitPat (Var (l, x, _)) -> x | _ -> static_error l "Predicate family indices must be function names." None) pats0
           in
           begin
           match try_assoc (g, fns) predinstmap with
-            Some (predenv, l, predinst_tparams, ps, g_symb, inputParamCount, body) ->
+            Some (predenv, lpred, predinst_tparams, ps, g_symb, inputParamCount, body) ->
             let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predinst_tparams else targs in
             let tpenv =
               match zip predinst_tparams targs with
@@ -12775,19 +12789,29 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               Java -> List.map (fun cn -> List.assoc cn classterms) fns
             | _ -> List.map (fun fn -> funcnameterm_of funcmap fn) fns
             in
-            (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0, inputParamCount)
-          | None -> static_error l "No such predicate instance." None
+            Some (lpred, targs, tpenv, ps, predenv, (g_symb, true), body, ts0, inputParamCount)
+          | None -> None
           end
+        in
+        let close_pred_inst g =
+          match resolve (pn,ilist) l g predfammap with
+            Some (g, _) -> close_pred_inst0 g
+          | None ->
+          match try_assoc g tenv with
+            Some (PredType _) -> close_pred_inst0 g
+          | _ -> None
+        in
+        match close_pred_inst g with
+          Some result -> result
         | None ->
           begin
             match try_assoc' (pn,ilist) g predctormap with
               None ->
-              let error () = static_error l ("No such predicate family instance or predicate constructor: "^g) None in
               begin match try_assoc "this" tenv with
                 Some (ObjType cn) ->
                 let this = List.assoc "this" env in
                 close_instance_predicate this cn
-              | _ -> error ()
+              | _ -> static_error l "No such predicate instance." None
               end
             | Some (PredCtorInfo (lpred, ps1, ps2, body, funcsym)) ->
               let bs0 =
@@ -13228,7 +13252,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let tcont _ _ _ _ _ = () in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
-    | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, atomic, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
+    | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
           None -> static_error lcb "No such box class." None
@@ -13247,7 +13271,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
       consume_chunk rules h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
-        if not (atomic || box_coef == real_unit) then assert_false h env lcb "Box predicate coefficient must be 1 for non-atomic perform_action statement." None;
+        if box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1." None;
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
           if pre_hpn = pre_bcn ^ "_handle" then
@@ -13293,26 +13317,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                    begin function
                      NonpureStmt (l, _, s) when !nonpure_ctxt ->
                      nonpureStmtCount := !nonpureStmtCount + 1;
-                     if atomic then
-                     begin
-                       let funcname =
-                         match s with
-                           ExprStmt (CallExpr (lcall, g, targs, [], args, _)) -> g
-                         | ExprStmt (AssignExpr (lcall, x, CallExpr (_, g, _, _, _, _))) -> g
-                         | DeclStmt (lcall, [_, xtype, x, Some(CallExpr (_, g, _, _, _, _)), _]) -> g
-                         | _ -> static_error l "A non-pure statement in the body of an atomic perform_action statement must be a function call." None
-                       in
-                       match try_assoc funcname funcmap with
-                         None -> static_error l "No such function." None
-                       | Some (FuncInfo (funenv, fterm, l, k, tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body,fb,v)) ->
-                         if not atomic then static_error l "A non-pure statement in the body of an atomic perform_action statement must be a call of an atomic function." None
-                     end;
                      NonpureStmt (l, true, s)
                    | s -> s
                    end
                    ss
                in
-               if atomic && !nonpureStmtCount <> 1 then static_error lpa "The body of an atomic perform_action statement must include exactly one non-pure statement." None;
                verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
@@ -13365,33 +13374,53 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           )
       )
     | BlockStmt (l, ds, ss, closeBraceLoc, locals_to_free) ->
-      let (lems, predinsts) =
+      let (lems, predinsts, localpreds, localpredinsts) =
         List.fold_left
-          begin fun (lems, predinsts) decl ->
+          begin fun (lems, predinsts, localpreds, localpredinsts) decl ->
             match decl with
+            | PredFamilyDecl (l, p, tparams, arity, tes, inputParamCount) ->
+              if tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
+              if arity <> 0 then static_error l "Local predicate families are not yet supported." None;
+              if List.mem_assoc p predfammap then static_error l "Duplicate predicate family name." None;
+              if List.mem_assoc p tenv then static_error l "Predicate name conflicts with local variable name." None;
+              let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
+              let ptype = PredType ([], ts, inputParamCount) in
+              let psymb = get_unique_var_symb p ptype in
+              (lems, predinsts, (p, (l, ts, inputParamCount, ptype, psymb))::localpreds, localpredinsts)
             | PredFamilyInstanceDecl (l, p, predinst_tparams, is, xs, body) ->
-              let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." None in
-              if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
-              (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts)
-            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, atomic, functype_opt, contract_opt, Some body, Static, Public) ->
+              begin match try_assoc p localpreds with
+              | Some (_, ts, inputParamCount, ptype, psymb) ->
+                if predinst_tparams <> [] then static_error l "Local predicates with type parameters are not yet supported." None;
+                if is <> [] then static_error l "Local predicate families are not yet supported." None;
+                if List.mem_assoc p localpredinsts then static_error l "Duplicate predicate family instance." None;
+                (lems, predinsts, localpreds, (p, (l, ts, inputParamCount, ptype, psymb, xs, body))::localpredinsts)
+              | None ->
+                let i = match is with [i] -> i | _ -> static_error l "Local predicate family declarations must declare exactly one index." None in
+                if List.mem_assoc (p, i) predinsts then static_error l "Duplicate predicate family instance." None;
+                (lems, ((p, i), (l, predinst_tparams, xs, body))::predinsts, localpreds, localpredinsts)
+              end
+            | Func (l, Lemma(auto, trigger), tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, Some body, Static, Public) ->
               if List.mem_assoc fn funcmap || List.mem_assoc fn lems then static_error l "Duplicate function name." None;
               if List.mem_assoc fn tenv then static_error l "Local lemma name hides existing local variable name." None;
               let fterm = get_unique_var_symb fn (PtrType Void) in
-              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body))::lems, predinsts)
+              ((fn, (auto, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, body))::lems, predinsts, localpreds, localpredinsts)
             | _ -> static_error l "Local declarations must be lemmas or predicate family instances." None
           end
-          ([], [])
+          ([], [], [], [])
           ds
       in
-      let (lems, predinsts) = (List.rev lems, List.rev predinsts) in
+      let (lems, predinsts, localpreds, localpredinsts) = (List.rev lems, List.rev predinsts, List.rev localpreds, List.rev localpredinsts) in
       let funcnameterms' =
         List.map
-          (fun (fn, (autom, trigger, fterm, l, tparams, rt, xs, atomic, functype_opt, contract_opt, body)) -> (fn, fterm))
+          (fun (fn, (autom, trigger, fterm, l, tparams, rt, xs, nonghost_callers_only, functype_opt, contract_opt, body)) -> (fn, fterm))
         lems
       in
       let env = funcnameterms' @ env in
       let ghostenv = List.map (fun (fn, _) -> fn) funcnameterms' @ ghostenv in
       let tenv = List.map (fun (fn, _) -> (fn, PtrType Void)) funcnameterms' @ tenv in
+      let env = List.map (fun (p, (l, ts, inputParamCount, ptype, psymb)) -> (p, psymb)) localpreds @ env in
+      let ghostenv = List.map fst localpreds @ ghostenv in
+      let tenv = List.map (fun (p, (l, ts, inputParamCount, ptype, psymb)) -> (p, ptype)) localpreds @ tenv in
       let predinstmap' =
         List.map
           begin fun ((p, (li, i)), (l, predinst_tparams, xs, body)) ->
@@ -13400,21 +13429,27 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end
           predinsts
       in
+      let localpredinsts =
+        localpredinsts |> List.map
+          begin fun (p, (l, ts, inputParamCount, ptype, psymb, xs, body)) ->
+            check_predinst0 [] 0 ts psymb inputParamCount (pn, ilist) tparams tenv env l p [] [] xs body
+          end
+      in
       let funcmap' =
         List.map
-          begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, atomic, functype_opt, contract_opt, body)) ->
+          begin fun (fn, (auto, trigger, fterm, l, tparams', rt, xs, nonghost_callers_only, functype_opt, contract_opt, body)) ->
             let (rt, xmap, functype_opt, pre, pre_tenv, post) =
-              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs atomic functype_opt contract_opt (Some body)
+              check_func_header pn ilist tparams tenv env l (Lemma(auto, trigger)) tparams' rt fn (Some fterm) xs nonghost_callers_only functype_opt contract_opt (Some body)
             in
-            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
+            (fn, FuncInfo (env, Some fterm, l, Lemma(auto, trigger), tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, Some (Some body), Static, Public))
           end
           lems
       in
-      let predinstmap = predinstmap' @ predinstmap in
+      let predinstmap = localpredinsts @ predinstmap' @ predinstmap in
       let funcmap = funcmap' @ funcmap in
       let verify_lems lems0 =
         List.fold_left
-          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, atomic, pre, pre_tenv, post, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
+          begin fun lems0 (fn, FuncInfo (funenv, fterm, l, k, tparams', rt, xmap, nonghost_callers_only, pre, pre_tenv, post, functype_opt, Some (Some (ss, closeBraceLoc)), _, _)) ->
             verify_func pn ilist lems0 boxes predinstmap funcmap tparams funenv l k tparams' rt fn xmap pre pre_tenv post ss closeBraceLoc
           end
           lems0
@@ -13425,7 +13460,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           None ->
           let lems0 =
             flatmap
-              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
+              (function (fn, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _)) -> [fn] | _ -> [])
               funcmap
           in
           ignore $. verify_lems lems0;
@@ -13442,7 +13477,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | PureStmt (l, s) ->
       begin
         match s with
-          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
+          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
           nonpure_ctxt := not pure
         | _ -> ()
       end;
@@ -14022,7 +14057,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
       if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec) then begin
-        let FuncInfo ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
+        let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
@@ -14032,7 +14067,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let lems' =
       record_fun_timing l g begin fun () ->
       if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying function %s\n" (Perf.time()) (string_of_loc l) g;
-      let FuncInfo ([], fterm, l, k, tparams', rt, ps, atomic, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
+      let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, _, Some (Some (ss, closeBraceLoc)),fb,v) = (List.assoc g funcmap)in
       let tparams = [] in
       let env = [] in
       verify_func pn ilist lems boxes predinstmap funcmap tparams env l k tparams' rt g ps pre pre_tenv post ss closeBraceLoc
@@ -14113,7 +14148,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   in
   let lems0 =
     flatmap
-      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, atomic, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
       funcmap0
   in
   let rec verify_funcs' boxes lems ps=

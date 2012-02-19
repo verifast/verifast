@@ -335,4 +335,15 @@ lemma void mem_remove_eq<t>(t x, list<t> xs);
     requires true;
     ensures mem(x, xs) != (remove(x, xs) == xs);
 
+fixpoint boolean forall<t>(list<t> xs, fixpoint(t, boolean) p) {
+    switch (xs) {
+        case nil: return true;
+        case cons(x0, xs0): return p(x0) && forall(xs0, p);
+    }
+}
+
+lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, boolean) p);
+    requires true;
+    ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
+
 @*/

@@ -1,0 +1,68 @@
+package channels;
+
+/*@
+
+typedef lemma void channel_sep(predicate() inv, Channel c, predicate() sepPred, predicate(list<Object>) unsepPred)();
+    requires sepPred() &*& inv();
+    ensures c.ChannelState(?items) &*& unsepPred(items);
+
+typedef lemma void channel_unsep(predicate() inv, Channel c, predicate() sepPred, predicate(list<Object>) unsepPred)();
+    requires unsepPred(?items) &*& c.ChannelState(items);
+    ensures sepPred() &*& inv();
+
+typedef lemma void channel_send(predicate() inv, Channel c, predicate(list<Object>) unsepPred, String msg, predicate() pre, predicate(boolean) post)(boolean r);
+    requires pre() &*& unsepPred(?items);
+    ensures post(r) &*& unsepPred(r ? append(items, cons(msg, nil)) : items);
+
+typedef lemma void channel_receive(predicate() inv, Channel c, predicate(list<Object>) unsepPred, predicate() pre, predicate(Object) post)();
+    requires pre() &*& unsepPred(?items);
+    ensures post(items != nil ? head(items) : null) &*& unsepPred(tail(items));
+
+@*/
+
+public final class Channel {
+    
+    //@ predicate Channel();
+    //@ predicate ChannelState(list<Object> items);
+    
+    public Channel();
+        //@ requires true;
+        //@ ensures Channel() &*& ChannelState(nil);
+    
+    public boolean send(String msg);
+        /*@
+        requires
+            [?fc]Channel() &*&
+            [?fa]atomic_space(?inv) &*&
+            is_channel_sep(?sep, inv, this, ?sepPred, ?unsepPred) &*&
+            is_channel_unsep(?unsep, inv, this, sepPred, unsepPred) &*&
+            is_channel_send(?send, inv, this, unsepPred, msg, ?pre, ?post) &*&
+            sepPred() &*& pre();
+        @*/
+        /*@
+        ensures
+            [fc]Channel() &*&
+            [fa]atomic_space(inv) &*&
+            sepPred() &*&
+            post(result);
+        @*/
+    
+    public String receive();
+        /*@
+        requires
+            [?fc]Channel() &*&
+            [?fa]atomic_space(?inv) &*&
+            is_channel_sep(?sep, inv, this, ?sepPred, ?unsepPred) &*&
+            is_channel_unsep(?unsep, inv, this, sepPred, unsepPred) &*&
+            is_channel_receive(?receive, inv, this, unsepPred, ?pre, ?post) &*&
+            sepPred() &*& pre();
+        @*/
+        /*@
+        ensures
+            [fc]Channel() &*&
+            [fa]atomic_space(inv) &*&
+            sepPred() &*&
+            post(result);
+        @*/
+    
+}

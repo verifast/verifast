@@ -384,9 +384,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
     match !(tab#path) with
       None -> ()
     | Some (path, mtime) ->
-      if Filename.check_suffix path ".c" then highlight (common_keywords @ c_keywords)
-      else if Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
-      else if Filename.check_suffix path ".java" then highlight (common_keywords @ java_keywords)
+      if Filename.check_suffix path ".c" || Filename.check_suffix path ".h" then highlight (common_keywords @ c_keywords)
+      else if Filename.check_suffix path ".java" || Filename.check_suffix path ".javaspec" then highlight (common_keywords @ java_keywords)
       else ()
   in
   let create_editor (textNotebook: GPack.notebook) buffer =

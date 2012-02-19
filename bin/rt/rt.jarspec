@@ -1,6 +1,7 @@
 _list.javaspec
 _nat.javaspec
 _bitops.javaspec
+_atomics.javaspec
 java.lang.javaspec
 javacard.framework.javaspec
 javacard.security.javaspec

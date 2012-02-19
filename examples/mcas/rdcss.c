@@ -528,7 +528,7 @@ loop:
             @*/
             //@ close atomic_noop_context_pre(context)(inv);
             //@ produce_lemma_function_pointer_chunk(context);
-            atomic_noop();
+            //@ atomic_noop();
             //@ leak is_atomic_noop_context(context);
             //@ open atomic_noop_context_post(context)();
         }

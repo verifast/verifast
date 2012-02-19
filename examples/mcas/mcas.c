@@ -350,7 +350,7 @@ void *mcas_read(void *a)
         @*/
         //@ close atomic_noop_context_pre(noop)(inv);
         //@ produce_lemma_function_pointer_chunk(noop);
-        atomic_noop();
+        //@ atomic_noop();
         //@ leak is_atomic_noop_context(noop);
         //@ open atomic_noop_context_post(noop)();
     }
@@ -575,7 +575,7 @@ bool mcas(int n, struct mcas_entry *aes)
         @*/
         //@ close atomic_noop_context_pre(context)(inv);
         //@ produce_lemma_function_pointer_chunk(context);
-        atomic_noop();
+        //@ atomic_noop();
         //@ leak is_atomic_noop_context(context);
         //@ open atomic_noop_context_post(context)();
     }
@@ -623,7 +623,7 @@ bool mcas(int n, struct mcas_entry *aes)
         @*/
         //@ close atomic_noop_context_pre(context)(inv);
         //@ produce_lemma_function_pointer_chunk(context);
-        atomic_noop();
+        //@ atomic_noop();
         //@ leak is_atomic_noop_context(context);
         //@ open atomic_noop_context_post(context)();
     }

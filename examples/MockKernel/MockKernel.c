@@ -58,7 +58,8 @@ predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module
     malloc_block_module(module);
 
 predicate file_ops_wrapper1(struct device *device, predicate(;) state; struct file_ops *ops) =
-    device->ops |-> ops &*& device->fileState |-> ?fileState &*& file_ops(ops, state, fileState) &*& state();predicate file_ops_wrapper2(pair<struct device *, predicate(;)> device_state; struct file_ops *ops) =
+    device->ops |-> ops &*& device->fileState |-> ?fileState &*& file_ops(ops, state, fileState) &*& state();
+predicate file_ops_wrapper2(pair<struct device *, predicate(;)> device_state; struct file_ops *ops) =
     file_ops_wrapper1(fst(device_state), snd(device_state), ops);
 
 predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
@@ -119,9 +120,9 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
         chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
-        file_ops(ops, ?device, ?fileState) &*& device();
+        file_ops(ops, ?devicePred, ?fileState) &*& devicePred();
     @*/
-    //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, device);
+    //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, devicePred);
 {
     //@ open kernel_module_initializing(owner, deviceCount);
     //@ create_ticket(ghost_set_member_handle_wrapper, pair(owner->modulesId, owner));
@@ -135,7 +136,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     //@ d->nameChars = nameChars;
     d->ops = ops;
     //@ d->useCount = 0;
-    //@ d->state = device;
+    //@ d->state = devicePred;
     //@ start_counting(device_state, d);
     //@ create_ticket(device_state, d);
     //@ create_ticket(device_state, d);
@@ -154,9 +155,9 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     @*/
     directory = d;
     //@ d->fileState = fileState;
-    //@ close file_ops_wrapper1(d, device, ops);
-    //@ close file_ops_wrapper2(pair(d, device), ops);
-    //@ start_counting(file_ops_wrapper2, pair(d, device));
+    //@ close file_ops_wrapper1(d, devicePred, ops);
+    //@ close file_ops_wrapper2(pair(d, devicePred), ops);
+    //@ start_counting(file_ops_wrapper2, pair(d, devicePred));
     //@ ghost_set_add(owner->devicesId, d);
     //@ close ghost_set_member_handle_wrapper(pair(owner->devicesId, d), unit);
     //@ start_counting(ghost_set_member_handle_wrapper, pair(owner->devicesId, d));
@@ -165,7 +166,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     //@ close device(owner->modulesId, owner->devicesId)(d);
     //@ close lseg(d, 0, _, device(owner->modulesId, owner->devicesId));
     //@ close kernel_module_initializing(owner, deviceCount + 1);
-    //@ close kernel_device(d, owner, name, nameChars, ops, device);
+    //@ close kernel_device(d, owner, name, nameChars, ops, devicePred);
     return d;
 }
 

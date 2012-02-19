@@ -112,21 +112,17 @@ typedef lemma void atomic_noop_context();
     requires atomic_noop_context_pre(this)(?inv) &*& inv();
     ensures atomic_noop_context_post(this)() &*& inv();
 
-@*/
-
-void atomic_noop();
-    /*@
+lemma void atomic_noop(); nonghost_callers_only
     requires
         [?f]atomic_space(?inv) &*&
         is_atomic_noop_context(?ctxt) &*&
         atomic_noop_context_pre(ctxt)(inv);
-    @*/
-    /*@
     ensures
         [f]atomic_space(inv) &*&
         is_atomic_noop_context(ctxt) &*&
         atomic_noop_context_post(ctxt)();
-    @*/
+
+@*/
 
 struct cas_tracker;
 

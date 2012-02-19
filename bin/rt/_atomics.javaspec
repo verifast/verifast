@@ -1,0 +1,28 @@
+/*@
+
+predicate atomic_space(predicate() inv;);
+
+lemma void create_atomic_space(predicate() inv);
+    requires inv();
+    ensures atomic_space(inv);
+
+lemma void dispose_atomic_space(predicate() inv);
+    requires atomic_space(inv);
+    ensures inv();
+
+typedef lemma void atomic_space_ghost_operation(predicate() inv, predicate() pre, predicate() post)();
+    requires pre() &*& inv();
+    ensures post() &*& inv();
+
+lemma void perform_atomic_space_ghost_operation();
+    nonghost_callers_only
+    requires
+        [?f]atomic_space(?inv) &*&
+        is_atomic_space_ghost_operation(?op, inv, ?pre, ?post) &*&
+        pre();
+    ensures
+        [f]atomic_space(inv) &*&
+        is_atomic_space_ghost_operation(op, inv, pre, post) &*&
+        post();
+
+@*/
