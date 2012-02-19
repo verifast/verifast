@@ -3431,8 +3431,8 @@ let concat_if_relative path1 path2 =
   else
     path2
 
+(* Returned paths are relative to the directory of [path] *)
 let parse_jarspec_file_core path =
-  let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
   let (jarspecs, lines) =
     let rec iter jarspecs lines =
@@ -3440,7 +3440,7 @@ let parse_jarspec_file_core path =
       | line::lines when line = "" ->
         iter jarspecs lines
       | line::lines when Filename.check_suffix line ".jarspec" ->
-        iter (concat_if_relative dirPath (expand_path line)::jarspecs) lines
+        iter ((expand_path line)::jarspecs) lines
       | _ ->
         (List.rev jarspecs, lines)
     in
@@ -3453,12 +3453,13 @@ let parse_jarspec_file_core path =
         if not (Filename.check_suffix line ".javaspec") then
           raise (ParseException (file_loc path, "A .jarspec file must consists of a list of .jarspec file paths followed by a list of .javaspec file paths"))
         else
-          [Filename.concat dirPath line]
+          [line]
       end
       lines
   in
   (jarspecs, javaspecs)
 
+(* Returned paths are relative to the directory of [path] *)
 let parse_jarsrc_file_core path =
   let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
@@ -3466,7 +3467,7 @@ let parse_jarsrc_file_core path =
     let rec iter jars lines =
       match lines with
         line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".jar" ->
-        iter (concat_if_relative dirPath (expand_path line)::jars) lines
+        iter ((expand_path line)::jars) lines
       | _ ->
         (List.rev jars, lines)
     in
@@ -3476,7 +3477,7 @@ let parse_jarsrc_file_core path =
     let rec iter javas lines =
       match lines with
         line::lines when not (startswith line "main-class ") && Filename.check_suffix line ".java" ->
-        iter (Filename.concat dirPath line::javas) lines
+        iter (line::javas) lines
       | _ ->
         (List.rev javas, lines)
     in
@@ -4255,6 +4256,8 @@ let verify_program_core (* ?verify_program_core *)
       Returns the elements declared directly in the current file.
       May add symbols and global assumptions to the SMT solver.
       
+      Paths in [headers] are relative to [basedir].
+      
       is_import_spec:
         true if the file being checked specifies a module used by the module being verified
         false if the file being checked specifies the module being verified
@@ -4355,14 +4358,16 @@ let verify_program_core (* ?verify_program_core *)
                     parse_header_file basedir relpath reportRange reportShouldFail
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
-                    let ds = List.map (fun javaspec -> parse_java_file javaspec reportRange reportShouldFail) javaspecs in
+                    let pathDir = Filename.dirname path in
+                    let ds = List.map (fun javaspec -> parse_java_file (Filename.concat pathDir javaspec) reportRange reportShouldFail) javaspecs in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
                       spec_classes := classes;
                       spec_lemmas := lemmas
                     end;
                     let l = file_loc path in
-                    let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in
+                    let relDir = Filename.dirname relpath in
+                    let jarspecs = List.map (fun path -> (l, Filename.concat relDir path ^ "spec")) jars in
                     (jarspecs, ds)
                 in
                 let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir headers' ds in
@@ -4388,9 +4393,9 @@ let verify_program_core (* ?verify_program_core *)
               | None -> 
                 let ([], javaspecs) = parse_jarspec_file_core rtpath in
                 let javaspecs =
-                  if options.option_allow_assume then Filename.concat rtdir "_assume.javaspec"::javaspecs else javaspecs
+                  if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
-                let ds = List.map (fun x -> parse_java_file x reportRange reportShouldFail) javaspecs in
+                let ds = List.map (fun x -> parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail) javaspecs in
                 let (_, maps0) = check_file rtpath true false bindir [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
@@ -14177,10 +14182,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let (jars, javas, provides) = parse_jarsrc_file_core path in
               let specPath = Filename.chop_extension path ^ ".jarspec" in
               let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
+              let pathDir = Filename.dirname path in
+              let javas = List.map (Filename.concat pathDir) javas in
               if Sys.file_exists specPath then begin
                 let (specJars, _) = parse_jarspec_file_core specPath in
                 jardeps := specJars @ jars;
-                ((l, specPath) :: jarspecs, javas, provides)
+                ((l, Filename.basename specPath) :: jarspecs, javas, provides)
               end else
                 (jarspecs, javas, provides)
             else

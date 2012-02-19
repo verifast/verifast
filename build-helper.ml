@@ -4,7 +4,7 @@ open Unix;;
 open Printf;;
 
 let releases = [ (* Add new releases to the front *)
-  "12.2", 1040;
+  "12.2", 1041;
   "11.12", 1016;
   "11.11.27", 1003;
   "11.11", 987;
