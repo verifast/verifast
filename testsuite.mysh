@@ -132,7 +132,7 @@ verifast -c -allow_assume -prover redux -provides "java_card_applet mypackage.My
 cd ..
 verifast_both -c -disable_overflow_check Account.java
 verifast_both -c -disable_overflow_check AbstractClasses.java
-ifnotmac verifast -c -disable_overflow_check ArrayList.java
+verifast_both -c -disable_overflow_check ArrayList.java
 verifast_both -c -disable_overflow_check ArraysAuto.java
 verifast_both -c -disable_overflow_check ArraysManual.java
 verifast_both -c -disable_overflow_check Automation.java

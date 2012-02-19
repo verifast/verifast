@@ -163,10 +163,12 @@ lemma_auto(append(take(n, xs), drop(n, xs))) void append_take_drop<t>(int n, lis
     ensures append(take(n, xs), drop(n, xs)) == xs;
 
 lemma_auto void nth_drop<t>(list<t> vs, int i);
-  requires 0 <= i && i < length(vs);
-  ensures nth(i, vs) == head(drop(i, vs));
+    requires 0 <= i && i < length(vs);
+    ensures nth(i, vs) == head(drop(i, vs));
 
-
+lemma_auto void nth_drop0<t>(int n, int m, list<t> xs);
+    requires 0 <= n && 0 <= m;
+    ensures nth(n, drop(m, xs)) == nth(n + m, xs);
 
 fixpoint list<t> remove<t>(t x, list<t> xs) {
     switch (xs) {
@@ -199,8 +201,12 @@ fixpoint list<t> remove_all<t>(list<t> xs, list<t> ys) {
 }
 
 lemma void drop_take_remove_nth<t>(list<t> xs, int n);
-  requires 0<=n && n < length(xs);
-  ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
+    requires 0 <= n && n < length(xs);
+    ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
+
+lemma void remove_nth_take_drop<t>(list<t> xs, int n);
+    requires 0 <= n && n < length(xs);
+    ensures remove_nth(n, xs) == append(take(n, xs), drop(n + 1, xs));
 
 fixpoint int index_of<t>(t x, list<t> xs) {
     switch (xs) {
@@ -345,5 +351,17 @@ fixpoint boolean forall<t>(list<t> xs, fixpoint(t, boolean) p) {
 lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, boolean) p);
     requires true;
     ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
+
+lemma_auto void drop_drop<t>(int m, int n, list<t> xs);
+    requires 0 <= m && 0 <= n && m + n <= length(xs);
+    ensures drop(m, drop(n, xs)) == drop(m + n, xs);
+
+lemma_auto void nth_append_left<t>(int n, list<t> xs, list<t> ys);
+    requires 0 <= n && n < length(xs);
+    ensures nth(n, append(xs, ys)) == nth(n, xs);
+
+lemma_auto void nth_append_right<t>(int n, list<t> xs, list<t> ys);
+    requires length(xs) <= n;
+    ensures nth(n, append(xs, ys)) == nth(n - length(xs), ys);
 
 @*/

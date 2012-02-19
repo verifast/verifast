@@ -3775,14 +3775,15 @@ let verify_program_core (* ?verify_program_core *)
     if domain = [] then
       (fsymb, ctxt#mk_app fsymb [])
     else
-      let vsymb = ctxt#mk_app (ctxt#mk_symbol ("@" ^ s) [] ctxt#type_inductive Uninterp) [] in
+      let name = "@" ^ s in
+      let vsymb = ctxt#mk_app (ctxt#mk_symbol name [] ctxt#type_inductive Uninterp) [] in
       (* Emit an axiom saying that @(@f, x) == f(x) / @(@(@f, x), y) == f(x, y) / ... *)
       ctxt#begin_formal;
       let bounds = imap (fun k t -> ctxt#mk_bound k t) domain_tnodes in
       let app = List.fold_left2 (fun t1 tp t2 -> ctxt#mk_app apply_symbol [t1; apply_conversion tp ProverInductive t2]) vsymb domain bounds in
       let body = ctxt#mk_eq (apply_conversion ProverInductive range app) (ctxt#mk_app fsymb bounds) in
       ctxt#end_formal;
-      ctxt#assume_forall [app] domain_tnodes body;
+      ctxt#assume_forall name [app] domain_tnodes body;
       (fsymb, vsymb)
   in
   
@@ -8212,7 +8213,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
        let rhs = eval None env w in
        let lhs = ctxt#mk_app fsym (List.map snd env) in
        ctxt#end_formal;
-       ctxt#assume_forall [lhs] tps (ctxt#mk_eq lhs rhs)
+       ctxt#assume_forall g [lhs] tps (ctxt#mk_eq lhs rhs)
     end
     fixpointmap1
   in
@@ -13730,7 +13731,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       ) in
       let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
-      ctxt#assume_forall trigger tps body
+      ctxt#assume_forall g trigger tps body
   | (WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))

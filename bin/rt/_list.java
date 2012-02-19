@@ -660,4 +660,73 @@ lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, boolean) p)
     }
 }
 
+lemma_auto void drop_drop<t>(int m, int n, list<t> xs)
+    requires 0 <= m && 0 <= n && m + n <= length(xs);
+    ensures drop(m, drop(n, xs)) == drop(m + n, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (n == 0) {
+            } else {
+                drop_drop(m, n - 1, xs0);
+            }
+    }
+}
+
+lemma_auto void nth_append_left<t>(int n, list<t> xs, list<t> ys)
+    requires 0 <= n && n < length(xs);
+    ensures nth(n, append(xs, ys)) == nth(n, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (n == 0) {
+            } else {
+                nth_append_left(n - 1, xs0, ys);
+            }
+    }
+}
+
+lemma_auto void nth_append_right<t>(int n, list<t> xs, list<t> ys)
+    requires length(xs) <= n;
+    ensures nth(n, append(xs, ys)) == nth(n - length(xs), ys);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            nth_append_right(n - 1, xs0, ys);
+            length_nonnegative(xs0);
+    }
+}
+
+lemma void remove_nth_take_drop<t>(list<t> xs, int n)
+    requires 0 <= n && n < length(xs);
+    ensures remove_nth(n, xs) == append(take(n, xs), drop(n + 1, xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (n == 0) {
+                drop_0(xs0);
+            } else {
+                remove_nth_take_drop(xs0, n - 1);
+            }
+    }
+}
+
+lemma_auto void nth_drop0<t>(int n, int m, list<t> xs)
+    requires 0 <= n && 0 <= m;
+    ensures nth(n, drop(m, xs)) == nth(n + m, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (m == 0) {
+            } else {
+                nth_drop0(n, m - 1, xs0);
+            }
+    }
+}
+
 @*/

@@ -187,6 +187,9 @@ public class ArrayIndexOutOfBoundsException extends RuntimeException {
 public class NullPointerException extends RuntimeException {
 }
 
+public class UnsupportedOperationException extends RuntimeException {
+}
+
 public class Byte {
     
     public static final byte MIN_VALUE = -128;

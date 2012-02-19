@@ -234,7 +234,7 @@ class z3_context () =
     method begin_formal = ()
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3.type_ast) = Z3.mk_bound ctxt i tp
-    method assume_forall (triggers: Z3.ast list) (tps: Z3.type_ast list) (body: Z3.ast): unit = 
+    method assume_forall (description: string) (triggers: Z3.ast list) (tps: Z3.type_ast list) (body: Z3.ast): unit = 
       if List.length tps = 0 then
         Z3.assert_cnstr ctxt body
       else

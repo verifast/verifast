@@ -168,6 +168,8 @@ final class ArrayListIterator implements Iterator {
         //@ list.size_limits();
         //@ switch (removals) { case nil: case cons(r, rs1): }
         //@ length_remove_nths(removals, oldElements);
+        //@ assert [_]oldElements |-> ?oes;
+        //@ seq_of_list_length(oes, n);
         return list.get(index++);
         //@ hasCurrentElement = true;
         //@ nextRemoveIndex = n;
@@ -207,34 +209,6 @@ lemma int list_neq_nth<t>(list<t> xs, list<t> ys)
                     } else {
                         return list_neq_nth(xs0, ys0) + 1;
                     }
-            }
-    }
-}
-
-lemma_auto void nth_drop_0<t>(int i, int n, list<t> xs)
-    requires 0 <= n && 0 <= i && n + i < length(xs);
-    ensures nth(i, drop(n, xs)) == nth(n + i, xs);
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (n == 0) {
-            } else {
-                nth_drop_0(i, n - 1, xs0);
-            }
-    }
-}
-
-lemma_auto void nth_append<t>(int i, list<t> xs, list<t> ys)
-    requires 0 <= i && i < length(xs) + length(ys);
-    ensures nth(i, append(xs, ys)) == (i < length(xs) ? nth(i, xs) : nth(i - length(xs), ys));
-{
-    switch (xs) {
-        case nil:
-        case cons(x0, xs0):
-            if (i == 0) {
-            } else {
-                nth_append(i - 1, xs0, ys);
             }
     }
 }
@@ -350,15 +324,7 @@ final class ArrayList implements List {
         //@ open array_slice_dynamic(_, _, _, _, _);
         elements[--size] = null;
         return result;
-        //@ assert array_slice(e, 0, s - 1, ?es1);
-        //@ drop_take_remove_nth(es, index);
-        /*@
-        if (es1 == remove_nth(index, es)) {
-        } else {
-            int i = list_neq_nth(es1, remove_nth(index, es));
-            assert false;
-        }
-        @*/
+        //@ remove_nth_take_drop(es, index);
     }
     
     /*@

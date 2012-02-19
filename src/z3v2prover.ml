@@ -232,7 +232,7 @@ class z3_context () =
     method begin_formal = ()
     method end_formal = ()
     method mk_bound (i: int) (tp: Z3.sort) = Z3.mk_bound ctxt i tp
-    method assume_forall (triggers: Z3.ast list) (tps: Z3.sort list) (body: Z3.ast): unit = 
+    method assume_forall (description: string) (triggers: Z3.ast list) (tps: Z3.sort list) (body: Z3.ast): unit = 
       let pats = (
         match triggers with
           [] -> [| |]

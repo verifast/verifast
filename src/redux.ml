@@ -874,6 +874,7 @@ and context () =
           let tnode = self#get_node (new symbol Uninterp s) [] in
           let u = tnode#value#mk_unknown in
           simplex#assert_eq n ((neg_unit_num, u)::List.map (fun (t, scale) -> (scale, t#value#mk_unknown)) ts);
+          assert (self#pump_simplex_eqs <> Unsat3);
           tnode
         end
       | TermNode t -> t
@@ -1270,23 +1271,13 @@ and context () =
     
     val mutable reducing = false
     
-    method reduce0 =
+    method pump_simplex_eqs =
       let rec iter result =
         match simplex_eqs with
           [] ->
           begin
             match simplex_consts with
-              [] ->
-              begin
-                match redexes with
-                  [] -> result
-                | f::redexes0 ->
-                  redexes <- redexes0;
-                  match (f(), result) with
-                    (Unsat3, _) -> Unsat3
-                  | (r, Valid3) -> iter r
-                  | _ -> iter Unknown3
-              end
+              [] -> result
             | (u, c)::consts ->
               simplex_consts <- consts;
               let Some tn = unknown_tag u in
@@ -1305,6 +1296,24 @@ and context () =
             (Unsat3, _) -> Unsat3
           | (r, Valid3) -> iter r
           | _ -> iter Unknown3
+      in
+      iter Valid3
+    
+    method reduce0 =
+      let rec reduce_step result =
+        match redexes with
+          [] -> result
+        | f::redexes0 ->
+          redexes <- redexes0;
+          match (f(), result) with
+            (Unsat3, _) -> Unsat3
+          | (r, Valid3) -> iter r
+          | _ -> iter Unknown3
+      and iter result =
+        match (self#pump_simplex_eqs, result) with
+          (Unsat3, _) -> Unsat3
+        | (r, Valid3) -> reduce_step r
+        | _ -> reduce_step Unknown3
       in
       reducing <- true;
       let result = iter Valid3 in
@@ -1332,7 +1341,7 @@ and context () =
     method begin_formal = formal_depth <- formal_depth + 1
     method end_formal = formal_depth <- formal_depth - 1
     method mk_bound (i: int) (s: unit): (symbol, termnode) term = BoundVar i
-    method assume_forall (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
+    method assume_forall (description: string) (pats: ((symbol, termnode) term) list) (tps: unit list) (body: (symbol, termnode) term): unit =
       if tps = [] then ignore (self#assume body) else
       let pats =
         if pats = [] then
@@ -1421,9 +1430,10 @@ and context () =
               | _ -> failwith (Printf.sprintf "Redux does not support subpattern %s; it currently supports only symbol applications and bound variables as subpatterns." (self#pprint pat))
             in
             match_pats [] term#children args (fun bound_env ->
-              if verbosity >= 3 then printff "%10.6fs: Redux: Axiom %s triggered with\n" (Perf.time()) (self#pprint body);
+              if verbosity >= 3 then printff "%10.6fs: Redux: Axiom %s triggered\n" (Perf.time()) description;
+              if verbosity >= 4 then printff "%10.6fs: Redux: Axiom %s triggered with\n" (Perf.time()) (self#pprint body);
               let body = term_subst bound_env body in
-              if verbosity >= 3 then List.iter (fun (i, t) -> printff "            bound.%d = %s\n" i t#pprint) bound_env;
+              if verbosity >= 4 then List.iter (fun (i, t) -> printff "            bound.%d = %s\n" i t#pprint) bound_env;
               self#add_redex (fun () ->
                 (* printff "Asserting axiom body %s\n" (self#pprint body); *)
                 self#assume_core body

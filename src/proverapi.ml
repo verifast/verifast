@@ -60,6 +60,6 @@ class virtual ['typenode, 'symbol, 'termnode] context =
     method virtual begin_formal: unit
     method virtual end_formal: unit
     method virtual mk_bound: int -> 'typenode -> 'termnode
-    method virtual assume_forall: 'termnode list -> ('typenode) list -> 'termnode -> unit
+    method virtual assume_forall: string (* description for diagnostic traces *) -> 'termnode list -> ('typenode) list -> 'termnode -> unit
     method virtual simplify: 'termnode -> 'termnode option
   end
