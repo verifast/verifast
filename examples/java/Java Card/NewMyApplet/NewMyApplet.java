@@ -4,10 +4,16 @@
 // What we are proving here is that in any execution of the applet where the input satisfies these assumptions, the applet does not dereference null pointers,
 // access arrays with indices that are out of bounds, divide by zero, perform arithmetic overflow, violate API contracts, or violate the assertions specified in the code.
 
-package mypackage;
+package newmypackage;
+
+import org.globalplatform.GPSystem;
+
+import be.fedict.neweidapplet.INewEidPoints;
+
+import newepurse.IEPurseServicesCredit;
+import newepurse.IEPurseServicesDebit;
 
 import javacard.framework.*;
-import visa.openplatform.*;
 
 /*@
 
@@ -27,9 +33,9 @@ predicate optional_data_records(byte[] array, int start, int count;) =
     :
         0 < count &*&
         array_slice(array, start, start + 2, _) &*&
-        array[start + 2] |-> ?length &*& 0 <= length &*& length <= MyApplet.MAX_LEN_OPTIONAL_DATA &*&
-        array_slice(array, start + 3, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, _) &*&
-        optional_data_records(array, start + 3 + MyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
+        array[start + 2] |-> ?length &*& 0 <= length &*& length <= NewMyApplet.MAX_LEN_OPTIONAL_DATA &*&
+        array_slice(array, start + 3, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, _) &*&
+        optional_data_records(array, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
 
 lemma void optional_data_records_split(byte[] array, int start, int offset)
     requires [?f]optional_data_records(array, start, ?count) &*& 0 <= offset &*& offset <= count;
@@ -60,7 +66,7 @@ lemma void optional_data_records_merge(byte[] array, int start)
 
 predicate record(int maxSizeRecord, byte[] record; unit info) =
   record != null &*&
-  true == ((record).length == maxSizeRecord + MyApplet.LEN_RECORD_LEN_BYTE) &*&
+  true == ((record).length == maxSizeRecord + NewMyApplet.LEN_RECORD_LEN_BYTE) &*&
   array_element(record, 0, ?recordLength) &*& 0 <= recordLength &*& 0 + recordLength <= maxSizeRecord &*&
   array_slice(record, 1, 6, _) &*&
   array_element(record, 6, ?adfLength) &*& 0 <= adfLength &*& 6 + adfLength <= maxSizeRecord &*&
@@ -70,12 +76,19 @@ predicate record(int maxSizeRecord, byte[] record; unit info) =
 predicate my_record(int maxSizeRecord, Object record; unit info) =
   record(maxSizeRecord, ^record, unit) &*& info == unit;
 
-predicate MyApplet_(MyApplet applet; char nbRecords, byte maxSizeRecord) =
-  MyApplet_bya_FCI(?fci) &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*&
+predicate MyApplet_(NewMyApplet applet; char nbRecords, byte maxSizeRecord) =
+  applet.NewEPurseAID |-> ?newEPurseAid &*& array_slice(newEPurseAid, 0, newEPurseAid.length, _) &*& newEPurseAid.length == 6 &*&
+  applet.NewEidAID |-> ?newEidAid &*& array_slice(newEidAid, 0, newEidAid.length, _) &*& newEidAid.length == 9 &*&
+  applet.NewEidPointsObject |-> _ &*&
+  applet.NewEPurseDebitObject |-> _ &*&
+  applet.NewEPurseCreditObject |-> _ &*&
+  applet.NewMyAppletPointsObject |-> ?pointsObject &*& [_]pointsObject.applet |-> applet &*&
+  NewMyApplet_Points(_) &*&
+  NewMyApplet_bya_FCI(?fci) &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*&
   applet.by_NbRecords |-> nbRecords &*& 0 <= nbRecords &*&
   applet.by_MaxNbRecord |-> ?maxNbRecord &*& nbRecords <= maxNbRecord &*&
-  applet.by_MaxSizeRecord |-> maxSizeRecord &*& maxSizeRecord >= MyApplet.OFF_DATA_IN_RECORD + 5 &*&
-  applet.bya_OptionalData |-> ?optionalData &*& optionalData != null &*& optionalData.length == MyApplet.SIZE_OPTIONAL_DATA_BUFFER &*&
+  applet.by_MaxSizeRecord |-> maxSizeRecord &*& maxSizeRecord >= NewMyApplet.OFF_DATA_IN_RECORD + 5 &*&
+  applet.bya_OptionalData |-> ?optionalData &*& optionalData != null &*& optionalData.length == NewMyApplet.SIZE_OPTIONAL_DATA_BUFFER &*&
   optional_data_records(optionalData, 0, 3) &*&
   applet.o_Records |-> ?records &*& records != null &*& records.length == maxNbRecord &*&
   array_slice_deep(records, 0, nbRecords, my_record, maxSizeRecord, _, _) &*&
@@ -83,7 +96,7 @@ predicate MyApplet_(MyApplet applet; char nbRecords, byte maxSizeRecord) =
 
 @*/
 
-public final class MyApplet extends Applet {
+public final class NewMyApplet extends Applet {
 
   static final boolean B_MODE_DEBUG = false;
 
@@ -100,8 +113,8 @@ public final class MyApplet extends Applet {
   static final short MAX_LEN_OPTIONAL_DATA_AND_HEADER = (short)(MAX_LEN_OPTIONAL_DATA + 3);
   static final short SIZE_OPTIONAL_DATA_BUFFER = (short)(3 * MAX_LEN_OPTIONAL_DATA_AND_HEADER);
   static final short TAG_LANGUAGE_PREFERENCE = (short) 0x1234 ;
-  static final short TAG_ISSUER_CODE_TABLE_INDEX = (short) 0x1234 ;
-  static final short TAG_FCI_ISSUER_DISCRETIONARY_DATA = (short) 0x1234 ;
+  static final short TAG_ISSUER_CODE_TABLE_INDEX = (short) 0x1235 ;
+  static final short TAG_FCI_ISSUER_DISCRETIONARY_DATA = (short) 0x1236 ;
 
   byte by_NbRecords;
   byte by_MaxNbRecord;
@@ -123,12 +136,25 @@ public final class MyApplet extends Applet {
     (byte)0x12, (byte)1,  (byte)1
   };
 
+  	public static final byte INS_Debit = 0x01;
+	public static final byte INS_Eid_Points = 0x03;
+	private byte[] NewEPurseAID = {0x01,0x02,0x03,0x04,0x05,0x00};
+	private IEPurseServicesDebit NewEPurseDebitObject;
+	private IEPurseServicesCredit NewEPurseCreditObject;
+	private byte[] NewEidAID = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x00};
+	private INewEidPoints NewEidPointsObject;
+	public static byte Points = 5;
+	NewMyAppletPoints NewMyAppletPointsObject;
+
     //@ predicate valid() = MyApplet_(this, _, _);
 
-  private MyApplet(byte[] byaBuffer, short shOffset, byte byLength, byte byMaxNbRecord, byte byMaxSizeRecord)
-    //@ requires system() &*& 0 <= byMaxNbRecord &*& 6 <= byMaxSizeRecord &*& bya_FCI |-> ?fci &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*& array_slice(byaBuffer, shOffset, byLength, _);
+  private NewMyApplet(byte[] byaBuffer, short shOffset, byte byLength, byte byMaxNbRecord, byte byMaxSizeRecord)
+    //@ requires system() &*& 0 <= byMaxNbRecord &*& 6 <= byMaxSizeRecord &*& Points |-> _ &*& bya_FCI |-> ?fci &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*& array_slice(byaBuffer, shOffset, byLength, _);
     //@ ensures true;
   {
+	NewMyAppletPointsObject = new NewMyAppletPoints();
+	//@ NewMyAppletPointsObject.applet = this;
+		
     by_MaxNbRecord   = byMaxNbRecord;
     by_MaxSizeRecord = byMaxSizeRecord;
 
@@ -154,7 +180,7 @@ public final class MyApplet extends Applet {
   public static void install(byte[] byaBuffer, short shOffset, byte byLength) throws ISOException /*@ ensures true; @*/
     /*@
     requires
-      system() &*& class_init_token(MyApplet.class) &*&
+      system() &*& class_init_token(NewMyApplet.class) &*&
       byaBuffer != null &*&
       shOffset >= 0 &*&
       array_slice(byaBuffer, shOffset, byLength, ?values) &*&
@@ -193,7 +219,7 @@ public final class MyApplet extends Applet {
       byMaxSizeRecord  = (byaBuffer[byOffRecParam] != 0) ? byaBuffer[byOffRecParam] : DEF_MAX_ENTRY_SIZE;
     }
 
-    new MyApplet(byaBuffer, (short)(shOffset+1), byaBuffer[shOffset], byMaxNbRecord, byMaxSizeRecord);
+    new NewMyApplet(byaBuffer, (short)(shOffset+1), byaBuffer[shOffset], byMaxNbRecord, byMaxSizeRecord);
   }
 
   public void process(APDU oApdu)
@@ -243,6 +269,12 @@ public final class MyApplet extends Applet {
             return;
           }
         }
+      case INS_Debit:
+			askForPayment();
+			break;
+      case INS_Eid_Points:
+		   askForSharingPoints();
+		   break;
       default:
         ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
       }
@@ -255,6 +287,12 @@ public final class MyApplet extends Applet {
       case 0xe2:
         processAppendRecord(oApdu);
         return;
+      case INS_Debit:
+		askForPayment();
+		break;
+      case INS_Eid_Points:
+	    askForSharingPoints();
+	    break;
       default:
         ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
       }
@@ -324,7 +362,7 @@ public final class MyApplet extends Applet {
     //@ requires oApdu != null &*& APDU(oApdu, ?buffer_) &*& array_slice(buffer_, 0, buffer_.length, _);
     //@ ensures APDU(oApdu, buffer_) &*& array_slice(buffer_, 0, buffer_.length, _) &*& result == buffer_;
   {
-    if (bCheckPersoState && OPSystem.getCardContentState() != OPSystem.APPLET_PERSONALIZED )
+    if (bCheckPersoState && GPSystem.getCardContentState() != GPSystem.SECURITY_DOMAIN_PERSONALIZED )
       ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
     if (bReceive) oApdu.setIncomingAndReceive();
     return oApdu.getBuffer();
@@ -354,7 +392,7 @@ public final class MyApplet extends Applet {
         (short) (byIndex * MAX_LEN_OPTIONAL_DATA_AND_HEADER),
         (short) (shLC + (short)3));
     //@ assert byaOptionalData[byIndex * 13 + 2] |-> ?length;
-    //@ assume(0 <= length && length <= MyApplet.MAX_LEN_OPTIONAL_DATA);
+    //@ assume(0 <= length && length <= NewMyApplet.MAX_LEN_OPTIONAL_DATA);
     //@ close optional_data_records(byaOptionalData, byIndex * MAX_LEN_OPTIONAL_DATA_AND_HEADER, 3 - byIndex);
     //@ optional_data_records_merge(byaOptionalData, 0);
     //@ close MyApplet_(this, _, _);
@@ -374,6 +412,7 @@ public final class MyApplet extends Applet {
     default :
       ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
     }
+    return -1;
   }
 
   private void processAppendRecord(APDU oApdu)
@@ -472,7 +511,7 @@ public final class MyApplet extends Applet {
     //@ open valid();
     //@ open MyApplet_(this, _, _);
     if ((byFreeRecord == (byte)0x7F) && (by_NbRecords == 1))
-      OPSystem.setCardContentState( OPSystem.APPLET_PERSONALIZED );
+      GPSystem.setCardContentState( GPSystem.SECURITY_DOMAIN_PERSONALIZED );
       //@ close [1/2]MyApplet_(this, _, _);
       //@ close [1/2]valid();
   }
@@ -636,6 +675,102 @@ public final class MyApplet extends Applet {
     //@ assume (byByte < 0 ? res == 256 + byByte : res == byByte);
     //@ close is_short_of_byte((short) (byByte & 0xFF), byByte);
   }
+  private void askForSharingPoints()
+    //@ requires current_applet(this) &*& [1/2]valid();
+    //@ ensures current_applet(this) &*& [1/2]valid();
+  {
+	AID NewEid_AID = JCSystem.lookupAID(NewEidAID,(short)0, (byte)NewEidAID.length);
+		
+	if (NewEid_AID == null)
+		ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+		
+	JCSystem.beginTransaction(); // Added for VeriFast
+	NewEidPointsObject = (INewEidPoints)
+		(JCSystem.getAppletShareableInterfaceObject(NewEid_AID, (byte) 0x00));
+		
+	INewEidPoints newEidPoints = NewEidPointsObject;
+	byte points = Points;
+	
+	if (newEidPoints != null) {
+	    points = newEidPoints.sharePoints(points);
+	}
+	
+	Points = points;
+	JCSystem.commitTransaction(); // Added for VeriFast
+		
+  }
+
+  private void askForPayment()
+    //@ requires current_applet(this) &*& [1/2]valid();
+    //@ ensures current_applet(this) &*& [1/2]valid();
+  {
+	AID NewEPurse_AID = JCSystem.lookupAID(NewEPurseAID,(short)0, (byte)NewEPurseAID.length);
+		
+	if (NewEPurse_AID == null)
+		ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+		
+	JCSystem.beginTransaction(); // Added for VeriFast
+	NewEPurseDebitObject = (IEPurseServicesDebit)
+		(JCSystem.getAppletShareableInterfaceObject(NewEPurse_AID, (byte) 0x00));
+	IEPurseServicesDebit newEPurseDebitObject = NewEPurseDebitObject;
+	byte points = Points;
+		
+	if (newEPurseDebitObject != null) {
+        //@ Shareable epurseServiceSIO = newEPurseDebitObject;
+        //@ assert epurseServiceSIO.Shareable(?epurseApplet1);
+        //@ mem_registered_applets_is(this);
+        //@ assert registered_applets(?as1);
+        //@ foreachp_unremove<Applet>(this, as1);
+        //@ set_current_applet(epurseApplet1);
+        //@ foreachp_remove(epurseApplet1, as1);
+	newEPurseDebitObject.debit(points);
+        //@ is_registered_applets_mem(this);
+        //@ assert registered_applets(?as2);
+        //@ foreachp_unremove(epurseApplet1, as2);
+        //@ set_current_applet(this);
+        //@ foreachp_remove<Applet>(this, as2);
+        }
+	
+	NewEPurseCreditObject = (IEPurseServicesCredit)
+	(JCSystem.getAppletShareableInterfaceObject(NewEPurse_AID, (byte) 0x01));
+	IEPurseServicesCredit newEPurseCreditObject = NewEPurseCreditObject;
+	
+	if (newEPurseCreditObject != null) {
+        //@ Shareable epurseServiceSIO = newEPurseCreditObject;
+        //@ assert epurseServiceSIO.Shareable(?epurseApplet2);
+        //@ mem_registered_applets_is(this);
+        //@ assert registered_applets(?as1);
+        //@ foreachp_unremove<Applet>(this, as1);
+        //@ set_current_applet(epurseApplet2);
+        //@ foreachp_remove(epurseApplet2, as1);
+	newEPurseCreditObject.transaction(points);
+        //@ is_registered_applets_mem(this);
+        //@ assert registered_applets(?as2);
+        //@ foreachp_unremove(epurseApplet2, as2);
+        //@ set_current_applet(this);
+        //@ foreachp_remove<Applet>(this, as2);
+        }
+	
+	JCSystem.commitTransaction(); // Added for VeriFast
+  }
+  
+  public Shareable getShareableInterfaceObject(AID oAid, byte bArg)
+        //@ requires [1/2]this.valid() &*& registered_applets(?as) &*& foreachp(remove<Applet>(this, as), semi_valid) &*& mem<Applet>(this, as) == true &*& AID(oAid);
+        //@ ensures [1/2]this.valid() &*& registered_applets(as) &*& foreachp(remove<Applet>(this, as), semi_valid) &*& AID(oAid) &*& result == null ? true : result.Shareable(?a) &*& mem<Applet>(a, as) == true;
+  {
+		
+		//check if AID is allowed
+		//@ NewMyAppletPointsObject.getShareable();
+		
+		if (bArg == (byte)0x0) // Based on argument, return
+												// object reference
+			return (Shareable) (NewMyAppletPointsObject);
+
+          else 
+			    ISOException.throwIt(ISO7816.SW_WRONG_DATA);
+		
+		return null;
+	}
 }
 
 //@ predicate is_short_of_byte(short s, byte b) = b < 0 ? s == 256 + b : s == b;

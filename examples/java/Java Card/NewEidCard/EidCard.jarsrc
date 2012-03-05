@@ -1,8 +1,8 @@
 ../NewEPurse/IEPurseServices.jar
+EidCardServices.jar
 File.java
 ElementaryFile.java
 DedicatedFile.java
 MasterFile.java
-INewEidPoints.java
 NewEidPoints.java
 NewEidCard.java
