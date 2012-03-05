@@ -16,7 +16,7 @@ public class DedicatedFile extends File {
 		foreachp(take(number, sb), valid_id); @*/
 
 	// link to parent DF
-	private DedicatedFile parentFile;
+	public DedicatedFile parentFile;
 	// list of sibling files (either EF or DF)
 	private static final byte MAX_SIBLINGS = 10;
 	private File[] siblings;

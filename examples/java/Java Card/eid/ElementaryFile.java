@@ -8,16 +8,16 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	/*@ predicate ElementaryFile(short fileID, DedicatedFile parentFile, byte[] data, boolean activeState, short size, any info) = 
 		this.File(File.class)(fileID, activeState, _) &*& this.parentFile |-> parentFile &*& 
 		this.data |-> data &*& data != null &*& this.size |-> size &*& array_slice(data, 0, data.length, _) &*&
-		size >= 0 &*& size <= data.length &*& info == unit &*& data.length <= Short.MAX_VALUE; @*/
+		size >= 0 &*& size <= data.length &*& info == unit &*& data.length <= 30000; @*/
 		
 	// link to parent DF
-	private DedicatedFile parentFile;
+	public DedicatedFile parentFile;
 	// data stored in file
 	private byte[] data;
 	// current size of data stored in file
 	short size;
 	public ElementaryFile(short fid, DedicatedFile parent, byte[] d) 
-  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& d.length <= Short.MAX_VALUE &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, _, _);
+  	    //@ requires d != null &*& array_slice(d, 0, d.length, _) &*& d.length <= 255 &*& parent != null &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, _, _);
       	    //@ ensures ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	{
 		super(fid);
@@ -28,7 +28,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		//@ close ElementaryFile(fid, parent, d, true, (short)d.length, _);
 	}
 	public ElementaryFile(short fid, DedicatedFile parent, short maxSize) 
-  	    //@ requires parent != null &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?siblist, ?info) &*& length(siblist) < DedicatedFile.MAX_SIBLINGS;
+  	    //@ requires parent != null &*& 30000 >= maxSize &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?siblist, ?info) &*& length(siblist) < DedicatedFile.MAX_SIBLINGS;
       	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, append(siblist, cons(this, nil)), info);
 	{
 		super(fid);
@@ -63,10 +63,11 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		} else {
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
 		}
+		return 0;
 	}
 	public short getMaxSize() 
   	    //@ requires [?f]ElementaryFile(?fid, ?parent, ?data, ?state, ?thesize, ?info);
-      	    //@ ensures [f]ElementaryFile(fid, parent, data, state, thesize, info) &*& data != null &*& result == data.length;
+      	    //@ ensures [f]ElementaryFile(fid, parent, data, state, thesize, info) &*& data != null &*& result == data.length &*& data.length <= 30000;
 	{
 		//@ open [f]ElementaryFile(fid, parent, data, state, thesize, info);
 		return (short) this.data.length;

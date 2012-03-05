@@ -52,7 +52,7 @@ predicate APDU(APDU apdu, byte[] buffer);
 
 lemma_auto void APDU_inv();
     requires APDU(?apdu, ?buffer);
-    ensures APDU(apdu, buffer) &*& apdu != null &*& buffer != null &*& !is_persistent_object(buffer) &*& 133 <= buffer.length;
+    ensures APDU(apdu, buffer) &*& apdu != null &*& buffer != null &*& !is_persistent_object(buffer) &*& 133 <= buffer.length &*& buffer.length <= 32767;
 
 @*/
 

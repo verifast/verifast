@@ -504,7 +504,7 @@ public final class NewEidCard extends Applet {
 		if ((lc == 0) || (byteRead == 0))
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		// update file
-		if (offset < 0 || ISO7816.OFFSET_CDATA + lc > buffer.length || offset + lc > size)
+		if (offset < 0 || (short) (ISO7816.OFFSET_CDATA + lc) > (short) (buffer.length) || (short) (offset + lc) > size)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		((ElementaryFile) selectedFile).updateData(offset, buffer, ISO7816.OFFSET_CDATA, lc);
 		//@ close valid();
@@ -571,13 +571,13 @@ public final class NewEidCard extends Applet {
 		short dataLen = (short) data[pos];
 		pos = (short) (pos + 1 + dataLen + 1);
 		//@ close [1/2]identityFile.ElementaryFile(_, _, identityFileData, _, _, info);
-		if (dataLen <= 0 || dataLen + pos + 2 >= identityFile.getCurrentSize())
+		if (dataLen <= (short)0 || (short)(dataLen + pos + 2) >= (short)(identityFile.getCurrentSize()))
 			ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 		//@ open [1/2]identityFile.ElementaryFile(_, _, identityFileData, _, _, info);
 		dataLen = (short) data[pos];
 		pos = (short) (pos + 1);
 		//@ close [1/2]identityFile.ElementaryFile(_, _, identityFileData, _, _, info);
-		if (dataLen < 0 || pos + dataLen >= identityFile.getCurrentSize())
+		if (dataLen < (short)0 || (short) (pos + dataLen) >= (short) (identityFile.getCurrentSize()))
 			ISOException.throwIt(ISO7816.SW_DATA_INVALID);
 		//@ open [1/2]identityFile.ElementaryFile(_, _, identityFileData, _, _, info);
 		// check Le
@@ -920,7 +920,7 @@ public final class NewEidCard extends Applet {
 		// it must be a multiple of 2
 		if (((lc & 1) == 1) || ((byteRead & 1) == 1))
 			ISOException.throwIt(SW_INCONSISTENT_P1P2);
-		if (buffer.length < ISO7816.OFFSET_CDATA + lc + 1)
+		if ((short) (buffer.length) < (short) (ISO7816.OFFSET_CDATA + lc + 1))
 			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		//@ open [1/2]valid();
 		// use the path name in the APDU data to select a file
@@ -1539,7 +1539,7 @@ public final class NewEidCard extends Applet {
       	    //@ ensures array_slice(buffer, 0, buffer.length, _) &*& randomBuffer |-> theRandomBuffer &*& array_slice(theRandomBuffer, 0, theRandomBuffer.length, _);
 	{
 		// 2nd nibble of the PIN header is the length (in digits)
-		int tmp = buffer[OFFSET_PIN_HEADER];
+		byte tmp = buffer[OFFSET_PIN_HEADER];
 		if(tmp < 0) { // BUG
 		  return false;
 		}
@@ -2247,7 +2247,7 @@ public final class NewEidCard extends Applet {
 		// set the actual number of outgoing data bytes
 		apdu.setOutgoingLength(le);
 		// send content of sigBuffer in apdu
-		if (offset + le > 128 || offset < 0)
+		if ((short) (offset + le) > (short)128 || offset < (short)0)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		apdu.sendBytesLong(responseBuffer, offset, le);
 		//@ close [1/2]valid();

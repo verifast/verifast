@@ -14,7 +14,7 @@ public abstract class File {
 	 	&*& info == unit; @*/
 
 	// file identifier
-	private short fileID;
+	public short fileID;
 	protected boolean active;
 	
 	public File(short fid) 
