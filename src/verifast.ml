@@ -1699,6 +1699,10 @@ and
       switch_asn_clause list
   | EmpAsn of  (* als "emp" bij requires/ensures staat -regel-*)
       loc
+  | ForallAsn of 
+      loc *
+      string *
+      expr
   | CoefAsn of (* fractional permission met coeff-predicate*)
       loc *
       pat *
@@ -1971,6 +1975,7 @@ let asn_loc p =
   | SwitchAsn (l, e, sacs) -> l
   | WSwitchAsn (l, e, i, sacs) -> l
   | EmpAsn l -> l
+  | ForallAsn (l, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | PluginAsn (l, asn) -> l
   | WPluginAsn (l, xs, asn) -> l
@@ -2100,7 +2105,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"
+  "unloadable_module"; "decreases"; "load_plugin"; "forall_"
 ]
 
 let c_keywords = [
@@ -2945,6 +2950,7 @@ and
   parse_pred0 = parser
   [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpAsn l
+| [< '(l, Kwd "forall_"); '(_, Kwd "("); '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, x, e)
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefAsn (l, coef, p)
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
@@ -7160,6 +7166,13 @@ let verify_program_core (* ?verify_program_core *)
       | _ -> static_error l "Switch operand is not an inductive value." None
       end
     | EmpAsn l -> (p, tenv, [])
+    | ForallAsn (l, i, e) -> 
+      begin match try_assoc i tenv with
+        None -> 
+          let w = check_expr_t (pn,ilist) tparams ((i, IntType) :: tenv) e boolt in
+          (ForallAsn(l, i, w), tenv, [])
+      | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
+      end
     | CoefAsn (l, coef, body) ->
       let (wcoef, tenv') = check_pat_core (pn,ilist) l tparams tenv RealType coef in
       let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
@@ -7337,6 +7350,7 @@ let verify_program_core (* ?verify_program_core *)
       in
       iter None cs
     | EmpAsn l -> fixed
+    | ForallAsn (l, i, e) -> fixed
     | CoefAsn (l, coefpat, p) ->
       begin
         match coefpat with
@@ -8512,6 +8526,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       iter cs
     | EmpAsn l -> cont h ghostenv env
+    | ForallAsn (l, i, e) -> 
+      ctxt#begin_formal;
+      let forall = (eval None ((i, ctxt#mk_bound 0 ctxt#type_int) :: env) e) in
+      ctxt#end_formal;
+      ctxt#assume_forall "assuming forall" [] [ctxt#type_int] forall;
+      cont h ghostenv env
     | CoefAsn (l, DummyPat, body) ->
       produce_asn_core tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefAsn (l, coef', body) ->
@@ -9089,6 +9109,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       iter cs
     | EmpAsn l -> cont [] h ghostenv env env' None
+    | ForallAsn (l, i, e) -> 
+      let fresh_term = get_unique_var_symb i IntType in
+      assert_expr ((i, fresh_term) :: env) e h ((i, fresh_term) :: env) l "Cannot prove condition." None;
+      cont [] h ghostenv env env' None
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, _, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
@@ -9153,6 +9177,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             | ExprAsn (_, e) when expr_is_fixed inputVars e ->
               cont (e::conds)
             | EmpAsn _ -> cont conds
+            (*| ForallAsn _ -> cont conds*)
             | WSwitchAsn(_, e, i, cases) when expr_is_fixed inputVars e ->
               flatmap 
                 (fun (SwitchAsnClause (l, casename, args, boxinginfo, asn)) ->
@@ -11051,6 +11076,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
         List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
+    | ForallAsn (l, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals;
   in
   let rec stmt_mark_addr_taken s locals cont =

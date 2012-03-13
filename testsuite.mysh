@@ -8,6 +8,7 @@ verifast_both -c -runtime nort rt_verified.jarsrc
 cd ..
 cd ..
 cd examples
+verifast_both -c -disable_overflow_check -allow_should_fail forall.c
 verifast_both -c -disable_overflow_check -allow_should_fail address_of_local.c
 verifast_both -c -disable_overflow_check alt_threading.c
 verifast_both -c args.c
