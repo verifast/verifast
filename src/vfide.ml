@@ -338,7 +338,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     (buffer#get_iter_at_byte ~line:(line - 1) 0)#set_line_index (col - 1) (* Hack, to work around an apparent Gtk or lablgtk bug *)
     (* buffer#get_iter (`LINEBYTE (line - 1, col - 1)) *)
   in
-  let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in
+  (* let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in *)
   let apply_tag_by_name tab tagName ~start ~stop =
     tab#apply_tag_enabled := true;
     tab#buffer#apply_tag_by_name tagName ~start ~stop;
@@ -392,7 +392,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let textLabel = GMisc.label ~text:"(untitled)" () in
     let textVbox = GPack.vbox ~spacing:2 ~packing:(fun widget -> ignore (textNotebook#append_page ~tab_label:textLabel#coerce widget)) () in
     let textFindBox = GPack.hbox ~show:false ~border_width:2 ~spacing:2 ~packing:(textVbox#pack ~expand:false) () in
-    GMisc.label ~text:"Find:" ~packing:(textFindBox#pack ~expand:false) ();
+    ignore (GMisc.label ~text:"Find:" ~packing:(textFindBox#pack ~expand:false) ());
     let textFindEntry = GEdit.entry ~packing:textFindBox#add () in
     let textScroll =
       GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN
@@ -675,9 +675,9 @@ let show_ide initialPath prover codeFont traceFont runtime =
     lb#coerce#misc#modify_font_by_name !scaledTraceFont;
     let col1 = GTree.view_column ~title:title1 ~renderer:(GTree.cell_renderer_text [`FONT !codeFont], ["text", col_text1]) () in
     col1#set_resizable true;
-    lb#append_column col1;
+    ignore (lb#append_column col1);
     let col2 = GTree.view_column ~title:title2 ~renderer:(GTree.cell_renderer_text [], ["text", col_text2]) () in
-    lb#append_column col2;
+    ignore (lb#append_column col2);
     (scrollWin, lb, col_k, col_text1, col_text2, col1, col2, store)
   in
   let (steplistFrame, stepList, stepKCol, stepCol, stepViewCol, stepStore) = create_steplistbox in
@@ -988,7 +988,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
     updateMessageEntry();
     go_to_loc l
   in
-  let loc_path ((path, _, _), _) = path in
   let reportRange kind l =
     apply_tag_by_loc (tag_name_of_range_kind kind) l
   in

@@ -50,6 +50,11 @@ Since it is impractical to push and pop whenever we call get_unique_var_symb, le
 push and pop whenever we start a new branch***. Nonetheless, for the sake of "defense in depth", use assume instead
 of ctxt#assume etc. whenever it makes sense.
 
+The codebase uses "effect typing" to help check that all branches are "protected" by push and pop. Specifically, each
+function that potentially modifies the mutable state should have return type symexec_result, i.e. it should return
+SymExecSuccess. To "cast" this type to unit, use function "execute_branch". This function saves and restores the
+mutable state.
+
 
 You can get an outline of this file in Notepad++ by copying the text
 "Region:" to the clipboard and choosing TextFX->Viz->Hide Lines without (clipboard) text.
@@ -873,12 +878,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       end
       else
         Some (ident_or_keyword s false)
-  and neg_number () =
-    match text_peek () with
-      ('0'..'9' as c) ->
-        text_junk ();
-        reset_buffer (); store '-'; store c; number ()
-    | _ -> reset_buffer (); store '-'; ident2 ()
   and number () =
     match text_peek () with
       ('0'..'9' as c) ->
@@ -1096,7 +1095,6 @@ let make_preprocessor make_lexer basePath relPath =
     locs := List.tl !locs
   in
   push_lexer basePath relPath;
-  let basePath, relPath = (), () in (* Hide the variables *)
   let pp_ignore_eol = ref true in
   let next_at_start_of_line = ref true in
   let peek () = loc := List.hd !locs (); Stream.peek (List.hd !streams) in
@@ -1294,7 +1292,7 @@ let make_preprocessor make_lexer basePath relPath =
             and arg () =
               match peek () with
                 Some (_, Kwd (")"|",")) -> []
-              | Some ((_, Kwd "(") as t) -> term 0
+              | Some (_, Kwd "(") -> term 0
               | None -> syntax_error ()
               | Some t -> junk (); t::arg ()
             in
@@ -2341,10 +2339,6 @@ and
 and
   instance_preds mems = flatmap (function PredMember p -> [p] | _ -> []) mems
 and
-  parse_interface_visibility = parser
-  [<'(_, Kwd "public")>] -> Public
-| [<>] -> Public
-and
   parse_visibility = parser
   [<'(_, Kwd "public")>] -> Public
 | [<'(_, Kwd "private")>] -> Private
@@ -2373,9 +2367,6 @@ and
      end;
      mems = parse_ghost_java_members cn
   >] -> m::mems
-and
-  parse_qualified_identifier = parser
-  [< '(l, Ident x); xs = rep (parser [< '(_, Kwd "."); '(l, Ident x) >] -> (l, x)) >] -> (l, x)::xs
 and
   parse_thrown = parser
   [< tp = parse_type; '(_, Kwd "/*@"); '(_, Kwd "ensures"); epost = parse_pred; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> (tp, epost)
@@ -3499,7 +3490,6 @@ let parse_jarspec_file_core path =
 
 (* Returned paths are relative to the directory of [path] *)
 let parse_jarsrc_file_core path =
-  let dirPath = Filename.dirname path in
   let lines = read_file_lines path in
   let (jars, lines) =
     let rec iter jars lines =
@@ -3673,6 +3663,9 @@ type options = {
 
 (* Region: verify_program_core: the toplevel function *)
 
+(* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
+type symexec_result = SymExecSuccess
+
 (** Verifies the .c/.jarsrc/.scala file at path [path].
     Uses the SMT solver [ctxt].
     Reports syntax highlighting regions using the callback [reportRange].
@@ -3744,8 +3737,14 @@ let verify_program_core (* ?verify_program_core *)
   (** Execute [cont] in a temporary context. *)
   let in_temporary_context cont =
     push();
-    cont();
-    pop()
+    let r = cont() in
+    pop();
+    r
+  in
+  
+  let execute_branch cont =
+    let SymExecSuccess = in_temporary_context cont in
+    ()
   in
   
   let get_ident_use_count_cell s =
@@ -3934,6 +3933,7 @@ let verify_program_core (* ?verify_program_core *)
     match tp with
       Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
     | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term term) (ctxt#mk_le term max_short_term));
+    | UShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_ushort_term term) (ctxt#mk_le term max_ushort_term));
     | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
     | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) term) (ctxt#mk_le term max_ptr_term));
     | _ -> ()
@@ -3958,7 +3958,6 @@ let verify_program_core (* ?verify_program_core *)
   
   let is_dummy_frac_term t = List.memq t !dummy_frac_terms in
   
-  let get_unique_var_symbs xts = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) xts in
   let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts in
   let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts in
   
@@ -3981,7 +3980,6 @@ let verify_program_core (* ?verify_program_core *)
   let modulemap = [(current_module_name, current_module_term)] in
   
   let programDir = Filename.dirname path in
-  let preludePath = Filename.concat bindir "prelude.h" in
   let rtpath = match options.option_runtime with None -> Filename.concat rtdir "rt.jarspec" | Some path -> path in
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs = ref [] in
@@ -4027,9 +4025,6 @@ let verify_program_core (* ?verify_program_core *)
                 | None -> true
                 | Some _ -> false
       end in
-      (* TODO: cons' is not used anywhere, and should probably be used
-         in the line after the definition. Changing it has no effect on the test results,
-         clearly meaning that more tests should be written. I left it unchanged so that a warning still reminds us of this issue. *)
       let cons' = cons |> List.filter begin
         fun x ->
           match x with
@@ -4038,9 +4033,8 @@ let verify_program_core (* ?verify_program_core *)
                 | None -> true
                 | Some _ -> false
       end in
-      iter (pn,ilist) (Class(l,abstract,fin,cn,meths',fds,cons,super,inames,[])::classes) lemmas rest
+      iter (pn,ilist) (Class(l,abstract,fin,cn,meths',fds,cons',super,inames,[])::classes) lemmas rest
     | Func(l,Lemma(_),tparams,rt,fn,arglist,nonghost_callers_only,ftype,contract,None,fb,vis) as elem ::rest->
-      let fn = full_name pn fn in
       iter (pn, ilist) classes (elem::lemmas) rest
     | _::rest -> 
       iter (pn, ilist) classes lemmas rest
@@ -4835,7 +4829,7 @@ let verify_program_core (* ?verify_program_core *)
   
   let typedefmap = typedefmap1 @ typedefmap0 in
   
-  let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap1 (pn,ilist) tpenv te in
+  let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap (pn,ilist) tpenv te in
   
   let classmap1 =
     List.map
@@ -4878,7 +4872,7 @@ let verify_program_core (* ?verify_program_core *)
       let t = ctxt#mk_app (mk_symbol x [] ctxt#type_int Uninterp) [] in
       let serialNumber = !class_counter in
       class_counter := !class_counter + 1;
-      ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber));
+      ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber)));
       (x, t)
     end
   in
@@ -5535,7 +5529,6 @@ let verify_program_core (* ?verify_program_core *)
           in
           iter [] ps
         in
-        let old_boxpmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxpmap in
         let pfm = mk_predfam bcn l [] 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
         let pfm = mk_predfam default_hpn l [] 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
         let amap =
@@ -6328,7 +6321,6 @@ let verify_program_core (* ?verify_program_core *)
       (e, (ArrayType t), None)
     | NewArrayWithInitializer (l, te, es) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      let ws = List.map (fun e -> checkt e t) es in
       (e, ArrayType t, None)
     | IfExpr (l, e1, e2, e3) ->
       let w1 = checkt e1 boolt in
@@ -6499,7 +6491,6 @@ let verify_program_core (* ?verify_program_core *)
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)], _), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
-    | (IntLit (l, n, t), UintPtrType) -> t:=Some UintPtrType; e
     | (IntLit (l, n, t), RealType) -> t:=Some RealType; e
     | (IntLit (l, n, t), UChar) ->
       t:=Some UChar;
@@ -7697,9 +7688,9 @@ let verify_program_core (* ?verify_program_core *)
   let with_context msg cont =
     stats#execStep;
     push_context msg;
-    cont();
+    let result = cont() in
     pop_context();
-    ()
+    result
   in
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
@@ -7708,13 +7699,14 @@ let verify_program_core (* ?verify_program_core *)
     stats#proverAssume;
     push_context (Assuming t);
     ctxt#push;
-    begin
+    let result =
       match ctxt#assume t with
         Unknown -> cont()
-      | Unsat -> ()
-    end;
+      | Unsat -> SymExecSuccess
+    in
     pop_context();
-    ctxt#pop
+    ctxt#pop;
+    result
   in
   
   let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont in
@@ -8014,7 +8006,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end
       end
     | ClassLit (l,s) -> cont state (List.assoc s classterms)
-    | StringLit (l, s) -> 
+    | StringLit (l, s) ->
+      if ass_term = None then static_error l "String literals are not allowed in ghost code." None;
       cont state
         begin match file_type path with
           Java -> get_unique_var_symb "stringLiteral" (ObjType "java.lang.String")
@@ -8273,24 +8266,26 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url in
 
-  let success() = () in
+  let success() = SymExecSuccess in
   
   let branch cont1 cont2 =
     stats#branch;
-    in_temporary_context (fun _ -> cont1());
-    in_temporary_context (fun _ -> cont2())
+    execute_branch cont1;
+    execute_branch cont2;
+    SymExecSuccess
   in
   
   let rec assert_expr_split e h env l msg url = 
     match e with
       IfExpr(l0, con, e1, e2) -> 
         branch
-           (fun _ -> assume (eval None env con) (fun _ -> assert_expr_split e1 h env l msg url; ))
-           (fun _ -> assume (ctxt#mk_not (eval None env con)) (fun _ -> assert_expr_split e2 h env l msg url; ))
+           (fun () -> assume (eval None env con) (fun () -> assert_expr_split e1 h env l msg url))
+           (fun () -> assume (ctxt#mk_not (eval None env con)) (fun () -> assert_expr_split e2 h env l msg url))
     | Operation(l0, And, [e1; e2], tps) ->
-        assert_expr_split e1 h env l msg url;
-        assert_expr_split e2 h env l msg url;
-    | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun _ -> assert_expr env e h env l msg url)
+      branch
+        (fun () -> assert_expr_split e1 h env l msg url)
+        (fun () -> assert_expr_split e2 h env l msg url)
+    | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_expr env e h env l msg url; SymExecSuccess)
   in
   
   let evalpat ghost ghostenv env pat tp0 tp cont =
@@ -8319,12 +8314,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let definitely_equal t1 t2 =
     let result = if t1 == t2 then (stats#definitelyEqualSameTerm; true) else (stats#definitelyEqualQuery; ctxt#query (ctxt#mk_eq t1 t2)) in
-    (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
-    result
-  in
-  
-  let definitely_different t1 t2 =
-    let result = if t1 == t2 then false else ctxt#query (ctxt#mk_not (ctxt#mk_eq t1 t2)) in
     (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
     result
   in
@@ -8423,7 +8412,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter [] h
   in
 
-  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont =
+  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -8934,7 +8923,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               iter rules
             | None -> cont ()
             end
-          | _ -> cont ()
         end $. fun () ->
         let message =
           let predname = match g with (g, _) -> ctxt#pprint g in
@@ -9254,7 +9242,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   *)
   let pred_fam_contains_edges =
     flatmap
-      (fun (((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody0)) as predinst) ->
+      (fun ((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody0)) ->
         let pindices = List.map term_of_pred_index fns in
         match inputParamCount with
           None -> [] (* predicate is not precise *)
@@ -9338,7 +9326,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     classmap1 |> flatmap 
       (fun (cn, (l, abstract, fin, meths, fds, cmap, super, interfs, preds, pn, ilist)) ->
         preds |> flatmap
-          (fun ((g, (l, pmap, family, psymb, wbody_opt)) as instance_predicate) ->
+          (fun (g, (l, pmap, family, psymb, wbody_opt)) ->
             match wbody_opt with None -> [] | Some wbody0 ->
             let pindices = [(List.assoc cn classterms)] in
             let instpred_tparams = [] in
@@ -9423,9 +9411,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let close1_ edges =
     flatmap
-    (fun ((from_symb, from_indices, to_symb, path) as edge0) ->
+    (fun (from_symb, from_indices, to_symb, path) ->
       flatmap 
-        (fun ((from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) as edge1) ->
+        (fun (from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) ->
           if to_symb == from_symb0 then
             let rec add_extra_conditions path = 
               match path with
@@ -9492,7 +9480,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | Some rules ->
         rules := rule::!rules
     in
-    let (pn, ilist) = ("", []) in
     (* transitive auto-close rules for precise predicates and predicate families *)
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
@@ -9530,7 +9517,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
                 end
             | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
-              let (outer_s, _) = outer_symb in
               let Some tpenv = zip outer_formal_targs current_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
               let env = match current_this_opt with
@@ -9620,7 +9606,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 None
             | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               
-              let (outer_s, _) = outer_symb in
               let actual_input_args = (take (List.length outer_formal_input_args) actual_input_args) in (* to fix first call *)
               let Some tpenv = zip outer_formal_targs actual_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args actual_input_args in
@@ -9821,7 +9806,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               None -> cont (Some (Chunk ((p, false), [], coef, [a; elem; v], None)::h))
             | Some (xs, wbody) ->
               let tpenv = [] in
-              let (pn,ilist) = ("", []) in
               let ghostenv = [] in
               let Some env = zip (List.map fst xs) [a; elem; v] in
               produce_asn tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
@@ -9935,7 +9919,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   None -> cont None
                 | Some (xs, wbody) ->
                   let tpenv = [] in
-                  let (pn,ilist) = ("", []) in
                   let ghostenv = [] in
                   let [xinfo, _; xelem, _; xvalue, _] = xs in
                   let env = [xinfo, info; xelem, elem] in
@@ -10086,12 +10069,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     get_points_to h t f_symb l cont
   in
   
-  let get_full_field (pn,ilist) h t fparent fname l cont =
-    let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
-    consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit (TermPat real_unit) (Some 1) [TermPat t; dummypat] (fun chunk h coef [_; field_value] size ghostenv env env' ->
-      cont h coef field_value)
-  in
-  
   let current_thread_name = "currentThread" in
   let current_thread_type = IntType in
   
@@ -10137,10 +10114,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 StructType sn ->
                 (* Generate struct padding chunk for array elements. *)
                 let (_, _, padding_predsymb_opt) = List.assoc sn structmap in
-                match padding_predsymb_opt with
+                begin match padding_predsymb_opt with
                   None -> cont h
                 | Some padding_predsymb ->
                   cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
+                end
               | _ -> cont h
             end $. fun h ->
             produce_c_object l coef addr elemTp (Some (Some e)) false h $. fun h ->
@@ -10305,9 +10283,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     empty_preds
   in
   
-  let check_leaks h env l msg = (* ?check_leaks *)
-    match file_type path with
-    Java -> with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () -> check_breakpoint h env l
+  let check_leaks h env l msg: symexec_result = (* ?check_leaks *)
+    match language with
+      Java ->
+      with_context (Executing (h, env, l, "Leaking remaining chunks")) $. fun () ->
+      check_breakpoint h env l;
+      SymExecSuccess
     | _ ->
     with_context (Executing (h, env, l, "Cleaning up dummy fraction chunks")) $. fun () ->
     let h = List.filter (fun (Chunk (_, _, coef, _, _)) -> not (is_dummy_frac_term coef)) h in
@@ -10321,7 +10302,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     let h = List.filter (function Chunk ((name, true), targs, frac, args, Some (PluginChunkInfo info)) -> check_plugin_state h env l name info; false | _ -> true) h in
     if h <> [] then assert_false h env l msg (Some "leak");
-    check_breakpoint [] env l
+    check_breakpoint [] env l;
+    SymExecSuccess
   in
   
   let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0) =
@@ -10348,7 +10330,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         (zip2 xmap xmap0)
     end;
     if nonghost_callers_only <> nonghost_callers_only0 then static_error l (msg ^ "nonghost_callers_only clauses do not match.") None;
-    push();
+    execute_branch begin fun () ->
     let env0_0 = List.map (function (p, t) -> (p, get_unique_var_symb p t)) xmap0 in
     let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
     let env0 = currentThreadEnv @ env0_0 @ cenv0 in
@@ -10361,34 +10343,43 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             None -> (env, env0)
           | Some t -> let result = get_unique_var_symb "result" t in (("result", result)::env, ("result", result)::env0)
         in
-        produce_asn tpenv h [] env post real_unit None None (fun h _ _ ->
-          consume_asn rules tpenv0 h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
-            check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
+        execute_branch begin fun () ->
+          produce_asn tpenv h [] env post real_unit None None (fun h _ _ ->
+            consume_asn rules tpenv0 h [] env0 post0 true real_unit (fun _ h _ env0 _ ->
+              check_leaks h env0 l (msg ^ "Implementation leaks heap chunks.")
+            )
           )
-        );
-        List.iter (fun (exceptp, epost) ->
+        end;
+        epost |> List.iter begin fun (exceptp, epost) ->
           if not (is_unchecked_exception_type exceptp) then
-            produce_asn tpenv h [] env epost real_unit None None (fun h _ _ ->
+            execute_branch begin fun () ->
+              produce_asn tpenv h [] env epost real_unit None None $. fun h _ _ ->
               let rec handle_exception handlers =
                 match handlers with
                 | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
                 | (handler_tp, epost0) :: handlers ->
                   branch
-                   (fun () ->
+                    begin fun () ->
                       if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
-                      consume_asn rules tpenv0 h [] env0 epost0 true real_unit (fun _ h ghostenv env size_first -> ())
-                   )
-                   (fun () ->
-                     if not (is_subtype_of_ exceptp handler_tp) then
-                       handle_exception handlers
-                   )
+                        consume_asn rules tpenv0 h [] env0 epost0 true real_unit $. fun _ h ghostenv env size_first ->
+                        success()
+                      else
+                        success()
+                    end
+                    begin fun () ->
+                      if not (is_subtype_of_ exceptp handler_tp) then
+                        handle_exception handlers
+                      else
+                        success()
+                    end
               in
               handle_exception epost0
-            )
-        ) epost;
+            end
+        end;
+        success()
       )
-    );
-    pop()
+    )
+    end
   in
   
   let assume_is_functype fn ftn =
@@ -10743,16 +10734,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 match co with
                   None -> ()
                 | Some (pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn) ->
-                  push();
+                  execute_branch begin fun () ->
                   let ("this", thisType)::xmap = xmap in
                   let ("this", _)::xmap' = xmap' in
                   let thisTerm = get_unique_var_symb "this" thisType in
                   assume (ctxt#mk_eq (ctxt#mk_app get_class_symbol [thisTerm]) (List.assoc cn classterms)) (fun _ ->
                     check_func_header_compat l "Method specification check: " [("this", thisTerm)]
                       (Regular, [], rt, xmap, false, pre, post, epost)
-                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost')
-                  );
-                  pop()
+                      (Regular, [], rt', xmap', false, [], [("this", thisTerm)], pre', post', epost');
+                    success()
+                  )
+                  end
               end
               super_specs;
             let (pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn) =
@@ -10887,7 +10879,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               | Some {fl=lf1; ft=t1; fvis=vis1; fbinding=binding1; ffinal=final1; finit=init1; fvalue=value1} ->
                 let v1 = ! value0 in
                 let v2 = ! value1 in
-                if t0<>t1 || vis0<>vis1 || binding0<>binding1 || final0<>final1 (*|| v1 <> v2*) then static_error lf1 "Duplicate field" None;
+                if t0 <> t1 || vis0 <> vis1 || binding0 <> binding1 || final0 <> final1 || v1 <> v2 then static_error lf1 "Duplicate field" None;
                 if !value0 = None && init0 <> None then static_error lf1 "Cannot refine a non-constant field with an initializer." None;
                 iter rest fds1
             in
@@ -11017,7 +11009,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             let rec iter mlist meths_impl=
               match mlist with
                 [] -> meths_impl
-              | Meth(lm,gh,rt,n,ps,co,None,fb,v,abstract) as elem::rest ->
+              | Meth(lm,gh,rt,n,ps,co,None,fb,v,abstract)::rest ->
                 if List.mem (n,lm) meths_impl then
                   let meths_impl'= remove (fun (x,l0) -> x=n && lm=l0) meths_impl in
                   iter rest meths_impl'
@@ -11279,7 +11271,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   (* Region: verification of calls *)
   
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
-    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval_h h env pat cont =
       match pat with
@@ -11371,21 +11362,23 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             get_unique_var_symb_ symbol_name t pure
         in
         let env'' = match tr with None -> env' | Some t -> update env' "result" r in
-        (branch
-          (fun () -> match epost with
-              None -> ()
-            | Some(epost) ->
-                List.iter (fun (tp, post) -> produce_asn tpenv h ghostenv' env' post real_unit None None $. fun h _ _ ->
-                  with_context PopSubcontext $. fun () ->
-                  let e = get_unique_var_symb_ "excep" tp false in
-                  (econt l h env tp e)
-                )
-                epost
-          )
-          (fun () ->
-            produce_asn tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
+        execute_branch begin fun () ->
+          produce_asn tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
+          with_context PopSubcontext $. fun () ->
+          cont h env r
+        end;
+        begin match epost with
+          None -> ()
+        | Some(epost) ->
+          epost |> List.iter begin fun (tp, post) ->
+            execute_branch $. fun () ->
+            produce_asn tpenv h ghostenv' env' post real_unit None None $. fun h _ _ ->
             with_context PopSubcontext $. fun () ->
-            cont h env r))
+            let e = get_unique_var_symb_ "excep" tp false in
+            econt l h env tp e
+          end
+        end;
+        success()
       )
     )
   in
@@ -11433,8 +11426,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     let l = expr_loc e in
     let has_env_effects () = if language = CLang && envReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
     let has_heap_effects () = if language = CLang && heapReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
-    let eval0 = eval in
-    let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h h env e cont = verify_expr (true, true) h env None e cont in
     let eval_h_core ro h env e cont = if not pure then check_ghost ghostenv l e; verify_expr ro h env None e cont in
     let rec evhs h env es cont =
@@ -11442,7 +11433,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         [] -> cont h env []
       | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs))) 
     in 
-    let ev e = eval env e in
     let check_assign l x =
       if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None
     in
@@ -11791,7 +11781,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       )
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) as aoe ->
+    | AssignOpExpr(l, lhs, ((And | Or | Xor) as op), rhs, postOp, ts, lhs_type) ->
       assert(match !lhs_type with None -> false | _ -> true);
       let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let new_value = 
@@ -11805,8 +11795,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       ))
       in
       execute_assign_op_expr h env lhs get_values cont
-    | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) as aoe ->
-        let Some [t1; t2] = ! ts in
+    | AssignOpExpr(l, lhs, ((Add | Sub | Mul | ShiftLeft | ShiftRight | Div | Mod | BitAnd | BitOr | BitXor) as op), rhs, postOp, ts, lhs_type) ->
         let Some lhs_type = ! lhs_type in
         let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let check_overflow min t max =
@@ -11977,7 +11966,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     check_breakpoint h env l;
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
-    let eval0 = eval in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h_core sideeffectfree h env e cont =
       if not pure then check_ghost ghostenv l e;
@@ -11995,30 +11983,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | e::es -> eval_h h env e (fun h env v -> evhs h env es (fun h env vs -> cont h env (v::vs)))
     in 
     let ev e = eval env e in
-    let cont= tcont sizemap tenv ghostenv
-    in
-    let check_assign l x =
-      if pure && not (List.mem x ghostenv) then static_error l "Cannot assign to non-ghost variable in pure context." None
-    in
-    let vartp l x = 
-      match try_assoc x tenv with
-          None -> 
-        begin
-          match try_assoc' (pn, ilist) x globalmap with
-            None -> static_error l ("No such variable: "^x) None
-          | Some((l, tp, symbol, init)) -> (tp, Some(symbol))
-        end 
-      | Some tp -> (tp, None) 
-    in
-    let update_local_or_global h env tpx x symb w cont =
-      match symb with
-        None -> cont h (update env x w)
-      | Some(symb) -> 
-          let predSymb = pointee_pred_symb l tpx in
-          get_points_to h symb predSymb l (fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a global variable requires full permission." None;
-            cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
-    in
+    let cont = tcont sizemap tenv ghostenv in
     let verify_expr readonly h env xo e cont =
       if not pure then check_ghost ghostenv l e;
       verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont
@@ -12126,7 +12091,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 in
                 iter [] ss
               in
-              begin
+              execute_branch begin fun () ->
                 let currentThreadEnv = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] in
                 let h = [] in
                 with_context (Executing (h, [], openBraceLoc, "Producing function type precondition")) $. fun () ->
@@ -12235,7 +12200,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot close a struct that does not declare a body." None in
       let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." None in
       eval_h h env e $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
@@ -12254,7 +12218,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
       let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let fds = match fds_opt with Some fds -> fds | None -> static_error l "Cannot open a struct that does not declare a body." None in
       let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." None in
       eval_h h env e $. fun h env pointerTerm ->
       consume_c_object l pointerTerm (StructType sn) h $. fun h ->
@@ -12290,8 +12253,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | ExprStmt (CallExpr (l, "set_verifast_verbosity", [], [], [LitPat (IntLit (_, n, _))], Static)) when pure ->
       let oldv = !verbosity in
       set_verbosity (int_of_big_int n);
-      cont h env;
-      set_verbosity oldv
+      let r = cont h env in
+      set_verbosity oldv;
+      r
     | ExprStmt (CallExpr (l, "init_class", [], [], args, Static)) when pure ->
       let cn =
         match args with
@@ -12503,15 +12467,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         in
         let rec verify_cases cs =
           match cs with
-            [] -> if n = 0 then (* implicit default *) cont h env
+            [] ->
+            if n = 0 then (* implicit default *)
+              execute_branch (fun () -> cont h env)
           | c::cs' ->
             begin match c with
               SwitchStmtClause (l, i, ss) ->
               let w2 = check_expr_t (pn,ilist) tparams tenv i IntType in
+              execute_branch $. fun () ->
               eval_h h env w2 $. fun h env t ->
               assume_eq t v $. fun () ->
               fall_through h env cs
             | SwitchStmtDefaultClause (l, ss) ->
+              execute_branch $. fun () ->
               let restr =
                 List.fold_left
                   begin fun state clause -> 
@@ -12528,7 +12496,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             end;
             verify_cases cs'
         in
-        verify_cases cs
+        verify_cases cs;
+        success()
       | _ -> static_error l "Switch statement operand is not an inductive value or integer." None
       end
     | Assert(_, ExprAsn(le, e)) -> 
@@ -13022,13 +12991,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | CreateHandleStmt (l, x, hpn, arg) ->
       if not pure then static_error l "Handle creation statements are allowed only in a pure context." None;
       if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
-      let bcn =
-        match chop_suffix hpn "_handle" with
+      begin match chop_suffix hpn "_handle" with
           None -> static_error l "Handle creation statement must mention predicate name that ends in '_handle'." None
         | Some bcn -> match try_assoc' (pn,ilist) bcn boxmap with
             None-> static_error l "No such box class." None
-          | Some bcn -> bcn
-      in
+          | Some bcn -> ()
+      end;
       let w = check_expr_t (pn,ilist) tparams tenv arg BoxIdType in
       let boxIdTerm = ev w in
       let handleTerm = get_unique_var_symb x HandleIdType in
@@ -13093,16 +13061,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end $. fun h' env ->
       let env = List.filter (fun (x, _) -> List.mem_assoc x tenv) env in
       consume_asn rules [] h' ghostenv env p true real_unit $. fun _ h''' _ env''' _ ->
-      check_leaks h''' env endBodyLoc "Loop leaks heap chunks.";
-      begin match (t_dec, dec) with
-        (None, None) -> ()
+      execute_branch (fun () -> check_leaks h''' env endBodyLoc "Loop leaks heap chunks.");
+      execute_branch begin fun () ->
+      match (t_dec, dec) with
+        (None, None) -> success()
       | (Some t_dec, Some dec) ->
         eval_h h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
-      end
+        assert_term dec_check2 h' env''' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None;
+        success()
+      end;
+      success()
     | WhileStmt (l, e, Some (LoopSpec (pre, post)), dec, ss) ->
       if not pure then begin
         match ss with PureStmt (lp, _)::_ -> static_error lp "Pure statement not allowed here." None | _ -> ()
@@ -13146,7 +13117,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         check_leaks h' env' endBodyLoc "Loop leaks heap chunks"
       in
       let exit_loop h' env' cont =
-        check_post h' env';
+        execute_branch (fun () -> check_post h' env');
         let env =
           flatmap
             begin fun (x, t) ->
@@ -13190,14 +13161,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end $. fun h' tenv''' env' ->
       let env'' = List.filter (fun (x, _) -> List.mem_assoc x tenv) env' in
       consume_asn rules [] h' ghostenv env'' pre true real_unit $. fun _ h' ghostenv'' env'' _ ->
-      begin match (t_dec, dec) with
-        (None, None) -> ()
+      execute_branch begin fun () -> match (t_dec, dec) with
+        (None, None) -> success()
       | (Some t_dec, Some dec) ->
         eval_h h' env'' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env'' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
-        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None
+        assert_term dec_check2 h' env'' (expr_loc dec) (sprintf "Cannot prove that the loop measure remains non-negative: %s" (ctxt#pprint dec_check2)) None;
+        success()
       end;
       let bs' = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
       let env'' =
@@ -13222,7 +13194,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       check_ghost ghostenv l e';
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       if (is_unchecked_exception_type tp) then
-        ()
+        success()
       else
         verify_expr false h env None w (fun h env v -> (econt l h env tp v)) econt
     | TryCatch (l, body, catches) ->
@@ -13244,12 +13216,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                       let tenv = (x, t)::tenv in
                       let env = (x, excep)::env in
                       verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
-                    end
+                    end else
+                      success()
                   end
                   begin fun () ->
-                    begin if not (is_subtype_of_ texcep t) then
+                    if not (is_subtype_of_ texcep t) then
                       iter catches
-                    end
+                    else
+                      success()
                   end
               in
               iter catches
@@ -13264,7 +13238,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let h = [] in
           let rec iter catches =
             match catches with
-              [] -> ()
+              [] -> success()
             | (l, te, x, body)::catches ->
               branch
                 begin fun () ->
@@ -13275,7 +13249,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     let tenv = (x, t)::tenv in
                     let env = (x, xterm)::env in
                     verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
-                  end
+                  end else
+                    success()
                 end
                 begin fun () ->
                   iter catches
@@ -13315,7 +13290,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           let bs = List.map (fun x -> (x, get_unique_var_symb_ x (List.assoc x tenv) (List.mem x ghostenv))) xs in
           let env = bs @ env in
           let h = [] in
-          let tcont _ _ _ _ _ = () in
+          let tcont _ _ _ _ _ = success() in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
     | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
@@ -13707,13 +13682,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter blocks
     in
     lblenv_ref := lblenv;
-    begin
+    execute_branch begin fun () ->
       match blocks with
-        [] -> cont sizemap tenv ghostenv h env
+        [] ->
+        cont sizemap tenv ghostenv h env
       | block0::_ ->
-        in_temporary_context begin fun () ->
-          goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block0
-        end
+        goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block0
     end;
     begin
       List.iter
@@ -13721,7 +13695,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match inv with
             None -> ()
           | Some (l, inv, tenv) ->
-            in_temporary_context begin fun () ->
+            execute_branch begin fun () ->
             let env =
               flatmap
                 begin fun (x, v) ->
@@ -13742,7 +13716,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             end
         end
         blocks
-    end
+    end;
+    success()
   and verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt =
     let (ss, tcont) =
       if not pure && List.exists (function ReturnStmt (_, _) -> true | _ -> false) ss then
@@ -13864,7 +13839,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     let env = [(current_thread_name, get_unique_var_symb current_thread_name current_thread_type)] @ penv @ env in
     let _ =
-      check_should_fail () $. fun _ ->
+      check_should_fail () $. fun () ->
+      execute_branch $. fun () ->
       produce_asn [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env ->
         let (prolog, ss) =
           if in_pure_context then
@@ -13950,14 +13926,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | [] -> assert_false h env l ("Potentially unhandled exception " ^ (string_of_type exceptp) ^ ".") None 
       | (handler_tp, epost) :: handlers ->
         branch
-          (fun () ->
+          begin fun () ->
             if (is_subtype_of_ exceptp handler_tp) || (is_subtype_of_ handler_tp exceptp) then
-              consume_asn rules [] h ghostenv env epost true real_unit (fun _ h ghostenv env size_first -> ())
-          )
-          (fun () ->
+              consume_asn rules [] h ghostenv env epost true real_unit $. fun _ h ghostenv env size_first ->
+              success()
+            else
+              success()
+          end
+          begin fun () ->
             if not (is_subtype_of_ exceptp handler_tp) then
               verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers
-          )
+            else
+              success()
+          end
+    else
+      success()
   in
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
@@ -13973,7 +13956,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | Some (Some (ss, closeBraceLoc)) ->
         record_fun_timing lm (cn ^ ".<ctor>") begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying constructor %s\n" (Perf.time()) (string_of_loc lm) (string_of_sign (cn, sign));
-        push();
+        execute_branch begin fun () ->
         let env = get_unique_var_symbs_non_ghost ([(current_thread_name, current_thread_type)] @ xmap) in
         let (sizemap, indinfo) = switch_stmt ss env in
         let (ss, explicitsupercall) = match ss with SuperConstructorCall(l, es) :: body -> (body, Some(SuperConstructorCall(l, es))) | _ -> (ss, None) in
@@ -14039,8 +14022,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             iter h fds
           in
           assume_neq this (ctxt#mk_intlit 0) $. fun() -> do_body h ghostenv (("this", this)::env)
-        end;
-        pop()
+        end
+        end
         end;
         verify_cons (pn,ilist) cfin cn superctors boxes lems rest
   in
@@ -14058,7 +14041,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         record_fun_timing l g begin fun () ->
         if !verbosity >= 1 then Printf.printf "%10.6fs: %s: Verifying method %s\n" (Perf.time()) (string_of_loc l) g;
         if abstract then static_error l "Abstract method cannot have implementation." None;
-        push();
+        execute_branch $. fun () ->
         let (in_pure_context, leminfo, ghostenv) =
           match gh with
             Ghost -> (true, Some (lems, "<method>", None), List.map (function (p, t) -> p) ps @ ["#result"])
@@ -14098,8 +14081,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           let cont sizemap tenv ghostenv h env = return_cont h tenv env None in
           verify_block (pn,ilist) [] [] [] boxes in_pure_context leminfo funcmap predinstmap sizemap tenv ghostenv h env ss cont return_cont econt
-        end;
-        pop()
+        end
         end;
         verify_meths (pn,ilist) cfin cabstract boxes lems meths
   in
@@ -14157,7 +14139,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   match try_assoc an amap with
                     None -> static_error l "No such action." None
                   | Some (_, apmap, pre, post) ->
-                    let _ =
+                    let () =
                       let rec iter ys xs =
                         match xs with
                           [] -> ()
@@ -14177,7 +14159,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                     in
                     let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
                     let tenv = boxvarmap @ old_boxvarmap @ pmap @ apmap' in
-                    push();
+                    execute_branch begin fun () ->
                     let currentThread = get_unique_var_symb "currentThread" IntType in
                     let actionHandle = get_unique_var_symb "actionHandle" HandleIdType in
                     let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
@@ -14206,8 +14188,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                                         assert_expr_split inv [] post_inv_env l "Handle predicate invariant preservation check failure." None
                                       end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
                                       begin fun _ _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
+                    end
                     end;
-                    pop();
                     an
                   end)
                pbcs
