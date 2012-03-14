@@ -19,6 +19,38 @@ How to understand this codebase?
 - VeriFast uses OCaml lists extensively. Familiarize yourself with the List module. See library docs at http://caml.inria.fr.
   Additional list manipulation functions are defined at the top of this file. Familiarize yourself with them.
 
+Mutable state & symbolic execution forks
+========================================
+
+VeriFast is written in a partially functional and partially imperative style. In particular,
+the symbolic execution state (essentially the heap, the environment, and the path condition) is
+partially threaded explicitly in functional style (the heap and the environment) and partially
+kept in a mutable data structure (the path condition: it is kept as the state of the SMT solver).
+Note: there are also some other pieces of mutable state linked to the symbolic execution state:
+- the set of used symbol names (for generating fresh symbol names)
+- the symbolic execution trace (for debugging)
+
+Symbolic execution is forked at branching constructs, such as if statements, if assertions,
+switch statements, switch assertions, while statements, blocks with gotos, shortcut boolean operators,
+and many other places.
+
+It is important that when a branch ends and the next branch is started, the symbolic execution state is
+properly reset, i.e. all changes to the path condition, all newly allocated symbol names, etc. are forgotten.
+This is done by using the push() and pop() functions, or, more structuredly, the in_temporary_context function.
+
+There are two general strategies for when to push() and pop(): at the time of a change to the mutable state, or
+at the time of the start of a branch.
+
+Note: the following are some of the functions that change the mutable state:
+- ctxt#assume
+- get_unique_var_symb
+- ctxt#assume_forall
+
+Since it is impractical to push and pop whenever we call get_unique_var_symb, let us use as the strategy that ***we
+push and pop whenever we start a new branch***. Nonetheless, for the sake of "defense in depth", use assume instead
+of ctxt#assume etc. whenever it makes sense.
+
+
 You can get an outline of this file in Notepad++ by copying the text
 "Region:" to the clipboard and choosing TextFX->Viz->Hide Lines without (clipboard) text.
 Get all lines back by choosing TextFX->Viz->Show Between-Selected or All-Reset Lines.
@@ -8526,12 +8558,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       in
       iter cs
     | EmpAsn l -> cont h ghostenv env
-    | ForallAsn (l, i, e) -> 
-      ctxt#begin_formal;
-      let forall = (eval None ((i, ctxt#mk_bound 0 ctxt#type_int) :: env) e) in
-      ctxt#end_formal;
-      ctxt#assume_forall "assuming forall" [] [ctxt#type_int] forall;
-      cont h ghostenv env
+    | ForallAsn (l, i, e) ->
+      in_temporary_context begin fun () ->
+        ctxt#begin_formal;
+        let forall = (eval None ((i, ctxt#mk_bound 0 ctxt#type_int) :: env) e) in
+        ctxt#end_formal;
+        ctxt#assume_forall "forall_ assertion" [] [ctxt#type_int] forall;
+        cont h ghostenv env
+      end
     | CoefAsn (l, DummyPat, body) ->
       produce_asn_core tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
     | CoefAsn (l, coef', body) ->
@@ -13676,7 +13710,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     begin
       match blocks with
         [] -> cont sizemap tenv ghostenv h env
-      | block0::_ -> goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block0
+      | block0::_ ->
+        in_temporary_context begin fun () ->
+          goto_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env return_cont econt block0
+        end
     end;
     begin
       List.iter
@@ -13684,6 +13721,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match inv with
             None -> ()
           | Some (l, inv, tenv) ->
+            in_temporary_context begin fun () ->
             let env =
               flatmap
                 begin fun (x, v) ->
@@ -13701,6 +13739,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let blocks_done = block::blocks_done in
               verify_miniblock (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (cont blocks_done) return_cont econt
             )
+            end
         end
         blocks
     end
