@@ -207,8 +207,8 @@ proverapi.cmx: proverapi.ml
 simplex.cmi: simplex.mli
 	ocamlopt.opt -c simplex.mli
 
-simplex.cmx: simplex.cmi simplex.ml
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c simplex.ml
+simplex.cmx: win\Perf.cmxa simplex.cmi simplex.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I .\win Perf.cmxa simplex.ml
 
 redux.cmx: win\Perf.cmxa proverapi.cmx simplex.cmx redux.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -c -I .\win Perf.cmxa redux.ml

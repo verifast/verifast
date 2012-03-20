@@ -3,6 +3,8 @@
 open Big_int
 open Num
 
+let stopwatch = Stopwatch.create ()
+
 let rec try_assoc k0 kvs =
   match kvs with
     [] -> None
@@ -303,6 +305,7 @@ and ['tag] simplex () =
       const_listener u n
       
     method assert_ge (c: num) (ts: (num * 'tag unknown) list) =
+      Stopwatch.start stopwatch;
       let y = new unknown (self :> 'tag simplex) ("r" ^ string_of_int (self#get_unique_index())) true None false in
       let row = new row (self :> 'tag simplex) y c in
       rows <- row::rows;
@@ -316,11 +319,17 @@ and ['tag] simplex () =
              row#add a col
         )
         ts;
-      match self#sign_of_max_of_row row with
-        -1 -> Unsat
-      | 0 -> row#close; if unsat then Unsat else Sat
-      | 1 -> Sat
-      | _ -> assert false
+      let result =
+        match self#sign_of_max_of_row row with
+          -1 -> Unsat
+        | 0 -> row#close; if unsat then Unsat else Sat
+        | 1 -> Sat
+        | _ -> assert false
+      in
+      Stopwatch.stop stopwatch;
+      result
+    
+    method get_ticks: int64 = Stopwatch.ticks stopwatch
     
     method assert_eq (c: num) (ts: (num * 'tag unknown) list) =
       match self#assert_ge c ts with
@@ -345,7 +354,8 @@ type 'tag simplex0 = <
   alloc_unknown: string -> 'tag -> 'tag unknown;
   assert_ge: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_eq: Num.num -> (Num.num * 'tag unknown) list -> result;
-  assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result
+  assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result;
+  get_ticks: int64
 >
 
 let print_unknown u = u#print

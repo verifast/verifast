@@ -305,8 +305,8 @@ proverapi.cmx: proverapi.ml
 simplex.cmi: simplex.mli
 	ocamlopt.opt -c simplex.mli
 
-simplex.cmx: simplex.cmi simplex.ml
-	ocamlopt.opt -warn-error F -c simplex.ml
+simplex.cmx: linux/Perf.cmx simplex.cmi simplex.ml
+	ocamlopt.opt -warn-error F -c -I ./linux Perf.cmx simplex.ml
 
 redux.cmx: linux/Perf.cmx proverapi.cmx simplex.cmx redux.ml
 	ocamlopt.opt -warn-error F -c -I ./linux Perf.cmx redux.ml

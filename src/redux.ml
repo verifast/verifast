@@ -687,7 +687,7 @@ and context () =
         max_falsenode_childcount
         axiomTriggerCounts
       in
-        (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch])
+        (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch; "Time spent in Simplex", simplex#get_ticks])
     
     initializer
       simplex#register_listeners (fun u1 u2 -> simplex_eqs <- (u1, u2)::simplex_eqs) (fun u n -> simplex_consts <- (u, n)::simplex_consts);

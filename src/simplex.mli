@@ -15,7 +15,8 @@ type 'tag simplex0 = <
   alloc_unknown: string -> 'tag -> 'tag unknown;
   assert_ge: Num.num -> (Num.num * 'tag unknown) list -> result;
   assert_eq: Num.num -> (Num.num * 'tag unknown) list -> result;
-  assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result
+  assert_neq: Num.num -> (Num.num * 'tag unknown) list -> result;
+  get_ticks: int64
 >
 
 val new_simplex: unit -> 'tag simplex0
