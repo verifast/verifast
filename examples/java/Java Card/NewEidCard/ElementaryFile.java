@@ -29,7 +29,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 	}
 	public ElementaryFile(short fid, DedicatedFile parent, short maxSize) 
   	    //@ requires parent != null &*& 30000 >= maxSize &*& maxSize >= 0 &*& parent.DedicatedFile(?fileID, ?pf, ?activeState, ?siblist, ?info) &*& length(siblist) < DedicatedFile.MAX_SIBLINGS;
-      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, append(siblist, cons(this, nil)), info);
+      	    //@ ensures ElementaryFile(fid, parent, ?data, true, 0, _) &*& data != null &*& data.length == maxSize &*& parent.DedicatedFile(fileID, pf, activeState, append(siblist, cons(this, nil)), info) &*& length(append(siblist, cons(this, nil))) == length(siblist) + 1;
 	{
 		super(fid);
 		parentFile = parent;
@@ -37,6 +37,7 @@ public /*VF*ADDED*/final class ElementaryFile extends File {
 		data = new byte[maxSize];
 		size = (short) 0;
 		//@ close ElementaryFile(fid, parent, data, true, size, _);
+		//@ length_append(siblist, cons(this, nil));
 	}
 	public byte[] getData() 
   	    //@ requires [?f]ElementaryFile(?fid, ?pf, ?d, ?a, ?size, ?info);
