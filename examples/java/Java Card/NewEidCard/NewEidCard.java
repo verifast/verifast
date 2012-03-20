@@ -120,6 +120,8 @@ import javacard.security.PublicKey;
 
 //@ predicate eq<T>(T t1; T t2) = t2 == t1;
 
+//@ predicate selected_file_class(File theSelectedFile;) = (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class);
+
 public final class NewEidCard extends Applet {
     /*@
     
@@ -161,7 +163,7 @@ public final class NewEidCard extends Applet {
         belpicSibs == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
         idSibs == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(thecaRoleIDFile, cons(thePreferencesFile, cons(thePhotoFile, nil))))))) &*&
         selected_file_types(theSelectedFile, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
-            (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class) &*&
+            selected_file_class(theSelectedFile) &*&
         signatureAlgorithm |-> ?theSignatureAlgorithm &*&
         nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
         authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&
@@ -977,7 +979,7 @@ public final class NewEidCard extends Applet {
                     belpicSibs == cons<File>(theTokenInfo, cons(theObjectDirectoryFile, cons(theAuthenticationObjectDirectoryFile, cons(thePrivateKeyDirectoryFile, cons(theCertificateDirectoryFile, cons(theCaCertificate, cons(theRrnCertificate, cons(theRootCaCertificate, cons(theAuthenticationCertificate, cons(theNonRepudiationCertificate, nil)))))))))) &*&
                     idSibs == cons<File>(theIdentityFile, cons(theIdentityFileSignature, cons(theAddressFile, cons(theAddressFileSignature, cons(thecaRoleIDFile, cons(thePreferencesFile, cons(thePhotoFile, nil))))))) &*&
                     [1/2]selected_file_types(theSelectedFile, theMasterFile, theBelpicDirectory, theIdDirectory, theIdentityFile, theIdentityFileSignature, theAddressFile, theAddressFileSignature, thePhotoFile, thecaRoleIDFile, theDirFile, theTokenInfo, theObjectDirectoryFile, theAuthenticationObjectDirectoryFile, thePrivateKeyDirectoryFile, theCaCertificate, theCertificateDirectoryFile, theRrnCertificate, theRootCaCertificate, theAuthenticationCertificate, theNonRepudiationCertificate, thePreferencesFile, _) &*&
-                        (theSelectedFile.getClass() == ElementaryFile.class || theSelectedFile.getClass() == MasterFile.class || theSelectedFile.getClass() == DedicatedFile.class) &*&
+                        [1/2]selected_file_class(theSelectedFile) &*&
                     [1/2]signatureAlgorithm |-> ?theSignatureAlgorithm &*&
                     [1/2]nonRepKeyPair |-> ?theNonRepKeyPair &*& theNonRepKeyPair != null &*&
                     [1/2]authKeyPair |-> ?theAuthKeyPair &*& theAuthKeyPair != null &*&

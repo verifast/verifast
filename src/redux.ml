@@ -642,6 +642,7 @@ and context () =
     val mutable max_truenode_childcount = 0
     val mutable max_falsenode_childcount = 0
     val mutable assume_core_count = 0
+    val mutable split_count = 0
     val mutable simplex_assert_ge_count = 0
     val mutable simplex_assert_eq_count = 0
     val mutable simplex_assert_neq_count = 0
@@ -672,14 +673,16 @@ and context () =
       Printf.sprintf
         "\
           assume_core_count = %d\n\
+          number of case splits = %d\n\
           simplex_assert_ge_count = %d\n\
           simplex_assert_eq_count = %d\n\
           simplex_assert_neq_count = %d\n\
           max_truenode_childcount = %d\n\
           max_falsenode_childcount = %d\n\
-          axiom trigger counts:\n%s\n\
+          axiom triggered counts:\n%s\n\
         "
         assume_core_count
+        split_count
         simplex_assert_ge_count
         simplex_assert_eq_count
         simplex_assert_neq_count
@@ -1009,11 +1012,13 @@ and context () =
       in
       iter ()
 *)
+    (** If this method returns true, then the current theory is unsatisfiable. *)
     method perform_pending_splits cont =
       let rec iter assumptions currentNode =
         match !currentNode with
           None -> cont assumptions
         | Some (`SplitNode (branch1, branch2, nextNode)) as currentNodeValue->
+          split_count <- split_count + 1;
           if verbosity >= 2 then printff "Splitting on (%s, %s) (depth: %d)\n" (self#pprint branch1) (self#pprint branch2) (List.length assumptions);
           self#push_internal;
           if verbosity >= 2 then printff "  First branch: %s\n" (self#pprint branch1);
