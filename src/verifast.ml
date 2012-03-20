@@ -10072,172 +10072,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let current_thread_name = "currentThread" in
   let current_thread_type = IntType in
   
-  (** Used to produce malloc'ed, global, local, or nested C variables/objects. *)
-  let rec produce_c_object l coef addr tp init allowGhostFields h cont =
-    match tp with
-      StaticArrayType (elemTp, elemCount) ->
-      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-      let produce_char_array_chunk h addr elemCount =
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Char])) in
-        let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) (sizeof l elemTp) in
-        begin fun cont ->
-          if init <> None then
-            assume (mk_all_eq Char elems (ctxt#mk_intlit 0)) cont
-          else
-            cont ()
-        end $. fun () ->
-        assume_eq (mk_length elems) length $. fun () ->
-        cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
-      in
-      let produce_array_chunk addr elems elemCount =
-        match try_pointee_pred_symb elemTp with
-          Some elemPred ->
-          let length = ctxt#mk_intlit elemCount in
-          assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; sizeof l elemTp; elemPred; elems], None)::h)
-        | None -> (* Produce a character array of the correct size *)
-          produce_char_array_chunk h addr elemCount
-      in
-      begin match elemTp, init with
-        Char, Some (Some (StringLit (_, s))) ->
-        produce_array_chunk addr (mk_char_list_of_c_string elemCount s) elemCount
-      | (StructType _ | StaticArrayType (_, _)), Some (Some (InitializerList (ll, es))) ->
-        let size = sizeof l elemTp in
-        let rec iter h i es =
-          let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) size) in
-          match es with
-            [] ->
-            produce_char_array_chunk h addr (elemCount - i)
-          | e::es ->
-            begin fun cont ->
-              match elemTp with
-                StructType sn ->
-                (* Generate struct padding chunk for array elements. *)
-                let (_, _, padding_predsymb_opt) = List.assoc sn structmap in
-                begin match padding_predsymb_opt with
-                  None -> cont h
-                | Some padding_predsymb ->
-                  cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
-                end
-              | _ -> cont h
-            end $. fun h ->
-            produce_c_object l coef addr elemTp (Some (Some e)) false h $. fun h ->
-            iter h (i + 1) es
-        in
-        iter h 0 es
-      | _, Some (Some (InitializerList (ll, es))) ->
-        let rec iter n es =
-          match es with
-            [] -> mk_zero_list n
-          | e::es ->
-            mk_cons elemTp (eval None [] e) (iter (n - 1) es)
-        in
-        produce_array_chunk addr (iter elemCount es) elemCount
-      | _ ->
-        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
-        begin fun cont ->
-          match init, elemTp with
-            Some _, (IntType|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
-            assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
-          | _ ->
-            cont ()
-        end $. fun () ->
-        produce_array_chunk addr elems elemCount
-      end
-    | StructType sn ->
-      let fields =
-        match List.assoc sn structmap with
-          (_, None, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, _) -> fds
-      in
-      let inits =
-        match init with
-          Some (Some (InitializerList (_, es))) -> Some (Some es)
-        | Some None -> Some None (* Initialize to default value (= zero) *)
-        | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
-      in
-      let rec iter h fields inits =
-        match fields with
-          [] -> cont h
-        | (f, (lf, gh, t))::fields ->
-          if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
-          let init, inits =
-            if gh = Ghost then None, inits else
-            match inits with
-              Some (Some (e::es)) -> Some (Some e), Some (Some es)
-            | Some (None | Some []) -> Some None, Some None
-            | _ -> None, None
-          in
-          match t with
-            StaticArrayType (_, _) | StructType _ ->
-            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields h $. fun h ->
-            iter h fields inits
-          | _ ->
-            let value =
-              match init with
-                Some None ->
-                begin match provertype_of_type t with
-                  ProverBool -> ctxt#mk_false
-                | ProverInt -> ctxt#mk_intlit 0
-                | ProverReal -> real_zero
-                | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
-                end
-              | Some (Some e) -> eval None [] e
-              | None -> get_unique_var_symb_ "value" t (gh = Ghost)
-            in
-            assume_field h sn f t gh addr value coef $. fun h ->
-            iter h fields inits
-      in
-      iter h fields inits
-    | _ ->
-      let value =
-        match init with
-          Some None -> ctxt#mk_intlit 0
-        | Some (Some e) -> eval None [] e
-        | None -> get_unique_var_symb "value" tp
-      in
-      cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
-  in
-  
-  let rec consume_c_object l addr tp h cont =
-    match tp with
-      StaticArrayType (elemTp, elemCount) ->
-      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-      begin match try_pointee_pred_symb elemTp with
-        Some elemPred ->
-        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); TermPat (sizeof l elemTp); TermPat elemPred; dummypat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
-        cont h
-      | None ->
-        let pats = [TermPat addr; TermPat (sizeof l tp); TermPat (ctxt#mk_intlit 1); TermPat (char_pred_symb ()); dummypat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [Char] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
-        cont h
-      end
-    | StructType sn ->
-      let fields =
-        match List.assoc sn structmap with
-          (_, None, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, _) -> fds
-      in
-      let rec iter h fields =
-        match fields with
-          [] -> cont h
-        | (f, (lf, gh, t))::fields ->
-          match t with
-            StaticArrayType (_, _) | StructType _ ->
-            consume_c_object l (field_address l addr sn f) t h $. fun h ->
-            iter h fields
-          | _ ->
-            get_field h addr sn f l $. fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h [] l "Full field chunk permission required" None;
-            iter h fields
-      in
-      iter h fields
-    | _ ->
-      consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
-      cont h
-  in
-  
   (* Region: function contracts *)
   
   let functypemap1 =
@@ -11254,6 +11088,173 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (fun l a i -> read_array h env l a i)
     in
     eval_core assert_term (Some read_field) env e
+  in
+  
+  (** Used to produce malloc'ed, global, local, or nested C variables/objects. *)
+  let rec produce_c_object l coef addr tp init allowGhostFields h cont =
+    let eval e = eval_non_pure false [] [] e in
+    match tp with
+      StaticArrayType (elemTp, elemCount) ->
+      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+      let produce_char_array_chunk h addr elemCount =
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [Char])) in
+        let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) (sizeof l elemTp) in
+        begin fun cont ->
+          if init <> None then
+            assume (mk_all_eq Char elems (ctxt#mk_intlit 0)) cont
+          else
+            cont ()
+        end $. fun () ->
+        assume_eq (mk_length elems) length $. fun () ->
+        cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
+      in
+      let produce_array_chunk addr elems elemCount =
+        match try_pointee_pred_symb elemTp with
+          Some elemPred ->
+          let length = ctxt#mk_intlit elemCount in
+          assume_eq (mk_length elems) length $. fun () ->
+          cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; sizeof l elemTp; elemPred; elems], None)::h)
+        | None -> (* Produce a character array of the correct size *)
+          produce_char_array_chunk h addr elemCount
+      in
+      begin match elemTp, init with
+        Char, Some (Some (StringLit (_, s))) ->
+        produce_array_chunk addr (mk_char_list_of_c_string elemCount s) elemCount
+      | (StructType _ | StaticArrayType (_, _)), Some (Some (InitializerList (ll, es))) ->
+        let size = sizeof l elemTp in
+        let rec iter h i es =
+          let addr = ctxt#mk_add addr (ctxt#mk_mul (ctxt#mk_intlit i) size) in
+          match es with
+            [] ->
+            produce_char_array_chunk h addr (elemCount - i)
+          | e::es ->
+            begin fun cont ->
+              match elemTp with
+                StructType sn ->
+                (* Generate struct padding chunk for array elements. *)
+                let (_, _, padding_predsymb_opt) = List.assoc sn structmap in
+                begin match padding_predsymb_opt with
+                  None -> cont h
+                | Some padding_predsymb ->
+                  cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
+                end
+              | _ -> cont h
+            end $. fun h ->
+            produce_c_object l coef addr elemTp (Some (Some e)) false h $. fun h ->
+            iter h (i + 1) es
+        in
+        iter h 0 es
+      | _, Some (Some (InitializerList (ll, es))) ->
+        let rec iter n es =
+          match es with
+            [] -> mk_zero_list n
+          | e::es ->
+            mk_cons elemTp (eval e) (iter (n - 1) es)
+        in
+        produce_array_chunk addr (iter elemCount es) elemCount
+      | _ ->
+        let elems = get_unique_var_symb "elems" (InductiveType ("list", [elemTp])) in
+        begin fun cont ->
+          match init, elemTp with
+            Some _, (IntType|UShortType|ShortType|UintPtrType|UChar|Char|PtrType _) ->
+            assume (mk_all_eq elemTp elems (ctxt#mk_intlit 0)) cont
+          | _ ->
+            cont ()
+        end $. fun () ->
+        produce_array_chunk addr elems elemCount
+      end
+    | StructType sn ->
+      let fields =
+        match List.assoc sn structmap with
+          (_, None, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
+        | (_, Some fds, _) -> fds
+      in
+      let inits =
+        match init with
+          Some (Some (InitializerList (_, es))) -> Some (Some es)
+        | Some None -> Some None (* Initialize to default value (= zero) *)
+        | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
+      in
+      let rec iter h fields inits =
+        match fields with
+          [] -> cont h
+        | (f, (lf, gh, t))::fields ->
+          if gh = Ghost && not allowGhostFields then static_error l "Cannot produce a struct instance with ghost fields in this context." None;
+          let init, inits =
+            if gh = Ghost then None, inits else
+            match inits with
+              Some (Some (e::es)) -> Some (Some e), Some (Some es)
+            | Some (None | Some []) -> Some None, Some None
+            | _ -> None, None
+          in
+          match t with
+            StaticArrayType (_, _) | StructType _ ->
+            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields h $. fun h ->
+            iter h fields inits
+          | _ ->
+            let value =
+              match init with
+                Some None ->
+                begin match provertype_of_type t with
+                  ProverBool -> ctxt#mk_false
+                | ProverInt -> ctxt#mk_intlit 0
+                | ProverReal -> real_zero
+                | ProverInductive -> get_unique_var_symb_ "value" t (gh = Ghost)
+                end
+              | Some (Some e) -> eval e
+              | None -> get_unique_var_symb_ "value" t (gh = Ghost)
+            in
+            assume_field h sn f t gh addr value coef $. fun h ->
+            iter h fields inits
+      in
+      iter h fields inits
+    | _ ->
+      let value =
+        match init with
+          Some None -> ctxt#mk_intlit 0
+        | Some (Some e) -> eval e
+        | None -> get_unique_var_symb "value" tp
+      in
+      cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
+  in
+  
+  let rec consume_c_object l addr tp h cont =
+    match tp with
+      StaticArrayType (elemTp, elemCount) ->
+      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+      begin match try_pointee_pred_symb elemTp with
+        Some elemPred ->
+        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); TermPat (sizeof l elemTp); TermPat elemPred; dummypat] in
+        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      | None ->
+        let pats = [TermPat addr; TermPat (sizeof l tp); TermPat (ctxt#mk_intlit 1); TermPat (char_pred_symb ()); dummypat] in
+        consume_chunk rules h [] [] [] l (c_array_symb, true) [Char] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        cont h
+      end
+    | StructType sn ->
+      let fields =
+        match List.assoc sn structmap with
+          (_, None, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
+        | (_, Some fds, _) -> fds
+      in
+      let rec iter h fields =
+        match fields with
+          [] -> cont h
+        | (f, (lf, gh, t))::fields ->
+          match t with
+            StaticArrayType (_, _) | StructType _ ->
+            consume_c_object l (field_address l addr sn f) t h $. fun h ->
+            iter h fields
+          | _ ->
+            get_field h addr sn f l $. fun h coef _ ->
+            if not (definitely_equal coef real_unit) then assert_false h [] l "Full field chunk permission required" None;
+            iter h fields
+      in
+      iter h fields
+    | _ ->
+      consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
+      cont h
   in
   
   let assume_is_of_type l t tp cont =
