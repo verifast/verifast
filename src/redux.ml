@@ -647,6 +647,8 @@ and context () =
     val mutable simplex_assert_eq_count = 0
     val mutable simplex_assert_neq_count = 0
     val mutable axioms: (string * int ref) list = []
+    val assumes_with_pending_splits = Array.make 30 0
+    val mutable assumes_with_more_pending_splits = 0
     
     val mutable verbosity = 0
     
@@ -669,9 +671,20 @@ and context () =
           |> List.map (fun (k, v) -> Printf.sprintf "    %-*s %5d\n" maxAxiomNameLength k !v)
           |> String.concat ""
       in
+      let assumesWithPendingSplits =
+        assumes_with_pending_splits
+          |> Array.fold_left (fun (i, xs) n -> (i + 1, (i, n)::xs))  (0, [])
+          |> snd
+          |> List.filter (fun (i, n) -> n > 0)
+          |> List.rev
+          |> List.map (fun (i, n) -> Printf.sprintf "%d (%d)" n i)
+          |> String.concat ", "
+      in
+      let pendingSplitsInfo = Printf.sprintf "%s, %d (more than %d)" assumesWithPendingSplits assumes_with_more_pending_splits (Array.length assumes_with_pending_splits) in
       let text =
       Printf.sprintf
         "\
+          # toplevel assumes and queries (with # pending case splits) = %s\n\
           assume_core_count = %d\n\
           number of case splits = %d\n\
           simplex_assert_ge_count = %d\n\
@@ -681,6 +694,7 @@ and context () =
           max_falsenode_childcount = %d\n\
           axiom triggered counts:\n%s\n\
         "
+        pendingSplitsInfo
         assume_core_count
         split_count
         simplex_assert_ge_count
@@ -854,9 +868,17 @@ and context () =
       | Unknown3 ->
         if (* with_timing "assume: perform_pending_splits" $. fun () -> *) self#perform_pending_splits (fun _ -> false) then Unsat else Unknown
     
+    method register_pending_splits_count =
+      let pendingSplitsCount = self#count_pending_splits in
+      if pendingSplitsCount < Array.length assumes_with_pending_splits then
+        assumes_with_pending_splits.(pendingSplitsCount) <- assumes_with_pending_splits.(pendingSplitsCount) + 1
+      else
+        assumes_with_more_pending_splits <- assumes_with_more_pending_splits + 1;
+    
     method assume t =
       let time0 = if verbosity > 0 then begin printff "%10.6fs: Entering Redux.assume(%s)\n" (Perf.time()) (self#pprint t); Perf.time() end else 0.0 in
       Stopwatch.start stopwatch;
+      self#register_pending_splits_count;
       let result = self#assume_internal t in
       Stopwatch.stop stopwatch;
       if verbosity > 0 then begin let time1 = Perf.time() in printff "%10.6fs: Exiting Redux.assume: %.6f seconds\n" time1 (time1 -. time0) end;
@@ -866,6 +888,7 @@ and context () =
       if verbosity > 0 then printff "%10.6fs: Entering Redux.query(%s)\n" (Perf.time()) (self#pprint t);
       Stopwatch.start stopwatch;
       assert (not self#prune_pending_splits);
+      self#register_pending_splits_count;
       self#push_internal;
       let result = self#assume_internal (Not t) in
       self#pop_internal;
@@ -1012,6 +1035,16 @@ and context () =
       in
       iter ()
 *)
+    
+    method count_pending_splits =
+      let rec iter n node =
+        match !node with
+          None -> n
+        | Some (`SplitNode (branch1, branch2, nextNode)) ->
+          iter (n + 1) nextNode
+      in
+      iter 0 pending_splits_front
+    
     (** If this method returns true, then the current theory is unsatisfiable. *)
     method perform_pending_splits cont =
       let rec iter assumptions currentNode =
