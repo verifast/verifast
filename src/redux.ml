@@ -645,6 +645,7 @@ and context () =
     val mutable simplex_assert_ge_count = 0
     val mutable simplex_assert_eq_count = 0
     val mutable simplex_assert_neq_count = 0
+    val mutable axioms: (string * int ref) list = []
     
     val mutable verbosity = 0
     
@@ -659,6 +660,14 @@ and context () =
     method reportExportingConstant =
       simplex_assert_eq_count <- simplex_assert_eq_count + 1
     method stats =
+      let axiomTriggerCounts = axioms |> List.filter (fun (k, v) -> !v > 0) in
+      let maxAxiomNameLength = List.fold_left (fun n (k, v) -> max n (String.length k)) 0 axiomTriggerCounts in
+      let axiomTriggerCounts =
+        axiomTriggerCounts
+          |> List.sort (fun (k1, v1) (k2, v2) -> compare !v1 !v2)
+          |> List.map (fun (k, v) -> Printf.sprintf "    %-*s %5d\n" maxAxiomNameLength k !v)
+          |> String.concat ""
+      in
       let text =
       Printf.sprintf
         "\
@@ -668,6 +677,7 @@ and context () =
           simplex_assert_neq_count = %d\n\
           max_truenode_childcount = %d\n\
           max_falsenode_childcount = %d\n\
+          axiom trigger counts:\n%s\n\
         "
         assume_core_count
         simplex_assert_ge_count
@@ -675,6 +685,7 @@ and context () =
         simplex_assert_neq_count
         max_truenode_childcount
         max_falsenode_childcount
+        axiomTriggerCounts
       in
         (text, ["Time spent in query, assume, push, pop", Stopwatch.ticks stopwatch])
     
@@ -1391,6 +1402,8 @@ and context () =
       in
       if pats = [] then failwith (Printf.sprintf "Redux could not find suitable triggers for axiom %s" (self#pprint body));
       (* printff "Axiom (%s) %s asserted\n" (String.concat ", " (List.map self#pprint pats)) (self#pprint body); *)
+      let triggeredCounter = ref 0 in
+      axioms <- (description, triggeredCounter)::axioms;
       pats |> List.iter (fun pat ->
         match pat with
           App (symb, args, _) ->
@@ -1430,6 +1443,7 @@ and context () =
               | _ -> failwith (Printf.sprintf "Redux does not support subpattern %s; it currently supports only symbol applications and bound variables as subpatterns." (self#pprint pat))
             in
             match_pats [] term#children args (fun bound_env ->
+              incr triggeredCounter;
               if verbosity >= 3 then printff "%10.6fs: Redux: Axiom %s triggered\n" (Perf.time()) description;
               if verbosity >= 4 then printff "%10.6fs: Redux: Axiom %s triggered with\n" (Perf.time()) (self#pprint body);
               let body = term_subst bound_env body in
