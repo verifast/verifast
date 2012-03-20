@@ -81,6 +81,7 @@ class SenderThread implements Runnable {
                     if (r) Program.sendCount++;
                     close Q(r);
                     forall_append(items, cons(m, nil), non_null);
+                    length_append(items, cons(m, nil));
                     close my_unsep_pred(c)(r ? append(items, cons(m, nil)) : items);
                 }
                 @*/

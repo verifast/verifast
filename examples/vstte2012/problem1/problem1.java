@@ -8,6 +8,21 @@ The specification below proves:
 */
 
 /*@
+
+lemma_auto void length_append_auto<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures length(append(xs, ys)) == length(xs) + length(ys);
+{
+    length_append(xs, ys);
+}
+
+lemma_auto void length_take_n_auto<t>(int n, list<t> xs)
+    requires 0 <= n && n <= length(xs);
+    ensures length(take(n, xs)) == n;
+{
+    length_take_n(n, xs);
+}
+
 fixpoint boolean is_sorted(list<boolean> vs) {
   switch(vs) {
     case nil: return true;

@@ -42,7 +42,7 @@ lemma void append_assoc<t>(list<t> xs, list<t> ys, list<t> zs);
     requires true;
     ensures append(append(xs, ys), zs) == append(xs, append(ys, zs));
     
-lemma_auto(length(append<t>(xs, ys))) void length_append<t>(list<t> xs, list<t> ys);
+lemma void length_append<t>(list<t> xs, list<t> ys);
   requires true;
   ensures length(append(xs, ys)) == length(xs) + length(ys);
 
@@ -150,7 +150,7 @@ lemma_auto(drop(length(xs), xs)) void drop_length<t>(list<t> xs);
     requires true;
     ensures drop(length(xs), xs) == nil;
 
-lemma_auto(length(drop(n, xs))) void length_drop<t>(int n, list<t> xs);
+lemma void length_drop<t>(int n, list<t> xs);
     requires 0 <= n && n <= length(xs);
     ensures length(drop(n, xs)) == length(xs) - n;
 
@@ -352,7 +352,7 @@ lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, boolean) p);
     requires true;
     ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
 
-lemma_auto void drop_drop<t>(int m, int n, list<t> xs);
+lemma void drop_drop<t>(int m, int n, list<t> xs);
     requires 0 <= m && 0 <= n && m + n <= length(xs);
     ensures drop(m, drop(n, xs)) == drop(m + n, xs);
 

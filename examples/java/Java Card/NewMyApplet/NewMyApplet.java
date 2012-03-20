@@ -17,6 +17,13 @@ import javacard.framework.*;
 
 /*@
 
+lemma_auto void length_append_auto<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures length(append(xs, ys)) == length(xs) + length(ys);
+{
+    length_append(xs, ys);
+}
+
 predicate length_value_record(list<byte> values, int start; int end) =
     start < length(values) &*&
     0 <= nth(start, values) &*&

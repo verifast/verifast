@@ -2,6 +2,27 @@ import java.util.*;
 
 /*@
 
+lemma_auto void length_append_auto<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures length(append(xs, ys)) == length(xs) + length(ys);
+{
+    length_append(xs, ys);
+}
+
+lemma_auto(length(drop(n, xs))) void length_drop_auto<t>(int n, list<t> xs)
+    requires 0 <= n && n <= length(xs);
+    ensures length(drop(n, xs)) == length(xs) - n;
+{
+    length_drop(n, xs);
+}
+
+lemma_auto void drop_drop_auto<t>(int m, int n, list<t> xs)
+    requires 0 <= m && 0 <= n && m + n <= length(xs);
+    ensures drop(m, drop(n, xs)) == drop(m + n, xs);
+{
+    drop_drop(m, n, xs);
+}
+
 fixpoint boolean descendingFrom(int x0, list<int> xs) {
     switch (xs) {
         case nil: return true;

@@ -1,4 +1,12 @@
 /*@
+
+lemma_auto void length_append_auto<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures length(append(xs, ys)) == length(xs) + length(ys);
+{
+    length_append(xs, ys);
+}
+
 fixpoint boolean consistent(list<int> vs, nat i, int pos) {
   switch(i) {
     case zero: return true;
