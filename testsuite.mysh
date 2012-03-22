@@ -64,6 +64,7 @@ cd ..
 verifast_both -shared -disable_overflow_check listex.o inverse.c
 verifast_both iter.c
 verifast_both iter_with_auto.c
+verifast_both -c iospec.c
 cd lcset
 verifast_both listex.o atomics.o threading.o ghost_lists.c ghost_counters.c locks.c lcset.c lcset_client.c
 cd ..
