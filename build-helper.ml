@@ -65,11 +65,33 @@ let os_suffix = if is_macos then "-macos" else ""
 let (//) x y = Filename.concat x y
 
 let () =
-  begin match Sys.argv with
-    [| _; "--caller=build.ml" |] -> ()
-  | _ -> failwith "Please do not run this script directly; run build.ml instead."
-  end;
-  let (release, revision) = List.hd releases in
+  try
+  let (release, revision) =
+    match List.tl (Array.to_list Sys.argv) with
+      "--caller=build.ml"::args ->
+      begin match args with
+        [] -> List.hd releases
+      | ["--release"; release] ->
+        begin try
+          (release, List.assoc release releases)
+        with Not_found -> failwith (sprintf "No such release: '%s'" release)
+        end
+      | ["--revision"; revision] ->
+        let revision =
+          try
+            int_of_string revision
+          with Failure "int_of_string" -> failwith (sprintf "Revision must be a number: '%s'" revision)
+        in
+        (sprintf "r%d" revision, revision)
+      | _ ->
+        failwith begin
+          "Command line syntax error.\n" ^
+          "Usage:\n" ^
+          "  build.ml [--release Release | --revision Revision]"
+        end
+      end
+    | _ -> failwith "Please do not run this script directly; run build.ml instead."
+  in
   let exportdir = ".." // "exportdir" in
   if Sys.file_exists exportdir then rm_Rf exportdir;
   sh (sprintf "svn export https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk@%d %s" revision exportdir);
@@ -83,3 +105,7 @@ let () =
   let zippath = ".." // ".." // zipname in
   if Sys.file_exists zippath then Sys.remove zippath;
   create_zip zippath releasename
+  with
+    Failure msg ->
+      print_endline msg;
+      exit 1

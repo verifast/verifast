@@ -1,3 +1,7 @@
+let (|>) x f = f x
+
+let args = Sys.argv |> Array.to_list |> List.tl |> String.concat " "
+
 let sh cmd =
   print_endline cmd;
   let result = Sys.command cmd in
@@ -5,4 +9,4 @@ let sh cmd =
 
 let () =
   sh "svn export https://dnetcode.cs.kuleuven.be/svn/verifast/verifast/trunk/build-helper.ml build-helper-latest.ml";
-  sh "ocaml build-helper-latest.ml --caller=build.ml"
+  sh ("ocaml build-helper-latest.ml --caller=build.ml " ^ args)
