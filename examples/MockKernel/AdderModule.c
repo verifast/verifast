@@ -82,6 +82,7 @@ predicate adderState(struct module *self, int deviceCount) =
     deviceCount == 1 &*&
     pointer(&adderDevice, ?adderDevice_) &*&
     kernel_device(adderDevice_, self, adderName, ?adderNameChars, &adderOps, adderDeviceState) &*&
+    struct_file_ops_padding(&adderOps) &*&
     length(adderNameChars) == 11;
 
 @*/

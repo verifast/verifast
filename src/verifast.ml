@@ -11090,8 +11090,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     eval_core assert_term (Some read_field) env e
   in
   
-  (** Used to produce malloc'ed, global, local, or nested C variables/objects. *)
-  let rec produce_c_object l coef addr tp init allowGhostFields h cont =
+  (** Used to produce malloc'ed, global, local, or nested C variables/objects.
+    * If [tp] is a struct type, [producePaddingChunk] says whether the padding chunk for the outermost struct should be produced.
+    * (A padding chunk is always produced for nested structs.)
+    *)
+  let rec produce_c_object l coef addr tp init allowGhostFields producePaddingChunk h cont =
     let eval e = eval_non_pure false [] [] e in
     match tp with
       StaticArrayType (elemTp, elemCount) ->
@@ -11128,19 +11131,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             [] ->
             produce_char_array_chunk h addr (elemCount - i)
           | e::es ->
-            begin fun cont ->
-              match elemTp with
-                StructType sn ->
-                (* Generate struct padding chunk for array elements. *)
-                let (_, _, padding_predsymb_opt) = List.assoc sn structmap in
-                begin match padding_predsymb_opt with
-                  None -> cont h
-                | Some padding_predsymb ->
-                  cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
-                end
-              | _ -> cont h
-            end $. fun h ->
-            produce_c_object l coef addr elemTp (Some (Some e)) false h $. fun h ->
+            produce_c_object l coef addr elemTp (Some (Some e)) false true h $. fun h ->
             iter h (i + 1) es
         in
         iter h 0 es
@@ -11164,10 +11155,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         produce_array_chunk addr elems elemCount
       end
     | StructType sn ->
-      let fields =
+      let (fields, padding_predsymb_opt) =
         match List.assoc sn structmap with
           (_, None, _) -> static_error l (Printf.sprintf "Cannot produce an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, _) -> fds
+        | (_, Some fds, padding_predsymb_opt) -> fds, padding_predsymb_opt
       in
       let inits =
         match init with
@@ -11175,6 +11166,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | Some None -> Some None (* Initialize to default value (= zero) *)
         | _ -> None (* Do not initialize; i.e. arbitrary initial value *)
       in
+      begin fun cont ->
+        match producePaddingChunk, padding_predsymb_opt with
+        | true, Some padding_predsymb ->
+          cont (Chunk ((padding_predsymb, true), [], real_unit, [addr], None)::h)
+        | _ ->
+          cont h
+      end $. fun h ->
       let rec iter h fields inits =
         match fields with
           [] -> cont h
@@ -11189,7 +11187,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           match t with
             StaticArrayType (_, _) | StructType _ ->
-            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields h $. fun h ->
+            produce_c_object l coef (field_address l addr sn f) t init allowGhostFields true h $. fun h ->
             iter h fields inits
           | _ ->
             let value =
@@ -11218,7 +11216,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
   in
   
-  let rec consume_c_object l addr tp h cont =
+  let rec consume_c_object l addr tp h consumePaddingChunk cont =
     match tp with
       StaticArrayType (elemTp, elemCount) ->
       let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
@@ -11233,18 +11231,26 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         cont h
       end
     | StructType sn ->
-      let fields =
+      let fields, padding_predsymb_opt =
         match List.assoc sn structmap with
           (_, None, _) -> static_error l (Printf.sprintf "Cannot consume an object of type 'struct %s' since this struct was declared without a body" sn) None
-        | (_, Some fds, _) -> fds
+        | (_, Some fds, padding_predsymb_opt) -> fds, padding_predsymb_opt
       in
+      begin fun cont ->
+        match consumePaddingChunk, padding_predsymb_opt with
+          true, Some padding_predsymb ->
+          consume_chunk rules h [] [] [] l (padding_predsymb, true) [] real_unit real_unit_pat (Some 1) [TermPat addr] $. fun _ h _ _ _ _ _ _ ->
+          cont h
+        | _ ->
+          cont h
+      end $. fun h ->
       let rec iter h fields =
         match fields with
           [] -> cont h
         | (f, (lf, gh, t))::fields ->
           match t with
             StaticArrayType (_, _) | StructType _ ->
-            consume_c_object l (field_address l addr sn f) t h $. fun h ->
+            consume_c_object l (field_address l addr sn f) t h true $. fun h ->
             iter h fields
           | _ ->
             get_field h addr sn f l $. fun h coef _ ->
@@ -11583,7 +11589,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end
         begin fun () ->
           assume_neq result (ctxt#mk_intlit 0) $. fun () ->
-          produce_c_object l real_unit result t None true h $. fun h ->
+          produce_c_object l real_unit result t None true false h $. fun h ->
           match t with
             StructType sn ->
             let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
@@ -11935,10 +11941,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           | Some addr ->
             match List.assoc x tenv with
               StaticArrayType (elemTp, elemCount) as t ->
-              consume_c_object closeBraceLoc addr t h $. fun h ->
+              consume_c_object closeBraceLoc addr t h true $. fun h ->
               free_locals_core h locals
             | RefType t -> (* free locals of which the address is taken *)
-              consume_c_object closeBraceLoc addr t h $. fun h ->
+              consume_c_object closeBraceLoc addr t h true $. fun h ->
               free_locals_core h locals
       in
       match locals with
@@ -12200,9 +12206,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of close_struct must be of type pointer-to-struct." None in
-      let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot close a struct that declares ghost fields." None in
-      eval_h h env e $. fun h env pointerTerm ->
+      eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
       consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef ts _ _ _ _ ->
@@ -12212,19 +12216,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
       if not (definitely_equal (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
         assert_false h env l "Could not prove that length of character array equals size of struct." None;
-      produce_c_object l real_unit pointerTerm (StructType sn) None false h $. fun h ->
-      cont (Chunk ((padding_predsymb, true), [], real_unit, [pointerTerm], None)::h) env
+      produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
+      cont h env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "open_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
       let sn = match tp with PtrType (StructType sn) -> sn | _ -> static_error l "The argument of open_struct must be of type pointer-to-struct." None in
-      let (_, fds_opt, padding_predsymb_opt) = List.assoc sn structmap in
-      let padding_predsymb = match padding_predsymb_opt with Some s -> s | None -> static_error l "Cannot open a struct that declares ghost fields." None in
-      eval_h h env e $. fun h env pointerTerm ->
-      consume_c_object l pointerTerm (StructType sn) h $. fun h ->
-      with_context (Executing (h, env, l, "Consuming struct padding chunk")) $. fun () ->
-      consume_chunk rules h ghostenv [] [] l (padding_predsymb, true) [] real_unit dummypat None [TermPat pointerTerm] $. fun _ h coef _ _ _ _ _ ->
-      if not (definitely_equal coef real_unit) then assert_false h env l "Opening a struct requires full permission to the struct padding chunk." None;
+      eval_h h env w $. fun h env pointerTerm ->
+      consume_c_object l pointerTerm (StructType sn) h true $. fun h ->
       let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
@@ -12237,7 +12236,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           [(arg, PtrType t)] when t <> Void && t <> Char ->
           if pure then static_error l "Cannot call a non-pure function from a pure context." None;
           let arg = ev arg in
-          consume_c_object l arg t h $. fun h ->
+          consume_c_object l arg t h false $. fun h ->
           begin match t with
             StructType sn ->
             let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
@@ -12298,7 +12297,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match globals with
             [] -> cont h
           | (x, (_, tp, addr, init))::globals ->
-            produce_c_object l coef addr tp (Some !init) true h $. fun h ->
+            produce_c_object l coef addr tp (Some !init) true true h $. fun h ->
             iter h globals
         in
         iter h globalmap
@@ -12316,7 +12315,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           match globals with
             [] -> cont h
           | (x, (lg, tp, addr, init))::globals ->
-            consume_c_object l addr tp h $. fun h ->
+            consume_c_object l addr tp h true $. fun h ->
             iter h globals
         in
         iter h globalmap
@@ -12345,7 +12344,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               | Some e -> Some (Some (check_c_initializer e t))
             in
             let addr = get_unique_var_symb_non_ghost (x ^ "_addr") (PtrType Void) in
-            produce_c_object l real_unit addr t init true h $. fun h ->
+            produce_c_object l real_unit addr t init true true h $. fun h ->
             iter h ((x, envTp)::tenv) ghostenv ((x, addr)::env) xs
           in
           match t with

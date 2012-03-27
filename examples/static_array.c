@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include "bool.h"
 
@@ -48,6 +49,14 @@ static void foo()
   //@ ensures mystruct(&my_global_nested_struct);
 {
   struct mystruct my_local_nested_struct;
+  //@ open_struct(&my_local_nested_struct);
+  memset(&my_local_nested_struct, 0, sizeof(struct mystruct));
+  //@ close_struct(&my_local_nested_struct);
+  
+  //@ open_struct(&(&my_local_nested_struct)->s1);
+  memset(&(&my_local_nested_struct)->s1, 0, sizeof(struct struct_with_array));
+  //@ close_struct(&(&my_local_nested_struct)->s1);
+  
   //@ open mystruct(_);
   //@ open struct_with_array(_);
   assert(&my_global_nested_struct != &my_local_nested_struct);

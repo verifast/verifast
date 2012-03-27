@@ -21,4 +21,8 @@ char *memchr(char *array, char c, int count);
     //@ requires [?f]chars(array, ?cs) &*& length(cs) == count;
     //@ ensures [f]chars(array, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
 
+void memset(void *array, char value, int size);
+    //@ requires chars(array, ?cs) &*& length(cs) == size;
+    //@ ensures chars(array, ?cs1) &*& length(cs1) == size &*& all_eq(cs1, value) == true;
+
 #endif
