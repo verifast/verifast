@@ -105,7 +105,7 @@ mysh -cpus 1 < helloproc.mysh
 cd ..
 cd java
 cd channels
-verifast_both -c channels.jarsrc client.jarsrc
+verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
 cd ..
 cd chat
 verifast_both -c -allow_assume chat.jarsrc

@@ -1,3 +1,5 @@
+// Work done in collaboration with Sybren Roede and Ruurd Kuiper
+
 package channels;
 
 import java.util.concurrent.*;
@@ -6,7 +8,8 @@ import java.util.*;
 /*@
 
 predicate_ctor channel_sema_inv(Channel channel)() =
-    channel.itemList |-> ?itemList &*& itemList.List(?items) &*& [1/2]channel.items_ |-> items;
+    channel.itemList |-> ?itemList &*& itemList.List(?items) &*& [1/2]channel.items_ |-> items &*&
+    [1/2]channel.queueMaxSize |-> ?qms &*& length(items) <= qms;
 
 @*/
 
@@ -15,27 +18,29 @@ public final class Channel {
     //@ list<Object> items_;
     List itemList;
     Semaphore sema;
+    int queueMaxSize;
     
     //@ predicate Channel() = sema |-> ?sema &*& [_]sema.Semaphore(channel_sema_inv(this));
-    //@ predicate ChannelState(list<Object> items) = [1/2]items_ |-> items;
+    //@ predicate ChannelState(list<Object> items, int qms) = [1/2]items_ |-> items &*& [1/2]queueMaxSize |-> qms;
     
-    public Channel()
-        //@ requires true;
-        //@ ensures Channel() &*& ChannelState(nil);
+    public Channel(int queueMaxSize)
+        //@ requires 0 <= queueMaxSize;
+        //@ ensures Channel() &*& ChannelState(nil, queueMaxSize);
     {
         itemList = new ArrayList();
+        this.queueMaxSize = queueMaxSize;
         //@ items_ = nil;
         //@ close channel_sema_inv(this)();
         //@ one_time(channel_sema_inv(this));
         sema = new Semaphore(1);
         //@ sema.leakHandle();
         //@ close Channel();
-        //@ close ChannelState(nil);
+        //@ close ChannelState(nil, queueMaxSize);
     }
     
     boolean send(String msg)
         /*@
-        requires
+        requires 
             [?fc]Channel() &*&
             [?fa]atomic_space(?inv) &*&
             is_channel_sep(?sep, inv, this, ?sepPred, ?unsepPred) &*&
@@ -56,7 +61,16 @@ public final class Channel {
         sema.acquire();
         //@ open channel_sema_inv(this)();
         //@ assert itemList |-> ?l &*& l.List(?items);
-        itemList.add(msg);
+        //@ assert [1/2]queueMaxSize |-> ?qms;
+
+        boolean result;
+        if (itemList.size() < queueMaxSize) {
+            itemList.add(msg);
+            result = true;
+        } else {
+            result = false;
+        }
+        
         {
             /*@
             predicate P() =
@@ -66,9 +80,9 @@ public final class Channel {
                 sepPred() &*& pre() &*&
                 [1/2]items_ |-> items;
             predicate Q() =
-                [1/2]items_ |-> append(items, cons(msg, nil)) &*&
+                [1/2]items_ |-> (length(items) < qms ? append(items, cons(msg, nil)) : items) &*&
                 sepPred() &*&
-                post(true);
+                post(length(items) < qms);
             
             lemma void my_ghost_op()
                 requires P() &*& inv();
@@ -76,10 +90,20 @@ public final class Channel {
             {
                 open P();
                 sep();
-                open ChannelState(_);
-                items_ = append(items, cons(msg, nil));
-                close ChannelState(append(items, cons(msg, nil)));
-                send_(true);
+                open ChannelState(_, _);
+                if (length(items) < qms)
+                {
+                  items_ = append(items, cons(msg, nil));
+                  close ChannelState(append(items, cons(msg, nil)), _);
+                  send_(true);
+                }
+                else
+                {
+                  items_ = items;
+                  close ChannelState(items, _);
+                  send_(false);
+                }
+
                 unsep();
                 close Q();
             }
@@ -89,10 +113,11 @@ public final class Channel {
             //@ perform_atomic_space_ghost_operation();
             //@ open Q();
         }
+        //@ length_append(items, cons(msg, nil));
         //@ close channel_sema_inv(this)();
         sema.release();
         //@ close [fc]Channel();
-        return true;
+        return result;
     }
     
     String receive()
@@ -142,9 +167,9 @@ public final class Channel {
             {
                 open P();
                 sep();
-                open ChannelState(_);
+                open ChannelState(_, _);
                 items_ = tail(items);
-                close ChannelState(tail(items));
+                close ChannelState(tail(items), _);
                 receive_();
                 unsep();
                 close Q();
