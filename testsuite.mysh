@@ -158,6 +158,9 @@ verifast_both -c InterfaceLemmas.java
 verifast_both -c Iterator.java
 verifast_both -allow_assume -disable_overflow_check -c map.java
 verifast_both -c -disable_overflow_check NestedExprTest.java
+cd prodcons
+verifast -prover redux -disable_overflow_check -c client.jarsrc
+cd ..
 verifast_both -c -disable_overflow_check Recell.java
 verifast_both -c -disable_overflow_check AmortizedQueue.java
 verifast_both -c -disable_overflow_check SuperCalls.java

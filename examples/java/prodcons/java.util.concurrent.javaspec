@@ -1,0 +1,68 @@
+package java.util.concurrent;
+
+/*@
+
+typedef lemma void ArrayBlockingQueue_sep(predicate() inv, ArrayBlockingQueue queue, predicate() sepPred, predicate(list<Object>, int) unsepPred)();
+    requires sepPred() &*& inv();
+    ensures queue.state(?elements, ?capacity) &*& unsepPred(elements, capacity);
+
+typedef lemma void ArrayBlockingQueue_unsep(predicate() inv, ArrayBlockingQueue queue, predicate() sepPred, predicate(list<Object>, int) unsepPred)();
+    requires unsepPred(?elements, ?capacity) &*& queue.state(elements, capacity);
+    ensures sepPred() &*& inv();
+
+typedef lemma void ArrayBlockingQueue_put(predicate() inv, ArrayBlockingQueue queue, predicate(list<Object>, int) unsepPred, Object element, predicate() pre, predicate() post)();
+    requires pre() &*& unsepPred(?elements, ?capacity) &*& length(elements) < capacity;
+    ensures post() &*& unsepPred(append(elements, cons(element, nil)), capacity);
+
+typedef lemma void ArrayBlockingQueue_take(predicate() inv, ArrayBlockingQueue queue, predicate(list<Object>, int) unsepPred, predicate() pre, predicate(Object) post)();
+    requires pre() &*& unsepPred(?elements, ?capacity) &*& elements != nil;
+    ensures post(head(elements)) &*& unsepPred(tail(elements), capacity);
+
+@*/
+
+public class ArrayBlockingQueue {
+    
+    //@ predicate ArrayBlockingQueue();
+    //@ predicate state(list<Object> elements, int capacity);
+    
+    public ArrayBlockingQueue(int capacity);
+        //@ requires 0 <= capacity;
+        //@ ensures ArrayBlockingQueue() &*& state(nil, capacity);
+    
+    public void put(Object element);
+        /*@
+        requires
+            [?fc]ArrayBlockingQueue() &*&
+            [?fa]atomic_space(?inv) &*&
+            is_ArrayBlockingQueue_sep(?sep, inv, this, ?sepPred, ?unsepPred) &*&
+            is_ArrayBlockingQueue_unsep(?unsep, inv, this, sepPred, unsepPred) &*&
+            is_ArrayBlockingQueue_put(?put, inv, this, unsepPred, element, ?pre, ?post) &*&
+            sepPred() &*& pre();
+        @*/
+        /*@
+        ensures
+            [fc]ArrayBlockingQueue() &*&
+            [fa]atomic_space(inv) &*&
+            sepPred() &*&
+            post();
+        @*/
+    
+    public Object take();
+        /*@
+        requires
+            [?fc]ArrayBlockingQueue() &*&
+            [?fa]atomic_space(?inv) &*&
+            is_ArrayBlockingQueue_sep(?sep, inv, this, ?sepPred, ?unsepPred) &*&
+            is_ArrayBlockingQueue_unsep(?unsep, inv, this, sepPred, unsepPred) &*&
+            is_ArrayBlockingQueue_take(?take, inv, this, unsepPred, ?pre, ?post) &*&
+            sepPred() &*& pre();
+        @*/
+        /*@
+        ensures
+            [fc]ArrayBlockingQueue() &*&
+            [fa]atomic_space(inv) &*&
+            sepPred() &*&
+            post(result);
+        @*/
+    
+}
