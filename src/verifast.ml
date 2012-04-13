@@ -8999,19 +8999,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
     in
-    let pred_asn l coefpat g targs pats0 pats =
+    let pred_asn l coefpat g is_global_predref targs pats0 pats =
       let (g_symb, pats0, pats, types) =
-        match try_assoc g#name predfammap with
-          Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
-        | None ->
-          begin match try_assoc (g#name) env with
-            Some term -> ((term, false), pats0, pats, g#domain)
-          | None ->
+        if is_global_predref then
+           match try_assoc g#name predfammap with
+            Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
+          | None -> 
             let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             ((g_symb, false), [], pats, List.map snd ps2)
-          end
+        else
+          let Some term = try_assoc (g#name) env in ((term, false), pats0, pats, g#domain)
       in
       let targs = instantiate_types tpenv targs in
       let domain = instantiate_types tpenv types in
@@ -9048,7 +9047,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     in
     match p with
     | WPointsTo (l, e, tp, rhs) -> points_to l real_unit_pat e tp (SrcPat rhs)
-    | WPredAsn (l, g, _, targs, pats0, pats) -> pred_asn l real_unit_pat g targs (srcpats pats0) (srcpats pats)
+    | WPredAsn (l, g, is_global_predref, targs, pats0, pats) -> pred_asn l real_unit_pat g is_global_predref targs (srcpats pats0) (srcpats pats)
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       inst_call_pred l real_unit_pat e_opt tn g index pats
     | ExprAsn (l, Operation (lo, Eq, [Var (lx, x, scope); e], tps)) when !scope = Some LocalVar ->
@@ -9136,7 +9135,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       assert_expr ((i, fresh_term) :: env) e h ((i, fresh_term) :: env) l "Cannot prove condition." None;
       cont [] h ghostenv env env' None
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
-    | CoefAsn (l, coefpat, WPredAsn (_, g, _, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g targs (srcpats pat0) (srcpats pats)
+    | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
     | WPluginAsn (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
