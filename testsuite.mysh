@@ -28,6 +28,7 @@ ifnotmac verifast stringBuffers.c sockets.o bot.c
 verifast_both -disable_overflow_check cat.c
 verifast_both char.c
 mysh < chat.mysh
+verifast_both -c closetest.c
 verifast_both Composite.c
 verifast_both composite4.c
 verifast_both -c -disable_overflow_check composite5.c

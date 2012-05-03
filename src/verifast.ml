@@ -12899,7 +12899,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   in
                   let env =
                     match pat with
-                      VarPat x -> [x, t]
+                      VarPat x -> [x, tp, t]
                     | _ -> []
                   in
                   (env, t)
@@ -12908,10 +12908,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           in
           with_context PopSubcontext $. fun () ->
           with_context (Executing (h, env, l, "Producing predicate chunk")) $. fun () ->
-          let env = List.fold_left (fun env0 (env, t) -> merge_tenvs l env env0) env ts in
+          let env = List.fold_left (fun env0 (env, t) -> merge_tenvs l (List.map (fun (x, tp, t) -> (x, t)) env) env0) env ts in
+          let tenv = List.fold_left (fun tenv0 (env, t) -> merge_tenvs l (List.map (fun (x, tp, t) -> (x, tp)) env) tenv0) tenv ts in
+          let ghostenv = List.fold_left (fun ghostenv (env, t) -> List.map (fun (x, tp, t) -> x) env @ ghostenv) ghostenv ts in
           let ts = List.map (fun (env, t) -> t) ts in
           produce_chunk h g_symb targs coef inputParamCount (ts0 @ ts) None $. fun h ->
-          cont h env
+          tcont sizemap tenv ghostenv h env
         )
       )
     | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
