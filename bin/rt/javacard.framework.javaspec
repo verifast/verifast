@@ -267,6 +267,15 @@ class JCSystem {
     // It's crucial for soundness that commitTransaction() consumes the full applet.valid() chunk. Consuming only [1/2]applet.valid() is unsound.
     // E.g.: predicate valid() = x |-> ?b &*& b ? y |-> _ : [2]y |-> _;
     //       In process(), set b = false, then commit, then throw an exception. Next time you enter process(), you have [1]y |-> _ outside a transaction.
+    // TODO: Improve this contract so that it's easier to retain information about the precise state of the applet.
+    //       Perhaps this would work:
+    //            requires in_transaction(?a) &*& (a.valid() && ?P);
+    //            ensures current_applet(a) &*& [1/2]P;
+    //       This contract would be executed as follows:
+    //       - Consume in_transaction(?a). Let the resulting symbolic heap be H.
+    //       - Consume a.valid(). This may involve a lot of auto-closing, auto-merging, etc. Let P = the chunks from H consumed by this operation.
+    //       - Produce current_applet(a).
+    //       - Produce [1/2]P.
     public static void commitTransaction();
         //@ requires in_transaction(?a) &*& a.valid();
         //@ ensures current_applet(a) &*& [1/2]a.valid();
