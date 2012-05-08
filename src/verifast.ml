@@ -1531,7 +1531,7 @@ and
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
-  | VarPat of string (* var pattern, aangeduid met ? in code *)
+  | VarPat of loc * string (* var pattern, aangeduid met ? in code *)
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
 and
   switch_expr_clause = (* ?switch_expr_clause *)
@@ -3026,7 +3026,7 @@ and
 and
   parse_pattern = parser
   [< '(_, Kwd "_") >] -> DummyPat
-| [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat x
+| [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
 | [< e = parse_expr >] -> LitPat e
 and
@@ -6975,20 +6975,20 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: type checking of assertions *)
   
-  let check_pat_core (pn,ilist) l tparams tenv t p =
+  let check_pat_core (pn,ilist) tparams tenv t p =
     match p with
       LitPat (WidenedParameterArgument e) ->
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      expect_type l t tp;
+      expect_type (expr_loc e) t tp;
       (LitPat (WidenedParameterArgument w), [])
     | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
-    | VarPat x ->
+    | VarPat (l, x) ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
       (p, [(x, t)])
     | DummyPat -> (p, [])
   in
   
-  let check_pat (pn,ilist) l tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) l tparams tenv t p in (w, tenv' @ tenv) in
+  let check_pat (pn,ilist) l tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv) in
 
   let merge_tenvs l tenv1 tenv2 =
     let rec iter tenv1 tenv3 =
@@ -7232,7 +7232,7 @@ let verify_program_core (* ?verify_program_core *)
       | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
       end
     | CoefAsn (l, coef, body) ->
-      let (wcoef, tenv') = check_pat_core (pn,ilist) l tparams tenv RealType coef in
+      let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
       let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
       (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
     | PluginAsn (l, text) ->
@@ -7340,7 +7340,7 @@ let verify_program_core (* ?verify_program_core *)
     match pat with
       LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> [x]
     | LitPat _ -> []
-    | VarPat x -> [x]
+    | VarPat (_, x) -> [x]
     | DummyPat -> []
   in
   
@@ -7413,7 +7413,7 @@ let verify_program_core (* ?verify_program_core *)
       begin
         match coefpat with
           LitPat e -> assert_expr_fixed fixed e
-        | VarPat x -> static_error l "Precision check failure: variable patterns not supported as coefficients." None
+        | VarPat (_, x) -> static_error l "Precision check failure: variable patterns not supported as coefficients." None
         | DummyPat -> ()
       end;
       check_pred_precise fixed p
@@ -8326,7 +8326,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   let evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
       LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)
-    | VarPat x -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
+    | VarPat (_, x) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
   in
   
@@ -8668,7 +8668,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | (SrcPat (LitPat e), t) ->
         match_terms (prover_convert_term (eval None env e) tp0 tp) t
       | (TermPat t0, t) -> match_terms (prover_convert_term t0 tp0 tp) t
-      | (SrcPat (VarPat x), t) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
+      | (SrcPat (VarPat (_, x)), t) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
       | (SrcPat DummyPat, t) -> cont ghostenv env env'
     in
     let rec match_pats ghostenv env env' index pats tps0 tps ts cont =
@@ -8701,7 +8701,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       match coefpat with
         SrcPat (LitPat e) -> match_term_coefpat (eval None env e)
       | TermPat t -> match_term_coefpat t
-      | SrcPat (VarPat x) -> cont chunk (x::ghostenv) (update env x (real_div l coef0 coef)) coef0 []
+      | SrcPat (VarPat (_, x)) -> cont chunk (x::ghostenv) (update env x (real_div l coef0 coef)) coef0 []
       | SrcPat DummyPat ->
         if is_dummy_frac_term coef0 then
           let dummy' = get_dummy_frac_term () in
@@ -8974,7 +8974,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               | SrcPat (LitPat (Var (_, x, scope)))::pats when !scope = Some LocalVar -> iter patvars pats ((if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_")::args)
               | SrcPat (LitPat e)::pats -> iter patvars pats ((if patvars = [] || lists_disjoint patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>")::args)
               | SrcPat DummyPat::pats -> iter patvars pats ("_"::args)
-              | SrcPat (VarPat x)::pats -> iter (x::patvars) pats ("_"::args)
+              | SrcPat (VarPat (_, x))::pats -> iter (x::patvars) pats ("_"::args)
             in
             String.concat ", " (iter [] pats [])
           in
@@ -12934,7 +12934,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   in
                   let env =
                     match pat with
-                      VarPat x -> [x, tp, t]
+                      VarPat (_, x) -> [x, tp, t]
                     | _ -> []
                   in
                   (env, t)
@@ -13813,12 +13813,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
       ctxt#assume_forall g trigger tps body
-  | (WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+  | (WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
-      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
-  | (CoefAsn(loc, VarPat(f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_) -> true | _ -> false) (p_args1 @ p_args2) && 
+      (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
+  | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
          List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
-      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(x)) -> x) p_args1, List.map (fun (VarPat(x)) -> x) p_args2, pre, post))
+      (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g) None
   and heapify_params h tenv env ps =
     begin match ps with

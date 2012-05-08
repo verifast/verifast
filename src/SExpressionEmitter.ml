@@ -235,9 +235,9 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
 
 and sexpr_of_pat (pat : pat) : sexpression =
   match pat with
-    | LitPat expr  -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
-    | VarPat str   -> List [ Symbol "pat-variable"; Symbol str ]
-    | DummyPat     -> List [ Symbol "pat-dummy" ]
+    | LitPat expr     -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
+    | VarPat (l, str) -> List [ Symbol "pat-variable"; Symbol str ]
+    | DummyPat        -> List [ Symbol "pat-dummy" ]
 
 let rec sexpr_of_pred (asn : asn) : sexpression =
   match asn with
