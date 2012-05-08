@@ -441,6 +441,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let add_buffer() =
     let path = ref None in
     let buffer = GSourceView2.source_buffer () in
+    buffer#begin_not_undoable_action (); (* Disable the source view's undo manager since we handle undos ourselves. *)
     let apply_tag_enabled = ref false in (* To prevent tag copying when pasting from clipboard *)
     ignore $. buffer#connect#apply_tag (fun tag ~start ~stop -> if not !apply_tag_enabled then GtkSignal.emit_stop_by_name buffer#as_buffer "apply-tag");
     let _ = buffer#create_tag ~name:"keyword" [`WEIGHT `BOLD; `FOREGROUND "Blue"] in

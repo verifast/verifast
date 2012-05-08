@@ -1,6 +1,7 @@
 class source_buffer buffer =
   object
     inherit GText.buffer buffer#as_buffer
+    method begin_not_undoable_action () = ()
   end
 
 class source_view (source_buffer: source_buffer) view () =
@@ -16,7 +17,7 @@ class source_view (source_buffer: source_buffer) view () =
     method set_tab_width (size: int) = ()
   end
 
-let source_buffer () = GText.buffer ()
+let source_buffer () = new source_buffer (GText.buffer ())
 
 let source_view ?source_buffer ~packing () =
   let buffer = match source_buffer with None -> GText.buffer () | Some sbuf -> (sbuf :> GText.buffer) in
