@@ -307,6 +307,35 @@ let chop_suffix s s0 =
 let chop_suffix_opt s s0 =
   match chop_suffix s s0 with None -> s | Some s -> s
 
+let split separator_predicate string =
+  let n = String.length string in
+  let rec iter parts start k =
+    let current_part () = String.sub string start (k - start) in
+    if k = n then
+      List.rev (current_part ()::parts)
+    else
+      if separator_predicate string.[k] then
+        iter (current_part ()::parts) (k + 1) (k + 1)
+      else
+        iter parts start (k + 1)
+  in
+  iter [] 0 0
+
+(** Eliminates '.' and 'foo/..' components. *)
+let reduce_path path =
+  let path = split (fun c -> c = '/' || c = '\\') path in
+  let rec iter reduced todo =
+    match reduced, todo with
+      _, [] -> String.concat "/" (List.rev reduced)
+    | _::reduced, ".."::todo -> iter reduced todo
+    | _, "."::todo -> iter reduced todo
+    | _, part::todo -> iter (part::reduced) todo
+  in
+  iter [] path
+
+let concat path1 path2 =
+  if path1 = "" || path1 = "." then path2 else path1 ^ Filename.dir_sep ^ path2
+
 (** Same as [try_assoc x (xys1 @ xys2)] but without performing the append operation. *)
 let try_assoc2 x xys1 xys2 =
   match try_assoc x xys1 with
@@ -324,7 +353,7 @@ let get x =
   | Some x -> x
 
 let bindir = Filename.dirname Sys.executable_name
-let rtdir = Filename.concat bindir "rt"
+let rtdir = concat bindir "rt"
 
 (* Region: Statistics *)
 
@@ -365,7 +394,7 @@ class stats =
       proverStats <- proverStats ^ text ^ String.concat "" (List.map (fun (lbl, ticks) -> Printf.sprintf "%s: %.6fs\n" lbl (Int64.to_float ticks *. tickLength)) tickCounts)
     method overhead ~path ~nonGhostLineCount ~ghostLineCount ~mixedLineCount =
       let (basepath, relpath) = path in
-      let path = Filename.concat basepath relpath in
+      let path = concat basepath relpath in
       let o = object method path = path method nonghost_lines = nonGhostLineCount method ghost_lines = ghostLineCount method mixed_lines = mixedLineCount end in
       overhead <- o::overhead
     method recordFunctionTiming funName seconds = if seconds > 0.1 then functionTimings <- (funName, seconds)::functionTimings
@@ -1187,12 +1216,12 @@ let make_preprocessor make_lexer basePath relPath =
           junk ();
           if List.mem s ["bool.h"; "assert.h"; "limits.h"] then next_token () else
           let basePath0, relPath0 = List.hd !paths in
-          let localRelPath = Filename.concat (Filename.dirname relPath0) s in
+          let localRelPath = concat (Filename.dirname relPath0) s in
           let basePath, relPath =
-            if Sys.file_exists (Filename.concat basePath0 localRelPath) then
+            if Sys.file_exists (concat basePath0 localRelPath) then
               basePath0, localRelPath
             else
-              let sysPath = Filename.concat bindir s in
+              let sysPath = concat bindir s in
               if Sys.file_exists sysPath then
                 bindir, s
               else
@@ -1924,7 +1953,7 @@ http://www.gnu.org/prep/standards/standards.html#Errors
   
 let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
 
-let string_of_path (basedir, relpath) = Filename.concat basedir relpath
+let string_of_path (basedir, relpath) = concat basedir relpath
 
 let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
   string_of_path p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
@@ -3360,7 +3389,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.start parsing_stopwatch;
   let result =
   let make_lexer basePath relPath =
-    let text = readFile (Filename.concat basePath relPath) in
+    let text = readFile (concat basePath relPath) in
     make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange reportShouldFail
   in
   let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer in
@@ -3378,11 +3407,12 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.stop parsing_stopwatch;
   result
 
+(** Returns [(headers, packages)] where the paths in [headers] are unchanged from the source file. *)
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
   Stopwatch.start parsing_stopwatch;
   let result =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (Filename.concat basePath relPath)) reportRange reportShouldFail in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (concat basePath relPath)) reportRange reportShouldFail in
   let parse_header_file =
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
@@ -3456,7 +3486,7 @@ let expand_path path =
 
 let concat_if_relative path1 path2 =
   if Filename.is_relative path2 then
-    Filename.concat path1 path2
+    concat path1 path2
   else
     path2
 
@@ -3980,7 +4010,7 @@ let verify_program_core (* ?verify_program_core *)
   let modulemap = [(current_module_name, current_module_term)] in
   
   let programDir = Filename.dirname path in
-  let rtpath = match options.option_runtime with None -> Filename.concat rtdir "rt.jarspec" | Some path -> path in
+  let rtpath = match options.option_runtime with None -> concat rtdir "rt.jarspec" | Some path -> path in
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
   let shouldFailLocs = ref [] in
   
@@ -4288,13 +4318,15 @@ let verify_program_core (* ?verify_program_core *)
       Returns the elements declared directly in the current file.
       May add symbols and global assumptions to the SMT solver.
       
-      Paths in [headers] are relative to [basedir].
+      Paths in [headers] are taken from the source file, which is in [reldir], which is relative to [basedir].
+      Note: [basedir] is either the directory of the program being verified (i.e. the file specified on the command line) or
+      the directory of the VeriFast built-in header files (= <verifasthome>/bin for C and <verifasthome>/bin/rt for Java).
       
       is_import_spec:
         true if the file being checked specifies a module used by the module being verified
         false if the file being checked specifies the module being verified
     *)
-  let rec check_file (filepath: string) (is_import_spec : bool) (include_prelude : bool) (basedir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
+  let rec check_file (filepath: string) (is_import_spec : bool) (include_prelude : bool) (basedir : string) (reldir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
   
   let is_jarspec = Filename.check_suffix filepath ".jarspec" in
   
@@ -4357,29 +4389,33 @@ let verify_program_core (* ?verify_program_core *)
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
-    let rec merge_header_maps include_prelude maps0 headers_included headers =
+    let rec merge_header_maps include_prelude maps0 headers_included basedir reldir headers =
       match headers with
         [] -> (maps0, headers_included)
       | (l, header_path)::headers ->
         if List.mem header_path ["bool.h"; "assert.h"; "limits.h"] then
-          merge_header_maps include_prelude maps0 headers_included headers
+          merge_header_maps include_prelude maps0 headers_included basedir reldir headers
         else
         begin
-          let localpath = Filename.concat basedir header_path in
-          let (basedir, relpath, path) =
+          let rellocalpath = concat reldir header_path in
+          let localpath = concat basedir rellocalpath in
+          let (basedir1, relpath) =
             if Sys.file_exists localpath then
-              (basedir, Filename.concat "." header_path, localpath)
+              (basedir, rellocalpath)
             else
-              let systempath = Filename.concat bindir header_path in
+              let systempath = concat bindir header_path in
               if Sys.file_exists systempath then
-                (bindir, header_path, systempath)
+                (bindir, header_path)
               else
                 static_error l (Printf.sprintf "No such file: '%s'" localpath) None
           in
+          let relpath = reduce_path relpath in
+          let path = concat basedir1 relpath in
           if List.mem path headers_included then
-            merge_header_maps include_prelude maps0 headers_included headers
+            merge_header_maps include_prelude maps0 headers_included basedir reldir headers
           else
           begin
+            let reldir1 = Filename.dirname relpath in
             let (headers', maps) =
               match try_assoc path !headermap with
                 None ->
@@ -4387,29 +4423,28 @@ let verify_program_core (* ?verify_program_core *)
                 let (headers', ds) =
                   match language with
                     CLang ->
-                    parse_header_file basedir relpath reportRange reportShouldFail
+                    parse_header_file basedir1 relpath reportRange reportShouldFail
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
-                    let ds = List.map (fun javaspec -> parse_java_file (Filename.concat pathDir javaspec) reportRange reportShouldFail) javaspecs in
+                    let ds = List.map (fun javaspec -> parse_java_file (concat pathDir javaspec) reportRange reportShouldFail) javaspecs in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
                       spec_classes := classes;
                       spec_lemmas := lemmas
                     end;
                     let l = file_loc path in
-                    let relDir = Filename.dirname relpath in
-                    let jarspecs = List.map (fun path -> (l, Filename.concat relDir path ^ "spec")) jars in
+                    let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in
                     (jarspecs, ds)
                 in
-                let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir headers' ds in
+                let (_, maps) = check_file header_path header_is_import_spec include_prelude basedir1 reldir1 headers' ds in
                 headermap := (path, (headers', maps))::!headermap;
                 (headers', maps)
               | Some (headers', maps) ->
                 (headers', maps)
             in
-            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included headers' in
-            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) headers
+            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included basedir1 reldir1 headers' in
+            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) basedir reldir headers
           end
         end
     in
@@ -4427,20 +4462,20 @@ let verify_program_core (* ?verify_program_core *)
                 let javaspecs =
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
-                let ds = List.map (fun x -> parse_java_file (Filename.concat rtdir x) reportRange reportShouldFail) javaspecs in
-                let (_, maps0) = check_file rtpath true false bindir [] ds in
+                let ds = List.map (fun x -> parse_java_file (concat rtdir x) reportRange reportShouldFail) javaspecs in
+                let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
               | Some ([], maps0) ->
                 (maps0, [])
           end
           | CLang ->
-            merge_header_maps false maps0 [] [(dummy_loc, "prelude.h")]
+            merge_header_maps false maps0 [] bindir "" [(dummy_loc, "prelude.h")]
       else
         (maps0, [])
     in
 
-    let (maps, _) = merge_header_maps include_prelude maps0 headers_included headers in
+    let (maps, _) = merge_header_maps include_prelude maps0 headers_included basedir reldir headers in
     maps
   in
 
@@ -4453,7 +4488,7 @@ let verify_program_core (* ?verify_program_core *)
           LoadPluginDecl (l, lx, x) ->
           if pluginmap0 <> [] || pluginmap1 <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None;
           begin try
-            let p = Plugins_private.load_plugin (Filename.concat basedir (x ^ "_verifast_plugin")) in
+            let p = Plugins_private.load_plugin (concat basedir (x ^ "_verifast_plugin")) in
             let x = full_name pn x in
             (x, ((p, p#create_instance plugin_context), get_unique_var_symb x (PredType ([], [], None))))::pluginmap1
           with
@@ -10095,7 +10130,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match breakpoint with
       None -> ()
     | Some (path0, line0) ->
-      if line = line0 && Filename.concat basepath relpath = path0 then
+      if line = line0 && concat basepath relpath = path0 then
         assert_false h env l "Breakpoint reached." None
   in
 
@@ -14231,7 +14266,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               let specPath = Filename.chop_extension path ^ ".jarspec" in
               let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
               let pathDir = Filename.dirname path in
-              let javas = List.map (Filename.concat pathDir) javas in
+              let javas = List.map (concat pathDir) javas in
               if Sys.file_exists specPath then begin
                 let (specJars, _) = parse_jarspec_file_core specPath in
                 jardeps := specJars @ jars;
@@ -14268,7 +14303,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     emitter_callback ds;
     let result =
       check_should_fail ([], []) $. fun () ->
-      let (linker_info, _) = check_file path false true programDir headers ds in
+      let (linker_info, _) = check_file path false true programDir "" headers ds in
       linker_info
     in
     begin
@@ -14298,8 +14333,16 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
   
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
+    let local_basedir = Filename.dirname path in
+    let qualified_path (basedir, relpath) =
+      if basedir = local_basedir then Filename.concat "." relpath else relpath
+    in
     let sorted_lines protos =
-      let lines = List.map (fun (g, (((_, path), _, _), _)) -> path ^ "#" ^ g) protos in
+      let lines =
+        protos |> List.map begin fun (g, ((path, _, _), _)) ->
+          qualified_path path ^ "#" ^ g
+        end
+      in
       List.sort compare lines
     in
     let lines =
@@ -14310,9 +14353,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       List.sort compare
         begin
           List.map
-            begin fun (fn, (((_, header), _, _), _), ftn, ftargs, unloadable) ->
+            begin fun (fn, ((header, _, _), _), ftn, ftargs, unloadable) ->
               Printf.sprintf
-                ".provides %s : %s#%s(%s)%s" fn header ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
+                ".provides %s : %s#%s(%s)%s" fn (qualified_path header) ftn (String.concat "," ftargs) (if unloadable then " unloadable" else "")
             end
             functypes_implemented
         end
@@ -14453,7 +14496,7 @@ let link_program isLibrary modulepaths emitDllManifest exports =
             read_file_lines manifest_path
           with FileNotFound ->
             try
-              read_file_lines (Filename.concat bindir manifest_path)
+              read_file_lines (concat bindir manifest_path)
             with FileNotFound ->
               failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_vfmanifest option.")
       in

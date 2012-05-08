@@ -574,11 +574,10 @@ let show_ide initialPath prover codeFont traceFont runtime =
       tab#undoList := [];
       tab#redoList := [];
       buffer#set_modified false;
-      let thePath = Filename.concat (Filename.dirname newPath) (Filename.basename newPath) in
-      tab#path := Some (thePath, mtime);
+      tab#path := Some (newPath, mtime);
       perform_syntax_highlighting tab buffer#start_iter buffer#end_iter;
       updateBufferTitle tab;
-      Some thePath
+      Some newPath
     with Sys_error msg -> GToolbox.message_box "VeriFast IDE" ("Could not load file: " ^ msg); None
   in
   let open_path path =
@@ -725,7 +724,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
-    let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
+    let (_, tab) = get_tab_for_path (concat path1_base path1_relpath) in
     let buffer = tab#buffer in
     let mark1 = buffer#create_mark (srcpos_iter buffer (line1, col1)) in
     let mark2 = buffer#create_mark (srcpos_iter buffer (line2, col2)) in
@@ -809,7 +808,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let ((path1_base, path1_relpath) as path1, line1, col1) = p1 in
     let (path2, line2, col2) = p2 in
     assert (path1 = path2);
-    let (_, tab) = get_tab_for_path (Filename.concat path1_base path1_relpath) in
+    let (_, tab) = get_tab_for_path (concat path1_base path1_relpath) in
     let buffer = tab#buffer in
     apply_tag_by_name tab name ~start:(srcpos_iter buffer (line1, col1)) ~stop:(srcpos_iter buffer (line2, col2))
   in
