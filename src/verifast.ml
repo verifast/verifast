@@ -2173,7 +2173,7 @@ let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
-  "volatile"; "register"; "ifdef"; "elif"; "undef"
+  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"
 ]
 
 let java_keywords = [
@@ -2639,6 +2639,7 @@ and
 and
   parse_primary_type = parser
   [< '(l, Kwd "volatile"); t0 = parse_primary_type >] -> t0
+| [< '(l, Kwd "const"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "register"); t0 = parse_primary_type >] -> t0
 | [< '(l, Kwd "struct"); '(_, Ident s) >] -> StructTypeExpr (l, s)
 | [< '(l, Kwd "enum"); '(_, Ident _) >] -> ManifestTypeExpr (l, IntType)
@@ -2684,7 +2685,7 @@ and
       | _ -> 
       let pac = (String.concat "." (n :: (take ((List.length rest) -1) rest))) in
       IdentTypeExpr(l, Some (pac), List.nth rest ((List.length rest) - 1))
-and 
+and
   parse_type_suffix t0 = parser
   [< '(l, Kwd "*"); t = parse_type_suffix (PtrTypeExpr (l, t0)) >] -> t
 | [< '(l, Kwd "["); '(_, Kwd "]");>] -> ArrayTypeExpr(l,t0)
@@ -2700,7 +2701,12 @@ and
     (ManifestTypeExpr (_, Void), "") -> false
   | _ -> true
 and
-  parse_param = parser [< t = parse_type; pn = parse_param_name; is_array = opt(parser [< '(l, Kwd "[");'(_, Kwd "]") >] -> l) >] ->
+  parse_param = parser [< t = parse_type; pn = parse_param_name;
+      is_array = opt(parser [< '(l0, Kwd "[");'(_, Kwd "]") >] -> l0);
+      (* A basic parser for the parameters of a function signature in a
+         function pointer declaration, currenly supporting one parameter: *)
+      fp_params = opt(parser [< '(l1, Kwd "("); fpp0 = parse_type;
+        '(_, Kwd ")") >] -> fpp0) >] ->
     begin match t with
       ManifestTypeExpr (_, Void) -> 
       begin match pn with
@@ -2712,7 +2718,9 @@ and
         None -> raise (ParseException (type_expr_loc t, "Illegal parameter."));
       | Some((l, pname)) -> 
         begin match is_array with
-          None -> (t, pname)
+          None -> ( match fp_params with 
+                      None -> (t, pname)
+                    | Some(_) -> (t, pname) )
         | Some(_) -> (ArrayTypeExpr(type_expr_loc t, t), pname)
         end
       end
@@ -2720,6 +2728,8 @@ and
 and
   parse_param_name = parser
     [< '(l, Ident pn) >] -> Some (l, pn)
+  | [< '(l, Kwd "("); '(l, Kwd "*"); '(l, Ident pn); '(l, Kwd ")") >] -> 
+     Some (l, pn) (* function pointer identifier *)
   | [< >] -> None
 and
   parse_functypeclause_args = parser
@@ -8226,6 +8236,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           cont state (field_address l v fparent fname)
         | Var (l, x, scope) when !scope = Some GlobalName ->
           let Some (l, tp, symbol, init) = try_assoc x globalmap in cont state symbol
+        (* The address of a function symbol is commonly used in the
+           assignment of function pointers. We tread (&function) in the
+           same way as (function), which is what most compilers do: *)
+        | Var (l, x, scope) when !scope = Some FuncName ->
+            cont state (List.assoc x funcnameterms)
         | _ -> static_error l "Taking the address of this expression is not supported." None
       end
     | SwitchExpr (l, e, cs, cdef_opt, tref) ->
