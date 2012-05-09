@@ -241,24 +241,22 @@ void push(struct stack* stack, void* data)
 
 void* pop(struct stack* stack)
   /*@
-  requires Stack(stack, ?destructor, ?Stack) &*&
-           Stack != Nil;
+  requires Stack(stack, ?destructor, Cons(?head, ?info, ?tail));
   @*/
   /*@
-  ensures Stack(stack, destructor, Pop(Stack)) &*&
-          Ownership(destructor)(result, ?info) &*&
-          Stack == Cons(result, info, Pop(Stack));
+  ensures Stack(stack, destructor, tail) &*&
+          Ownership(destructor)(head, info) &*& result == head;
   @*/
 {
-  //@ open Stack(stack, destructor, Stack);
+  //@ open Stack(stack, destructor, ?Stack);
   struct node* first = stack->first;
-  //@ open StackItems(first, destructor, Stack);
+  //@ open StackItems(first, destructor, _);
   //@ open Node(first, _, _, _, _);
   void* data = first->data;
   stack->first = first->next;
   free(first);
   stack->size--;
-  //@ close Stack(stack, destructor, Pop(Stack));
+  //@ close Stack(stack, destructor, tail);
   
   return data;
 }

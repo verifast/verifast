@@ -254,8 +254,11 @@ plugins2.cmi: plugins.cmi plugins2.mli
 plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
 	ocamlopt.opt -c plugins2.ml
 
+pa_verifast.cmo: pa_verifast.ml
+	ocamlc -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
+
 verifast.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx verifast.ml 
-	ocamlopt.opt -warn-error F -pp camlp4o -c -I ./linux Perf.cmxa proverapi.cmx verifast.ml
+	ocamlopt.opt -warn-error F -pp "camlp4o pa_verifast.cmo" -c -I ./linux Perf.cmxa proverapi.cmx verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
 	ocamlc.opt -warn-error F -g -pp camlp4o -I ./linux -c verifast.ml

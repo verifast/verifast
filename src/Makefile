@@ -79,6 +79,9 @@ Fonts.cmx: Fonts_default.ml
 ..\bin\mysh.exe: Fonts.cmx mysh.ml
 	ocamlopt.opt -thread -o ..\bin\mysh.exe unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
+pa_verifast.cmo: pa_verifast.ml
+	ocamlc -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
+
 Printexc_proxy.cmo:
 	copy Printexc_proxy_311.ml Printexc_proxy.ml
 	ocamlc -c Printexc_proxy.ml
@@ -166,9 +169,9 @@ plugins2.cmx: plugins.cmi plugins_private.cmx plugins2.cmi
 trivial_verifast_plugin.cmxs: DynType.cmx plugins.cmi plugins2.cmi trivial_plugin.ml
 	ocamlopt.opt -o trivial_verifast_plugin.cmxs -shared DynType.cmx trivial_plugin.ml
 
-verifast.cmx: win\Perf.cmxa vfversion.cmi proverapi.cmx plugins.cmx verifast.ml
+verifast.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins.cmx verifast.ml
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp camlp4o -c -I .\win Perf.cmxa proverapi.cmx verifast.ml
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp "camlp4o pa_verifast.cmo" -c -I .\win Perf.cmxa proverapi.cmx verifast.ml
 	time < nl.txt
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml

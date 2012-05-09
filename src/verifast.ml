@@ -1533,6 +1533,8 @@ and
     LitPat of expr (* literal pattern *)
   | VarPat of loc * string (* var pattern, aangeduid met ? in code *)
   | DummyPat (*dummy pattern, aangeduid met _ in code *)
+  | CtorPat of loc * string * pat list
+  | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list
 and
   switch_expr_clause = (* ?switch_expr_clause *)
     SwitchExprClause of loc * string * string list * expr (* switch uitdrukking *)
@@ -3028,7 +3030,13 @@ and
   [< '(_, Kwd "_") >] -> DummyPat
 | [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
-| [< e = parse_expr >] -> LitPat e
+| [< e = parse_expr >] ->
+  begin match e with
+    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
+    CtorPat (l, g, pats)
+  | _ ->
+    LitPat e
+  end
 and
   parse_switch_pred_clauses = parser
   [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs
@@ -3746,16 +3754,45 @@ let verify_program_core (* ?verify_program_core *)
   let dummy_frac_terms = ref [] in
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref [] in
+  
+  let undoStack = ref [] in
+  
+  let push_undo_item f = undoStack := f::!undoStack in
+  
+  let undoStackStack = ref [] in
+  let push_undoStack () = undoStackStack := !undoStack::!undoStackStack; undoStack := [] in
+  let pop_undoStack () = List.iter (fun f -> f ()) !undoStack; let h::t = !undoStackStack in undoStack := h; undoStackStack := t in
 
+  let contextStack = ref [] in
+  
+  let push_context msg = contextStack := msg::!contextStack in
+  let pop_context () = let (h::t) = !contextStack in contextStack := t in
+    
+  let contextStackStack = ref [] in
+  
+  let push_contextStack () = push_undoStack(); contextStackStack := !contextStack::!contextStackStack in
+  let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t in
+  
+  let with_context msg cont =
+    stats#execStep;
+    push_contextStack ();
+    push_context msg;
+    let result = cont() in
+    pop_contextStack ();
+    result
+  in
+  
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
     used_ids_stack := (!used_ids_undo_stack, !dummy_frac_terms)::!used_ids_stack;
     used_ids_undo_stack := [];
-    ctxt#push
+    ctxt#push;
+    push_contextStack ()
   in
   
   (** Restore the previous path condition, set of used IDs, and set of dummy fraction terms. *)
   let pop() =
+    pop_contextStack ();
     List.iter (fun r -> decr r) !used_ids_undo_stack;
     let ((usedIdsUndoStack, dummyFracTerms)::t) = !used_ids_stack in
     used_ids_undo_stack := usedIdsUndoStack;
@@ -6975,21 +7012,6 @@ let verify_program_core (* ?verify_program_core *)
   
   (* Region: type checking of assertions *)
   
-  let check_pat_core (pn,ilist) tparams tenv t p =
-    match p with
-      LitPat (WidenedParameterArgument e) ->
-      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      expect_type (expr_loc e) t tp;
-      (LitPat (WidenedParameterArgument w), [])
-    | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
-    | VarPat (l, x) ->
-      if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
-      (p, [(x, t)])
-    | DummyPat -> (p, [])
-  in
-  
-  let check_pat (pn,ilist) l tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv) in
-
   let merge_tenvs l tenv1 tenv2 =
     let rec iter tenv1 tenv3 =
       match tenv1 with
@@ -7000,12 +7022,57 @@ let verify_program_core (* ?verify_program_core *)
     in
     iter tenv1 tenv2
   in
-
+    
+  let rec check_pat_core (pn,ilist) tparams tenv t p =
+    match p with
+      LitPat (WidenedParameterArgument e) ->
+      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+      expect_type (expr_loc e) t tp;
+      (LitPat (WidenedParameterArgument w), [])
+    | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
+    | VarPat (l, x) ->
+      if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
+      (p, [(x, t)])
+    | DummyPat -> (p, [])
+    | CtorPat (l, g, pats) ->
+      begin match resolve (pn,ilist) l g purefuncmap with
+        Some (_, (_, _, rt, _, _)) ->
+        begin match rt with
+          InductiveType (i, _) ->
+          let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+          begin match try_assoc g ctormap with
+            Some (_, (_, _, _, ts0, symb)) ->
+            let targs = List.map (fun _ -> InferredType (ref None)) inductive_tparams in
+            let Some tpenv = zip inductive_tparams targs in
+            let ts = List.map (instantiate_type tpenv) ts0 in
+            let t0 = InductiveType (i, targs) in
+            expect_type l t t0;
+            let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
+            (WCtorPat (l, i, targs, g, ts0, ts, pats), tenv')
+          | None ->
+            static_error l "Not a constructor" None
+          end
+        end
+      | None -> static_error l "No such pure function" None
+      end
+  and check_pats_core (pn,ilist) l tparams tenv ts ps =
+    match (ts, ps) with
+      ([], []) -> ([], [])
+    | (t::ts, p::ps) ->
+      let (wpat, tenv') = check_pat_core (pn,ilist) tparams tenv t p in
+      let (wpats, tenv'') = check_pats_core (pn,ilist) l tparams tenv ts ps in
+      (wpat::wpats, merge_tenvs l tenv' tenv'')
+    | ([], _) -> static_error l "Too many patterns" None
+    | (_, []) -> static_error l "Too few patterns" None
+  in
+  
+  let check_pat (pn,ilist) tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv) in
+  
   let rec check_pats (pn,ilist) l tparams tenv ts ps =
     match (ts, ps) with
       ([], []) -> ([], tenv)
     | (t::ts, p::ps) ->
-      let (wpat, tenv) = check_pat (pn,ilist) l tparams tenv t p in
+      let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t p in
       let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv ts ps in
       (wpat::wpats, tenv)
     | ([], _) -> static_error l "Too many patterns" None
@@ -7078,7 +7145,7 @@ let verify_program_core (* ?verify_program_core *)
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference or an array element expression." None
       end;
-      let (wv, tenv') = check_pat (pn,ilist) l tparams tenv t v in
+      let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
       (WPointsTo (l, wlhs, t, wv), tenv', [])
     | PredAsn (l, p, targs, ps0, ps) ->
       let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
@@ -7336,12 +7403,14 @@ let verify_program_core (* ?verify_program_core *)
       static_error (expr_loc e) ("Preciseness check failure: non-fixed variable(s) " ^ xs ^ " used in input expression.") None
   in
   
-  let fixed_pat_fixed_vars pat =
+  let rec fixed_pat_fixed_vars pat =
     match pat with
       LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> [x]
     | LitPat _ -> []
     | VarPat (_, x) -> [x]
     | DummyPat -> []
+    | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
+      List.concat (List.map fixed_pat_fixed_vars pats)
   in
   
   let assume_pat_fixed fixed pat =
@@ -7715,18 +7784,7 @@ let verify_program_core (* ?verify_program_core *)
     iter 0
   in
   
-  let contextStack = ref [] in
   
-  let push_context msg = let _ = contextStack := msg::!contextStack in () in
-  let pop_context () = let _ = let (h::t) = !contextStack in contextStack := t in () in
-    
-  let with_context msg cont =
-    stats#execStep;
-    push_context msg;
-    let result = cont() in
-    pop_context();
-    result
-  in
   
   (* TODO: To improve performance, push only when branching, i.e. not at every assume. *)
   
@@ -8323,14 +8381,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_expr env e h env l msg url; SymExecSuccess)
   in
   
-  let evalpat ghost ghostenv env pat tp0 tp cont =
+  let rec evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
       LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)
     | VarPat (_, x) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
-  in
-  
-  let rec evalpats ghostenv env pats tps0 tps cont =
+    | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
+      let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+      let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
+      evalpats ghostenv env pats ts ts0 $. fun ghostenv env vs ->
+      cont ghostenv env (prover_convert_term (ctxt#mk_app symb vs) tp0 tp)
+  and evalpats ghostenv env pats tps0 tps cont =
     match (pats, tps0, tps) with
       ([], [], []) -> cont ghostenv env []
     | (pat::pats, tp0::tps0, tp::tps) -> evalpat true ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
@@ -8637,7 +8698,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           latter are not instantiated. The predicate argument expressions have been typechecked against these partially-instantiated types. Therefore, the environment
           used to evaluate the predicate arguments must be boxed correctly for these types. (Boxing is necessary because the SMT solvers do not support generics.)
         tps (instantiatedParameterTypes): type_ list -- Parameter types of the predicate, after instantiation with both the type parameter bindings specified in
-          the predicate assertion and any additional type parameter bindings from the environment.
+          the predicate assertion and any additional type parameter bindings from the environment. The chunk argument terms are of these types.
         chunk: chunk -- The chunk against which to match the predicate assertion
       Returns:
         None -- no match
@@ -8650,7 +8711,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           newChunks -- Any new chunks generated by this match; in particular, auto-splitting of fractional permissions.
    *)
   let match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0) as chunk) =
-    let match_pat ghostenv env env' isInputParam pat tp0 tp t cont =
+    let rec match_pat ghostenv env env' isInputParam pat tp0 tp t cont =
       let match_terms v t =
         if definitely_equal v t then
           cont ghostenv env env'
@@ -8659,23 +8720,63 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         else
           assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None
       in
-      match (pat, t) with
-      | (SrcPat (LitPat (Var (lx, x, scope))), t) when !scope = Some LocalVar ->
+      match pat with
+      | SrcPat (LitPat (Var (lx, x, scope))) when !scope = Some LocalVar ->
         begin match try_assoc x env with
           Some t' -> match_terms (prover_convert_term t' tp0 tp) t
         | None -> let binding = (x, prover_convert_term t tp tp0) in cont ghostenv (binding::env) (binding::env')
         end
-      | (SrcPat (LitPat e), t) ->
+      | SrcPat (LitPat e) ->
         match_terms (prover_convert_term (eval None env e) tp0 tp) t
-      | (TermPat t0, t) -> match_terms (prover_convert_term t0 tp0 tp) t
-      | (SrcPat (VarPat (_, x)), t) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
-      | (SrcPat DummyPat, t) -> cont ghostenv env env'
-    in
-    let rec match_pats ghostenv env env' index pats tps0 tps ts cont =
+      | TermPat t0 -> match_terms (prover_convert_term t0 tp0 tp) t
+      | SrcPat (VarPat (_, x)) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
+      | SrcPat DummyPat -> cont ghostenv env env'
+      | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats)) ->
+        let t = prover_convert_term t tp tp0 in
+        let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+        let cont () =
+          let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
+          ctxt#push;
+          let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
+          let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
+          push_context (Assuming formula);
+          ignore (ctxt#assume formula);
+          let inputParamCount = if isInputParam then max_int else 0 in
+          let pats = List.map (fun pat -> SrcPat pat) pats in
+          match match_pats ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
+            None ->
+            pop_context ();
+            ctxt#pop;
+            None
+          | result ->
+            push_undo_item (fun () -> pop_context (); ctxt#pop);
+            result
+        in
+        let rec check_not_other_ctors cs =
+          match cs with
+            [] -> cont ()
+          | (g', (_, (_, _, _, ts0, (symb, _))))::cs ->
+            if
+              g' = g ||
+              in_temporary_context begin fun () ->
+                let vs = List.map (fun t -> get_unique_var_symb "value" t) ts0 in
+                ctxt#assume (ctxt#mk_eq t (ctxt#mk_app symb vs)) = Unsat
+              end
+            then
+              check_not_other_ctors cs
+            else
+              if isInputParam then
+                None
+              else
+                assert_false h env l (Printf.sprintf "Cannot prove that '%s' is not an instance of constructor '%s'" (ctxt#pprint t) g') None
+        in
+        check_not_other_ctors ctormap
+    and match_pats ghostenv env env' inputParamCount index pats tps0 tps ts cont =
       match (pats, tps0, tps, ts) with
         (pat::pats, tp0::tps0, tp::tps, t::ts) ->
-        let isInputParam = match inputParamCount with None -> true | Some n -> index < n in
-        match_pat ghostenv env env' isInputParam pat tp0 tp t (fun ghostenv env env' -> match_pats ghostenv env env' (index + 1) pats tps0 tps ts cont)
+        let isInputParam = index < inputParamCount in
+        match_pat ghostenv env env' isInputParam pat tp0 tp t $. fun ghostenv env env' ->
+        match_pats ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont
       | ([], [], [], []) -> cont ghostenv env env'
     in
     let match_coef ghostenv env cont =
@@ -8710,7 +8811,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           cont chunk ghostenv env coef0 []
     in
     if not (predname_eq g g' && List.for_all2 unify targs targs0) then None else
-    match_pats ghostenv env env' 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
+    let inputParamCount = match inputParamCount with None -> max_int | Some n -> n in
+    match_pats ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
     match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks ->
     Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
   in
@@ -12658,7 +12760,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (coefpat, tenv) =
         match coefpat with
           None -> (DummyPat, tenv)
-        | Some coefpat -> check_pat (pn,ilist) l tparams tenv RealType coefpat
+        | Some coefpat -> check_pat (pn,ilist) tparams tenv RealType coefpat
       in
       let (wpats, tenv') = check_pats (pn,ilist) l tparams tenv (List.map (fun (x, t0, t) -> t) ps) pats in
       let wpats = (List.map (function (LitPat e) -> (TermPat (eval_non_pure true h env e)) | wpat -> SrcPat wpat) wpats) in
