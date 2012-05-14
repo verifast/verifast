@@ -150,6 +150,7 @@ let _ =
   let runPreprocessor = ref false in
   let provides = ref [] in
   let keepProvideFiles = ref false in
+  let include_paths: string list ref = ref [] in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
@@ -177,7 +178,9 @@ let _ =
                 SExpressionEmitter.unsupported_exception := true
               end,
               "Emits the ast as an s-expression to the specified file; raises exception on unsupported constructs"
-            ; "-export", String (fun str -> exports := str :: !exports), "" ]
+            ; "-export", String (fun str -> exports := str :: !exports), ""
+            ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
+            ]
   in
   let process_file filename =
     if List.exists (Filename.check_suffix filename) [ ".c"; ".java"; ".scala"; ".jarsrc"; ".javaspec" ]
@@ -193,7 +196,8 @@ let _ =
           option_runtime = !runtime;
           option_run_preprocessor = !runPreprocessor;
           option_provides = !provides;
-          option_keep_provide_files = !keepProvideFiles
+          option_keep_provide_files = !keepProvideFiles;
+          option_include_paths = !include_paths
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =

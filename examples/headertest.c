@@ -1,4 +1,5 @@
 #include "headertest/foo.h"
+#include "baz.h"
 
 int main()
     //@ requires true;
@@ -6,5 +7,6 @@ int main()
 {
     foo();
     bar();
+    baz();
     return 0;
 }

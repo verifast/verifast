@@ -3706,7 +3706,8 @@ type options = {
   option_runtime: string option;
   option_run_preprocessor: bool;
   option_provides: string list;
-  option_keep_provide_files: bool
+  option_keep_provide_files: bool;
+  option_include_paths: string list
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
@@ -3741,7 +3742,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
     option_allow_should_fail=allow_should_fail;
-    option_emit_manifest=emit_manifest
+    option_emit_manifest=emit_manifest;
+    option_include_paths=include_paths
   } = options
   
   let verbosity = ref 0
@@ -4443,17 +4445,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         else
         begin
           let rellocalpath = concat reldir header_path in
-          let localpath = concat basedir rellocalpath in
-          let (basedir1, relpath) =
-            if Sys.file_exists localpath then
-              (basedir, rellocalpath)
-            else
-              let systempath = concat bindir header_path in
-              if Sys.file_exists systempath then
-                (bindir, header_path)
-              else
-                static_error l (Printf.sprintf "No such file: '%s'" localpath) None
-          in
+          let includepaths = List.append include_paths (basedir::bindir::[]) in
+          let rec find_include_file includepaths =
+            match includepaths with
+              [] -> static_error l (Printf.sprintf "No such file: '%s'"
+                      rellocalpath) None
+            | head::body ->
+                ( let headerpath = concat head rellocalpath in
+                  if Sys.file_exists headerpath then
+                    (head, rellocalpath)
+                  else
+                    (find_include_file body) ) in
+          let (basedir1, relpath) = find_include_file includepaths in
           let relpath = reduce_path relpath in
           let path = concat basedir1 relpath in
           if List.mem path headers_included then
