@@ -3714,74 +3714,74 @@ type options = {
 (* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
 type symexec_result = SymExecSuccess
 
-(** Verifies the .c/.jarsrc/.scala file at path [path].
-    Uses the SMT solver [ctxt].
-    Reports syntax highlighting regions using the callback [reportRange].
-    Stops at source line [breakpoint], if not None.
-    This function is generic in the types of SMT solver types, symbols, and terms.
-    *)
-let verify_program_core (* ?verify_program_core *)
-    ?(emitter_callback : package list -> unit = fun _ -> ())
-    (type typenode) (type symbol) (type termnode)  (* Explicit type parameters; new in OCaml 3.12 *)
-    (ctxt: (typenode, symbol, termnode) Proverapi.context)
-    (options : options)
-    (program_path : string)
-    (reportRange : range_kind -> loc -> unit)
-    (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (breakpoint : (string * int) option) : unit =
+module type VERIFY_PROGRAM_ARGS = sig
+  val emitter_callback: package list -> unit
+  type typenode
+  type symbol
+  type termnode
+  val ctxt: (typenode, symbol, termnode) Proverapi.context
+  val options: options
+  val program_path: string
+  val reportRange: range_kind -> loc -> unit
+  val reportUseSite: decl_kind -> loc -> loc -> unit
+  val breakpoint: (string * int) option
+end
+
+module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
+
+  open VerifyProgramArgs
+
+  let path = program_path
   
-  let path = program_path in
+  let language = file_type path
   
-  let language = file_type path in
-  
-  let auto_lemmas = Hashtbl.create 10 in
+  let auto_lemmas = Hashtbl.create 10
 
   let {
     option_verbose=initial_verbosity;
     option_disable_overflow_check=disable_overflow_check;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest
-  } = options in
+  } = options
   
-  let verbosity = ref 0 in
+  let verbosity = ref 0
   
   let set_verbosity v =
     verbosity := v;
     ctxt#set_verbosity (v - 3)
-  in
   
-  set_verbosity initial_verbosity;
+  let () = set_verbosity initial_verbosity
   
-  let class_counter = ref 0 in
+  let class_counter = ref 0
 
   (** Maps an identifier to a ref cell containing approximately the number of distinct symbols that have been generated for this identifier.
     * It is an approximation because of clashes such as the clash between the second symbol ('foo0') generated for 'foo'
     * and the first symbol ('foo0') generated for 'foo0'. *)
-  let used_ids = Hashtbl.create 10000 in
+  let used_ids = Hashtbl.create 10000
   (** Contains all ref cells from used_ids that need to be decremented at the next pop(). *)
-  let used_ids_undo_stack = ref [] in
+  let used_ids_undo_stack = ref []
   (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
-  let dummy_frac_terms = ref [] in
+  let dummy_frac_terms = ref []
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
-  let used_ids_stack = ref [] in
+  let used_ids_stack = ref []
   
-  let undoStack = ref [] in
+  let undoStack = ref []
   
-  let push_undo_item f = undoStack := f::!undoStack in
+  let push_undo_item f = undoStack := f::!undoStack
   
-  let undoStackStack = ref [] in
-  let push_undoStack () = undoStackStack := !undoStack::!undoStackStack; undoStack := [] in
-  let pop_undoStack () = List.iter (fun f -> f ()) !undoStack; let h::t = !undoStackStack in undoStack := h; undoStackStack := t in
+  let undoStackStack = ref []
+  let push_undoStack () = undoStackStack := !undoStack::!undoStackStack; undoStack := []
+  let pop_undoStack () = List.iter (fun f -> f ()) !undoStack; let h::t = !undoStackStack in undoStack := h; undoStackStack := t
 
-  let contextStack = ref [] in
+  let contextStack = ref []
   
-  let push_context msg = contextStack := msg::!contextStack in
-  let pop_context () = let (h::t) = !contextStack in contextStack := t in
+  let push_context msg = contextStack := msg::!contextStack
+  let pop_context () = let (h::t) = !contextStack in contextStack := t
     
-  let contextStackStack = ref [] in
+  let contextStackStack = ref []
   
-  let push_contextStack () = push_undoStack(); contextStackStack := !contextStack::!contextStackStack in
-  let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t in
+  let push_contextStack () = push_undoStack(); contextStackStack := !contextStack::!contextStackStack
+  let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t
   
   let with_context msg cont =
     stats#execStep;
@@ -3790,7 +3790,6 @@ let verify_program_core (* ?verify_program_core *)
     let result = cont() in
     pop_contextStack ();
     result
-  in
   
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
@@ -3798,7 +3797,6 @@ let verify_program_core (* ?verify_program_core *)
     used_ids_undo_stack := [];
     ctxt#push;
     push_contextStack ()
-  in
   
   (** Restore the previous path condition, set of used IDs, and set of dummy fraction terms. *)
   let pop() =
@@ -3809,7 +3807,6 @@ let verify_program_core (* ?verify_program_core *)
     dummy_frac_terms := dummyFracTerms;
     used_ids_stack := t;
     ctxt#pop
-  in
   
   (** Execute [cont] in a temporary context. *)
   let in_temporary_context cont =
@@ -3817,12 +3814,10 @@ let verify_program_core (* ?verify_program_core *)
     let r = cont() in
     pop();
     r
-  in
   
   let execute_branch cont =
     let SymExecSuccess = in_temporary_context cont in
     ()
-  in
   
   let get_ident_use_count_cell s =
     try
@@ -3831,7 +3826,6 @@ let verify_program_core (* ?verify_program_core *)
       let cell = ref 0 in
       Hashtbl.add used_ids s cell;
       cell
-  in
   
   (** Generate a fresh ID based on string [s]. *)
   let mk_ident s =
@@ -3853,7 +3847,6 @@ let verify_program_core (* ?verify_program_core *)
         end
     in
     find_unused_ident !count_cell
-  in
   
   (** Convert term [t] from type [proverType] to type [proverType0]. *)  
   let apply_conversion proverType proverType0 t =
@@ -3865,7 +3858,6 @@ let verify_program_core (* ?verify_program_core *)
     | (ProverInductive, ProverInt) -> ctxt#mk_unboxed_int t
     | (ProverInductive, ProverReal) -> ctxt#mk_unboxed_real t
     | (t1, t2) when t1 = t2 -> t
-  in
   
   let typenode_of_provertype t =
     match t with
@@ -3873,14 +3865,12 @@ let verify_program_core (* ?verify_program_core *)
     | ProverBool -> ctxt#type_bool
     | ProverReal -> ctxt#type_real
     | ProverInductive -> ctxt#type_inductive
-  in
   
   let mk_symbol s domain range kind =
     ctxt#mk_symbol (mk_ident s) domain range kind
-  in
 
   (** For higher-order function application *)
-  let apply_symbol = ctxt#mk_symbol "@" [ctxt#type_inductive; ctxt#type_inductive] ctxt#type_inductive Uninterp in
+  let apply_symbol = ctxt#mk_symbol "@" [ctxt#type_inductive; ctxt#type_inductive] ctxt#type_inductive Uninterp
 
   (** Generate a fresh SMT solver symbol based on string [s]. *)  
   let mk_func_symbol s domain range kind =
@@ -3900,11 +3890,9 @@ let verify_program_core (* ?verify_program_core *)
       ctxt#end_formal;
       ctxt#assume_forall name [app] domain_tnodes body;
       (fsymb, vsymb)
-  in
   
   let mk_app (fsymb, vsymb) ts =
     ctxt#mk_app fsymb ts
-  in
   
   (* Region: boxing and unboxing *)
   
@@ -3933,79 +3921,78 @@ let verify_program_core (* ?verify_program_core *)
     | TypeParam _ -> ProverInductive
     | Void -> ProverInductive
     | InferredType t -> begin match !t with None -> t := Some (InductiveType ("unit", [])); ProverInductive | Some t -> provertype_of_type t end
-  in
   
-  let typenode_of_type t = typenode_of_provertype (provertype_of_type t) in
+  let typenode_of_type t = typenode_of_provertype (provertype_of_type t)
    
   (* Generate some global symbols. *)
   
-  let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp in
-  let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp in
-  let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
-  let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
-  let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp in
-  let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp in
-  let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp in
-  let shiftleft_int32_symbol = mk_symbol "shiftleft_int32" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in (* shift left and truncate to 32-bit signed integer; Java's "<<" operator on two ints *)
-  let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp in (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
-  let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp in
-  let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp in
+  let get_class_symbol = mk_symbol "getClass" [ctxt#type_int] ctxt#type_int Uninterp
+  let class_serial_number = mk_symbol "class_serial_number" [ctxt#type_int] ctxt#type_int Uninterp
+  let bitwise_or_symbol = mk_symbol "bitor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
+  let bitwise_xor_symbol = mk_symbol "bitxor" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
+  let bitwise_and_symbol = mk_symbol "bitand" [ctxt#type_int; ctxt#type_int] ctxt#type_int Uninterp
+  let bitwise_not_symbol = mk_symbol "bitnot" [ctxt#type_int] ctxt#type_int Uninterp
+  let arraylength_symbol = mk_symbol "arraylength" [ctxt#type_int] ctxt#type_int Uninterp
+  let shiftleft_int32_symbol = mk_symbol "shiftleft_int32" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift left and truncate to 32-bit signed integer; Java's "<<" operator on two ints *)
+  let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
+  let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp
   
-  ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false); (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
+  let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
-  let boolt = Bool in
-  let intt = IntType in
-  let instanceof_symbol = ctxt#mk_symbol "instanceof" [ctxt#type_int; ctxt#type_int] ctxt#type_bool Uninterp in
-  let array_type_symbol = ctxt#mk_symbol "array_type"  [ctxt#type_int] ctxt#type_int Uninterp in
+  let boolt = Bool
+  let intt = IntType
+  let instanceof_symbol = ctxt#mk_symbol "instanceof" [ctxt#type_int; ctxt#type_int] ctxt#type_bool Uninterp
+  let array_type_symbol = ctxt#mk_symbol "array_type"  [ctxt#type_int] ctxt#type_int Uninterp
   
-  let two_big_int = big_int_of_int 2 in
+  let two_big_int = big_int_of_int 2
   
-  let real_zero = ctxt#mk_reallit 0 in
-  let real_unit = ctxt#mk_reallit 1 in
-  let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2) in
+  let real_zero = ctxt#mk_reallit 0
+  let real_unit = ctxt#mk_reallit 1
+  let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2)
 
-  let int_zero_term = ctxt#mk_intlit 0 in 
+  let int_zero_term = ctxt#mk_intlit 0
 
   (* unsigned int & pointer types *)
-  let min_uint_term = ctxt#mk_intlit_of_string "0" in
-  let max_uint_term = ctxt#mk_intlit_of_string "4294967295" in
-  let min_ptr_big_int = big_int_of_string "0" in
-  let max_ptr_big_int = big_int_of_string "4294967295" in
-  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295" in
+  let min_uint_term = ctxt#mk_intlit_of_string "0"
+  let max_uint_term = ctxt#mk_intlit_of_string "4294967295"
+  let min_ptr_big_int = big_int_of_string "0"
+  let max_ptr_big_int = big_int_of_string "4294967295"
+  let max_ptr_term = ctxt#mk_intlit_of_string "4294967295"
 
   (* signed int *)
-  let min_int_big_int = big_int_of_string "-2147483648" in
-  let min_int_term = ctxt#mk_intlit_of_string "-2147483648" in
-  let max_int_big_int = big_int_of_string "2147483647" in
-  let max_int_term = ctxt#mk_intlit_of_string "2147483647" in
+  let min_int_big_int = big_int_of_string "-2147483648"
+  let min_int_term = ctxt#mk_intlit_of_string "-2147483648"
+  let max_int_big_int = big_int_of_string "2147483647"
+  let max_int_term = ctxt#mk_intlit_of_string "2147483647"
 
   (* unsigned short *)
-  let min_ushort_big_int = big_int_of_string "0" in
-  let min_ushort_term = ctxt#mk_intlit_of_string "0" in
-  let max_ushort_big_int = big_int_of_string "65535" in
-  let max_ushort_term = ctxt#mk_intlit_of_string "65535" in
+  let min_ushort_big_int = big_int_of_string "0"
+  let min_ushort_term = ctxt#mk_intlit_of_string "0"
+  let max_ushort_big_int = big_int_of_string "65535"
+  let max_ushort_term = ctxt#mk_intlit_of_string "65535"
 
   (* signed short *)
-  let min_short_big_int = big_int_of_string "-32768" in
-  let min_short_term = ctxt#mk_intlit_of_string "-32768" in
-  let max_short_big_int = big_int_of_string "32767" in
-  let max_short_term = ctxt#mk_intlit_of_string "32767" in
+  let min_short_big_int = big_int_of_string "-32768"
+  let min_short_term = ctxt#mk_intlit_of_string "-32768"
+  let max_short_big_int = big_int_of_string "32767"
+  let max_short_term = ctxt#mk_intlit_of_string "32767"
 
   (* unsigned char *)
-  let min_uchar_big_int = big_int_of_string "0" in
-  let min_uchar_term = ctxt#mk_intlit_of_string "0" in
-  let max_uchar_big_int = big_int_of_string "255" in
-  let max_uchar_term = ctxt#mk_intlit_of_string "255" in
+  let min_uchar_big_int = big_int_of_string "0"
+  let min_uchar_term = ctxt#mk_intlit_of_string "0"
+  let max_uchar_big_int = big_int_of_string "255"
+  let max_uchar_term = ctxt#mk_intlit_of_string "255"
 
   (* signed char *)
-  let min_char_big_int = big_int_of_string "-128" in
-  let min_char_term = ctxt#mk_intlit_of_string "-128" in
-  let max_char_big_int = big_int_of_string "127" in
-  let max_char_term = ctxt#mk_intlit_of_string "127" in
+  let min_char_big_int = big_int_of_string "-128"
+  let min_char_term = ctxt#mk_intlit_of_string "-128"
+  let max_char_big_int = big_int_of_string "127"
+  let max_char_term = ctxt#mk_intlit_of_string "127"
   
   let get_unique_var_symb x t = 
     ctxt#mk_app (mk_symbol x [] (typenode_of_type t) Uninterp) []
-  in
+  
   let assume_bounds term tp = 
     match tp with
       Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
@@ -4014,31 +4001,29 @@ let verify_program_core (* ?verify_program_core *)
     | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
     | PtrType _ | UintPtrType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) term) (ctxt#mk_le term max_ptr_term));
     | _ -> ()
-  in
+  
   let get_unique_var_symb_non_ghost x t = 
     let res = get_unique_var_symb x t in
     assume_bounds res t;
     res
-  in
+  
   let get_unique_var_symb_ x t ghost = 
     if ghost then
       get_unique_var_symb x t
     else
       get_unique_var_symb_non_ghost x t
-  in
   
   let get_dummy_frac_term () =
     let t = get_unique_var_symb "dummy" RealType in
     dummy_frac_terms := t::!dummy_frac_terms;
     t
-  in
   
-  let is_dummy_frac_term t = List.memq t !dummy_frac_terms in
+  let is_dummy_frac_term t = List.memq t !dummy_frac_terms
   
-  let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts in
-  let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts in
+  let get_unique_var_symbs_ xts ghost = List.map (fun (x, t) -> (x, get_unique_var_symb_ x t ghost)) xts
+  let get_unique_var_symbs_non_ghost xts = List.map (fun (x, t) -> (x, get_unique_var_symb_non_ghost x t)) xts
   
-  let real_unit_pat = TermPat real_unit in
+  let real_unit_pat = TermPat real_unit
   
   let plugin_context = object
     method mk_symbol x tp = get_unique_var_symb x (match tp with Plugins.PointerTerm -> PtrType Void | Plugins.IntTerm -> IntType | Plugins.CharListTerm -> InductiveType ("list", [IntType]))
@@ -4046,20 +4031,20 @@ let verify_program_core (* ?verify_program_core *)
     method push = ctxt#push
     method assert_formula t1 r t2 = ctxt#assume (match r with Plugins.Eq -> ctxt#mk_eq t1 t2 | Plugins.Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) | Plugins.Lt -> ctxt#mk_lt t1 t2) = Unsat
     method pop = ctxt#pop
-  end in
+  end
   
   let current_module_name =
     match language with
       | Java -> "current_module"
       | CLang -> Filename.chop_extension (Filename.basename path)
-  in
-  let current_module_term = get_unique_var_symb current_module_name IntType in
-  let modulemap = [(current_module_name, current_module_term)] in
   
-  let programDir = Filename.dirname path in
-  let rtpath = match options.option_runtime with None -> concat rtdir "rt.jarspec" | Some path -> path in
+  let current_module_term = get_unique_var_symb current_module_name IntType
+  let modulemap = [(current_module_name, current_module_term)]
+  
+  let programDir = Filename.dirname path
+  let rtpath = match options.option_runtime with None -> concat rtdir "rt.jarspec" | Some path -> path
   (** Records the source lines containing //~, indicating that VeriFast is supposed to detect an error on that line. *)
-  let shouldFailLocs = ref [] in
+  let shouldFailLocs = ref []
   
   (* Callback function called from the lexer. *)
   let reportShouldFail l =
@@ -4067,7 +4052,6 @@ let verify_program_core (* ?verify_program_core *)
       shouldFailLocs := l::!shouldFailLocs
     else
       static_error l "Should fail directives are not allowed; use the -allow_should_fail command-line option to allow them." None
-  in
   
   let check_should_fail default body =
     let locs_match ((path0, line0, _), _) ((path1, line1, _), _) = path0 = path1 && line0 = line1 in
@@ -4079,14 +4063,12 @@ let verify_program_core (* ?verify_program_core *)
     with
     | StaticError (l, msg, url) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, phi, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
-  in
  
-  let prototypes_used : (string * loc) list ref = ref [] in
+  let prototypes_used : (string * loc) list ref = ref []
   
   let register_prototype_used l g =
     if not (List.mem (g, l) !prototypes_used) then
       prototypes_used := (g, l)::!prototypes_used
-  in
   
   let extract_specs ps=
     let rec iter (pn,ilist) classes lemmas ds=
@@ -4122,11 +4104,10 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> (classes,lemmas)
     in
     iter' ([],[]) ps
-  in
   
   (* Region: check_file *)
   
-  let module CheckFileTypes = struct
+  module CheckFileTypes = struct
     type 'a map = (string * 'a) list
     type struct_field_info =
         loc
@@ -4349,15 +4330,16 @@ let verify_program_core (* ?verify_program_core *)
     type check_file_output =
         implemented_prototype_info list
       * implemented_function_type_info list
-  end in
-  let open CheckFileTypes in
+  end
+  
+  open CheckFileTypes
   
   (* Maps a header file name to the list of header file names that it includes, and the various maps of VeriFast elements that it declares directly. *)
-  let headermap: ((loc * string) list * maps) map ref = ref [] in
-  let spec_classes= ref [] in
-  let spec_lemmas= ref [] in
-  let meths_impl= ref [] in
-  let cons_impl= ref [] in
+  let headermap: ((loc * string) list * maps) map ref = ref []
+  let spec_classes= ref []
+  let spec_lemmas= ref []
+  let meths_impl= ref []
+  let cons_impl= ref []
   
   (** Verify the .c/.h/.jarsrc/.jarspec file whose headers are given by [headers] and which declares packages [ps].
       As a side-effect, adds all processed headers to the header map.
@@ -4373,9 +4355,25 @@ let verify_program_core (* ?verify_program_core *)
         true if the file being checked specifies a module used by the module being verified
         false if the file being checked specifies the module being verified
     *)
-  let rec check_file (filepath: string) (is_import_spec : bool) (include_prelude : bool) (basedir : string) (reldir : string) (headers : (loc * string) list) (ps : package list): check_file_output * maps =
   
-  let is_jarspec = Filename.check_suffix filepath ".jarspec" in
+  module type CHECK_FILE_ARGS = sig
+    val filepath: string
+    val is_import_spec: bool
+    val include_prelude: bool
+    val basedir: string
+    val reldir: string
+    val headers: (loc * string) list
+    val ps: package list
+    
+    (** For recursive calls. *)
+    val check_file: string -> bool -> bool -> string -> string -> (loc * string) list -> package list -> check_file_output * maps
+  end
+  
+  module CheckFile(CheckFileArgs: CHECK_FILE_ARGS) = struct
+  
+  open CheckFileArgs
+  
+  let is_jarspec = Filename.check_suffix filepath ".jarspec"
   
   let
     (structmap0: struct_info map),
@@ -4524,7 +4522,6 @@ let verify_program_core (* ?verify_program_core *)
 
     let (maps, _) = merge_header_maps include_prelude maps0 headers_included basedir reldir headers in
     maps
-  in
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap *)
   
@@ -4544,9 +4541,8 @@ let verify_program_core (* ?verify_program_core *)
         | _ -> pluginmap1
       end pluginmap1
     end []
-  in
   
-  let pluginmap = pluginmap1 @ pluginmap0 in
+  let pluginmap = pluginmap1 @ pluginmap0
   
   let unloadable =
     match language with
@@ -4554,7 +4550,6 @@ let verify_program_core (* ?verify_program_core *)
         let [PackageDecl (_, _, _, ds)] = ps in
         List.exists (function (UnloadableModuleDecl l) -> true | _ -> false) ds
       | Java -> false
-  in
   
   let typedefdeclmap =
     let rec iter tddm ds =
@@ -4568,7 +4563,6 @@ let verify_program_core (* ?verify_program_core *)
     in
     if language = Java then [] else
     let [PackageDecl(_,"",[],ds)] = ps in iter [] ds
-  in
   
   let structdeclmap =
     let rec iter sdm ds =
@@ -4590,7 +4584,6 @@ let verify_program_core (* ?verify_program_core *)
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
-  in
   
   let enumdeclmap = 
     let rec iter edm ds = 
@@ -4607,7 +4600,6 @@ let verify_program_core (* ?verify_program_core *)
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
-  in
   
   let enummap1 =
     let rec process_decls enummap1 ds =
@@ -4649,7 +4641,6 @@ let verify_program_core (* ?verify_program_core *)
         process_elems enummap1 zero_big_int elems
     in
     process_decls [] enumdeclmap
-  in
   
   let functypenames = 
     let ds=match ps with
@@ -4657,7 +4648,6 @@ let verify_program_core (* ?verify_program_core *)
       | _ when file_type path=Java -> []
     in
     flatmap (function (FuncTypeDecl (l, gh, _, g, tps, ftps, _, _)) -> [g, (l, gh, tps, ftps)] | _ -> []) ds
-  in
   
   let inductivedeclmap=
     let rec iter pn idm ds =
@@ -4676,7 +4666,6 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> List.rev idm
     in
     iter' [] ps
-  in
    
   (* Region: Java name resolution functions *)
   
@@ -4688,7 +4677,6 @@ let verify_program_core (* ?verify_program_core *)
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map-> Some (List.assoc (full_name p name) map) 
     | _::rest -> try_assoc' (pn,rest) name map
     | [] -> None
-  in
   
   let rec try_assoc_pair' (pn,imports) (n,n') map=
     match imports with
@@ -4698,13 +4686,11 @@ let verify_program_core (* ?verify_program_core *)
     | Import(l,p,Some n2)::rest when n=n2 && List.mem_assoc (full_name p n,List.map (fun n-> full_name p n) n') map-> Some (List.assoc (full_name p n,List.map (fun n-> full_name p n) n') map) 
     | _::rest -> try_assoc_pair' (pn,rest) (n,n') map
     | [] -> None
-  in
 
   let try_assoc2' (pn,imports)x xys1 xys2 =
     match try_assoc' (pn,imports) x xys1 with
       None -> try_assoc' (pn,imports) x xys2
     | result -> result
-  in
   
   let rec search name (pn,imports) map=
     match imports with
@@ -4714,7 +4700,6 @@ let verify_program_core (* ?verify_program_core *)
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map-> true
     | _::rest -> search name (pn,rest) map
     | []->  false
-  in
   
   let rec search' name (pn,imports) map=
     match imports with
@@ -4724,7 +4709,6 @@ let verify_program_core (* ?verify_program_core *)
     | Import(l,p,Some name')::rest when name=name' && List.mem_assoc (full_name p name) map ->Some (full_name p name)
     | _::rest -> search' name (pn,rest) map
     | [] -> None
-  in
   
   let resolve (pn, imports) l name map =
     match try_assoc0 name map with
@@ -4753,13 +4737,11 @@ let verify_program_core (* ?verify_program_core *)
           | _ ->
             let fqns = List.map (fun (x, y) -> "'" ^ x ^ "'") matches in
             static_error l ("Ambiguous imports for name '" ^ name ^ "': " ^ String.concat ", " fqns ^ ".") None
-  in
   
   let search2' x (pn,imports) xys1 xys2 =
     match search' x (pn,imports) xys1 with
       None -> search' x (pn,imports) xys2
     | result -> result
-  in
   
   (* Region: interfdeclmap, classmap1 *)
   
@@ -4818,12 +4800,10 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> (List.rev ifdm, List.rev classlist)
     in
     iter' ([],[]) ps
-  in
   
   let inductive_arities =
     List.map (fun (i, (l, tparams, _)) -> (i, (l, List.length tparams))) inductivedeclmap
     @ List.map (fun (i, (l, tparams, _, _)) -> (i, (l, List.length tparams))) inductivemap0
-  in
   
   (* Region: check_pure_type: checks validity of type expressions *)
   
@@ -4896,7 +4876,6 @@ let verify_program_core (* ?verify_program_core *)
       iter ts
     in
     check te
-  in
   
   let typedefmap1 =
     let rec iter tdm1 tdds =
@@ -4907,11 +4886,10 @@ let verify_program_core (* ?verify_program_core *)
         iter ((d,t)::tdm1) tdds
     in
     iter [] typedefdeclmap
-  in
   
-  let typedefmap = typedefmap1 @ typedefmap0 in
+  let typedefmap = typedefmap1 @ typedefmap0
   
-  let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap (pn,ilist) tpenv te in
+  let check_pure_type (pn,ilist) tpenv te = check_pure_type_core typedefmap (pn,ilist) tpenv te
   
   let classmap1 =
     List.map
@@ -4926,7 +4904,6 @@ let verify_program_core (* ?verify_program_core *)
         iter [] fds
       end
       classmap1
-  in
   
   let rec instantiate_type tpenv t =
     if tpenv = [] then t else
@@ -4943,11 +4920,9 @@ let verify_program_core (* ?verify_program_core *)
       end
     | ArrayType t -> ArrayType (instantiate_type tpenv t)
     | _ -> t
-  in
   
   let instantiate_types tpenv ts =
     if tpenv = [] then ts else List.map (instantiate_type tpenv) ts
-  in
   
   let terms_of xys =
     xys |> List.map begin fun (x, _) ->
@@ -4957,12 +4932,11 @@ let verify_program_core (* ?verify_program_core *)
       ignore (ctxt#assume (ctxt#mk_eq (ctxt#mk_app class_serial_number [t]) (ctxt#mk_intlit serialNumber)));
       (x, t)
     end
-  in
-  let classterms1 =  terms_of classmap1 in
-  let interfaceterms1 = terms_of interfmap1 in
+  let classterms1 =  terms_of classmap1
+  let interfaceterms1 = terms_of interfmap1
 
-  let classterms = classterms1 @ classterms0 in
-  let interfaceterms = interfaceterms1 @ interfaceterms0 in
+  let classterms = classterms1 @ classterms0
+  let interfaceterms = interfaceterms1 @ interfaceterms0
   
   (* Region: structmap1 *)
   
@@ -4994,11 +4968,10 @@ let verify_program_core (* ?verify_program_core *)
          end
       )
       structdeclmap
-  in
    
-  let structmap = structmap1 @ structmap0 in
+  let structmap = structmap1 @ structmap0
   
-  let enummap = enummap1 @ enummap0 in
+  let enummap = enummap1 @ enummap0
   
   let isfuncs = if file_type path=Java then [] else
     flatmap (fun (ftn, (_, gh, tparams, ftps)) ->
@@ -5010,7 +4983,6 @@ let verify_program_core (* ?verify_program_core *)
         [(isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))]
       | _ -> []
     ) functypenames
-  in
   
   let rec is_subtype_of x y =
     x = y ||
@@ -5029,17 +5001,16 @@ let verify_program_core (* ?verify_program_core *)
           | None -> false 
           end
         end
-  in
+  
   let is_subtype_of_ x y =
     match (x, y) with
       (ObjType x, ObjType y) -> is_subtype_of x y
     | _ -> false
-  in
+  
   let is_unchecked_exception_type tp = 
     match tp with
      ObjType cn -> (is_subtype_of cn "java.lang.RuntimeException") || (is_subtype_of cn "java.lang.Error")
     | _ -> false
-  in
 
   (* Region: globaldeclmap *)
   
@@ -5066,10 +5037,9 @@ let verify_program_core (* ?verify_program_core *)
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [] ds
     | _ when file_type path=Java -> []
-  in
 
-  let globalmap1 = globaldeclmap in
-  let globalmap = globalmap1 @ globalmap0 in
+  let globalmap1 = globaldeclmap
+  let globalmap = globalmap1 @ globalmap0
  
   (* Region: type compatibility checker *)
   
@@ -5079,7 +5049,6 @@ let verify_program_core (* ?verify_program_core *)
     | (Void, _) -> true
     | (PtrType t, PtrType t0) -> compatible_pointees t t0
     | _ -> t = t0
-  in
   
   let rec unfold_inferred_type t =
     match t with
@@ -5090,7 +5059,6 @@ let verify_program_core (* ?verify_program_core *)
         | Some t -> unfold_inferred_type t
       end
     | _ -> t
-  in
   
   let rec unify t1 t2 =
     t1 == t2 ||
@@ -5103,7 +5071,6 @@ let verify_program_core (* ?verify_program_core *)
     | (ArrayType t1, ArrayType t2) -> unify t1 t2
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
-  in
   
   let rec expect_type_core l msg t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
@@ -5132,27 +5099,22 @@ let verify_program_core (* ?verify_program_core *)
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
       List.iter2 (expect_type_core l msg) args1 args2
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
-  in
   
-  let expect_type l t t0 = expect_type_core l "" t t0 in
+  let expect_type l t t0 = expect_type_core l "" t t0
   
   let is_assignable_to t t0 =
     try expect_type dummy_loc t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
-  in
   
-  let is_assignable_to_sign sign sign0 = for_all2 is_assignable_to sign sign0 in
+  let is_assignable_to_sign sign sign0 = for_all2 is_assignable_to sign sign0
   
   let convert_provertype_expr e proverType proverType0 =
     if proverType = proverType0 then e else ProverTypeConversion (proverType, proverType0, e)
-  in
   
   let box e t t0 =
     match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e (provertype_of_type t) ProverInductive | _ -> e
-  in
   
   let unbox e t0 t =
     match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
-  in
   
   (* Region: type-checking of inductive datatypes and fixpoint functions *)
   
@@ -5166,7 +5128,6 @@ let verify_program_core (* ?verify_program_core *)
         iter xs
     in
     iter tparams
-  in
   
   let (inductivemap1, purefuncmap1, fixpointmap1) =
     let rec iter (pn,ilist) imap pfm fpm ds =
@@ -5243,7 +5204,6 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> (List.rev imap, List.rev pfm, List.rev fpm)
     in
     iter' ([],isfuncs,[]) ps
-  in
   
   let () =
     let welldefined_map = List.map (fun (i, info) -> let ec = ref (`EqClass (0, [])) in let ptr = ref ec in ec := `EqClass (0, [ptr]); (i, (info, ptr))) inductivemap1 in
@@ -5323,7 +5283,6 @@ let verify_program_core (* ?verify_program_core *)
     in
     List.iter (check_welldefined 1 0 []) welldefined_map
     (* Postcondition: there are no cycles in the inductive datatype definition graph that go through a negative occurrence. *)
-  in
   
   let () =
     let inhabited_map = List.map (fun (i, info) -> (i, (info, ref 0))) inductivemap1 in
@@ -5359,7 +5318,6 @@ let verify_program_core (* ?verify_program_core *)
       end
     in
     List.iter (fun (i, ((l, _, ctors), status)) -> check_inhabited i l ctors status) inhabited_map
-  in
   
   let inductivemap1 =
     let infinite_map = List.map (fun (i, info) -> let status = ref (0, []) in (i, (info, status))) inductivemap1 in
@@ -5423,9 +5381,8 @@ let verify_program_core (* ?verify_program_core *)
         let cond = if n = 2 then Some cond else None in
         (i, (l, tparams, ctors, cond))
       end
-  in
   
-  let inductivemap = inductivemap1 @ inductivemap0 in
+  let inductivemap = inductivemap1 @ inductivemap0
   
   (* A universal type is one that is isomorphic to the universe for purposes of type erasure *)
   let rec is_universal_type tp =
@@ -5437,7 +5394,6 @@ let verify_program_core (* ?verify_program_core *)
     | InductiveType (i0, targs) ->
       let (_, _, _, cond) = List.assoc i0 inductivemap in
       cond <> Some [] && List.for_all is_universal_type targs
-  in
   
   let functypedeclmap1 =
     let rec iter (pn,ilist) functypedeclmap1 ds =
@@ -5489,11 +5445,10 @@ let verify_program_core (* ?verify_program_core *)
       | PackageDecl (_, pn, ilist, ds)::ps -> iter' (iter (pn,ilist) functypedeclmap1 ds) ps
     in
     iter' [] ps
-  in
   
   (* Region: predicate families *)
   
-  let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts, inputParamCount)), inputParamCount)) in
+  let mk_predfam p l tparams arity ts inputParamCount = (p, (l, tparams, arity, ts, get_unique_var_symb p (PredType (tparams, ts, inputParamCount)), inputParamCount))
 
   let struct_padding_predfams1 =
     flatmap
@@ -5501,7 +5456,6 @@ let verify_program_core (* ?verify_program_core *)
          (sn, (l, fds, Some padding_predsymb)) -> [("struct_" ^ sn ^ "_padding", (l, [], 0, [PtrType (StructType sn)], padding_predsymb, Some 1))]
        | _ -> [])
       structmap1
-  in
   
   let functypedeclmap1 =
     List.map
@@ -5516,18 +5470,16 @@ let verify_program_core (* ?verify_program_core *)
         (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps))
       end
       functypedeclmap1
-  in
   
-  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1 in
+  let isparamizedfunctypepreds1 = flatmap (fun (g, (l, gh, tparams, rt, ftxmap, xmap, pn, ilist, pre, post, predfammaps)) -> predfammaps) functypedeclmap1
   
   let malloc_block_pred_map1 = 
     structmap1 |> flatmap begin function
       (sn, (l, Some _, _)) -> [(sn, mk_predfam ("malloc_block_" ^ sn) l [] 0 [PtrType (StructType sn)] (Some 1))]
     | _ -> []
     end
-  in
   
-  let malloc_block_pred_map = malloc_block_pred_map1 @ malloc_block_pred_map0 in
+  let malloc_block_pred_map = malloc_block_pred_map1 @ malloc_block_pred_map0
 
   let field_pred_map1 = (* dient om dingen te controleren bij read/write controle v velden*)
     match file_type path with
@@ -5555,11 +5507,10 @@ let verify_program_core (* ?verify_program_core *)
              fds
       )
       structmap1
-  in
   
-  let field_pred_map = field_pred_map1 @ field_pred_map0 in
+  let field_pred_map = field_pred_map1 @ field_pred_map0
   
-  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1 in
+  let structpreds1 = List.map (fun (_, p) -> p) malloc_block_pred_map1 @ List.map (fun (_, p) -> p) field_pred_map1 @ struct_padding_predfams1
   
   let predfammap1 =
     let rec iter (pn,ilist) pm ds =
@@ -5590,7 +5541,6 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> pm
     in
     iter' (isparamizedfunctypepreds1 @ structpreds1) ps
-  in
   
   let (boxmap, predfammap1) =
     let rec iter (pn,ilist) bm pfm ds =
@@ -5667,9 +5617,8 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> (bm,pfm)
     in
     iter' ([],predfammap1) ps
-  in
   
-  let predfammap = predfammap1 @ predfammap0 in (* TODO: Check for name clashes here. *)
+  let predfammap = predfammap1 @ predfammap0 (* TODO: Check for name clashes here. *)
   
   let interfmap1 =
     let rec iter_interfs interfmap1_done interfmap1_todo =
@@ -5722,7 +5671,6 @@ let verify_program_core (* ?verify_program_core *)
         iter_preds [] preds
     in
     iter_interfs [] interfmap1
-  in
   
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
@@ -5797,7 +5745,6 @@ let verify_program_core (* ?verify_program_core *)
         iter [] preds
     in
     iter [] classmap1
-  in
   
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
@@ -5855,8 +5802,8 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> (pcm,pfm)
     in
     iter' ([],purefuncmap1) ps
-  in
-  let purefuncmap = purefuncmap1 @ purefuncmap0 in
+  
+  let purefuncmap = purefuncmap1 @ purefuncmap0
   
   (* Region: The type checker *)
   
@@ -5873,21 +5820,17 @@ let verify_program_core (* ?verify_program_core *)
         end
         ps
       end
-  in
   
   let check_classname (pn, ilist) (l, c) =
     match resolve (pn, ilist) l c classmap1 with 
       None -> static_error l "No such class name." None
     | Some (s, _) -> s
-  in
   
   let check_classnamelist (pn,ilist) is =
     List.map (check_classname (pn, ilist)) is
-  in
   
   let check_funcnamelist is =
     List.map (fun (l, i) -> if not (List.mem i funcnames) then static_error l "No such function name." None; i) is 
-  in
   
   let interfmap1 =
     interfmap1 |> List.map begin function (i, (l, fields, meths, preds, supers, pn, ilist)) ->
@@ -5899,7 +5842,6 @@ let verify_program_core (* ?verify_program_core *)
       in
       (i, (l, fieldmap, meths, preds, supers, pn, ilist))
     end
-  in
   
   let rec lookup_class_field cn fn =
     match try_assoc cn classmap1 with
@@ -5943,15 +5885,13 @@ let verify_program_core (* ?verify_program_core *)
       end
     | None ->
     None
-  in
 
   let is_package x =
     let x = x ^ "." in
     let has_package map = List.exists (fun (cn, _) -> startswith cn x) map in
     has_package classmap1 || has_package classmap0 || has_package interfmap1 || has_package interfmap0
-  in
   
-  let current_class = "#currentClass" in
+  let current_class = "#currentClass"
   
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
@@ -6721,15 +6661,13 @@ let verify_program_core (* ?verify_program_core *)
         static_error l "No such type or package" None
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
-  in
   
   let check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
    let (w, tp, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
    (w, tp)
-  in
   
-  let check_expr (pn,ilist) tparams tenv e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv e in
-  let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core [] [] [] [] (pn,ilist) tparams tenv e tp in
+  let check_expr (pn,ilist) tparams tenv e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv e
+  let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core [] [] [] [] (pn,ilist) tparams tenv e tp
   
   (* Region: Type checking of fixpoint function bodies *)
 
@@ -6839,7 +6777,6 @@ let verify_program_core (* ?verify_program_core *)
         iter ((g, (l, rt, pmap, None, w, pn, ilist, fsym))::fpm_done) fpm_todo
     in
     iter [] fixpointmap1
-  in
   
   (* Static field initializers cannot have side-effects; otherwise, class initialization would be tricky to verify. *)
   let check_static_field_initializer e =
@@ -6855,7 +6792,6 @@ let verify_program_core (* ?verify_program_core *)
       | _ -> static_error (expr_loc e) "This expression form is not supported in a static field initializer." None
     in
     iter e
-  in
   
   (* Region: Type checking of field initializers for static fields *)
   
@@ -6876,7 +6812,6 @@ let verify_program_core (* ?verify_program_core *)
         (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist))
       end
       classmap1
-  in
   
   let rec check_c_initializer e tp =
     match tp, e with
@@ -6913,15 +6848,15 @@ let verify_program_core (* ?verify_program_core *)
       InitializerList (ll, iter fds es)
     | tp, e ->
       check_expr_t ("", []) [] [] e tp
-  in
   
-  globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
-    ref_init := option_map (fun e -> check_c_initializer e tp) !ref_init
-  end;
+  let () =
+    globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
+      ref_init := option_map (fun e -> check_c_initializer e tp) !ref_init
+    end
   
   (* Region: Computing constant field values *)
   
-  begin
+  let () =
     let string_of_const v =
       match v with
         IntConst n -> string_of_big_int n
@@ -7018,7 +6953,6 @@ let verify_program_core (* ?verify_program_core *)
     in
     classmap1 |> List.iter (fun (cn, (l, abstract, fin, meths, fds, constr, super, interfs, preds, pn, ilist)) -> compute_fields fds);
     interfmap1 |> List.iter (fun (ifn, (li, fds, meths, preds, interfs, pn, ilist)) -> compute_fields fds)
-  end;
   
   (* Region: type checking of assertions *)
   
@@ -7031,7 +6965,6 @@ let verify_program_core (* ?verify_program_core *)
         iter tenv1 (xt::tenv3)
     in
     iter tenv1 tenv2
-  in
     
   let rec check_pat_core (pn,ilist) tparams tenv t p =
     match p with
@@ -7074,9 +7007,8 @@ let verify_program_core (* ?verify_program_core *)
       (wpat::wpats, merge_tenvs l tenv' tenv'')
     | ([], _) -> static_error l "Too many patterns" None
     | (_, []) -> static_error l "Too few patterns" None
-  in
   
-  let check_pat (pn,ilist) tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv) in
+  let check_pat (pn,ilist) tparams tenv t p = let (w, tenv') = check_pat_core (pn,ilist) tparams tenv t p in (w, tenv' @ tenv)
   
   let rec check_pats (pn,ilist) l tparams tenv ts ps =
     match (ts, ps) with
@@ -7087,11 +7019,9 @@ let verify_program_core (* ?verify_program_core *)
       (wpat::wpats, tenv)
     | ([], _) -> static_error l "Too many patterns" None
     | (_, []) -> static_error l "Too few patterns" None
-  in
-    
+  
   let get_class_of_this =
     WMethodCall (dummy_loc, "java.lang.Object", "getClass", [], [Var (dummy_loc, "this", ref (Some LocalVar))], Instance)
-  in
   
   let get_class_finality tn = (* Returns ExtensibleClass if tn is an interface *)
     match try_assoc tn classmap1 with
@@ -7102,7 +7032,6 @@ let verify_program_core (* ?verify_program_core *)
         Some {cfinal} ->
         cfinal
       | None -> ExtensibleClass
-  in
   
   let check_inst_pred_asn l cn g check_call error =
     let rec find_in_interf itf =
@@ -7144,7 +7073,6 @@ let verify_program_core (* ?verify_program_core *)
     | [(family, pmap)] -> check_call family pmap
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
     end
-  in
   
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let check_asn = check_asn_core in
@@ -7339,22 +7267,19 @@ let verify_program_core (* ?verify_program_core *)
           let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in (* TODO: Suport multiline assertions *)
           static_error l msg None
         end
-  in
   
   let rec fix_inferred_type r =
     match !r with
       None -> r := Some Bool (* any type will do *)
     | Some (InferredType r) -> fix_inferred_type r
     | _ -> ()
-  in
   
-  let fix_inferred_types rs = List.iter fix_inferred_type rs in
+  let fix_inferred_types rs = List.iter fix_inferred_type rs
   
   let check_asn (pn,ilist) tparams tenv p =
     let (wpred, tenv, infTypes) = check_asn_core (pn,ilist) tparams tenv p in
     fix_inferred_types infTypes;
     (wpred, tenv)
-  in
   
   let boxmap =
     List.map
@@ -7382,7 +7307,6 @@ let verify_program_core (* ?verify_program_core *)
         (bcn, (l, boxpmap, winv, boxvarmap, amap, hpmap))
       end
       boxmap
-  in
   
   (* Region: predicate preciseness check *)
   
@@ -7403,7 +7327,6 @@ let verify_program_core (* ?verify_program_core *)
       | e -> expr_fold_open iter state e
     in
     iter [] e
-  in
   
   let assert_expr_fixed fixed e =
     let used = vars_used e in
@@ -7411,7 +7334,6 @@ let verify_program_core (* ?verify_program_core *)
     if nonfixed <> [] then
       let xs = String.concat ", " (List.map (fun x -> "'" ^ x ^ "'") nonfixed) in
       static_error (expr_loc e) ("Preciseness check failure: non-fixed variable(s) " ^ xs ^ " used in input expression.") None
-  in
   
   let rec fixed_pat_fixed_vars pat =
     match pat with
@@ -7421,24 +7343,19 @@ let verify_program_core (* ?verify_program_core *)
     | DummyPat -> []
     | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
       List.concat (List.map fixed_pat_fixed_vars pats)
-  in
   
   let assume_pat_fixed fixed pat =
     fixed_pat_fixed_vars pat @ fixed
-  in
   
   let assert_pats_fixed l fixed pats =
     List.iter (function (LitPat e) -> assert_expr_fixed fixed e | _ -> static_error l "Non-fixed pattern used in input position." None) pats
-  in
   
   let assume_pats_fixed fixed pats =
     flatmap fixed_pat_fixed_vars pats @ fixed
-  in
   
   let expr_is_fixed fixed e =
     let used = vars_used e in
     List.for_all (fun x -> List.mem x fixed) used
-  in
   
   let rec check_pred_precise fixed p =
     match p with
@@ -7496,7 +7413,6 @@ let verify_program_core (* ?verify_program_core *)
         | DummyPat -> ()
       end;
       check_pred_precise fixed p
-  in
   
   (* Region: Predicate instances *)
   
@@ -7537,7 +7453,6 @@ let verify_program_core (* ?verify_program_core *)
         | _ -> []
       end
       structmap1
-  in
   
   let check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
     check_tparams l tparams predinst_tparams;
@@ -7581,7 +7496,6 @@ let verify_program_core (* ?verify_program_core *)
           outps
     end;
     ((p, fns), (env, l, predinst_tparams, xs, psymb, inputParamCount, wbody))
-  in
   
   let check_predinst (pn, ilist) tparams tenv env l p predinst_tparams fns xs body =
     let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
@@ -7590,7 +7504,6 @@ let verify_program_core (* ?verify_program_core *)
       | Some (p, (_, predfam_tparams, arity, ps, psymb, inputParamCount)) -> (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in
     check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
-  in
   
   let predinstmap1 = 
     let rec iter (pn,ilist) pm ds =
@@ -7612,9 +7525,8 @@ let verify_program_core (* ?verify_program_core *)
       | [] -> pm
     in
     iter' predinstmap1 ps
-  in
   
-  let predinstmap = predinstmap1 @ predinstmap0 in
+  let predinstmap = predinstmap1 @ predinstmap0
   
   let predctormap1 =
     List.map
@@ -7625,9 +7537,8 @@ let verify_program_core (* ?verify_program_core *)
           (g, PredCtorInfo (l, ps1, ps2, wbody, funcsym))
       )
       predctormap1
-  in
   
-  let predctormap = predctormap1 @ predctormap0 in
+  let predctormap = predctormap1 @ predctormap0
   
   let classmap1 =
     classmap1 |> List.map
@@ -7650,7 +7561,6 @@ let verify_program_core (* ?verify_program_core *)
         in
         (cn, (lc, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist))
       end
-  in
   
   (* Region: evaluation helpers; pushing and popping assumptions and execution trace elements *)
   
@@ -7661,10 +7571,8 @@ let verify_program_core (* ?verify_program_core *)
       | _ -> ()
       end
       e
-  in
 
   let funcnameterms = List.map (fun fn -> (fn, get_unique_var_symb fn (PtrType Void))) funcnames
-  in
   
   let struct_sizes =
     List.map
@@ -7674,7 +7582,6 @@ let verify_program_core (* ?verify_program_core *)
         (sn, s)
       end
       structmap
-  in
   
   let rec sizeof l t =
     match t with
@@ -7684,7 +7591,6 @@ let verify_program_core (* ?verify_program_core *)
     | StructType sn -> List.assoc sn struct_sizes
     | StaticArrayType (elemTp, elemCount) -> ctxt#mk_mul (sizeof l elemTp) (ctxt#mk_intlit elemCount)
     | _ -> static_error l ("Taking the size of type " ^ string_of_type t ^ " is not yet supported.") None
-  in
   
   let field_offsets =
     flatmap
@@ -7702,24 +7608,21 @@ let verify_program_core (* ?verify_program_core *)
         | _ -> []
       end
       structmap
-  in
   
   let field_offset l fparent fname =
     match try_assoc (fparent, fname) field_offsets with
       Some term -> term
     | None -> static_error l "Cannot take the address of a ghost field" None
-  in
-  let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname) in
+  
+  let field_address l t fparent fname = ctxt#mk_add t (field_offset l fparent fname)
   
   let convert_provertype term proverType proverType0 =
     if proverType = proverType0 then term else apply_conversion proverType proverType0 term
-  in
   
   let prover_convert_term term t t0 =
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
-  in
   
-  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb in
+  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb
   
   let lazy_value f =
     let cell = ref None in
@@ -7727,53 +7630,45 @@ let verify_program_core (* ?verify_program_core *)
       match !cell with
         None -> let result = f() in cell := Some result; result
       | Some result -> result
-  in
-  let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name) in
   
-  let array_element_symb = lazy_predfamsymb "java.lang.array_element" in
-  let array_slice_symb = lazy_predfamsymb "java.lang.array_slice" in
-  let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep" in
+  let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
+  
+  let array_element_symb = lazy_predfamsymb "java.lang.array_element"
+  let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
+  let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
   
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
     mk_app nil_symb []
-  in
   
   let mk_cons elem_tp head tail =
     let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
     mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
-  in
   
   let mk_all_eq elem_tp xs x =
     let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
     mk_app all_eq_symb [xs; apply_conversion (provertype_of_type elem_tp) ProverInductive x]
-  in
   
   let rec mk_list elem_tp elems =
     match elems with
       [] -> mk_nil()
     | e::es -> mk_cons elem_tp e (mk_list elem_tp es)
-  in
   
   let mk_take n xs =
     let (_, _, _, _, take_symb) = List.assoc "take" purefuncmap in
     mk_app take_symb [n; xs]
-  in
   
   let mk_drop n xs =
     let (_, _, _, _, drop_symb) = List.assoc "drop" purefuncmap in
     mk_app drop_symb [n; xs]
-  in
   
   let mk_append l1 l2 =
     let (_, _, _, _, append_symb) = List.assoc "append" purefuncmap in
     mk_app append_symb [l1; l2]
-  in
   
   let mk_length l =
     let (_, _, _, _, length_symb) = List.assoc "length" purefuncmap in
     mk_app length_symb [l]
-  in
   
   let rec mk_zero_list n =
     assert (0 <= n);
@@ -7781,7 +7676,6 @@ let verify_program_core (* ?verify_program_core *)
       mk_nil ()
     else
       mk_cons Char (ctxt#mk_intlit 0) (mk_zero_list (n - 1))
-  in
   
   let mk_char_list_of_c_string size s =
     let n = String.length s in
@@ -7792,7 +7686,6 @@ let verify_program_core (* ?verify_program_core *)
         mk_cons Char (ctxt#mk_intlit (Char.code s.[k])) (iter (k + 1))
     in
     iter 0
-  in
   
   
   
@@ -7810,17 +7703,15 @@ let verify_program_core (* ?verify_program_core *)
     pop_context();
     ctxt#pop;
     result
-  in
   
-  let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont in
-  let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont in
+  let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont
+  let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont
   
   let pprint_context_term t = 
     if options.option_simplify_terms then
       match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
     else
       ctxt#pprint t
-  in
   
   let pprint_context_stack cs =
     List.map
@@ -7843,17 +7734,14 @@ let verify_program_core (* ?verify_program_core *)
        | PushSubcontext -> PushSubcontext
        | PopSubcontext -> PopSubcontext)
       cs
-  in
 
   let assert_term t h env l msg url = 
     stats#proverOtherQuery;
     if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
-  in
 
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
-  in
   
   let rec prover_type_term l tp = 
     match tp with
@@ -7864,7 +7752,6 @@ let verify_program_core (* ?verify_program_core *)
       end
     | ArrayType(tp) -> (ctxt#mk_app array_type_symbol [prover_type_term l tp])
     | _ -> static_error l ("unknown prover_type_expr for: " ^ (string_of_type tp)) None
-  in
 
   (* Region: evaluation *)
   
@@ -7993,7 +7880,6 @@ let verify_program_core (* ?verify_program_core *)
     | ShiftLeft when ts = Some [IntType; IntType] -> ctxt#mk_app shiftleft_int32_symbol [v1;v2]
     | _ -> static_error l "This operator is not supported in this position." None
     end
-  in
   
   let rec eval_core_cps0 eval_core ev state ass_term read_field env e cont =
      let evs state es cont =
@@ -8306,16 +8192,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | _ -> cont state (ctxt#mk_app instanceof_symbol [v; prover_type_term l2 tp])
         end
     | _ -> static_error (expr_loc e) "Construct not supported in this position." None
-  in
   
   let rec eval_core ass_term read_field env e =
     let rec ev () e cont = eval_core_cps0 eval_core ev () ass_term read_field env e cont in
     ev () e $. fun () v -> v
-  in
   
-  let eval_core_cps = eval_core_cps0 eval_core in
+  let eval_core_cps = eval_core_cps0 eval_core
   
-  let eval = eval_core None in
+  let eval = eval_core None
 
   let _ =
     List.iter
@@ -8368,20 +8252,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
        ctxt#assume_forall g [lhs] tps (ctxt#mk_eq lhs rhs)
     end
     fixpointmap1
-  in
   
   (* Region: production of assertions *)
   
-  let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url in
+  let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url
 
-  let success() = SymExecSuccess in
+  let success() = SymExecSuccess
   
   let branch cont1 cont2 =
     stats#branch;
     execute_branch cont1;
     execute_branch cont2;
     SymExecSuccess
-  in
   
   let rec assert_expr_split e h env l msg url = 
     match e with
@@ -8394,7 +8276,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         (fun () -> assert_expr_split e1 h env l msg url)
         (fun () -> assert_expr_split e2 h env l msg url)
     | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_expr env e h env l msg url; SymExecSuccess)
-  in
   
   let rec evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
@@ -8410,29 +8291,24 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match (pats, tps0, tps) with
       ([], [], []) -> cont ghostenv env []
     | (pat::pats, tp0::tps0, tp::tps) -> evalpat true ghostenv env pat tp0 tp (fun ghostenv env t -> evalpats ghostenv env pats tps0 tps (fun ghostenv env ts -> cont ghostenv env (t::ts)))
-  in
 
   let real_mul l t1 t2 =
     if t1 == real_unit then t2 else if t2 == real_unit then t1 else
     let t = ctxt#mk_real_mul t1 t2 in
     if is_dummy_frac_term t1 || is_dummy_frac_term t2 then dummy_frac_terms := t::!dummy_frac_terms;
     t
-  in
   
   let real_div l t1 t2 =
     if t2 == real_unit then t1 else static_error l "Real division not yet supported." None
-  in
   
   let definitely_equal t1 t2 =
     let result = if t1 == t2 then (stats#definitelyEqualSameTerm; true) else (stats#definitelyEqualQuery; ctxt#query (ctxt#mk_eq t1 t2)) in
     (* print_endline ("Checking definite equality of " ^ ctxt#pprint t1 ^ " and " ^ ctxt#pprint t2 ^ ": " ^ (if result then "true" else "false")); *)
     result
-  in
   
   let predname_eq g1 g2 =
     match (g1, g2) with
       ((g1, literal1), (g2, literal2)) -> if literal1 && literal2 then g1 == g2 else definitely_equal g1 g2
-  in
   
   let assume_field h0 fparent fname frange fghost tp tv tcoef cont =
     let (_, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
@@ -8478,7 +8354,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       iter h0
     else
       assume_neq tp (ctxt#mk_intlit 0) (fun _ -> iter h0) (* in Java, the target of a field chunk is non-null *)
-  in
 
   let produce_chunk h g_symb targs coef inputParamCount ts size cont =
     if inputParamCount = None || coef == real_unit then
@@ -8521,7 +8396,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             iter (chunk::hdone) htodo
       in
       iter [] h
-  in
 
   let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
     let with_context_helper cont =
@@ -8681,10 +8555,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       plugin#produce_assertion pluginState env wasn $. fun pluginState env ->
       cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
-  in
+  
   let produce_asn tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
     produce_asn_core tpenv h ghostenv env p coef size_first size_all false cont
-  in
   
   (* Region: consumption of assertions *)
   
@@ -8830,7 +8703,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match_pats ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
     match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks ->
     Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
-  in
   
   let lookup_points_to_chunk_core h0 f_symb t =
     let rec iter h =
@@ -8841,25 +8713,21 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _::h -> iter h
     in
     iter h0
-  in
 
   let lookup_points_to_chunk h0 env l f_symb t =
     match lookup_points_to_chunk_core h0 f_symb t with
       None -> assert_false h0 env l ("No matching pointsto chunk: " ^ (ctxt#pprint f_symb) ^ "(" ^ (ctxt#pprint t) ^ ", _)") None
     | Some v -> v
-  in
 
   let read_field h env l t fparent fname =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     lookup_points_to_chunk h env l f_symb t
-  in
   
   let read_static_field h env l fparent fname =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     match extract (function Chunk (g, targs, coef, arg0::args, size) when predname_eq (f_symb, true) g -> Some arg0 | _ -> None) h with
       None -> assert_false h env l ("No matching heap chunk: " ^ ctxt#pprint f_symb) None
     | Some (v, _) -> v
-  in
   
   let try_read_java_array h env l a i tp =
     head_flatmap
@@ -8878,7 +8746,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _ -> []
       end
       h
-  in
   
   let try_update_java_array h env l a i tp new_value =
     let rec try_update_java_array_core todo seen = 
@@ -8897,39 +8764,32 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         try_update_java_array_core rest (seen @ [chunk])
     in
       try_update_java_array_core h [] 
-  in
   
   let read_java_array h env l a i tp =
     let slices = try_read_java_array h env l a i tp in
     match slices with
       None -> assert_false h env l "No matching array element or array slice chunk" None
     | Some v -> v
-  in
   
   let pointer_pred_symb () =
     let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
     pointer_pred_symb
-  in
 
   let int_pred_symb () =
     let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
     int_pred_symb
-  in
 
   let u_int_pred_symb () =
     let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
     u_int_pred_symb
-  in
   
   let char_pred_symb () =
     let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
     char_pred_symb
-  in
 
   let u_char_pred_symb () =
     let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
     u_char_pred_symb
-  in
   
   let try_pointee_pred_symb pointeeType =
     match pointeeType with
@@ -8939,13 +8799,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Char -> Some (char_pred_symb ())
     | UChar -> Some (u_char_pred_symb ())
     | _ -> None
-  in
   
   let pointee_pred_symb l pointeeType =
     match try_pointee_pred_symb pointeeType with
       Some symb -> symb
     | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
-  in
   
   let read_c_array h env l a i tp =
     let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
@@ -8972,29 +8830,24 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | Some v -> v
         end
     | Some v -> v
-  in
   
   let read_array h env l a i tp = 
     match language with 
       Java -> read_java_array h env l a i tp
     | CLang -> read_c_array h env l a i tp
-  in
   
   let deref_pointer h env l pointerTerm pointeeType =
     lookup_points_to_chunk h env l (pointee_pred_symb l pointeeType) pointerTerm
-  in
   
   let lists_disjoint xs ys =
     List.for_all (fun x -> not (List.mem x ys)) xs
-  in
   
   let with_updated_ref r f body =
     let value = !r in
     r := f value;
     do_finally body (fun () -> r := value)
-  in
   
-  let consume_chunk_recursion_depth = ref 0 in
+  let consume_chunk_recursion_depth = ref 0
   
   (** consume_chunk_core attempts to consume a chunk matching the specified predicate assertion from the specified heap.
       If no matching chunk is found in the heap, automation rules are tried (e.g. auto-open and auto-close rules).
@@ -9105,16 +8958,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | (chunk, h, coef, ts, size, ghostenv, env, env')::_ -> cont chunk h coef ts size ghostenv env env'
     in
     consume_chunk_core_core h
-  in
   
   (** [cont] is called as [cont chunk h coef ts size ghostenv env env']. See docs at consume_chunk_core. *)
   let consume_chunk rules h ghostenv env env' l g targs coef coefpat inputParamCount pats cont =
     let tps = List.map (fun _ -> IntType) pats in (* dummies, to indicate that no prover type conversions are needed *)
     consume_chunk_core rules h ghostenv env env' l g targs coef coefpat inputParamCount pats tps tps cont
-  in
   
-  let srcpat pat = SrcPat pat in
-  let srcpats pats = List.map srcpat pats in
+  let srcpat pat = SrcPat pat
+  let srcpats pats = List.map srcpat pats
   
   let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
     let with_context_helper cont =
@@ -9304,17 +9155,14 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         let l = ((path, line, col + 1 + off), (path, line, col + 1 + off + len)) in
         assert_false h env l msg None
     )
-  in
   
   let consume_asn rules tpenv h ghostenv env p checkDummyFracs coef cont =
     consume_asn_core rules tpenv h ghostenv env [] p checkDummyFracs coef (fun chunks h ghostenv env env' size_first -> cont chunks h ghostenv env size_first)
-  in
 
   let term_of_pred_index =
     match language with
       Java -> fun cn -> List.assoc cn classterms
     | CLang -> fun fn -> List.assoc fn funcnameterms
-  in
   
   let predinstmap_by_predfamsymb =
     flatmap
@@ -9325,7 +9173,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           []
       end
       predinstmap
-  in
   
   (* Those predicate instances that, under certain conditions on the input parameters, are likely to be closeable. *)
   let empty_preds =
@@ -9367,7 +9214,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           if conds <> [] then [(symb, fsymbs, conds, predinst)] else []
       end
       predinstmap
-  in
   
   (*let _ =
     begin print_endline "empty predicates:";
@@ -9471,7 +9317,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           iter None [] wbody0
       )
       predinstmap
-  in
    
   let instance_predicate_contains_edges = 
     classmap1 |> flatmap 
@@ -9556,9 +9401,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             iter None [] wbody0
           )
       )
-  in
   
-  let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges in
+  let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges
   
   let close1_ edges =
     flatmap
@@ -9598,7 +9442,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         edges
     )
     edges
-  in
   
   let transitive_contains_edges_ = 
     let rec close edges =
@@ -9609,7 +9452,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         close (new_edges @ edges)
     in
     close contains_edges
-  in
   
   (*let _ =
     print_endline "transitive_edges:";
@@ -9620,7 +9462,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     contains_edges
   in*)
   
-  let rules_cell = ref [] in (* A hack to allow the rules to recursively use the rules *)
+  let rules_cell = ref [] (* A hack to allow the rules to recursively use the rules *)
   
   let rules =
     let rulemap = ref [] in
@@ -10130,9 +9972,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       end
     end;
     List.map (fun (predSymb, rules) -> (predSymb, !rules)) !rulemap
-  in
   
-  rules_cell := rules;
+  let () = rules_cell := rules
 
   let rec block_assigned_variables ss =
     match ss with
@@ -10206,22 +10047,19 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | InvariantStmt _ -> []
     | Break _ -> []
     | SuperConstructorCall(_, es) -> flatmap (fun e -> expr_assigned_variables e) es
-  in
 
-  let dummypat = SrcPat DummyPat in
+  let dummypat = SrcPat DummyPat
   
   let get_points_to h p predSymb l cont =
     consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat p; dummypat] (fun chunk h coef [_; t] size ghostenv env env' ->
       cont h coef t)
-  in
     
   let get_field h t fparent fname l cont =
     let (_, (_, _, _, _, f_symb, _)) = List.assoc (fparent, fname) field_pred_map in
     get_points_to h t f_symb l cont
-  in
   
-  let current_thread_name = "currentThread" in
-  let current_thread_type = IntType in
+  let current_thread_name = "currentThread"
+  let current_thread_type = IntType
   
   (* Region: function contracts *)
   
@@ -10239,9 +10077,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter ((ftn, (l, gh, tparams, rt, ftxmap, xmap, pre, post, predfammaps))::functypemap) ds
     in
     iter [] functypedeclmap1
-  in
   
-  let functypemap = functypemap1 @ functypemap0 in
+  let functypemap = functypemap1 @ functypemap0
   
   let check_breakpoint h env ((((basepath, relpath), line, col), _) as l) =
     match breakpoint with
@@ -10249,7 +10086,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | Some (path0, line0) ->
       if line = line0 && concat basepath relpath = path0 then
         assert_false h env l "Breakpoint reached." None
-  in
 
   let is_empty_chunk name targs frac args =
     List.exists
@@ -10266,7 +10102,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
     )
     empty_preds
-  in
   
   let check_leaks h env l msg: symexec_result = (* ?check_leaks *)
     match language with
@@ -10289,7 +10124,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     if h <> [] then assert_false h env l msg (Some "leak");
     check_breakpoint [] env l;
     SymExecSuccess
-  in
   
   let check_func_header_compat l msg env00 (k, tparams, rt, xmap, nonghost_callers_only, pre, post, epost) (k0, tparams0, rt0, xmap0, nonghost_callers_only0, tpenv0, cenv0, pre0, post0, epost0) =
     if k <> k0 then 
@@ -10365,14 +10199,12 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       )
     )
     end
-  in
   
   let assume_is_functype fn ftn =
     let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
     ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
-  in
   
-  let functypes_implemented = ref [] in
+  let functypes_implemented = ref []
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt body =
     if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported." None;
@@ -10455,7 +10287,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end
     in
     (rt, xmap, functype_opt, pre, pre_tenv, post)
-  in
   
   let (funcmap1, prototypes_implemented) =
     let rec iter pn ilist funcmap prototypes_implemented ds =
@@ -10489,9 +10320,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | [] -> (funcmap,prototypes_implemented)
     in
     iter' ([],[]) ps
-  in
   
-  let funcmap = funcmap1 @ funcmap0 in
+  let funcmap = funcmap1 @ funcmap0
   
   let interfmap1 =
     List.map
@@ -10538,11 +10368,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         (ifn, InterfaceInfo (l, fieldmap, mmap, preds, interfs))
       end
       interfmap1
-  in
   
   let string_of_sign (mn, ts) =
     Printf.sprintf "%s(%s)" mn (String.concat ", " (List.map string_of_type ts))
-  in
   
   let () = (* Check interfaces in .java files against their specifications in .javaspec files. *)
     interfmap1 |> List.iter begin function (i, InterfaceInfo (l1,fields1,meths1,preds1,interfs1)) ->
@@ -10573,7 +10401,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         match_fields fields0 fields1;
         match_meths meths0 meths1
     end
-  in
   
   let interfmap = (* checks overriding methods in interfaces *)
     let rec iter map0 map1 =
@@ -10610,7 +10437,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter rest (elem :: map1)
     in
     iter interfmap1 interfmap0
-  in
   
   let rec dynamic_of asn =
     match asn with
@@ -10640,7 +10466,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let body' = dynamic_of body in
       if body' == body then asn else CoefAsn (l, coefpat, body')
     | _ -> asn
-  in
   
   let classmap1 =
     let rec iter classmap1_done classmap1_todo =
@@ -10748,7 +10573,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter [] meths
     in
     iter [] classmap1
-  in
   
   let classmap1 =
     List.map
@@ -10791,7 +10615,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter [] ctors
       end
       classmap1
-  in
   
   (* Default constructor insertion *)
 
@@ -10842,7 +10665,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         iter (c::classmap1_done) classmap1_todo
     in
     iter [] classmap1
-  in
   
   (* Merge classmap1 into classmap0; check class implementations against specifications. *)
   let classmap =
@@ -10915,7 +10737,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           iter rest ((cn, {cls1 with cmeths=meths'; cfds=fds'; cctors=constr'})::map1)
     in
     iter classmap0 classmap1
-  in
   
   (* Region: Type checking of field initializers for instance fields *)
 
@@ -10937,9 +10758,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         (cn, {cls with cfds=fds})
       end
       classmap
-  in
   
-  begin
+  let () =
     (* Inheritance check *)
     let rec get_overrides cn =
       if cn = "java.lang.Object" then [] else
@@ -10966,9 +10786,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
          end
       end
       classmap1
-  end;
   
-  if file_type path=Java && filepath = path then begin
+  let () =
+    if file_type path=Java && filepath = path then begin
     let rec check_spec_lemmas lemmas impl=
       match lemmas with
         [] when List.length impl=0-> ()
@@ -10980,9 +10800,10 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             static_error l "No implementation found for this lemma." None
     in
     check_spec_lemmas !spec_lemmas prototypes_implemented
-  end;
+    end
   
-  if file_type path=Java && filepath = path then begin
+  let () =
+    if file_type path=Java && filepath = path then begin
     let rec check_spec_classes classes meths_impl cons_impl=
       match classes with
         [] -> (match meths_impl with
@@ -11019,15 +10840,15 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           check_spec_classes rest (check_meths meths meths_impl) (check_cons cons cons_impl)
     in
     check_spec_classes !spec_classes !meths_impl !cons_impl
-  end;
+    end
   
   (* Region: symbolic execution helpers *)
   
   let rec mark_if_local locals x =
     match locals with
       [] -> ()
-    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; (if(not (List.mem x !block)) then block := x :: (!block));
-  in
+    | (block, head) :: rest -> match try_assoc x head with None -> mark_if_local rest x | Some(addrtaken) -> addrtaken := true; (if(not (List.mem x !block)) then block := x :: (!block))
+  
   let rec expr_mark_addr_taken e locals = 
     match e with
       True _ | False _ | Null _ | Var(_, _, _) | IntLit(_, _, _) | RealLit _ | StringLit(_, _) | ClassLit(_) -> ()
@@ -11067,7 +10888,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match pat with
       LitPat(e) -> expr_mark_addr_taken e locals
     | _ -> ()
-  in
+  
   let rec ass_mark_addr_taken a locals = 
     match a with
       PointsTo(_, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals;
@@ -11088,8 +10909,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
     | ForallAsn (l, i, e) -> expr_mark_addr_taken e locals; 
-    | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals;
-  in
+    | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
+  
   let rec stmt_mark_addr_taken s locals cont =
     match s with
       DeclStmt(_, ds) ->
@@ -11151,11 +10972,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     match ss with
       [] -> cont locals
     | s :: ss -> stmt_mark_addr_taken s locals (fun locals -> stmts_mark_addr_taken ss locals cont)
-  in
+  
   
   (* locals whose address is taken in e *)
   
-    let rec expr_address_taken e =
+  let rec expr_address_taken e =
     let pat_address_taken pat =
       match pat with
         LitPat(e) -> expr_address_taken e
@@ -11195,7 +11016,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | AssignExpr(_, e1, e2) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | AssignOpExpr(_, e1, _, e2, _, _, _) -> (expr_address_taken e1) @ (expr_address_taken e2)
     | InitializerList (_, es) -> flatmap expr_address_taken es
-  in
   
   let rec stmt_address_taken s =
     (* incomplete: might miss &x expressions *)
@@ -11215,9 +11035,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | BlockStmt(_, decls, ss, _, _) -> (List.flatten (List.map (fun s -> stmt_address_taken s) ss))
     | LabelStmt _ | GotoStmt _ | NoopStmt _ | Break _ | Throw _ | TryFinally _ | TryCatch _ -> []
     | _ -> []
-  in
   
-  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map in
+  let nonempty_pred_symbs = List.map (fun (_, (_, (_, _, _, _, symb, _))) -> symb) field_pred_map
   
   let eval_non_pure_cps ev is_ghost_expr ((h, env) as state) env e cont =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
@@ -11228,7 +11047,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (fun l a i -> read_array h env l a i)
     in
     eval_core_cps ev state assert_term (Some read_field) env e cont
-  in
   
   let eval_non_pure is_ghost_expr h env e =
     let assert_term = if is_ghost_expr then None else Some (fun l t msg url -> assert_term t h env l msg url) in
@@ -11239,7 +11057,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       (fun l a i -> read_array h env l a i)
     in
     eval_core assert_term (Some read_field) env e
-  in
   
   (** Used to produce malloc'ed, global, local, or nested C variables/objects.
     * If [tp] is a struct type, [producePaddingChunk] says whether the padding chunk for the outermost struct should be produced.
@@ -11365,7 +11182,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | None -> get_unique_var_symb "value" tp
       in
       cont (Chunk ((pointee_pred_symb l tp, true), [], coef, [addr; value], None)::h)
-  in
   
   let rec consume_c_object l addr tp h consumePaddingChunk cont =
     match tp with
@@ -11412,7 +11228,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | _ ->
       consume_chunk rules h [] [] [] l (pointee_pred_symb l tp, true) [] real_unit real_unit_pat (Some 1) [TermPat addr; dummypat] $. fun _ h _ _ _ _ _ _ ->
       cont h
-  in
   
   let assume_is_of_type l t tp cont =
     match tp with
@@ -11424,7 +11239,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
     | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ObjType _ -> cont ()
     | _ -> static_error l (Printf.sprintf "Producing the limits of a variable of type '%s' is not yet supported." (string_of_type tp)) None
-  in
   
   (* Region: verification of calls *)
   
@@ -11539,21 +11353,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         success()
       )
     )
-  in
   
   let funcnameterm_of funcmap fn =
     let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
-  in
   
   let default_value t =
     match t with
      Bool -> ctxt#mk_false
     | IntType|ShortType|Char|ObjType _|ArrayType _ -> ctxt#mk_intlit 0
     | _ -> get_unique_var_symb_non_ghost "value" t
-  in
 
   
-  let module LValues = struct
+  module LValues = struct
     type lvalue =
       Var of loc * string * ident_scope option ref
     | Field of
@@ -11574,7 +11385,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         loc
       * termnode
       * type_ (* pointee type *)
-  end in
+  end
   
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     let (envReadonly, heapReadonly) = readonly in
@@ -12070,13 +11881,11 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       cont h env vrhs
     | e ->
       eval_non_pure_cps (fun (h, env) e cont -> eval_h h env e (fun h env t -> cont (h, env) t)) pure (h, env) env e (fun (h, env) v -> cont h env v)
-  in
   
   (* Region: verification of statements *)
   
   let verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     verify_expr (readonly, readonly) (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt
-  in
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     stats#stmtExec;
@@ -14050,7 +13859,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | _ -> ()
     ) in
     lems'
-  in
+  
   let switch_stmt ss env=
     match ss with
       [SwitchStmt (_, Var (_, x, _), _)] ->
@@ -14059,20 +13868,18 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
          | Some t -> ([(t, 0)], Some x)
         )
     | _ -> ([], None)
-  in
   
   let get_fields (pn,ilist) cn lm=
     match try_assoc' (pn,ilist) cn classmap with
       Some {cfds} -> cfds
     | None -> static_error lm ("No class was found: "^cn) None
-  in
   
   let record_fun_timing l funName body =
     let time0 = Perf.time() in
     let result = body () in
     stats#recordFunctionTiming (string_of_loc l ^ ": " ^ funName) (Perf.time() -. time0);
     result
-  in
+  
   let rec verify_exceptional_return (pn,ilist) l h ghostenv env exceptp excep handlers =
     if not (is_unchecked_exception_type exceptp) then
       match handlers with
@@ -14094,7 +13901,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           end
     else
       success()
-  in
+  
   let rec verify_cons (pn,ilist) cfin cn superctors boxes lems cons =
     match cons with
       [] -> ()
@@ -14179,7 +13986,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end
         end;
         verify_cons (pn,ilist) cfin cn superctors boxes lems rest
-  in
   
   let rec verify_meths (pn,ilist) cfin cabstract boxes lems meths=
     match meths with
@@ -14237,7 +14043,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         end
         end;
         verify_meths (pn,ilist) cfin cabstract boxes lems meths
-  in
   
   let rec verify_classes boxes lems classm=
     match classm with
@@ -14252,7 +14057,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       verify_cons (cpn, cilist) cfinal cn superctors boxes lems cctors;
       verify_meths (cpn, cilist) cfinal cabstract boxes lems cmeths;
       verify_classes boxes lems classm
-  in
   
   let rec verify_funcs (pn,ilist)  boxes lems ds =
     match ds with
@@ -14351,27 +14155,40 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         hpmap;
       verify_funcs (pn,ilist)  (bcn::boxes) lems ds
     | _::ds -> verify_funcs (pn,ilist)  boxes lems ds
-  in
+  
   let lems0 =
     flatmap
       (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
       funcmap0
-  in
+  
   let rec verify_funcs' boxes lems ps=
     match ps with
       PackageDecl(l,pn,il,ds)::rest-> let (boxes, lems) = verify_funcs (pn,il) boxes lems ds in verify_funcs' boxes lems rest
     | [] -> verify_classes boxes lems classmap
-  in
-  verify_funcs' [] lems0 ps;
   
-  ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  let () = verify_funcs' [] lems0 ps
   
-  in (* let rec check_file *)
+  let result = ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  
+  end (* CheckFile *)
+  
+  let rec check_file filepath is_import_spec include_prelude basedir reldir headers ps =
+    let module CF = CheckFile(struct
+      let filepath = filepath
+      let is_import_spec = is_import_spec
+      let include_prelude = include_prelude
+      let basedir = basedir
+      let reldir = reldir
+      let headers = headers
+      let ps = ps
+      let check_file = check_file
+    end) in
+    CF.result
   
   (* Region: top-level stuff *)
   
-  let jardeps = ref [] in
-  let provide_files = ref [] in
+  let jardeps = ref []
+  let provide_files = ref []
   let (prototypes_implemented, functypes_implemented) =
     let (headers, ds)=
       match file_type path with
@@ -14429,13 +14246,13 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       | l::_ -> static_error l "No error found on line." None
     end;
     result
-  in
   
-  if not options.option_keep_provide_files then begin
-    !provide_files |> List.iter Sys.remove
-  end;
+  let () =
+    if not options.option_keep_provide_files then begin
+      !provide_files |> List.iter Sys.remove
+    end
   
-  stats#appendProverStats ctxt#stats;
+  let () = stats#appendProverStats ctxt#stats
 
   let create_jardeps_file() =
     let jardeps_filename = Filename.chop_extension path ^ ".jardeps" in
@@ -14446,7 +14263,6 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       ) (fun () -> close_out file)
     else
       jardeps_map := (jardeps_filename, !jardeps)::!jardeps_map
-  in
   
   let create_manifest_file() =
     let manifest_filename = Filename.chop_extension path ^ ".vfmanifest" in
@@ -14486,12 +14302,45 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       ) (fun () -> close_out file)
     else
       manifest_map := (manifest_filename, lines)::!manifest_map
-  in
-  if file_type path <> Java then
-    create_manifest_file()
-  else
-    if Filename.check_suffix path ".jarsrc" then
-      create_jardeps_file()
+  
+  let () =
+    if file_type path <> Java then
+      create_manifest_file()
+    else
+      if Filename.check_suffix path ".jarsrc" then
+        create_jardeps_file()
+
+end
+
+(** Verifies the .c/.jarsrc/.scala file at path [path].
+    Uses the SMT solver [ctxt].
+    Reports syntax highlighting regions using the callback [reportRange].
+    Stops at source line [breakpoint], if not None.
+    This function is generic in the types of SMT solver types, symbols, and terms.
+    *)
+let verify_program_core (* ?verify_program_core *)
+    ?(emitter_callback : package list -> unit = fun _ -> ())
+    (type typenode') (type symbol') (type termnode')  (* Explicit type parameters; new in OCaml 3.12 *)
+    (ctxt: (typenode', symbol', termnode') Proverapi.context)
+    (options : options)
+    (program_path : string)
+    (reportRange : range_kind -> loc -> unit)
+    (reportUseSite : decl_kind -> loc -> loc -> unit)
+    (breakpoint : (string * int) option) : unit =
+
+  let module VP = VerifyProgram(struct
+    let emitter_callback = emitter_callback
+    type typenode = typenode'
+    type symbol = symbol'
+    type termnode = termnode'
+    let ctxt = ctxt
+    let options = options
+    let program_path = program_path
+    let reportRange = reportRange
+    let reportUseSite = reportUseSite
+    let breakpoint = breakpoint
+  end) in
+  ()
 
 (* Region: prover selection *)
 
