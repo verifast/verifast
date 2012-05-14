@@ -1,4 +1,9 @@
 open Unix
+open Util
+open Lexer
+open Ast
+open Parser
+open Verifast0
 open Verifast
 open GMain
 open Pervasives
@@ -874,13 +879,13 @@ let show_ide initialPath prover codeFont traceFont runtime =
             let r = compare x y in
             if r <> 0 then r else compare_list xs ys
         in
-        let r = compare (Verifast.string_of_targs targs) (Verifast.string_of_targs targs') in
+        let r = compare (string_of_targs targs) (string_of_targs targs') in
         if r <> 0 then r else
         let r = compare_list ts ts' in
         if r <> 0 then r else
         compare coef coef'
       in
-      append_items chunksStore chunksKCol chunksCol (List.map Verifast.string_of_chunk (List.sort compare_chunks h))
+      append_items chunksStore chunksKCol chunksCol (List.map string_of_chunk (List.sort compare_chunks h))
   in
   let _ = stepList#connect#cursor_changed ~callback:stepSelected in
   let _ = (new GObj.misc_ops stepList#as_widget)#grab_focus() in

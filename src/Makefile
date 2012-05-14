@@ -37,7 +37,7 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe
 	cd ..\src
 
 clean:
-	del *.cm* *.obj ..\bin\*.exe win\*.cm* win\*.obj
+	del *.cm* *.obj ..\bin\*.exe win\*.cm* win\*.obj ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\lstex.vfmanifest ..\bin\arrays.vfmanifest
 
 refman:
 	cd ..\doc\refman
@@ -126,9 +126,9 @@ vfide.cmx: vfversion.cmi verifast.cmx Fonts.cmx vfide.ml
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I +lablgtk2 Fonts.cmx vfide.ml
 	time < nl.txt
 
-..\bin\vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx DynType.cmx plugins.cmx plugins2.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
+..\bin\vfide.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx DynType.cmx plugins.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx verifastPluginZ3.ml Fonts.cmx vfide.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error FSU -pp camlp4o -o ..\bin\vfide.exe -I $(Z3)\ocaml -I +lablgtk2 -I .\win record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx Dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx verifastPluginRedux.ml verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error FSU -pp camlp4o -o ..\bin\vfide.exe -I $(Z3)\ocaml -I +lablgtk2 -I .\win record_backtrace.cmx lablgtk.cmxa lablgtksourceview2.cmxa libgtksourceview-2.0-0.lib gtkInit.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa Printexc_proxy.cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx Dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx verifastPluginRedux.ml verifastPluginZ3.ml Fonts.cmx vfide.cmx -cclib "-L "$(GTKLIB)
 	time < nl.txt
 
 vfideredux.exe: Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml Fonts.cmx vfide.cmx
@@ -148,7 +148,7 @@ DynType.cmx: DynType.mli DynType.ml
 plugins.mli: ..\examples\plugin\plugins.mli
 	copy /B/Y generated_file_warning.txt+..\examples\plugin\plugins.mli plugins.mli
 
-plugins.cmi: plugins.mli
+plugins.cmi: DynType.cmx plugins.mli
 	ocamlopt.opt -c plugins.mli
 
 plugins.cmx: plugins.cmi plugins.ml
@@ -169,9 +169,86 @@ plugins2.cmx: plugins.cmi plugins_private.cmx plugins2.cmi
 trivial_verifast_plugin.cmxs: DynType.cmx plugins.cmi plugins2.cmi trivial_plugin.ml
 	ocamlopt.opt -o trivial_verifast_plugin.cmxs -shared DynType.cmx trivial_plugin.ml
 
-verifast.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins.cmx verifast.ml
+#verifast.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins.cmx verifast.ml
+#	time < nl.txt
+#	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp "camlp4o pa_verifast.cmo" -c -I .\win Perf.cmxa proverapi.cmx verifast.ml
+#	time < nl.txt
+
+util.cmi: util.mli
+	ocamlopt.opt util.mli
+
+util.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx util.cmi util.ml
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp "camlp4o pa_verifast.cmo" -c -I .\win Perf.cmxa proverapi.cmx verifast.ml
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win util.ml
+	time < nl.txt
+
+stats.cmi: util.cmi stats.mli
+	ocamlopt.opt -I .\win stats.mli
+
+stats.cmx: stats.cmi stats.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win stats.ml
+	time < nl.txt
+
+lexer.cmi: stats.cmi lexer.mli
+	ocamlopt.opt lexer.mli
+
+lexer.cmx: lexer.cmi lexer.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win lexer.ml
+	time < nl.txt
+
+ast.cmi: lexer.cmi ast.mli
+	ocamlopt.opt ast.mli
+
+ast.cmx: ast.cmi ast.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win ast.ml
+	time < nl.txt
+
+parser.cmi: ast.cmi parser.mli
+	ocamlopt.opt parser.mli
+
+parser.cmx: parser.cmi parser.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp camlp4o -c -I .\win parser.ml
+	time < nl.txt
+
+verifast0.cmi: parser.cmi verifast0.mli
+	ocamlopt.opt verifast0.mli
+
+verifast0.cmx: verifast0.cmi verifast0.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast0.ml
+	time < nl.txt
+
+verifast1.cmi: verifast0.cmi verifast1.mli
+	ocamlopt.opt verifast1.mli
+
+verifast1.cmx: verifast1.cmi verifast1.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast1.ml
+	time < nl.txt
+
+assertions.cmi: verifast1.cmi assertions.mli
+	ocamlopt.opt assertions.mli
+
+assertions.cmx: assertions.cmi assertions.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win assertions.ml
+	time < nl.txt
+
+verify_expr.cmi: assertions.cmi verify_expr.mli
+	ocamlopt.opt verify_expr.mli
+
+verify_expr.cmx: verify_expr.cmi verify_expr.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verify_expr.ml
+	time < nl.txt
+
+verifast.cmx: verify_expr.cmi verifast.ml
+	time < nl.txt
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast.ml
 	time < nl.txt
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
@@ -194,9 +271,9 @@ z3prover.cmo: proverapi.cmo z3prover.ml
 verifastz3redux_opt.exe: record_backtrace.cmx vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o verifastz3redux_opt.exe -I $(Z3)\ocaml record_backtrace.cmx ole32.lib $(OCAMLLIB)\libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
-..\bin\verifast.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx DynType.cmx plugins.cmx plugins2.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
+..\bin\verifast.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3prover.cmx simplex.cmx redux.cmx DynType.cmx plugins.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx
 	time < nl.txt
-	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\verifast.exe -I $(Z3)\ocaml -I .\win record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx Dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
+	ocamlopt.opt $(OPT_OPTIONS) -warn-error F -pp camlp4o -o ..\bin\verifast.exe -I $(Z3)\ocaml -I .\win record_backtrace.cmx unix.cmxa nums.cmxa z3.cmxa Perf.cmxa proverapi.cmx z3prover.cmx simplex.cmx redux.cmx vfversion.cmx Dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx sexpressions.cmx SExpressionEmitter.cmx verifastPluginRedux.ml verifastPluginZ3.ml vfconsole.ml
 	time < nl.txt
 
 ..\bin\verifastz3v2.exe: tabhunt record_backtrace.cmx vfversion_cmx proverapi.cmx z3v2prover.cmx simplex.cmx redux.cmx DynType.cmx plugins.cmx plugins2.cmx verifast.cmx verifastPluginZ3v2.ml verifastPluginRedux.ml vfconsole.ml sexpressions.cmx SExpressionEmitter.cmx

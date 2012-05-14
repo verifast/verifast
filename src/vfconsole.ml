@@ -1,3 +1,7 @@
+open Lexer
+open Ast
+open Parser
+open Verifast0
 open Verifast
 open Arg
 

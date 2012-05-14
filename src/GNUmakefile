@@ -215,8 +215,8 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 	cd macos; ocamlopt.opt -c -I +lablgtk2 GSourceView2.ml
 endif
 
-../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
+	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -257,8 +257,62 @@ plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
 pa_verifast.cmo: pa_verifast.ml
 	ocamlc -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
 
-verifast.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx verifast.ml pa_verifast.cmo
-	ocamlopt.opt -warn-error F -pp "camlp4o pa_verifast.cmo" -c -I ./linux Perf.cmxa proverapi.cmx verifast.ml
+util.cmi: util.mli
+	ocamlopt.opt util.mli
+
+util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.cmi util.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux util.ml
+
+stats.cmi: util.cmi stats.mli
+	ocamlopt.opt -I ./linux stats.mli
+
+stats.cmx: stats.cmi stats.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux stats.ml
+
+lexer.cmi: stats.cmi lexer.mli
+	ocamlopt.opt lexer.mli
+
+lexer.cmx: lexer.cmi lexer.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux lexer.ml
+
+ast.cmi: lexer.cmi ast.mli
+	ocamlopt.opt ast.mli
+
+ast.cmx: ast.cmi ast.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux ast.ml
+
+parser.cmi: ast.cmi parser.mli
+	ocamlopt.opt parser.mli
+
+parser.cmx: parser.cmi parser.ml
+	ocamlopt.opt -w p -warn-error FSU -pp camlp4o -c -I ./linux parser.ml
+
+verifast0.cmi: parser.cmi verifast0.mli
+	ocamlopt.opt verifast0.mli
+
+verifast0.cmx: verifast0.cmi verifast0.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast0.ml
+
+verifast1.cmi: verifast0.cmi verifast1.mli
+	ocamlopt.opt verifast1.mli
+
+verifast1.cmx: verifast1.cmi verifast1.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast1.ml
+
+assertions.cmi: verifast1.cmi assertions.mli
+	ocamlopt.opt assertions.mli
+
+assertions.cmx: assertions.cmi assertions.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux assertions.ml
+
+verify_expr.cmi: assertions.cmi verify_expr.mli
+	ocamlopt.opt verify_expr.mli
+
+verify_expr.cmx: verify_expr.cmi verify_expr.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verify_expr.ml
+
+verifast.cmx: verify_expr.cmi verifast.ml
+	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
 	ocamlc.opt -warn-error F -g -pp camlp4o -I ./linux -c verifast.ml
@@ -299,8 +353,8 @@ SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
 SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
 	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
 
-../bin/verifast: vfversion_cmx proverapi.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+../bin/verifast: vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	ocamlopt.opt -warn-error F -c proverapi.ml
