@@ -1,5 +1,3 @@
-#include "list.h"
-
 /*@
 
 lemma_auto void length_nonnegative<t>(list<t> xs)
