@@ -1,4 +1,4 @@
-
+${OCAMLOPTOPT${OCAMLOPTOPT}}
 include ../GNUmakefile.settings
 
 # OS detection
@@ -91,11 +91,12 @@ env:
 	@echo "Configuration:"
 	@echo "---------------------"
 ifdef OS_SUPPORTED
-	@echo "OS            $(OS)"
+	@echo "OS                 $(OS)"
 else
 	$(error Unknown operating system: $(OS))
 endif
 	@echo "NUMCPU             $(NUMCPU)"
+	@echo "OCAMLBIN           $(OCAMLBIN)"
 	@echo "OCAMLLIB           $(OCAMLLIB)"
 	@echo "CWD                $(CWD)"
 	@echo "Z3                 $(Z3)"
@@ -130,16 +131,16 @@ distclean: clean
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
 
 ../bin/vfstrip: vfstrip.ml
-	ocamlopt.opt -o ../bin/vfstrip vfstrip.ml
+	${OCAMLOPTOPT} -o ../bin/vfstrip vfstrip.ml
 
 ../bin/main_class: main_class.ml
-	ocamlopt.opt -o ../bin/main_class main_class.ml
+	${OCAMLOPTOPT} -o ../bin/main_class main_class.ml
 
 ../bin/java_card_applet: java_card_applet.ml
-	ocamlopt.opt -o ../bin/java_card_applet java_card_applet.ml
+	${OCAMLOPTOPT} -o ../bin/java_card_applet java_card_applet.ml
 
 ../bin/dlsymtool: dlsymtool.ml
-	ocamlopt.opt -o ../bin/dlsymtool dlsymtool.ml
+	${OCAMLOPTOPT} -o ../bin/dlsymtool dlsymtool.ml
 
 reduxtest: verifastredux.opt
 	cd ../examples
@@ -163,63 +164,63 @@ reduxtest: verifastredux.opt
 
 Printexc_proxy.cmx:
 	cp Printexc_proxy_310.ml Printexc_proxy.ml
-	ocamlopt -c Printexc_proxy.ml
+	${OCAMLOPT} -c Printexc_proxy.ml
 
 ifdef MAC
 Fonts.cmx: Fonts_mac.ml
 	cp Fonts_mac.ml Fonts.ml
-	ocamlopt -c Fonts.ml
+	${OCAMLOPT} -c Fonts.ml
 else
 Fonts.cmx: Fonts_default.ml
 	cp Fonts_default.ml Fonts.ml
-	ocamlopt -c Fonts.ml
+	${OCAMLOPT} -c Fonts.ml
 endif
 
 ../bin/mysh: Fonts.cmx mysh.ml
-	ocamlopt.opt -thread -o ../bin/mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
+	${OCAMLOPTOPT} -thread -o ../bin/mysh unix.cmxa threads.cmxa Fonts.cmx mysh.ml
 
 vfversion.cmi: vfversion.mli
-	ocamlc -c vfversion.mli
+	${OCAMLC} -c vfversion.mli
 
 vfversion_cmo: vfversion.cmi
-	ocaml generate_vfversion.ml
-	ocamlc -c vfversion.ml
+	${OCAML} generate_vfversion.ml
+	${OCAMLC} -c vfversion.ml
 
 vfversion_cmx: vfversion.cmi
-	ocaml generate_vfversion.ml
-	ocamlopt -c vfversion.ml
+	${OCAML} generate_vfversion.ml
+	${OCAMLOPT} -c vfversion.ml
 
 verifastRedux: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlc -warn-error F -w p -g -pp camlp4o -o verifastRedux unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
+	${OCAMLC} -warn-error F -w p -g -pp camlp4o -o verifastRedux unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 
 verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml
 ifdef Z3V2
 	$(error "Z3V2 is defined.")
 endif
-	ocamlc -custom -warn-error F -g -pp camlp4o -o verifastZ3 -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
+	${OCAMLC} -custom -warn-error F -g -pp camlp4o -o verifastZ3 -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
 
 verifastZ3v2: vfversion_cmo proverapi.cmo z3v2prover.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml
 ifndef Z3V2
 	$(error "Z3V2 is not defined.")
 endif
-	ocamlc -custom -warn-error F -g -pp camlp4o -o verifastZ3v2 -I ./linux -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3v2prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
+	${OCAMLC} -custom -warn-error F -g -pp camlp4o -o verifastZ3v2 -I ./linux -I $(Z3)/ocaml unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3v2prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3v2.ml vfconsole.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib
 
 vfideZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfide.ml
-	$(SET_LDD); ocamlc -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
+	$(SET_LDD); ${OCAMLC} -custom -warn-error F -g -pp camlp4o -o vfideZ3 -I $(Z3)/ocaml -I +lablgtk2 lablgtk.cma gtkInit.cmo unix.cma nums.cma $(Z3)/ocaml/z3.ml proverapi.cmo z3prover.cmo vfversion.cmo verifast.cmo verifastPluginZ3.ml vfide.ml $(Z3)/ocaml/z3_stubs.obj $(Z3)/bin/z3.lib $(OCAMLLIB)/libcamlidl.lib ole32.lib -ccopt "/link /LIBPATH:"$(GTKLIB)
 
 mynum.cmx: mynum.ml
-	ocamlopt.opt -c nums.cmxa mynum.ml
+	${OCAMLOPTOPT} -c nums.cmxa mynum.ml
 
 ifdef MAC
 macos/GSourceView2.cmx: macos/GSourceView2.ml
-	cd macos; ocamlopt.opt -c -I +lablgtk2 GSourceView2.ml
+	cd macos; ${OCAMLOPTOPT} -c -I +lablgtk2 GSourceView2.ml
 endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
-	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp camlp4o -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
-	$(SET_LDD); ocamlopt.opt -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
+	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp camlp4o -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 
 linux/Perf.cmxa: linux/Perf.ml linux/Stopwatch.mli linux/caml_stopwatch.c
 	cd linux; make
@@ -228,154 +229,154 @@ DynType.mli: ../examples/plugin/DynType.mli
 	cat generated_file_warning.txt ../examples/plugin/DynType.mli > DynType.mli
 
 DynType.cmi: DynType.mli
-	ocamlopt.opt -c DynType.mli
+	${OCAMLOPTOPT} -c DynType.mli
 
 DynType.cmx: DynType.cmi DynType.ml
-	ocamlopt.opt -c DynType.ml
+	${OCAMLOPTOPT} -c DynType.ml
 
 plugins.mli: ../examples/plugin/plugins.mli
 	cat generated_file_warning.txt ../examples/plugin/plugins.mli > plugins.mli
 
 plugins.cmi: DynType.cmi plugins.mli
-	ocamlopt.opt -c plugins.mli
+	${OCAMLOPTOPT} -c plugins.mli
 
 plugins.cmx: DynType.cmx plugins.cmi plugins.ml
-	ocamlopt.opt -c plugins.ml
+	${OCAMLOPTOPT} -c plugins.ml
 
 plugins_private.cmx: plugins.cmx plugins_private.ml
-	ocamlopt.opt -c plugins_private.ml
+	${OCAMLOPTOPT} -c plugins_private.ml
 
 plugins2.mli: ../examples/plugin/plugins2.mli
 	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
 
 plugins2.cmi: plugins.cmi plugins2.mli
-	ocamlopt.opt -c plugins2.mli
+	${OCAMLOPTOPT} -c plugins2.mli
 
 plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
-	ocamlopt.opt -c plugins2.ml
+	${OCAMLOPTOPT} -c plugins2.ml
 
 pa_verifast.cmo: pa_verifast.ml
-	ocamlc -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
+	${OCAMLC} -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
 
 util.cmi: util.mli
-	ocamlopt.opt util.mli
+	${OCAMLOPTOPT} util.mli
 
 util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.cmi util.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux util.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux util.ml
 
 stats.cmi: util.cmi stats.mli
-	ocamlopt.opt -I ./linux stats.mli
+	${OCAMLOPTOPT} -I ./linux stats.mli
 
 stats.cmx: stats.cmi stats.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux stats.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux stats.ml
 
 lexer.cmi: stats.cmi lexer.mli
-	ocamlopt.opt lexer.mli
+	${OCAMLOPTOPT} lexer.mli
 
 lexer.cmx: lexer.cmi lexer.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux lexer.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux lexer.ml
 
 ast.cmi: lexer.cmi ast.mli
-	ocamlopt.opt ast.mli
+	${OCAMLOPTOPT} ast.mli
 
 ast.cmx: ast.cmi ast.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux ast.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux ast.ml
 
 parser.cmi: ast.cmi parser.mli
-	ocamlopt.opt parser.mli
+	${OCAMLOPTOPT} parser.mli
 
 parser.cmx: parser.cmi parser.ml
-	ocamlopt.opt -w p -warn-error FSU -pp camlp4o -c -I ./linux parser.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -pp camlp4o -c -I ./linux parser.ml
 
 verifast0.cmi: parser.cmi verifast0.mli
-	ocamlopt.opt verifast0.mli
+	${OCAMLOPTOPT} verifast0.mli
 
 verifast0.cmx: verifast0.cmi verifast0.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast0.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast0.ml
 
 verifast1.cmi: verifast0.cmi verifast1.mli
-	ocamlopt.opt verifast1.mli
+	${OCAMLOPTOPT} verifast1.mli
 
 verifast1.cmx: verifast1.cmi verifast1.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast1.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast1.ml
 
 assertions.cmi: verifast1.cmi assertions.mli
-	ocamlopt.opt assertions.mli
+	${OCAMLOPTOPT} assertions.mli
 
 assertions.cmx: assertions.cmi assertions.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux assertions.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux assertions.ml
 
 verify_expr.cmi: assertions.cmi verify_expr.mli
-	ocamlopt.opt verify_expr.mli
+	${OCAMLOPTOPT} verify_expr.mli
 
 verify_expr.cmx: verify_expr.cmi verify_expr.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verify_expr.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verify_expr.ml
 
 verifast.cmx: verify_expr.cmi verifast.ml
-	ocamlopt.opt -w p -warn-error FSU -c -I ./linux verifast.ml
+	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
-	ocamlc.opt -warn-error F -g -pp camlp4o -I ./linux -c verifast.ml
+	${OCAMLCOPT} -warn-error F -g -pp camlp4o -I ./linux -c verifast.ml
 
 simplex.cmo: simplex.ml
-	ocamlc -warn-error F -g -c simplex.ml
+	${OCAMLC} -warn-error F -g -c simplex.ml
 
 proverapi.cmo: proverapi.ml
-	ocamlc -warn-error F -g -c proverapi.ml
+	${OCAMLC} -warn-error F -g -c proverapi.ml
 
 redux.cmo: proverapi.cmo simplex.cmo redux.ml
-	ocamlc -warn-error F -w p -g -c redux.ml
+	${OCAMLC} -warn-error F -w p -g -c redux.ml
 
 z3prover.cmo: proverapi.cmo z3prover.ml linux/Perf.cmxa
 ifdef Z3V2
 	$(error "Z3V2 is defined.")
 endif
-	ocamlc -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3prover.ml
+	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3prover.ml
 
 z3v2prover.cmo: proverapi.cmo z3v2prover.ml linux/Perf.cmxa
 ifndef Z3V2
 	$(error "Z3V2 is not defined.")
 endif
-	ocamlc -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v2prover.ml
+	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v2prover.ml
 
 verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
+	${OCAMLOPTOPT} -warn-error F -pp camlp4o -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
 SExpressions.cmi: SExpressions.mli
-	ocamlopt.opt -c SExpressions.mli
+	${OCAMLOPTOPT} -c SExpressions.mli
 
 SExpressions.cmx: SExpressions.cmi SExpressions.ml
-	ocamlopt.opt -c nums.cmxa SExpressions.ml
+	${OCAMLOPTOPT} -c nums.cmxa SExpressions.ml
 
 SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
-	ocamlopt.opt -c SExpressionEmitter.mli
+	${OCAMLOPTOPT} -c SExpressionEmitter.mli
 
 SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
-	ocamlopt.opt -c nums.cmxa SExpressionEmitter.ml
+	${OCAMLOPTOPT} -c nums.cmxa SExpressionEmitter.ml
 
 ../bin/verifast: vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	${OCAMLOPTOPT} -warn-error F -pp camlp4o -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
-	ocamlopt.opt -warn-error F -c proverapi.ml
+	${OCAMLOPTOPT} -warn-error F -c proverapi.ml
 
 simplex.cmi: simplex.mli
-	ocamlopt.opt -c simplex.mli
+	${OCAMLOPTOPT} -c simplex.mli
 
 simplex.cmx: linux/Perf.cmx simplex.cmi simplex.ml
-	ocamlopt.opt -warn-error F -c -I ./linux Perf.cmx simplex.ml
+	${OCAMLOPTOPT} -warn-error F -c -I ./linux Perf.cmx simplex.ml
 
 redux.cmx: linux/Perf.cmx proverapi.cmx simplex.cmx redux.ml
-	ocamlopt.opt -warn-error F -c -I ./linux Perf.cmx redux.ml
+	${OCAMLOPTOPT} -warn-error F -c -I ./linux Perf.cmx redux.ml
 
 z3prover.cmx: linux/Perf.cmx proverapi.cmx z3prover.ml
-	ocamlopt.opt -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3prover.ml
+	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3prover.ml
 
 z3v2prover.cmx: linux/Perf.cmx proverapi.cmx z3v2prover.ml
-	ocamlopt.opt -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v2prover.ml
+	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v2prover.ml
 
 verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
-	ocamlopt.opt -warn-error F -pp camlp4o -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
+	${OCAMLOPTOPT} -warn-error F -pp camlp4o -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 
 release: test release_core
 
