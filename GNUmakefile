@@ -31,6 +31,7 @@ ocaml: GNUmakefile
 	cd ${OCAMLSRC}; ${MAKE} world
 	cd ${OCAMLSRC}; ${MAKE} opt
 	cd ${OCAMLSRC}; ${MAKE} install
+	cd ${OCAMLSRC}; ${MAKE} clean
 	echo ${OCAMLDIR} >ocaml
 
 cidl: GNUmakefile ocaml
@@ -39,8 +40,9 @@ cidl: GNUmakefile ocaml
 	gunzip -c ${CIDLPKG} | tar -xv
 	sed 's#/usr/local#${OCAMLDIR}#g'\
           ${CIDLSRC}/config/Makefile.unix >${CIDLSRC}/config/Makefile
-	cd ${CIDLSRC}; ${MAKE} all
-	cd ${CIDLSRC}; ${MAKE} install
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} all
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} install
+	cd ${CIDLSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; ${MAKE} clean
 	touch cidl
 
 lgtk: GNUmakefile ocaml

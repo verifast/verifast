@@ -28,6 +28,7 @@ OCAMLCOPT    = ${OCAMLBIN}/ocamlc
 OCAMLOPT     = ${OCAMLBIN}/ocamlopt
 OCAMLOPTOPT  = ${OCAMLBIN}/ocamlopt
 #OCAMLOPTOPT  = ${OCAMLBIN}/ocamlopt.opt
+CAMLP4O      = ${OCAMLBIN}/camlp4o
 
 # ----------------------------------------------------------------------------
 # lablgtk2 installation directories
