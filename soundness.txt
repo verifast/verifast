@@ -6,7 +6,7 @@ If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./
 
 Known VeriFast unsoundnesses:
 - linking correctness: ensure header files have the same meaning in all modules
-- linking correctness: prevent duplicate struct definitions and duplicate predicate definitions
+- linking correctness: prevent duplicate struct definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions
 - disallow the use of regular function pointers as predicate family indices in unloadable modules. (Note: using lemma function pointers as predicate family indices is fine.)
 - VeriFast assumes that the C compiler does not assume that the C program obeys strict aliasing rules.
@@ -35,3 +35,4 @@ Known VeriFast unsoundnesses:
 - ghost variables (which can hide fields) can appear in the argument of the Java assert statement
 - Spec of Selector.selectedKeys: states that the selected-keys set does not contain any cancelled keys. This is not true.
 - API specs: Not all specs of methods that throw checked exceptions (such as IOException) declare them
+- Linking soundness (i.e. soundness for multi-jar programs) has not yet been thoroughly dealt with

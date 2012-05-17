@@ -12,13 +12,6 @@
  */
  
 
-/*#
- * predicate module_state() - The user of this wrapper API should fill in this
- * predicate.
- */
-//@ predicate module_state();
-
-
 /**
  * typedef int module_setup_t - Prototype of module initialisation function
  *
@@ -32,11 +25,12 @@
  * Failure is interpreted as out of memory.  Other types of failure or
  * specific return codes are currently not supported.
  */
-typedef int module_setup_t/*@(int module)@*/();
+typedef int module_setup_t/*@(int module, void *module_cleanup_func)@*/();
 	//@ requires module(module, true) &*& vf_cleanup_debt(0);
 	/*@ ensures
 		result == 0 ? // success
-			module_state()
+			[_]is_module_cleanup_t(module_cleanup_func, module, ?module_state)
+			&*& module_state()
 		: // failure
 			module(module, _)
 			&*& result == -1
@@ -44,7 +38,7 @@ typedef int module_setup_t/*@(int module)@*/();
 	@*/
 
 
-typedef void module_cleanup_t/*@(int module)@*/();
+typedef void module_cleanup_t/*@(int module, predicate() module_state)@*/();
 	//@ requires module_state();
 	//@ ensures module(module, _) &*& vf_cleanup_debt(0);
 

@@ -66,30 +66,23 @@ void *threadfn(void* _unused) //@ : pthread_run_joinable
   return ((void *) 0);
  }
 
-/*@
-
-predicate lockset(int threadId, list<int> lockIds) = true;
-
-  @*/
-
-
 void run_instance(void)
 /*@ requires
         integer(&g, ?vf_g0)
     &*& 0 <= vf_g0 &*& vf_g0 <= 1024
     &*& integer(&g_lock, _)
+    &*& lockset(currentThread, nil)
     &*& true;
   @*/
 /*@ ensures
         integer(&g, _)
     &*& integer(&g_lock, _)
+    &*& lockset(currentThread, nil)
     &*& true;
   @*/
  {
   void *data = (void *) 0;
   pthread_t pthr1, pthr2;
-
-//@ close lockset(currentThread, nil);  // A lockset for the "local" thread.
 
   g = 41;
 //@ assert integer(&g, ?vf_g1);
@@ -129,9 +122,9 @@ void run_instance(void)
 
 int main (int argc, char** argv)
 /*@ requires
-        module(pthreads, true);
+        module(pthreads, true) &*& lockset(currentThread, nil);
   @*/
-/*@ ensures true;
+/*@ ensures lockset(currentThread, nil);
   @*/
  {
 //@ open_module();

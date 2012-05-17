@@ -3797,7 +3797,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let (p, predfam_tparams, arity, ps, psymb, inputParamCount) =
       match resolve (pn,ilist) l p predfammap with
         None -> static_error l ("No such predicate family: "^p) None
-      | Some (p, (_, predfam_tparams, arity, ps, psymb, inputParamCount)) -> (p, predfam_tparams, arity, ps, psymb, inputParamCount)
+      | Some (p, (lfam, predfam_tparams, arity, ps, psymb, inputParamCount)) ->
+        if fns = [] && language = CLang then begin
+          let famPath = let (((basePath, relPath), _, _), _) = lfam in concat basePath relPath in
+          let instPath = let (((basePath, relPath), _, _), _) = l in concat basePath relPath in
+          let famPathNoExt = try Filename.chop_extension famPath with Invalid_argument _ -> famPath in
+          if instPath <> famPath && instPath <> famPathNoExt ^ ".c" then
+            static_error l "A predicate declared in a header file may be defined only in the corresponding .c file." None
+        end;
+        (p, predfam_tparams, arity, ps, psymb, inputParamCount)
     in
     check_predinst0 predfam_tparams arity ps psymb inputParamCount (pn, ilist) tparams tenv env l p predinst_tparams fns xs body
   

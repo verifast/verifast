@@ -250,7 +250,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let assume_is_functype fn ftn =
     let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
     ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
-  
+   
+  let funcnameterm_of funcmap fn =
+    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
+ 
   let functypes_implemented = ref []
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt body =
@@ -306,12 +309,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some bs ->
                 List.map
                   begin fun ((x, tp), (larg, arg)) ->
-                    let value =
+                    let (value, type_) =
                       match try_assoc arg modulemap with
-                        None -> static_error larg "No such module" None
-                      | Some term -> term
+                        None ->
+                        begin try
+                          List.assoc arg funcnameterms
+                        with Not_found ->
+                        try
+                          funcnameterm_of funcmap0 arg
+                        with Not_found ->
+                          static_error larg "No such module or function" None
+                        end, PtrType Void
+                      | Some term -> term, IntType
                     in
-                    expect_type larg IntType (instantiate_type fttpenv tp);
+                    expect_type larg type_ (instantiate_type fttpenv tp);
                     (x, value)
                   end
                   bs
@@ -1400,9 +1411,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         success()
       )
     )
-  
-  let funcnameterm_of funcmap fn =
-    let FuncInfo (env, Some fterm, l, k, tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, _, _) = List.assoc fn funcmap in fterm
   
   let default_value t =
     match t with

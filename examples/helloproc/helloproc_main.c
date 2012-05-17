@@ -153,11 +153,12 @@ int read_proc_callback(struct vf_procfs_callback_handle *cb_handle)
  * 
  * Called when this module is loaded.
  */
-int helloproc_main_module_init() //@ : module_setup_t(helloproc_main)
+int helloproc_main_module_init() //@ : module_setup_t(helloproc_main, helloproc_main_module_exit)
 	//@ requires module(helloproc_main, true) &*& vf_cleanup_debt(0);
 	/*@ ensures
 		result == 0 ?
-			module_state()
+			[_]is_module_cleanup_t(helloproc_main_module_exit, helloproc_main, module_state)
+			&*& module_state()
 		:
 			module(helloproc_main, _)
 			&*& result == -1
@@ -192,6 +193,7 @@ int helloproc_main_module_init() //@ : module_setup_t(helloproc_main)
 	}
 	
 	/*---- We're done ----*/
+	//@ produce_function_pointer_chunk module_cleanup_t(helloproc_main_module_exit)(helloproc_main, module_state)() { call(); }
 	//@ close module_state();
 	return 0;
 	
@@ -229,7 +231,7 @@ error_mkdir:
  *
  * Called when this kernel module is being unloaded.
  */
-void helloproc_main_module_exit() //@ : module_cleanup_t(helloproc_main)
+void helloproc_main_module_exit()
 	//@ requires module_state();
 	//@ ensures module(helloproc_main, _) &*& vf_cleanup_debt(0);
 {
