@@ -8,4 +8,10 @@ void abort();
     //@ requires true;
     //@ ensures false;
 
+void exit(int status);
+/*@ requires true;
+  @*/
+/*@ ensures false;
+  @*/
+
 #endif

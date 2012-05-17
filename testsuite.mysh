@@ -82,6 +82,7 @@ cd ..
 verifast_both -c odd_even_lemmas.c
 verifast_both threading.o philosophers.c
 verifast_both -c -run_preprocessor -disable_overflow_check preprocessor.c
+verifast_both -c pthreads.c
 verifast_both -c public_invariant.c
 verifast_both -c pure_map.c
 cd queue

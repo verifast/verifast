@@ -112,6 +112,7 @@ clean:
          arrays.vfmanifest list.vfmanifest listex.vfmanifest \
          raw_ghost_lists.vfmanifest
 	rm -f macos/*.cm* macos/*.o
+	rm -f a.out
 	${MAKE} -C linux -f GNUmakefile clean
 
 distclean: clean

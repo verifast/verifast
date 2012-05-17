@@ -76,6 +76,7 @@ GNUmakefile.settings: GNUmakefile.settings.local
 
 
 clean:
+	rm -f test
 	$(MAKE) -C src -f GNUmakefile clean
 
 distclean: clean

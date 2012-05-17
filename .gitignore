@@ -36,6 +36,8 @@ ocaml-3.12.1.tar.gz
 ocaml-3.12.1
 z3build
 
+test
+
 /examples/MockKernel/MockKernelModule_proxy*
 
 
