@@ -18,7 +18,7 @@ OS       = $(shell uname -s)
 # Autodetection of OCAML Lib.
 # If autodetection fails, set OCAMLBIN to point to the location of the
 # OCAML binaries, i.e., "/usr/local/ocaml/bin".
-OCAMLBIN = /usr/bin/
+OCAMLBIN = $(shell dirname `which ocamlc`)
 OCAMLLIB = $(shell ${OCAMLBIN}/ocamlc -where)
 
 OCAML        = ${OCAMLBIN}/ocaml
