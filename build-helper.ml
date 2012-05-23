@@ -4,7 +4,7 @@ open Unix;;
 open Printf;;
 
 let releases = [ (* Add new releases to the front *)
-  "12.5.23", 1129;
+  "12.5.23", 1130;
   "12.5", 1124;
   "12.3", 1058;
   "12.2", 1041;
@@ -108,7 +108,7 @@ let () =
   let zippath = ".." // ".." // zipname in
   if Sys.file_exists zippath then Sys.remove zippath;
   create_zip zippath releasename;
-  Sys.chdir ".." // "..";
+  Sys.chdir (".." // "..");
   sh (sprintf "%s %s" ("." // "upload") zipname)
   with
     Failure msg ->

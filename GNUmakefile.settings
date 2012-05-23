@@ -1,0 +1,38 @@
+
+# ----------------------------------------------------------------------------
+# Path to Z3 or Z3v2
+# Notes: Use $$HOME instead of ~ here!
+#        If you don't have Z3, i.e. on a MAC, define NOZ3 = true instead.
+#Z3       = $$HOME/z3
+#Z3V2     = $$HOME/z3
+NOZ3     = true
+
+
+# ----------------------------------------------------------------------------
+# Autodetection of operating system.
+# If autodetection fails, set OS to either "Linux" or "Darwin".
+OS       = $(shell uname -s)
+
+
+# ----------------------------------------------------------------------------
+# Autodetection of OCAML Lib.
+# If autodetection fails, set OCAMLBIN to point to the location of the
+# OCAML binaries, i.e., "/usr/local/ocaml/bin".
+OCAMLBIN = $(shell dirname `which ocaml`)
+OCAMLLIB = $(shell ${OCAMLBIN}/ocamlc -where)
+
+OCAML        = ${OCAMLBIN}/ocaml
+OCAMLC       = ${OCAMLBIN}/ocamlc
+OCAMLCOPT    = ${OCAMLBIN}/ocamlc
+#OCAMLCOPT    = ${OCAMLBIN}/ocamlc.opt
+OCAMLOPT     = ${OCAMLBIN}/ocamlopt
+OCAMLOPTOPT  = ${OCAMLBIN}/ocamlopt
+#OCAMLOPTOPT  = ${OCAMLBIN}/ocamlopt.opt
+CAMLP4O      = ${OCAMLBIN}/camlp4o
+
+
+
+# ----------------------------------------------------------------------------
+# Autodetect current working directory
+CWD      = $(CURDIR)
+
