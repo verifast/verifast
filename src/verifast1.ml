@@ -3048,6 +3048,31 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             iter0 (List.map fst xmap) wbody;
             check_cs (List.remove_assoc cn ctormap) (SwitchExprClause (lc, cn, xs, wbody)::wcs) cs
+          | SwitchStmtDefaultClause (lc, body)::cs ->
+            if cs <> [] then static_error lc "The default clause must be the last clause." None;
+            let (lret, body) =
+              match body with
+                [ReturnStmt (lret, Some e)] -> (lret, e)
+              | _ -> static_error lc "Body of switch clause must be a return statement with a result expression." None
+            in
+            let wbody = check_expr_t (pn,ilist) tparams pmap body rt in
+            let expr_is_ok e =
+              match e with
+                WPureFunCall (l, g', targs, args) ->
+                if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot call a fixpoint function that appears later in the program text" None;
+                if g' = g then static_error l "Recursive calls are not allowed in a default clause." None
+              | Var (l, g', scope) when (match !scope with Some PureFuncName -> true | _ -> false) ->
+                if List.mem_assoc g' fpm_todo then static_error l "A fixpoint function cannot mention a fixpoint function that appears later in the program text" None;
+                if g' = g then static_error l "A fixpoint function that mentions itself is not yet supported." None
+              | _ -> ()
+            in
+            expr_iter expr_is_ok wbody;
+            let clauses =
+              ctormap |> List.map begin fun (cn, (_, (_, _, _, ts, _))) ->
+                SwitchExprClause (lc, cn, List.map (fun _ -> "_") ts, wbody)
+              end
+            in
+            clauses @ wcs
         in
         let wcs = check_cs ctormap [] cs in
         iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x, ref None), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
@@ -4476,8 +4501,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
               (csym, apply)
             | None ->
               let (Some (_, e)) = cdef_opt in
-              let apply gvs cvs =
-                let Some genv = zip ("#value"::List.map (fun (x, t) -> x) env) gvs in
+              let apply (_::gvs) cvs =
+                let Some genv = zip (List.map (fun (x, t) -> x) env) gvs in
                 eval_core None None genv e
               in
               (csym, apply)
@@ -4523,6 +4548,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                 let Some pts = zip pmap gts in
                 let penv = List.map (fun ((p, tp), t) -> (p, t)) pts in
                 let Some patenv = zip pats cts in
+                let patenv = List.filter (fun (x, t) -> x <> "_") patenv in
                 let patenv =
                   if tparams = [] then patenv else
                   let Some tpenv = zip tparams targs in

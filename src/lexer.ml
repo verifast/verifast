@@ -419,7 +419,14 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
          ( reset_buffer (); Some (String (string ())) )
          else
          ( reset_buffer (); store c; ident2 () )
-    | ('!' | '%' | '&' | '$' | '#' | '+' | '-' | '=' | '>' |
+    | '!' ->
+      start_token(); text_junk ();
+      if text_peek() = '=' then begin
+        text_junk ();
+        Some (ident_or_keyword "!=" false)
+      end else
+        Some (ident_or_keyword "!" false)
+    | ('%' | '&' | '$' | '#' | '+' | '-' | '=' | '>' |
        '?' | '@' | '\\' | '~' | '^' | '|' as c) ->
         start_token();
         text_junk ();

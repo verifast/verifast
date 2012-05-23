@@ -39,6 +39,7 @@ verifast_both -disable_overflow_check counter.c
 verifast_both -disable_overflow_check counter_with_pred.c
 verifast_both -disable_overflow_check counter_with_pred_auto.c
 verifast_both -shared listex.o arrays.o threading.o counting_threads.c
+verifast_both -c default_clause_test.c
 verifast_both -disable_overflow_check cp.c
 ifnotmac verifast -c decreases.c
 verifast_both -c dolevyao.c
