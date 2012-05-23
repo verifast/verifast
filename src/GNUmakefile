@@ -258,61 +258,34 @@ plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
 pa_verifast.cmo: pa_verifast.ml
 	${OCAMLC} -I +camlp4 dynlink.cma camlp4lib.cma -pp "${CAMLP4O} pa_extend.cmo q_MLast.cmo" pa_verifast.ml
 
-util.cmi: util.mli
-	${OCAMLOPTOPT} util.mli
-
-util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.cmi util.ml
+util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux util.ml
 
-stats.cmi: util.cmi stats.mli
-	${OCAMLOPTOPT} -I ./linux stats.mli
-
-stats.cmx: stats.cmi stats.ml
+stats.cmx: util.cmx stats.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux stats.ml
 
-lexer.cmi: stats.cmi lexer.mli
-	${OCAMLOPTOPT} lexer.mli
-
-lexer.cmx: lexer.cmi lexer.ml
+lexer.cmx: stats.cmx lexer.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux lexer.ml
 
-ast.cmi: lexer.cmi ast.mli
-	${OCAMLOPTOPT} ast.mli
-
-ast.cmx: ast.cmi ast.ml
+ast.cmx: lexer.cmx ast.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux ast.ml
 
-parser.cmi: ast.cmi parser.mli
-	${OCAMLOPTOPT} parser.mli
-
-parser.cmx: parser.cmi parser.ml
+parser.cmx: ast.cmx parser.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -pp ${CAMLP4O} -c -I ./linux parser.ml
 
-verifast0.cmi: parser.cmi verifast0.mli
-	${OCAMLOPTOPT} verifast0.mli
-
-verifast0.cmx: verifast0.cmi verifast0.ml
+verifast0.cmx: parser.cmx verifast0.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast0.ml
 
-verifast1.cmi: verifast0.cmi verifast1.mli
-	${OCAMLOPTOPT} verifast1.mli
-
-verifast1.cmx: verifast1.cmi verifast1.ml
+verifast1.cmx: verifast0.cmx verifast1.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast1.ml
 
-assertions.cmi: verifast1.cmi assertions.mli
-	${OCAMLOPTOPT} assertions.mli
-
-assertions.cmx: assertions.cmi assertions.ml
+assertions.cmx: verifast1.cmx assertions.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux assertions.ml
 
-verify_expr.cmi: assertions.cmi verify_expr.mli
-	${OCAMLOPTOPT} verify_expr.mli
-
-verify_expr.cmx: verify_expr.cmi verify_expr.ml
+verify_expr.cmx: assertions.cmx verify_expr.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verify_expr.ml
 
-verifast.cmx: verify_expr.cmi verifast.ml
+verifast.cmx: verify_expr.cmx verifast.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml

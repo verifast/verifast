@@ -174,79 +174,52 @@ trivial_verifast_plugin.cmxs: DynType.cmx plugins.cmi plugins2.cmi trivial_plugi
 #	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp "camlp4o pa_verifast.cmo" -c -I .\win Perf.cmxa proverapi.cmx verifast.ml
 #	time < nl.txt
 
-util.cmi: util.mli
-	ocamlopt.opt util.mli
-
-util.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx util.cmi util.ml
+util.cmx: pa_verifast.cmo win\Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx util.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win util.ml
 	time < nl.txt
 
-stats.cmi: util.cmi stats.mli
-	ocamlopt.opt -I .\win stats.mli
-
-stats.cmx: stats.cmi stats.ml
+stats.cmx: util.cmx stats.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win stats.ml
 	time < nl.txt
 
-lexer.cmi: stats.cmi lexer.mli
-	ocamlopt.opt lexer.mli
-
-lexer.cmx: lexer.cmi lexer.ml
+lexer.cmx: stats.cmx lexer.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win lexer.ml
 	time < nl.txt
 
-ast.cmi: lexer.cmi ast.mli
-	ocamlopt.opt ast.mli
-
-ast.cmx: ast.cmi ast.ml
+ast.cmx: lexer.cmx ast.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win ast.ml
 	time < nl.txt
 
-parser.cmi: ast.cmi parser.mli
-	ocamlopt.opt parser.mli
-
-parser.cmx: parser.cmi parser.ml
+parser.cmx: ast.cmx parser.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp camlp4o -c -I .\win parser.ml
 	time < nl.txt
 
-verifast0.cmi: parser.cmi verifast0.mli
-	ocamlopt.opt verifast0.mli
-
-verifast0.cmx: verifast0.cmi verifast0.ml
+verifast0.cmx: parser.cmx verifast0.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast0.ml
 	time < nl.txt
 
-verifast1.cmi: verifast0.cmi verifast1.mli
-	ocamlopt.opt verifast1.mli
-
-verifast1.cmx: verifast1.cmi verifast1.ml
+verifast1.cmx: verifast0.cmx verifast1.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast1.ml
 	time < nl.txt
 
-assertions.cmi: verifast1.cmi assertions.mli
-	ocamlopt.opt assertions.mli
-
-assertions.cmx: assertions.cmi assertions.ml
+assertions.cmx: verifast1.cmx assertions.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win assertions.ml
 	time < nl.txt
 
-verify_expr.cmi: assertions.cmi verify_expr.mli
-	ocamlopt.opt verify_expr.mli
-
-verify_expr.cmx: verify_expr.cmi verify_expr.ml
+verify_expr.cmx: assertions.cmx verify_expr.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verify_expr.ml
 	time < nl.txt
 
-verifast.cmx: verify_expr.cmi verifast.ml
+verifast.cmx: verify_expr.cmx verifast.ml
 	time < nl.txt
 	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -c -I .\win verifast.ml
 	time < nl.txt

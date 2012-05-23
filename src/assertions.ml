@@ -710,19 +710,21 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               [] -> ""
             | _ -> Printf.sprintf "<%s>" (String.concat ", " (List.map string_of_type targs))
           in
-          let args =
-            let rec iter patvars pats args =
-              match pats with
-                [] -> List.rev args
-              | TermPat t::pats -> iter patvars pats (ctxt#pprint t::args)
-              | SrcPat (LitPat (Var (_, x, scope)))::pats when !scope = Some LocalVar -> iter patvars pats ((if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_")::args)
-              | SrcPat (LitPat e)::pats -> iter patvars pats ((if patvars = [] || lists_disjoint patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>")::args)
-              | SrcPat DummyPat::pats -> iter patvars pats ("_"::args)
-              | SrcPat (VarPat (_, x))::pats -> iter (x::patvars) pats ("_"::args)
-            in
-            String.concat ", " (iter [] pats [])
+          let patvars = ref [] in
+          let rec string_of_pat pat =
+            match pat with
+            | LitPat (Var (_, x, scope)) when !scope = Some LocalVar -> if List.mem_assoc x env then ctxt#pprint (List.assoc x env) else "_"
+            | LitPat e -> if !patvars = [] || lists_disjoint !patvars (vars_used e) then ctxt#pprint (eval None env e) else "<expr>"
+            | DummyPat -> "_"
+            | VarPat (_, x) -> patvars := x::!patvars; "_"
+            | WCtorPat (_, i, targs, g, ts0, ts, pats) -> Printf.sprintf "%s(%s)" g (String.concat ", " (List.map string_of_pat pats))
           in
-          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs args
+          let string_of_pat0 pat0 =
+            match pat0 with
+              TermPat t -> ctxt#pprint t
+            | SrcPat pat -> string_of_pat pat
+          in
+          Printf.sprintf "No matching heap chunks: %s%s(%s)" predname targs (String.concat ", " (List.map string_of_pat0 pats))
         in
         assert_false h env l message (Some "nomatchingheapchunks")
   (*      
