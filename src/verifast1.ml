@@ -1534,7 +1534,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec check_ctor (ctorname, (_, (_, _, _, pts, _))) =
           let rec check_type negative pt =
             match pt with
-              Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
+            | Bool | Void | IntType | UShortType | ShortType | UintPtrType | RealType | UChar | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
             | TypeParam _ -> if negative then static_error l "A type parameter may not appear in a negative position in an inductive datatype definition." None
             | InductiveType (i0, tps) ->
               List.iter (fun t -> check_type negative t) tps;
@@ -1566,6 +1566,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               List.iter (fun t -> check_type true t) pts
             | PureFuncType (t1, t2) ->
               check_type true t1; check_type negative t2
+            | t -> static_error l (Printf.sprintf "Type '%s' is not supported as an inductive constructor parameter type." (string_of_type t)) None
           in
           List.iter (check_type false) pts
         in
@@ -3316,6 +3317,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None ->
             static_error l "Not a constructor" None
           end
+        | _ -> static_error l "Not a constructor" None
         end
       | None -> static_error l "No such pure function" None
       end

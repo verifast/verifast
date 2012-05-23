@@ -1704,7 +1704,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume_eq (mk_app length_symb [elems]) lv $. fun () ->
         assume (mk_app all_eq_symb [elems; ctxt#mk_boxed_int (ctxt#mk_intlit 0)]) $. fun () ->
           new_array h env l elem_tp lv elems
-    | NewArrayWithInitializer(l, tp, es) ->
+    | NewArrayWithInitializer(l, tp, es) when language = Java ->
       let elem_tp = check_pure_type (pn,ilist) tparams tp in
       let ws = List.map (fun e -> check_expr_t (pn,ilist) tparams tenv e elem_tp) es in
       evhs h env ws $. fun h env vs ->
