@@ -969,6 +969,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | EmpAsn _ -> ()
     | ForallAsn (l, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
+    | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
+    | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
   
   let rec stmt_mark_addr_taken s locals cont =
     match s with
