@@ -403,6 +403,7 @@ and
       asn
   | PluginAsn of loc * string
   | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
+  | EnsuresAsn of loc * asn
 and
   switch_asn_clause = (* ?switch_asn_clause *)
   | SwitchAsnClause of
@@ -673,6 +674,7 @@ let asn_loc p =
   | CoefAsn (l, coef, body) -> l
   | PluginAsn (l, asn) -> l
   | WPluginAsn (l, xs, asn) -> l
+  | EnsuresAsn (l, body) -> l
   
 let stmt_loc s =
   match s with

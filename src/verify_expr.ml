@@ -272,12 +272,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] xs
     in
-    let tenv = [(current_thread_name, current_thread_type)] @ xmap @ tenv0 in
+    let tenv = [(current_thread_name, current_thread_type); "#pre", match rt with None -> Void | Some rt -> rt] @ xmap @ tenv0 in
     let (pre, pre_tenv, post) =
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None
       | Some (pre, post) ->
         let (wpre, pre_tenv) = check_asn (pn,ilist) tparams tenv pre in
+        let pre_tenv = List.remove_assoc "#pre" pre_tenv in
         let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
         let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
         (wpre, pre_tenv, wpost)
@@ -1340,7 +1341,12 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
     (fun cont -> if language = Java then with_context (Executing (h, env, l, "Verifying call")) cont else cont ()) $. fun () ->
     with_context PushSubcontext (fun () ->
-      consume_asn rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size ->
+      consume_asn_with_post rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
+        let post =
+          match post' with
+            None -> post
+          | Some post' -> post'
+        in
         let _ =
           match leminfo with
             None -> ()

@@ -352,8 +352,15 @@ struct iter *llist_create_iter(struct llist *l)
 }
 
 int iter_next(struct iter *i)
-    //@ requires iter(i, ?f, ?l, ?v0, ?v) &*& switch (v) { case nil: return false; case cons(h, t): return true; };
-    //@ ensures switch (v) { case nil: return false; case cons(h, t): return result == h &*& iter(i, f, l, v0, t); };
+    /*@
+    requires
+        iter(i, ?f, ?l, ?v0, ?v) &*&
+        switch (v) {
+            case nil: return false;
+            case cons(h, t): return ensures result == h &*& iter(i, f, l, v0, t);
+        };
+    @*/
+    //@ ensures emp;
 {
     //@ open iter(i, f, l, v0, v);
     struct node *c = i->current;

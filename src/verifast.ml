@@ -1941,7 +1941,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ =
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
-      produce_asn [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env ->
+      produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
+        let post =
+          match post' with
+            None -> post
+          | Some post' ->
+            post'
+        in
         let (prolog, ss) =
           if in_pure_context then
             ([], ss)

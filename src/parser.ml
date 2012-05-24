@@ -875,6 +875,7 @@ and
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefAsn (l, coef, p)
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
+| [< '(l, Kwd "ensures"); p = parse_pred >] -> EnsuresAsn (l, p)
 | [< e = parse_disj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> PointsTo (l, e, rhs)
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)

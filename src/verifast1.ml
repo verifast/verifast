@@ -3563,6 +3563,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
       let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
       (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
+    | EnsuresAsn (l, body) ->
+      begin match try_assoc "#pre" tenv with
+        None -> static_error l "Ensures clause not allowed here." None
+      | Some rt ->
+        let tenv = List.remove_assoc "#pre" tenv in
+        let tenv = if rt = Void then tenv else ("result", rt)::tenv in
+        let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
+        (EnsuresAsn (l, wbody), tenv, infTps)
+      end
     | PluginAsn (l, text) ->
       match pluginmap with
         [] -> static_error l "Load a plugin before using a plugin assertion" None

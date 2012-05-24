@@ -171,7 +171,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] h
   
-  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
+  let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
+    let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -233,11 +234,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match frac with
             None -> 
             if coef == real_unit then 
-              produce_asn_core (zip2 tparams targs) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+              produce_asn_core_with_post (zip2 tparams targs) h [] (zip2 (xs1@xs2) ts) post coef size_first size_all true (fun h_ _ _ _ -> cont h_ ghostenv env)
             else
               do_assume_chunk ()
           | Some(f) ->
-            produce_asn_core (zip2 tparams targs) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ -> cont h_ ghostenv env)
+            produce_asn_core_with_post (zip2 tparams targs) h [] ((f, coef) :: (zip2 (xs1@xs2) ts)) post real_unit size_first size_all true (fun h_ _ _ _ -> cont h_ ghostenv env)
       )
     | WInstPredAsn (l, e_opt, st, cfin, tn, g, index, pats) ->
       let (pmap, pred_symb) =
@@ -265,12 +266,15 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
       cont h ghostenv env
     | ExprAsn (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
-    | Sep (l, p1, p2) -> produce_asn_core tpenv h ghostenv env p1 coef size_first size_all assuming (fun h ghostenv env -> produce_asn_core tpenv h ghostenv env p2 coef size_all size_all assuming cont)
+    | Sep (l, p1, p2) ->
+      produce_asn_core_with_post tpenv h ghostenv env p1 coef size_first size_all assuming $. fun h ghostenv env post ->
+      if post <> None then assert_false h env l "Left-hand side of separating conjunction cannot specify a postcondition." None;
+      produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post
     | IfAsn (l, e, p1, p2) ->
       let cont h _ _ = cont h ghostenv env in
       branch
-        (fun _ -> assume (ev e) (fun _ -> produce_asn_core tpenv h ghostenv env p1 coef size_all size_all assuming cont))
-        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core tpenv h ghostenv env p2 coef size_all size_all assuming cont))
+        (fun _ -> assume (ev e) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p1 coef size_all size_all assuming cont_with_post))
+        (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
       let cont h _ _ = cont h ghostenv env in
       let t = ev e in
@@ -300,7 +304,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                      pts
                in
                let xenv = List.map (fun (x, _, t) -> (x, t)) xts in
-               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont))
+               assume_eq t (mk_app cs (List.map (fun (x, t, _) -> t) xts)) (fun _ -> produce_asn_core_with_post tpenv h (pats @ ghostenv) (xenv @ env) p coef size_all size_all assuming cont_with_post))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -315,10 +319,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont h ghostenv env
       end
     | CoefAsn (l, DummyPat, body) ->
-      produce_asn_core tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont
+      produce_asn_core_with_post tpenv h ghostenv env body (get_dummy_frac_term ()) size_first size_all assuming cont_with_post
     | CoefAsn (l, coef', body) ->
       evalpat true ghostenv env coef' RealType RealType $. fun ghostenv env coef' ->
-      produce_asn_core tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont
+      produce_asn_core_with_post tpenv h ghostenv env body (real_mul l coef coef') size_first size_all assuming cont_with_post
+    | EnsuresAsn (l, body) ->
+      cont_with_post h ghostenv env (Some body)
     | WPluginAsn (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
       let (pluginState, h) =
@@ -330,8 +336,14 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       cont (Chunk ((symb, true), [], real_unit, [], Some (PluginChunkInfo pluginState))::h) (xs @ ghostenv) env
     )
   
+  let rec produce_asn_core tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont: symexec_result =
+    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) (fun h env ghostenv post -> cont h env ghostenv)
+    
   let produce_asn tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
-    produce_asn_core tpenv h ghostenv env p coef size_first size_all false cont
+    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all false (fun h env ghostenv post -> cont h env ghostenv)
+  
+  let produce_asn_with_post tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont =
+    produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all false cont
   
   (* Region: consumption of assertions *)
   
@@ -743,7 +755,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let srcpat pat = SrcPat pat
   let srcpats pats = List.map srcpat pats
   
-  let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
+  let rec consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef cont_with_post =
+    let cont chunks h ghostenv env env' size_first = cont_with_post chunks h ghostenv env env' size_first None in
     let with_context_helper cont =
       match p with
         Sep (_, _, _) -> cont()
@@ -853,9 +866,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | ExprAsn (l, e) ->
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
-      consume_asn_core rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size ->
-        consume_asn_core rules tpenv h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
-          cont (chunks @ chunks') h ghostenv env env' size
+      consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
+        if post <> None then static_error l "Left-hand operand of separating conjunction cannot specify a postcondition." None;
+        consume_asn_core_with_post rules tpenv h ghostenv env env' p2 checkDummyFracs coef (fun chunks' h ghostenv env env' _ post ->
+          cont_with_post (chunks @ chunks') h ghostenv env env' size post
         )
       )
     | IfAsn (l, e, p1, p2) ->
@@ -864,10 +878,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun _ ->
            assume (ev e) (fun _ ->
-             consume_asn_core rules tpenv h ghostenv env env' p1 checkDummyFracs coef cont))
+             consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef cont_with_post))
         (fun _ ->
            assume (ctxt#mk_not (ev e)) (fun _ ->
-             consume_asn_core rules tpenv h ghostenv env env' p2 checkDummyFracs coef cont))
+             consume_asn_core_with_post rules tpenv h ghostenv env env' p2 checkDummyFracs coef cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
       let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
       let env' = [] in
@@ -903,7 +917,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (xs, xenv)
           in
           branch
-            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core rules tpenv h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont))
+            (fun _ -> assume_eq t (mk_app ctorsym xs) (fun _ -> consume_asn_core_with_post rules tpenv h (pats @ ghostenv) (xenv @ env) env' p checkDummyFracs coef cont_with_post))
             (fun _ -> iter cs)
         | [] -> success()
       in
@@ -916,6 +930,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)
     | CoefAsn (l, coefpat, WPredAsn (_, g, is_global_predref, targs, pat0, pats)) -> pred_asn l (SrcPat coefpat) g is_global_predref targs (srcpats pat0) (srcpats pats)
     | CoefAsn (l, coefpat, WInstPredAsn (_, e_opt, st, cfin, tn, g, index, pats)) -> inst_call_pred l (SrcPat coefpat) e_opt tn g index pats
+    | EnsuresAsn (l, body) ->
+      cont_with_post [] h ghostenv env env' None (Some body)
     | WPluginAsn (l, xs, wasn) ->
       let [_, ((_, plugin), symb)] = pluginmap in
       let (pluginState, h) =
@@ -932,9 +948,18 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h env l msg None
     )
   
+  let rec consume_asn_core rules tpenv h ghostenv env env' p checkDummyFracs coef cont =
+    consume_asn_core_with_post rules tpenv h ghostenv env env' p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+    cont chunks h ghostenv env env' size_first
+  
   let consume_asn rules tpenv h ghostenv env p checkDummyFracs coef cont =
-    consume_asn_core rules tpenv h ghostenv env [] p checkDummyFracs coef (fun chunks h ghostenv env env' size_first -> cont chunks h ghostenv env size_first)
+    consume_asn_core_with_post rules tpenv h ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+    cont chunks h ghostenv env size_first
 
+  let rec consume_asn_with_post rules tpenv h ghostenv env p checkDummyFracs coef cont =
+    consume_asn_core_with_post rules tpenv h ghostenv env [] p checkDummyFracs coef $. fun chunks h ghostenv env env' size_first post ->
+    cont chunks h ghostenv env size_first post
+  
   let term_of_pred_index =
     match language with
       Java -> fun cn -> List.assoc cn classterms
