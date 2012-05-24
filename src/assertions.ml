@@ -266,17 +266,33 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       produce_chunk h (pred_symb, true) [] coef (Some 2) (target::index::args) size_first $. fun h ->
       cont h ghostenv env
     | ExprAsn (l, e) -> assume (ev e) (fun _ -> cont h ghostenv env)
+    | WMatchAsn (l, e, pat, tp) ->
+      let v = ev e in
+      evalpat true ghostenv env pat tp tp $. fun ghostenv env v' ->
+      let f = if tp = Bool then ctxt#mk_iff v v' else ctxt#mk_eq v v' in
+      assume f $. fun () ->
+      cont h ghostenv env
     | Sep (l, p1, p2) ->
       produce_asn_core_with_post tpenv h ghostenv env p1 coef size_first size_all assuming $. fun h ghostenv env post ->
       if post <> None then assert_false h env l "Left-hand side of separating conjunction cannot specify a postcondition." None;
       produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post
     | IfAsn (l, e, p1, p2) ->
-      let cont h _ _ = cont h ghostenv env in
+      let cont_with_post h ghostenv1 env1 post =
+        let ghostenv, env =
+          if post = None then ghostenv, env else ghostenv1, env1
+        in
+        cont_with_post h ghostenv env post
+      in
       branch
         (fun _ -> assume (ev e) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p1 coef size_all size_all assuming cont_with_post))
         (fun _ -> assume (ctxt#mk_not (ev e)) (fun _ -> produce_asn_core_with_post tpenv h ghostenv env p2 coef size_all size_all assuming cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
-      let cont h _ _ = cont h ghostenv env in
+      let cont_with_post h ghostenv1 env1 post =
+        let ghostenv, env =
+          if post = None then ghostenv, env else ghostenv1, env1
+        in
+        cont_with_post h ghostenv env post
+      in
       let t = ev e in
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in
       let rec iter cs =
@@ -347,6 +363,79 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: consumption of assertions *)
   
+  let rec match_pat h l ghostenv env env' isInputParam pat tp0 tp t cont =
+    let match_terms v t =
+      if
+        if tp = Bool then
+          ctxt#query (ctxt#mk_iff v t)
+        else
+          definitely_equal v t
+      then
+        cont ghostenv env env'
+      else if isInputParam then
+        None
+      else
+        assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None
+    in
+    match pat with
+    | SrcPat (LitPat (Var (lx, x, scope))) when !scope = Some LocalVar ->
+      begin match try_assoc x env with
+        Some t' -> match_terms (prover_convert_term t' tp0 tp) t
+      | None -> let binding = (x, prover_convert_term t tp tp0) in cont ghostenv (binding::env) (binding::env')
+      end
+    | SrcPat (LitPat e) ->
+      match_terms (prover_convert_term (eval None env e) tp0 tp) t
+    | TermPat t0 -> match_terms (prover_convert_term t0 tp0 tp) t
+    | SrcPat (VarPat (_, x)) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
+    | SrcPat DummyPat -> cont ghostenv env env'
+    | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats)) ->
+      let t = prover_convert_term t tp tp0 in
+      let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
+      let cont () =
+        let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
+        ctxt#push;
+        let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
+        let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
+        push_context (Assuming formula);
+        ignore (ctxt#assume formula);
+        let inputParamCount = if isInputParam then max_int else 0 in
+        let pats = List.map (fun pat -> SrcPat pat) pats in
+        match match_pats h l ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
+          None ->
+          pop_context ();
+          ctxt#pop;
+          None
+        | result ->
+          push_undo_item (fun () -> pop_context (); ctxt#pop);
+          result
+      in
+      let rec check_not_other_ctors cs =
+        match cs with
+          [] -> cont ()
+        | (g', (_, (_, _, _, ts0, (symb, _))))::cs ->
+          if
+            g' = g ||
+            in_temporary_context begin fun () ->
+              let vs = List.map (fun t -> get_unique_var_symb "value" t) ts0 in
+              ctxt#assume (ctxt#mk_eq t (ctxt#mk_app symb vs)) = Unsat
+            end
+          then
+            check_not_other_ctors cs
+          else
+            if isInputParam then
+              None
+            else
+              assert_false h env l (Printf.sprintf "Cannot prove that '%s' is not an instance of constructor '%s'" (ctxt#pprint t) g') None
+      in
+      check_not_other_ctors ctormap
+  and match_pats h l ghostenv env env' inputParamCount index pats tps0 tps ts cont =
+    match (pats, tps0, tps, ts) with
+      (pat::pats, tp0::tps0, tp::tps, t::ts) ->
+      let isInputParam = index < inputParamCount in
+      match_pat h l ghostenv env env' isInputParam pat tp0 tp t $. fun ghostenv env env' ->
+      match_pats h l ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont
+    | ([], [], [], []) -> cont ghostenv env env'
+  
   (** Checks if the specified predicate assertion matches the specified chunk. If not, returns None. Otherwise, returns the environment updated with new bindings and other stuff.
       Parameters:
         ghostenv (ghostEnvironment): string list -- The list of all variables that are ghost variables (i.e., not real variables). match_chunk adds all new bindings to this
@@ -385,74 +474,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           newChunks -- Any new chunks generated by this match; in particular, auto-splitting of fractional permissions.
    *)
   let match_chunk ghostenv h env env' l g targs coef coefpat inputParamCount pats tps0 tps (Chunk (g', targs0, coef0, ts0, size0) as chunk) =
-    let rec match_pat ghostenv env env' isInputParam pat tp0 tp t cont =
-      let match_terms v t =
-        if definitely_equal v t then
-          cont ghostenv env env'
-        else if isInputParam then
-          None
-        else
-          assert_false h env l (Printf.sprintf "Cannot prove %s == %s" (ctxt#pprint t) (ctxt#pprint v)) None
-      in
-      match pat with
-      | SrcPat (LitPat (Var (lx, x, scope))) when !scope = Some LocalVar ->
-        begin match try_assoc x env with
-          Some t' -> match_terms (prover_convert_term t' tp0 tp) t
-        | None -> let binding = (x, prover_convert_term t tp tp0) in cont ghostenv (binding::env) (binding::env')
-        end
-      | SrcPat (LitPat e) ->
-        match_terms (prover_convert_term (eval None env e) tp0 tp) t
-      | TermPat t0 -> match_terms (prover_convert_term t0 tp0 tp) t
-      | SrcPat (VarPat (_, x)) -> cont (x::ghostenv) ((x, prover_convert_term t tp tp0)::env) env'
-      | SrcPat DummyPat -> cont ghostenv env env'
-      | SrcPat (WCtorPat (l, i, targs, g, ts0, ts, pats)) ->
-        let t = prover_convert_term t tp tp0 in
-        let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
-        let cont () =
-          let (_, (_, _, _, _, (symb, _))) = List.assoc g ctormap in
-          ctxt#push;
-          let vs = List.map2 (fun tp0 tp -> let v = get_unique_var_symb "value" tp in (v, prover_convert_term v tp tp0)) ts0 ts in
-          let formula = ctxt#mk_eq t (ctxt#mk_app symb (List.map snd vs)) in
-          push_context (Assuming formula);
-          ignore (ctxt#assume formula);
-          let inputParamCount = if isInputParam then max_int else 0 in
-          let pats = List.map (fun pat -> SrcPat pat) pats in
-          match match_pats ghostenv env env' inputParamCount 0 pats ts ts (List.map fst vs) cont with
-            None ->
-            pop_context ();
-            ctxt#pop;
-            None
-          | result ->
-            push_undo_item (fun () -> pop_context (); ctxt#pop);
-            result
-        in
-        let rec check_not_other_ctors cs =
-          match cs with
-            [] -> cont ()
-          | (g', (_, (_, _, _, ts0, (symb, _))))::cs ->
-            if
-              g' = g ||
-              in_temporary_context begin fun () ->
-                let vs = List.map (fun t -> get_unique_var_symb "value" t) ts0 in
-                ctxt#assume (ctxt#mk_eq t (ctxt#mk_app symb vs)) = Unsat
-              end
-            then
-              check_not_other_ctors cs
-            else
-              if isInputParam then
-                None
-              else
-                assert_false h env l (Printf.sprintf "Cannot prove that '%s' is not an instance of constructor '%s'" (ctxt#pprint t) g') None
-        in
-        check_not_other_ctors ctormap
-    and match_pats ghostenv env env' inputParamCount index pats tps0 tps ts cont =
-      match (pats, tps0, tps, ts) with
-        (pat::pats, tp0::tps0, tp::tps, t::ts) ->
-        let isInputParam = index < inputParamCount in
-        match_pat ghostenv env env' isInputParam pat tp0 tp t $. fun ghostenv env env' ->
-        match_pats ghostenv env env' inputParamCount (index + 1) pats tps0 tps ts cont
-      | ([], [], [], []) -> cont ghostenv env env'
-    in
     let match_coef ghostenv env cont =
       if coef == real_unit && coefpat == real_unit_pat && coef0 == real_unit then cont chunk ghostenv env coef0 [] else
       let match_term_coefpat t =
@@ -486,7 +507,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     if not (predname_eq g g' && List.for_all2 unify targs targs0) then None else
     let inputParamCount = match inputParamCount with None -> max_int | Some n -> n in
-    match_pats ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
+    match_pats h l ghostenv env env' inputParamCount 0 pats tps0 tps ts0 $. fun ghostenv env env' ->
     match_coef ghostenv env $. fun chunk ghostenv env coef0 newChunks ->
     Some (chunk, coef0, ts0, size0, ghostenv, env, env', newChunks)
   
@@ -865,6 +886,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef cont))*)
     | ExprAsn (l, e) ->
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
+    | WMatchAsn (l, e, pat, tp) ->
+      let v = ev e in
+      let Some (ghostenv, env, env') = match_pat h l ghostenv env env' false (SrcPat pat) tp tp v (fun ghostenv env env' -> Some (ghostenv, env, env')) in
+      cont [] h ghostenv env env' None
     | Sep (l, p1, p2) ->
       consume_asn_core_with_post rules tpenv h ghostenv env env' p1 checkDummyFracs coef (fun chunks h ghostenv env env' size post ->
         if post <> None then static_error l "Left-hand operand of separating conjunction cannot specify a postcondition." None;
@@ -873,7 +898,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       )
     | IfAsn (l, e, p1, p2) ->
-      let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
+      let cont_with_post chunks h ghostenv1 env1 env'' _ post =
+        let ghostenv, env =
+          if post = None then ghostenv, env else ghostenv1, env1
+        in
+        cont_with_post chunks h ghostenv (env'' @ env) (env'' @ env') None post
+      in
       let env' = [] in
       branch
         (fun _ ->
@@ -883,7 +913,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            assume (ctxt#mk_not (ev e)) (fun _ ->
              consume_asn_core_with_post rules tpenv h ghostenv env env' p2 checkDummyFracs coef cont_with_post))
     | WSwitchAsn (l, e, i, cs) ->
-      let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
+      let cont_with_post chunks h ghostenv1 env1 env'' _ post =
+        let ghostenv, env =
+          if post = None then ghostenv, env else ghostenv1, env1
+        in
+        cont_with_post chunks h ghostenv (env'' @ env) (env'' @ env') None post
+      in
       let env' = [] in
       let t = ev e in
       let (_, tparams, ctormap, _) = List.assoc i inductivemap in

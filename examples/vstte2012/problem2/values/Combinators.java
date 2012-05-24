@@ -32,7 +32,7 @@ predicate reduces_to(term t1, term t2) =
 
 lemma void reduces_to_val(term t1, term t2)
     requires [_]reduces_to(t1, t2);
-    ensures t1 == t2 ? true : switch (t1) { case val(v): return false; case app(t11, t12): return true; };
+    ensures t1 == t2 ? true : t1 == app(_, _);
 {
     open reduces_to(t1, t2);
     if (t1 == t2) {

@@ -868,6 +868,12 @@ and
   [< '(l, Kwd "&*&"); p2 = parse_pred >] -> Sep (l, p1, p2)
 | [< >] -> p1
 and
+  pat_of_expr e =
+  match e with
+    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
+    CtorPat (l, g, pats)
+  | _ -> LitPat e
+and
   parse_pred0 = parser
   [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpAsn l
@@ -890,6 +896,11 @@ and
          | _ -> raise (ParseException (l, "Instance predicate call: single index expression expected"))
        in
        InstPredAsn (l, e, g, index, pats)
+     | Operation (l, Eq, [e1; e2], _) ->
+       begin match pat_of_expr e2 with
+         LitPat e2 -> ExprAsn (l, e)
+       | e2 -> MatchAsn (l, e1, e2)
+       end
      | _ -> ExprAsn (expr_loc e, e)
     )
   >] -> p
@@ -898,13 +909,7 @@ and
   [< '(_, Kwd "_") >] -> DummyPat
 | [< '(_, Kwd "?"); '(lx, Ident x) >] -> VarPat (lx, x)
 | [< '(_, Kwd "^"); e = parse_expr >] -> LitPat (WidenedParameterArgument e)
-| [< e = parse_expr >] ->
-  begin match e with
-    CallExpr (l, g, [], [], pats, Static) when List.exists (function LitPat _ -> false | _ -> true) pats ->
-    CtorPat (l, g, pats)
-  | _ ->
-    LitPat e
-  end
+| [< e = parse_expr >] -> pat_of_expr e
 and
   parse_switch_pred_clauses = parser
   [< c = parse_switch_pred_clause; cs = parse_switch_pred_clauses >] -> c::cs

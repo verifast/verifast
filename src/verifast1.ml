@@ -3494,6 +3494,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | ExprAsn (l, e) ->
       let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprAsn (l, w), tenv, [])
+    | MatchAsn (l, e1, pat) ->
+      let (w1, t) = check_expr (pn,ilist) tparams tenv e1 in
+      let (wpat, tenv) = check_pat_core (pn,ilist) tparams tenv t pat in
+      (WMatchAsn (l, w1, wpat, t), tenv, [])
     | Sep (l, p1, p2) ->
       let (p1, tenv, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
       let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
@@ -3717,6 +3721,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         fixed
     | ExprAsn (_, _) -> fixed
+    | WMatchAsn (l, e, pat, tp) ->
+      if expr_is_fixed fixed e then
+        fixed_pat_fixed_vars pat @ fixed
+      else
+        fixed
     | Sep (l, p1, p2) ->
       let fixed = check_pred_precise fixed p1 in
       check_pred_precise fixed p2

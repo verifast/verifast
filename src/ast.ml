@@ -404,6 +404,8 @@ and
   | PluginAsn of loc * string
   | WPluginAsn of loc * string list * Plugins.typechecked_plugin_assertion
   | EnsuresAsn of loc * asn
+  | MatchAsn of loc * expr * pat
+  | WMatchAsn of loc * expr * pat * type_
 and
   switch_asn_clause = (* ?switch_asn_clause *)
   | SwitchAsnClause of
@@ -665,6 +667,8 @@ let asn_loc p =
   | InstPredAsn (l, e, g, index, pats) -> l
   | WInstPredAsn (l, e_opt, tns, cfin, tn, g, index, pats) -> l
   | ExprAsn (l, e) -> l
+  | MatchAsn (l, e, pat) -> l
+  | WMatchAsn (l, e, pat, tp) -> l
   | Sep (l, p1, p2) -> l
   | IfAsn (l, e, p1, p2) -> l
   | SwitchAsn (l, e, sacs) -> l
