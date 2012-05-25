@@ -631,6 +631,7 @@ and context () =
     val mutable simplex_eqs = []
     val mutable simplex_consts = []
     val mutable redexes = []
+    val mutable unsat = false
     val mutable implications = []
     val mutable pending_splits_front = initialPendingSplitsFrontNode
     val mutable pending_splits_back = initialPendingSplitsFrontNode
@@ -861,7 +862,7 @@ and context () =
         if self#perform_implications then Unsat3 else Unknown3
     
     method assume_internal t =
-      let result = (* with_timing "assume: assume_core" $. fun () -> *) self#assume_with_implications t in
+      let result = (* with_timing "assume: assume_core" $. fun () -> *) if unsat then Unsat3 else self#assume_with_implications t in
       match result with
         Unsat3 -> Unsat
       | Valid3 -> Unknown
@@ -940,10 +941,12 @@ and context () =
     method push_internal =
       (* print_endline "Push"; *)
       self#reduce;
-      assert (redexes = []);
-      assert (simplex_eqs = []);
-      assert (simplex_consts = []);
-      popstack <- (pushdepth, popactionlist, values)::popstack;
+      if not unsat then begin
+        assert (redexes = []);
+        assert (simplex_eqs = []);
+        assert (simplex_consts = [])
+      end;
+      popstack <- (pushdepth, popactionlist, values, unsat)::popstack;
       pushdepth <- pushdepth + 1;
       popactionlist <- [];
       simplex#push
@@ -963,11 +966,12 @@ and context () =
       simplex_consts <- [];
       simplex#pop;
       match popstack with
-        (pushdepth0, popactionlist0, values0)::popstack0 ->
+        (pushdepth0, popactionlist0, values0, unsat0)::popstack0 ->
         List.iter (fun action -> action()) popactionlist;
         pushdepth <- pushdepth0;
         popactionlist <- popactionlist0;
         values <- values0;
+        unsat <- unsat0;
         popstack <- popstack0
       | [] -> failwith "Popstack is empty"
 
@@ -1371,8 +1375,23 @@ and context () =
     
     method reduce =
       if not reducing then
-        assert (self#reduce0 <> Unsat3)
-
+        unsat <-
+            unsat
+          ||
+              self#reduce0 = Unsat3
+            &&
+              begin
+                printff "%s"
+                  begin
+                    "redux: INFO: Detected an inconsistency after axiom " ^
+                    "instantiations triggered by the construction of new " ^
+                    "terms (rather than after adding a new assumption). " ^
+                    "This might indicate an inconsistency in the axioms. " ^
+                    "Call 'verifast -verbose 10' to diagnose.\n"
+                  end;
+                true
+              end
+    
     method do_and_reduce action =
       match action() with
         Unsat3 -> Unsat3
