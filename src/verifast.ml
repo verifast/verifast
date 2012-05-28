@@ -2210,7 +2210,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (((_, g_file_name), _, _), _) = l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
-      if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
+      if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
         let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
