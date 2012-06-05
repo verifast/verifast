@@ -1,10 +1,10 @@
 #ifndef PTHREAD_H
 #define PTHREAD_H
 
+//@ #include <threading.h>
 
 #include <bits/pthreadtypes.h>
 
-//@ #include <threading.h>
 
 /*@
 
