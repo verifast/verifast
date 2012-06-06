@@ -672,7 +672,7 @@ let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
 
 (* The preprocessor *)
 
-let make_preprocessor make_lexer basePath relPath =
+let make_preprocessor make_lexer basePath relPath include_paths =
   let macros = Hashtbl.create 10 in
   let streams = ref [] in
   let callers = ref [[]] in
@@ -680,7 +680,7 @@ let make_preprocessor make_lexer basePath relPath =
   let locs = ref [] in
   let loc = ref dummy_loc in
   let push_lexer basePath relPath =
-    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath in
+    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths in
     lexer_ignore_eol := false;
     streams := stream::!streams;
     callers := List.hd !callers::!callers;
@@ -792,17 +792,19 @@ let make_preprocessor make_lexer basePath relPath =
           junk ();
           if List.mem s ["bool.h"; "assert.h"; "limits.h"] then next_token () else
           let basePath0, relPath0 = List.hd !paths in
-          let localRelPath = concat (Filename.dirname relPath0) s in
-          let basePath, relPath =
-            if Sys.file_exists (concat basePath0 localRelPath) then
-              basePath0, localRelPath
-            else
-              let sysPath = concat bindir s in
-              if Sys.file_exists sysPath then
-                bindir, s
+          let rellocalpath = concat (Filename.dirname relPath0) s in
+          let includepaths = List.append include_paths [basePath0; bindir] in
+          let rec find_include_file includepaths =
+            match includepaths with
+              [] -> error (Printf.sprintf "No such file: '%s'" rellocalpath)
+            | head::body ->
+              let headerpath = concat head rellocalpath in
+              if Sys.file_exists headerpath then
+                (head, rellocalpath)
               else
-                error "No such file"
+                (find_include_file body)
           in
+          let basePath, relPath = find_include_file includepaths in
           push_lexer basePath relPath;
           next_at_start_of_line := true;
           next_token ()

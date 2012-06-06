@@ -12,6 +12,8 @@ type platform = Windows | Linux | MacOS
 
 let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then MacOS else Linux
 
+let include_paths: string list ref = ref []
+
 let normalize_to_lf text =
   let n = String.length text in
   let buffer = Buffer.create n in
@@ -171,6 +173,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       GAction.add_toggle_action "RunPreprocessor" ~label:"Run preprocessor" ~active:false ~callback:(fun toggleAction -> runPreprocessor := toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
+      a "Include paths" ~label:"_Include paths...";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
       a "TopWindow" ~label:"Window(_Top)";
@@ -219,6 +222,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <menuitem action='CheckOverflow' />
           <menuitem action='RunPreprocessor' />
           <menuitem action='SimplifyTerms' />
+          <menuitem action='Include paths' />
         </menu>
         <menu action='TopWindow'>
            <menuitem action='Stub' />
@@ -1147,7 +1151,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_run_preprocessor = !runPreprocessor;
                 option_provides = [];
                 option_keep_provide_files = true;
-                option_include_paths = []
+                option_include_paths = !include_paths
               }
               in
               verify_program prover false options path reportRange reportUseSite breakpoint;
@@ -1204,10 +1208,34 @@ let show_ide initialPath prover codeFont traceFont runtime =
     ignore $. dialog#run();
     dialog#destroy()
   in
-  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
+  let add_include_path_gui gui_input () =
+    let text = gui_input#text in
+    if (String.length text > 0) then (
+    include_paths := text :: !include_paths )
+  in
+  let showIncludesDialog () =
+    let dialog = GWindow.dialog ~title:"Include Paths" ~parent:root () in
+    let vbox = dialog#vbox in
+    let itemsTable = GPack.table ~rows:2 ~columns:2 ~border_width:4 ~row_spacings:4 ~col_spacings:4 ~packing:(vbox#pack ~from:`START ~expand:true) () in
+    ignore $. GMisc.label ~text:"Current paths:" ~packing:(itemsTable#attach ~left:0 ~top:0 ~expand:`X) ();
+    ignore $. GMisc.label ~text:(String.concat ":" !include_paths) ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) ();
+    ignore $. GMisc.label ~text:"Add path:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
+    let new_include = GEdit.entry ~text:"" ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
+    new_include#connect#activate ~callback:(add_include_path_gui new_include);
+    let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
+    ignore $. okButton#connect#clicked (fun () ->
+      add_include_path_gui new_include ();
+      dialog#response `DELETE_EVENT
+    );
+    let cancelButton = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
+    ignore $. cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
+    ignore $. dialog#run();
+    dialog#destroy()
+  in  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
   ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
   ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
+  ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. undoAction#connect#activate undo;
   ignore $. redoAction#connect#activate redo;
   ignore $. root#event#connect#focus_in begin fun _ ->
@@ -1238,9 +1266,12 @@ let () =
     | "-codeFont"::arg::args -> codeFont := arg; iter args
     | "-traceFont"::arg::args -> traceFont := arg; iter args
     | "-runtime"::arg::args -> runtime := Some arg; iter args
+    | "-I"::arg::args -> ( match (Some arg) with
+       None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
+       iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
     | [] -> show_ide !path !prover !codeFont !traceFont !runtime
-    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line.\n\nUsage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] [-traceFont fontSpec]"
+    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line.\n\nUsage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] [-traceFont fontSpec] [-I IncludeDir]"
   in
   let _::args = Array.to_list (Sys.argv) in
   iter args

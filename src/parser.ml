@@ -1266,15 +1266,15 @@ let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_
 in
   parse_include_directives
 
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (runPreprocessor: bool): ((loc * string) list * package list) = (* ?parse_c_file *)
+let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (runPreprocessor: bool) (include_paths: string list): ((loc * string) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
-  let make_lexer basePath relPath =
+  let make_lexer basePath relPath include_paths =
     let text = readFile (concat basePath relPath) in
     make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange reportShouldFail
   in
   let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer in
-  let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) in
+  let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
   let parse_c_file =
     parser
       [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])

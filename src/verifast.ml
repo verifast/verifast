@@ -2376,7 +2376,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           if Filename.check_suffix path ".h" then
             parse_header_file "" path reportRange reportShouldFail
           else
-            parse_c_file path reportRange reportShouldFail options.option_run_preprocessor
+            parse_c_file path reportRange reportShouldFail options.option_run_preprocessor options.option_include_paths
     in
     emitter_callback ds;
     let result =
