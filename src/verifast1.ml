@@ -19,7 +19,9 @@ module type VERIFY_PROGRAM_ARGS = sig
   val program_path: string
   val reportRange: range_kind -> loc -> unit
   val reportUseSite: decl_kind -> loc -> loc -> unit
+  val reportExecutionForest: node list ref -> unit
   val breakpoint: (string * int) option
+  val targetPath: int list option
 end
 
 module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
@@ -66,22 +68,104 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let undoStackStack = ref []
   let push_undoStack () = undoStackStack := !undoStack::!undoStackStack; undoStack := []
   let pop_undoStack () = List.iter (fun f -> f ()) !undoStack; let h::t = !undoStackStack in undoStack := h; undoStackStack := t
-
+  
+  let executionForest: node list ref = ref [] (* toplevel list of execution trees *)
+  let () = reportExecutionForest executionForest
+  let currentForest: node list ref ref = ref executionForest
+  let currentPath: int list ref = ref []
+  let currentBranch: int ref = ref 0
+  let targetPath: int list option ref = ref (match targetPath with None -> None | Some bs -> Some (List.rev bs))
+  
   let contextStack = ref []
   
-  let push_context msg = contextStack := msg::!contextStack
+  let pprint_context_term t = 
+    if options.option_simplify_terms then
+      match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
+    else
+      ctxt#pprint t
+  
+  let globalPluginMap = ref []
+  
+  let pprint_context_stack cs =
+    List.map
+      (function
+         Assuming t -> Assuming (pprint_context_term t)
+       | Executing (h, env, l, msg) ->
+         let h' =
+           List.map
+             begin function
+               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) ->
+               let [_, ((_, plugin), _)] = !globalPluginMap in
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None)
+             | (Chunk ((g, literal), targs, coef, ts, size)) ->
+               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
+             end
+             h
+         in
+         let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
+         Executing (h', env', l, msg)
+       | PushSubcontext -> PushSubcontext
+       | PopSubcontext -> PopSubcontext)
+      cs
+
+  let assert_false h env l msg url =
+    raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
+  
+  let push_node l msg =
+    let oldPath, oldBranch, oldTargetPath = !currentPath, !currentBranch, !targetPath in
+    targetPath :=
+      begin match oldTargetPath with
+        Some (b::bs) ->
+        if b = oldBranch then
+          if bs = [] then
+            assert_false [] [] l "Target branch reached" None
+          else
+            Some bs
+        else
+          Some []
+      | p -> p
+      end;
+    currentPath := oldBranch::oldPath;
+    currentBranch := 0;
+    push_undo_item (fun () -> currentPath := oldPath; currentBranch := oldBranch + 1; targetPath := oldTargetPath);
+    let newForest = ref [] in
+    let oldForest = !currentForest in
+    oldForest := Node (msg, !currentPath, newForest)::!oldForest;
+    push_undo_item (fun () -> currentForest := oldForest);
+    currentForest := newForest
+  
+  let push_context msg =
+    contextStack := msg::!contextStack;
+    begin match msg with
+      Executing (h, env, l, msg) ->
+      push_node l msg
+    | _ -> ()
+    end
   let pop_context () = let (h::t) = !contextStack in contextStack := t
-    
+  
   let contextStackStack = ref []
   
   let push_contextStack () = push_undoStack(); contextStackStack := !contextStack::!contextStackStack
   let pop_contextStack () = pop_undoStack(); let h::t = !contextStackStack in contextStack := h; contextStackStack := t
   
-  let with_context msg cont =
+  let with_context_force msg cont =
     stats#execStep;
     push_contextStack ();
     push_context msg;
     let result = cont() in
+    pop_contextStack ();
+    result
+  
+  let with_context msg cont =
+    stats#execStep;
+    push_contextStack ();
+    push_context msg;
+    let result =
+      if !targetPath <> Some [] then
+        cont()
+      else
+        SymExecSuccess
+    in
     pop_contextStack ();
     result
   
@@ -839,6 +923,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end []
   
   let pluginmap = pluginmap1 @ pluginmap0
+  
+  let () = globalPluginMap := pluginmap1 @ !globalPluginMap
   
   let unloadable =
     match language with
@@ -4056,42 +4142,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont
   let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont
   
-  let pprint_context_term t = 
-    if options.option_simplify_terms then
-      match ctxt#simplify t with None -> ctxt#pprint t | Some(t) -> ctxt#pprint t
-    else
-      ctxt#pprint t
-  
-  let pprint_context_stack cs =
-    List.map
-      (function
-         Assuming t -> Assuming (pprint_context_term t)
-       | Executing (h, env, l, msg) ->
-         let h' =
-           List.map
-             begin function
-               (Chunk ((g, literal), targs, coef, ts, Some (PluginChunkInfo info))) ->
-               let [_, ((_, plugin), _)] = pluginmap in
-               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, [plugin#string_of_state info], None)
-             | (Chunk ((g, literal), targs, coef, ts, size)) ->
-               Chunk ((ctxt#pprint g, literal), targs, pprint_context_term coef, List.map (fun t -> pprint_context_term t) ts, size)
-             end
-             h
-         in
-         let env' = List.map (fun (x, t) -> (x, pprint_context_term t)) env in
-         Executing (h', env', l, msg)
-       | PushSubcontext -> PushSubcontext
-       | PopSubcontext -> PopSubcontext)
-      cs
-
   let assert_term t h env l msg url = 
     stats#proverOtherQuery;
     if not (ctxt#query t) then
       raise (SymbolicExecutionError (pprint_context_stack !contextStack, ctxt#pprint t, l, msg, url))
 
-  let assert_false h env l msg url =
-    raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
-  
   let rec prover_type_term l tp = 
     match tp with
       ObjType(n) -> 

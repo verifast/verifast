@@ -1941,6 +1941,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let _ =
       check_should_fail () $. fun () ->
       execute_branch $. fun () ->
+      with_context (Executing ([], env, l, sprintf "Verifying function '%s'" g)) $. fun () ->
       produce_asn_with_post [] [] ghostenv env pre real_unit (Some (PredicateChunkSize 0)) None (fun h ghostenv env post' ->
         let post =
           match post' with
@@ -2453,7 +2454,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     else
       if Filename.check_suffix path ".jarsrc" then
         create_jardeps_file()
-
+  
 end
 
 (** Verifies the .c/.jarsrc/.scala file at path [path].
@@ -2470,7 +2471,9 @@ let verify_program_core (* ?verify_program_core *)
     (program_path : string)
     (reportRange : range_kind -> loc -> unit)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (breakpoint : (string * int) option) : unit =
+    (reportExecutionForest : node list ref -> unit)
+    (breakpoint : (string * int) option)
+    (targetPath : int list option) : unit =
 
   let module VP = VerifyProgram(struct
     let emitter_callback = emitter_callback
@@ -2482,7 +2485,9 @@ let verify_program_core (* ?verify_program_core *)
     let program_path = program_path
     let reportRange = reportRange
     let reportUseSite = reportUseSite
+    let reportExecutionForest = reportExecutionForest
     let breakpoint = breakpoint
+    let targetPath = targetPath
   end) in
   ()
 
@@ -2496,9 +2501,11 @@ let verify_program_with_stats (* ?verify_program_with_stats *)
     (path : string)
     (reportRange : range_kind -> loc -> unit)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (breakpoint : (string * int) option) : unit =
+    (reportExecutionForest : node list ref -> unit)
+    (breakpoint : (string * int) option)
+    (targetPath : int list option) : unit =
   do_finally
-    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange reportUseSite breakpoint)
+    (fun () -> verify_program_core ~emitter_callback:emitter_callback ctxt verbose path reportRange reportUseSite reportExecutionForest breakpoint targetPath)
     (fun () -> if print_stats then stats#printStats)
 
 class virtual prover_client =
@@ -2541,11 +2548,13 @@ let verify_program (* ?verify_program *)
     (path : string)
     (reportRange : range_kind -> loc -> unit)
     (reportUseSite : decl_kind -> loc -> loc -> unit)
-    (breakpoint : (string * int) option) : unit =
+    (reportExecutionForest : node list ref -> unit)
+    (breakpoint : (string * int) option)
+    (targetPath : int list option) : unit =
   lookup_prover prover
     (object
        method run: 'typenode 'symbol 'termnode. ('typenode, 'symbol, 'termnode) Proverapi.context -> unit =
-         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange reportUseSite breakpoint
+         fun ctxt -> verify_program_with_stats ~emitter_callback:emitter_callback ctxt print_stats options path reportRange reportUseSite reportExecutionForest breakpoint targetPath
      end)
 
 (* Region: linker *)

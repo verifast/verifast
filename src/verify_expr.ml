@@ -1372,7 +1372,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                             match chunk_size with
                               Some (PredicateChunkSize k) when k < 0 -> ()
                             | _ ->
-                              with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                              with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
                               assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the derivation depth of the first chunk and there is no inductive parameter." (Some "recursivelemmacall")
                             )
                           end
@@ -1380,7 +1380,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           match try_assq (List.assoc x env') sizemap with
                             Some k when k < 0 -> ()
                           | _ ->
-                            with_context (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
+                            with_context_force (Executing (h, env', l, "Checking recursion termination")) (fun _ ->
                             assert_false h env l "Recursive lemma call does not decrease the heap (no full field chunks left) or the inductive parameter." None
                           )
                         )

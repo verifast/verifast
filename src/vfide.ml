@@ -98,6 +98,15 @@ let in_channel_last_modification_time chan =
 let out_channel_last_modification_time chan =
   (Unix.fstat (Unix.descr_of_out_channel chan)).st_mtime
 
+type tree_node = TreeNode of string * int list * int * int * tree_node list
+
+module TreeMetrics = struct
+  let dotWidth = 15
+  let dotRadius = dotWidth / 2
+  let padding = 4
+  let cw = dotWidth + 2 * padding
+end
+
 let show_ide initialPath prover codeFont traceFont runtime =
   let ctxts_lifo = ref None in
   let msg = ref None in
@@ -284,7 +293,53 @@ let show_ide initialPath prover codeFont traceFont runtime =
   ignore (helpButton#connect#clicked (fun () -> (match(!url) with None -> () | Some(url) -> show_help url);));
   toolbar#insert messageToolItem;
   rootVbox#pack (toolbar#coerce);
-  let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(rootVbox#pack ~expand:true) () in
+  let treeSeparator = GPack.paned `HORIZONTAL ~packing:(rootVbox#pack ~expand:true) () in
+  let treeVbox = GPack.vbox ~packing:(treeSeparator#pack2 ~shrink:true) () in
+  let (treeCombo, (treeComboListStore, treeComboColumn)) as treeComboText = GEdit.combo_box_text
+    ~packing:treeVbox#pack
+    ()
+  in
+  let treeScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN ~packing:(treeVbox#pack ~expand:true) () in
+  let treeDrawingArea = GMisc.drawing_area ~packing:treeScroll#add_with_viewport () in
+  treeSeparator#set_position 800;
+  let executionForest = ref [] in
+  let reportExecutionForest forest =
+    let rec findFork (Node (msg, p, ns) as n) =
+      match !ns with
+        [n] -> findFork n
+      | _ -> n
+    in
+    let rec convert forest =
+      forest |> List.rev |> List.map begin fun (Node (msg, p, ns)) ->
+        let ns = convert (List.map findFork !ns) in
+        let width =
+          ns
+            |> List.map (fun (TreeNode (msg, p, width, _, _)) -> width)
+            |> List.fold_left (+) 0
+            |> max 1
+        in
+        let height =
+          ns
+            |> List.map (fun (TreeNode (msg, p, width, height, _)) -> height)
+            |> List.fold_left max 0
+        in
+        TreeNode (msg, p, width, height + 1, ns)
+      end
+    in
+    executionForest := convert forest;
+    treeComboListStore#clear ();
+    !executionForest |> List.iter (fun (TreeNode (msg, _, _, _, _)) -> GEdit.text_combo_add treeComboText msg)
+  in
+  ignore $. treeCombo#connect#changed begin fun () ->
+    let active = treeCombo#active in
+    if 0 <= active then begin
+      let TreeNode (msg, p, w, h, ns) = List.nth !executionForest active in
+      let open TreeMetrics in
+      treeDrawingArea#set_size ~width:(cw * w) ~height:(cw * h)
+    end;
+    treeDrawingArea#misc#draw None
+  end;
+  let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(treeSeparator#pack1) () in
   rootTable#set_position 400;
   let textPaned = GPack.paned `VERTICAL ~packing:(rootTable#pack1 ~resize:true ~shrink:true) () in
   textPaned#set_position 0;
@@ -1111,7 +1166,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       tab#useSiteTags := []
     end
   in
-  let verifyProgram runToCursor () =
+  let verifyProgram runToCursor targetPath () =
     clearTrace();
     match !buffers with
       [] -> ()
@@ -1139,7 +1194,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
               else
                 None
             in
-            try
+            let postProcess = ref (fun () -> ()) in
+            begin try
               let options = {
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
@@ -1154,8 +1210,14 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_include_paths = !include_paths
               }
               in
-              verify_program prover false options path reportRange reportUseSite breakpoint;
-              msg := Some (if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
+              let reportExecutionForest =
+                if targetPath <> None then
+                  (fun _ -> ())
+                else
+                  (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
+              in
+              verify_program prover false options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
+              msg := Some (if targetPath <> None then "0 errors found (target path not reached)" else if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with
               ParseException (l, emsg) ->
@@ -1186,9 +1248,61 @@ let show_ide initialPath prover codeFont traceFont runtime =
               Printexc_proxy.print_backtrace stderr;
               flush stderr;
               GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."
+            end;
+            !postProcess ()
           end
       end
   in
+  begin
+    let open TreeMetrics in
+    ignore $. treeDrawingArea#event#connect#expose begin fun event ->
+      let d = new GDraw.drawable treeDrawingArea#misc#window in
+      let rec drawNode x y (TreeNode (msg, p, w, h, ns)) =
+        let px = x + cw * w / 2 in
+        let py = y + cw / 2 in
+        d#arc ~x:(px - dotWidth / 2) ~y:(py - dotWidth / 2) ~width:dotWidth ~height:dotWidth ~filled:true ();
+        let rec drawChildren x y ns =
+          match ns with
+            [] -> ()
+          | n::ns ->
+            let (w, cx, cy) = drawNode x y n in
+            d#line ~x:px ~y:py ~x:cx ~y:cy;
+            drawChildren (x + w * cw) y ns
+        in
+        drawChildren x (y + cw) ns;
+        (w, px, py)
+      in
+      let active = treeCombo#active in
+      if 0 <= active then ignore $. drawNode 0 0 (List.nth !executionForest active);
+      true
+    end;
+    treeDrawingArea#event#add [`BUTTON_PRESS; `BUTTON_RELEASE];
+    ignore $. treeDrawingArea#event#connect#button_release begin fun event ->
+      let bx, by = int_of_float (GdkEvent.Button.x event), int_of_float (GdkEvent.Button.y event) in
+      let rec hitTest x y (TreeNode (msg, p, w, h, ns)) =
+        if by < y + cw then begin
+          let px = x + cw * w / 2 in
+          let py = y + cw / 2 in
+          if abs (by - py) <= dotRadius && abs (bx - px) <= dotRadius then
+            verifyProgram false (Some p) ()
+        end else begin
+          let rec testChildren x y ns =
+            match ns with
+              [] -> ()
+            | (TreeNode (msg, p, w, _, _) as n)::ns ->
+              if bx < x + cw * w then
+                hitTest x y n
+              else
+                testChildren (x + cw * w) y ns
+          in
+          testChildren x (y + cw) ns
+        end
+      in
+      let active = treeCombo#active in
+      if 0 <= active then hitTest 0 0 (List.nth !executionForest active);
+      true
+    end
+  end;
   let showPreferencesDialog () =
     let dialog = GWindow.dialog ~title:"Preferences" ~parent:root () in
     let vbox = dialog#vbox in
@@ -1221,7 +1335,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     ignore $. GMisc.label ~text:(String.concat ":" !include_paths) ~packing:(itemsTable#attach ~left:1 ~top:0 ~expand:`X) ();
     ignore $. GMisc.label ~text:"Add path:" ~packing:(itemsTable#attach ~left:0 ~top:1 ~expand:`X) ();
     let new_include = GEdit.entry ~text:"" ~max_length:500 ~packing:(itemsTable#attach ~left:1 ~top:1 ~expand:`X) () in
-    new_include#connect#activate ~callback:(add_include_path_gui new_include);
+    ignore $. new_include#connect#activate ~callback:(add_include_path_gui new_include);
     let okButton = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
     ignore $. okButton#connect#clicked (fun () ->
       add_include_path_gui new_include ();
@@ -1233,8 +1347,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
     dialog#destroy()
   in  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
-  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false);
-  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true);
+  ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
+  ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None);
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
   ignore $. undoAction#connect#activate undo;
   ignore $. redoAction#connect#activate redo;

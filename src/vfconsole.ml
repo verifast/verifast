@@ -13,7 +13,7 @@ let _ =
     let verify range_callback =
     try
       let use_site_callback declKind declLoc useSiteLoc = () in
-      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback None;
+      verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback (fun _ -> ()) None None;
       print_endline "0 errors found"
     with
       ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1

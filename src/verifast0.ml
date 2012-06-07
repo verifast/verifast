@@ -34,6 +34,7 @@ type 'termnode context =
 | Executing of 'termnode heap * 'termnode env * loc * string
 | PushSubcontext
 | PopSubcontext
+type node = Node of string * int list * node list ref
 
 (* Returns the locations of the "call stack" of the current execution step. *)
 let get_callers (ctxts: 'termnode context list): loc option list =
