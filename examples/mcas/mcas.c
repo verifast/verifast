@@ -1,11 +1,11 @@
 #include "bool.h"
 #include "stdlib.h"
 #include "rdcss.h"
-#include "ghost_cells_ex.h"
-#include "ghost_lists.h"
-#include "assoc_list.h"
-#include "ghost_counters.h"
-#include "bitops.h"
+//@ #include "ghost_cells_ex.gh"
+//@ #include "ghost_lists.gh"
+//@ #include "assoc_list.gh"
+//@ #include "ghost_counters.gh"
+//@ #include "bitops.gh"
 #include "mcas.h"
 
 struct cd {

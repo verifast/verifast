@@ -1,8 +1,6 @@
 #ifndef GHOST_COUNTERS_H
 #define GHOST_COUNTERS_H
 
-/*@
-
 predicate ghost_counter(int id, int count);
 predicate ghost_counter_zero_contrib(int id;);
 predicate ghost_counter_contrib(int id, real frac, int contrib);
@@ -30,7 +28,5 @@ lemma void ghost_counter_end_contrib();
 lemma void ghost_counter_match_zero_contrib();
     requires ghost_counter(?id, ?count) &*& ghost_counter_zero_contrib(id);
     ensures ghost_counter(id, count) &*& ghost_counter_zero_contrib(id) &*& count == 0;
-
-@*/
 
 #endif

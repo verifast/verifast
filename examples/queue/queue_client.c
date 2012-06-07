@@ -1,7 +1,7 @@
 #include "stdlib.h"
 #include "queue.h"
 #include "threading.h"
-#include "ghost_cells.h"
+//@ #include "ghost_cells.gh"
 
 struct message {
     int id;

@@ -1,10 +1,6 @@
 #ifndef GHOST_LISTS_H
 #define GHOST_LISTS_H
 
-#include "lists.h"
-
-/*@
-
 predicate ghost_list<t>(int id, list<t> xs);
 predicate ghost_list_member_handle<t>(int id, t d);
 
@@ -35,6 +31,5 @@ lemma void ghost_list_member_handle_lemma<t>(int id, t d);
 lemma void ghost_list_dispose<t>();
   requires ghost_list<t>(?id, nil);
   ensures true;
-@*/
 
 #endif

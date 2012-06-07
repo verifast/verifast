@@ -1,9 +1,7 @@
 #ifndef GHOST_LISTS_H
 #define GHOST_LISTS_H
 
-#include "assoc_list.h"
-
-/*@
+#include "assoc_list.gh"
 
 predicate ghost_list<t>(int id, list<t> xs);
 predicate ghost_list_member_handle<t>(int id, t x);
@@ -70,7 +68,5 @@ lemma void strong_ghost_assoc_list_key_handle_lemma();
 lemma void create_strong_ghost_assoc_list_key_handle(void *x);
     requires strong_ghost_assoc_list(?id, ?xys) &*& mem_assoc(x, xys) == true;
     ensures strong_ghost_assoc_list(id, xys) &*& [_]strong_ghost_assoc_list_key_handle(id, x);
-
-@*/
 
 #endif

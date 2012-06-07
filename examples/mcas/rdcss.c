@@ -1,10 +1,9 @@
 #include "stdlib.h"
 #include "atomics.h"
-#include "list.h"
 #include "rdcss.h"
-#include "bitops.h"
-#include "ghost_cells_ex.h"
-#include "ghost_lists.h"
+//@ #include "bitops.gh"
+//@ #include "ghost_cells_ex.gh"
+//@ #include "ghost_lists.gh"
 
 // A port of the RDCSS [1] proof by Vafeiadis [2] to VeriFast
 // [1] Tim Harris, Keir Fraser, and Ian A. Pratt. A practical multi-word compare-and-swap operation.

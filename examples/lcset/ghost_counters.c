@@ -1,6 +1,6 @@
-#include "ghost_cells.h"
-#include "raw_ghost_lists.h"
-#include "ghost_counters.h"
+//@ #include "ghost_cells.gh"
+//@ #include "raw_ghost_lists.gh"
+//@ #include "ghost_counters.gh"
 
 /*@
 
@@ -210,7 +210,8 @@ lemma void ghost_counter_decrement()
 		        sum_append(cs0, cons(c - 1, cs1));
 		    }
 		    close ghost_counter_contrib(id, f, contrib - 1);
-		    close ghost_counter(id, count - 1);            }
+		    close ghost_counter(id, count - 1);
+            }
     }
 }
 

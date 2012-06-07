@@ -5,9 +5,9 @@
     list sets
     - represents the set as a list of elements
 */
-//@ #include "listex2.h"
-//@ #include "exwitness.h"
-/*@
+
+#include "listex2.gh"
+#include "exwitness.gh"
 
 fixpoint list<t> lset_empty<t>() { return nil; }
 
@@ -405,5 +405,4 @@ lemma void lset_equals_add_r_remove_l<t>(list<t> s1, list<t> s2, t el);
 */
 
             
-@*/
 #endif

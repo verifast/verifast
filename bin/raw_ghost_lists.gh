@@ -1,8 +1,6 @@
 #ifndef RAW_GHOST_LISTS_H
 #define RAW_GHOST_LISTS_H
 
-/*@
-
 predicate raw_ghost_list<t>(int id; int n, list<pair<int, t> > elements);
 predicate raw_ghost_list_member_handle<t>(int id, int k; t element);
 
@@ -21,7 +19,5 @@ lemma void raw_ghost_list_match<t>(int id, int k);
 lemma void raw_ghost_list_remove<t>(int id, int k);
     requires raw_ghost_list<t>(id, ?n, ?xs) &*& raw_ghost_list_member_handle<t>(id, k, ?x);
     ensures raw_ghost_list<t>(id, n, remove(pair(k, x), xs));
-
-@*/
 
 #endif

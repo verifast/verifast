@@ -1,8 +1,6 @@
 #ifndef THREADING_H
 #define THREADING_H
 
-//@ #include "list.h"
-
 // Lock ordering for re-entry and deadlock prevention.
 // Note: we use lock IDs instead of struct lock pointers because
 // 1) if a lock is disposed and its address is reused for a new lock, it could be inserted in a different place in the lock order DAG,

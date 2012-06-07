@@ -1,6 +1,6 @@
 #include "malloc.h"
-#include "arrays.h"
-#include "listex.h"
+//@ #include "arrays.gh"
+//@ #include "listex.gh"
 
 /*
 Terminology: if the array is STUFF1_empty_STUFF2, then bighead refers to stuff2, bigtail refers to stuff1.

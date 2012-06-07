@@ -1,6 +1,6 @@
-//@ #include "listex.h"
-//@ #include "nat.h"
-//@ #include "arrays.h"
+//@ #include "listex.gh"
+//@ #include "nat.gh"
+//@ #include "arrays.gh"
 
 /*@
 fixpoint bool between(unit u, int lower, int upper, int x) {

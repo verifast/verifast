@@ -1,8 +1,6 @@
 #ifndef GHOST_COUNTERS_H
 #define GHOST_COUNTERS_H
 
-/*@
-
 predicate ghost_counter(int id, int count);
 predicate ghost_counter_snapshot(int id, int snapshot);
 
@@ -21,7 +19,5 @@ lemma void create_ghost_counter_snapshot(int snapshot);
 lemma void match_ghost_counter_snapshot(int snapshot);
     requires ghost_counter(?id, ?count) &*& [_]ghost_counter_snapshot(id, snapshot);
     ensures ghost_counter(id, count) &*& snapshot <= count;
-
-@*/
 
 #endif

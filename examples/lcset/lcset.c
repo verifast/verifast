@@ -1,8 +1,7 @@
 #include "stdlib.h"
 #include "atomics.h"
-#include "list.h"
-#include "ghost_lists.h"
-#include "ghost_counters.h"
+//@ #include "ghost_lists.gh"
+//@ #include "ghost_counters.gh"
 #include "locks.h"
 #include "lcset.h"
 

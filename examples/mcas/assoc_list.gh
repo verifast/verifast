@@ -1,9 +1,7 @@
 #ifndef ASSOC_LIST_H
 #define ASSOC_LIST_H
 
-#include "listex.h"
-
-/*@
+#include "listex.gh"
 
 fixpoint list<pair<a, b> > zip<a, b>(list<a> xs, list<b> ys) {
     switch (xs) {
@@ -246,7 +244,5 @@ lemma void foreach3_foreach_assoc_unseparate_nochange(list<void *> xs, list<void
 lemma void length_mapfst<a, b>(list<pair<a, b> > xys);
     requires true;
     ensures length(mapfst(xys)) == length(xys);
-
-@*/
 
 #endif

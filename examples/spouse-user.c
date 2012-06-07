@@ -1,7 +1,7 @@
 #include "spouse.h"
 #include "stdio.h"
 #include "arraylist.h"
-//@ #include "ghostlist.h"
+//@ #include "ghostlist.gh"
 #include "io_helper.h"
 #include "bool.h"
 

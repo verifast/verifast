@@ -1,10 +1,6 @@
 #ifndef GHOST_SETS_H
 #define GHOST_SETS_H
 
-//@ #include "list.h"
-
-/*@
-
 predicate ghost_set<t>(int id, list<t> elements);
 predicate ghost_set_member_handle<t>(int id, t element;);
 
@@ -31,7 +27,5 @@ lemma void ghost_set_member_handle_unique<t>(int id, t element);
 lemma void ghost_set_remove_lemma<t>(int id, list<t> xs1, t x, list<t> xs2);
     requires ghost_set<t>(id, append(xs1, cons(x, xs2)));
     ensures ghost_set<t>(id, append(xs1, cons(x, xs2))) &*& remove(x, append(xs1, cons(x, xs2))) == append(xs1, xs2);
-
-@*/
 
 #endif

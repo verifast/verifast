@@ -1,8 +1,6 @@
 #ifndef PRELUDE_CORE_H
 #define PRELUDE_CORE_H
 
-/*@
-
 fixpoint t default_value<t>();
 
 inductive unit = unit;
@@ -29,7 +27,5 @@ fixpoint bool unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): 
 
 inductive boxed_real = boxed_real(real);
 fixpoint real unboxed_real(boxed_real r) { switch (r) { case boxed_real(value): return value; } }
-
-@*/
 
 #endif

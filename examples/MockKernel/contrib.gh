@@ -1,8 +1,6 @@
 #ifndef CONTRIB_H
 #define CONTRIB_H
 
-/*@
-
 predicate contrib_sum(int id, int count, int sum);
 predicate contrib(int id, int contrib);
 
@@ -21,7 +19,5 @@ lemma void dispose_contrib(int id);
 lemma void contrib_sum_nonnegative(int id);
     requires contrib_sum(id, ?count, ?sum);
     ensures contrib_sum(id, count, sum) &*& 0 <= count &*& 0 <= sum;
-
-@*/
 
 #endif

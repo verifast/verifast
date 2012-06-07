@@ -5,7 +5,7 @@
 
 #include "bool.h"
 
-//@ #include "arrays.h"
+//@ #include "arrays.gh"
 
 void check (bool b)
   //@ requires b;

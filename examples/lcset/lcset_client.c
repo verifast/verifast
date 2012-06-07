@@ -7,7 +7,7 @@
 #include "lcset.h"
 #include "threading.h"
 #include "assert.h"
-#include "ghost_cells.h"
+//@ #include "ghost_cells.gh"
 
 int readNumber() // Asks the user to enter a number.
     //@ requires true;
@@ -304,7 +304,8 @@ void remover_thread(struct set *set)
         [1/2]atomic_space(space_inv(set, adderCell, removerPhaseCell, removerCell)) &*&
         [1/2]ghost_cell<bool>(removerPhaseCell, false) &*&
         [1/2]ghost_cell<int>(removerCell, _);
-    @*/    //@ ensures false;
+    @*/
+    //@ ensures false;
 {
     //@ open cells(adderCell, removerPhaseCell, removerCell);
     for (;;)

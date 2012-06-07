@@ -2,7 +2,6 @@
 #define LCSET_H
 
 #include "atomics.h"
-#include "list.h"
 
 struct set;
 

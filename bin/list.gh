@@ -1,7 +1,7 @@
 #ifndef LIST_H
 #define LIST_H
 
-#include "prelude_core.h"
+#include "prelude_core.gh"
 
 /*
 
@@ -15,8 +15,6 @@ and various lemmas.
 See listex.h for additional lemmas about these definitions, and for additional definitions.
 
 */
-
-/*@
 
 inductive list<t> = nil | cons(t, list<t>);
 
@@ -255,7 +253,5 @@ fixpoint bool all_eq<t>(list<t> xs, t x) {
 lemma void all_eq_nth<t>(list<t> xs, t x, int i);
     requires all_eq(xs, x) && 0 <= i &*& i < length(xs);
     ensures nth(i, xs) == x;
-
-@*/
 
 #endif

@@ -1,6 +1,6 @@
-.provides .\ghost_sets.h#create_ghost_set
-.provides .\ghost_sets.h#ghost_set_add
-.provides .\ghost_sets.h#ghost_set_match_member_handle
-.provides .\ghost_sets.h#ghost_set_member_handle_unique
-.provides .\ghost_sets.h#ghost_set_remove
-.provides .\ghost_sets.h#ghost_set_remove_lemma
+.provides .\ghost_sets.gh#create_ghost_set
+.provides .\ghost_sets.gh#ghost_set_add
+.provides .\ghost_sets.gh#ghost_set_match_member_handle
+.provides .\ghost_sets.gh#ghost_set_member_handle_unique
+.provides .\ghost_sets.gh#ghost_set_remove
+.provides .\ghost_sets.gh#ghost_set_remove_lemma

@@ -1,9 +1,7 @@
 #ifndef ARRAYS_H
 #define ARRAYS_H
 
-#include "listex.h"
-
-/*@
+#include "listex.gh"
 
 lemma void array_split<t>(void *a, int offset);
     requires array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
@@ -102,7 +100,5 @@ lemma void chars_to_int_array(void *ptr, int array_nb_items);
 lemma void chars_to_char_array(void *ptr);
     requires [?f]chars(ptr, ?elems);
     ensures [f]array<char>(ptr, length(elems), sizeof(char), character, elems);
-
-@*/
 
 #endif

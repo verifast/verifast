@@ -7,9 +7,9 @@
 #include "MockKernel.h"
 #include "MockKernelModule_proxy.h"
 #include "lists.h"
-//@ #include "counting.h"
-//@ #include "ghost_sets.h"
-//@ #include "contrib.h"
+//@ #include "counting.gh"
+//@ #include "ghost_sets.gh"
+//@ #include "contrib.gh"
 
 struct module {
     struct module *next;

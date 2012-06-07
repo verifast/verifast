@@ -6,7 +6,7 @@ Represents an I/O specification using an approach inspired by coinduction.
 
 */
 
-//@ #include "nat.h"
+//@ #include "nat.gh"
 
 /*@
 

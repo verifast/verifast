@@ -3,7 +3,7 @@
 #include "MockKernel.h"
 #include "stdlib.h"
 
-//@ #include "arrays.h"
+//@ #include "arrays.gh"
 
 //@ unloadable_module;
 

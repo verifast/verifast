@@ -1,14 +1,11 @@
 #ifndef LISTEX2_H
 #define LISTEX2_H
 
-//@ #include "list.h"
-//@ #include "listex.h"
-//@ #include "exwitness.h"
+#include "listex.gh"
+#include "exwitness.gh"
 
 //TODO: move general lemma's to list.h or listex.h 
 
-/*@
-    
 fixpoint list<t> snoc<t>(list<t> vs, t v) 
 {   
     return append(vs, cons(v, nil));
@@ -97,7 +94,5 @@ lemma void mem_map_false<ta, tb>(fixpoint (ta, tb) f, list<ta> l, ta a, tb b)
             if(a!=h) mem_map_false(f, t, a, b);
     }
 }
-
-@*/
 
 #endif

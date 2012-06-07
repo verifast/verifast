@@ -169,7 +169,7 @@ end
 
 type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
-let parse_decls =
+let parse_decls ?inGhostHeader =
 let rec
   parse_decls = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
@@ -1191,7 +1191,10 @@ and
   [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
 in
-  parse_decls
+  if match inGhostHeader with None -> false | Some b -> b then
+    parse_pure_decls
+  else
+    parse_decls
 
 let rec parse_package_name= parser
   [<'(_, Ident n);x=parser
@@ -1255,29 +1258,39 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let parse_include_directives (ignore_eol: bool ref): (loc * string) list parser_ =
+let parse_include_directives (ignore_eol: bool ref) ~inGhostHeader : (loc * string) list parser_ =
   let rec parse_include_directives = parser
     [< header = parse_include_directive; headers = parse_include_directives >] -> header::headers 
   | [< >] -> []
   and
   parse_include_directive = parser
-    [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] -> ignore_eol := true; (l, header)
-  | [< d = peek_in_ghost_range (parser [< '(_, Kwd "#"); '(_, Kwd "include"); '(l, String header); '(_, Kwd "@*/") >] -> (l, header)) >] -> d
+    [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] ->
+    ignore_eol := true;
+    if not inGhostHeader && Filename.check_suffix header ".gh" then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."));
+    if inGhostHeader && not (Filename.check_suffix header ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends with .gh)."));
+    (l, header)
+  | [< d = peek_in_ghost_range begin parser
+         [< '(_, Kwd "#"); '(_, Kwd "include"); '(l, String header); '(_, Kwd "@*/") >] ->
+         if inGhostHeader then raise (ParseException (l, "Ghost #include directives are not allowed inside ghost headers."));
+         if not (Filename.check_suffix header ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
+         (l, header)
+       end
+    >] -> d
 in
   parse_include_directives
 
 let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (runPreprocessor: bool) (include_paths: string list): ((loc * string) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
-  let make_lexer basePath relPath include_paths =
+  let make_lexer basePath relPath include_paths ~inGhostRange =
     let text = readFile (concat basePath relPath) in
-    make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange reportShouldFail
+    make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange reportShouldFail
   in
-  let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer in
+  let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer ~inGhostRange:false in
   let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
   let parse_c_file =
     parser
-      [< headers = parse_include_directives ignore_eol; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+      [< headers = parse_include_directives ignore_eol ~inGhostHeader:false; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
   in
   try
     parse_c_file token_stream
@@ -1291,14 +1304,15 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
 (** Returns [(headers, packages)] where the paths in [headers] are unchanged from the source file. *)
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit): ((loc * string) list * package list) =
   Stopwatch.start parsing_stopwatch;
+  let isGhostHeader = Filename.check_suffix relPath ".gh" in
   let result =
   let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
-  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (concat basePath relPath)) reportRange reportShouldFail in
+  let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (concat basePath relPath)) reportRange ~inGhostRange:isGhostHeader reportShouldFail in
   let parse_header_file =
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
          '(_, Kwd "#"); '(_,Kwd "define"); '(lx', PreprocessorSymbol x'); '(_, Eol); _ = (fun _ -> ignore_eol := true);
-         headers = parse_include_directives ignore_eol; ds = parse_decls;
+         headers = parse_include_directives ignore_eol isGhostHeader; ds = parse_decls ~inGhostHeader:isGhostHeader;
          '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
          _ = Stream.empty >] ->
       if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));

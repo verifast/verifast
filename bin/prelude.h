@@ -1,8 +1,8 @@
 #ifndef PRELUDE_H
 #define PRELUDE_H
 
-#include "prelude_core.h"
-#include "list.h"
+//@ #include "prelude_core.gh"
+//@ #include "list.gh"
 
 /*@
 

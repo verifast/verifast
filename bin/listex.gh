@@ -9,8 +9,6 @@ Contents:
 
 */
 
-/*@
-
 lemma void take_plus_one<t>(int i, list<t> xs);
     requires 0 <= i &*& i < length(xs);
     ensures take(i + 1, xs) == append(take(i, xs), cons(nth(i, xs), nil));
@@ -42,7 +40,15 @@ lemma void distinct_remove<t>(t x, list<t> xs);
 lemma void mem_nth_index_of<t>(t x, list<t> xs);
     requires mem(x, xs) == true;
     ensures nth(index_of(x, xs), xs) == x;
-lemma void map_append<a, b>(fixpoint(a, b) f, list<a> xs, list<a> ys);    requires true;    ensures map(f, append(xs, ys)) == append(map(f, xs), map(f, ys));lemma void mem_map<a, b>(a x, list<a> xs, fixpoint(a, b) f);    requires mem(x, xs) == true;    ensures mem(f(x), map(f, xs)) == true;
+
+lemma void map_append<a, b>(fixpoint(a, b) f, list<a> xs, list<a> ys);
+    requires true;
+    ensures map(f, append(xs, ys)) == append(map(f, xs), map(f, ys));
+
+lemma void mem_map<a, b>(a x, list<a> xs, fixpoint(a, b) f);
+    requires mem(x, xs) == true;
+    ensures mem(f(x), map(f, xs)) == true;
+
 lemma void forall_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p);
     requires true;
     ensures forall(append(xs, ys), p) == (forall(xs, p) && forall(ys, p));
@@ -81,7 +87,5 @@ lemma void fold_left_append<a, b>(a x0, fixpoint(a, b, a) f, list<b> xs1, list<b
 lemma_auto void append_drop_take<t>(list<t> vs, int i);
   requires 0 <= i && i <= length(vs);
   ensures append(take(i, vs), drop(i, vs)) == vs;
-
-@*/
 
 #endif

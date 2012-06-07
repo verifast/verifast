@@ -1,8 +1,6 @@
 #ifndef COUNTING_H
 #define COUNTING_H
 
-/*@
-
 predicate counting<a, b>(predicate(a; b) p, a a, int count; b b);
 predicate ticket<a, b>(predicate(a; b) p, a a, real frac;);
 
@@ -25,7 +23,5 @@ lemma void destroy_ticket<a, b>(predicate(a; b) p, a a);
 lemma void stop_counting<a, b>(predicate(a; b) p, a a);
     requires counting(p, a, 0, ?b);
     ensures p(a, b);
-
-@*/
 
 #endif

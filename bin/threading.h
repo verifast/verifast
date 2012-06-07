@@ -1,8 +1,6 @@
 #ifndef THREADING_H
 #define THREADING_H
 
-//@ #include "list.h"
-
 // The threading.c module provides two synchronization constructs: mutexes and
 // locks. The only difference between these two constructs is that mutexes
 // are non-re-entrant, whereas locks are re-entrant. Furthermore, the

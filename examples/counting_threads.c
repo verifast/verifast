@@ -1,5 +1,5 @@
-//@ #include "arrays.h"
-//@ #include "counting.h"
+//@ #include "arrays.gh"
+//@ #include "counting.gh"
 #include "malloc.h"
 #include "stdlib.h"
 #include "threading.h"

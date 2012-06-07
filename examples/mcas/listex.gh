@@ -1,10 +1,6 @@
 #ifndef LISTEX_H
 #define LISTEX_H
 
-#include "list.h"
-
-/*@
-
 fixpoint t reverseHead<t>(t head, list<t> tail) {
     switch (tail) {
         case nil: return head;
@@ -76,7 +72,5 @@ predicate foreach3(list<void *> xs, list<void *> ys, list<void *>zs, predicate(v
         xs == cons(x, xs0) &*&
         ys == cons(y, ys0) &*&
         zs == cons(z, zs0);
-
-@*/
 
 #endif

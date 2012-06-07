@@ -665,9 +665,9 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
    in_comment,
    in_ghost_range)
 
-let make_lexer keywords ghostKeywords path text reportRange reportShouldFail =
+let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange reportShouldFail =
   let {file_opt_annot_char=annotChar} = get_file_options text in
-  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false false true reportShouldFail annotChar in
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false (match inGhostRange with None -> false | Some b -> b) true reportShouldFail annotChar in
   (loc, ignore_eol, token_stream)
 
 (* The preprocessor *)
@@ -679,8 +679,9 @@ let make_preprocessor make_lexer basePath relPath include_paths =
   let paths = ref [] in
   let locs = ref [] in
   let loc = ref dummy_loc in
+  let in_ghost_range = ref false in
   let push_lexer basePath relPath =
-    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths in
+    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths ~inGhostRange:!in_ghost_range in
     lexer_ignore_eol := false;
     streams := stream::!streams;
     callers := List.hd !callers::!callers;
@@ -781,6 +782,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
     | Some t ->
     match t with
       (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
+    | (_, Kwd "/*@") -> junk (); in_ghost_range := true; next_at_start_of_line := at_start_of_line; Some t
     | (l, Kwd "#") when at_start_of_line ->
       junk ();
       begin match peek () with

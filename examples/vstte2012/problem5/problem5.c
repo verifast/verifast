@@ -1,6 +1,6 @@
 #include "stdlib.h"
-//@ #include "lset.h"
-//@ #include "nat.h"
+//@ #include "lset.gh"
+//@ #include "nat.gh"
 
 struct vertex;
 

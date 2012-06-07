@@ -1,7 +1,7 @@
 #include "malloc.h"
 #include "stdlib.h"
 #include "bool.h"
-#include "ghostlist.h"
+//@ #include "ghostlist.gh"
 
 // Some general infrastructure; should be in the VeriFast Library.
 

@@ -1,7 +1,7 @@
 #ifndef MOCKKERNEL_H
 #define MOCKKERNEL_H
 
-//@ #include "threading.h"
+#include "threading.h"
 
 struct module;
 

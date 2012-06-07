@@ -1,8 +1,6 @@
 #ifndef GHOST_CELLS_H
 #define GHOST_CELLS_H
 
-/*@
-
 predicate ghost_cell3(int id; int v1, int v2, int v3);
 
 lemma int create_ghost_cell3(int v1, int v2, int v3);
@@ -41,7 +39,5 @@ lemma void counted_ghost_cell_match_ticket<t>(int id);
 lemma void counted_ghost_cell_update<t>(int id, t x);
     requires counted_ghost_cell<t>(id, _, 0);
     ensures counted_ghost_cell<t>(id, x, 0);
-
-@*/
 
 #endif

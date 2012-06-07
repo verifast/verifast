@@ -1,8 +1,6 @@
 #ifndef GHOST_CELLS_H
 #define GHOST_CELLS_H
 
-/*@
-
 predicate ghost_cell<t>(int id; t value);
 
 lemma int create_ghost_cell<t>(t value);
@@ -20,7 +18,5 @@ lemma void ghost_cell_fraction_info<t>(int id);
 lemma void ghost_cell_leak<t>(int id); // For people who prefer to avoid "leak" statements.
     requires [?f]ghost_cell<t>(id, ?value);
     ensures [_]ghost_cell<t>(id, value);
-
-@*/
 
 #endif

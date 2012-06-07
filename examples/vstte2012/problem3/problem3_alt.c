@@ -1,6 +1,6 @@
 #include "malloc.h"
-#include "arrays.h"
-#include "listex.h"
+//@ #include "arrays.gh"
+//@ #include "listex.gh"
 
 struct ring_buffer{
 	int *fields; // buffer contents

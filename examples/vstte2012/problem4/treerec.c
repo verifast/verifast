@@ -1,5 +1,5 @@
-//@ #include "nat.h"
-//@ #include "listex.h"
+//@ #include "nat.gh"
+//@ #include "listex.gh"
 
 #include "treerec_list.h"
 #include "treerec_tree.h"

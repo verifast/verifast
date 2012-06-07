@@ -1,4 +1,4 @@
-//@ #include "lset.h"
+//@ #include "lset.gh"
 
 /*@
 

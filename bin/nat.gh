@@ -1,8 +1,6 @@
 #ifndef NAT_H
 #define NAT_H
 
-/*@
-
 inductive nat = zero | succ(nat);
 
 fixpoint int int_of_nat(nat n) {
@@ -33,7 +31,5 @@ lemma_auto void int_of_nat_nonnegative(nat n);
 lemma_auto(succ(nat_of_int(x))) void succ_int(int x);
   requires 0 <= x;
   ensures nat_of_int(x + 1) == succ(nat_of_int(x));
-
-@*/
 
 #endif

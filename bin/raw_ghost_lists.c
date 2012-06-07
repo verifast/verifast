@@ -1,5 +1,5 @@
-#include "ghost_cells.h"
-#include "raw_ghost_lists.h"
+//@ #include "ghost_cells.gh"
+//@ #include "raw_ghost_lists.gh"
 
 /*@
 

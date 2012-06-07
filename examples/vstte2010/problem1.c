@@ -1,7 +1,7 @@
 /* verifies with prover Z3 with overflow checking disabled */
 
-//@ #include "listex.h"
-//@ #include "arrays.h"
+//@ #include "listex.gh"
+//@ #include "arrays.gh"
 
 /*@
 fixpoint bool le(unit u, int x, int y) {
@@ -21,7 +21,8 @@ fixpoint int plus(unit u, int x, int y) {
         case unit: return x + y;
     }
 }
-lemma void le_mult_compat(int x, int y1, int y2)
+
+lemma void le_mult_compat(int x, int y1, int y2)
     requires 0 <= x &*& y1 <= y2;
     ensures x * y1 <= x * y2;
 {
@@ -56,7 +57,8 @@ lemma void mult_congr_l(int x1, int x2, int y)
     }
   }
 }
-@*/
+@*/
+
 void problem1(int *a, int N)
    //@ requires ints(a, N, ?elems) &*& forall(elems, (le)(unit, 0)) == true;
    //@ ensures ints(a, N, elems);

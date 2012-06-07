@@ -2,7 +2,6 @@
 #define QUEUE_H
 
 #include "atomics.h"
-#include "list.h"
 
 struct queue;
 

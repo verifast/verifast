@@ -2,7 +2,7 @@
 #define RDCSS_H
 
 #include "atomics.h"
-#include "assoc_list.h"
+//@ #include "assoc_list.gh"
 
 /*@
 

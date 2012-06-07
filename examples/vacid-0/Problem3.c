@@ -1,8 +1,8 @@
 #include "malloc.h"
 #include "stdlib.h"
-#include "nat.h"
-#include "arrays.h"
-#include "listex.h"
+//@ #include "nat.gh"
+//@ #include "arrays.gh"
+//@ #include "listex.gh"
 
 struct heap {
   int* elems;
@@ -293,7 +293,8 @@ lemma void is_heap_shrink_list(nat i, list<int> h, list<nat> excep)
 
 lemma int div2(int j); // todo: implement integer division
   requires 0 <= j;
-  ensures 2 * result == j || 2 * result + 1 == j;
+  ensures 2 * result == j || 2 * result + 1 == j;
+
 lemma void is_heap_smaller(nat i, list<int> h, int j)
   requires is_heap(i, h, nil) == true &*& 2*j < length(h) &*& 1 <= j&*& j <= int_of_nat(i);
   ensures 0 +nth(j, h) <= 0 +nth(2*j, h);
@@ -352,7 +353,8 @@ lemma void is_heap_smaller2(nat i, list<int> h, int j)
 
 lemma void minimum_of_heap(nat i, list<int> h, int n)
   requires is_heap(i, h, nil) == true && 1 <= n &*& n < length(h) &*& n <= int_of_nat(i);
-  ensures 0 + nth(1, h) <= nth(n, h);{
+  ensures 0 + nth(1, h) <= nth(n, h);
+{
   int j = n;
   while(1 < j) 
     invariant 1 <= j &*& j <= n &*& 0+nth(j, h) <= 0 + nth(n, h);
@@ -423,10 +425,15 @@ void sink(int* arr, int size, int k)
       //@ is_heap_remove_except(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), nat_of_int(k));
       return;
     }
-    exch(arr, k, j);    //@ is_perm_swap(take(size + 1, vs3), j, k);
+    exch(arr, k, j);
+    //@ is_perm_swap(take(size + 1, vs3), j, k);
     //@ assert array<int>(arr, capacity, sizeof(int), integer, ?myvs);
-    //@ assert is_perm(take(size + 1, myvs), take(size + 1, vs3)) == true;      //@ is_perm_symmetric(take(size + 1, myvs), take(size + 1, vs3));    //@ is_perm_transitive(take(size + 1, vs2), take(size + 1, vs3), take(size + 1, myvs));
-    if(j == 2 * k) {       //@ is_heap_swap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, prevk);
+    //@ assert is_perm(take(size + 1, myvs), take(size + 1, vs3)) == true;
+  
+    //@ is_perm_symmetric(take(size + 1, myvs), take(size + 1, vs3));
+    //@ is_perm_transitive(take(size + 1, vs2), take(size + 1, vs3), take(size + 1, myvs));
+    if(j == 2 * k) {
+       //@ is_heap_swap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, prevk);
     } else {
        //@ is_heap_swap2(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), k, prevk);
     }

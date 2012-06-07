@@ -1,10 +1,6 @@
 #ifndef LISTEX_H
 #define LISTEX_H
 
-#include "list.h"
-
-/*@
-
 fixpoint t reverseHead<t>(t head, list<t> tail) {
     switch (tail) {
         case nil: return head;
@@ -29,7 +25,5 @@ lemma void reverse_head_tail_lemma<t>(t h, list<t> t)
             reverse_head_tail_lemma(th, tt);
     }
 }
-
-@*/
 
 #endif

@@ -1,8 +1,6 @@
 #ifndef LISTS_H
 #define LISTS_H
 
-//@ #include "list.h"
-
 /*@
 
 predicate lseg(void *first, void *last, list<void *> xs, predicate(void *) p) =
