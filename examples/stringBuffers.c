@@ -12,7 +12,7 @@ struct string_buffer {
 };
 
 /*@
-predicate string_buffer(struct string_buffer *buffer) =
+predicate string_buffer(struct string_buffer *buffer;) =
     buffer->length |-> ?length &*& buffer->capacity |-> ?capacity &*& buffer->chars |-> ?charsArray &*& malloc_block_string_buffer(buffer) &*&
     chars(charsArray, ?cs) &*& malloc_block(charsArray, capacity) &*& 0 <= length &*& length <= capacity &*& length(cs) == capacity;
 @*/

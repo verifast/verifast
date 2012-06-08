@@ -43,4 +43,12 @@ int fclose(FILE* fp);
   //@ requires file(fp);
   //@ ensures true;
 
+int getchar();
+  //@ requires true;
+  //@ ensures true;
+
+void putchar(char c);
+  //@ requires true;
+  //@ ensures true;
+
 #endif

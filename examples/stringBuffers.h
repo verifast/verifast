@@ -6,7 +6,12 @@
 struct string_buffer;
 
 /*@
-predicate string_buffer(struct string_buffer *buffer);
+predicate string_buffer(struct string_buffer *buffer;);
+predicate string_buffer_minus_chars(struct string_buffer *buffer, char *pcs, list<char> cs);
+
+lemma void string_buffer_merge_chars(struct string_buffer *buffer);
+    requires [?f]string_buffer_minus_chars(buffer, ?pcs, ?cs) &*& [f]chars(pcs, cs);
+    ensures [f]string_buffer(buffer);
 @*/
 
 struct string_buffer *create_string_buffer();
@@ -16,8 +21,8 @@ int string_buffer_get_length(struct string_buffer *buffer);
     //@ requires [?f]string_buffer(buffer);
     //@ ensures [f]string_buffer(buffer) &*& 0 <= result;
 char *string_buffer_get_chars(struct string_buffer *buffer);
-    //@ requires false; // TODO: Improve this contract.
-    //@ ensures true;
+    //@ requires [?f]string_buffer(buffer);
+    //@ ensures [f]string_buffer_minus_chars(buffer, result, ?cs) &*& [f]chars(result, cs);
 bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *buffer0);
     //@ requires [?f]string_buffer(buffer) &*& [?f0]string_buffer(buffer0);
     //@ ensures [f]string_buffer(buffer) &*& [f0]string_buffer(buffer0);
