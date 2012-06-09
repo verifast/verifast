@@ -24,7 +24,7 @@ int main() //@ : main
     writer_write_string(w, "BoT\r\n");
     
     while (!stop)
-        //@ invariant reader(r) &*& writer(w) &*& stop ? emp : string_buffer(line) &*& string_buffer(nick) &*& string_buffer(text);
+        //@ invariant reader(r) &*& writer(w) &*& stop ? emp : string_buffer(line, _) &*& string_buffer(nick, _) &*& string_buffer(text, _);
     {
         bool test = true;
         bool result = false;

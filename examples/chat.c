@@ -15,7 +15,7 @@ struct member {
 
 /*@
 predicate member(struct member* member)
-    requires member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick) &*& writer(writer) &*& malloc_block_member(member);
+    requires member->nick |-> ?nick &*& [1/2]member->writer |-> ?writer &*& string_buffer(nick, _) &*& writer(writer) &*& malloc_block_member(member);
 @*/
 
 struct room {
@@ -48,8 +48,8 @@ struct room *create_room()
 }
 
 bool room_has_member(struct room *room, struct string_buffer *nick)
-    //@ requires room(room) &*& string_buffer(nick);
-    //@ ensures room(room) &*& string_buffer(nick);
+    //@ requires room(room) &*& string_buffer(nick, _);
+    //@ ensures room(room) &*& string_buffer(nick, _);
 {
     //@ open room(room);
     //@ struct member *membersList = room->members;
@@ -60,7 +60,7 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
     while (iter != 0 && !hasMember)
         /*@
         invariant
-            string_buffer(nick) &*&
+            string_buffer(nick, _) &*&
             lseg(membersList, iter, ?members0, member) &*& lseg(iter, 0, ?members1, member) &*& members == append(members0, members1);
         @*/
     {
@@ -77,15 +77,15 @@ bool room_has_member(struct room *room, struct string_buffer *nick)
 }
 
 void room_broadcast_message(struct room *room, struct string_buffer *message)
-    //@ requires room(room) &*& string_buffer(message);
-    //@ ensures room(room) &*& string_buffer(message);
+    //@ requires room(room) &*& string_buffer(message, _);
+    //@ ensures room(room) &*& string_buffer(message, _);
 {
     //@ open room(room);
     struct member *iter = room->members;
     //@ assert lseg(?list, 0, ?ms, member);
     //@ close lseg(list, list, nil, member);
     while (iter != 0)
-        //@ invariant string_buffer(message) &*& lseg(list, iter, ?ms0, member) &*& lseg(iter, 0, ?ms1, member) &*& ms == append(ms0, ms1);
+        //@ invariant string_buffer(message, _) &*& lseg(list, iter, ?ms0, member) &*& lseg(iter, 0, ?ms1, member) &*& ms == append(ms0, ms1);
     {
         //@ open lseg(iter, 0, ms1, member);
         //@ open member(iter);
@@ -135,12 +135,12 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
     /*@
     requires
         locked(roomLock, ?roomLockId, room_ctor(room), currentThread, _) &*& lockset(currentThread, cons(roomLockId, nil)) &*&
-        room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick);
+        room(room) &*& reader(reader) &*& writer(writer) &*& string_buffer(nick, _);
     @*/
     /*@
     ensures
         [_]lock(roomLock, roomLockId, room_ctor(room)) &*& lockset(currentThread, nil) &*&
-        reader(reader) &*& writer(writer) &*& string_buffer(nick);
+        reader(reader) &*& writer(writer) &*& string_buffer(nick, _);
     @*/
 {
     struct member *member = 0;
@@ -181,7 +181,7 @@ void session_run_with_nick(struct room *room, struct lock *roomLock, struct read
         bool eof = false;
         struct string_buffer *message = create_string_buffer();
         while (!eof)
-            //@ invariant reader(reader) &*& string_buffer(nick) &*& string_buffer(message) &*& [_]lock(roomLock, roomLockId, room_ctor(room)) &*& lockset(currentThread, nil);
+            //@ invariant reader(reader) &*& string_buffer(nick, _) &*& string_buffer(message, _) &*& [_]lock(roomLock, roomLockId, room_ctor(room)) &*& lockset(currentThread, nil);
         {
             eof = reader_read_line(reader, message);
             if (eof) {
@@ -287,7 +287,7 @@ void session_run(void *data) //@ : thread_run
         struct string_buffer *nick = create_string_buffer();
         bool done = false;
         while (!done)
-          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick) &*& [_]lock(roomLock, _, room_ctor(room)) &*& lockset(currentThread, nil);
+          //@ invariant writer(writer) &*& reader(reader) &*& string_buffer(nick, _) &*& [_]lock(roomLock, _, room_ctor(room)) &*& lockset(currentThread, nil);
         {
             writer_write_string(writer, "Please enter your nick: ");
             {

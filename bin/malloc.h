@@ -2,7 +2,7 @@
 #define MALLOC_H
 
 /*@
-predicate malloc_block(void *array, int size);
+predicate malloc_block(void *array; int size);
 
 // In Standard C, freeing a null pointer is allowed and is a no-op.
 lemma void malloc_block_null();

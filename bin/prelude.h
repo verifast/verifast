@@ -22,8 +22,8 @@ predicate array<t>(void* a, int n, int elemsize, predicate(t*; t) q; list<t> ele
 
     
 lemma_auto void array_inv<t>();
-    requires array<t>(?a, ?n, ?size, ?q, ?elems);
-    ensures array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
+    requires [?f]array<t>(?a, ?n, ?size, ?q, ?elems);
+    ensures [f]array<t>(a, n, size, q, elems) &*& 0 <= n &*& length(elems) == n;
 
 predicate character(char *p; char c);
 predicate u_character(unsigned char *p; unsigned char c);
