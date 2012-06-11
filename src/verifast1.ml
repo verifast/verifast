@@ -2627,7 +2627,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let func_call () =
         match try_assoc g tenv with
           Some (PtrType (FuncType ftn)) ->
-          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, ft_predfammap) = List.assoc ftn functypemap in
+          let (_, gh, tparams, rt, ftxmap, xmap, pre, post, ft_predfammap) =
+            match try_assoc ftn functypemap with
+              None -> static_error l "Function pointer calls are now allowed here." None
+            | Some info -> info
+          in
           let rt = match rt with None -> Void | Some rt -> rt in (* This depends on the fact that the return type does not mention type parameters. *)
           (WFunPtrCall (l, g, es), rt, None)
         | Some ((PureFuncType (t1, t2) as t)) ->
