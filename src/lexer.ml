@@ -783,6 +783,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
     match t with
       (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
     | (_, Kwd "/*@") -> junk (); in_ghost_range := true; next_at_start_of_line := at_start_of_line; Some t
+    | (_, Kwd "@*/") -> junk (); in_ghost_range := false; Some t
     | (l, Kwd "#") when at_start_of_line ->
       junk ();
       begin match peek () with
