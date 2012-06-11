@@ -1,6 +1,6 @@
 #include "stdio.h"
 #include "stdlib.h"
-#include "stringbuffers.h"
+#include "stringBuffers.h"
 //@ #include "arrays.gh"
 
 typedef int charreader();
