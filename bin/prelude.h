@@ -72,7 +72,7 @@ predicate chars(char *array, list<char> cs) =
     };
 
 lemma void chars_zero(); // There is nothing at address 0.
-    requires chars(0, ?cs);
+    requires [?f]chars(0, ?cs);
     ensures cs == nil;
 
 lemma void char_limits(char *pc);
