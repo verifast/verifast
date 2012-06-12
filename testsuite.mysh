@@ -89,7 +89,8 @@ verifast_both -c pure_map.c
 cd queue
 verifast_both atomics.o threading.o queue.c queue_client.c
 cd ..
-verifast_both -c -disable_overflow_check tokenizer.c tokenizer_test.c
+verifast_both -c tokenizer_test.c
+verifast_both -disable_overflow_check listex.o arrays.o stringBuffers.c tokenizer.c ghostlist.o rcl.c
 verifast_both reallittest.c
 verifast_both -c short.c
 verifast_both sorted_bintree.c

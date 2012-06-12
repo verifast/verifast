@@ -38,6 +38,8 @@
 .provides stdio.h#fwrite
 .provides stdio.h#printf
 .provides stdio.h#feof
+.provides stdio.h#getchar
+.provides stdio.h#putchar
 .provides ghost_cells.gh#create_ghost_cell
 .provides ghost_cells.gh#ghost_cell_mutate
 .provides ghost_cells.gh#ghost_cell_leak
