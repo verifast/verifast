@@ -344,7 +344,9 @@ and
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g);
      ds = begin parser
-       [< (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); (pre, post) = parse_spec >] -> [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, (pre, post))]
+       [< (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); spec = opt parse_spec >] ->
+       let spec = match spec with Some spec -> spec | None -> raise (ParseException (l, "Function type declaration should have contract.")) in
+       [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, spec)]
      | [< '(_, Kwd ";") >] -> begin match rt with None -> raise (ParseException (l, "Void not allowed here.")) | Some te -> [TypedefDecl (l, te, g)] end
      end
   >] -> ds
