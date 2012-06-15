@@ -2884,7 +2884,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ((Bool, Bool)) -> (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
       | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
         (AssignOpExpr(l, w1, (match operator with And -> BitAnd | Or -> BitOr | Xor -> BitXor), w2, postOp, ts, lhs_type), IntType, None)
-       | _ -> static_error l "Arguments to &=, &= and ^= must be boolean or integral types." None
+       | _ -> static_error l "Arguments to |=, &= and ^= must be boolean or integral types." None
       end
     | AssignOpExpr(l, e1, (ShiftLeft | ShiftRight | Div | Mod as operator), e2, postOp, ts, lhs_type) ->
       let (w1, t1, _) = check e1 in
@@ -4025,6 +4025,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec sizeof l t =
     match t with
       Void | Char | UChar -> ctxt#mk_intlit 1
+    | ShortType | UShortType -> ctxt#mk_intlit 2
     | IntType | UintPtrType -> ctxt#mk_intlit 4
     | PtrType _ -> ctxt#mk_intlit 4
     | StructType sn -> List.assoc sn struct_sizes
