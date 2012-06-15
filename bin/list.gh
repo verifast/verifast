@@ -178,6 +178,10 @@ lemma_auto(append(take(n, xs), tail(drop(n, xs)))) void drop_take_remove_nth<t>(
   requires 0<=n && n < length(xs);
   ensures append(take(n, xs), tail(drop(n, xs))) == remove_nth(n, xs);
 
+lemma_auto(append(take(n, xs), drop(n, xs))) void append_take_drop_n<t>(list<t> xs, int n);
+  requires 0<=n && n < length(xs);
+  ensures append(take(n, xs), drop(n, xs)) == xs;
+
 fixpoint int index_of<t>(t x, list<t> xs) {
     switch (xs) {
         case nil: return 0;
