@@ -230,6 +230,15 @@ lemma void drop_take_remove_nth<t>(list<t> xs, int n)
   }
 }
 
+lemma void append_take_drop_n<t>(list<t> xs, int n)
+  requires 0<=n && n < length(xs);
+  ensures append(take(n, xs), drop(n, xs)) == xs;
+{
+  switch(xs) {
+    case nil: nil;
+    case cons(h, t): append_take_drop_n(xs, n); }
+}
+
 lemma void mem_index_of<t>(t x, list<t> xs)
     requires mem(x, xs) == true;
     ensures 0 <= index_of(x, xs) && index_of(x, xs) < length(xs);

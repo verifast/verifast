@@ -120,14 +120,16 @@ distclean: clean
 ../bin/list.vfmanifest: ../bin/list.c ../bin/list.gh
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c
 
-../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.gh
+../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.gh \
+ ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest listex.c
 
-../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.gh
+../bin/arrays.vfmanifest: ../bin/arrays.c ../bin/arrays.gh \
+ ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest arrays.c
 
 ../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c \
- ../bin/raw_ghost_lists.gh
+ ../bin/raw_ghost_lists.gh ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
 
 ../bin/vfstrip: vfstrip.ml

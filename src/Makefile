@@ -21,17 +21,17 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe
 	verifast -prover redux -c -emit_vfmanifest list.c
 	cd ..\src
 
-..\bin\raw_ghost_lists.vfmanifest: ..\bin\raw_ghost_lists.gh ..\bin\raw_ghost_lists.c
+..\bin\raw_ghost_lists.vfmanifest: ..\bin\raw_ghost_lists.gh ..\bin\raw_ghost_lists.c ..\bin\list.vfmanifest
 	cd ..\bin
 	verifast -prover redux -c -emit_vfmanifest raw_ghost_lists.c
 	cd ..\src
 
-..\bin\listex.vfmanifest: ..\bin\listex.gh ..\bin\listex.c
+..\bin\listex.vfmanifest: ..\bin\listex.gh ..\bin\listex.c ..\bin\list.vfmanifest
 	cd ..\bin
 	verifast -prover redux -c -emit_vfmanifest listex.c
 	cd ..\src
 
-..\bin\arrays.vfmanifest: ..\bin\arrays.gh ..\bin\arrays.c
+..\bin\arrays.vfmanifest: ..\bin\arrays.gh ..\bin\arrays.c ..\bin\list.vfmanifest
 	cd ..\bin
 	verifast -prover redux -c -emit_vfmanifest arrays.c
 	cd ..\src
