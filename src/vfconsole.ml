@@ -155,6 +155,8 @@ let _ =
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
+  let safe_mode = ref false in
+  let header_whitelist: string list ref = ref [] in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
@@ -184,6 +186,8 @@ let _ =
               "Emits the ast as an s-expression to the specified file; raises exception on unsupported constructs"
             ; "-export", String (fun str -> exports := str :: !exports), ""
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
+            ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)"
+            ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ]
   in
   let process_file filename =
@@ -201,7 +205,9 @@ let _ =
           option_run_preprocessor = !runPreprocessor;
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
-          option_include_paths = !include_paths
+          option_include_paths = !include_paths;
+          option_safe_mode = !safe_mode;
+          option_header_whitelist = !header_whitelist
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =

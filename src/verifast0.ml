@@ -130,7 +130,9 @@ type options = {
   option_run_preprocessor: bool;
   option_provides: string list;
   option_keep_provide_files: bool;
-  option_include_paths: string list
+  option_include_paths: string list;
+  option_safe_mode: bool; (* for invocation through web interface *)
+  option_header_whitelist: string list
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)

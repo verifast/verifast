@@ -821,6 +821,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           merge_header_maps include_prelude maps0 headers_included basedir reldir headers
         else
         begin
+          if (options.option_safe_mode || options.option_header_whitelist <> []) && not (List.mem header_path options.option_header_whitelist) then
+            static_error l "This header file is not on the header whitelist." None;
           let rellocalpath = concat reldir header_path in
           let includepaths = List.append include_paths [basedir; bindir] in
           let rec find_include_file includepaths =
@@ -911,6 +913,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match decl with
           LoadPluginDecl (l, lx, x) ->
           if pluginmap0 <> [] || pluginmap1 <> [] then static_error l "VeriFast does not yet support loading multiple plugins" None;
+          if options.option_safe_mode then static_error l "Loading plugins is not allowed in safe mode" None;
           begin try
             let p = Plugins_private.load_plugin (concat basedir (x ^ "_verifast_plugin")) in
             let x = full_name pn x in

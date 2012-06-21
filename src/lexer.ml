@@ -114,17 +114,21 @@ let get_file_options text =
   iter '@' 8 tokens
 
 let readFile path =
-  let chan = open_in_bin path in
+  let chan, close_chan =
+    if path = "<stdin>.c" || path = "<stdin>.java" then
+      (stdin, fun _ -> ())  (* read file from standard input; used for the web interface *)
+    else
+      (open_in_bin path, close_in)
+  in
   let count = ref 0 in
   let rec iter () =
-
     let buf = String.create 60000 in
     let result = input chan buf 0 60000 in
     count := !count + result;
     if result = 0 then [] else (buf, result)::iter()
   in
   let chunks = iter() in
-  let _ = close_in chan in
+  close_chan chan;
   let s = String.create !count in
   let rec iter2 chunks offset =
     match chunks with

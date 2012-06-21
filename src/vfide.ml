@@ -1207,7 +1207,9 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_run_preprocessor = !runPreprocessor;
                 option_provides = [];
                 option_keep_provide_files = true;
-                option_include_paths = !include_paths
+                option_include_paths = !include_paths;
+                option_safe_mode = false;
+                option_header_whitelist = []
               }
               in
               let reportExecutionForest =
