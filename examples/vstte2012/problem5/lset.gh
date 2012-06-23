@@ -14,7 +14,7 @@ fixpoint list<t> lset_empty<t>() { return nil; }
 fixpoint list<t> lset_add<t>(list<t> s, t v) { return cons(v, s); }
 
 fixpoint list<t> lset_remove<t>(list<t> s, t v) { 
-    return remove_all(v, s);
+    return remove_all1(v, s);
 }
 
 fixpoint list<t> lset_singleton<t>(t v) { return lset_add(lset_empty(), v); }

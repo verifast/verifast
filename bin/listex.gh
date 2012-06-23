@@ -85,7 +85,87 @@ lemma void fold_left_append<a, b>(a x0, fixpoint(a, b, a) f, list<b> xs1, list<b
     ensures fold_left(x0, f, append(xs1, xs2)) == fold_left(fold_left(x0, f, xs1), f, xs2);
 
 lemma_auto void append_drop_take<t>(list<t> vs, int i);
-  requires 0 <= i && i <= length(vs);
-  ensures append(take(i, vs), drop(i, vs)) == vs;
+    requires 0 <= i && i <= length(vs);
+    ensures append(take(i, vs), drop(i, vs)) == vs;
+
+fixpoint list<t> remove_all<t>(list<t> xs, list<t> ys) {
+    switch (xs) {
+        case nil: return ys;
+        case cons(x, xs0): return remove(x, remove_all(xs0, ys));
+    }
+}
+
+lemma_auto void remove_all_nil<t>(list<t> xs);
+    requires true;
+    ensures remove_all(xs, nil) == nil;
+
+lemma void remove_all_cons<t>(list<t> xs, t y, list<t> ys);
+    requires !mem(y, xs);
+    ensures remove_all(xs, cons(y, ys)) == cons(y, remove_all(xs, ys));
+
+lemma void mem_remove_all<t>(t x, list<t> xs, list<t> ys);
+    requires mem(x, ys) == true &*& !mem(x, xs);
+    ensures mem(x, remove_all(xs, ys)) == true;
+
+lemma void remove_remove_all<t>(t x, list<t> xs, list<t> ys);
+    requires true;
+    ensures remove(x, remove_all(xs, ys)) == remove_all(xs, remove(x, ys));
+
+fixpoint list<t> filter<t>(fixpoint(t, bool) f, list<t> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return f(x) ? cons(x, filter(f, xs0)) : filter(f, xs0);
+    }
+}
+
+fixpoint bool contains<t>(list<t> xs, t x) { return mem(x, xs); }
+
+fixpoint bool subset<t>(list<t> xs, list<t> ys) { return forall(xs, (contains)(ys)); }
+
+fixpoint list<t> intersection<t>(list<t> xs, list<t> ys) { return filter((contains)(xs), ys); }
+
+lemma void subset_intersection<t>(list<t> xs, list<t> ys);
+    requires subset(xs, ys) == true;
+    ensures intersection(ys, xs) == xs;
+
+lemma_auto void intersection_nil<t>(list<t> xs);
+    requires true;
+    ensures intersection(nil, xs) == nil;
+
+lemma void subset_intersection_subset<t>(list<t> xs, list<t> ys);
+    requires subset(xs, ys) == true;
+    ensures subset(xs, intersection(xs, ys)) == true;
+
+lemma void mem_intersection<t>(t x, list<t> xs, list<t> ys);
+    requires true;
+    ensures mem(x, intersection(xs, ys)) == (mem(x, xs) && mem(x, ys));
+
+lemma_auto void subset_refl<t>(list<t> xs);
+    requires true;
+    ensures subset(xs, xs) == true;
+
+lemma void mem_subset<t>(t x, list<t> xs, list<t> ys);
+    requires mem(x, xs) == true &*& subset(xs, ys) == true;
+    ensures mem(x, ys) == true;
+
+lemma void subset_cons<t>(t x, list<t> xs);
+    requires true;
+    ensures subset(xs, cons(x, xs)) == true;
+
+lemma void subset_trans<t>(list<t> xs, list<t> ys, list<t> zs);
+    requires subset(xs, ys) == true &*& subset(ys, zs) == true;
+    ensures subset(xs, zs) == true;
+
+lemma void subset_remove_all<t>(list<t> xs, list<t> ys);
+    requires true;
+    ensures subset(remove_all(xs, ys), ys) == true;
+
+lemma void not_mem_intersection<t>(t x, list<t> xs, list<t> ys);
+    requires !mem(x, ys);
+    ensures intersection(xs, ys) == intersection(remove(x, xs), ys);
+
+lemma void remove_intersection<t>(t x, list<t> xs, list<t> ys);
+    requires !mem(x, remove(x, intersection(xs, ys))) &*& !mem(x, remove(x, xs));
+    ensures remove(x, intersection(xs, ys)) == intersection(remove(x, xs), ys);
 
 #endif

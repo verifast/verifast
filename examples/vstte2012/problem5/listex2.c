@@ -64,22 +64,22 @@ lemma void nth_snoc_length<t>(list<t> l, t el)
     }
 }
 
-lemma void remove_all_mem<t>(t v, t v2, list<t> l)
+lemma void remove_all1_mem<t>(t v, t v2, list<t> l)
     requires true;
-    ensures mem(v, remove_all(v2, l)) == (v != v2 && mem(v, l));
+    ensures mem(v, remove_all1(v2, l)) == (v != v2 && mem(v, l));
 {
     switch(l) {
         case nil:
-        case cons(h, t): remove_all_mem(v, v2, t);
+        case cons(h, t): remove_all1_mem(v, v2, t);
     }
 }
-lemma void remove_all_id<t>(t v, list<t> l)
+lemma void remove_all1_id<t>(t v, list<t> l)
     requires !mem(v, l);
-    ensures remove_all(v, l) == l;
+    ensures remove_all1(v, l) == l;
 {
     switch(l) {
         case nil:
-        case cons(h, t): remove_all_id(v, t);
+        case cons(h, t): remove_all1_id(v, t);
     }
 }
 

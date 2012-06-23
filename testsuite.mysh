@@ -54,6 +54,7 @@ verifast_both -disable_overflow_check -c fractions-counting.c
 verifast_both -disable_overflow_check -c full_func_io.c
 verifast_both -disable_overflow_check -c full_func_io_mod.c
 verifast_both -disable_overflow_check -c full_func_io_sim.c
+verifast_both -disable_overflow_check -c gcl.c
 verifast_both ghost_field.c
 verifast_both -disable_overflow_check globals.c
 verifast_both -shared goto.c

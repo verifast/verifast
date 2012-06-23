@@ -32,7 +32,7 @@ Backends:
 proverapi.ml -- Common API used by the core to access the SMT solver (Z3/Redux)
 z3prover.ml -- Implements the prover API using Microsoft's Z3 SMT solver (version 1.3.6)
 redux.ml -- A simple SMT solver developed in-house (a partial re-implementation of the Simplify SMT solver by Detlefs, Nelson, Saxe; see their TR HPL-2003-148)
-simplex.ml -- A partial re-implementation of the Simplex module for checking satisfiability of systems of linear equations over the rationals (see TR HPL-2003-148)
+simplex.ml -- A partial re-implementation of the Simplex module for checking satisfiability of systems of linear inequations over the rationals (see TR HPL-2003-148)
 
 Assertion plugins: (An experimental feature that allows users to plug in their own kinds of assertions; see examples/plugins.)
 

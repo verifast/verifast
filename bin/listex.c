@@ -214,4 +214,260 @@ lemma void append_drop_take<t>(list<t> vs, int i)
   }
 }
 
+lemma_auto void remove_all_nil<t>(list<t> xs)
+    requires true;
+    ensures remove_all(xs, nil) == nil;
+{
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            remove_all_nil(xs0);
+    }
+}
+
+lemma void remove_all_cons<t>(list<t> xs, t y, list<t> ys)
+    requires !mem(y, xs);
+    ensures remove_all(xs, cons(y, ys)) == cons(y, remove_all(xs, ys));
+{
+    switch (xs) {
+        case nil:
+        case cons(x, xs0):
+            remove_all_cons(xs0, y, ys);
+    }
+}
+
+lemma void mem_remove_all<t>(t x, list<t> xs, list<t> ys)
+    requires mem(x, ys) == true &*& !mem(x, xs);
+    ensures mem(x, remove_all(xs, ys)) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            mem_remove_all(x, xs0, ys);
+            assert mem(x, remove_all(xs0, ys)) == true;
+            neq_mem_remove(x, x0, remove_all(xs0, ys));
+            assert mem(x, remove(x0, remove_all(xs0, ys))) == true;
+            assert mem(x, remove_all(xs, ys)) == true;
+    }
+}
+
+lemma void remove_commut<t>(t x1, t x2, list<t> xs)
+    requires true;
+    ensures remove(x1, remove(x2, xs)) == remove(x2, remove(x1, xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x1 == x2) {
+            } else {
+                if (x1 == x0) {
+                } else if (x2 == x0) {
+                } else {
+                    remove_commut(x1, x2, xs0);
+                }
+            }
+    }
+}
+
+lemma void remove_remove_all<t>(t x, list<t> xs, list<t> ys)
+    requires true;
+    ensures remove(x, remove_all(xs, ys)) == remove_all(xs, remove(x, ys));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            remove_commut(x, x0, remove_all(xs0, ys));
+            remove_remove_all(x, xs0, ys);
+    }
+}
+
+lemma void subset_intersection<t>(list<t> xs, list<t> ys)
+    requires subset(xs, ys) == true;
+    ensures intersection(ys, xs) == xs;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            subset_intersection(xs0, ys);
+    }
+}
+
+lemma_auto void intersection_nil<t>(list<t> xs)
+    requires true;
+    ensures intersection(nil, xs) == nil;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            intersection_nil(xs0);
+    }
+}
+
+lemma void mem_intersection<t>(t x, list<t> xs, list<t> ys)
+    requires true;
+    ensures mem(x, intersection(xs, ys)) == (mem(x, xs) && mem(x, ys));
+{
+    switch (ys) {
+        case nil:
+        case cons(y0, ys0):
+            mem_intersection(x, xs, ys0);
+    }
+}
+
+lemma void mem_subset<t>(t x, list<t> xs, list<t> ys)
+    requires mem(x, xs) == true &*& subset(xs, ys) == true;
+    ensures mem(x, ys) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x == x0) {
+            } else {
+                mem_subset(x, xs0, ys);
+            }
+    }
+}
+
+lemma void subset_trans<t>(list<t> xs, list<t> ys, list<t> zs)
+    requires subset(xs, ys) == true &*& subset(ys, zs) == true;
+    ensures subset(xs, zs) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            mem_subset(x0, ys, zs);
+            subset_trans(xs0, ys, zs);
+    }
+}
+
+lemma void subset_cons0<t>(list<t> xs, t y, list<t> ys)
+    requires subset(xs, ys) == true;
+    ensures subset(xs, cons(y, ys)) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            subset_cons0(xs0, y, ys);
+    }
+}
+
+lemma_auto void subset_refl<t>(list<t> xs)
+    requires true;
+    ensures subset(xs, xs) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            subset_refl(xs0);
+            subset_cons0(xs0, x0, xs0);
+    }
+}
+
+lemma void subset_cons<t>(t x, list<t> xs)
+    requires true;
+    ensures subset(xs, cons(x, xs)) == true;
+{
+    subset_refl(xs);
+    subset_cons0(xs, x, xs);
+}
+
+lemma void subset_remove<t>(t x, list<t> xs, list<t> ys)
+    requires subset(xs, ys) == true;
+    ensures subset(remove(x, xs), ys) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+            } else {
+                subset_remove(x, xs0, ys);
+            }
+    }
+}
+
+lemma void subset_remove_all<t>(list<t> xs, list<t> ys)
+    requires true;
+    ensures subset(remove_all(xs, ys), ys) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            subset_remove_all(xs0, ys);
+            subset_remove(x0, remove_all(xs0, ys), ys);
+    }
+}
+
+lemma void not_mem_intersection<t>(t x, list<t> xs, list<t> ys)
+    requires !mem(x, ys);
+    ensures intersection(xs, ys) == intersection(remove(x, xs), ys);
+{
+    switch (ys) {
+        case nil:
+        case cons(y0, ys0):
+            not_mem_intersection(x, xs, ys0);
+            neq_mem_remove(y0, x, xs);
+    }
+}
+
+lemma void not_mem_remove_eq<t>(t x, list<t> xs)
+    requires !mem(x, xs);
+    ensures remove(x, xs) == xs;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            not_mem_remove_eq(x, xs0);
+    }
+}
+
+lemma void remove_intersection<t>(t x, list<t> xs, list<t> ys)
+    requires !mem(x, remove(x, intersection(xs, ys))) &*& !mem(x, remove(x, xs));
+    ensures remove(x, intersection(xs, ys)) == intersection(remove(x, xs), ys);
+{
+    switch (ys) {
+        case nil:
+        case cons(y0, ys0):
+            if (mem(y0, xs)) {
+                if (y0 == x) {
+                     assert remove(x, intersection(xs, ys)) == intersection(xs, ys0);
+                     assert intersection(remove(x, xs), ys) == intersection(remove(x, xs), ys0);
+                     not_mem_remove_eq(x, intersection(xs, ys0));
+                     assert remove(x, intersection(xs, ys0)) == intersection(xs, ys0);
+                     remove_intersection(x, xs, ys0);
+                } else {
+                     neq_mem_remove(y0, x, xs);
+                     assert intersection(remove(x, xs), ys) == cons(y0, intersection(remove(x, xs), ys0));
+                     remove_intersection(x, xs, ys0);
+                }
+            } else {
+                if (y0 == x) {
+                    remove_intersection(x, xs, ys0);
+                } else {
+                    neq_mem_remove(y0, x, xs);
+                    remove_intersection(x, xs, ys0);
+                }
+            }
+    }
+}
+
+lemma void subset_subset_intersection_subset<t>(list<t> xs, list<t> ys, list<t> zs)
+    requires subset(xs, ys) == true &*& subset(xs, zs) == true;
+    ensures subset(xs, intersection(ys, zs)) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            mem_intersection(x0, ys, zs);
+            subset_subset_intersection_subset(xs0, ys, zs);
+    }
+}
+
+lemma void subset_intersection_subset<t>(list<t> xs, list<t> ys)
+    requires subset(xs, ys) == true;
+    ensures subset(xs, intersection(xs, ys)) == true;
+{
+    subset_refl(xs);
+    subset_subset_intersection_subset(xs, xs, ys);
+}
+
 @*/

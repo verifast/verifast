@@ -1120,7 +1120,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let e = check_expr_t (pn,ilist) tparams tenv e boolt in
       if not pure then check_ghost ghostenv l e;
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
-      let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+      let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (p, tenv') = check_asn (pn,ilist) tparams tenv p in
       let dec = (match dec with None -> None | Some(e) -> Some(check_expr_t (pn,ilist) tparams tenv' e intt)) in
       consume_asn rules [] h ghostenv env p true real_unit $. fun _ h _ _ _ ->
@@ -1190,7 +1190,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | _ -> (ss, ref [])
       in
       let xs = (expr_assigned_variables e) @ (block_assigned_variables ss) in
-      let xs = List.filter (fun x -> List.mem_assoc x tenv) xs in
+      let xs = List.filter (fun x -> match try_assoc x tenv with None -> false | Some (RefType _) -> false | _ -> true) xs in
       let (pre, tenv') = check_asn (pn,ilist) tparams tenv pre in
       let old_xs_tenv = List.map (fun x -> ("old_" ^ x, List.assoc x tenv)) xs in
       let tenv'' = old_xs_tenv @ tenv' in
@@ -2211,12 +2211,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (((_, g_file_name), _, _), _) = l in
       if language = Java && not (Filename.check_suffix g_file_name ".javaspec") then
         static_error l "A lemma function outside a .javaspec file must have a body. To assume a lemma, use the body '{ assume(false); }'." None;
+      let FuncInfo ([], fterm, _, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb,v) = (List.assoc g funcmap) in
       if auto && (Filename.check_suffix g_file_name ".c" or is_import_spec or language = CLang && Filename.chop_extension (Filename.basename g_file_name) <> Filename.chop_extension (Filename.basename program_path)) then begin
-        let FuncInfo ([], fterm, l, k, tparams', rt, ps, nonghost_callers_only, pre, pre_tenv, post, x, y,fb,v) = (List.assoc g funcmap) in
         register_prototype_used l g;
         create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams'
       end;
-      verify_funcs (pn,ilist)  boxes (g::lems) ds
+      let lems =
+        if body = None then
+          g::lems (* Prototype for lemma defined in preceding module; will generate .requires directive in manifest when called. *)
+        else
+          lems    (* Prototype for lemma implemented in current file; will not generate .requires directive; calls must be subjected to termination check. *)
+      in
+      verify_funcs (pn,ilist) boxes lems ds
     | Func (l, k, _, _, g, _, _, functype_opt, _, Some _, _, _)::ds when k <> Fixpoint ->
       let g = full_name pn g in
       let lems' =
@@ -2301,9 +2307,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       verify_funcs (pn,ilist)  (bcn::boxes) lems ds
     | _::ds -> verify_funcs (pn,ilist)  boxes lems ds
   
-  let lems0 =
+  let lems1 =
     flatmap
       (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) -> [g] | _ -> [])
+      funcmap1
+  
+  let lems0 =
+    flatmap
+      (function (g, FuncInfo (funenv, fterm, l, Lemma(_), tparams, rt, ps, nonghost_callers_only, pre, pre_tenv, post, functype_opt, body, fb, v)) when not (List.mem g lems1) -> [g] | _ -> [])
       funcmap0
   
   let rec verify_funcs' boxes lems ps=

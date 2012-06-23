@@ -35,22 +35,20 @@ lemma void nth_snoc_length<t>(list<t> l, t el);
     requires true;
     ensures nth(length(l), snoc(l, el)) == el;
 
-
-fixpoint list<t> remove_all<t>(t v, list<t> l) { 
+fixpoint list<t> remove_all1<t>(t v, list<t> l) { 
     switch(l) {
         case nil: return nil;
-        case cons(h,t): return h == v ? remove_all(v, t) : cons(h, remove_all(v, t));
+        case cons(h,t): return h == v ? remove_all1(v, t) : cons(h, remove_all1(v, t));
     }
 }
 
-lemma void remove_all_mem<t>(t v, t v2, list<t> l);
+lemma void remove_all1_mem<t>(t v, t v2, list<t> l);
     requires true;
-    ensures mem(v, remove_all(v2, l)) == (v != v2 && mem(v, l));
+    ensures mem(v, remove_all1(v2, l)) == (v != v2 && mem(v, l));
 
-lemma void remove_all_id<t>(t v, list<t> l);
+lemma void remove_all1_id<t>(t v, list<t> l);
     requires !mem(v, l);
-    ensures remove_all(v, l) == l;
-
+    ensures remove_all1(v, l) == l;
 
 lemma void append_cons_r_snoc_l<t>(list<t> s1, t v, list<t> s2)
     requires true;
