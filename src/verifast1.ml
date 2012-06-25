@@ -314,6 +314,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let shiftleft_int32_symbol = mk_symbol "shiftleft_int32" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift left and truncate to 32-bit signed integer; Java's "<<" operator on two ints *)
   let shiftright_symbol = mk_symbol "shiftright" [ctxt#type_int;ctxt#type_int] ctxt#type_int Uninterp (* shift right with sign extension; Java's ">>" operator. For nonnegative n, "x >> n" is equivalent to floor(x / 2^n). *)
   let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_uint8_symbol = mk_symbol "truncate_uint8" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp
   
   let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
@@ -2522,9 +2523,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | _ -> static_error l "Arguments to bitwise operators must be integral types." None
       end
     | Operation (l, Mod, [e1; e2], ts) ->
-      let w1 = checkt e1 IntType in
-      let w2 = checkt e2 IntType in
-      (Operation (l, Mod, [w1; w2], ts), IntType, None)
+      let (w1, t1, _) = check e1 in
+      let (_, t2, _) = check e2 in
+      begin
+      match t1 with
+        (Char | ShortType | IntType) -> let w2 = checkt e2 IntType in ts :=
+Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
+      | (UChar | UShortType | UintPtrType) -> let w2 = checkt e2 UintPtrType in (Operation (l, Mod, [w1; w2], ts), UintPtrType, None)
+      | _ -> static_error l "Arguments to modulus operator must be integral types." None
+      end
     | Operation (l, BitNot, [e], ts) ->
       let (w, t, _) = check e in
       begin
@@ -4359,6 +4366,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, Char, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
+        | (e, UChar, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_uint8_symbol [t])
         | (e, ShortType, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int16_symbol [t])
