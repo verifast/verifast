@@ -14,7 +14,8 @@ LGTKPKG  = ${LGTKSRC}.tar.gz
 
 Z3SRC    = z3
 Z3URL    = https://dnetcode.cs.kuleuven.be/attachments/download/59/
-Z3PKG    = z3.tar.gz
+#Z3PKG    = z3.tar.gz
+Z3PKG    = z3-4.0.tar.gz
 
 
 all: ocaml cidl lgtk z3build GNUmakefile.settings

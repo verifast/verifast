@@ -3,8 +3,9 @@
 # Path to Z3 or Z3v2
 # Use $$HOME instead of ~ here!
 # If you don't have Z3, i.e. on a MAC, define NOZ3 = true instead.
-Z3       = $(shell cat ../z3build)
-#Z3V2     = $$HOME/git/www/leuven/verifast/z3
+#Z3       = $(shell cat ../z3build)
+#Z3V2     = $(shell cat ../z3build)
+Z3V4     = $(shell cat ../z3build)
 #NOZ3     = yes
 
 

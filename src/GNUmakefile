@@ -46,12 +46,19 @@ else ifdef Z3V2
             -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
             -cclib -lz3-gmp -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
   LDLPATH = $(Z3)/lib
+else ifdef Z3V4
+  Z3      = $(Z3V4)
+  Z3DEPS  = z3v4prover.cmx verifastPluginZ3v4.ml
+  Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3v4prover.cmx verifastPluginZ3v4.ml \
+            -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
+            -cclib -lz3 -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+  LDLPATH = $(Z3)/lib
 else ifdef NOZ3
   Z3DEPS  =
   Z3ARGS  =
   LDLPATH =
 else
-  $(error Neither Z3, Z3V2, nor NOZ3 is defined. Please check your \
+  $(error Neither Z3, Z3V2, Z3V4, nor NOZ3 is defined. Please check your \
    ../GNUmakefile.settings)
 endif
 
@@ -100,6 +107,7 @@ endif
 	@echo "CWD                $(CWD)"
 	@echo "Z3                 $(Z3)"
 	@echo "Z3V2               $(Z3V2)"
+	@echo "Z3V4               $(Z3V4)"
 	@echo "Z3DEPS             $(Z3DEPS)"
 	@echo "LDLPATH            $(LDLPATH)"
 	@echo "GTKSOURCEVIEW      $(GTKSOURCEVIEW)"
@@ -314,6 +322,12 @@ ifndef Z3V2
 endif
 	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v2prover.ml
 
+z3v4prover.cmo: proverapi.cmo z3v4prover.ml linux/Perf.cmxa
+ifndef Z3V4
+	$(error "Z3V2 is not defined.")
+endif
+	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v4prover.ml
+
 verifast.opt: vfversion_cmx proverapi.cmx redux.cmx z3prover.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o verifast.opt -I $(Z3)/ocaml ole32.lib $(OCAMLLIB)/libcamlidl.lib unix.cmxa z3.cmxa proverapi.cmx redux.cmx z3prover.cmx vfversion.cmx verifast.ml verifastPluginZ3.ml verifastPluginRedux.ml vfconsole.ml
 
@@ -349,6 +363,9 @@ z3prover.cmx: linux/Perf.cmx proverapi.cmx z3prover.ml
 
 z3v2prover.cmx: linux/Perf.cmx proverapi.cmx z3v2prover.ml
 	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v2prover.ml
+
+z3v4prover.cmx: linux/Perf.cmx proverapi.cmx z3v4prover.ml
+	${OCAMLOPTOPT} -warn-error F -c -I $(Z3)/ocaml z3.cmxa -I ./linux Perf.cmx proverapi.cmx z3v4prover.ml
 
 verifastRedux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
 	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o verifastRedux.opt unix.cmxa nums.cmxa proverapi.cmx simplex.cmx redux.cmx vfversion.cmx verifast.ml verifastPluginRedux.ml vfconsole.ml
