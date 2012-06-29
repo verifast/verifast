@@ -25,21 +25,19 @@ Examples:
 
 To compile (with MSVC):
 
-    cl gcl.c tokenizer.c stringBuffers.c
+    cl gcl0.c tokenizer.c stringBuffers.c
 
-Performs tail call optimization. Also: does not use the C stack
-(i.e. the C program performs no recursion), so recursion depth is
-limited only by available memory and no C stack overflows can
-happen.
+Performs tail call optimization. Note: for simplicity, in this version of the program,
+the mark phase of the garbage collector is a recursive function. As a result,
+C-level stack overflows can still happen. For a version that eliminates this recursive
+function, see gcl.c.
 
 Memory safety of the interpreter has been verified using VeriFast. It follows
 that it is relatively safe to run untrusted code with this interpreter.
 
-This version uses Schorr-Waite for garbage collection. For a slightly simpler
-garbage collector, see gcl0.c.
-
 TODO:
 - Remove assume statements; enable arithmetic overflow checking
+- gc: Don't use the call stack for marking
 - Performance enhancements:
   - Allocate the nodes of the roots list on the stack (as opposed to malloc'ing them)
   - Avoid some roots by reasoning about reachability
@@ -53,7 +51,6 @@ TODO:
 #include <stdio.h>
 #include "stringBuffers.h"
 #include "tokenizer.h"
-#include "assert.h"
 
 void error(char *msg)
     //@ requires [?f]chars(msg, ?cs) &*& mem('\0', cs) == true;
@@ -116,25 +113,9 @@ void *stack_pop(struct stack **stack)
     }
 }
 
-typedef bool start_marking_func/*@(predicate(void *; list<object>) inv, predicate(void *, list<object>, int, object) markingInv)@*/(struct object **object, struct object **parent);
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& inv(o, ?children);
-    /*@
-    ensures
-        switch (children) {
-            case nil: return !result &*& pointer(object, o) &*& pointer(parent, p) &*& inv(o, children);
-            case cons(h, t): return result &*& pointer(object, h) &*& pointer(parent, o) &*& markingInv(o, children, 0, p);
-        };
-    @*/
-typedef bool mark_next_func/*@(predicate(void *; list<object>) inv, predicate(void *, list<object>, int, object) markingInv)@*/(struct object **object, struct object **parent);
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& markingInv(p, ?children, ?i, ?gp) &*& o == nth(i, children);
-    /*@
-    ensures
-        i + 1 == length(children) ?
-            !result &*& pointer(object, p) &*& pointer(parent, gp) &*& inv(p, children)
-        :
-            result &*& pointer(object, nth(i + 1, children)) &*& pointer(parent, p) &*& markingInv(p, children, i + 1, gp);
-    @*/
-
+typedef void mark_func/*@(predicate(void *; list<object>) inv)@*/(struct object *object);
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& inv(object, ?children0) &*& subset(children0, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& inv(object, ?children1) &*& subset(markedObjects0, markedObjects1) == true &*& subset(children1, markedObjects1) == true;
 typedef void dispose_func/*@(predicate(void *; list<object>) inv)@*/(struct object *object);
     //@ requires object->next |-> _ &*& object->marked |-> _ &*& object->class |-> _ &*& struct_object_padding(object) &*& inv(object, _);
     //@ ensures true;
@@ -142,9 +123,7 @@ typedef void dispose_func/*@(predicate(void *; list<object>) inv)@*/(struct obje
 struct class {
     char *name;
     //@ predicate(void *; list<object>) inv;
-    //@ predicate(void *, list<object>, int, object) marking_inv;
-    start_marking_func *start_marking;
-    mark_next_func *mark_next;
+    mark_func *mark;
     dispose_func *dispose;
 };
 
@@ -184,48 +163,14 @@ lemma void object_list_next_absurd(object o)
     close object_list(head, elems);
 }
 
-lemma void object_list_nonzero()
-    requires object_list(?head, ?elems);
-    ensures object_list(head, elems) &*& !mem<object>(0, elems);
-{
-    open object_list(head, elems);
-    if (head == 0) {
-    } else {
-        object_list_nonzero();
-    }
-    close object_list(head, elems);
-}
-
-predicate class(struct class *class; predicate(object; list<object>) inv, predicate(object, list<object>, int, object) markingInv) =
-    [_]class->inv |-> inv &*&
-    [_]class->marking_inv |-> markingInv &*&
-    [_]class->start_marking |-> ?startMarking &*& [_]is_start_marking_func(startMarking, inv, markingInv) &*&
-    [_]class->mark_next |-> ?markNext &*& [_]is_mark_next_func(markNext, inv, markingInv) &*&
-    [_]class->dispose |-> ?dispose &*& [_]is_dispose_func(dispose, inv);
-
 predicate_ctor object(list<object> allObjects)(object object) =
     object->marked |-> false &*&
     object->class |-> ?class &*&
     struct_object_padding(object) &*&
     [_]class->inv |-> ?inv &*& inv(object, ?children) &*&
     subset(children, allObjects) == true &*&
-    [_]class->marking_inv |-> ?markingInv &*&
-    [_]class->start_marking |-> ?startMarking &*& [_]is_start_marking_func(startMarking, inv, markingInv) &*&
-    [_]class->mark_next |-> ?markNext &*& [_]is_mark_next_func(markNext, inv, markingInv) &*&
+    [_]class->mark |-> ?mark &*& [_]is_mark_func(mark, inv) &*&
     [_]class->dispose |-> ?dispose &*& [_]is_dispose_func(dispose, inv);
-
-lemma void open_object_with_closed_class(list<object> allObjects, object object)
-    requires object(allObjects)(object);
-    ensures
-        object->marked |-> false &*&
-        object->class |-> ?class &*&
-        struct_object_padding(object) &*&
-        class(class, ?inv, ?markingInv) &*& inv(object, ?children) &*&
-        subset(children, allObjects) == true;
-{
-    open object(allObjects)(object);
-    close class(object->class, _, _);
-}
 
 predicate_ctor root0(list<object> allObjects)(object *root) = [1/2]pointer(root, ?r) &*& mem(r, allObjects) == true;
 
@@ -276,9 +221,7 @@ predicate_ctor marked_object(list<object> markedObjects)(object object) =
     struct_object_padding(object) &*& 
     [_]class->inv |-> ?inv &*& inv(object, ?children) &*&
     subset(children, markedObjects) == true &*&
-    [_]class->marking_inv |-> ?markingInv &*&
-    [_]class->start_marking |-> ?startMarking &*& [_]is_start_marking_func(startMarking, inv, markingInv) &*&
-    [_]class->mark_next |-> ?markNext &*& [_]is_mark_next_func(markNext, inv, markingInv) &*&
+    [_]class->mark |-> ?mark &*& [_]is_mark_func(mark, inv) &*&
     [_]class->dispose |-> ?dispose &*& [_]is_dispose_func(dispose, inv);
 
 lemma void foreach_marked_object_mono(list<object> markedObjects0, list<object> markedObjects1)
@@ -301,7 +244,7 @@ lemma void foreach_marked_object_mono(list<object> markedObjects0, list<object> 
 predicate busy_object(object object) = object->marked |-> true;
 
 predicate heap_marking(list<object> objects, list<object> busyObjects, list<object> markedObjects) =
-    foreach(remove_all(markedObjects, objects), object(objects)) &*& !mem<struct object *>(0, objects) == true &*&
+    foreach(remove_all(markedObjects, objects), object(objects)) &*&
     subset(busyObjects, markedObjects) == true &*&
     subset(markedObjects, objects) == true &*&
     foreach(busyObjects, busy_object) &*&
@@ -361,169 +304,62 @@ void pop_root()
     //@ close heap(objects, tail(roots));
 }
 
-/*@
-
-predicate mark_stack(list<object> objects, list<object> markedObjects, object root, object object, object child, list<object> busyObjects) =
-    object == 0 ?
-        busyObjects == nil &*& child == root
-    :
-        mem(object, markedObjects) == true &*&
-        object->class |-> ?class &*&
-        struct_object_padding(object) &*& 
-        [_]class->inv |-> ?inv &*&
-        [_]class->marking_inv |-> ?markingInv &*& markingInv(object, ?children, ?i, ?parent) &*& 0 <= i &*& i < length(children) &*&
-        subset(children, objects) == true &*&
-        subset(take(i, children), markedObjects) == true &*&
-        child == nth(i, children) &*&
-        [_]class->start_marking |-> ?startMarking &*& [_]is_start_marking_func(startMarking, inv, markingInv) &*&
-        [_]class->mark_next |-> ?markNext &*& [_]is_mark_next_func(markNext, inv, markingInv) &*&
-        [_]class->dispose |-> ?dispose &*& [_]is_dispose_func(dispose, inv) &*&
-        mark_stack(objects, markedObjects, root, parent, object, ?busyObjectsTail) &*&
-        busyObjects == cons(object, busyObjectsTail);
-
-lemma void mark_stack_mono(list<object> markedObjects0, list<object> markedObjects1)
-    requires mark_stack(?objects, markedObjects0, ?r, ?o, ?c, ?busyObjects) &*& subset(markedObjects0, markedObjects1) == true;
-    ensures mark_stack(objects, markedObjects1, r, o, c, busyObjects);
-{
-    open mark_stack(_, _, _, _, _, _);
-    if (o == 0) {
-    } else {
-        assert o->class |-> ?class &*& [_]class->marking_inv |-> ?markingInv &*& markingInv(o, ?children, ?i, _);
-        mem_subset(o, markedObjects0, markedObjects1);
-        subset_trans(take(i, children), markedObjects0, markedObjects1);
-        mark_stack_mono(markedObjects0, markedObjects1);
-    }
-    close mark_stack(objects, markedObjects1, r, o, c, busyObjects);
-}
-
-lemma void mark_stack_not_mem(object o)
-    requires mark_stack(?objects, ?markedObjects, ?r, ?o0, ?c, ?busyObjects) &*& o->class |-> ?class;
-    ensures mark_stack(objects, markedObjects, r, o0, c, busyObjects) &*& o->class |-> class &*& !mem(o, busyObjects);
-{
-    open mark_stack(_, _, _, _, _, _);
-    if (o0 == 0) {
-    } else {
-        mark_stack_not_mem(o);
-    }
-    close mark_stack(objects, markedObjects, r, o0, c, busyObjects);
-}
-
-@*/
-
 void mark(struct object *object)
-    //@ requires heap_marking(?objects, nil, ?markedObjects0) &*& mem(object, objects) == true;
-    //@ ensures heap_marking(objects, nil, ?markedObjects1) &*& subset(markedObjects0, markedObjects1) == true &*& mem(object, markedObjects1) == true;
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& mem(object, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& subset(markedObjects0, markedObjects1) == true &*& mem(object, markedObjects1) == true;
 {
-    struct object *parent = 0;
-    struct object *root = object;
-    //@ close mark_stack(objects, markedObjects0, object, 0, object, nil);
-start_marking:
-    /*@
-    invariant
-        pointer(&object, ?o) &*& pointer(&parent, ?p) &*&
-        heap_marking(objects, ?busyObjects, ?markedObjects) &*& subset(markedObjects0, markedObjects) == true &*&
-        mark_stack(objects, markedObjects, root, p, o, busyObjects) &*&
-        mem(o, objects) == true;
-    @*/
     //@ open heap_marking(_, _, _);
     /*@
     if (mem(object, busyObjects)) {
         foreach_remove(object, busyObjects);
         open busy_object(object);
-    } else if (mem(object, markedObjects)) {
-        mem_remove_all(object, busyObjects, markedObjects);
-        foreach_remove(object, remove_all(busyObjects, markedObjects));
-        open marked_object(markedObjects)(object);
+    } else if (mem(object, markedObjects0)) {
+        mem_remove_all(object, busyObjects, markedObjects0);
+        foreach_remove(object, remove_all(busyObjects, markedObjects0));
+        open marked_object(markedObjects0)(object);
     } else {
-        mem_remove_all(object, markedObjects, objects);
-        foreach_remove(object, remove_all(markedObjects, objects));
+        mem_remove_all(object, markedObjects0, objects);
+        foreach_remove(object, remove_all(markedObjects0, objects));
         open object(objects)(object);
     }
     @*/
-    if (object->marked) {
-        /*@
-        if (mem(object, busyObjects)) {
-            close busy_object(object);
-            foreach_unremove(object, busyObjects);
-            mem_subset(object, busyObjects, markedObjects);
-            close heap_marking(objects, busyObjects, markedObjects);
-        } else if (mem(object, markedObjects)) {
-            close marked_object(markedObjects)(object);
-            foreach_unremove(object, remove_all(busyObjects, markedObjects));
-            close heap_marking(objects, busyObjects, markedObjects);
-        }
-        @*/
-        goto mark_next;
-    } else {
-        start_marking_func *startMarkingFunc = object->class->start_marking;
+    
+    if (!object->marked) {
+        mark_func *markFunc = object->class->mark;
         object->marked = true;
-        //@ subset_cons(o, busyObjects);
-        //@ subset_cons(o, markedObjects);
-        //@ subset_trans(busyObjects, markedObjects, cons(o, markedObjects));
-        //@ subset_trans(markedObjects0, markedObjects, cons(o, markedObjects));
-        //@ close busy_object(o);
-        //@ close foreach(cons(o, busyObjects), busy_object);
-        //@ remove_remove_all(o, busyObjects, cons(o, markedObjects));
-        //@ foreach_marked_object_mono(markedObjects, cons(o, markedObjects));
-        //@ close heap_marking(objects, cons(o, busyObjects), cons(o, markedObjects));
-        //@ mark_stack_mono(markedObjects, cons(o, markedObjects));
-        if (startMarkingFunc(&object, &parent)) {
-            //@ close mark_stack(objects, cons(o, markedObjects), root, parent, object, cons(o, busyObjects));
-            goto start_marking;
-        } else {
-            //@ open heap_marking(_, _, ?markedObjects1);
-            //@ open foreach(cons(object, busyObjects), _);
-            //@ mem_remove_all(object, busyObjects, markedObjects1);
-            //@ open busy_object(object);
-            //@ close marked_object(markedObjects1)(object);
-            //@ foreach_unremove(object, remove_all(busyObjects, markedObjects1));
-            //@ close heap_marking(objects, busyObjects, markedObjects1);
-            goto mark_next;
-        }
+        
+        //@ subset_cons(object, busyObjects);
+        //@ subset_cons(object, markedObjects0);
+        //@ subset_trans(busyObjects, markedObjects0, cons(object, markedObjects0));
+        //@ close busy_object(object);
+        //@ close foreach(cons(object, busyObjects), busy_object);
+        //@ remove_remove_all(object, busyObjects, cons(object, markedObjects0));
+        //@ foreach_marked_object_mono(markedObjects0, cons(object, markedObjects0));
+        //@ close heap_marking(objects, cons(object, busyObjects), cons(object, markedObjects0));
+        
+        markFunc(object);
+        
+        //@ open heap_marking(_, _, ?markedObjects1);
+        //@ open foreach(cons(object, busyObjects), _);
+        //@ mem_remove_all(object, busyObjects, markedObjects1);
+        //@ open busy_object(object);
+        //@ close marked_object(markedObjects1)(object);
+        //@ foreach_unremove(object, remove_all(busyObjects, markedObjects1));
+        //@ close heap_marking(objects, busyObjects, markedObjects1);
     }
-mark_next:
+    
     /*@
-    invariant
-        pointer(&object, ?o) &*& pointer(&parent, ?p) &*&
-        heap_marking(objects, ?busyObjects, ?markedObjects) &*& subset(markedObjects0, markedObjects) == true &*&
-        mark_stack(objects, markedObjects, root, p, o, busyObjects) &*&
-        mem(o, markedObjects) == true;
+    if (mem(object, busyObjects)) {
+        close busy_object(object);
+        foreach_unremove(object, busyObjects);
+        mem_subset(object, busyObjects, markedObjects0);
+        close heap_marking(objects, busyObjects, markedObjects0);
+    } else if (mem(object, markedObjects0)) {
+        close marked_object(markedObjects0)(object);
+        foreach_unremove(object, remove_all(busyObjects, markedObjects0));
+        close heap_marking(objects, busyObjects, markedObjects0);
+    }
     @*/
-    if (parent == 0) {
-        //@ open mark_stack(_, _, _, _, _, _);
-        return;
-    }
-    {
-        //@ open mark_stack(_, _, _, _, _, _);
-        mark_next_func *markNextFunc = parent->class->mark_next;
-        //@ assert object_class(p, ?class) &*& [_]class->marking_inv |-> ?markingInv &*& markingInv(p, ?children, ?i, _);
-        if (markNextFunc(&object, &parent)) {
-            //@ take_plus_one(i, children);
-            //@ forall_append(take(i, children), cons(o, nil), (contains)(markedObjects));
-            //@ close mark_stack(objects, markedObjects, root, p, object, busyObjects);
-            //@ mem_subset(object, children, objects);
-            goto start_marking;
-        } else {
-            //@ open heap_marking(_, _, ?markedObjects1);
-            //@ open foreach(busyObjects, _);
-            //@ mark_stack_not_mem(p);
-            //@ mem_remove_all(p, tail(busyObjects), markedObjects1);
-            //@ open busy_object(p);
-            //@ assert subset(take(length(children) - 1, children), markedObjects1) == true;
-            //@ assert o == nth(length(children) - 1, children) &*& mem(o, markedObjects1) == true;
-            //@ drop_n_plus_one(length(children) - 1, children);
-            //@ append_take_drop_n(children, length(children) - 1);
-            //@ take_plus_one(length(children) - 1, children);
-            //@ drop_length(children);
-            //@ take_length(children);
-            //@ forall_append(take(length(children) - 1, children), cons(o, nil), (contains)(markedObjects1));
-            //@ assert subset(take(length(children), children), markedObjects1) == true;
-            //@ close marked_object(markedObjects1)(p);
-            //@ foreach_unremove(p, remove_all(tail(busyObjects), markedObjects1));
-            //@ close heap_marking(objects, tail(busyObjects), markedObjects1);
-            goto mark_next;
-        }
-    }
 }
 
 void gc()
@@ -534,7 +370,6 @@ void gc()
     struct stack *rs = roots_head;
     //@ close foreach(nil, busy_object);
     //@ close foreach(nil, marked_object(nil));
-    //@ object_list_nonzero();
     //@ close heap_marking(objects, nil, nil);
     for (;;)
         /*@
@@ -703,9 +538,7 @@ void register_object(struct object *o, struct class *class)
         o->next |-> _ &*& o->marked |-> _ &*& o->class |-> _ &*& struct_object_padding(o) &*&
         [_]class->inv |-> ?inv &*& inv(o, ?children) &*&
         roots(roots, ?childRoots, children) &*&
-        [_]class->marking_inv |-> ?markingInv &*&
-        [_]class->start_marking |-> ?startMarking &*& [_]is_start_marking_func(startMarking, inv, markingInv) &*&
-        [_]class->mark_next |-> ?markNext &*& [_]is_mark_next_func(markNext, inv, markingInv) &*&
+        [_]class->mark |-> ?mark &*& [_]is_mark_func(mark, inv) &*&
         [_]class->dispose |-> ?dispose &*& [_]is_dispose_func(dispose, inv);
     @*/
     //@ ensures heap(?objects1, roots) &*& mem(o, objects1) == true &*& roots(roots, childRoots, children);
@@ -737,17 +570,14 @@ void register_object(struct object *o, struct class *class)
 /*@
 
 predicate class_info() =
-    [_]class_inv(&cons_class, cons_inv) &*& [_]class_marking_inv(&cons_class, cons_marking_inv) &*&
-    [_]class_start_marking(&cons_class, cons_start_marking) &*& [_]is_start_marking_func(cons_start_marking, cons_inv, cons_marking_inv) &*&
-    [_]class_mark_next(&cons_class, cons_mark_next) &*& [_]is_mark_next_func(cons_mark_next, cons_inv, cons_marking_inv) &*&
+    [_]class_inv(&cons_class, cons_inv) &*&
+    [_]class_mark(&cons_class, cons_mark) &*& [_]is_mark_func(cons_mark, cons_inv) &*&
     [_]class_dispose(&cons_class, cons_dispose) &*& [_]is_dispose_func(cons_dispose, cons_inv) &*&
-    [_]class_inv(&atom_class, atom_inv) &*& [_]class_marking_inv(&atom_class, atom_marking_inv) &*&
-    [_]class_start_marking(&atom_class, atom_start_marking) &*& [_]is_start_marking_func(atom_start_marking, atom_inv, atom_marking_inv) &*&
-    [_]class_mark_next(&atom_class, atom_mark_next) &*& [_]is_mark_next_func(atom_mark_next, atom_inv, atom_marking_inv) &*&
+    [_]class_inv(&atom_class, atom_inv) &*&
+    [_]class_mark(&atom_class, atom_mark) &*& [_]is_mark_func(atom_mark, atom_inv) &*&
     [_]class_dispose(&atom_class, atom_dispose) &*& [_]is_dispose_func(atom_dispose, atom_inv) &*&
-    [_]class_inv(&function_class, function_inv) &*& [_]class_marking_inv(&function_class, function_marking_inv) &*&
-    [_]class_start_marking(&function_class, function_start_marking) &*& [_]is_start_marking_func(function_start_marking, function_inv, function_marking_inv) &*&
-    [_]class_mark_next(&function_class, function_mark_next) &*& [_]is_mark_next_func(function_mark_next, function_inv, function_marking_inv) &*&
+    [_]class_inv(&function_class, function_inv) &*&
+    [_]class_mark(&function_class, function_mark) &*& [_]is_mark_func(function_mark, function_inv) &*&
     [_]class_dispose(&function_class, function_dispose) &*& [_]is_dispose_func(function_dispose, function_inv) &*&
     emp;
 
@@ -804,33 +634,12 @@ void pop_root_g()
     //@ close globals(objects, tail(roots));
 }
 
-bool nil_start_marking(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& nil_inv(o, ?children);
-    /*@
-    ensures
-        switch (children) {
-            case nil: return !result &*& pointer(object, o) &*& pointer(parent, p) &*& nil_inv(o, children);
-            case cons(h, t): return result &*& pointer(object, h) &*& pointer(parent, o) &*& nil_marking_inv(o, children, 0, p);
-        };
-    @*/
+void nil_mark(void *o)
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& nil_inv(o, ?children0) &*& subset(children0, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& nil_inv(o, ?children1) &*& subset(markedObjects0, markedObjects1) == true &*& subset(children1, markedObjects1) == true;
 {
     //@ open nil_inv(_, _);
-    return false;
-    //@ close nil_inv(o, nil);
-}
-
-bool nil_mark_next(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& nil_marking_inv(p, ?children, ?i, ?gp) &*& o == nth(i, children);
-    /*@
-    ensures
-        i + 1 == length(children) ?
-            !result &*& pointer(object, p) &*& pointer(parent, gp) &*& nil_inv(p, children)
-        :
-            result &*& pointer(object, nth(i + 1, children)) &*& pointer(parent, p) &*& nil_marking_inv(p, children, i + 1, gp);
-    @*/
-{
-    //@ open nil_marking_inv(_, _, _, _);
-    assert(false);
+    //@ close nil_inv(o, _);
 }
 
 void nil_dispose(void *o)
@@ -840,10 +649,9 @@ void nil_dispose(void *o)
     abort();
 }
 
-struct class nil_class = {"nil_value", nil_start_marking, nil_mark_next, nil_dispose};
+struct class nil_class = {"nil_value", nil_mark, nil_dispose};
 
 //@ predicate nil_inv(object o; list<object> children) = children == nil;
-//@ predicate nil_marking_inv(object o, list<object> children, int i, object parent) = false;
 
 struct object nil_value = {0, false, &nil_class};
 
@@ -861,7 +669,6 @@ struct object *create_nil()
 
 struct cons {
     struct object object;
-    bool tail_is_next;
     struct object *head;
     struct object *tail;
 };
@@ -869,76 +676,24 @@ struct cons {
 /*@
 
 predicate cons_inv(struct cons *cons; list<object> children) =
-    cons->tail_is_next |-> _ &*&
     cons->head |-> ?head &*&
     cons->tail |-> ?tail &*&
     malloc_block_cons(cons) &*&
     children == cons(head, cons(tail, nil));
 
-predicate cons_children(object head, object tail) = true;
-
-predicate cons_marking_inv(struct cons *cons, list<object> children, int i, object parent) =
-    cons->tail_is_next |-> i == 0 &*&
-    malloc_block_cons(cons) &*&
-    cons_children(?h, ?t) &*& children == cons(h, cons(t, nil)) &*&
-    i == 0 ?
-        cons->head |-> parent &*&
-        cons->tail |-> t
-    :
-        i == 1 &*&
-        cons->head |-> h &*&
-        cons->tail |-> parent;
-
 @*/
 
-bool cons_start_marking(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& cons_inv(o, ?children);
-    /*@
-    ensures
-        switch (children) {
-            case nil: return !result &*& pointer(object, o) &*& pointer(parent, p) &*& cons_inv(o, children);
-            case cons(h, t): return result &*& pointer(object, h) &*& pointer(parent, o) &*& cons_marking_inv(o, children, 0, p);
-        };
-    @*/
+void cons_mark(struct object *object)
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& cons_inv((void *)object, ?children0) &*& subset(children0, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& cons_inv((void *)object, ?children1) &*& subset(markedObjects0, markedObjects1) == true &*& subset(children1, markedObjects1) == true;
 {
-    struct cons *cons = (void *)*object;
-    //@ open cons_inv(cons, _);
-    //@ close cons_children(cons->head, cons->tail);
-    *object = cons->head;
-    cons->head = *parent;
-    *parent = (void *)cons;
-    cons->tail_is_next = true;
-    return true;
-    //@ close cons_marking_inv(o, children, 0, p);
-}
-
-bool cons_mark_next(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& cons_marking_inv(p, ?children, ?i, ?gp) &*& o == nth(i, children);
-    /*@
-    ensures
-        i + 1 == length(children) ?
-            !result &*& pointer(object, p) &*& pointer(parent, gp) &*& cons_inv(p, children)
-        :
-            result &*& pointer(object, nth(i + 1, children)) &*& pointer(parent, p) &*& cons_marking_inv(p, children, i + 1, gp);
-    @*/
-{
-    struct cons *cons = (void *)*parent;
-    //@ open cons_marking_inv(cons, _, _, _);
-    if (cons->tail_is_next) {
-        struct object *grandparent = cons->head;
-        cons->head = *object;
-        *object = cons->tail;
-        cons->tail = grandparent;
-        cons->tail_is_next = false;
-        //@ close cons_marking_inv(p, children, i + 1, gp);
-        return true;
-    } else {
-        *parent = cons->tail;
-        cons->tail = *object;
-        *object = (void *)cons;
-        return false;
-        //@ open cons_children(_, _);
-    }
+    struct cons *cons = (void *)object;
+    mark(cons->head);
+    //@ assert heap_marking(objects, busyObjects, ?markedObjects2);
+    mark(cons->tail);
+    //@ assert heap_marking(objects, busyObjects, ?markedObjects1);
+    //@ mem_subset(cons->head, markedObjects2, markedObjects1);
+    //@ subset_trans(markedObjects0, markedObjects2, markedObjects1);
 }
 
 void cons_dispose(struct object *object)
@@ -949,7 +704,7 @@ void cons_dispose(struct object *object)
     free(cons);
 }
 
-struct class cons_class = {"cons", cons_start_marking, cons_mark_next, cons_dispose};
+struct class cons_class = {"cons", cons_mark, cons_dispose};
 
 struct cons *create_cons(struct object *head, struct object *tail)
     //@ requires globals(?objects, ?roots) &*& mem(head, objects) == true &*& mem(tail, objects) == true;
@@ -1010,37 +765,14 @@ struct atom {
 predicate atom_inv(struct atom *atom; list<object> children) =
     atom->chars |-> ?buffer &*& string_buffer(buffer, _) &*& malloc_block_atom(atom) &*& children == nil;
 
-predicate atom_marking_inv(struct atom *atom, list<object> children, int i, object parent) = false;
-
 @*/
 
-bool atom_start_marking(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& atom_inv(o, ?children);
-    /*@
-    ensures
-        switch (children) {
-            case nil: return !result &*& pointer(object, o) &*& pointer(parent, p) &*& atom_inv(o, children);
-            case cons(h, t): return result &*& pointer(object, h) &*& pointer(parent, o) &*& atom_marking_inv(o, children, 0, p);
-        };
-    @*/
+void atom_mark(struct object *object)
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& atom_inv((void *)object, ?children0) &*& subset(children0, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& atom_inv((void *)object, ?children1) &*& subset(markedObjects0, markedObjects1) == true &*& subset(children1, markedObjects1) == true;
 {
-    return false;
     //@ open atom_inv(?atom, ?cs);
     //@ close atom_inv(atom, cs);
-}
-
-bool atom_mark_next(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& atom_marking_inv(p, ?children, ?i, ?gp) &*& o == nth(i, children);
-    /*@
-    ensures
-        i + 1 == length(children) ?
-            !result &*& pointer(object, p) &*& pointer(parent, gp) &*& atom_inv(p, children)
-        :
-            result &*& pointer(object, nth(i + 1, children)) &*& pointer(parent, p) &*& atom_marking_inv(p, children, i + 1, gp);
-    @*/
-{
-    //@ open atom_marking_inv(_, _, _, _);
-    assert(false);
 }
 
 void atom_dispose(struct object *object)
@@ -1052,7 +784,7 @@ void atom_dispose(struct object *object)
     free(atom);
 }
 
-struct class atom_class = {"atom", atom_start_marking, atom_mark_next, atom_dispose};
+struct class atom_class = {"atom", atom_mark, atom_dispose};
 
 struct atom *create_atom(struct string_buffer *buffer)
     //@ requires globals(?objects0, ?roots) &*& string_buffer(buffer, _);
@@ -1271,54 +1003,16 @@ predicate function_inv(struct function *function; list<object> children) =
     function->data |-> ?data &*& children == cons(data, nil) &*&
     malloc_block_function(function);
 
-predicate function_data_ghost(object data) = true;
-
-predicate function_marking_inv(struct function *function, list<object> children, int i, object parent) =
-    i == 0 &*&
-    function_data_ghost(?data) &*&
-    function->apply |-> ?apply &*& is_apply_func(apply) == true &*&
-    function->data |-> parent &*& children == cons(data, nil) &*&
-    malloc_block_function(function);
-
 @*/
 
-bool function_start_marking(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& function_inv(o, ?children);
-    /*@
-    ensures
-        switch (children) {
-            case nil: return !result &*& pointer(object, o) &*& pointer(parent, p) &*& function_inv(o, children);
-            case cons(h, t): return result &*& pointer(object, h) &*& pointer(parent, o) &*& function_marking_inv(o, children, 0, p);
-        };
-    @*/
+void function_mark(struct object *object)
+    //@ requires heap_marking(?objects, ?busyObjects, ?markedObjects0) &*& function_inv((void *)object, ?children0) &*& subset(children0, objects) == true;
+    //@ ensures heap_marking(objects, busyObjects, ?markedObjects1) &*& function_inv((void *)object, ?children1) &*& subset(markedObjects0, markedObjects1) == true &*& subset(children1, markedObjects1) == true;
 {
-    struct function *function = (void *)*object;
-    //@ open function_inv(_, _);
-    //@ close function_data_ghost(function->data);
-    *object = function->data;
-    function->data = *parent;
-    *parent = (void *)function;
-    return true;
-    //@ close function_marking_inv(o, children, 0, p);
-}
-
-bool function_mark_next(struct object **object, struct object **parent)
-    //@ requires pointer(object, ?o) &*& pointer(parent, ?p) &*& function_marking_inv(p, ?children, ?i, ?gp) &*& o == nth(i, children);
-    /*@
-    ensures
-        i + 1 == length(children) ?
-            !result &*& pointer(object, p) &*& pointer(parent, gp) &*& function_inv(p, children)
-        :
-            result &*& pointer(object, nth(i + 1, children)) &*& pointer(parent, p) &*& function_marking_inv(p, children, i + 1, gp);
-    @*/
-{
-    struct function *function = (void *)*parent;
-    //@ open function_marking_inv(_, _, _, _);
-    *parent = function->data;
-    function->data = *object;
-    *object = (void *)function;
-    return false;
-    //@ open function_data_ghost(_);
+    struct function *function = (void *)object;
+    //@ open function_inv(function, _);
+    mark(function->data);
+    //@ close function_inv(function, children0);
 }
 
 void function_dispose(struct object *object)
@@ -1330,7 +1024,7 @@ void function_dispose(struct object *object)
     free(function);
 }
 
-struct class function_class = {"function", function_start_marking, function_mark_next, function_dispose};
+struct class function_class = {"function", function_mark, function_dispose};
 
 struct function *create_function(apply_func *apply, struct object *data)
     //@ requires globals(?objects, ?roots) &*& is_apply_func(apply) == true &*& mem(data, objects) == true;
@@ -1398,17 +1092,16 @@ bool atom_equals(struct object *object1, struct object *object2)
     //@ foreach_remove(object1, objects);
     //@ neq_mem_remove(object2, object1, objects);
     //@ foreach_remove(object2, remove(object1, objects));
-    //@ open_object_with_closed_class(objects, object1);
-    //@ open_object_with_closed_class(objects, object2);
+    //@ open object(objects)(object1);
+    //@ open object(objects)(object2);
     if (object1->class != &atom_class || object2->class != &atom_class)
         error("atom_equals: atoms expected");
     else {
         struct atom *a1 = (void *)object1;
         struct atom *a2 = (void *)object2;
-        //@ open class(_, _, _);
-        //@ open class(_, _, _);
         //@ open class_info();
         //@ open atom_inv(a1, _);
+        //@ open class_info();
         //@ open atom_inv(a2, _);
         return string_buffer_equals(a1->chars, a2->chars);
         //@ close atom_inv(a1, nil);
@@ -1678,19 +1371,16 @@ lemma void init_heap()
 @*/
 
 void init_globals()
-    //@ requires module(gcl, true);
+    //@ requires module(gcl0, true);
     //@ ensures globals(_, _);
 {
     //@ open_module();
     //@ init_heap();
     
     //@ (&nil_class)->inv = nil_inv;
-    //@ (&nil_class)->marking_inv = nil_marking_inv;
-    //@ produce_function_pointer_chunk start_marking_func(nil_start_marking)(nil_inv, nil_marking_inv)(o, p) { call(); }
-    //@ produce_function_pointer_chunk mark_next_func(nil_mark_next)(nil_inv, nil_marking_inv)(o, p) { call(); }
+    //@ produce_function_pointer_chunk mark_func(nil_mark)(nil_inv)(o) { call(); }
     //@ produce_function_pointer_chunk dispose_func(nil_dispose)(nil_inv)(o) { call(); }
-    //@ leak class_name(&nil_class, _) &*& class_inv(&nil_class, _) &*& class_marking_inv(&nil_class, _);
-    //@ leak class_start_marking(&nil_class, _) &*& class_mark_next(&nil_class, _) &*& class_dispose(&nil_class, _);
+    //@ leak class_name(&nil_class, _) &*& class_inv(&nil_class, _) &*& class_mark(&nil_class, _) &*& class_dispose(&nil_class, _);
     
     //@ assume(&nil_value != 0);
     //@ close nil_inv(&nil_value, nil);
@@ -1703,28 +1393,19 @@ void init_globals()
     push_root(&cont_stack);
     
     //@ (&cons_class)->inv = cons_inv;
-    //@ (&cons_class)->marking_inv = cons_marking_inv;
-    //@ produce_function_pointer_chunk start_marking_func(cons_start_marking)(cons_inv, cons_marking_inv)(o, p) { call(); }
-    //@ produce_function_pointer_chunk mark_next_func(cons_mark_next)(cons_inv, cons_marking_inv)(o, p) { call(); }
+    //@ produce_function_pointer_chunk mark_func(cons_mark)(cons_inv)(o) { call(); }
     //@ produce_function_pointer_chunk dispose_func(cons_dispose)(cons_inv)(o) { call(); }
-    //@ leak class_name(&cons_class, _) &*& class_inv(&cons_class, _) &*& class_marking_inv(&cons_class, _);
-    //@ leak class_start_marking(&cons_class, _) &*& class_mark_next(&cons_class, _) &*& class_dispose(&cons_class, _);
+    //@ leak class_name(&cons_class, _) &*& class_inv(&cons_class, _) &*& class_mark(&cons_class, _) &*& class_dispose(&cons_class, _);
     
     //@ (&atom_class)->inv = atom_inv;
-    //@ (&atom_class)->marking_inv = atom_marking_inv;
-    //@ produce_function_pointer_chunk start_marking_func(atom_start_marking)(atom_inv, atom_marking_inv)(o, p) { call(); }
-    //@ produce_function_pointer_chunk mark_next_func(atom_mark_next)(atom_inv, atom_marking_inv)(o, p) { call(); }
+    //@ produce_function_pointer_chunk mark_func(atom_mark)(atom_inv)(o) { call(); }
     //@ produce_function_pointer_chunk dispose_func(atom_dispose)(atom_inv)(o) { call(); }
-    //@ leak class_name(&atom_class, _) &*& class_inv(&atom_class, _) &*& class_marking_inv(&atom_class, _);
-    //@ leak class_start_marking(&atom_class, _) &*& class_mark_next(&atom_class, _) &*& class_dispose(&atom_class, _);
+    //@ leak class_name(&atom_class, _) &*& class_inv(&atom_class, _) &*& class_mark(&atom_class, _) &*& class_dispose(&atom_class, _);
     
     //@ (&function_class)->inv = function_inv;
-    //@ (&function_class)->marking_inv = function_marking_inv;
-    //@ produce_function_pointer_chunk start_marking_func(function_start_marking)(function_inv, function_marking_inv)(o, p) { call(); }
-    //@ produce_function_pointer_chunk mark_next_func(function_mark_next)(function_inv, function_marking_inv)(o, p) { call(); }
+    //@ produce_function_pointer_chunk mark_func(function_mark)(function_inv)(o) { call(); }
     //@ produce_function_pointer_chunk dispose_func(function_dispose)(function_inv)(o) { call(); }
-    //@ leak class_name(&function_class, _) &*& class_inv(&function_class, _) &*& class_marking_inv(&function_class, _);
-    //@ leak class_start_marking(&function_class, _) &*& class_mark_next(&function_class, _) &*& class_dispose(&function_class, _);
+    //@ leak class_name(&function_class, _) &*& class_inv(&function_class, _) &*& class_mark(&function_class, _) &*& class_dispose(&function_class, _);
     
     //@ close class_info();
     //@ leak class_info();
@@ -1733,8 +1414,8 @@ void init_globals()
     //@ close globals(objects, roots);
 }
 
-int main() //@ : main_full(gcl)
-    //@ requires module(gcl, true);
+int main() //@ : main_full(gcl0)
+    //@ requires module(gcl0, true);
     //@ ensures true;
 {
     void *object;
