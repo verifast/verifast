@@ -17,6 +17,9 @@ Known VeriFast unsoundnesses:
 - The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
 - I am not 100% sure that a statement of the form "x = foo();" where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
 
+- -run_preprocessor:
+  - Preprocessor macros defined inside annotations are applied both inside and outside annotations.
+
 Java Programs
 =============
 

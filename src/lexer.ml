@@ -4,6 +4,28 @@ open Stats
 
 (* Region: lexical analysis *)
 
+(*
+
+Processing of comments and annotation regions: compliance with C
+================================================================
+
+- In the C standard (C11), multiline comments (/**/) do not nest.
+- VeriFast treats VeriFast multiline comments (/*[^@] ... [^@]*/) correctly, since it does the same thing as C.
+- The VeriFast preprocessor should not allow /*@ and @*/ tokens inside preprocessor directives. This ensures that preprocessing preserves annotation ranges.
+- Theorem: In any .c file that is accepted by both VeriFast and C, each VeriFast multiline annotation coincides exactly with a C multiline comment.
+  Proof:
+  - If there are no occurrences of /* or */ inside the annotation, this is trivially true.
+  - If there is a /* inside the annotation, VF requires a */ before the end of the annotation. As a result, the @*/ that terminates the annotation will be
+    outside a comment as far as C is concerned, and therefore will be seen as illegal by C. This contradicts the assumption that the file is accepted by C.
+  - If there is no /* but a */ inside the annotation:
+    - If the */ is not inside a string literal, this is considered illegal by VeriFast.
+    - If the */ is inside a string literal, we end up in the same case as where there is a /* inside the annotation. The @*/ will be considered illegal by C.
+  [TODO: Make this proof more rigorous.]
+- Theorem: single-line annotations (//@) coincide with C single-line comments.
+  Proof: This follows from the fact that VF and C agree on newlines.
+
+*)
+
 let latin1_to_utf8 text =
   let n = String.length text in
   let rec iter i =
@@ -707,9 +729,18 @@ let make_preprocessor make_lexer basePath relPath include_paths =
   push_lexer basePath relPath;
   let pp_ignore_eol = ref true in
   let next_at_start_of_line = ref true in
-  let peek () = loc := List.hd !locs (); Stream.peek (List.hd !streams) in
-  let junk () = Stream.junk (List.hd !streams) in
+  let ghost_range_delimiter_allowed = ref false in
   let error msg = raise (Stream.Error msg) in
+  let peek () =
+    loc := List.hd !locs ();
+    let t = Stream.peek (List.hd !streams) in
+    if not !ghost_range_delimiter_allowed then begin match t with
+      (Some (_, Kwd "/*@") | Some (_, Kwd "@*/")) -> error "Ghost range delimiters not allowed inside preprocessor directives."
+    | _ -> ()
+    end;
+    t
+  in
+  let junk () = Stream.junk (List.hd !streams) in
   let syntax_error () = error "Preprocessor syntax error" in
   let rec skip_block () =
     let at_start_of_line = !next_at_start_of_line in
@@ -781,7 +812,12 @@ let make_preprocessor make_lexer basePath relPath include_paths =
   and next_token () =
     let at_start_of_line = !next_at_start_of_line in
     next_at_start_of_line := false;
-    match peek () with
+    match
+      ghost_range_delimiter_allowed := true;
+      let t = peek () in
+      ghost_range_delimiter_allowed := false;
+      t
+    with
       None -> pop_stream (); if !streams = [] then None else next_token ()
     | Some t ->
     match t with
