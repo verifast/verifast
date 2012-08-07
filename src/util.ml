@@ -271,7 +271,7 @@ let reduce_path path =
   let rec iter reduced todo =
     match reduced, todo with
       _, [] -> String.concat "/" (List.rev reduced)
-    | _::reduced, ".."::todo -> iter reduced todo
+    | head::reduced, ".."::todo when head <> ".." -> iter reduced todo
     | _, "."::todo -> iter reduced todo
     | _, part::todo -> iter (part::reduced) todo
   in
