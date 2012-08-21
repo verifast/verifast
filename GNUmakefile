@@ -13,7 +13,7 @@ LGTKURL  = http://wwwfun.kurims.kyoto-u.ac.jp/soft/lsl/dist/
 LGTKPKG  = ${LGTKSRC}.tar.gz
 
 Z3SRC    = z3
-Z3URL    = https://dnetcode.cs.kuleuven.be/attachments/download/59/
+Z3URL    = https://dnetcode.cs.kuleuven.be/attachments/download/679/
 Z3PKG    = z3.tar.gz
 #Z3PKG    = z3-4.0.tar.gz
 
