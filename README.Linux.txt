@@ -183,7 +183,7 @@ Z3
 
 Alternative 1 (Z3 v1):
 ---------------
-- Download Z3 v 1.3, "Z3.tar.tgz" from
+- Download Z3 v 1.3, "z3.tar.gz" from
   https://dnetcode.cs.kuleuven.be/projects/verifast/files
 - Extract it to "z3"
 - run "./build-lib.sh `ocamlc -where`" in "z3/ocaml"
