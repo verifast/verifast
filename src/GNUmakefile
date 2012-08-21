@@ -16,6 +16,10 @@ ifdef MAC
   GTKSOURCEVIEW      = -I macos GSourceView2.cmx
   GTKSOURCEVIEW_DEPS = macos/GSourceView2.cmx
   GTKSOURCEVIEW_LIBS =
+else ifdef WITHOUT_LABLGTK
+  GTKSOURCEVIEW      =
+  GTKSOURCEVIEW_DEPS =
+  GTKSOURCEVIEW_LIBS =
 else
   ifdef LABLGTK2
     GTKSOURCEVIEW      = -I ${LABLGTK2} lablgtksourceview2.cmxa
@@ -92,6 +96,26 @@ test_plugin: build
 test: build test_plugin
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
+
+z3v4test: z3v4test.ml z3v4prover.cmo proverapi.cmo ${Z3DEPS} linux/Perf.cmxa
+	${OCAMLOPTOPT} \
+         -o z3v4test \
+         -I ./linux Perf.cmxa nums.cmxa \
+         -I $(Z3)/ocaml z3.cmxa z3v4prover.cmx proverapi.cmx \
+         -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
+         -cclib -lz3 -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a \
+         z3v4test.ml
+	./z3v4test
+
+z3v4test2: z3v4test2.ml
+	${OCAMLOPTOPT} \
+         -dtypes -o z3v4test2 \
+         -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib -fopenmp" \
+         -I $(Z3)/ocaml/ \
+         -cclib -lz3 -cclib -lz3stubs ${OCAMLLIB}/libcamlidl.a \
+         z3.cmxa \
+         z3v4test2.ml
+	./z3v4test2
 
 env:
 	@echo "Configuration:"
@@ -227,7 +251,9 @@ macos/GSourceView2.cmx: macos/GSourceView2.ml
 endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
+ifndef WITHOUT_LABLGTK
 	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+endif
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
 	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o vfideredux.opt -I +lablgtk2 lablgtk.cmxa gtkInit.cmx unix.cmxa proverapi.cmx nums.cmxa simplex.cmx redux.cmx vfversion.cmx verifast.cmx verifastPluginRedux.ml vfide.ml

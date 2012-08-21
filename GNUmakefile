@@ -28,7 +28,9 @@ ocaml: GNUmakefile
 	rm -rf ${OCAMLPKG} ${OCAMLDIR} ${OCAMLSRC}
 	wget ${OCAMLURL}${OCAMLPKG}
 	gunzip -c ${OCAMLPKG} | tar -xv
-	cd ${OCAMLSRC}; ./configure -prefix ${OCAMLDIR}
+	cd ${OCAMLSRC}; ./configure -prefix ${OCAMLDIR} -ccoption "gcc -m32" \
+          -as "as --32" -aspp "gcc -m32 -c" -host i386-linux \
+          -partialld "ld -r -melf_i386"
 	cd ${OCAMLSRC}; ${MAKE} world
 	cd ${OCAMLSRC}; ${MAKE} opt
 	cd ${OCAMLSRC}; ${MAKE} install
@@ -51,16 +53,21 @@ lgtk: GNUmakefile ocaml
 	wget ${LGTKURL}${LGTKPKG}
 	gunzip -c ${LGTKPKG} | tar -xv
 	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
-          ./configure --prefix=${OCAMLDIR}
-	cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
-          ${MAKE} all install
-	cd ${LGTKSRC}/src; export PATH=${OCAMLDIR}/bin:$$PATH; \
-          ${MAKE} gtkInit.cmx gtkInit.o lablgtksourceview2.cmxa \
-          lablgtksourceview2.a lablgtk.cmxa lablgtk.a
-	cd ${LGTKSRC}; cp src/gtkInit.cmx src/gtkInit.o \
-          src/lablgtksourceview2.cmxa src/lablgtksourceview2.a \
-          src/lablgtk.cmxa src/lablgtk.a ${OCAMLDIR}/lib/ocaml/lablgtk2/
-	touch lgtk
+          ./configure --prefix=${OCAMLDIR} CC="gcc -m32"; \
+          echo "$$?" >lgtk.conf
+	if [ `cat ${LGTKSRC}/lgtk.conf` -eq 0 ]; then \
+          cd ${LGTKSRC}; export PATH=${OCAMLDIR}/bin:$$PATH; \
+          ${MAKE} all install && \
+          ${MAKE} -C src gtkInit.cmx gtkInit.o lablgtksourceview2.cmxa \
+            lablgtksourceview2.a lablgtk.cmxa lablgtk.a && \
+          cp src/gtkInit.cmx src/gtkInit.o \
+            src/lablgtksourceview2.cmxa src/lablgtksourceview2.a \
+            src/lablgtk.cmxa src/lablgtk.a ${OCAMLDIR}/lib/ocaml/lablgtk2/ && \
+          cd ../ && \
+          echo "0" >lgtk; \
+         else \
+          echo "1" >lgtk; \
+         fi
 
 z3build: GNUmakefile ocaml
 	rm -rf ${Z3SRC}
@@ -72,9 +79,11 @@ z3build: GNUmakefile ocaml
           ./build-lib.sh `ocamlc -where`
 	echo $(shell pwd)/${Z3SRC} >z3build
 
-GNUmakefile.settings: GNUmakefile.settings.local
+GNUmakefile.settings: GNUmakefile.settings.local lgtk
 	cp GNUmakefile.settings.local GNUmakefile.settings
-
+	if [ `cat lgtk` -eq 1 ]; then \
+          echo "WITHOUT_LABLGTK = yes" >>GNUmakefile.settings; \
+        fi
 
 clean:
 	rm -f test

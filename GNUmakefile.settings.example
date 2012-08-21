@@ -36,6 +36,7 @@ CAMLP4O      = ${OCAMLBIN}/camlp4o
 # lablgtk2 installation directories
 LABLGTK2 = /usr/local/lib/ocaml/lablgtk2
 LABLLIBS = /usr/local/lib/ocaml/stublibs
+#WITHOUT_LABLGTK = yes
 
 
 # ----------------------------------------------------------------------------
