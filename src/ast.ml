@@ -395,6 +395,7 @@ and
       loc
   | ForallAsn of 
       loc *
+      type_expr *
       string *
       expr
   | CoefAsn of (* fractional permission met coeff-predicate*)
@@ -674,7 +675,7 @@ let asn_loc p =
   | SwitchAsn (l, e, sacs) -> l
   | WSwitchAsn (l, e, i, sacs) -> l
   | EmpAsn l -> l
-  | ForallAsn (l, i, e) -> l
+  | ForallAsn (l, tp, i, e) -> l
   | CoefAsn (l, coef, body) -> l
   | PluginAsn (l, asn) -> l
   | WPluginAsn (l, xs, asn) -> l

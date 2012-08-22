@@ -879,7 +879,7 @@ and
   parse_pred0 = parser
   [< '(l, Kwd "switch"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd "{"); cs = parse_switch_pred_clauses; '(_, Kwd "}") >] -> SwitchAsn (l, e, cs)
 | [< '(l, Kwd "emp") >] -> EmpAsn l
-| [< '(l, Kwd "forall_"); '(_, Kwd "("); '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, x, e)
+| [< '(l, Kwd "forall_"); '(_, Kwd "("); tp = parse_type; '(_, Ident x); '(_, Kwd ";"); e = parse_expr; '(_, Kwd ")") >] -> ForallAsn(l, tp, x, e)
 | [< '(_, Kwd "("); p = parse_pred; '(_, Kwd ")") >] -> p
 | [< '(l, Kwd "["); coef = parse_pattern; '(_, Kwd "]"); p = parse_pred0 >] -> CoefAsn (l, coef, p)
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)

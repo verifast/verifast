@@ -967,7 +967,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WSwitchAsn(_, e, i, cls) -> expr_mark_addr_taken e locals;
         List.iter (fun (SwitchAsnClause(_, _, _, _, a)) -> ass_mark_addr_taken a locals) cls;
     | EmpAsn _ -> ()
-    | ForallAsn (l, i, e) -> expr_mark_addr_taken e locals; 
+    | ForallAsn (l, tp, i, e) -> expr_mark_addr_taken e locals; 
     | CoefAsn(_, pat, a) -> pat_expr_mark_addr_taken pat locals; ass_mark_addr_taken a locals
     | MatchAsn (l, e, pat) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals
     | WMatchAsn (l, e, pat, tp) -> expr_mark_addr_taken e locals; pat_expr_mark_addr_taken pat locals

@@ -54,3 +54,4 @@
 .provides nat.gh#nat_of_int_of_nat
 .provides nat.gh#nat_of_zero
 .provides nat.gh#succ_int
+.provides maps.gh#apply_fupdate

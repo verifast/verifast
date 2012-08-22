@@ -326,12 +326,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter cs
     | EmpAsn l -> cont h ghostenv env
-    | ForallAsn (l, i, e) ->
+    | ForallAsn (l, ManifestTypeExpr(_, tp), i, e) ->
       in_temporary_context begin fun () ->
         ctxt#begin_formal;
-        let forall = (eval None ((i, ctxt#mk_bound 0 ctxt#type_int) :: env) e) in
+        let forall = (eval None ((i, ctxt#mk_bound 0 (typenode_of_provertype (provertype_of_type tp))) :: env) e) in
         ctxt#end_formal;
-        ctxt#assume_forall "forall_ assertion" [] [ctxt#type_int] forall;
+        ctxt#assume_forall "forall_ assertion" [] [(typenode_of_provertype (provertype_of_type tp))] forall;
         cont h ghostenv env
       end
     | CoefAsn (l, DummyPat, body) ->
@@ -958,8 +958,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter cs
     | EmpAsn l -> cont [] h ghostenv env env' None
-    | ForallAsn (l, i, e) -> 
-      let fresh_term = get_unique_var_symb i IntType in
+    | ForallAsn (l, ManifestTypeExpr(_, tp), i, e) -> 
+      let fresh_term = get_unique_var_symb i tp in
       assert_expr ((i, fresh_term) :: env) e h ((i, fresh_term) :: env) l "Cannot prove condition." None;
       cont [] h ghostenv env env' None
     | CoefAsn (l, coefpat, WPointsTo (_, e, tp, rhs)) -> points_to l (SrcPat coefpat) e tp (SrcPat rhs)

@@ -1182,6 +1182,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let rec iter' (ifdm,classlist) ps =
       match ps with
+
       PackageDecl(l,pn,ilist,ds)::rest -> iter' (iter (pn,ilist) ifdm classlist ds) rest
       | [] -> (List.rev ifdm, List.rev classlist)
     in
@@ -3656,11 +3657,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | _ -> static_error l "Switch operand is not an inductive value." None
       end
     | EmpAsn l -> (p, tenv, [])
-    | ForallAsn (l, i, e) -> 
+    | ForallAsn (l, te, i, e) -> 
       begin match try_assoc i tenv with
         None -> 
-          let w = check_expr_t (pn,ilist) tparams ((i, IntType) :: tenv) e boolt in
-          (ForallAsn(l, i, w), tenv, [])
+          let t = check_pure_type (pn,ilist) tparams te in
+          let w = check_expr_t (pn,ilist) tparams ((i, t) :: tenv) e boolt in
+          (ForallAsn(l, ManifestTypeExpr(l, t), i, w), tenv, [])
       | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
       end
     | CoefAsn (l, coef, body) ->
@@ -3845,7 +3847,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       in
       iter None cs
     | EmpAsn l -> fixed
-    | ForallAsn (l, i, e) -> fixed
+    | ForallAsn (l, _, i, e) -> fixed
     | CoefAsn (l, coefpat, p) ->
       begin
         match coefpat with
