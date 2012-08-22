@@ -91,7 +91,9 @@ build: env \
 
 test_plugin: build
 	$(SET_ENV); \
-	cd ../examples/plugin; make clean && make
+	  ${MAKE} -C ../examples/plugin clean OCAMLOPTOPT=${OCAMLOPTOPT}
+	$(SET_ENV); \
+	  ${MAKE} -C ../examples/plugin all OCAMLOPTOPT=${OCAMLOPTOPT}
 
 test: build test_plugin
 	$(SET_ENV); \
