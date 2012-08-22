@@ -2,26 +2,12 @@
 #include "assert.h"
 #include "bool.h"
 #include "malloc.h"
-#include "list.h"
-#include "nat.h"
+
+//@ #include "quantifiers.gh"
 
 typedef int ElementType;
 
 /*@
-
-fixpoint bool forall_nth_core<t>(list<t> xs, fixpoint(list<t>, int, bool) p, nat n) {
-  switch(n) {
-    case zero: return p(xs, int_of_nat(zero));
-    case succ(n0): return p(xs, int_of_nat(n)) && forall_nth_core(xs, p, n0);
-  }
-}
-
-fixpoint bool forall_nth<t>(list<t> xs, fixpoint(list<t>, int, bool) p) {
-  switch(xs) {
-    case nil: return true;
-    case cons(h, t): return forall_nth_core(xs, p, nat_of_int(length(xs) - 1));
-  }
-}
 
 fixpoint bool heap_index(list<int> xs, int i) {
   return 
@@ -129,63 +115,19 @@ lemma void move_array_elem(int* arr, int N)
   }
 }
 
-lemma int not_forall_nth_nat<t>(list<t> vs, fixpoint (list<t>, int, bool) p, nat n)
-  requires ! forall_nth_core(vs, p, n);
-  ensures 0 <= result &*& result <= int_of_nat(n) &*& ! p(vs,result);
+lemma void intarray_to_chars(void* a)
+  requires array<int>(a, ?n, sizeof(int), integer, _);
+  ensures chars(a, ?cs) &*& length(cs) == n * sizeof(int);
 {
-  switch(n) {
-    case zero: return 0;
-    case succ(n0):
-      if( ! p(vs, int_of_nat(n))) {
-        return int_of_nat(n);
-      } else {
-        int i = not_forall_nth_nat(vs, p, n0);
-        return i;
-      }
+  if(n == 0) {
+    close chars(a, nil);
+  } else {
+    open array<int>(a, n, sizeof(int), integer, _);
+    integer_to_chars(a);
+    intarray_to_chars(a + sizeof(int));
+    chars_join(a);
   }
 }
-
-lemma int not_forall_nth<t>(list<t> vs, fixpoint (list<t>, int, bool) p)
-  requires ! forall_nth(vs, p);
-  ensures 0 <= result &*& result < length(vs) &*& ! p(vs, result);
-{
-  switch(vs) {
-    case nil: return 0;
-    case cons(h, t):
-      int i = not_forall_nth_nat(vs, p, nat_of_int(length(vs) - 1));
-      assert i <= int_of_nat(nat_of_int(length(vs) - 1));
-      int_of_nat_of_int(length(vs) - 1);
-      assert i <= length(vs) - 1;
-      return i;
-  }
-  
-}
-  
-lemma void forall_nth_elim_nat<t>(list<t> vs, fixpoint (list<t>, int, bool) p, nat n, int i)
-  requires forall_nth_core(vs, p, n) == true &*& 0 <= i && i <= int_of_nat(n);
-  ensures p(vs, i) == true;
-{
-  switch(n) {
-    case zero:
-    case succ(n0):
-      if(i == int_of_nat(n)) {
-      } else {
-          forall_nth_elim_nat(vs, p, n0, i);
-      } 
-  }
-}
-
-
-lemma void forall_nth_elim<t>(list<t> vs, fixpoint (list<t>, int, bool) p, int i)
-  requires forall_nth(vs, p) == true &*& 0 <= i &*& i < length(vs);
-  ensures p(vs, i) == true;
-{
-  switch(vs) {
-    case nil:
-    case cons(h, t): forall_nth_elim_nat(vs, p, nat_of_int(length(vs) - 1), i);
-  }
-}
-
 @*/
 
 
@@ -250,9 +192,12 @@ void heap_insert(struct heap* heap, ElementType x)
 }
 
 /*@
-lemma_auto(i/2) void div_mul(int i);
+lemma_auto(i/2) void div_mul(int i)
   requires 1 < i;
   ensures 2*(i/2) == i || 2*(i/2) + 1 == i;
+{
+  assume(false);
+}
 @*/
 
 void swim(int* arr, int N, int k)
@@ -361,7 +306,7 @@ void heap_dispose(struct heap* heap)
   free(heap);
 }
 
-int main()
+int main() //@: main
   //@ requires true;
   //@ ensures true;
 {

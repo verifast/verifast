@@ -1,0 +1,38 @@
+#ifndef QUANTIFIERS_H
+#define QUANTIFIERS_H
+
+#include "nat.gh"
+
+lemma t not_forall<t>(list<t> vs, fixpoint(t, bool) p);
+  requires ! forall(vs, p);
+  ensures mem(result, vs) == true &*& ! p(result);
+
+lemma void forall_elim<t>(list<t> vs, fixpoint(t, bool) p, t x);
+  requires forall(vs, p) == true &*& mem(x, vs) == true;
+  ensures p(x) == true;
+
+fixpoint bool forall_nth_core<t>(list<t> xs, fixpoint(list<t>, int, bool) p, nat n) {
+  switch(n) {
+    case zero: return p(xs, int_of_nat(zero));
+    case succ(n0): return p(xs, int_of_nat(n)) && forall_nth_core(xs, p, n0);
+  }
+}
+
+fixpoint bool forall_nth<t>(list<t> xs, fixpoint(list<t>, int, bool) p) {
+  switch(xs) {
+    case nil: return true;
+    case cons(h, t): return forall_nth_core(xs, p, nat_of_int(length(xs) - 1));
+  }
+}
+
+lemma int not_forall_nth<t>(list<t> vs, fixpoint (list<t>, int, bool) p);
+  requires ! forall_nth(vs, p);
+  ensures 0 <= result &*& result < length(vs) &*& ! p(vs, result);
+
+lemma void forall_nth_elim<t>(list<t> vs, fixpoint (list<t>, int, bool) p, int i);
+  requires forall_nth(vs, p) == true &*& 0 <= i &*& i < length(vs);
+  ensures p(vs, i) == true;
+  
+
+
+#endif

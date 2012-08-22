@@ -87,7 +87,7 @@ build: env \
        ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/java_card_applet ../bin/dlsymtool \
        ../bin/vfstrip ../bin/list.vfmanifest \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
-       ../bin/arrays.vfmanifest
+       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest
 
 test_plugin: build
 	$(SET_ENV); \
@@ -144,7 +144,7 @@ clean:
 	rm -f *.o *.a
 	cd ../bin; rm -f verifast vfide dlsymtool vfstrip mysh \
          arrays.vfmanifest list.vfmanifest listex.vfmanifest \
-         raw_ghost_lists.vfmanifest
+         raw_ghost_lists.vfmanifest quantifiers.vfmanifest
 	rm -f macos/*.cm* macos/*.o
 	rm -f a.out
 	${MAKE} -C linux -f GNUmakefile clean
@@ -165,6 +165,10 @@ distclean: clean
 ../bin/raw_ghost_lists.vfmanifest: ../bin/raw_ghost_lists.c \
  ../bin/raw_ghost_lists.gh ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest raw_ghost_lists.c
+
+../bin/quantifiers.vfmanifest: ../bin/quantifiers.c ../bin/quantifiers.gh \
+ ../bin/list.vfmanifest
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest quantifiers.c
 
 ../bin/vfstrip: vfstrip.ml
 	${OCAMLOPTOPT} -o ../bin/vfstrip vfstrip.ml
