@@ -65,6 +65,8 @@ class z3_context () =
   let _ = Z3.set_param_value cfg "STATISTICS" "true" in
 *)
   let ctxt = Z3.mk_context cfg in
+  let () = Gc.finalise Z3.del_context ctxt in
+  let () = Gc.finalise Z3.del_config cfg in
   (* let _ = Z3.trace_to_stdout ctxt in *)
   let bool_type = Z3.mk_bool_type ctxt in
   let int_type = Z3.mk_int_type ctxt in
