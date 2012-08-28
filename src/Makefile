@@ -3,7 +3,7 @@
 PATH=$(MAKEDIR)\..\bin;$(PATH)
 OPT_OPTIONS=-g
 
-test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\java_card_applet.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest
+test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\java_card_applet.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest ..\bin\quantifiers.vfmanifest
 	time < nl.txt
 	cd ..
 	cd examples\plugin
@@ -34,6 +34,11 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe
 ..\bin\arrays.vfmanifest: ..\bin\arrays.gh ..\bin\arrays.c ..\bin\list.vfmanifest
 	cd ..\bin
 	verifast -prover redux -c -emit_vfmanifest arrays.c
+	cd ..\src
+
+..\bin\quantifiers.vfmanifest: ..\bin\quantifiers.gh ..\bin\quantifiers.c
+	cd ..\bin
+	verifast -prover redux -c -emit_vfmanifest quantifiers.c
 	cd ..\src
 
 clean:
