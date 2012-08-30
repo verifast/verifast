@@ -27,6 +27,7 @@ int lcp(int *a, int N, int x, int y)
         ensures 
             [f]array<int>(a, N, sizeof(int), integer, elems) &*& l - old_l == lcp_(drop(x + old_l, elems), drop(y + old_l, elems));
         @*/
+        //@ decreases N - l;
     {
         if (!(x + l < N && y + l < N && a[x+l] == a[y+l])) {
             /*@
