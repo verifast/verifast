@@ -2,7 +2,53 @@ import java.util.Arrays;
 
 /*@
 
+fixpoint int power(int n, nat e) {
+    switch (e) {
+        case zero: return 1;
+        case succ(e0): return n * pow(n, e0);
+    }
+}
+
 inductive bintree = leaf(int) | node(bintree, bintree);
+
+fixpoint bintree bintree_of_list(nat n, list<int> xs) {
+    switch (n) {
+        case zero: return leaf(head(xs));
+        case succ(n0): return node(bintree_of_list(n0, take(length(xs) / 2, xs)), bintree_of_list(n0, drop(length(xs) / 2, xs)));
+    }
+}
+
+lemma void pow_gt_zero(int m, nat n)
+    requires 0 < m;
+    ensures 0 < pow(m, n);
+{
+    assume(false);
+}
+
+lemma void flatten_bintree_of_list(nat n, list<int> xs)
+    requires length(xs) == pow(2, n);
+    ensures flatten(bintree_of_list(n, xs)) == xs;
+{
+    switch (n) {
+        case zero:
+            switch (xs) { case nil: case cons(x0, xs0): }
+        case succ(n0):
+            pow_gt_zero(2, n);
+            append_take_drop(length(xs) / 2, xs);
+            flatten_bintree_of_list(n0, take(length(xs) / 2, xs));
+            //assume(length(xs) - length(xs) / 2 == length(xs) / 2);
+            length_drop(length(xs) / 2, xs);
+            assert length(drop(length(xs) / 2, xs)) == length(xs) / 2;
+            flatten_bintree_of_list(n0, drop(length(xs) / 2, xs));
+    }
+}
+
+fixpoint list<int> flatten(bintree t) {
+    switch (t) {
+        case leaf(n): return cons(n, nil);
+        case node(t1, t2): return append(flatten(t1), flatten(t2));
+    }
+}
 
 predicate array_tree0(int[] a, int left, int right, bintree values) =
     right > left + 1 ?
@@ -13,6 +59,20 @@ predicate array_tree0(int[] a, int left, int right, bintree values) =
     :
         array_element(a, left, ?l) &*& array_element(a, right, ?r) &*& values == node(leaf(l), leaf(r)) &*&
         right == left + 1;
+
+lemma void array_slice_to_array_tree0(nat n)
+    requires array_slice<int>(?a, ?start, ?end, ?vs) &*& length(vs) == pow(2, succ(n));
+    ensures array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(n, vs));
+{
+    switch (n) {
+        case zero:
+            switch (vs) { case nil: case cons(h, t): switch (t) { case nil: assert true; case cons(th, tt): assert tt == nil; assert true; } }
+        case succ(n0):
+            array_slice_to_array_tree0(n0);
+            array_slice_to_array_tree0(n0);
+    }
+    close array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(n, vs));
+}
 
 fixpoint int treesum(bintree t) {
     switch (t) {
@@ -134,8 +194,20 @@ class PrefixSumRec {
         }
         //@ close array_tree2(a_, left, right, leftSum, values);
     }
-
-       
+    
+    public static void prefixsums(int[] a)
+        //@ requires array_slice(a, 0, a.length, ?vs) &*& exists<nat>(?n) &*& length(vs) == pow(2, n);
+        //@ ensures array_slice(a, 0, a.length, prefixSums(0, bintree_of_list(n, vs)));
+    {
+        int left = a.length / 2 - 1;
+        int right = a.length - 1;
+        PrefixSumRec p = new PrefixSumRec(a);
+        p.upsweep(left, right);
+        a[a.length - 1]=0;
+        p.downsweep(left, right);
+        //@ array_tree2_prefixsums();
+    }
+    
     public static void main (String [] args)
         //@ requires true;
         //@ ensures true;

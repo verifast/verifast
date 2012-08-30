@@ -76,12 +76,12 @@ fixpoint int min_value(tree_ vs) {
 fixpoint bool ordered_between(int min, tree_ t, int max) {
     switch (t) {
         case empty: return true;
-        case node(t1, p, v, t2): return ordered_between(min, t1, v) && ordered_between(v, t2, max);
+        case node(t1, p, v, t2): return min <= v && v <= max && ordered_between(min, t1, v) && ordered_between(v, t2, max);
     }
 }
 
 lemma void ordered_between_weaken(int min0, int min1, tree_ t, int max0, int max1)
-    requires ordered_between(min1, t, max0) == true;
+    requires ordered_between(min1, t, max0) == true &*& min0 <= min1 &*& max0 <= max1;
     ensures ordered_between(min0, t, max1) == true;
 {
     switch (t) {
