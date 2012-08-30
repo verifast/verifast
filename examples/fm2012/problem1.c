@@ -18,7 +18,6 @@ int lcp(int *a, int N, int x, int y)
     //@ ensures [f]array<int>(a, N, sizeof(int), integer, elems) &*& result == lcp_(drop(x, elems), drop(y, elems));
 {
     int l = 0;
-    //while (x + l < N && y + l < N && a[x+l] == a[y+l])
     for (;;)
         /*@
         requires
