@@ -87,7 +87,7 @@ lemma void chars_split(char *array, int offset);
    requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= length(cs);
    ensures
        [f]chars(array, take(offset, cs))
-       &*& [f]chars(array + length(take(offset, cs)), drop(offset, cs))
+       &*& [f]chars(array + offset, drop(offset, cs))
        &*& length(take(offset, cs)) == offset
        &*& length(drop(offset, cs)) == length(cs) - offset
        &*& append(take(offset, cs), drop(offset, cs)) == cs;

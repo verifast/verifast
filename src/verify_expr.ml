@@ -1388,18 +1388,20 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   else
                     static_error l "A lemma can call only preceding lemmas or itself." None
         in
-        let r =
+        let r, env'' =
           match tr with
-            None -> real_unit (* any term will do *)
-          | Some t ->
+            None -> real_unit, env' (* any term will do *)
+          | Some t0 ->
             let symbol_name =
               match xo with
                 None -> "result"
               | Some x -> x
             in
-            get_unique_var_symb_ symbol_name t pure
+            let t = instantiate_type tpenv t0 in
+            let r = get_unique_var_symb_ symbol_name t pure in
+            let env'' = update env' "result" (prover_convert_term r t t0) in
+            r, env''
         in
-        let env'' = match tr with None -> env' | Some t -> update env' "result" r in
         execute_branch begin fun () ->
           produce_asn tpenv h ghostenv' env'' post real_unit None None $. fun h _ _ ->
           with_context PopSubcontext $. fun () ->

@@ -579,21 +579,33 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       'n' -> text_junk (); '\n'
     | 'r' -> text_junk (); '\r'
     | 't' -> text_junk (); '\t'
-    | ('0'..'9' as c1) ->
+    | ('0'..'3' as c1) ->   (* octal *)
         text_junk ();
         begin match text_peek () with
-          ('0'..'9' as c2) ->
+          ('0'..'7' as c2) ->
             text_junk ();
             begin match text_peek () with
-              ('0'..'9' as c3) ->
+              ('0'..'7' as c3) ->
                 text_junk ();
                 Char.chr
-                  ((Char.code c1 - 48) * 100 + (Char.code c2 - 48) * 10 +
+                  ((Char.code c1 - 48) * 64 + (Char.code c2 - 48) * 8 +
                      (Char.code c3 - 48))
-            | _ -> Char.chr ((Char.code c1 - 48) * 10 + (Char.code c2 - 48))
+            | _ -> Char.chr ((Char.code c1 - 48) * 64 + (Char.code c2 - 48))
             end
         | _ -> Char.chr (Char.code c1 - 48)
         end
+    | 'x' ->   (* hex *)
+      text_junk ();
+      let hex_digit () =
+        match text_peek() with
+          '0'..'9' as c -> text_junk (); Char.code c - Char.code '0'
+        | 'A'..'F' as c -> text_junk (); Char.code c - Char.code 'A' + 10
+        | 'a'..'f' as c -> text_junk (); Char.code c - Char.code 'a' + 10
+        | _ -> raise Stream.Failure
+      in
+      let d1 = hex_digit () in
+      let d2 = hex_digit () in
+      Char.chr (d1 * 16 + d2)
     | c when c < ' ' -> raise Stream.Failure
     | c -> text_junk (); c
   and ghost_range_end_at srcpos =

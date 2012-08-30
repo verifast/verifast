@@ -1216,13 +1216,26 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         consume_asn rules [] h' ghostenv' env' post true real_unit $. fun _ h' _ _ _ ->
         check_leaks h' env' endBodyLoc "Loop leaks heap chunks"
       in
+      let (ss_before, ss_after) =
+        let rec iter ss_before ss =
+          match ss with
+            [] -> (List.rev ss_before, [])
+          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, ss_after)
+          | s::ss_after -> iter (s::ss_before) ss_after
+        in
+        iter [] ss
+      in
+      let xs_ss_after = block_assigned_variables ss_after in
       let exit_loop h' env' cont =
         execute_branch (fun () -> check_post h' env');
         let env =
           flatmap
             begin fun (x, t) ->
               if List.mem x xs then
-                [(x, List.assoc x env'); ("old_" ^ x, t)]
+                if List.mem x xs_ss_after then
+                  [(x, get_unique_var_symb_ x (List.assoc x tenv) true); ("old_" ^ x, t)]
+                else
+                  [(x, List.assoc x env'); ("old_" ^ x, t)]
               else
                 [(x, t)]
             end
@@ -1244,15 +1257,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             assume (ctxt#mk_not v) $. fun () -> exit_loop h' env' (tcont sizemap)
           end
       end $. fun () ->
-      let (ss_before, ss_after) =
-        let rec iter ss_before ss =
-          match ss with
-            [] -> (List.rev ss_before, [])
-          | PureStmt (_, ExprStmt (CallExpr (lc, "recursive_call", [], [], [], Static)))::ss_after -> (List.rev ss_before, ss_after)
-          | s::ss_after -> iter (s::ss_before) ss_after
-        in
-        iter [] ss
-      in
       begin fun continue ->
         verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv'' ghostenv' h' env' ss_before
           (fun _ tenv''' _ h' env' -> free_locals endBodyLoc h' tenv''' env' !locals_to_free (fun h' _ -> continue h' tenv''' env'))

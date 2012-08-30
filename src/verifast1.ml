@@ -4131,11 +4131,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   
   let mk_char_list_of_c_string size s =
     let n = String.length s in
+    let as_signed_char n = if 127 < n then n - 256 else n in
     let rec iter k =
       if k = n then
         mk_zero_list (size - n)
       else
-        mk_cons Char (ctxt#mk_intlit (Char.code s.[k])) (iter (k + 1))
+        mk_cons Char (ctxt#mk_intlit (as_signed_char (Char.code s.[k]))) (iter (k + 1))
     in
     iter 0
   
