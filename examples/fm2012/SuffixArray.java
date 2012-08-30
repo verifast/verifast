@@ -1,3 +1,28 @@
+/*@
+
+fixpoint list<int> suffixOffsets<t>(int offset0, list<t> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x, xs0): return cons(offset0, suffixOffsets(offset0 + 1, xs0));
+    }
+}
+
+predicate is_swap<t>(list<t> xs, int i, int j, list<t> ys) =
+    0 <= i &*& i < length(xs) &*& 0 <= j &*& j < length(xs) &*&
+    ys == update(i, nth(j, xs), update(j, nth(i, xs), xs));
+
+predicate is_perm<t>(list<t> xs, list<t> ys) =
+    exists<boolean>(?b) &*& b ? xs == ys : is_swap(xs, _, _, ?zs) &*& is_perm(zs, ys);
+
+fixpoint boolean is_sorted<t>(fixpoint(t, t, bool) le, t x0, list<t> xs) {
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return le(x0, x) && is_sorted(le, x, xs0);
+    }
+}
+
+@*/
+
 public class SuffixArray {
 
     private final int[] a;
@@ -6,13 +31,16 @@ public class SuffixArray {
     
     /*@
     
-    
+    predicate SuffixArray(list<int> elems, list<int> suffixes_) =
+        a |-> ?a &*& suffixes |-> ?suffixes &*& N |-> ?N &*& N == a.length &*&
+        array_slice(a, 0, N, elems_) &*&
+        array_slice(suffixes, 0, N, suffixes_);
     
     @*/
 
     public SuffixArray(int[] a)
         //@ requires array_slice(a, 0, a.length, ?elems);
-        //@ ensures true;
+        //@ ensures SuffixArray(elems, ?suffixes_) &*& ;
     {
         this.a = a;
         N = a.length;
