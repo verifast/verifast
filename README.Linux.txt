@@ -10,7 +10,7 @@ B. How to build
 0. Using the local GNUmakefile
 ===================================
 
-ecent releases of VeriFast require OCaml >= 3.12.1 released in December
+Recent releases of VeriFast require OCaml >= 3.12.1 released in December
 2011. Currently not many Linux distributions provide packages of the latest
 OCaml and LABLGTK2. Thus, we provide a build script to automatically
 download and compile the OCaml 3.12.1, camlidl, lablgtk and the Z3 OCaml
@@ -25,27 +25,40 @@ Required Packages
 - gcc
 - gtk
 - standard system, X11 and GTK development files
+- libgtksourceview2.0 and libgtksourceview2.0-dev
 
 How to build
 =================
 
-- cd to the directory this README.Linux.txt is located in
-- run "make -f GNUmakefile" -- if you are using gnu-make, just
+- cd to the directory this README.Linux.txt is located in, we refer to this
+  directory as $PWD from now on
+- Run "make -f GNUmakefile" -- if you are using gnu-make, just
   "make" is sufficient
-- follow the instructions on screen, in particular with respect to
+- Follow the instructions on screen, in particular with respect to
   downloading Z3
+- add $PWD/z3/lib to your LD_LIBRARY_PATH environment variable:
+  export LD_LIBRARY_PATH=$PWD/z3/lib:$LD_LIBRARY_PATH
+- run vfide or verifast; the binaries reside in $PWD/bin
 
 Remarks:
 -----------------
-- you may also read the GNUmakefile in advance so that you
+- The Z3 library is a 32 bit binary. Thus, compiling and linking VeriFast
+  with Z3 support requires you to have 32 bit versions of all development
+  files and libraries installed
+- If your Linux distribution does not provide 32 bit versions of gtk and
+  libgtksourceview (e.g. the 64 bit version of Ubuntu 12.04), the build
+  system will automatically skip compiling vfide, the interactive IDE of
+  VeriFast. Only the command line version of the verifier will be available
+  in this case.
+- You may also read the GNUmakefile in advance so that you
   know what to expect
-- note that you may change download URIs and target directories in
+- Note that you may change download URIs and target directories in
   the preamble of GNUmakefile
-- the script DOES NOT require superuser priviledges
-- if a specific build step -- compiling OCaml, camlidl, lablgtk or the
+- The script DOES NOT require superuser priviledges
+- If a specific build step -- compiling OCaml, camlidl, lablgtk or the
   Z3 OCaml bindings -- fails, consult the README file of the particular
   package
-- during compilation you will need abou 500 MBytes of free disk space on
+- During compilation you will need abou 500 MBytes of free disk space on
   the volume this folder is located at
 
 
