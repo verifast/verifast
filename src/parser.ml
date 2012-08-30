@@ -340,7 +340,7 @@ and
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
     [< '(_, Kwd "{"); fs = parse_fields; '(_, Kwd ";") >] -> Struct (l, s, Some fs)
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
-  | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) >] -> d
+  | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> [d]
 | [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g);
      ds = begin parser
@@ -354,8 +354,8 @@ and
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
      '(_, Kwd "}"); '(_, Kwd ";"); >] ->
   [EnumDecl(l, n, elems)]
-| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
-| [< t = parse_return_type; d = parse_func_rest Regular t >] -> [d]
+| [< '(_, Kwd "static"); t = parse_return_type; d = parse_func_rest Regular t Private >] -> [d]
+| [< t = parse_return_type; d = parse_func_rest Regular t Public >] -> [d]
 and
   parse_pure_decls = parser
   [< ds0 = parse_pure_decl; ds = parse_pure_decls >] -> ds0 @ ds
@@ -383,7 +383,7 @@ and
 and
   parse_pure_decl = parser
     [< '(l, Kwd "inductive"); '(li, Ident i); tparams = parse_type_params li; '(_, Kwd "="); cs = (parser [< cs = parse_ctors >] -> cs | [< cs = parse_ctors_suffix >] -> cs); '(_, Kwd ";") >] -> [Inductive (l, i, tparams, cs)]
-  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t >] -> [d]
+  | [< '(l, Kwd "fixpoint"); t = parse_return_type; d = parse_func_rest Fixpoint t Public>] -> [d]
   | [< '(l, Kwd "predicate"); '(li, Ident g); tparams = parse_type_params li; 
      (ps, inputParamCount) = parse_pred_paramlist;
      body = opt parse_pred_body;
@@ -397,8 +397,8 @@ and
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredFamilyInstanceDecl (l, g, [], is, ps, p)]
   | [< '(l, Kwd "predicate_ctor"); '(_, Ident g); ps1 = parse_paramlist; ps2 = parse_paramlist;
      p = parse_pred_body; '(_, Kwd ";"); >] -> [PredCtorDecl (l, g, ps1, ps2, p)]
-  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t >] -> [d]
-  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t >] -> [d]
+  | [< '(l, Kwd "lemma"); t = parse_return_type; d = parse_func_rest (Lemma(false, None)) t Public >] -> [d]
+  | [< '(l, Kwd "lemma_auto"); trigger = opt (parser [< '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); >] -> e); t = parse_return_type; d = parse_func_rest (Lemma(true, trigger)) t Public >] -> [d]
   | [< '(l, Kwd "box_class"); '(_, Ident bcn); ps = parse_paramlist;
        '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";");
        ads = parse_action_decls; hpds = parse_handle_pred_decls; '(_, Kwd "}") >] -> [BoxClassDecl (l, bcn, ps, inv, ads, hpds)]
@@ -441,7 +441,7 @@ and
 | [< xs = peek_in_ghost_range (parser [< xs = parse_type_params_free; '(_, Kwd "@*/") >] -> xs) >] -> xs
 | [< >] -> []
 and
-  parse_func_rest k t = parser
+  parse_func_rest k t v = parser
   [<
     '(l, Ident g);
     tparams = parse_type_params_general;
@@ -450,9 +450,9 @@ and
         ps = parse_paramlist;
         f = parser
           [< '(_, Kwd ";"); (nonghost_callers_only, ft, co) = parse_spec_clauses >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, None, Static, Public)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, None, Static, v)
         | [< (nonghost_callers_only, ft, co) = parse_spec_clauses; '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, Some (ss, closeBraceLoc), Static, Public)
+          Func (l, k, tparams, t, g, ps, nonghost_callers_only, ft, co, Some (ss, closeBraceLoc), Static, v)
       >] -> f
     | [<
         () = (fun s -> if k = Regular && tparams = [] && t <> None then () else raise Stream.Failure);

@@ -351,7 +351,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let rec iter pn ilist funcmap prototypes_implemented ds =
       match ds with
         [] -> (funcmap, List.rev prototypes_implemented)
-      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, body,Static,Public)::ds when k <> Fixpoint ->
+      | Func (l, k, tparams, rt, fn, xs, nonghost_callers_only, functype_opt, contract_opt, body,Static,_)::ds when k <> Fixpoint ->
         let fn = full_name pn fn in
         let fterm = Some (List.assoc fn funcnameterms) in
         let (rt, xmap, functype_opt, pre, pre_tenv, post) =

@@ -2201,7 +2201,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun (PackageDecl (_, pn, _, ds)) ->
           flatmap
             begin function
-              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, b,Static,Public)) -> [full_name pn g]
+              (Func (l, (Regular|Lemma(_)), tparams, rt, g, ps, nonghost_callers_only, ft, c, b,Static,_)) -> [full_name pn g]
             | _ -> []
             end
             ds
