@@ -196,22 +196,6 @@ fixpoint bool in_order(tree t) {
   }
 }
 
-/*lemma void delete_leftmost(tree tr)
-  requires tr != empty &*& in_order(tr) == true;
-  ensures delete_leftmost(tr) == empty ? true : tree_max(tr) == tree_max(delete_leftmost(tr));
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      if(l != empty) {
-        delete_leftmost(l);
-        assume(false);
-      } else {
-        
-      }
-  }
-}*/
-
 lemma void tree_min_le_tree_max(tree tr)
   requires true;
   ensures tree_min(tr) <= tree_max(tr);
@@ -224,9 +208,10 @@ lemma void tree_min_le_tree_max(tree tr)
   }
 }
 
+
 lemma void tree_max_delete_leftmost(tree tr) 
-  requires tr != empty &*& delete_leftmost(tr) != empty &*& in_order(tr) == true;
-  ensures tree_max(delete_leftmost(tr)) == tree_max(tr);
+  requires tr != empty &*& in_order(tr) == true;
+  ensures delete_leftmost(tr) == empty || tree_max(delete_leftmost(tr)) == tree_max(tr);
 {
   switch(tr) {
     case empty:
@@ -239,13 +224,7 @@ lemma void tree_max_delete_leftmost(tree tr)
           tree_min_le_tree_max(r);
         }
       } else {
-        assume(false);
         tree_max_delete_leftmost(l);
-        if(r == empty) {
-          assert tree_max(tr) == v || tree_max(tr) == tree_max(l);
-          
-        } else {
-        }
       }
   }
 } 
@@ -268,66 +247,48 @@ lemma void delete_leftmost_preserves_in_order(tree tr)
   }
 }
 
-/*lemma void tree_min_contains(tree tr, int x)
+lemma void tree_min_le_all(tree tr, int x)
   requires tree_contains(tr, x) == true;
   ensures tree_min(tr) <= x;
 {
   switch(tr) {
     case empty:
     case tree(v, l, r):
-      assume(false);
-      if(tree_contains(l, x)) {
-        tree_max_contains(l, x);
-      }
-      if(tree_contains(r, x)) {
-        tree_max_contains(r, x);
-      }
-  }
-}
-
-lemma void tree_max_contains(tree tr, int x)
-  requires tree_contains(tr, x) == true;
-  ensures x <= tree_max(tr);
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      assume(false);
-      if(tree_contains(l, x)) {
-        tree_max_contains(l, x);
-      }
-      if(tree_contains(r, x)) {
-        tree_max_contains(r, x);
+      if(v == x) {
+      } else if(tree_contains(l, x)) {
+        tree_min_le_all(l, x);
+      } else {
+        tree_min_le_all(r, x);
       }
   }
 }
 
-lemma void min_value_contains(tree tr, int x)
-  requires in_order(tr) == true &*& tree_contains(tr, x) == true;
-  ensures min_value(tr) <= x;
+lemma void leftmost_eq_min(tree tr)
+  requires tr != empty &*& in_order(tr) == true;
+  ensures leftmost(tr) == tree_min(tr);
 {
   switch(tr) {
     case empty:
     case tree(v, l, r):
-      if(tree_contains(l, x)) {
-        tree_max_contains(l, x);
-        min_value_contains(l, x);
-      }
-      if(tree_contains(r, x)) {
-        tree_min_contains(r, x);
-        min_value_contains(r, x);
-      }
+      if(l == empty) {
+      } else {
+        leftmost_eq_min(l);
+        tree_min_le_tree_max(l);
+      }  
   }
-}*/
+}
 @*/
 
 struct tree* test(struct tree* t, int x)
   //@ requires tree(t, ?tr) &*& tr != empty &*& tree_contains(tr, x) == true &*& in_order(tr) == true;
-  //@ ensures tree(result, _); 
+  //@ ensures tree(result, ?ntr) &*& in_order(ntr) == true; 
 {
   struct tree* res;
   int min;
   search_tree_delete_min(t, &res, &min);
- // assert(min <= x);
+  //@ delete_leftmost_preserves_in_order(tr);
+  //@ leftmost_eq_min(tr);
+  //@ tree_min_le_all(tr, x);
+  assert min <= x;
   return res;
 }
