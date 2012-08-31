@@ -60,18 +60,56 @@ predicate array_tree0(int[] a, int left, int right, bintree values) =
         array_element(a, left, ?l) &*& array_element(a, right, ?r) &*& values == node(leaf(l), leaf(r)) &*&
         right == left + 1;
 
-lemma void array_slice_to_array_tree0(nat n)
-    requires array_slice<int>(?a, ?start, ?end, ?vs) &*& length(vs) == pow(2, succ(n));
-    ensures array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(n, vs));
+lemma void note(boolean b)
+    requires b;
+    ensures b;
+{
+}
+
+lemma void even_lemma(int x)
+    requires x == x / 2 * 2;
+    ensures x - x / 2 == x / 2;
+{
+}
+
+lemma void array_slice_to_array_tree0(nat n, int[] a, int start, int end)
+    requires array_slice<int>(a, start, end, ?vs) &*& length(vs) == pow(2, succ(n));
+    ensures array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(succ(n), vs));
 {
     switch (n) {
         case zero:
-            switch (vs) { case nil: case cons(h, t): switch (t) { case nil: assert true; case cons(th, tt): assert tt == nil; assert true; } }
+            switch (vs) { case nil: case cons(h, t): switch (t) { case nil: assert true; case cons(th, tt):
+                assert tt == nil;
+                assert take(length(vs) / 2, vs) == cons(h, nil);
+                assert drop(length(vs) / 2, vs) == cons(th, nil);
+                assert bintree_of_list(succ(zero), vs) == node(leaf(h), leaf(th));
+                
+            } }
+            close array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(succ(n), vs));
         case succ(n0):
-            array_slice_to_array_tree0(n0);
-            array_slice_to_array_tree0(n0);
+            assert length(take(length(vs) / 2, vs)) == pow(2, n);
+            array_slice_to_array_tree0(n0, a, start, start + (end - start) / 2);
+            assert start + (end - start) / 2 - start == length(vs) / 2;
+            assert length(vs) / 2 == pow(2, n);
+            assert length(vs) >= (end - start) / 2;
+            assert end - start == (end - start) / 2 * 2;
+            note(end - start == (end - start) / 2 * 2);
+            even_lemma(end - start);
+            assert 0 <= (end - start) / 2;
+            length_drop((end - start) / 2, vs);
+            assert length(drop((end - start) / 2, vs)) == (end - start) - (end - start) / 2;
+            assert length(drop((end - start) / 2, vs)) == pow(2, n);
+            assert length(drop((end - start) / 2, drop(0, vs))) == pow(2, n);
+            array_slice_to_array_tree0(n0, a, start + (end - start) / 2, end);
+            pow_gt_zero(2, n0);
+            assert 0 < (end - start) / 2;
+            assert end == start + (end - start) / 2 * 2;
+            note(end == start + (end - start) / 2 * 2);
+            assert end - start - (end - start) / 2 >= 2;
+            assert end >= (start + (end - start) / 2) + 2;
+            assert end - 1 > (start + (end - start) / 2 - 1) + 1;
+            close array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(succ(n), vs));
     }
-    close array_tree0(a, start + (end - start) / 2 - 1, end - 1, bintree_of_list(n, vs));
 }
 
 fixpoint int treesum(bintree t) {
@@ -126,6 +164,69 @@ fixpoint list<int> prefixSums(int leftSum, bintree b) {
     switch (b) {
         case leaf(n): return cons(leftSum, nil);
         case node(t1, t2): return append(prefixSums(leftSum, t1), prefixSums(leftSum + treesum(t1), t2));
+    }
+}
+
+fixpoint list<int> list_prefixSums(int leftSum, list<int> xs) {
+    switch (xs) {
+        case nil: return nil;
+        case cons(x0, xs0): return cons(leftSum, list_prefixSums(leftSum + x0, xs0));
+    }
+}
+
+fixpoint int sum(list<int> xs) {
+    switch (xs) {
+        case nil: return 0;
+        case cons(x0, xs0): return x0 + sum(xs0);
+    }
+}
+
+lemma void sum_append(list<int> xs, list<int> ys)
+    requires true;
+    ensures sum(append(xs, ys)) == sum(xs) + sum(ys);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            sum_append(xs0, ys);
+    }
+}
+
+lemma void sum_flatten(bintree b)
+    requires true;
+    ensures sum(flatten(b)) == treesum(b);
+{
+    switch (b) {
+        case leaf(n):
+        case node(b1, b2):
+            sum_flatten(b1);
+            sum_flatten(b2);
+            sum_append(flatten(b1), flatten(b2));
+    }
+}
+
+lemma void list_prefixSums_append(int leftSum, list<int> xs, list<int> ys)
+    requires true;
+    ensures list_prefixSums(leftSum, append(xs, ys)) == append(list_prefixSums(leftSum, xs), list_prefixSums(leftSum + sum(xs), ys));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            list_prefixSums_append(leftSum + x0, xs0, ys);
+    }
+}
+
+lemma void list_prefixSums_flatten(int leftSum, bintree b)
+    requires true;
+    ensures prefixSums(leftSum, b) == list_prefixSums(leftSum, flatten(b));
+{
+    switch (b) {
+        case leaf(n):
+        case node(b1, b2):
+            list_prefixSums_flatten(leftSum, b1);
+            list_prefixSums_flatten(leftSum + treesum(b1), b2);
+            sum_flatten(b1);
+            list_prefixSums_append(leftSum, flatten(b1), flatten(b2));
     }
 }
 
@@ -196,16 +297,19 @@ class PrefixSumRec {
     }
     
     public static void prefixsums(int[] a)
-        //@ requires array_slice(a, 0, a.length, ?vs) &*& exists<nat>(?n) &*& length(vs) == pow(2, n);
-        //@ ensures array_slice(a, 0, a.length, prefixSums(0, bintree_of_list(n, vs)));
+        //@ requires array_slice(a, 0, a.length, ?vs) &*& exists<nat>(?n) &*& length(vs) == pow(2, succ(n));
+        //@ ensures array_slice(a, 0, a.length, list_prefixSums(0, vs));
     {
         int left = a.length / 2 - 1;
         int right = a.length - 1;
         PrefixSumRec p = new PrefixSumRec(a);
+        //@ array_slice_to_array_tree0(n, a, 0, a.length);
         p.upsweep(left, right);
         a[a.length - 1]=0;
         p.downsweep(left, right);
         //@ array_tree2_prefixsums();
+        //@ flatten_bintree_of_list(succ(n), vs);
+        //@ list_prefixSums_flatten(0, bintree_of_list(succ(n), vs));
     }
     
     public static void main (String [] args)
@@ -213,18 +317,12 @@ class PrefixSumRec {
         //@ ensures true;
     {
         int [] a = {3,1,7,0,4,1,6,3};
-        //@ close array_tree0(a, 0, 1, _);
-        //@ close array_tree0(a, 2, 3, _);
-        //@ close array_tree0(a, 1, 3, _);
-        //@ close array_tree0(a, 4, 5, _);
-        //@ close array_tree0(a, 6, 7, _);
-        //@ close array_tree0(a, 5, 7, _);
-        //@ close array_tree0(a, 3, 7, _);
-        PrefixSumRec p = new PrefixSumRec(a);
-        p.upsweep(3,7);
-        a[7]=0;
-        p.downsweep(3,7);
-        //@ array_tree2_prefixsums();
+//        PrefixSumRec p = new PrefixSumRec(a);
+//        p.upsweep(3,7);
+//        a[7]=0;
+//        p.downsweep(3,7);
+        //@ close exists(succ(succ(zero)));
+        prefixsums(a);
         //@ assert array_slice(a, 0, a.length, cons(0, cons(3, cons(4, cons(11, cons(11, cons(15, cons(16, cons(22, nil)))))))));
     }
 
