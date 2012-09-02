@@ -776,48 +776,88 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let h = Chunk (g_symb, targs, coef1, ts, None)::Chunk (g_symb, targs, coef2, ts, None)::h in
         tcont sizemap tenv' ghostenv h env
       )
-    | MergeFractionsStmt (l, p, targs, pats) ->
-      let targs = List.map (check_pure_type (pn, ilist) tparams) targs in
-      let (targs, g_symb, pts, inputParamCount) =
-        match try_assoc' (pn,ilist) p predfammap with
-          None -> static_error l "No such predicate." None
-        | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) ->
-          let targs = if targs = [] then List.map (fun _ -> InferredType (ref None)) predfam_tparams else targs in
-          let tpenv =
-            match zip predfam_tparams targs with
-              None -> static_error l "Incorrect number of type arguments." None
-            | Some bs -> bs
+    | MergeFractionsStmt (l, a) ->
+      let (a, _, _) = check_asn_core (pn,ilist) tparams tenv a in
+      let (g_symb, inputParamCount, targs, pats, is_field) =
+        match a with
+          WPredAsn (_, p, is_global, targs, pats0, pats) ->
+          if not is_global then static_error l "Local predicates are not yet supported here." None;
+          if pats0 <> [] then static_error l "Predicate families are not yet supported here." None;
+          let g_symb =
+            match try_assoc p#name predfammap with
+              None -> static_error l "No such predicate." None
+            | Some (_, predfam_tparams, arity, pts, g_symb, inputParamCount) -> g_symb
           in
-          if arity <> 0 then static_error l "Predicate families are not supported in merge_fractions statements." None;
-          begin
-            match inputParamCount with
-              None ->
-              static_error l
-                ("Cannot merge this predicate: it is not declared precise. "
-                 ^ "To declare a predicate precise, separate the input parameters "
-                 ^ "from the output parameters using a semicolon in the predicate declaration.") None;
-            | Some n -> (targs, (g_symb, true), instantiate_types tpenv pts, n)
-          end
+          let inputParamCount =
+            match p#inputParamCount with
+              None -> static_error l "Not a precise predicate." None
+            | Some n -> n
+          in
+          ((g_symb, true), inputParamCount, targs, pats, false)
+        | WPointsTo (_, WRead (_, e, fparent, fname, frange, fstatic, fvalue, fghost), _, rhs) ->
+          let (p, (_, _, _, _, symb, _)) = List.assoc (fparent, fname) field_pred_map in
+          let pats, inputParamCount =
+            if fstatic then
+              [rhs], 0
+            else
+              [LitPat e; rhs], 1
+          in
+          ((symb, true), inputParamCount, [], pats, true)
+        | _ -> static_error l "Only predicate assertions and field-points-to assertions are supported here at this time." None
       in
-      let (pats, tenv') = check_pats (pn,ilist) l tparams tenv pts pats in
       let (inpats, outpats) = take_drop inputParamCount pats in
-      List.iter (function (LitPat e) -> () | _ -> static_error l "No patterns allowed at input positions." None) inpats;
-      let pats = srcpats pats in
-      consume_chunk rules h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef1 ts1 _ ghostenv env [] ->
-        consume_chunk rules h ghostenv env [] l g_symb targs real_unit dummypat (Some inputParamCount) pats (fun _ h coef2 ts2 _ _ _ [] ->
-          let (Some tpairs) = zip ts1 ts2 in
-          let (ints, outts) = take_drop inputParamCount tpairs in
-          let merged_chunk = Chunk (g_symb, targs, ctxt#mk_real_add coef1 coef2, ts1, None) in
-          let h = merged_chunk::h in
-          let rec iter outts =
-            match outts with
-              [] -> tcont sizemap tenv' ghostenv h env
-            | (t1, t2)::ts ->
-              assume (ctxt#mk_eq t1 t2) (fun () -> iter ts)
-          in
-          iter outts
-        )
-      )
+      let inargs = List.map (function (LitPat e) -> ev e | _ -> static_error l "No patterns allowed at input positions." None) inpats in
+      List.iter (function DummyPat -> () | _ -> static_error l "Non-dummy patterns not supported here." None) outpats;
+      (* Do not use consume_chunk here; it splits dummy fractions, which is exactly what we don't want! *)
+      let rec iter totalCoef hdone htodo outargs =
+        match htodo with
+          [] ->
+          begin match outargs with
+            None -> assert_false h env l "No matching chunks" None
+          | Some outargs ->
+            begin fun cont ->
+              match totalCoef with
+                None -> cont (get_dummy_frac_term ())
+              | Some coef ->
+                if is_field then
+                  assume (ctxt#mk_real_le coef real_unit) $. fun () ->
+                  cont coef
+                else
+                  cont coef
+            end $. fun coef ->
+            cont (Chunk (g_symb, targs, coef, inargs @ outargs, None)::hdone) env
+          end
+        | Chunk (g_symb1, targs1, coef1, ts1, _) as c::htodo ->
+          if predname_eq g_symb g_symb1 && List.for_all2 unify targs targs1 then
+            let (inargs1, outargs1) = take_drop inputParamCount ts1 in
+            if List.for_all2 definitely_equal inargs inargs1 then
+              match outargs with
+                None ->
+                let totalCoef = if is_dummy_frac_term coef1 then None else Some coef1 in
+                iter totalCoef hdone htodo (Some outargs1)
+              | Some outargs as outargs0 ->
+                begin fun cont ->
+                  let rec iter outargs outargs1 =
+                    match outargs, outargs1 with
+                      [], [] -> cont ()
+                    | outarg::outargs, outarg1::outargs1 ->
+                      assume (ctxt#mk_eq outarg outarg1) (fun () -> iter outargs outargs1)
+                  in
+                  iter outargs outargs1
+                end $. fun () ->
+                let totalCoef =
+                  match totalCoef with
+                    None -> None
+                  | Some totalCoef ->
+                    if is_dummy_frac_term coef1 then None else Some (ctxt#mk_real_add totalCoef coef1)
+                in
+                iter totalCoef hdone htodo outargs0
+            else
+              iter totalCoef (c::hdone) htodo outargs
+          else
+            iter totalCoef (c::hdone) htodo outargs
+      in
+      iter None [] h None
     | DisposeBoxStmt (l, bcn, pats, handleClauses) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) bcn boxmap with

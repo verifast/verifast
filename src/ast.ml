@@ -272,9 +272,7 @@ and
       expr option
   | MergeFractionsStmt of (* merge_fraction ...*)
       loc *
-      string *
-      type_expr list *
-      pat list
+      asn
   | CreateBoxStmt of
       loc *
       string *
@@ -701,7 +699,7 @@ let stmt_loc s =
   | BlockStmt (l, ds, ss, _, _) -> l
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
-  | MergeFractionsStmt (l, _, _, _) -> l
+  | MergeFractionsStmt (l, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l
   | CreateHandleStmt (l, _, _, _) -> l
   | DisposeBoxStmt (l, _, _, _) -> l

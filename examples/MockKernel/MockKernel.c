@@ -176,7 +176,7 @@ void unregister_device(struct device *device)
 {
     //@ open kernel_device(device, owner, name, nameChars, ops, device_);
     //@ open kernel_module_disposing(owner, deviceCount);
-    //@ if (deviceCount == 0) { stop_counting(module_devicesId2, owner); { lemma void helper() requires [?f1]owner->devicesId2 |-> _ &*& [?f2]owner->devicesId2 |-> _; ensures [f1]owner->devicesId2 |-> _ &*& [f2]owner->devicesId2 |-> _; {} helper(); } }
+    //@ if (deviceCount == 0) { stop_counting(module_devicesId2, owner); merge_fractions owner->devicesId2 |-> _; }
     //@ destroy_ticket(module_devicesId2, owner);
     //@ int devicesId = owner->devicesId;
     //@ ghost_set_match_member_handle(devicesId, device);

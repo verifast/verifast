@@ -682,8 +682,8 @@ and
 | [< '(l, Kwd "split_fraction"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist;
      coefopt = (parser [< '(_, Kwd "by"); e = parse_expr >] -> Some e | [< >] -> None);
      '(_, Kwd ";") >] -> SplitFractionStmt (l, p, targs, pats, coefopt)
-| [< '(l, Kwd "merge_fractions"); '(li, Ident p); targs = parse_type_args li; pats = parse_patlist; '(_, Kwd ";") >]
-  -> MergeFractionsStmt (l, p, targs, pats)
+| [< '(l, Kwd "merge_fractions"); a = parse_pred; '(_, Kwd ";") >]
+  -> MergeFractionsStmt (l, a)
 | [< '(l, Kwd "dispose_box"); '(_, Ident bcn); pats = parse_patlist;
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
      '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats, handleClauses)
