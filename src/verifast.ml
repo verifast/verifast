@@ -72,15 +72,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
-    let eval_h_core sideeffectfree h env e cont =
+    let eval_h_core sideeffectfree pure h env e cont =
       if not pure then check_ghost ghostenv l e;
       verify_expr sideeffectfree (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None e cont econt
     in
     let eval_h h env e cont =
-      eval_h_core true h env e cont
+      eval_h_core true pure h env e cont
     in
     let eval_h_nonpure h env e cont =
-      eval_h_core false h env e cont
+      eval_h_core false pure h env e cont
+    in
+    let eval_h_pure h env e cont =
+      eval_h_core true true h env e cont
     in
     let rec evhs h env es cont =
       match es with
@@ -1179,7 +1182,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match dec with
           None -> cont None
         | Some dec ->
-          eval_h h' env' dec $. fun _ _ t_dec ->
+          eval_h_pure h' env' dec $. fun _ _ t_dec ->
           cont (Some t_dec)
       end $. fun t_dec ->
       eval_h_nonpure h' env' e $. fun h' env' v ->
@@ -1206,7 +1209,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match (t_dec, dec) with
         (None, None) -> success()
       | (Some t_dec, Some dec) ->
-        eval_h h' env''' dec $. fun _ _ t_dec2 ->
+        eval_h_pure h' env''' dec $. fun _ _ t_dec2 ->
         let dec_check1 = ctxt#mk_lt t_dec2 t_dec in
         assert_term dec_check1 h' env''' (expr_loc dec) (sprintf "Cannot prove that loop measure decreases: %s" (ctxt#pprint dec_check1)) None;
         let dec_check2 = ctxt#mk_le (ctxt#mk_intlit 0) t_dec in
