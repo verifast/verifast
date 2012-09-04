@@ -7,14 +7,25 @@ struct tree {
 /*@
 inductive tree = empty | tree(int, tree, tree);
 
+predicate tree_single(struct tree* t; int data, struct tree* left, struct tree* right) =
+  t != 0 &*& t->data |-> data &*&
+  t->left |-> left &*& t->right |-> right &*&
+  malloc_block_tree(t);
+  
+lemma_auto void treesingle_non_zero()
+  requires tree_single(?t, ?data, ?left, ?right);
+  ensures tree_single(t, data, left, right) &*& t != 0;
+{
+  open tree_single(t, data, left, right);
+}
+
 predicate tree(struct tree* t; tree tr) =
   t == 0 ?
     tr == empty
   :
-    t->left |-> ?l &*& tree(l, ?trl) &*&
-    t->right |-> ?r &*& tree(r, ?trr) &*&
-    t->data |-> ?v &*& malloc_block_tree(t) &*&
-    tr == tree(v, trl, trr);
+    tree_single(t, ?data, ?left, ?right) &*&
+    tree(left, ?lt) &*& tree(right, ?rt) &*&
+    tr == tree(data, lt, rt);
     
 lemma_auto void tree_zero()
   requires tree(?t, ?tr);
@@ -22,7 +33,7 @@ lemma_auto void tree_zero()
 {
   open tree(t, tr);
 }
-    
+
 predicate tree_with_hole(struct tree* t, struct tree* hole; tree tr) =
   hole != 0 &*&
   (t == hole ?
@@ -33,12 +44,13 @@ predicate tree_with_hole(struct tree* t, struct tree* hole; tree tr) =
     t->data |-> ?v &*& malloc_block_tree(t) &*&
     tr == tree(v, trl, trr) &*& hole != 0
   );
-
-lemma_auto void tree_with_hole_zero()
-  requires tree_with_hole(?t, ?hole, ?tr);
-  ensures tree_with_hole(t, hole, tr) &*& hole != 0;
-{
-  open tree_with_hole(t, hole, tr);
+  
+fixpoint tree delete_leftmost(tree t) {
+  switch(t) {
+    case empty: return empty;
+    case tree(v, l, r): 
+     return l == empty ? r : tree(v, delete_leftmost(l), r);
+  }
 }
 
 fixpoint int leftmost(tree tr) {
@@ -64,14 +76,6 @@ lemma void merge_tree(struct tree* t, struct tree* hole)
   } else {
     merge_tree(t->left, hole);
     
-  }
-}
-
-fixpoint tree delete_leftmost(tree t) {
-  switch(t) {
-    case empty: return empty;
-    case tree(v, l, r): 
-     return l == empty ? r : tree(v, delete_leftmost(l), r);
   }
 }
 
@@ -118,28 +122,24 @@ void search_tree_delete_min(struct tree* t, struct tree** res, int* min)
 {
   struct tree* tt, pp, p;
   int m;
-  //@ open tree(t, tr);
   p = t->left;
-  //@ open tree(p, _);
   if (p == 0) {
     m = t->data; tt = t->right; free (t); t = tt;
   } else {
     pp = t; tt = p->left;
-    //@ close tree_with_hole(pp, pp, empty);
-    //@ open tree(tt, _);
-    //@ close tree(tt, _);
     while (tt != 0)
-      /*@ requires tree_with_hole(pp, pp, empty) &*& pp != 0 &*& pp->left |-> p &*& pp->right |-> ?ppr &*& tree(ppr, ?pprtree) &*& pp->data |-> ?ppd &*&  malloc_block_tree(pp) &*&
-                   p != 0 &*& p->left |-> tt &*& p->right |-> ?pr &*& tree(pr, ?prtree) &*& tree(tt, ?tttree) &*& p->data |-> ?pd &*& malloc_block_tree(p);
+      /*@ requires tree_single(pp, ?ppd, p, ?ppr) &*& tree(ppr, ?pprtree) &*& 
+                   tree_single(p, ?pd, tt, ?pr) &*& tree(tt, ?tttree) &*& tree(pr, ?prtree);
       @*/
-      /*@ ensures  pp != 0 &*& pp->left |-> p &*& pp->right |-> ?nppr &*& tree(nppr, ?npprtree) &*& pp->data |-> ?nppd &*&  malloc_block_tree(pp) &*&
-                      p != 0 &*& p->left |-> tt &*& p->right |-> ?npr &*& tree(npr, ?nprtree) &*& p->data |-> ?npd &*& malloc_block_tree(p) &*& tree_with_hole(old_pp, pp, ?hollow_tree) &*& tt == 0 &*&
-                      merge(hollow_tree, tree(nppd, tree(npd, empty, nprtree), npprtree)) == tree(ppd, tree(pd, tttree, prtree), pprtree);
+      /*@ ensures  tree_single(pp, ?nppd, p, ?nppr) &*& tree(nppr, ?npprtree) &*&
+                   tree_single(p, ?npd, tt, ?npr) &*& tree_with_hole(old_pp, pp, ?hollow_tree) &*& tree(npr, ?nprtree) &*&
+                   merge(hollow_tree, tree(nppd, tree(npd, empty, nprtree), npprtree)) == tree(ppd, tree(pd, tttree, prtree), pprtree);
       @*/
     {
+      //@ open tree_single(pp, ppd, p, ppr);
       pp = p; p = tt; tt = p->left;
-      //@ close tree_with_hole(pp, pp, empty);
       //@ recursive_call();
+      //@ open tree_single(pp, _, _, _);
     }
     m = p->data; tt = p->right; free(p); pp->left= tt;
     //@ merge_tree(t, pp);

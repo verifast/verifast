@@ -27,7 +27,7 @@ predicate create_mutex_ghost_arg(predicate() p) = true;
 
 struct mutex *create_mutex();
     //@ requires create_mutex_ghost_arg(?p) &*& p();
-    //@ ensures mutex(result, p);
+    //@ ensures result != 0 &*& mutex(result, p);
     
 void mutex_acquire(struct mutex *mutex);
     //@ requires [?f]mutex(mutex, ?p);
