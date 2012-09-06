@@ -10,8 +10,6 @@ Represents an I/O specification using an approach inspired by coinduction.
 
 /*@
 
-inductive option<t> = none | some(t);
-
 fixpoint t the<t>(option<t> o) {
     switch (o) {
         case none: return default_value;
