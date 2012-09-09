@@ -55,9 +55,19 @@ lemma_auto(nth(i, append(xs, ys))) void nth_append_auto<t>(list<t> xs, list<t> y
 @*/
 
 /*@
+lemma void lseg_nodes_values(struct node* from, struct node* to)
+  requires lseg(from, to, ?nodes, ?vs);
+  ensures lseg(from, to, nodes, vs) &*& length(nodes) == length(vs);
+{
+  open lseg(from, to, nodes, vs);
+  if(from != to) {
+    lseg_nodes_values(from->next, to);
+  }
+}
+
 lemma void lseg_split(struct node* from, struct node* to, struct node* n)
   requires lseg(from, to, ?nodes, ?vs) &*& mem(n, nodes) == true;
-  ensures lseg(from, n, ?nodes1, ?vs1) &*& lseg(n, to, ?nodes2, ?vs2) &*& n != to &*& append(nodes1, nodes2) == nodes && append(vs1, vs2) == vs;
+  ensures lseg(from, n, ?nodes1, ?vs1) &*& lseg(n, to, ?nodes2, ?vs2) &*& n != to &*& append(nodes1, nodes2) == nodes && append(vs1, vs2) == vs &*& length(vs1) == index_of(n, nodes);
 {
   open lseg(from, to, nodes, vs);
   if(from == to) {
@@ -131,13 +141,54 @@ lemma void distinct_mem<t>(list<t> xs, list<t> ys, t x)
       }
   }
 }
-@*/
+
+lemma void drop_one_more<t>(list<t> xs, int i)
+  requires 0 <= i &*& i <= length(xs) - 1;
+  ensures tail(drop(i, xs)) == drop(i + 1, xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i != 0) {
+        drop_one_more(t, i - 1);
+      }
+  }
+}
+
+lemma void drop_nth_index_of<t>(list<t> vs, int i)
+  requires 0 <= i && i < length(vs);
+  ensures head(drop(i , vs)) == nth(i, vs);
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      if(i == 0) {
+
+      } else {
+        drop_nth_index_of(t, i - 1);
+      }
+  }
+}  
+
+lemma void nth_append2<t>(list<t> xs, list<t> ys, int i)
+  requires 0 <= i &*& i < length(ys);
+  ensures nth(length(xs) + i, append(xs, ys)) == nth(i, ys) ;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      nth_append2(t, ys, i );
+  }
+}
+ @*/
 
 /*@
-box_class msqueue_box(struct queue* q, predicate(list<int>) P) {
+box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
   invariant q->initial |-> ?initial &*& q->head |-> ?head &*& q->tail |-> ?tail &*& lseg(initial, 0, ?nodes, ?vs) &*&
             mem(head, nodes) == true &*& mem(tail, nodes) == true &*& index_of(head, nodes) <= index_of(tail, nodes) &*&
-            length(nodes) - 2 <= index_of(tail, nodes);// &*& P(drop(index_of(head, nodes), vs));
+            length(nodes) - 2 <= index_of(tail, nodes) &*& I(drop(index_of(head, nodes) + 1, vs)) &*&
+            //derived
+            length(nodes) == length(vs);
             
   action enqueue(struct node* new_node, int x);
     requires true;
@@ -182,13 +233,26 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) P) {
     preserved_by noop() {}
   }
   
-    handle_predicate was_head_with_succ_not_tail(struct node* h, struct node* n) {
+  handle_predicate was_head_with_succ_not_tail(struct node* h, struct node* n) {
     invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) && index_of(h, nodes) < index_of(tail, nodes) &&
               (n != 0 ? 
                 index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes)
               :
                 true
               );
+              
+    preserved_by enqueue(new_node, x) {}
+    preserved_by dequeue() {}
+    preserved_by move_tail() {}
+    preserved_by noop() {}
+  }
+  
+  handle_predicate is_good_node(bool dequeued, struct node* n, int v) {
+    invariant dequeued ?
+                mem(n, nodes) == true && nth(index_of(n, nodes), vs) == v
+              :
+                true 
+               ;
               
     preserved_by enqueue(new_node, x) {}
     preserved_by dequeue() {}
@@ -206,98 +270,169 @@ predicate lseg(struct node* from, struct node* to; list<struct node*> nodes, lis
     from != 0 &*& from->value |-> ?value &*& from->next |-> ?next &*& malloc_block_node(from) &*&
     lseg(next, to, ?nnodes, ?nvalues) &*& nodes == cons(from, nnodes) &*& values == cons(value, nvalues);
 
-predicate queue(struct queue* q, predicate(list<int>) P) = msqueue_box(?id, q, P) &*& malloc_block_queue(q);
+predicate queue(struct queue* q, predicate(list<int>) I) = msqueue_box(?id, q, I) &*& malloc_block_queue(q);
+
+predicate exists<t>(t x) = true;
+
+predicate_family try_dequeue_pre(void* index)();
+predicate_family try_dequeue_post(void* index)(bool success, int res);
+
+// todo: write client
+typedef lemma void queue_try_dequeue(predicate(list<int> vs) I)();
+  requires try_dequeue_pre(this)() &*& I(?vs);
+  ensures try_dequeue_post(this)(vs != nil, ?res) &*& vs != nil ? res == head(vs) &*& I(tail(vs)) : I(vs);
 @*/
 
-bool try_dequeue(struct queue* q, int* res)
-  //@ requires queue(q, ?P) &*& integer(res, ?v);
-  //@ ensures queue(q, P) &*& integer(res, ?nv) &*& result ? true : nv == v;
+struct queue* create_queue()
+  //@ requires exists<predicate(list<int> xs)>(?I) &*& I(nil);
+  //@ ensures result == 0 ? I(nil) : queue(result, I);
 {
-  ; // todo: fix bug
-  //@ open queue(q, P);
-  //@ assert msqueue_box(?id, q, P);
-  //@ handle ha = create_handle msqueue_box_handle(id);
-  // h = q->head
-  /*@
-  consuming_box_predicate msqueue_box(id, q, P)
-  consuming_handle_predicate msqueue_box_handle(ha)
-  perform_action noop()
-  {
-    @*/ struct node *h = atomic_load_pointer(&q->head); /*@
+  //@ open exists(I);
+  struct queue* q = malloc(sizeof(struct queue));
+  if(q == 0) {
+    return 0;
   }
-  producing_handle_predicate was_head(h);
-  @*/
-  // n = h->next
-  /*@
-  consuming_box_predicate msqueue_box(id, q, P)
-  consuming_handle_predicate was_head(ha, h)
-  perform_action noop()
-  {
-    assert q->initial |-> ?initial;
-    assert q->head |-> ?head;
-    assert lseg(initial, 0, ?nodes, ?vs);
-    lseg_distinct(initial, 0);
-    lseg_split(initial, 0, h);
-    assert lseg(initial, h, ?nodes1, _);
-    assert lseg(h, 0, ?nodes2, _);
-    @*/ struct node *n = atomic_load_pointer(&h->next); /*@
-    open lseg(n, 0, _, _);
-    lseg_merge(initial, h, 0);
-    if(n != 0) {
-      distinct_mem(nodes1, nodes2, h);
-      distinct_mem(nodes1, nodes2, n);
-      index_of_nth(nodes, n);
-      index_of_append2(nodes1, nodes2, h);
-      index_of_append2(nodes1, nodes2, n);
-    }
-  }
-  producing_handle_predicate was_head_with_succ(h, n);
-  @*/
+  struct node* n = malloc(sizeof(struct node));
   if(n == 0) {
-    return false;
-    //@ close queue(q, P);
-    //@ leak was_head_with_succ(_, _, _, _);
-  } else {
-    // old = cas(&q->tail, h, n);
-        /*@
-    consuming_box_predicate msqueue_box(id, q, P)
-    consuming_handle_predicate was_head_with_succ(ha, h, n)
-    perform_action move_tail()
-    { 
-      assert q->initial |-> ?initial_;
-      assert q->head |-> ?head_;
-      assert q->tail |-> ?tail_;
-      assert lseg(initial_, 0, ?nodes_, ?vs_);
-      @*/ struct node* old_ = atomic_compare_and_set_pointer(&q->tail, h, n); /*@
-      if(old_ != h) {
-        index_of_nth(nodes_, tail_);
-        index_of_nth(nodes_, h);
-      }
-    } producing_handle_predicate was_head_with_succ_not_tail(h, n); @*/
-    // old = cas(&q->head, h, n)
+    free(q);
+    return 0;
+  }
+  n->value = 0;
+  n->next = 0;
+  q->head = n;
+  q->tail = n;
+  //@ q->initial = n;
+  return q;
+  //@ create_box boxId = msqueue_box(q, I); 
+  //@ close queue(q, I);
+}
+
+bool try_dequeue(struct queue* q, int* res)
+  //@ requires queue(q, ?I) &*& integer(res, ?v) &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
+  //@ ensures queue(q, I) &*& integer(res, ?nv) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? ret == nv : true;
+{
+  while(true)
+    //@ invariant queue(q, I) &*& integer(res, v) &*& is_queue_try_dequeue(lem, I) &*& try_dequeue_pre(lem)();
+  {
+    //@ open queue(q, I);
+    //@ assert msqueue_box(?id, q, I);
+    //@ handle ha = create_handle msqueue_box_handle(id);
+    // h = q->head
     /*@
-    consuming_box_predicate msqueue_box(id, q, P)
-    consuming_handle_predicate was_head_with_succ_not_tail(ha, h, n)
-    perform_action dequeue()
-    {
-      @*/ struct node* old = atomic_compare_and_set_pointer(&q->head, h, n); /*@
-      
-    } producing_handle_predicate was_head_with_succ(h, n); @*/
-    // read h->value
-    /*@
-    consuming_box_predicate msqueue_box(id, q, P)
-    consuming_handle_predicate was_head_with_succ(ha, h, n)
+    consuming_box_predicate msqueue_box(id, q, I)
+    consuming_handle_predicate msqueue_box_handle(ha)
     perform_action noop()
     {
-      assert q->initial |-> ?initial__;
-      lseg_split(initial__, 0, h);
-      @*/ int value = atomic_load_int(&h->value); /*@
-      lseg_merge(initial__, h, 0);
-    } producing_handle_predicate msqueue_box_handle(); 
+      @*/ struct node *h = atomic_load_pointer(&q->head); /*@
+    }
+    producing_handle_predicate was_head(h);
     @*/
-    *res = value;
-    //@ leak msqueue_box_handle(ha, _);
-    return true;
-    //@ close queue(q, P);
+    // n = h->next
+    /*@
+    consuming_box_predicate msqueue_box(id, q, I)
+    consuming_handle_predicate was_head(ha, h)
+    perform_action noop()
+    {
+      assert q->initial |-> ?initial;
+      assert q->head |-> ?head;
+      assert lseg(initial, 0, ?nodes, ?vs);
+      lseg_distinct(initial, 0);
+      lseg_split(initial, 0, h);
+      assert lseg(initial, h, ?nodes1, _);
+      assert lseg(h, 0, ?nodes2, _);
+      @*/ struct node *n = atomic_load_pointer(&h->next); /*@
+      open lseg(n, 0, _, _);
+      lseg_merge(initial, h, 0);
+      if(n != 0) {
+        distinct_mem(nodes1, nodes2, h);
+        distinct_mem(nodes1, nodes2, n);
+        index_of_nth(nodes, n);
+        index_of_append2(nodes1, nodes2, h);
+        index_of_append2(nodes1, nodes2, n);
+      } else {
+        distinct_mem(nodes1, nodes2, h);
+        index_of_append2(nodes1, nodes2, h);
+        lseg_nodes_values(initial, 0);
+        lem();
+        leak is_queue_try_dequeue(_, _);
+      }
+    }
+    producing_handle_predicate was_head_with_succ(h, n);
+    @*/
+    if(n == 0) {
+      return false;
+      //@ close queue(q, I);
+      //@ leak was_head_with_succ(_, _, _, _);
+    } else {
+      // old = cas(&q->tail, h, n);
+          /*@
+      consuming_box_predicate msqueue_box(id, q, I)
+      consuming_handle_predicate was_head_with_succ(ha, h, n)
+      perform_action move_tail()
+      { 
+        assert q->initial |-> ?initial_;
+        assert q->head |-> ?head_;
+        assert q->tail |-> ?tail_;
+        assert lseg(initial_, 0, ?nodes_, ?vs_);
+        @*/ struct node* old_ = atomic_compare_and_set_pointer(&q->tail, h, n); /*@
+        if(old_ != h) {
+          index_of_nth(nodes_, tail_);
+          index_of_nth(nodes_, h);
+        }
+      } producing_handle_predicate was_head_with_succ_not_tail(h, n); @*/
+      // old = cas(&q->head, h, n)
+      /*@
+      consuming_box_predicate msqueue_box(id, q, I)
+      consuming_handle_predicate was_head_with_succ_not_tail(ha, h, n)
+      perform_action dequeue()
+      {
+        assert lseg(?theinitial, 0, ?thenodes, ?thevalues);
+        @*/ struct node* old = atomic_compare_and_set_pointer(&q->head, h, n); /*@
+        int ret;
+        if(old == h) {
+          lem();
+          lseg_nodes_values(theinitial, 0);
+          drop_one_more(thevalues, index_of(h, thenodes) + 1);
+          leak is_queue_try_dequeue(_, _);
+          assert try_dequeue_post(_)(_, ?retv);
+          ret = retv;
+          assert ret == head(drop(index_of(h, thenodes) + 1, thevalues));
+          drop_nth_index_of(thevalues, index_of(h, thenodes) + 1);
+        } else {
+          ret = 0;
+        }
+      } producing_handle_predicate is_good_node(old == h, n, ret); @*/
+      if(old == h) {
+        // read n->value
+        /*@
+        consuming_box_predicate msqueue_box(id, q, I)
+        consuming_handle_predicate is_good_node(ha, true, n, ret)
+        perform_action noop()
+        {
+          assert q->initial |-> ?initial__;
+          assert q->head |-> ?head__;
+          assert q->tail |-> ?tail__;
+          assert lseg(_, _, ?lnodes, ?lvs);
+         lseg_nodes_values(initial__, 0);
+          lseg_split(initial__, 0, n);
+           assert lseg(initial__, n, ?lnodes1, ?lvs1);
+           assert lseg(n, 0, ?lnodes2, ?lvs2);
+          @*/ int value = atomic_load_int(&n->value); /*@
+          lseg_merge(initial__, n, 0);
+          
+          assert ret == nth(index_of(n, lnodes), lvs);
+          assert value == nth(0, lvs2);
+          nth_append2(lvs1, lvs2, index_of(n, lnodes) - length(lvs1));
+          assert value == ret;
+        } producing_handle_predicate msqueue_box_handle(); 
+        @*/
+        *res = value;
+        //@ leak msqueue_box_handle(ha, _);
+        return true;
+        //@ close queue(q, I);
+      }
+      //@ close queue(q, I);
+      //@ leak is_good_node(_, _, _, _, _);
+    }
   }
 }
