@@ -1519,6 +1519,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    match post_bcp_args_opt with
                      None -> pre_boxArgMap
                    | Some (lpb, post_bcp_args) ->
+                     if is_atomic then assert_false h env lpb "Changing the parameters of the box predicate is not allowed for atomic perform_action statements." None;
                      begin
                        match zip boxpmap post_bcp_args with
                          None -> static_error lpb "Incorrect number of post-state box arguments." None
