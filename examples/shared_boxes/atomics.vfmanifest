@@ -1,0 +1,3 @@
+.provides .\atomics.h#atomic_load_pointer
+.provides .\atomics.h#atomic_load_int
+.provides .\atomics.h#atomic_compare_and_set_pointer

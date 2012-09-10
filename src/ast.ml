@@ -249,6 +249,7 @@ and
       string list ref
   | PerformActionStmt of
       loc *
+      bool * (* atomic *)
       bool ref (* in non-pure context *) *
       string *
       pat list *
@@ -697,7 +698,7 @@ let stmt_loc s =
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
   | BlockStmt (l, ds, ss, _, _) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l

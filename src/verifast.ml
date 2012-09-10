@@ -1440,7 +1440,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let tcont _ _ _ _ _ = success() in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
-    | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
+    | PerformActionStmt (lcb, is_atomic, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
           None -> static_error lcb "No such box class." None
@@ -1459,7 +1459,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
       consume_chunk rules h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
-        if box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1." None;
+        if not is_atomic && box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1 if action is non-atomic." None;
         let (boxId::pre_boxPredArgs) = ts in
         let (pre_handlePred_parammap, pre_handlePred_inv) =
           if pre_hpn = pre_bcn ^ "_handle" then
@@ -1665,7 +1665,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PureStmt (l, s) ->
       begin
         match s with
-          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
+          PerformActionStmt (_, _, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
           nonpure_ctxt := not pure
         | _ -> ()
       end;

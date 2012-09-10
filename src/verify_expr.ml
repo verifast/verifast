@@ -81,7 +81,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | TryCatch (l, body, catches) -> block_assigned_variables body @ flatmap (fun (l, t, x, body) -> block_assigned_variables body) catches
     | TryFinally (l, body, lf, finally) -> block_assigned_variables body @ block_assigned_variables finally
     | BlockStmt (l, ds, ss, _, _) -> block_assigned_variables ss
-    | PerformActionStmt (lcb, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
+    | PerformActionStmt (lcb, is_atomic, nonpure_ctxt, bcn, pre_boxargs, lch, pre_handlepredname, pre_handlepredargs, lpa, actionname, actionargs, body, closeBraceLoc, post_boxargs, lph, post_handlepredname, post_handlepredargs) ->
       block_assigned_variables body
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
     | MergeFractionsStmt (l, a) -> []
