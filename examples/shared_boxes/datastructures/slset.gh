@@ -1,0 +1,203 @@
+#ifndef SLSET_H
+#define SLSET_H
+
+/*
+    list sets
+    - represents the set as a sorted list of elements
+*/
+
+#include "dlset.gh"
+#include "storder.gh"
+
+fixpoint bool sorted<t>(list<t> l, fixpoint (t, t, bool) lt)
+{
+    switch(l) {
+        case nil: return true;
+        case cons(h, l2): return
+        switch(l2) {
+            case nil: return true;
+            case cons(h2, l3): return lt(h, h2) && sorted(l2, lt);
+        };
+    }
+}
+
+fixpoint list<t> sorted_insert<t>(list<t> l, fixpoint (t, t, bool) lt, t v) 
+{
+    switch(l) {
+        case nil: return cons(v, nil);
+        case cons(h, t): 
+            return (lt(h, v) ? cons(h, sorted_insert(t, lt, v)) : (h == v ? l : cons(v, l)));
+    }
+}
+
+lemma void sorted_tail_cons<t>(t x, list<t> l, fixpoint(t, t, bool) lt)
+    requires sorted(cons(x, l), lt) == true;
+    ensures sorted(l, lt) == true;
+{
+    switch(l) {
+        case nil:
+        case cons(h, t):
+            sorted_tail_cons(h, t, lt);
+    }
+}
+
+lemma void sorted_head_min<t>(t h, list<t> l, t v, fixpoint(t, t, bool) lt, lttrans* translem)
+    requires sorted(cons(h, l), lt) == true &*& mem(v, l) == true &*& is_lttrans(translem, lt);
+    ensures lt(h, v) == true &*& is_lttrans(translem, lt);
+{
+    switch(l) {
+        case nil:
+        case cons(h2, t):
+            if(v != h2) {
+                sorted_head_min(h2, t, v, lt, translem);
+                translem(h, h2, v);
+            }
+    }
+}
+
+lemma void sorted_insert_sorted<t>(list<t> vs, fixpoint(t, t, bool) lt, t v, lttotal* totallem)
+    requires sorted(vs, lt) == true &*& is_lttotal(totallem, lt);
+    ensures sorted(sorted_insert(vs, lt, v), lt) == true &*& is_lttotal(totallem, lt);
+{
+    switch(vs) {
+        case nil:
+        case cons(h, t):
+            if(lt(h, v)) {
+                sorted_tail_cons(h, t, lt);
+                sorted_insert_sorted(t, lt, v, totallem);
+                switch(t) {
+                    case nil:
+                    case cons(h2, t2):
+                }
+            } else {
+                if(h != v) {
+                    assert sorted(cons(h, t), lt) == true;
+                    totallem(v, h);
+                    assert lt(v, h) == true;
+                    assert sorted(cons(v, cons(h, t)), lt) == true;
+                }
+            }
+    }
+}
+
+lemma void remove_sorted<t>(list<t> vs, t v, fixpoint(t, t, bool) lt, lttrans* translem)
+    requires sorted(vs, lt) == true &*& is_lttrans(translem, lt);
+    ensures sorted(remove(v, vs), lt) == true &*& is_lttrans(translem, lt);
+{
+    switch(vs) {
+        case nil:
+        case cons(h, t): 
+            sorted_tail_cons(h, t, lt);
+            if(h != v) {
+                remove_sorted(t, v, lt, translem);
+                switch(t) {
+                    case nil:
+                    case cons(h2, t2):
+                        //sorted_tail_cons(h2, t2, lt);
+                        if(h2 == v) {
+                            switch(t2) {
+                                case nil:
+                                case cons(h3, t3):
+                                    translem(h, h2, h3);
+                                    //sorted_tail_cons(h3, t3, lt);
+                                    //assert remove(v, t) == cons(h3, t3);
+                            }
+                        } 
+                }
+            }
+    }
+}
+
+
+
+
+
+fixpoint bool isSlset<t>(list<t> s, fixpoint (t, t, bool) lt) { return sorted(s, lt); }
+
+fixpoint list<t> slset_empty<t>() { return nil; }
+
+fixpoint list<t> slset_add<t>(list<t> s, fixpoint (t, t, bool) lt, t v) { return sorted_insert(s, lt, v); }
+
+fixpoint list<t> slset_remove<t>(list<t> s, t v) { return remove(v, s); }
+
+fixpoint list<t> slset_singleton<t>(t v) { return lset_singleton(v); }
+
+fixpoint list<t> slset_union<t>(list<t> s1, list<t> s2, fixpoint (t, t, bool) lt) { 
+    switch(s2) {
+        case nil: return s1;
+        case cons(h, t): return slset_union(slset_add(s1, lt, h), t, lt);
+    }
+}
+
+fixpoint list<t> slset_inters<t>(list<t> s1, list<t> s2) { return lset_inters(s1, s2); }
+
+fixpoint list<t> slset_diff<t>(list<t> s1, list<t> s2)  { return lset_diff(s1, s2); }
+
+
+// relation with lset_contains
+
+lemma void slset_empty_contains<t>(t v);
+    requires true; 
+    ensures !lset_contains(slset_empty(), v);
+
+lemma void slset_add_contains<t>(list<t> s, t v, t v2, fixpoint (t, t, bool) lt);
+    requires true;
+    ensures lset_contains(slset_add(s, lt, v), v2) == (v == v2 || lset_contains(s, v2));
+
+lemma void slset_remove_contains<t>(list<t> s, t el, t el2, fixpoint (t, t, bool) lt, lttrans* translem, ltirrefl* irrefllem);
+    requires isSlset(s, lt) == true &*& is_lttrans(translem, lt) &*& is_ltirrefl(irrefllem, lt);
+    ensures lset_contains(slset_remove(s, el), el2) == (el != el2 && lset_contains(s, el2)) &*& is_lttrans(translem, lt) &*& is_ltirrefl(irrefllem, lt);
+
+lemma void slset_singleton_contains<t>(t v, t v2);
+    requires true; 
+    ensures lset_contains(slset_singleton(v), v2) == (v == v2);
+
+lemma void slset_union_contains<t>(list<t> s1, list<t> s2, t el, fixpoint (t, t, bool) lt);
+    requires true;
+    ensures lset_contains(slset_union(s1, s2, lt), el) == (lset_contains(s1, el) || lset_contains(s2, el));
+
+lemma void slset_inters_contains<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_contains(slset_inters(s1, s2), el) == (lset_contains(s1, el) && lset_contains(s2, el));
+
+lemma void slset_diff_contains<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_contains(slset_diff(s1, s2), el) == (lset_contains(s1, el) && !lset_contains(s2, el));
+
+// operations maintain isSlset
+
+lemma void slset_empty_isSlset<t>(fixpoint (t, t, bool) lt);
+    requires true; 
+    ensures isSlset(slset_empty(), lt) == true;
+
+lemma void slset_add_isSlset<t>(list<t> s, t v, fixpoint (t, t, bool) lt, lttotal* totallem);
+    requires isSlset(s, lt) == true &*& is_lttotal(totallem, lt);
+    ensures isSlset(slset_add(s, lt, v), lt) == true &*& is_lttotal(totallem, lt);
+
+lemma void slset_remove_isSlset<t>(list<t> s, t el, fixpoint (t, t, bool) lt, lttrans* translem);
+    requires isSlset(s, lt) == true &*& is_lttrans(translem, lt);
+    ensures isSlset(slset_remove(s, el), lt) == true &*& is_lttrans(translem, lt);
+
+lemma void slset_singleton_isSlset<t>(t v, fixpoint (t, t, bool) lt);
+    requires true;
+    ensures isSlset(slset_singleton(v), lt) == true;
+
+lemma void slset_union_isSlset<t>(list<t> s1, list<t> s2, fixpoint (t, t, bool) lt, lttotal* totallem);
+    requires isSlset(s1, lt) == true &*& is_lttotal(totallem, lt);
+    ensures isSlset(slset_union(s1, s2, lt), lt) == true &*& is_lttotal(totallem, lt);
+
+lemma void slset_inters_isSlset<t>(list<t> s1, list<t> s2, fixpoint (t, t, bool) lt, lttrans* translem);
+    requires isSlset(s1, lt) == true &*& is_lttrans(translem, lt);
+    ensures isSlset(slset_inters(s1, s2), lt) == true &*& is_lttrans(translem, lt);
+
+lemma void slset_diff_isSlset<t>(list<t> s1, list<t> s2, fixpoint (t, t, bool) lt, lttrans* translem);
+    requires isSlset(s1, lt) == true &*& is_lttrans(translem, lt);
+    ensures isSlset(slset_diff(s1, s2), lt) == true &*& is_lttrans(translem, lt);
+
+// slset is dlset
+
+lemma void slset_isDlset<t>(list<t> s, fixpoint (t, t, bool) lt, lttrans* translem, ltirrefl* irrefllem);
+    requires isSlset(s, lt) == true &*& is_lttrans(translem, lt) &*& is_ltirrefl(irrefllem, lt);
+    ensures isDlset(s) == true &*& is_lttrans(translem, lt) &*& is_ltirrefl(irrefllem, lt);
+            
+#endif

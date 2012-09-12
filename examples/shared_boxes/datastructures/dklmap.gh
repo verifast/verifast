@@ -1,0 +1,217 @@
+#ifndef ALMAP_H
+#define ALMAP_H
+
+/*
+    Abstract well-founded list maps
+    - represents the map as a list of entries
+    - allow a custom data type te for the entries
+    - functions starting with wf maintain the datastructure invariant is_wfalmap, but hey may also require it.
+    
+*/
+#include "dkalmap.gh"
+#include "lmap.gh"
+
+
+// basic inspectors: lmap_contains_key, almap_get_entry
+
+fixpoint bool isDklmap<tk,tv>(list<pair<tk,tv> > es)
+{
+    return isDkalmap(es, fst);
+}
+
+//derived
+
+fixpoint bool dklmap_contains_entry<tk,tv>(list<pair<tk,tv> > es, tk k, tv v) {
+    return dkalmap_contains_entry(es, fst, pair(k, v));
+}
+
+fixpoint tv dklmap_get_value<tk,tv>(list<pair<tk,tv> > es, tk k)
+{
+    return dkalmap_get_value(es, fst, snd, k);
+}
+
+
+fixpoint bool dklmap_contains_value<tk,tv>(list<pair<tk,tv> > es, tv v) {
+    return dkalmap_contains_value(es, fst, snd, v);
+}
+
+fixpoint list<tk> dklmap_keys<tk,tv>(list<pair<tk,tv> > es) 
+{
+    return dkalmap_keys(es, fst);
+}
+
+fixpoint list<pair<tk,tv> > dklmap_entries<tk,tv>(list<pair<tk,tv> > es) 
+{
+    return dkalmap_entries(es, fst);
+}
+
+fixpoint list<tv> dklmap_values<tk,tv>(list<pair<tk,tv> > es) 
+{
+    return dkalmap_values(es, fst, snd);
+}
+
+fixpoint bool dklmap_disjoint<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2)
+{
+    return dkalmap_disjoint(es1, es2, fst);
+}
+
+
+//ctors
+
+fixpoint list<pair<tk,tv> > dklmap_empty<tk,tv>()
+{
+    return dkalmap_empty();
+}
+
+fixpoint list<pair<tk,tv> > dklmap_remove_key<tk,tv>(list<pair<tk,tv> > es, tk k)
+{
+    return dkalmap_remove_key(es, fst, k);
+}
+
+fixpoint list<pair<tk,tv> > dklmap_put<tk,tv>(list<pair<tk,tv> > es, tk k, tv v)
+{
+    return dkalmap_put(es, fst, pair(k, v));
+}
+
+fixpoint list<pair<tk,tv> > dklmap_normalize<tk,tv>(list<pair<tk,tv> > es) 
+{
+    return dkalmap_normalize(es, fst);
+}
+
+fixpoint list<pair<tk,tv> > dklmap_override<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2)
+{
+    return dkalmap_override(es1, es2, fst);
+}
+
+fixpoint list<pair<tk,tv> > dklmap_restrict<tk,tv>(list<pair<tk,tv> > es, list<tk> ks)
+{
+    return dkalmap_restrict(es, ks, fst);    
+}
+
+
+// lemma's about basic inspectors
+
+lemma void dklmap_get_entry_key<tk,tv>(list<pair<tk,tv> > es, tk k);
+    requires isDklmap(es) == true &*& lmap_contains_key(es, k) == true;
+    ensures fst(lmap_get_entry(es, k)) == k;
+
+
+//lemma's for derived inspectors
+lemma void dklmap_contains_entry_spec<tk,tv>(list<pair<tk,tv> > es, tk k, tv v);
+    requires isDklmap(es) == true;
+    ensures dklmap_contains_entry(es, k, v) == (lmap_contains_key(es, k) && lmap_get_entry(es, k) == pair(k, v));
+
+lemma void dklmap_get_value_spec<tk,tv>(list<pair<tk,tv> > es, tk k);
+    requires isDklmap(es) == true;
+    ensures dklmap_get_value(es, k) == snd(lmap_get_entry(es, k));
+
+lemma void dklmap_contains_value_true<tk,tv>(list<pair<tk,tv> > es, tv v);
+    requires isDklmap(es) == true &*& dklmap_contains_value(es, v) == true;
+    ensures exwitness(?k) &*& dklmap_contains_entry(es, k, v) == true;
+
+lemma void dklmap_contains_value_false<tk,tv>(list<pair<tk,tv> > es, tv v, tk k, tv v2);
+    requires isDklmap(es) == true &*& dklmap_contains_value(es, v) == false &*& dklmap_contains_entry(es, k, v2) == true;
+    ensures v != v2;
+
+lemma void dklmap_keys_contains_key<tk,tv>(list<pair<tk,tv> > es, tk k);
+    requires true;
+    ensures lset_contains(dklmap_keys(es), k) == lmap_contains_key(es, k);
+
+lemma void dklmap_entries_contains_entry<tk,tv>(list<pair<tk,tv> > es, tk k, tv v);
+    requires true;
+    ensures lset_contains(dklmap_entries(es), pair(k, v)) == dklmap_contains_entry(es, k, v);
+
+lemma void dklmap_values_contains_value<tk,tv>(list<pair<tk,tv> > es, tv v);
+    requires true;
+    ensures lset_contains(dklmap_values(es), v) == dklmap_contains_value(es, v);
+
+lemma void dklmap_disjoint_true<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2, tk k);
+    requires dklmap_disjoint(es1, es2) == true;
+    ensures !lmap_contains_key(es1, k) || !lmap_contains_key(es2, k);
+
+lemma void dklmap_disjoint_false<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2);
+    requires dklmap_disjoint(es1, es2) == false;
+    ensures exwitness(?k) &*& lmap_contains_key(es1, k) == true &*& lmap_contains_key(es2, k) == true;
+
+
+// specification ctors wrt lmap_contains_key and almap_contains_entry
+
+lemma void dklmap_empty_contains_key<tk,tv>(list<pair<tk,tv> > es, tk k);
+    requires true; 
+    ensures !lmap_contains_key(dklmap_empty(), k);  
+
+lemma void dklmap_remove_key_contains_key<tk,tv>(list<pair<tk,tv> > es, tk k, tk k2);
+    requires isDklmap(es) == true; 
+    ensures lmap_contains_key(dklmap_remove_key(es, k), k2) == (k != k2 && lmap_contains_key(es, k2)); 
+
+lemma void dklmap_put_contains_key<tk,tv>(list<pair<tk,tv> > es, tk k, tv v, tk k2);
+    requires isDklmap(es) == true; 
+    ensures lmap_contains_key(dklmap_put(es, k, v), k2) == (k == k2 || lmap_contains_key(es, k2)); 
+
+lemma void dklmap_empty_contains_entry<tk,tv>(list<pair<tk,tv> > es, tk k, tv v);
+    requires true; 
+    ensures !dklmap_contains_entry(dklmap_empty(), k, v);  
+
+lemma void dklmap_remove_key_contains_entry<tk,tv>(list<pair<tk,tv> > es, tk k, tk k2, tv v);
+    requires isDklmap(es) == true; 
+    ensures dklmap_contains_entry(dklmap_remove_key(es, k), k2, v) == (k != k2 && dklmap_contains_entry(es, k2, v)); 
+
+lemma void dklmap_put_contains_entry<tk,tv>(list<pair<tk,tv> > es, tk k1, tv v1, tk k2, tv v2);
+    requires isDklmap(es) == true; 
+    ensures dklmap_contains_entry(dklmap_put(es, k1, v1), k2, v2) == (k1 == k2 ? v1 == v2 : dklmap_contains_entry(es, k2, v2)); 
+
+lemma void dklmap_normalize_equals<tk,tv>(list<pair<tk,tv> > es);
+    requires true;
+    ensures lmap_equals(dklmap_normalize(es), es) == true;
+
+lemma void dklmap_override_contains_entry<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2, tk k, tv v);
+    requires isDklmap(es1) == true &*& isDklmap(es2) == true; 
+    ensures dklmap_contains_entry(dklmap_override(es1, es2), k, v) == (lmap_contains_key(es1, k) ? dklmap_contains_entry(es1, k, v) : dklmap_contains_entry(es2, k, v));
+
+lemma void dklmap_restrict_contains_entry<tk,tv>(list<pair<tk,tv> > es, list<tk> ks, tk k, tv v);
+    requires isDklmap(es) == true; 
+    ensures dklmap_contains_entry(dklmap_restrict(es, ks), k, v) == (lset_contains(ks, k) && dklmap_contains_entry(es, k, v));
+
+lemma void dklmap_override_contains_key<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2, tk k);
+    requires isDklmap(es1) == true &*& isDklmap(es2) == true; 
+    ensures lmap_contains_key(dklmap_override(es1, es2), k) == (lmap_contains_key(es1, k) || lmap_contains_key(es2, k));
+
+lemma void dklmap_restrict_contains_key<tk,tv>(list<pair<tk,tv> > es, list<tk> ks, tk k);
+    requires isDklmap(es) == true; 
+    ensures lmap_contains_key(dklmap_restrict(es, ks), k) == (lset_contains(ks, k) && lmap_contains_key(es, k));
+
+//meaning of isDklmap
+lemma void isDklmap_distinct_keys<tk,tv>(list<pair<tk,tv> > es);
+    requires true;
+    ensures isDklmap(es) == distinct(dklmap_keys(es));
+
+
+//operations maintain isDklmap
+lemma void dklmap_empty_isDklmap<tk,tv>(list<pair<tk,tv> > es);
+    requires true; 
+    ensures isDklmap(dklmap_empty()) == true;  
+
+lemma void dklmap_remove_key_isDklmap<tk,tv>(list<pair<tk,tv> > es, tk k);
+    requires isDklmap(es) == true; 
+    ensures isDklmap(dklmap_remove_key(es, k)) == true; 
+
+lemma void dklmap_put_isDklmap<tk,tv>(list<pair<tk,tv> > es, tk k, tv v);
+    requires isDklmap(es) == true; 
+    ensures isDklmap(dklmap_put(es, k, v)) == true; 
+
+lemma void dklmap_normalize_isDklmap<tk,tv>(list<pair<tk,tv> > es);
+    requires true;
+    ensures isDklmap(dklmap_normalize(es)) == true;
+
+lemma void dklmap_override_isDklmap<tk,tv>(list<pair<tk,tv> > es1, list<pair<tk,tv> > es2);
+    requires isDklmap(es1) == true &*& isDklmap(es2) == true; 
+    ensures isDklmap(dklmap_override(es1, es2)) == true;
+
+lemma void dklmap_restrict_isDklmap<tk,tv>(list<pair<tk,tv> > es, list<tk> ks);
+    requires isDklmap(es) == true; 
+    ensures isDklmap(dklmap_restrict(es, ks)) == true;
+
+//TODO: override, restrict
+
+
+#endif

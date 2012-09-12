@@ -1,0 +1,79 @@
+#ifndef SLSETI_H
+#define SLSETI_H
+
+/*
+    list sets
+    - represents the set as a sorted list of elements
+    - element type int
+*/
+
+#include "slset.gh"
+
+fixpoint bool isSlseti(list<int> s) { return sorted(s, intlt); }
+
+fixpoint list<int> slseti_empty() { return nil; }
+
+fixpoint list<int> slseti_add(list<int> s, int v) { return slset_add(s, intlt, v); }
+
+fixpoint list<int> slseti_remove(list<int> s, int v) { return remove(v, s); }
+
+fixpoint list<int> slseti_singleton(int v) { return lset_singleton(v); }
+
+fixpoint list<int> slseti_union(list<int> s1, list<int> s2) { return slset_union(s1, s2, intlt); }
+
+fixpoint list<int> slseti_inters(list<int> s1, list<int> s2) { return slset_inters(s1, s2); }
+
+fixpoint list<int> slseti_diff(list<int> s1, list<int> s2)  { return slset_diff(s1, s2); }
+
+// relation with lset_contains (for other lemma's, use slset_*)
+
+lemma void slseti_add_contains(list<int> s, int v, int v2);
+    requires true;
+    ensures lset_contains(slseti_add(s, v), v2) == (v == v2 || lset_contains(s, v2));
+
+lemma void slseti_remove_contains(list<int> s, int el, int el2);
+    requires isSlseti(s) == true;
+    ensures lset_contains(slseti_remove(s, el), el2) == (el != el2 && lset_contains(s, el2));
+
+lemma void slseti_union_contains(list<int> s1, list<int> s2, int el);
+    requires true;
+    ensures lset_contains(slseti_union(s1, s2), el) == (lset_contains(s1, el) || lset_contains(s2, el));
+
+
+// operations maintain isSlseti
+
+lemma void slseti_empty_isSlset();
+    requires true; 
+    ensures isSlseti(slseti_empty()) == true;
+
+lemma void slseti_add_isSlset(list<int> s, int v);
+    requires isSlseti(s) == true;
+    ensures isSlseti(slseti_add(s, v)) == true;
+
+lemma void slseti_remove_isSlset(list<int> s, int el);
+    requires isSlseti(s) == true;
+    ensures isSlseti(slseti_remove(s, el)) == true;
+
+lemma void slseti_singleton_isSlset(int v);
+    requires true;
+    ensures isSlseti(slset_singleton(v)) == true;
+
+lemma void slseti_union_isSlset(list<int> s1, list<int> s2);
+    requires isSlseti(s1) == true;
+    ensures isSlseti(slseti_union(s1, s2)) == true;
+
+lemma void slseti_inters_isSlset(list<int> s1, list<int> s2);
+    requires isSlseti(s1) == true;
+    ensures isSlseti(slseti_inters(s1, s2)) == true;
+
+lemma void slseti_diff_isSlseti(list<int> s1, list<int> s2);
+    requires isSlseti(s1) == true;
+    ensures isSlseti(slseti_diff(s1, s2)) == true;
+
+// slset is dlset
+
+lemma void slseti_isDlset(list<int> s);
+    requires isSlseti(s) == true;
+    ensures isDlset(s) == true;
+            
+#endif

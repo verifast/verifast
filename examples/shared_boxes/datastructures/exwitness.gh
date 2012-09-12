@@ -1,0 +1,18 @@
+#ifndef EXWITNESS_H
+#define EXWITNESS_H
+
+/*
+    a witness for some existential quantifier 
+    can be used as ghost parameter or result
+*/
+
+predicate exwitness<t>(t v) = true;
+
+predicate exwitness2<t1,t2>(t1 v1, t2 v2) = true;
+
+predicate exwitness3<t1,t2,t3>(t1 v1, t2 v2, t3 v3) = true;
+
+predicate exwitness4<t1,t2,t3,t4>(t1 v1, t2 v2, t3 v3, t4 v4) = true;
+
+#endif
+

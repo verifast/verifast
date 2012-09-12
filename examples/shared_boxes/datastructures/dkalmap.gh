@@ -1,0 +1,229 @@
+#ifndef ALMAP_H
+#define ALMAP_H
+
+/*
+    Abstract well-founded list maps
+    - represents the map as a list of entries
+    - allow a custom data type te for the entries
+    - functions starting with wf maintain the datastructure invariant is_wfalmap, but hey may also require it.
+    
+*/
+#include "almap.gh"
+#include "exwitness.gh"
+
+
+// basic inspectors: almap_contains_key, almap_get_entry
+
+fixpoint bool isDkalmap<te,tk>(list<te> es, fixpoint(te, tk) fk)
+{
+    switch(es) {
+        case nil: return true;
+        case cons(e, es2): return !almap_contains_key(es2, fk, fk(e)) && isDkalmap(es2, fk);
+    }
+}
+
+//derived
+
+fixpoint bool dkalmap_contains_entry<te,tk>(list<te> es, fixpoint(te, tk) fk, te el) {
+    return mem(el, es); 
+}
+
+fixpoint tv dkalmap_get_value<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tk k)
+{
+    return almap_get_value(es, fk, fv, k);
+}
+
+
+fixpoint bool dkalmap_contains_value<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tv v) {
+    switch(es) {
+        case nil: return false;
+        case cons(e, es2): return fv(e) == v || dkalmap_contains_value(es2, fk, fv, v);
+    }
+}
+
+fixpoint list<tk> dkalmap_keys<te,tk>(list<te> es, fixpoint(te, tk) fk) 
+{
+    return almap_keys(es, fk);
+}
+
+fixpoint list<te> dkalmap_entries<te,tk>(list<te> es, fixpoint(te, tk) fk) 
+{
+    return es;
+}
+
+fixpoint list<tv> dkalmap_values<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv) 
+{
+    return map(fv, es);
+}
+
+fixpoint bool dkalmap_disjoint<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk)
+{
+    return almap_disjoint(es1, es2, fk);
+}
+
+
+//ctors
+
+fixpoint list<te> dkalmap_empty<te>()
+{
+    return almap_empty();
+}
+
+fixpoint list<te> dkalmap_remove_key<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k)
+{
+    switch(es) {
+        case nil: return nil;
+        case cons(e, es2): return fk(e) == k ? es2 : cons(e, dkalmap_remove_key(es2, fk, k)); 
+    }
+}
+
+fixpoint list<te> dkalmap_put<te,tk>(list<te> es, fixpoint(te, tk) fk, te el)
+{
+    return cons(el, dkalmap_remove_key(es, fk, fk(el)));
+}
+
+fixpoint list<te> dkalmap_normalize<te,tk>(list<te> es, fixpoint(te, tk) fk) 
+{
+    return almap_entries(es, fk);
+}
+
+fixpoint list<te> dkalmap_override<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk)
+{
+    switch(es1){
+        case nil: return es2;
+        case cons(h, t): return cons(h, dkalmap_override(t, dkalmap_remove_key(es2, fk, fk(h)), fk));
+    }
+}
+
+fixpoint list<te> dkalmap_restrict<te,tk>(list<te> es, list<tk> ks, fixpoint(te, tk) fk)
+{
+    return almap_restrict(es, ks, fk);    
+}
+
+
+// lemma's about basic inspectors
+
+lemma void dkalmap_get_entry_key<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k);
+    requires isDkalmap(es, fk) == true &*& almap_contains_key(es, fk, k) == true;
+    ensures fk(almap_get_entry(es, fk, k)) == k;
+
+
+//lemma's for derived inspectors
+lemma void dkalmap_contains_entry_spec<te,tk>(list<te> es, fixpoint(te, tk) fk, te e);
+    requires isDkalmap(es, fk) == true;
+    ensures dkalmap_contains_entry(es, fk, e) == (almap_contains_key(es, fk, fk(e)) && almap_get_entry(es, fk, fk(e)) == e);
+
+lemma void dkalmap_get_value_spec<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tk k);
+    requires isDkalmap(es, fk) == true;
+    ensures dkalmap_get_value(es, fk, fv, k) == fv(almap_get_entry(es, fk, k));
+
+lemma void dkalmap_contains_value_true<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tv v);
+    requires isDkalmap(es, fk) == true &*& dkalmap_contains_value(es, fk, fv, v) == true;
+    ensures exwitness(?e) &*& dkalmap_contains_entry(es, fk, e) == true &*& fv(e) == v;
+
+lemma void dkalmap_contains_value_false<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tv v, te e);
+    requires isDkalmap(es, fk) == true &*& dkalmap_contains_value(es, fk, fv, v) == false &*& dkalmap_contains_entry(es, fk, e) == true;
+    ensures fv(e) != v;
+
+lemma void dkalmap_keys_contains_key<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k);
+    requires true;
+    ensures lset_contains(dkalmap_keys(es, fk), k) == almap_contains_key(es, fk, k);
+
+lemma void dkalmap_entries_contains_entry<te,tk>(list<te> es, fixpoint(te, tk) fk, te e);
+    requires true;
+    ensures lset_contains(dkalmap_entries(es, fk), e) == dkalmap_contains_entry(es, fk, e);
+
+lemma void dkalmap_values_contains_value<te,tk,tv>(list<te> es, fixpoint(te, tk) fk, fixpoint(te, tv) fv, tv v);
+    requires true;
+    ensures lset_contains(dkalmap_values(es, fk, fv), v) == dkalmap_contains_value(es, fk, fv, v);
+
+lemma void dkalmap_disjoint_true<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk, tk k);
+    requires dkalmap_disjoint(es1, es2, fk) == true;
+    ensures !almap_contains_key(es1, fk, k) || !almap_contains_key(es2, fk, k);
+
+lemma void dkalmap_disjoint_false<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk);
+    requires dkalmap_disjoint(es1, es2, fk) == false;
+    ensures exwitness(?k) &*& almap_contains_key(es1, fk, k) == true &*& almap_contains_key(es2, fk, k) == true;
+
+
+// specification ctors wrt almap_contains_key and almap_contains_entry
+
+lemma void dkalmap_empty_contains_key<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k);
+    requires true; 
+    ensures !almap_contains_key(dkalmap_empty(), fk, k);  
+
+lemma void dkalmap_remove_key_contains_key<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k, tk k2);
+    requires isDkalmap(es, fk) == true; 
+    ensures almap_contains_key(dkalmap_remove_key(es, fk, k), fk, k2) == (k != k2 && almap_contains_key(es, fk, k2)); 
+
+lemma void dkalmap_put_contains_key<te,tk>(list<te> es, fixpoint(te, tk) fk, te e, tk k);
+    requires isDkalmap(es, fk) == true; 
+    ensures almap_contains_key(dkalmap_put(es, fk, e), fk, k) == (fk(e) == k || almap_contains_key(es, fk, k)); 
+
+lemma void dkalmap_empty_contains_entry<te,tk>(list<te> es, fixpoint(te, tk) fk, te e);
+    requires true; 
+    ensures !dkalmap_contains_entry(dkalmap_empty(), fk, e);  
+
+lemma void dkalmap_remove_key_contains_entry<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k, te e);
+    requires isDkalmap(es, fk) == true; 
+    ensures dkalmap_contains_entry(dkalmap_remove_key(es, fk, k), fk, e) == (k != fk(e) && dkalmap_contains_entry(es, fk, e)); 
+
+lemma void dkalmap_put_contains_entry<te,tk>(list<te> es, fixpoint(te, tk) fk, te e1, te e2);
+    requires isDkalmap(es, fk) == true; 
+    ensures dkalmap_contains_entry(dkalmap_put(es, fk, e1), fk, e2) == (fk(e1) == fk(e2) ? e1 == e2 : dkalmap_contains_entry(es, fk, e2)); 
+
+lemma void dkalmap_normalize_equals<te,tk>(list<te> es, fixpoint(te, tk) fk);
+    requires true;
+    ensures almap_equals(dkalmap_normalize(es, fk), es, fk) == true;
+
+lemma void dkalmap_override_contains_entry<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk, te e);
+    requires isDkalmap(es1, fk) == true &*& isDkalmap(es2, fk) == true; 
+    ensures dkalmap_contains_entry(dkalmap_override(es1, es2, fk), fk, e) == (almap_contains_key(es1, fk, fk(e)) ? dkalmap_contains_entry(es1, fk, e) : dkalmap_contains_entry(es2, fk, e));
+
+lemma void dkalmap_restrict_contains_entry<te,tk>(list<te> es, list<tk> ks, fixpoint(te, tk) fk, te e);
+    requires isDkalmap(es, fk) == true; 
+    ensures dkalmap_contains_entry(dkalmap_restrict(es, ks, fk), fk, e) == (lset_contains(ks, fk(e)) && dkalmap_contains_entry(es, fk, e));
+
+lemma void dkalmap_override_contains_key<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk, tk k);
+    requires isDkalmap(es1, fk) == true &*& isDkalmap(es2, fk) == true; 
+    ensures almap_contains_key(dkalmap_override(es1, es2, fk), fk, k) == (almap_contains_key(es1, fk, k) || almap_contains_key(es2, fk, k));
+
+lemma void dkalmap_restrict_contains_key<te,tk>(list<te> es, list<tk> ks, fixpoint(te, tk) fk, tk k);
+    requires isDkalmap(es, fk) == true; 
+    ensures almap_contains_key(dkalmap_restrict(es, ks, fk), fk, k) == (lset_contains(ks, k) && almap_contains_key(es, fk, k));
+
+//meaning of isDkalmap
+lemma void isDkalmap_distinct_keys<te,tk>(list<te> es, fixpoint(te, tk) fk);
+    requires true;
+    ensures isDkalmap(es, fk) == distinct(dkalmap_keys(es, fk));
+
+
+//operations maintain isDkalmap
+lemma void dkalmap_empty_isDkalmap<te,tk>(list<te> es, fixpoint(te, tk) fk);
+    requires true; 
+    ensures isDkalmap(dkalmap_empty(), fk) == true;  
+
+lemma void dkalmap_remove_key_isDkalmap<te,tk>(list<te> es, fixpoint(te, tk) fk, tk k);
+    requires isDkalmap(es, fk) == true; 
+    ensures isDkalmap(dkalmap_remove_key(es, fk, k), fk) == true; 
+
+lemma void dkalmap_put_isDkalmap<te,tk>(list<te> es, fixpoint(te, tk) fk, te e);
+    requires isDkalmap(es, fk) == true; 
+    ensures isDkalmap(dkalmap_put(es, fk, e), fk) == true; 
+
+lemma void dkalmap_normalize_isDkalmap<te,tk>(list<te> es, fixpoint(te, tk) fk);
+    requires true;
+    ensures isDkalmap(dkalmap_normalize(es, fk), fk) == true;
+
+lemma void dkalmap_override_isDkalmap<te,tk>(list<te> es1, list<te> es2, fixpoint(te, tk) fk);
+    requires isDkalmap(es1, fk) == true &*& isDkalmap(es2, fk) == true; 
+    ensures isDkalmap(dkalmap_override(es1, es2, fk), fk) == true;
+
+lemma void dkalmap_restrict_isDkalmap<te,tk>(list<te> es, list<tk> ks, fixpoint(te, tk) fk);
+    requires isDkalmap(es, fk) == true; 
+    ensures isDkalmap(dkalmap_restrict(es, ks, fk), fk) == true;
+
+//TODO: override, restrict
+
+
+#endif

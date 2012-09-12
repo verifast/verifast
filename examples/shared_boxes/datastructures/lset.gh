@@ -1,0 +1,407 @@
+#ifndef LSET_H
+#define LSET_H
+
+/*
+    list sets
+    - represents the set as a list of elements
+*/
+#include "listex2.gh"
+#include "exwitness.gh"
+
+fixpoint list<t> lset_empty<t>() { return nil; }
+
+fixpoint list<t> lset_add<t>(list<t> s, t v) { return cons(v, s); }
+
+fixpoint list<t> lset_remove<t>(list<t> s, t v) { 
+    return remove_all2(v, s);
+}
+
+fixpoint list<t> lset_singleton<t>(t v) { return lset_add(lset_empty(), v); }
+
+fixpoint list<t> lset_union<t>(list<t> s1, list<t> s2) { return append(s1, s2); }
+
+fixpoint list<t> lset_inters<t>(list<t> s1, list<t> s2) { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): return mem(h, s2) ? cons(h, lset_inters(t, s2)) : lset_inters(t, s2);
+    } 
+}
+
+fixpoint list<t> lset_diff<t>(list<t> s1, list<t> s2)  { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): return mem(h, s2) ? lset_diff(t, s2) : cons(h, lset_diff(t, s2));
+    } 
+}
+
+fixpoint bool lset_contains<t>(list<t> s, t el)
+{
+    return mem(el, s);
+}
+
+fixpoint bool lset_disjoint<t>(list<t> s1, list<t> s2) { 
+    return lset_inters(s1, s2) == nil;
+}
+
+fixpoint bool lset_subset<t>(list<t> s1, list<t> s2)
+{
+    switch(s1) {
+        case nil: return true;
+        case cons(h, t): return lset_contains(s2, h) && lset_subset(t, s2);
+    }
+}
+
+fixpoint bool lset_equals<t>(list<t> s1, list<t> s2)
+{
+    return lset_subset(s1, s2) && lset_subset(s2, s1);
+}
+
+// relation with lset_contains
+
+lemma void lset_empty_contains<t>(t v);
+    requires true; 
+    ensures !lset_contains(lset_empty(), v);
+
+lemma void lset_add_contains<t>(list<t> s, t v, t v2);
+    requires true; 
+    ensures lset_contains(lset_add(s, v), v2) == (v == v2 || lset_contains(s, v2));
+
+lemma void lset_remove_contains<t>(list<t> s, t el, t el2);
+    requires true;
+    ensures lset_contains(lset_remove(s, el), el2) == (el != el2 && lset_contains(s, el2));
+
+lemma void lset_singleton_contains<t>(t v, t v2);
+    requires true; 
+    ensures lset_contains(lset_singleton(v), v2) == (v == v2);
+
+lemma void lset_union_contains<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_contains(lset_union(s1, s2), el) == (lset_contains(s1, el) || lset_contains(s2, el));
+
+lemma void lset_inters_contains<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_contains(lset_inters(s1, s2), el) == (lset_contains(s1, el) && lset_contains(s2, el));
+
+lemma void lset_diff_contains<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_contains(lset_diff(s1, s2), el) == (lset_contains(s1, el) && !lset_contains(s2, el));
+
+lemma void lset_subset_contains<t>(list<t> s1, list<t> s2, t el);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_contains(s1, el) ? lset_contains(s2, el)==true : true;
+
+lemma void lset_equals_contains<t>(list<t> s1, list<t> s2, t el);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_contains(s1, el) == lset_contains(s2, el);
+
+lemma void lset_subset_contains_conv<t>(list<t> s1, list<t> s2);
+    requires lset_subset(s1, s2) == false;
+    ensures exwitness(?el) &*& lset_contains(s1, el) == true &*& !lset_contains(s2, el);
+
+lemma void lset_equals_contains_conv<t>(list<t> s1, list<t> s2);
+    requires lset_equals(s1, s2) == false;
+    ensures exwitness(?el) &*& lset_contains(s1, el) != lset_contains(s2, el);
+
+
+//properties wrt empty set
+/*
+lemma void lset_union_empty_r<t>(list<t> s);
+    requires true;
+    ensures lset_union(s, nil) == s; 
+    
+lemma void lset_union_empty_l<t>(list<t> s);
+    requires true;
+    ensures lset_union(nil, s) == s; 
+
+lemma void lset_inters_empty_r<t>(list<t> s);
+    requires true;
+    ensures lset_inters(s, nil) == nil; 
+    
+lemma void lset_inters_empty_l<t>(list<t> s);
+    requires true;
+    ensures lset_inters(nil, s) == nil; 
+
+lemma void lset_diff_empty_r<t>(list<t> s);
+    requires true;
+    ensures lset_diff(s, nil) == s; 
+    
+lemma void lset_diff_empty_l<t>(list<t> s);
+    requires true;
+    ensures lset_diff(nil, s) == nil; 
+
+//properties of subset
+
+lemma void lset_subset_empty_l<t>(list<t> s);
+    requires true;
+    ensures lset_subset(lset_empty(), s) == true;
+
+lemma void lset_subset_empty_r<t>(list<t> s);
+    requires true;
+    ensures lset_subset(s, lset_empty()) == (s == lset_empty());
+
+lemma void lset_subset_add_l<t>(list<t> s1, t el, list<t> s2);
+    requires true;
+    ensures lset_subset(lset_add(s1, el), s2) == (lset_contains(s2, el) && lset_subset(s1, s2));
+
+lemma void lset_subset_add_r<t>(list<t> s1, list<t> s2, t el);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(s1, lset_add(s2, el)) == true;
+
+lemma void lset_subset_remove_l<t>(list<t> s1, t el, list<t> s2);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_remove(s1, el), s2) == true;
+
+lemma void lset_subset_remove_r<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lset_subset(s1, lset_remove(s2, el)) == (!lset_contains(s1, el) && lset_subset(s1, s2));
+
+lemma void lset_subset_union_l<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_subset(s1, lset_union(s1, s2)) == true;
+
+lemma void lset_subset_union_r<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_subset(s2, lset_union(s1, s2)) == true;
+
+lemma void lset_subset_inters_l<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_subset(lset_inters(s1, s2), s1) == true;
+
+lemma void lset_subset_inters_r<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_subset(lset_inters(s1, s2), s2) == true;
+
+//subset is reflexive and transitive
+
+lemma void lset_subset_refl<t>(list<t> s);
+    requires true;
+    ensures lset_subset(s, s) == true;
+
+lemma void lset_subset_trans<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s1, s2) == true &*& lset_subset(s2, s3) == true;
+    ensures lset_subset(s1, s3) == true;
+
+//subset is structurally compatible
+
+lemma void lset_add_remains_subset<t>(list<t> s1, list<t> s2, t el);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_add(s1, el), lset_add(s2, el)) == true;
+
+lemma void lset_remove_remains_subset<t>(list<t> s1, list<t> s2, t el);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_remove(s1, el), lset_remove(s2, el)) == true;
+
+lemma void lset_union_r_remains_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_union(s1, s3),lset_union(s2, s3)) == true;
+
+lemma void lset_union_l_remains_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s2, s3) == true;
+    ensures lset_subset(lset_union(s1, s2),lset_union(s1, s3)) == true;
+
+lemma void lset_inters_r_remains_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_inters(s1, s3),lset_inters(s2, s3)) == true;
+
+lemma void lset_inters_l_remains_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s2, s3) == true;
+    ensures lset_subset(lset_inters(s1, s2),lset_inters(s1, s3)) == true;
+
+lemma void lset_diff_r_remains_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_subset(lset_diff(s1, s3),lset_diff(s2, s3)) == true;
+
+lemma void lset_diff_l_inverts_subset<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_subset(s2, s3) == true;
+    ensures lset_subset(lset_diff(s1, s3), lset_diff(s1, s2)) == true;
+
+//equality is an equivalence relation
+
+lemma void lset_equals_refl<t>(list<t> s);
+    requires true;
+    ensures lset_equals(s, s) == true;
+
+lemma void lset_equals_sym<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_equals(s1, s2) == lset_equals(s2, s1);
+
+lemma void lset_equals_trans<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s1, s2) == true &*& lset_equals(s2, s3) == true;
+    ensures lset_equals(s1, s3) == true;
+
+//equality is a congruence
+
+lemma void lset_add_remains_equals<t>(list<t> s1, list<t> s2, t el);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_equals(lset_add(s1, el), lset_add(s2, el)) == true;
+
+lemma void lset_remove_remains_equals<t>(list<t> s1, list<t> s2, t el);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_equals(lset_remove(s1, el), lset_remove(s2, el)) == true;
+
+lemma void lset_union_r_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_equals(lset_union(s1, s3),lset_union(s2, s3)) == true;
+
+lemma void lset_union_l_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s2, s3) == true;
+    ensures lset_equals(lset_union(s1, s2),lset_union(s1, s3)) == true;
+
+lemma void lset_inters_r_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_equals(lset_inters(s1, s3),lset_inters(s2, s3)) == true;
+
+lemma void lset_inters_l_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s2, s3) == true;
+    ensures lset_equals(lset_inters(s1, s2),lset_inters(s1, s3)) == true;
+
+lemma void lset_diff_r_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_equals(lset_diff(s1, s3),lset_diff(s2, s3)) == true;
+
+lemma void lset_diff_l_remains_equals<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires lset_equals(s2, s3) == true;
+    ensures lset_equals(lset_diff(s1, s2),lset_diff(s1, s3)) == true;
+
+//give new name to the following 4 lemma's?
+lemma void lset_equals_remains_subset_l<t>(list<t> s1, list<t>  s2, list<t> s3);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_subset(s1, s3) == lset_subset(s2, s3); 
+
+lemma void lset_equals_remains_subset_r<t>(list<t> s1, list<t>  s2, list<t> s3);
+    requires lset_equals(s2, s3) == true;
+    ensures lset_subset(s1, s2) == lset_subset(s1, s3); 
+
+lemma void lset_equals_remains_disjoint_l<t>(list<t> s1, list<t>  s2, list<t> s3);
+    requires lset_equals(s1, s2) == true;
+    ensures lset_disjoint(s1, s3) == lset_disjoint(s2, s3); 
+
+lemma void lset_equals_remains_disjoint_r<t>(list<t> s1, list<t>  s2, list<t> s3);
+    requires lset_equals(s2, s3) == true;
+    ensures lset_disjoint(s1, s2) == lset_disjoint(s1, s3); 
+
+// commutativity lemma's
+lemma void lset_inters_comm<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_equals(lset_inters(s1, s2), lset_inters(s2, s1)) == true; 
+
+lemma void lset_union_comm<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lset_equals(lset_union(s1, s2), lset_union(s2, s1)) == true; 
+
+// associativity lemma's
+lemma void lset_add_assoc<t>(list<t> s, t e1, t e2);
+    requires true;
+    ensures lset_equals(lset_add(lset_add(s, e1),e2), lset_add(lset_add(s, e2),e1)) == true;
+
+lemma void lset_remove_assoc<t>(list<t> s, t e1, t e2);
+    requires true;
+    ensures lset_equals(lset_remove(lset_remove(s, e1),e2), lset_remove(lset_remove(s, e2),e1)) == true;
+
+lemma void lset_union_assoc<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_union(s1, lset_union(s2, s3)), lset_union(lset_union(s1, s2), s3)) == true; 
+
+lemma void lset_inters_assoc<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_inters(s1, lset_inters(s2, s3)), lset_inters(lset_inters(s1, s2), s3)) == true; 
+
+    
+//distributivity lemma's
+lemma void lset_union_distr_inters<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_union(s1, lset_inters(s2, s3)), lset_inters(lset_union(s1, s2), lset_union(s1, s3))) == true; 
+
+lemma void lset_inters_distr_union<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_inters(s1, lset_union(s2, s3)), lset_union(lset_inters(s1, s2), lset_inters(s1, s3))) == true; 
+
+        
+//idempotency lemma's
+lemma void lset_remove_ident<t>(list<t> s, t el);
+    requires !lset_contains(s, el);
+    ensures lset_remove(s, el) == s;
+lemma void lset_remove_idem<t>(list<t> s, t el);
+    requires !lset_contains(s, el);
+    ensures lset_equals(lset_remove(s, el),s) == true;
+    
+lemma void lset_add_idem<t>(list<t> s, t v);
+    requires lset_contains(s, v) == true;
+    ensures lset_equals(lset_add(s, v), s) == true;
+
+lemma void lset_union_idem<t>(list<t> s);
+    requires true;
+    ensures lset_equals(lset_union(s, s), s) == true;
+    
+lemma void lset_inters_idem<t>(list<t> s);
+    requires true;
+    ensures lset_equals(lset_inters(s, s), s) == true;
+
+    
+// 
+lemma void lset_union_subset<t>(list<t> s1, list<t> s2);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_equals(lset_union(s1, s2), s2) == true;
+    
+lemma void lset_inters_subset<t>(list<t> s1, list<t> s2);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_equals(lset_inters(s1, s2), s1) == true;
+
+//difference laws
+
+lemma void lset_diff_union_l<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_diff(lset_union(s1, s2), s3), lset_union(lset_diff(s1, s3), lset_diff(s2, s3))) == true;
+
+lemma void lset_diff_inters_l<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_diff(lset_inters(s1, s2), s3), lset_inters(lset_diff(s1, s3), lset_diff(s2, s3))) == true;
+
+lemma void lset_diff_union_r<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_diff(lset_union(s1, s2), s3), lset_union(lset_diff(s1, s3), lset_diff(s2, s3))) == true;
+
+lemma void lset_diff_inters_r<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_equals(lset_diff(lset_inters(s1, s2), s3), lset_inters(lset_diff(s1, s3), lset_diff(s2, s3))) == true;
+        
+lemma void lset_inters_subset<t>(list<t> s1, list<t> s2);
+    requires lset_subset(s1, s2) == true;
+    ensures lset_equals(lset_inters(s1, s2), s1) == true;
+
+//a - (b union c) == (a - b) inters (a - c)
+//a - (b inters c) == (a - b) union (a - c)
+//a u b)
+
+// todo: place these in the right category 
+
+lemma void lset_union_subset_l<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_subset(lset_union(s1, s2), s3) == (lset_subset(s1, s3) && lset_subset(s2, s3));
+
+lemma void lset_inters_subset_r<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures lset_subset(s1, lset_inters(s2, s3)) == (lset_subset(s1, s2) && lset_subset(s1, s3));
+
+lemma void lset_equals_empty_l<t>(list<t> s);
+    requires true;
+    ensures lset_equals(nil, s) == (s==nil);
+
+lemma void lset_equals_empty_r<t>(list<t> s);
+    requires true;
+    ensures lset_equals(s, nil) == (s==nil);
+
+lemma void lset_equals_add_l_remove_r<t>(list<t> s1, list<t> s2, t el);
+    requires lset_equals(lset_add(s1, el), s2) == true &*& !lset_contains(s1, el);
+    ensures lset_equals(s1, lset_remove(s2, el)) == true;
+
+lemma void lset_equals_add_r_remove_l<t>(list<t> s1, list<t> s2, t el);
+    requires lset_equals(s1, lset_add(s2, el)) == true &*& !lset_contains(s2, el);
+    ensures lset_equals(lset_remove(s1, el), s2) == true;
+
+
+
+*/
+
+            
+#endif

@@ -1,0 +1,97 @@
+#ifndef DLSET_H
+#define DLSET_H
+
+/*
+    distinct list sets
+    - represents the set as a list of distinct elements
+*/
+
+#include "lset.gh"
+
+//distinct list sets
+
+fixpoint bool isDlset<t>(list<t> s) { return distinct(s) == true; }
+
+fixpoint list<t> dlset_remove<t>(list<t> s, t v) {
+    return remove(v, s);
+}
+
+fixpoint list<t> dlset_add<t>(list<t> s, t v) {
+    return cons(v, dlset_remove(s, v));
+}
+
+fixpoint list<t> dlset_union<t>(list<t> s1, list<t> s2) { 
+    switch(s1) {
+        case nil: return s2;
+        case cons(h, t): return cons(h, dlset_union(t, dlset_remove(s2, h)));
+    }
+}
+
+fixpoint list<t> dlset_normalize_helper<t>(list<t> s, list<t> acc)
+{
+    switch(s) {
+        case nil: return acc;
+        case cons(h, t): return dlset_normalize_helper(t, lset_contains(acc, h) ? acc : snoc(acc, h));
+    }
+}
+fixpoint list<t> dlset_normalize<t>(list<t> s)
+{
+    return dlset_normalize_helper(s, nil);
+}
+
+//for all other functions, lset_* can be used
+
+lemma void dlset_add_contains<t>(list<t> s, t v, t v2);
+    requires isDlset(s) == true;
+    ensures lset_contains(dlset_add(s, v), v2) == (v == v2 || lset_contains(s, v2));
+
+lemma void dlset_remove_contains<t>(list<t> s, t el, t el2);
+    requires isDlset(s) == true;
+    ensures lset_contains(dlset_remove(s, el), el2) == (el != el2 && lset_contains(s, el2));
+
+lemma void dlset_union_contains<t>(list<t> s1, list<t> s2, t el);
+    requires isDlset(s1) == true &*& isDlset(s2) == true;
+    ensures lset_contains(dlset_union(s1, s2), el) == (lset_contains(s1, el) || lset_contains(s2, el));
+
+
+lemma void dlset_normalize_isDlset<t>(list<t> s);
+    requires true;
+    ensures isDlset(dlset_normalize(s))==true;
+
+lemma void dlset_normalize_equals<t>(list<t> s);
+    requires true;
+    ensures lset_equals(dlset_normalize(s), s)==true;
+
+    
+lemma void lset_empty_isDlset<t>();
+    requires true;
+    ensures isDlset(lset_empty()) == true;
+
+lemma void dlset_remove_isDlset<t>(list<t> s, t v);
+    requires isDlset(s) == true;
+    ensures isDlset(dlset_remove(s, v)) == true;
+
+lemma void dlset_add_isDlset<t>(list<t> s, t v);
+    requires isDlset(s) == true;
+    ensures isDlset(dlset_add(s, v)) == true;
+
+lemma void lset_singleton_isDlset<t>(t v);
+    requires true;
+    ensures isDlset(lset_singleton(v)) == true;    
+
+lemma void dlset_union_isDlset<t>(list<t> s1, list<t> s2);
+    requires isDlset(s1) == true &*& isDlset(s2) == true;
+    ensures isDlset(dlset_union(s1, s2)) == true;
+
+lemma void lset_inters_isDlset<t>(list<t> s1, list<t> s2);
+    requires isDlset(s1) == true &*& isDlset(s2) == true;
+    ensures isDlset(lset_inters(s1, s2)) == true;
+
+lemma void lset_diff_isDlset<t>(list<t> s1, list<t> s2);
+    requires isDlset(s1) == true &*& isDlset(s2) == true;
+    ensures isDlset(lset_diff(s1, s2)) == true;
+
+                
+//TODO: sorted list sets    
+            
+#endif

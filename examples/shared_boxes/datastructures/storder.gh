@@ -1,0 +1,37 @@
+#ifndef STORDER_H
+#define STORDER_H
+
+//Strict total order (e.g. less than)
+
+typedef lemma void ltirrefl<t>(fixpoint(t, t, bool) lt) (t v);
+    requires true;
+    ensures !lt(v, v);
+
+typedef lemma void lttrans<t>(fixpoint(t, t, bool) lt) (t v1, t v2, t v3);
+    requires lt(v1, v2) == true &*& lt(v2, v3) == true;
+    ensures lt(v1, v3) == true;
+
+typedef lemma void lttotal<t>(fixpoint(t, t, bool) lt) (t v1, t v2);
+    requires true;
+    ensures lt(v1, v2) || v1 == v2 || lt(v2, v1);
+
+
+fixpoint bool intlt(int v1, int v2) { return v1 < v2; }
+
+lemma void intlttotal(int v1, int v2)
+    requires true;
+    ensures intlt(v1, v2) || v1 == v2 || intlt(v2, v1);
+{
+}
+lemma void intltirrefl(int v)
+    requires true;
+    ensures !intlt(v, v); 
+{
+}
+lemma void intlttrans(int v1, int v2, int v3)
+    requires intlt(v1, v2) == true &*& intlt(v2, v3) == true;
+    ensures intlt(v1, v3) == true;
+{
+}
+
+#endif
