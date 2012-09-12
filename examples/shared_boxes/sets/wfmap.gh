@@ -1,0 +1,53 @@
+#ifndef WFMAP_H
+#define WFMAP_H
+
+#include "list.gh"
+#include "listex.gh"
+#include "set.gh"
+
+fixpoint bool wfmap_contains_key<t,tk>(list<t> s, fixpoint(t, tk) fk, tk k)
+{
+    switch(s) {
+        case nil: return false;
+        case cons(sh, st): return fk(sh) == k ? true : wfmap_contains_key(st, fk, k);
+    }
+}
+fixpoint t wfmap_get<t,tk>(list<t> s, fixpoint(t, tk) fk, tk k)
+{
+    switch(s) {
+        case nil: return default_value<t>();
+        case cons(sh, st): return fk(sh) == k ? sh : wfmap_get(st, fk, k);
+    }
+}
+fixpoint bool wfmap_contains<t>(list<t> s, t el)
+{
+    return mem(el, s);
+}
+fixpoint bool is_wfmap<t,tk>(list<t> s, fixpoint(t, tk) fk) 
+{
+    switch(s) {
+        case nil: return true;
+        case cons(sh, st): return !wfmap_contains_key(st, fk, fk(sh)) && is_wfmap(st, fk);
+    }
+}
+fixpoint list<t> wfmap_remove_key<t,tk>(list<t> s, fixpoint(t, tk) fk, tk k)
+{
+    switch(s) {
+        case nil: return nil;
+        case cons(sh, st): return fk(sh) == k ? st : cons(sh, wfmap_remove_key(st, fk, k)); 
+    }
+}
+fixpoint list<t> wfmap_put<t,tk>(list<t> s, fixpoint(t, tk) fk, t el)
+{
+    return cons(el, wfmap_remove_key(s, fk, fk(el)));
+}
+
+lemma void wfmap_contains_contains_key<t,tk>(list<t> s, fixpoint(t, tk) fk, t el);
+    requires is_wfmap(s, fk) == true;
+    ensures wfmap_contains(s, el) == (wfmap_contains_key(s, fk, fk(el)) && wfmap_get(s, fk, fk(el)) == el);
+
+lemma void wfmap_contains_equal<t,tk>(list<t> s, fixpoint(t, tk) fk, t el, t el2);
+    requires is_wfmap(s, fk) == true &*& wfmap_contains(s, el) == true &*& wfmap_contains(s, el2) == true &*& fk(el) == fk(el2);
+    ensures el == el2;
+
+#endif

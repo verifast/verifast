@@ -1,0 +1,255 @@
+#ifndef SET_H
+#define SET_H
+
+#include "listex2.gh"
+
+// mathematical sets using a list representation 
+// lists can be seen as multisets, and all functions ignore the multiplicity of the elements
+// therefore, the functions are total: if you modify the lists without the set_* functions, all set_* functions still work
+
+//TODO: rename to listset ?
+
+
+fixpoint list<t> set_empty<t>() { return nil; }
+
+lemma void set_empty_mem<t>(t v);
+    requires true; 
+    ensures !mem(v, set_empty());
+    
+fixpoint list<t> set_add<t>(list<t> s, t v) { return cons(v, s); }
+
+lemma void set_add_mem<t>(list<t> s, t v, t v2);
+    requires true; 
+    ensures mem(v2, set_add(s, v)) == (v == v2 || mem(v2, s));
+
+fixpoint list<t> set_singleton<t>(t v) { return set_add(set_empty(), v); }
+
+lemma void set_singleton_mem<t>(t v, t v2);
+    requires true; 
+    ensures mem(v2, set_singleton(v)) == (v == v2);
+
+fixpoint list<t> set_remove<t>(list<t> s, t v) { 
+    switch(s) {
+        case nil: return nil;
+        case cons(h,t): return h == v ? set_remove(t, v) : cons(h, set_remove(t, v));
+    }
+}
+
+lemma void set_remove_mem<t>(list<t> s, t el, t el2);
+    requires true;
+    ensures mem(el2, set_remove(s, el)) == (el != el2 && mem(el2, s));
+
+fixpoint list<t> set_union<t>(list<t> s1, list<t> s2) { return append(s1, s2); }
+
+lemma void set_union_mem<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures mem(el, set_union(s1, s2)) == (mem(el, s1) || mem(el, s2));
+
+fixpoint list<t> set_inters<t>(list<t> s1, list<t> s2) { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): return mem(h, s2) ? cons(h, set_inters(t, s2)) : set_inters(t, s2);
+    } 
+}
+
+lemma void set_inters_mem<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures mem(el, set_inters(s1, s2)) == (mem(el, s1) &&mem(el, s2));
+
+fixpoint list<t> set_diff<t>(list<t> s1, list<t> s2)  { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): return mem(h, s2) ? set_diff(t, s2) : cons(h, set_diff(t, s2));
+    } 
+}
+
+lemma void set_diff_mem<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures mem(el, set_diff(s1, s2)) == (mem(el, s1) && !mem(el, s2));
+
+fixpoint bool set_subset<t>(list<t> s1, list<t> s2) {
+    switch(s1) {
+        case nil: return true;
+        case cons(h, t): return mem(h, s2) && set_subset(t, s2); 
+    } 
+}
+
+fixpoint bool set_equals<t>(list<t> s1, list<t> s2) {
+    return set_subset(s1, s2) && set_subset(s2, s1);
+}
+
+lemma void set_subset_mem<t>(list<t> s1, list<t> s2, t el);
+    requires set_subset(s1, s2) == true;
+    ensures mem(el, s1) ? mem(el, s2)==true : true;
+
+lemma void set_subset_set_add<t>(list<t> s1, t el, list<t> s2);
+    requires set_subset(s1, s2) == true;
+    ensures set_subset(s1, set_add(s2, el)) == true;
+
+lemma void set_subset_refl<t>(list<t> s);
+    requires true;
+    ensures set_subset(s, s) == true;
+
+lemma void set_equals_refl<t>(list<t> s);
+    requires true;
+    ensures set_equals(s, s) == true;
+
+lemma void set_equals_mem<t>(list<t> s1, list<t> s2, t el);
+    requires set_equals(s1, s2) == true;
+    ensures mem(el, s1) == mem(el, s2);
+
+lemma void set_subset_add_both<t>(list<t> s1, list<t> s2, t el);
+    requires set_subset(s1, s2) == true;
+    ensures set_subset(set_add(s1, el), set_add(s2, el)) == true;
+
+lemma void set_equals_add_both<t>(list<t> s1, list<t> s2, t el);
+    requires set_equals(s1, s2) == true;
+    ensures set_equals(set_add(s1, el), set_add(s2, el)) == true;
+
+lemma void set_equals_symmetric<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures set_equals(s1, s2) == set_equals(s2, s1);
+
+lemma void set_subset_transitive<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires set_subset(s1, s2) == true &*& set_subset(s2, s3) == true;
+    ensures set_subset(s1, s3) == true;
+
+lemma void set_equals_transitive<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires set_equals(s1, s2) == true &*& set_equals(s2, s3) == true;
+    ensures set_equals(s1, s3) == true;
+
+lemma void set_add_assoc_helper<t>(list<t> s, t e1, t e2);
+    requires true;
+    ensures set_subset(set_add(set_add(s, e1),e2), set_add(set_add(s, e2),e1)) == true;
+
+lemma void set_add_assoc<t>(list<t> s, t e1, t e2);
+    requires true;
+    ensures set_equals(set_add(set_add(s, e1),e2), set_add(set_add(s, e2),e1)) == true;
+
+lemma void set_subset_append_l<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires true;
+    ensures set_subset(set_union(s1, s2), s3) == (set_subset(s1, s3) && set_subset(s2, s3));
+
+lemma void set_subset_append_r1<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires set_subset(s1, s2) == true;
+    ensures set_subset(s1, set_union(s2, s3)) == true;
+
+lemma void set_subset_append_r2<t>(list<t> s1, list<t> s2, list<t> s3);
+    requires set_subset(s1, s3) == true;
+    ensures set_subset(s1, set_union(s2, s3)) == true;
+
+lemma void set_subset_cons_snoc<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures set_subset(s1, snoc(s2, el)) == set_subset(s1, cons(el, s2));
+
+lemma void set_equals_cons_snoc<t>(list<t> s, t el);
+    requires true;
+    ensures set_equals(cons(el, s), snoc(s, el)) == true;
+
+lemma void set_equals_empty<t>(list<t> s);
+    requires set_equals(s, set_empty()) == true;
+    ensures s == set_empty();
+
+lemma void set_subset_equals_r<t>(list<t> s1, list<t>  s2, list<t> s3);
+    requires set_subset(s1, s2) == true &*& set_equals(s2, s3) == true;
+    ensures set_subset(s1, s3) == true; 
+
+lemma void set_remove_not_mem<t>(list<t> s, t el);
+    requires !mem(el, s);
+    ensures set_remove(s, el) == s;
+
+lemma void set_subset_set_remove<t>(list<t> s1, list<t> s2, t el);
+    requires set_subset(s1, s2) == true;
+    ensures set_subset(set_remove(s1, el), set_remove(s2, el)) == true;
+
+lemma void set_equals_set_remove<t>(list<t> s1, list<t> s2, t el);
+    requires set_equals(s1, s2) == true;
+    ensures set_equals(set_remove(s1, el), set_remove(s2, el)) == true;
+
+lemma void set_subset_remove_r<t>(list<t> s1, list<t> s2, t v);
+    requires !mem(v, s1) &*& set_subset(s1, s2) == true;
+    ensures set_subset(s1, set_remove(s2, v)) == true;
+
+
+//TODO: more lemma's about sets
+
+//currently only usefull when parameters of the function can be hardcoded
+fixpoint list<tr> set_map<t, tr>(list<t> s, fixpoint(t,tr) f)
+{
+    switch(s) {
+        case nil: return nil;
+        case cons(sh, st): return cons(f(sh), set_map(st, f));
+    }
+}
+fixpoint list<tr> set_map2<t, ti, tr>(list<t> s, fixpoint(t, ti, tr) f, ti i)
+{
+    switch(s) {
+        case nil: return nil;
+        case cons(sh, st): return cons(f(sh, i), set_map2(st, f, i));
+    }
+}
+
+//currently only usefull when parameters of the function can be hardcoded
+fixpoint list<t> set_filter<t>(list<t> s, fixpoint(t,bool) f)
+{
+    switch(s) {
+        case nil: return nil;
+        case cons(sh, st): return f(sh) ? cons(sh, set_filter(st, f)) : set_filter(st, f);
+    }
+}
+fixpoint list<t> set_filter2<t, ti>(list<t> s, fixpoint(t, ti, bool) f, ti i)
+{
+    switch(s) {
+        case nil: return nil;
+        case cons(sh, st): return f(sh, i) ? cons(sh, set_filter2(st, f, i)) : set_filter2(st, f, i);
+    }
+}
+fixpoint bool set_forall<t>(list<t> s, fixpoint(t, bool) f)
+{
+    switch(s) {
+        case nil: return true;
+        case cons(sh, st): return f(sh) && set_forall(st, f);
+    }
+}
+fixpoint bool set_exists<t>(list<t> s, fixpoint(t, bool) f)
+{
+    switch(s) {
+        case nil: return false;
+        case cons(sh, st): return f(sh) || set_forall(st, f);
+    }
+}
+
+fixpoint tr set_fold<t, tr>(list<t> s, tr start, fixpoint(t, tr, tr) f)
+{
+    switch(s) {
+        case nil: return start;
+        case cons(sh, st): return f(sh, set_fold(st, start, f));
+    }
+}
+fixpoint tr set_fold2<t, tr>(list<t> s, tr start, fixpoint(t, tr, tr) f)
+{
+    switch(s) {
+        case nil: return start;
+        case cons(sh, st): return set_fold(st, f(sh, start), f);
+    }
+}
+
+
+lemma void set_filter2_union<t, ti>(list<t> s1, list<t> s2, fixpoint(t, ti, bool) f, ti i);
+    requires true;
+    ensures set_filter2(set_union(s1, s2), f, i) == set_union(set_filter2(s1, f, i), set_filter2(s2, f, i));
+
+lemma void set_filter2_subset<t, ti>(list<t> s, fixpoint(t, ti, bool) f, ti i);
+    requires true;
+    ensures set_subset(set_filter2(s, f, i), s) == true;
+
+lemma void set_filter2_spec<t,ti>(list<t> s, fixpoint(t, ti, bool) f, ti i, t el); 
+    requires true;
+    ensures mem(el, set_filter2(s, f, i)) == (f(el, i) && mem(el, s));
+
+
+//TODO: more lemma's about sets
+
+
+
+#endif

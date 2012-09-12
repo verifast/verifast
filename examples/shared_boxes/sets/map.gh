@@ -1,0 +1,246 @@
+#ifndef MAP_H
+#define MAP_H
+
+#include "set.gh"
+
+
+//TODO: refactor this file
+//1. remove map, use list of pairs instead.
+//2. current version is not total. Therefore, well-definedness conditions need to be specified.
+
+
+inductive map<tk,tv> = mnil | mcons(tk, tv, map<tk, tv>);
+
+
+fixpoint bool map_contains_key<tk,tv> (map<tk,tv> m, tk k) 
+{
+    switch(m) {
+        case mnil: return false;
+        case mcons(k2, v, t): return (k == k2 ? true : map_contains_key(t, k));
+    }
+}
+
+fixpoint tv map_get<tk,tv> (map<tk,tv> m, tk k) 
+{
+    switch(m) {
+        case mnil: return default_value<tv>();
+        case mcons(k2, v, t): return (k == k2 ? v : map_get(t, k));
+    }
+}
+
+fixpoint map<tk,tv> map_put<tk,tv> (map<tk,tv> m, tk k, tv v) 
+{
+    switch(m) {
+        case mnil: return mcons(k, v, mnil);
+        case mcons(k2, v2, t): return (k == k2 ? mcons(k, v, t) : mcons(k2, v2, map_put(t, k, v)));
+    }
+}
+
+fixpoint map<tk,tv> map_remove<tk,tv> (map<tk,tv> m, tk k) 
+{
+    switch(m) {
+        case mnil: return mnil;
+        case mcons(k2, v2, t): return (k == k2 ? t : mcons(k2, v2, map_remove(t, k)));
+    }
+}
+
+fixpoint bool map_contains<tk,tv> (map<tk,tv> m, tk k, tv v) 
+{
+    switch(m) {
+        case mnil: return false;
+        case mcons(k2, v2, t): return (k == k2 ? v == v2 : map_contains(t, k, v));
+    }
+}
+
+fixpoint list<tk> map_keys<tk, tv> (map<tk,tv> m)
+{
+    switch(m) {
+        case mnil: return nil;
+        case mcons(k, v, t): return cons(k, map_keys(t));
+    }
+}
+
+fixpoint list<tv> map_values<tk, tv> (map<tk,tv> m)
+{
+    switch(m) {
+        case mnil: return nil;
+        case mcons(k, v, t): return cons(v, map_values(t));
+    }
+}
+
+fixpoint list<pair<tk, tv> > map_entries<tk, tv> (map<tk,tv> m) 
+{
+    switch(m) {
+        case mnil: return nil;
+        case mcons(k, v, t): return cons(pair(k, v), map_entries(t));
+    }
+}
+
+fixpoint bool map_forall<tk,tv>(map<tk, tv> m, fixpoint(tk, tv, bool) fp) {
+    switch (m) {
+        case mnil: return true;
+        case mcons(k, v, t): return fp(k, v) && map_forall(t, fp);
+    }
+}
+
+fixpoint bool map_disjoint<tk,tv>(map<tk, tv> m1, map<tk, tv> m2)
+{
+    switch (m1) {
+        case mnil: return true;
+        case mcons(k, v, t): return !map_contains_key(m2, k) && map_disjoint(t, m2);
+    }
+}
+fixpoint bool map_alldisjoint<tk,tv>(map<tk,tv> m, list<map<tk, tv> > ms)
+{
+    switch(ms) {
+        case nil: return true;
+        case cons(h, t): return map_disjoint(m, h) && map_alldisjoint(m, t);
+    }
+}
+//TODO: define fold instead
+fixpoint bool maps_disjoint<tk,tv>(list<map<tk, tv> > ms)
+{
+    switch(ms) {
+        case nil: return true;
+        case cons(h, t): return map_alldisjoint(h, t) && maps_disjoint(t);
+    }
+}
+
+fixpoint bool map_subset<tk,tv>(map<tk, tv> m1, map<tk, tv> m2)
+{
+    switch (m1) {
+        case mnil: return true;
+        case mcons(k, v, t): return map_contains(m2, k, v) && map_subset(t, m2);
+    }
+}
+
+fixpoint bool map_equals<tk,tv>(map<tk, tv> m1, map<tk, tv> m2)
+{
+    return map_subset(m1, m2) && map_subset(m2, m1);
+}
+
+//this function assumes disjointness.
+fixpoint map<tk, tv> map_disjunion<tk,tv>(map<tk, tv> m1, map<tk, tv> m2)
+{
+    switch(m1) {
+        case mnil: return m2;
+        case mcons(k, v, t): return mcons(k, v, map_disjunion(t, m2));
+    }
+}
+fixpoint map<tk, tv> maps_disjunion<tk,tv>(list<map<tk, tv> > ms)
+{
+    switch(ms) {
+        case nil: return mnil;
+        case cons(h, t): return map_disjunion(h, maps_disjunion(t));
+    }
+}
+
+fixpoint map<tk, tv> map_union_l<tk,tv>(map<tk, tv> m1, map<tk, tv> m2)
+{
+    switch(m1) {
+        case mnil: return m2;
+        case mcons(k, v, t): return mcons(k, v, map_union_l(t, map_remove(m2, k)));
+    }
+}
+fixpoint map<tk, tv> maps_union_l<tk,tv>(list<map<tk, tv> > ms)
+{
+    switch(ms) {
+        case nil: return mnil;
+        case cons(h, t): return map_union_l(h, maps_union_l(t));
+    }
+}
+
+
+
+
+lemma void map_contains_spec<tk,tv>(map<tk,tv> m, tk k, tv v);
+    requires true;
+    ensures map_contains(m, k, v) == (map_contains_key(m, k) && map_get(m, k) == v);
+
+lemma void map_contains_functional<tk,tv>(map<tk,tv> m, tk k1, tv v1, tk k2, tv v2);
+    requires map_contains(m, k1, v1) && map_contains(m, k2, v2);
+    ensures (k1 == k2 ? v1 == v2 : true);
+
+lemma void map_put_maintains_map_contains<tk,tv>(map<tk,tv> m, tk k1, tv v1, tk k2, tv v2);
+    requires k1 != k2;
+    ensures map_contains(map_put(m, k2, v2), k1, v1) == map_contains(m, k1, v1);
+
+lemma void map_put_causes_map_contains<tk,tv>(map<tk,tv> m, tk k1, tv v1);
+    requires true;
+    ensures map_contains(map_put(m, k1, v1), k1, v1) == true;
+
+lemma void map_remove_maintains_map_contains<tk,tv>(map<tk,tv> m, tk k1, tv v1, tk k2);
+    requires k1 != k2;
+    ensures map_contains(map_remove(m, k2), k1, v1) == map_contains(m, k1, v1);
+
+
+lemma void map_put_invariant<tk,tv>(map<tk,tv> m, tk k1, tk k2, tv v2);
+    requires k1 != k2;
+    ensures map_get(map_put(m, k2, v2), k1) == map_get(m, k1);
+
+lemma void map_remove_invariant<tk,tv>(map<tk,tv> m, tk k1, tk k2);
+    requires k1 != k2;
+    ensures map_get(map_remove(m, k2), k1) == map_get(m, k1);
+
+lemma void map_contains_key_after_put<tk,tv>(map<tk,tv> m, tk k1, tk k2, tv v2);
+    requires k1 != k2;
+    ensures map_contains_key(map_put(m, k2, v2), k1) == map_contains_key(m, k1);
+    
+lemma void map_contains_key_after_remove<tk,tv>(map<tk,tv> m, tk k1, tk k2);
+    requires k1 != k2;
+    ensures map_contains_key(map_remove(m, k2), k1) == map_contains_key(m, k1);
+
+lemma void map_contains_key_mem_map_keys<tk,tv>(map<tk,tv> m, tk k);
+    requires true;
+    ensures mem(k, map_keys(m)) == map_contains_key(m, k);
+
+lemma void map_put_map_keys<tk,tv>(map<tk,tv> m, tk k, tv v);
+    requires !map_contains_key(m, k);
+    ensures map_keys(map_put(m, k, v)) == snoc(map_keys(m), k);
+    
+lemma void map_put_map_values<tk,tv>(map<tk,tv> m, tk k, tv v);
+    requires !map_contains_key(m, k);
+    ensures map_values(map_put(m, k, v)) == snoc(map_values(m), v);
+
+lemma void map_put_map_contains_key<tk,tv>(map<tk,tv> m, tk k, tv v);
+    requires true;
+    ensures map_contains_key(map_put(m, k, v), k) == true;
+
+lemma void map_put_map_get<tk,tv>(map<tk,tv> m, tk k, tv v);
+    requires true;
+    ensures map_get(map_put(m, k, v), k) == v;
+
+lemma void map_remove_map_keys<tk,tv>(map<tk,tv> m, tk k);
+    requires true;
+    ensures map_keys(map_remove(m, k)) == remove(k, map_keys(m));
+
+lemma void map_disjoint_mnil<tk,tv>(map<tk,tv> m);
+    requires true;
+    ensures map_disjoint(m, mnil) == true;
+    
+lemma void map_alldisjoint_mnil<tk,tv>(list<map<tk,tv> > ms);
+    requires true;
+    ensures map_alldisjoint(mnil, ms) == true;
+    
+lemma void map_disjoint_cons_r<tk,tv>(map<tk,tv> m1, tk k, tv v, map<tk,tv> m2);
+    requires true;
+    ensures map_disjoint(m1, mcons(k, v, m2)) == (!map_contains_key(m1, k) && map_disjoint(m1, m2));
+
+lemma void map_disjoint_sym<tk,tv>(map<tk,tv> m1, map<tk,tv> m2);
+    requires true;
+    ensures map_disjoint(m1, m2) == map_disjoint(m2, m1);
+
+lemma void map_alldisjoint_snoc<tk,tv>(map<tk,tv> m, list<map<tk,tv> > ms, map<tk,tv> m2);
+    requires true;
+    ensures map_alldisjoint(m, snoc(ms, m2)) == (map_alldisjoint(m, ms) && map_disjoint(m, m2));
+
+lemma void maps_disjoint_snoc<tk,tv>(list<map<tk,tv> > ms, map<tk,tv> m);
+    requires true;
+    ensures maps_disjoint(snoc(ms, m)) == (maps_disjoint(ms) && map_alldisjoint(m, ms));
+
+lemma void maps_disjunion_snoc_mnil<tk,tv>(list<map<tk,tv> > ms);
+    requires true;
+    ensures maps_disjunion(snoc(ms, mnil)) == maps_disjunion(ms);
+
+
+#endif 

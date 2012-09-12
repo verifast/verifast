@@ -1,0 +1,110 @@
+#ifndef NOTES_H
+#define NOTES_H
+
+/*
+    Changes from fset to fset2:
+    1. created ghost field for owner. Guarantees that a thread remains owner of a node until it releases the node. 
+       This may make it possible to simplify the box actions in the future. It also materializes the notion of owner, which was previously only
+       available in the inductive data structure
+      
+    2. added a fraction of the value field in the link* predicates. 
+       Previously, you needed mem(gnode(p, c, pvalue, v), gnodes) == true to ensure that the value of p is pvalue, even if you had a link predicate. 
+       This simplified the specification of the actions (no need to use gres(?pvalue) anymore). 
+       Note: fset illustrates how you could use a box to retain some information about a value even though you had no permission to read it again.
+       
+    3. a) added link_internal, and defined link, linkex and linkex2 based on link_internal.
+       b) added value to link, linkex, linkex2
+       c) moved owner param of linkex
+    
+    Changes from fset2 to fset3:
+    1. added oldNext field to node_internal and link_internal.
+       This is another precurser before it is possible to simplify the box actions. 
+       In fset and fset2, the definition of lsg retains the information about the old next field using a list of gnodes. In fset3, this information
+       is present in the nodes and links. Therefore, this refactoring should make it possible to remove the notion of owned nodes from the handle invariant.
+    
+    2. TODO: simplify handle predicate:
+       It is no longer necessary to communicate the old next using the handle pedicate invariant. 
+       Therefore, it is no longer necessary to maintain the set of owned gnodes.
+       However, it is necessary to know that a node is in the linked list, therefore it is still necessary to maintain the set of owned nodes.
+       Finally, to release the change permission, you need to know that you do not own any nodes. The set of owned nodes is sufficient for this purpose.
+       
+    3. TODO: use new node instead of unknownnode to define lsg
+        
+    2. TODO: replace the set of owned nodes by a counter in the handle predicate.   
+       
+    TODO: Remove unnecessary link predicates. 
+    TODO: Remove unnecessary node predicates. 
+    TODO: remove parameters of unlock_lockednode
+*/
+
+/*
+   note about cap:
+   - the cap paper every now and they seems to read a value without permission. Maybe this is because they leave out an 
+     implicit partitioning step. 
+   - the cap paper seems to miss a change step   
+    
+   shared boxes vs cap:
+   - the cap paper can use existential quantifiers in the actions, and therefore leave certain things unspecified
+     with shared boxes, patterns are not supported (neither in the definition nor as arguments when performing the action).
+
+problem:
+cap uses existential quantification to hide the next node (and the node) from the change action.
+with shared boxes this is impossible, and therefore I cannot express the post condition.
+
+e.g. the following action cannot be used in practice because the threads cannot specifiy the next node.
+
+    action change(struct llnode* node, struct llnode* next, int v);
+        requires map_contains(reserved, v, actionHandle) && !map_contains_key(gaps, node);
+        ensures 
+            allGaps == map_put(old_allGaps, v, map_put(map_get(old_allGaps, v), node, next)) && 
+            gaps == map_put(old_gaps, node, next) &&
+            values == old_values && 
+            reserved == old_reserved;
+
+on the other hand, without the next parameter, it is harder to specify the post condition.
+
+    action change(struct llnode* node, int v);
+        requires map_contains(reserved, v, actionHandle) && !map_contains_key(gaps, node);
+        ensures 
+            allGaps == map_put(old_allGaps, v, map_put(map_get(old_allGaps, v), node, ?next)) && 
+            gaps == map_put(old_gaps, node, ?next) &&
+            values == old_values && 
+            reserved == old_reserved;
+            
+
+More abstractly put: 
+an existential quantifier is usefull whenever an action needs to update the state of the box 
+using a value which can only be read after starting the action.
+In such cases, the value cannot be added as parameter, since it cannot be read before the action.
+The only way to deal with this using shared boxes is to create an extra box variable that
+stores or gives access to the variable.
+
+
+we could add a full map from node to next as parameter. 
+When performing a change action, the changeperm should relate the next map with the link predicate.
+
+struct fset *s, 
+list<int> values, 
+map<int, handle> reserved,
+map<struct llnode *, struct llnode *> nextNodes,
+map<int, list<struct llnode *> > resLocked,
+list<struct llnode *> allLocked
+
+list<pair<bool, struct llnode*> >
+
+
+
+
+Other note:
+
+to fully understand the meaning of the actions, you have to look at the preconditions but also the invariant of the box.
+e.g. it is not necessary to require that the current value is > the inserted value in gap2, because the invariant says that the result must be sorted.
+therefore, it is impossible to perform the action anyway. 
+This is a bit confusing. 
+
+*/
+
+//@ fixpoint bool foo() { return true; }
+
+
+#endif

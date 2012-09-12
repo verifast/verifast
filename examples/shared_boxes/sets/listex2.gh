@@ -1,0 +1,100 @@
+#ifndef LISTEX2_H
+#define LISTEX2_H
+
+#include "list.gh"
+#include "listex.gh"
+#include "exwitness.gh"
+
+//TODO: move general lemma's to list.h or listex.h 
+
+    
+fixpoint list<t> snoc<t>(list<t> vs, t v) 
+{   
+    return append(vs, cons(v, nil));
+}
+
+lemma void mem_append<t>(t v, list<t> vs1, list<t> vs2) ;
+    requires true; 
+    ensures mem(v, append(vs1, vs2)) == (mem(v, vs1) || mem(v, vs2));
+
+lemma void mem_snoc<t>(t v1, list<t> vs, t v2) ;
+    requires true;
+    ensures mem(v1, snoc(vs, v2)) == (mem(v1, vs) || v1 == v2);
+
+lemma void distinct_snoc<t>(list<t> l, t v);
+    requires distinct(l) == true &*& !mem(v, l);
+    ensures distinct(snoc(l, v)) == true;
+
+lemma void nth_tail<t>(int i, list<t> l); 
+  requires i > 0;
+  ensures nth(i-1, tail(l)) == nth(i,l);
+  
+lemma void length_tail<t>(list<t> l); 
+  requires length(l) > 0;
+  ensures length(tail(l)) == length (l) - 1;
+
+lemma void nth_snoc_length<t>(list<t> l, t el);
+    requires true;
+    ensures nth(length(l), snoc(l, el)) == el;
+
+
+fixpoint list<t> remove_all2<t>(t v, list<t> l) { 
+    switch(l) {
+        case nil: return nil;
+        case cons(h,t): return h == v ? remove_all2(v, t) : cons(h, remove_all2(v, t));
+    }
+}
+
+lemma void remove_all2_mem<t>(t v, t v2, list<t> l);
+    requires true;
+    ensures mem(v, remove_all2(v2, l)) == (v != v2 && mem(v, l));
+
+lemma void remove_all2_id<t>(t v, list<t> l);
+    requires !mem(v, l);
+    ensures remove_all2(v, l) == l;
+
+
+lemma void append_cons_r_snoc_l<t>(list<t> s1, t v, list<t> s2)
+    requires true;
+    ensures append(s1, cons(v, s2)) == append(snoc(s1, v), s2);
+{
+    switch(s1) {
+        case nil:
+        case cons(h, t): append_cons_r_snoc_l(t, v, s2);
+    }
+}    
+
+fixpoint bool exists2<t, ta>(list<t> l, fixpoint (t, ta, bool) f, ta a) {
+    switch(l) {
+        case nil: return false;
+        case cons(h, t): return f(h, a) || exists2(t, f, a);
+    }
+}
+
+
+lemma void mem_map_true<ta, tb>(fixpoint (ta, tb) f, list<ta> l, tb b)
+    requires mem(b, map(f, l)) == true;
+    ensures exwitness<ta>(?a) &*& mem(a, l) == true &*& f(a) == b;
+{
+    switch(l) {
+        case nil:
+        case cons(h, t): 
+            if(f(h) == b) {
+                close exwitness(h);
+            } else {
+                mem_map_true(f, t, b);
+            }
+    }
+}
+lemma void mem_map_false<ta, tb>(fixpoint (ta, tb) f, list<ta> l, ta a, tb b)
+    requires mem(b, map(f, l)) == false &*& mem(a, l) == true;
+    ensures f(a) != b;
+{
+    switch(l) {
+        case nil:
+        case cons(h, t): 
+            if(a!=h) mem_map_false(f, t, a, b);
+    }
+}
+
+#endif
