@@ -1,0 +1,42 @@
+#ifndef LMULTISET_H
+#define LMULTISET_H
+
+/*
+    list multisets
+    - represents the multiset as a list of elements
+*/
+#include "lset.gh"
+#include "lmultiset.gh"
+
+
+// relation between lset and lmultiset
+
+lemma void lmultiset_occ_lset_contains<t>(list<t> s, t v);
+    requires true; 
+    ensures lset_contains(s, v) == (lmultiset_occ(s, v) > 0);
+
+lemma void lmultiset_submultiset_lset_subset<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lmultiset_submultiset(s1, s2) ? lset_subset(s1, s2) == true : true ;
+
+lemma void lmultiset_equals_lset_equals<t>(list<t> s1, list<t> s2);
+    requires true;
+    ensures lmultiset_equals(s1, s2) ? lset_equals(s1, s2) == true : true ;
+
+// distinctness
+
+lemma void lmultiset_occ_distinct<t>(list<t> s, t v);
+    requires distinct(s) == true;
+    ensures lmultiset_occ(s, v) <= 1;
+
+lemma void lmultiset_occ_distinct_conv<t>(list<t> s);
+    requires distinct(s) == false;
+    ensures exwitness(?x) &*& lmultiset_occ(s, x) > 1;
+
+// foreach
+
+lemma void foreach_lmultiset_equals<t>(list<t> l1, list<t> l2);
+    requires foreach(l1, ?p) &*& lmultiset_equals(l1, l2) == true;
+    ensures foreach(l2, p);
+
+#endif

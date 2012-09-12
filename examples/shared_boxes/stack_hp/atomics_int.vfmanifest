@@ -1,0 +1,4 @@
+.provides .\atomics_int.h#atomic_compare_and_store_int
+.provides .\atomics_int.h#atomic_store_int
+.provides .\atomics_int.h#atomic_load_int
+.provides .\atomics_int.h#create_prophecy_int

@@ -1,0 +1,4 @@
+.provides .\atomics_bool.h#atomic_compare_and_store_bool
+.provides .\atomics_bool.h#atomic_store_bool
+.provides .\atomics_bool.h#atomic_load_bool
+.provides .\atomics_bool.h#create_prophecy_bool

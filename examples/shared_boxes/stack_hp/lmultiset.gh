@@ -1,0 +1,112 @@
+#ifndef LMULTISET_H
+#define LMULTISET_H
+
+/*
+    list multisets
+    - represents the multiset as a list of elements
+*/
+#include "listex2.gh"
+#include "exwitness.gh"
+
+fixpoint int lmultiset_occ<t>(list<t> s, t el)
+{
+    return occ(s, el);
+}
+
+fixpoint list<t> lmultiset_empty<t>() { return nil; }
+
+fixpoint list<t> lmultiset_add<t>(list<t> s, t v) { return cons(v, s); }
+
+fixpoint list<t> lmultiset_remove<t>(list<t> s, t v) { 
+    return remove(v, s);
+}
+
+fixpoint list<t> lmultiset_singleton<t>(t v) { return lmultiset_add(lmultiset_empty(), v); }
+
+fixpoint list<t> lmultiset_union<t>(list<t> s1, list<t> s2) { return append(s1, s2); }
+
+
+fixpoint list<t> lmultiset_inters<t>(list<t> s1, list<t> s2) { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): return lmultiset_occ(s2, h) > 0 ? cons(h, lmultiset_inters(t, lmultiset_remove(s2, h))) : lmultiset_inters(t, s2);
+    } 
+}
+
+
+fixpoint list<t> lmultiset_diff<t>(list<t> s1, list<t> s2)  { 
+    switch(s1) {
+        case nil: return nil;
+        case cons(h, t): 
+            return lmultiset_occ(s2, h) > 0 ? lmultiset_diff(t, lmultiset_remove(s2, h)) : cons(h, lmultiset_diff(t, lmultiset_remove(s2, h)));
+    } 
+}
+
+
+fixpoint bool lmultiset_disjoint<t>(list<t> s1, list<t> s2) { 
+    return lmultiset_inters(s1, s2) == nil;
+}
+
+fixpoint bool lmultiset_submultiset<t>(list<t> s1, list<t> s2)
+{
+    switch(s1) {
+        case nil: return true;
+        case cons(h, t): return lmultiset_occ(s2, h) > 0 && lmultiset_submultiset(t, lmultiset_remove(s2, h));
+    }
+}
+
+fixpoint bool lmultiset_equals<t>(list<t> s1, list<t> s2)
+{
+    return lmultiset_submultiset(s1, s2) && lmultiset_submultiset(s2, s1);
+}
+
+// relation with lset_contains
+lemma void lmultiset_occ_positive<t>(list<t> s, t v);
+    requires true; 
+    ensures lmultiset_occ(s, v) >= 0;
+
+lemma void lmultiset_empty_occ<t>(t v);
+    requires true; 
+    ensures lmultiset_occ(lmultiset_empty(), v) == 0;
+
+lemma void lmultiset_add_occ<t>(list<t> s, t v, t v2);
+    requires true; 
+    ensures lmultiset_occ(lmultiset_add(s, v), v2) == lmultiset_occ(s, v2) + (v == v2 ? 1 : 0);
+
+lemma void lmultiset_remove_occ<t>(list<t> s, t v, t v2);
+    requires true;
+    ensures lmultiset_occ(lmultiset_remove(s, v), v2) == (v == v2 && lmultiset_occ(s, v2) > 0 ? lmultiset_occ(s, v2) - 1 : lmultiset_occ(s, v2));  
+
+lemma void lmultiset_singleton_occ<t>(t v, t v2);
+    requires true; 
+    ensures lmultiset_occ(lmultiset_singleton(v), v2) == (v == v2 ? 1 : 0);
+
+lemma void lmultiset_union_occ<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lmultiset_occ(lmultiset_union(s1, s2), el) == lmultiset_occ(s1, el) + lmultiset_occ(s2, el);
+
+lemma void lmultiset_inters_occ<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lmultiset_occ(lmultiset_inters(s1, s2), el) == (lmultiset_occ(s1, el) <= lmultiset_occ(s2, el) ? lmultiset_occ(s1, el) : lmultiset_occ(s2, el));
+
+lemma void lmultiset_diff_occ<t>(list<t> s1, list<t> s2, t el);
+    requires true;
+    ensures lmultiset_occ(lmultiset_diff(s1, s2), el) == (lmultiset_occ(s1, el) > lmultiset_occ(s2, el) ? lmultiset_occ(s1, el) - lmultiset_occ(s2, el) : 0);
+
+lemma void lmultiset_submultiset_occ<t>(list<t> s1, list<t> s2, t el);
+    requires lmultiset_submultiset(s1, s2) == true;
+    ensures lmultiset_occ(s1, el) <= lmultiset_occ(s2, el);
+
+lemma void lmultiset_equals_occ<t>(list<t> s1, list<t> s2, t el);
+    requires lmultiset_equals(s1, s2) == true;
+    ensures lmultiset_occ(s1, el) == lmultiset_occ(s2, el);
+
+lemma void lmultiset_submultiset_occ_conv<t>(list<t> s1, list<t> s2);
+    requires lmultiset_submultiset(s1, s2) == false;
+    ensures exwitness(?el) &*& lmultiset_occ(s1, el) > lmultiset_occ(s2, el);
+
+lemma void lmultiset_equals_occ_conv<t>(list<t> s1, list<t> s2);
+    requires lmultiset_equals(s1, s2) == false;
+    ensures exwitness(?el) &*& lmultiset_occ(s1, el) != lmultiset_occ(s2, el);
+            
+#endif

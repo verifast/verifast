@@ -1,0 +1,33 @@
+#ifndef GHOST_COUNTERS_H
+#define GHOST_COUNTERS_H
+
+predicate ghost_counter(int id, int count);
+predicate ghost_counter_zero_contrib(int id;);
+predicate ghost_counter_contrib(int id, real frac, int contrib);
+
+lemma int create_ghost_counter();
+    requires true;
+    ensures ghost_counter(result, 0) &*& ghost_counter_zero_contrib(result);
+
+lemma void ghost_counter_start_contrib();
+    requires [?f]ghost_counter_zero_contrib(?id);
+    ensures ghost_counter_contrib(id, f, 0);
+
+lemma void ghost_counter_increment();
+    requires ghost_counter(?id, ?count) &*& ghost_counter_contrib(id, ?f, ?contrib);
+    ensures ghost_counter(id, count + 1) &*& ghost_counter_contrib(id, f, contrib + 1);
+
+lemma void ghost_counter_decrement();
+    requires ghost_counter(?id, ?count) &*& ghost_counter_contrib(id, ?f, ?contrib) &*& 0 < contrib;
+    ensures ghost_counter(id, count - 1) &*& ghost_counter_contrib(id, f, contrib - 1);
+
+lemma void ghost_counter_end_contrib();
+    requires ghost_counter_contrib(?id, ?f, 0);
+    ensures [f]ghost_counter_zero_contrib(id);
+
+lemma void ghost_counter_match_zero_contrib();
+    requires ghost_counter(?id, ?count) &*& ghost_counter_zero_contrib(id);
+    ensures ghost_counter(id, count) &*& ghost_counter_zero_contrib(id) &*& count == 0;
+
+
+#endif

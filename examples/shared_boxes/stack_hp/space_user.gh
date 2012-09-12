@@ -1,0 +1,55 @@
+#ifndef SPACE_USER_H
+#define SPACE_USER_H
+
+predicate dispose_perm(int id;);
+
+lemma void dispose_perm_unique(int id);
+    requires [?f]dispose_perm(id);
+    ensures [f]dispose_perm(id) &*& f <= 1;
+
+predicate space_user(int id, real f);
+
+predicate space_user_info(int id; int count);
+
+predicate_family space_user_info_sep  (void *sep)  (any args, int id, predicate() inv, space_user_info_unsep *unsep);
+predicate_family space_user_info_unsep(void *unsep)(any args, int id, predicate() inv, space_user_info_sep *sep, int count);
+
+typedef lemma void space_user_info_sep();
+    requires space_user_info_sep(this)(?args, ?id, ?inv, ?unsep) &*& inv();
+    ensures space_user_info_unsep(unsep)(args, id, inv, this, ?count) &*& space_user_info(id, count);
+
+typedef lemma void space_user_info_unsep();
+    requires space_user_info_unsep(this)(?args, ?id, ?inv, ?sep, ?count) &*& space_user_info(id, count);
+    ensures space_user_info_sep(sep)(args, id, inv, this) &*& inv();
+
+predicate space_user_info_seps(any args, int id, predicate() inv, space_user_info_sep* sep, space_user_info_unsep* unsep) = 
+    space_user_info_sep(sep)(args, id, inv, unsep) &*&
+    is_space_user_info_sep(sep) &*& 
+    is_space_user_info_unsep(unsep);
+
+
+lemma void space_user_info_create();
+    requires true;
+    ensures dispose_perm(?id) &*& space_user_info(id, 0);
+
+lemma void space_user_info_zero(int id);
+    requires dispose_perm(id) &*& space_user_info(id, ?count);
+    ensures dispose_perm(id) &*& space_user_info(id, count) &*& count == 0;
+
+lemma void space_user_info_dispose(int id);
+    requires dispose_perm(id) &*& space_user_info(id, ?count);
+    ensures count == 0;
+
+lemma void space_user_info_non_zero(int id);
+    requires space_user(id, ?f) &*& space_user_info(id, ?count);
+    ensures space_user(id, f) &*& space_user_info(id, count) &*& count > 0; 
+
+lemma void space_user_info_add_user(int id, real f);
+    requires [f]dispose_perm(id) &*& space_user_info(id, ?count);
+    ensures space_user(id, f) &*& space_user_info(id, count + 1);
+
+lemma void space_user_info_remove_user(int id, real f);
+    requires space_user(id, f) &*& space_user_info(id, ?count);
+    ensures [f]dispose_perm(id) &*& space_user_info(id, count - 1) &*& count > 0;
+
+#endif

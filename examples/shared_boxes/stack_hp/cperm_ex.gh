@@ -1,0 +1,63 @@
+#ifndef CPERM_EX_H
+#define CPERM_EX_H
+
+#include "cperm.gh"
+
+
+typedef lemma void object_set_trackerId<ta, tb>(predicate(ta; pair<tb, int>) object) (ta a, int trackerId);
+    requires object(a, ?p);
+    ensures object(a, pair(fst(p), trackerId));
+
+predicate object_tracker<ta, tb>(predicate(ta; pair<tb, int>) object, ta a, int count, tb b) =
+    cptracker(?id, object, a, count, pair(b, id));
+    
+predicate object_fraction<ta, tb>(predicate(ta; pair<tb, int>) object, ta a, tb b, real f) =
+    cpticket(?id, ?tid, f) &*& [f]object(a, pair(b, id)) &*& 0 < f;
+
+
+lemma void create_object_tracker<ta, tb>(predicate(ta; pair<tb, int>) object, ta a)
+    requires object(a, ?p) &*& is_object_set_trackerId(?lem, object);
+    ensures object_tracker(object, a, 0, fst(p)) &*& is_object_set_trackerId(lem, object);
+{
+    int id = create_cptracker_precursor(object, a);
+    lem(a, id);
+    convert_cptracker_precursor(id);
+    close object_tracker(object, a, 0, fst(p));
+}
+
+lemma void object_tracker_acquire_fraction<ta, tb>(predicate(ta; pair<tb, int>) object, ta a)
+    requires object_tracker(object, a, ?count, ?b);
+    ensures object_tracker(object, a, count + 1, b) &*& object_fraction(object, a, b, ?f);
+{
+    open object_tracker(object, a, count, b);
+    assert cptracker(?id, object, a, count, pair(b, id));
+    create_cpticket(id);
+    close object_tracker(object, a, count + 1, b);
+    close object_fraction(object, a, b, _);
+}
+
+lemma void object_tracker_release_fraction<ta, tb>(predicate(ta; pair<tb, int>) object, ta a)
+    requires object_tracker(object, a, ?count, ?b) &*& object_fraction(object, a, ?b2, ?f);
+    ensures object_tracker(object, a, count - 1, b) &*& b == b2 &*& count > 0;
+{
+    open object_tracker(object, a, count, b);
+    open object_fraction(object, a, b2, f);
+    assert cptracker(?id, object, a, count, pair(b, id)) &*& cpticket(?id2, ?tid, f);
+    cptracker_match(id);
+    destroy_cpticket(id, tid);
+    close object_tracker(object, a, count - 1, b);
+}
+
+lemma void destroy_object_tracker<ta, tb>(predicate(ta; pair<tb, int>) object, ta a)
+    requires object_tracker(object, a, 0, ?b);
+    ensures object(a, ?p) &*& fst(p) == b; 
+{
+    open object_tracker(object, a, 0, b);
+    assert cptracker(?id, object, a, 0, pair(b, id));
+    destroy_cptracker(id);
+}
+
+
+
+
+#endif

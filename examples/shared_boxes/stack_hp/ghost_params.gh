@@ -1,0 +1,17 @@
+#ifndef GHOST_PARAMS_H
+#define GHOST_PARAMS_H
+
+/*
+    ghost parameters for a procedure
+*/
+
+predicate ghost_params<t>(t v) = true;
+
+predicate ghost_params2<t1,t2>(t1 v1, t2 v2) = true;
+
+predicate ghost_params3<t1,t2,t3>(t1 v1, t2 v2, t3 v3) = true;
+
+predicate ghost_params4<t1,t2,t3,t4>(t1 v1, t2 v2, t3 v3, t4 v4) = true;
+
+#endif
+

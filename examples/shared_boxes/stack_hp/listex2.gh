@@ -1,0 +1,184 @@
+#ifndef LISTEX2_H
+#define LISTEX2_H
+
+#include "list.gh"
+#include "listex.gh"
+#include "exwitness.gh"
+
+//TODO: move general lemma's to list.h or listex.h 
+//NOTE: I added more functions here than in the data structures version
+    
+fixpoint list<t> snoc<t>(list<t> vs, t v) 
+{   
+    return append(vs, cons(v, nil));
+}
+
+lemma void mem_append<t>(t v, list<t> vs1, list<t> vs2) ;
+    requires true; 
+    ensures mem(v, append(vs1, vs2)) == (mem(v, vs1) || mem(v, vs2));
+
+lemma void mem_snoc<t>(t v1, list<t> vs, t v2) ;
+    requires true;
+    ensures mem(v1, snoc(vs, v2)) == (mem(v1, vs) || v1 == v2);
+
+lemma void distinct_snoc<t>(list<t> l, t v);
+    requires distinct(l) == true &*& !mem(v, l);
+    ensures distinct(snoc(l, v)) == true;
+
+lemma void nth_tail<t>(int i, list<t> l); 
+  requires i > 0;
+  ensures nth(i-1, tail(l)) == nth(i,l);
+  
+lemma void length_tail<t>(list<t> l); 
+  requires length(l) > 0;
+  ensures length(tail(l)) == length (l) - 1;
+
+lemma void nth_snoc_length<t>(list<t> l, t el);
+    requires true;
+    ensures nth(length(l), snoc(l, el)) == el;
+
+
+fixpoint list<t> remove_all2<t>(t v, list<t> l) { 
+    switch(l) {
+        case nil: return nil;
+        case cons(h,t): return h == v ? remove_all2(v, t) : cons(h, remove_all2(v, t));
+    }
+}
+
+lemma void remove_all2_mem<t>(t v, t v2, list<t> l);
+    requires true;
+    ensures mem(v, remove_all2(v2, l)) == (v != v2 && mem(v, l));
+
+lemma void remove_all2_id<t>(t v, list<t> l);
+    requires !mem(v, l);
+    ensures remove_all2(v, l) == l;
+
+
+lemma void append_cons_r_snoc_l<t>(list<t> s1, t v, list<t> s2);
+    requires true;
+    ensures append(s1, cons(v, s2)) == append(snoc(s1, v), s2);
+
+fixpoint bool exists2<t, ta>(list<t> l, fixpoint (t, ta, bool) f, ta a) {
+    switch(l) {
+        case nil: return false;
+        case cons(h, t): return f(h, a) || exists2(t, f, a);
+    }
+}
+
+
+lemma void mem_map_true<ta, tb>(fixpoint (ta, tb) f, list<ta> l, tb b);
+    requires mem(b, map(f, l)) == true;
+    ensures exwitness<ta>(?a) &*& mem(a, l) == true &*& f(a) == b;
+    
+lemma void mem_map_false<ta, tb>(fixpoint (ta, tb) f, list<ta> l, ta a, tb b);
+    requires mem(b, map(f, l)) == false &*& mem(a, l) == true;
+    ensures f(a) != b;
+
+lemma void foreach_split<t>(list<t> xs, list<t> ys);
+    requires foreach(append(xs, ys), ?p);
+    ensures foreach(xs, p) &*& foreach(ys, p);
+
+lemma void distinct_insert<t>(list<t> xs, list<t> ys, t z);
+    requires distinct(append(xs, ys)) == true &*& !mem(z, append(xs, ys));
+    ensures distinct(append(xs, cons(z, ys))) == true;
+
+lemma void remove_append<t>(t z, list<t> xs, list<t> ys);
+    requires true;
+    ensures remove(z, append(xs, ys)) == (mem(z, xs) ? append(remove(z, xs), ys) : append(xs, remove(z, ys)));
+
+lemma void insert_distinct_mem<t>(list<t> xs, list<t> ys, t z);
+    requires distinct(append(xs, cons(z, ys))) == true;
+    ensures !mem(z, xs) &*& !mem(z, ys);
+
+lemma void remove_nomem<t>(t el, t el2, list<t> l);
+    requires !mem(el, l);
+    ensures !mem(el, remove(el2, l));
+
+lemma void take_append<t>(int k, list<t> l1, list<t> l2);
+    requires k >= 0;
+    ensures take(k, append(l1, l2)) == (k <= length(l1) ? take(k, l1) : append(l1, take(k-length(l1), l2)));
+
+lemma void drop_append<t>(int k, list<t> l1, list<t> l2);
+    requires k >= 0;
+    ensures drop(k, append(l1, l2)) == (k <= length(l1) ? append(drop(k, l1), l2) : drop(k-length(l1), l2));
+
+lemma void split_distinct_unique<t>(list<t>l1, list<t>l2, list<t>l3, list<t>l4, t el);
+    requires distinct(append(l1, cons(el, l2))) == true &*& append(l1, cons(el, l2)) == append(l3, cons(el, l4)); 
+    ensures l1 == l3 &*& l2 == l4;
+
+lemma void distinct_snoc_full<t>(list<t> l, t v);
+    requires true;
+    ensures distinct(snoc(l, v)) == (distinct(l) && !mem(v, l));
+
+lemma void distinct_insert_full<t>(list<t> l1, t v, list<t> l2);
+    requires true;
+    ensures distinct(append(l1, cons(v, l2))) == (distinct(append(l1, l2)) && !mem(v, l1) && !mem(v, l2));
+    
+lemma void distinct_append_comm<t>(list<t> l1, list<t> l2);
+    requires true;
+    ensures distinct(append(l1, l2)) == distinct(append(l2, l1));
+
+fixpoint int occ<t>(list<t> l, t v) {
+    switch(l) {
+        case nil: return 0;
+        case cons(lh, lt): return (v == lh ? 1 : 0) + occ(lt, v);
+    } 
+}
+
+lemma void occ_positive<t>(list<t> s, t v);
+    requires true; 
+    ensures occ(s, v) >= 0;
+     
+lemma void occ_mem<t>(list<t> l, t v);
+    requires !mem(v, l);
+    ensures occ(l, v) == 0;
+
+lemma void occ_mem_full<t>(list<t> l, t v);
+    requires true;
+    ensures mem(v, l) == (occ(l, v) > 0);
+    
+lemma void occ_append<t>(list<t>l1, list<t>l2, t v);
+    requires true;
+    ensures occ(append(l1, l2), v) == occ(l1, v) + occ(l2, v);
+
+predicate pforeach<ta,tb>(list<ta> xs, predicate(ta; tb) p;) =
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return p(x, _) &*& pforeach(xs0, p);
+    };
+
+lemma void pforeach_remove<t>(t x, list<t> xs);
+    requires pforeach(xs, ?p) &*& mem(x, xs) == true;
+    ensures pforeach(remove(x, xs), p) &*& p(x, _);
+
+lemma void pforeach_unremove<t>(t x, list<t> xs);
+    requires pforeach(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x, _);
+    ensures pforeach(xs, p);
+
+lemma void pforeach_split<t>(list<t> xs, list<t> ys);
+    requires pforeach(append(xs, ys), ?p);
+    ensures pforeach(xs, p) &*& pforeach(ys, p);
+
+lemma void pforeach_append<t>(list<t> xs, list<t> ys);
+    requires pforeach(xs, ?p) &*& pforeach(ys, p);
+    ensures pforeach(append(xs, ys), p);
+
+predicate split_result<t>(t v1, t v2) = true;
+
+lemma void list_split<t>(list<t> l, t v);
+    requires mem(v, l) == true;
+    ensures split_result(?l1, ?l2) &*& l == append(l1, cons(v, l2)) &*& mem(v, l1) == false;
+
+fixpoint list<t> flatten<t>(list<list<t> > l)
+{
+    switch(l) {
+        case nil: return nil;
+        case cons(h, t): return append(h, flatten(t));
+    }
+}
+
+lemma void flatten_append<t>(list<list<t> > l1, list<list<t> > l2);
+    requires true;
+    ensures flatten(append(l1, l2)) == append(flatten(l1), flatten(l2));
+
+#endif

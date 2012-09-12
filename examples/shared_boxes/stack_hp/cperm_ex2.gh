@@ -1,0 +1,67 @@
+#ifndef CPERM_EX_H
+#define CPERM_EX_H
+
+#include "cperm.gh"
+
+
+predicate_family object(void* lem)(void* obj; int id, any data);
+
+typedef lemma void object_set_trackerId(void* obj, int id);
+    requires object(this)(obj, _, ?data);
+    ensures object(this)(obj, id, data);
+    
+predicate object_pred(pair<void*,void*> p; pair<int, any> out) = 
+    object(fst(p))(snd(p), ?id, ?data) &*& out == pair(id, data);
+
+predicate object_tracker(void* lem, void* obj, int count, any data) =
+    cptracker(?id, object_pred, pair(lem, obj), count, pair(id, data));
+    
+predicate object_fraction(void* lem, void* obj, any data, real f) =
+    cpticket(?id, ?tid, f) &*& [f]object(lem)(obj, id, data) &*& 0 < f;
+    
+
+lemma void create_object_tracker(void* obj)
+    requires is_object_set_trackerId(?lem) &*& object(lem)(obj, _, ?data);
+    ensures is_object_set_trackerId(lem) &*& object_tracker(lem, obj, 0, data);
+{
+    int id = create_cptracker_precursor(object_pred, pair(lem, obj));
+    lem(obj, id);
+    convert_cptracker_precursor(id);
+    close object_tracker(lem, obj, 0, data);
+}
+
+lemma void object_tracker_acquire_fraction(void* obj)
+    requires object_tracker(?lem, obj, ?count, ?data);
+    ensures object_tracker(lem, obj, count + 1, data) &*& object_fraction(lem, obj, data, ?f);
+{
+    open object_tracker(lem, obj, count, data);
+    assert cptracker(?id, object_pred, pair(lem, obj), count, pair(id, data));
+    create_cpticket(id);
+    close object_tracker(lem, obj, count + 1, data);
+    close object_fraction(lem, obj, data, _);
+}
+
+lemma void object_tracker_release_fraction(void* obj)
+    requires object_tracker(?lem, obj, ?count, ?data) &*& object_fraction(lem, obj, ?data2, ?f);
+    ensures object_tracker(lem, obj, count - 1, data) &*& data == data2 &*& count > 0;
+{
+    open object_tracker(lem, obj, count, data);
+    open object_fraction(lem, obj, data2, f);
+    assert cptracker(?id, object_pred, pair(lem, obj), count, pair(id, data)) &*& cpticket(?id2, ?tid, f);
+    cptracker_match(id);
+    destroy_cpticket(id, tid);
+    close object_tracker(lem, obj, count - 1, data);
+}
+
+lemma void destroy_object_tracker(void* obj)
+    requires object_tracker(?lem, obj, 0, ?data);
+    ensures object(lem)(obj, _, data); 
+{
+    open object_tracker(lem, obj, 0, data);
+    assert cptracker(?id, object_pred, pair(lem, obj), 0, pair(id, data));
+    destroy_cptracker(id);
+}
+
+
+
+#endif

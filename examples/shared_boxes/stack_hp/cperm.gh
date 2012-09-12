@@ -1,0 +1,44 @@
+#ifndef CPERM_H
+#define CPERM_H
+
+
+/*
+   Actualy, I would like to make this :
+   
+       predicate cptracker<ta,tb>(int id; predicate(ta; tb) p, ta a, int count, tb b);
+   
+*/
+
+predicate cptracker_precursor<ta,tb>(int cid, predicate(ta; tb) p; ta a);
+predicate cptracker<ta,tb>(int cid, predicate(ta; tb) p; ta a, int count, tb b);
+predicate cpticket(int cid, int tid; real frac);
+
+lemma int create_cptracker<ta,tb>(predicate(ta; tb) p, ta a);
+    requires p(a, ?b);
+    ensures cptracker<ta,tb>(result, p, a, 0, b);
+    
+lemma int create_cptracker_precursor<ta,tb>(predicate(ta; tb) p, ta a);
+    requires true;
+    ensures cptracker_precursor<ta,tb>(result, p, a);
+
+lemma void convert_cptracker_precursor<ta,tb>(int id);
+    requires cptracker_precursor<ta,tb>(id, ?p, ?a) &*& p(a, ?b);
+    ensures cptracker<ta,tb>(id, p, a, 0, b);
+
+lemma int create_cpticket<ta,tb>(int id);
+    requires cptracker<ta,tb>(id, ?p, ?a, ?count, ?b);
+    ensures cptracker<ta,tb>(id, p, a, count + 1, b) &*& cpticket(id, result, ?f) &*& [f]p(a, b) &*& 0 < f;
+
+lemma void destroy_cpticket<ta,tb>(int id, int tid);
+    requires cptracker<ta,tb>(id, ?p, ?a, ?count, ?b) &*& cpticket(id, tid, ?f) &*& [f]p(a, ?b2) &*& 0 < f;
+    ensures cptracker<ta,tb>(id, p, a, count - 1, b) &*& count > 0 &*& b == b2;
+
+lemma void destroy_cptracker<ta,tb>(int id);
+    requires cptracker<ta, tb>(id, ?p, ?a, 0, ?b);
+    ensures p(a, b);
+
+lemma void cptracker_match<ta,tb>(int id);
+    requires cptracker<ta, tb>(id, ?p, ?a, ?c, ?b) &*& [?f]p(a, ?b2) &*& f > 0;
+    ensures cptracker<ta, tb>(id, p, a, c, b) &*& [f]p(a, b2) &*& b == b2;
+    
+#endif

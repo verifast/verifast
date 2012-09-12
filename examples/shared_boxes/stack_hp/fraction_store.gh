@@ -1,0 +1,59 @@
+#ifndef FRACTION_STORE_H
+#define FRACTION_STORE_H
+
+predicate fraction_store<ta,tb>(int id, predicate(ta; tb) p; ta a, int count, real rem);
+
+predicate fraction_store_precursor<ta, tb>(int id, predicate(ta; tb) p);
+
+predicate fraction_store_ticket<ta, tb>(int id, real f);
+
+lemma int create_fraction_store<ta, tb>(predicate(ta; tb) p, ta a);
+    requires true;
+    ensures fraction_store<ta,tb>(result, p, a, 0, 0);
+
+lemma int create_fraction_store_precursor<ta, tb>(predicate(ta; tb) p);
+    requires true;
+    ensures fraction_store_precursor(result, p);
+    
+lemma void convert_fraction_store_precursor<ta, tb>(int id, predicate(ta; tb) p, ta a);
+    requires fraction_store_precursor(id, p);
+    ensures fraction_store<ta,tb>(id, p, a, 0, 0);
+    
+lemma void fraction_store_deposit<ta, tb>(int id, real f);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& [f]p(a, _) &*& 0 < f;
+    ensures fraction_store<ta,tb>(id, p, a, c + 1, r + f) &*& fraction_store_ticket<ta, tb>(id, f) &*& r >= 0;
+    
+lemma void fraction_store_withdraw<ta, tb>(int id, real f);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& fraction_store_ticket<ta, tb>(id, f);
+    ensures fraction_store<ta,tb>(id, p, a, c - 1, r - f) &*& [f]p(a, _) &*& 0 < f &*& f <= r &*& c > 0;
+
+lemma void fraction_store_dispose<ta, tb>(int id);
+    requires fraction_store<ta,tb>(id, ?p, ?a, 0, _);
+    ensures true;
+
+lemma void fraction_store_info<ta, tb>(int id);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r);
+    ensures fraction_store<ta,tb>(id, p, a, c, r) &*& 0 <= r &*& c >= 0;
+
+lemma void fraction_store_ticket_info<ta, tb>(int id, real f);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& fraction_store_ticket<ta, tb>(id, f);
+    ensures fraction_store<ta,tb>(id, p, a, c, r) &*& fraction_store_ticket<ta, tb>(id, f) &*& 0 < f &*& f <= r &*& c > 0;
+
+typedef lemma void predicate_unique<ta, tb>(predicate(ta; tb) p)(ta a);
+    requires [?f]p(a, ?b);
+    ensures [f]p(a, b) &*& f<= 1;
+    
+lemma void fraction_store_info_unique<ta, tb>(int id, real f);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& is_predicate_unique(?lem, p) &*& [f]p(a, _) &*& 0 < f;
+    ensures fraction_store<ta,tb>(id, p, a, c, r) &*& is_predicate_unique(lem, p) &*& [f]p(a, _) &*& 0 <= r &*& r <= 1 - f;
+        
+lemma void fraction_store_ticket_info_unique<ta, tb>(int id, real f, real f2);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& is_predicate_unique(?lem, p) &*& fraction_store_ticket<ta, tb>(id, f) &*& [f2]p(a, _) &*& 0 < f2;
+    ensures fraction_store<ta,tb>(id, p, a, c, r) &*& is_predicate_unique(lem, p) &*& fraction_store_ticket<ta, tb>(id, f) &*& [f2]p(a, _) &*& 0 < f &*& f2 <= 1 - f;
+
+lemma void fraction_store_unique_empty<ta, tb>(int id);
+    requires fraction_store<ta,tb>(id, ?p, ?a, ?c, ?r) &*& is_predicate_unique(?lem, p) &*& p(a, _);
+    ensures fraction_store<ta,tb>(id, p, a, c, r) &*& is_predicate_unique(lem, p) &*& p(a, _) &*& r == 0 &*& c == 0;
+
+
+#endif
