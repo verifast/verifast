@@ -103,6 +103,31 @@ lemma void mem_nth_index_of<t>(t x, list<t> xs)
     }
 }
 
+lemma void index_of_append_l<t>(t x, list<t> xs, list<t> ys)
+    requires mem(x, xs) == true;
+    ensures index_of(x, append(xs, ys)) == index_of(x, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (x0 == x) {
+            } else {
+                index_of_append_l(x, xs0, ys);
+            }
+    }
+}
+
+lemma void index_of_append_r<t>(t x, list<t> xs, list<t> ys)
+    requires !mem(x, xs);
+    ensures index_of(x, append(xs, ys)) == length(xs) + index_of(x, ys);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            index_of_append_r(x, xs0, ys);
+    }
+}
+
 lemma void map_append<a, b>(fixpoint(a, b) f, list<a> xs, list<a> ys)
     requires true;
     ensures map(f, append(xs, ys)) == append(map(f, xs), map(f, ys));
@@ -212,6 +237,17 @@ lemma void append_drop_take<t>(list<t> vs, int i)
         append_drop_take(t, i - 1);
       }
   }
+}
+
+lemma void drop_append<t>(int n, list<t> xs, list<t> ys)
+    requires length(xs) <= n;
+    ensures drop(n, append(xs, ys)) == drop(n - length(xs), ys);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            drop_append(n - 1, xs0, ys);
+    }
 }
 
 lemma_auto void remove_all_nil<t>(list<t> xs)
