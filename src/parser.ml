@@ -10,7 +10,7 @@ open Ast
 let common_keywords = [
   "switch"; "case"; ":"; "return"; "for";
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
-  "||"; "!"; "["; "]"; "{"; "break"; "default";
+  "||"; "!"; "."; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
   "truncating"; "typedef"; "do"
@@ -34,7 +34,7 @@ let c_keywords = [
 ]
 
 let java_keywords = [
-  "public"; "char"; "private"; "protected"; "class"; "."; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
+  "public"; "char"; "private"; "protected"; "class"; "static"; "boolean"; "new"; "null"; "interface"; "implements"; "package"; "import";
   "throw"; "try"; "catch"; "throws"; "byte"; "final"; "extends"; "instanceof"; "super"; "abstract"
 ]
 
@@ -169,7 +169,7 @@ end
 
 type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
-let parse_decls ?inGhostHeader =
+let parse_decls language ?inGhostHeader =
 let rec
   parse_decls = parser
   [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
@@ -996,7 +996,7 @@ and
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<
-        '(ldot, Kwd ".");
+        '(ldot, Kwd ".") when language = Java;
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
@@ -1069,6 +1069,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
+| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
@@ -1228,7 +1229,7 @@ let parse_import = parser
 | [< i = peek_in_ghost_range (parser [< i = parse_import0; '(_, Kwd "@*/") >] -> i) >] -> i
 
 let parse_package_decl= parser
-  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
+  [< (l,p) = parse_package; is=rep parse_import; ds=parse_decls Java;>] -> PackageDecl(l,p,Import(dummy_loc,"java.lang",None)::is, ds)
 
 let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): package =
   let lexer = make_lexer Scala.keywords ghost_keywords in
@@ -1292,7 +1293,7 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
   let parse_c_file =
     parser
-      [< headers = parse_include_directives ignore_eol ~inGhostHeader:false; ds = parse_decls; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+      [< headers = parse_include_directives ignore_eol ~inGhostHeader:false; ds = parse_decls CLang; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
   in
   try
     parse_c_file token_stream
@@ -1314,7 +1315,7 @@ let parse_header_file (basePath: string) (relPath: string) (reportRange: range_k
     parser
       [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
          '(_, Kwd "#"); '(_,Kwd "define"); '(lx', PreprocessorSymbol x'); '(_, Eol); _ = (fun _ -> ignore_eol := true);
-         headers = parse_include_directives ignore_eol isGhostHeader; ds = parse_decls ~inGhostHeader:isGhostHeader;
+         headers = parse_include_directives ignore_eol isGhostHeader; ds = parse_decls CLang ~inGhostHeader:isGhostHeader;
          '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
          _ = Stream.empty >] ->
       if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));

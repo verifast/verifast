@@ -102,6 +102,7 @@ verifast_both sorted_bintree.c
 verifast_both spouse.c
 verifast_both -c spouse-user.c
 verifast_both -disable_overflow_check -shared stack.c
+verifast_both struct_fields.c
 verifast_both swap.c
 verifast_both -c switch.c
 verifast_both -c -disable_overflow_check tuerk.c
