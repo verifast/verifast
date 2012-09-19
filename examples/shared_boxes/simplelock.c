@@ -35,7 +35,7 @@ box_class lock_box(struct lock* l, predicate() I)
   }
     
   handle_predicate locked_handle(bool success, real f) {
-    invariant success ? is_locked == 1 && owner == predicateHandle && myf == f: true;
+    invariant success ? is_locked == 1 && owner == predicateHandle && myf == f : true;
     
     preserved_by acquire(f0) {
     }

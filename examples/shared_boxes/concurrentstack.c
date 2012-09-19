@@ -72,7 +72,7 @@ lemma void nth_index_of<t>(int i, list<t> xs)
 TODO:
   - add actions for adding and removing clients
   - take into account the 'active' bit
-  - specify that junk nodes are owned by active clients
+  - specify that junk nodes are owned by active clients (needed to dispose a stack)
 */
 
 //@ predicate list(struct list* l, list<void*> vs);
@@ -316,6 +316,20 @@ lemma void update_hp_preserves_is_valid(struct stack_client* c, struct stack_cli
   }
 }
 
+lemma void update_hp_preserves_no_validated_hps(struct node* nn, struct stack_client* client, struct node* n, list<client_state> states) 
+  requires no_validated_hps(nn, states) == true ;
+  ensures no_validated_hps(nn, update_hp(client, n, states)) == true;
+{
+  switch(states) {
+    case nil:
+    case cons(h, nstates):
+      switch(h) {
+        case client_state(client0, hp, valid, active, ha): 
+           update_hp_preserves_no_validated_hps(nn, client, n, nstates);
+      }
+  }
+}
+
 lemma void validate_hp_preserves_length(struct stack_client* client, list<client_state> states) 
   requires true;
   ensures length(states) == length(validate_hp(client, states));
@@ -379,6 +393,23 @@ lemma void validate_hp_preserves_hps(struct stack_client* c, struct stack_client
           if(client == client0) {
           } else {
             validate_hp_preserves_hps(c, client, nstates);
+          }
+      }
+  }
+}
+
+lemma void validate_different_hp_preserves_no_validated_hps(struct node* n, struct stack_client* client, list<client_state> states) 
+  requires n != get_hp(client, states) || ! mem(client, project_stack_clients(states));
+  ensures no_validated_hps(n, states) == no_validated_hps(n, validate_hp(client, states));
+{
+    switch(states) {
+    case nil:
+    case cons(h, nstates):
+      switch(h) {
+        case client_state(client0, hp, valid, active, ha): 
+          if(client == client0) {
+          } else {
+            validate_different_hp_preserves_no_validated_hps(n, client, nstates);
           }
       }
   }
@@ -493,7 +524,9 @@ lemma void clients_distinct(struct stack_client* c1, struct stack_client* c2)
 
 lemma void clients_split(struct stack_client* client, struct stack_client* curr) 
   requires clients(client, 0, ?states) &*& mem(curr, project_stack_clients(states)) == true;
-  ensures clients(client, curr, ?states1) &*& clients(curr, 0, ?states2) &*& states == append(states1, states2) && length(states1) == index_of(curr, project_stack_clients(states));
+  ensures clients(client, curr, ?states1) &*& clients(curr, 0, ?states2) &*& states == append(states1, states2) && 
+          length(states1) == index_of(curr, project_stack_clients(states)) &&
+          ! mem(curr, project_stack_clients(states1));
 {
   open clients(client, 0, states);
   if(client != 0) {
@@ -552,21 +585,73 @@ fixpoint list<struct node*> project_nodes(list<pair<struct node*, struct stack_c
     case nil: return nil;
     case cons(h, t): return cons(fst(h), project_nodes(t));
   }
-} 
+}
 
-lemma void junk_mem_remove(list<pair<struct node*, struct stack_client* > > junk, struct node* n1, struct stack_client* c)
-  requires mem(pair(n1, c), junk) == true ;//&*& distinct(project_nodes(junk)) == true;
-  ensures project_nodes(remove(pair(n1, c), junk)) == remove(n1, project_nodes(junk)); 
+lemma void mem_project_nodes(list<pair<struct node*, struct stack_client*> > junk, struct node* n, struct stack_client* c)
+  requires mem(pair(n, c), junk) == true;
+  ensures mem(n, project_nodes(junk)) == true;
 {
-  assume(false);
   switch(junk) {
     case nil:
     case cons(h, t):
       switch(h) {
         case pair(n0, c0):
-          if(h == pair(n1, c)) {
+          if(n0 == n && c0 == c) {
           } else {
-            junk_mem_remove(t, n1, c);
+            mem_project_nodes(t, n, c);
+          }
+      }
+  }
+}
+
+lemma void not_mem_project_nodes(list<pair<struct node*, struct stack_client*> > junk, struct node* n, struct stack_client* c)
+  requires ! mem(n, project_nodes(junk));
+  ensures ! mem(pair(n, c), junk);
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(n0, c0):
+          if(n0 == n && c0 == c) {
+          } else {
+            not_mem_project_nodes(t, n, c);
+          }
+      }
+  }
+}
+
+lemma void junk_mem(list<pair<struct node*, struct stack_client* > > junk, struct node* n)
+  requires foreach(junk, is_node) &*& n->next |-> ?nxt;
+  ensures foreach(junk, is_node) &*& n->next |-> nxt &*& ! mem(n, project_nodes(junk));
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      open foreach(junk, is_node);
+      open is_node(h);
+      junk_mem(t, n);
+      close is_node(h);
+      close foreach(junk, is_node);
+  }
+}
+
+lemma void junk_mem_remove(list<pair<struct node*, struct stack_client* > > junk, struct node* n, struct stack_client* c)
+  requires mem(pair(n, c), junk) == true &*& distinct(project_nodes(junk)) == true;
+  ensures project_nodes(remove(pair(n, c), junk)) == remove(n, project_nodes(junk)); 
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(n0, c0):
+          if(n0 == n && c0 == c) {
+          } else {
+            junk_mem_remove(t, n, c);
+            if(n0 == n) {
+              not_mem_project_nodes(t, n, c);
+            } else {
+            }
           }
       }
   } 
@@ -593,20 +678,83 @@ lemma void invalidated_hps_lemma(list<client_state> states, struct stack_client*
       }
   }
 }
+
+lemma void take_update_hp(struct stack_client* cl, struct node* n, list<client_state> states, int i)
+  requires 0 <=i &*& i <= length(states);
+  ensures update_hp(cl, n, take(i, states)) == take(i, update_hp(cl, n, states));
+{
+  switch(states) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          if(client0 == cl) {
+          } else {
+            if(i == 0) {
+            } else {
+              take_update_hp(cl, n, t, i - 1);
+            }
+          }
+      }
+  }
+}
+
+lemma void take_validate_hp(struct stack_client* cl, list<client_state> states, int i)
+  requires 0 <=i &*& i <= length(states);
+  ensures validate_hp(cl, take(i, states)) == take(i, validate_hp(cl, states));
+{
+  switch(states) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          if(client0 == cl) {
+          } else {
+            if(i == 0) {
+            } else {
+              take_validate_hp(cl, t, i - 1);
+            }
+          }
+      }
+  }
+}
+
+lemma void take_mem_project(list<client_state> states, struct stack_client* c, int index)
+  requires 0 <= index && index <= length(states) &*& mem(c, project_stack_clients(take(index, states))) == true;
+  ensures get_hp(c, take(index, states)) == get_hp(c, states);
+{
+  switch(states) {
+    case nil:
+    case cons(h, t):
+     switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          if(client0 == c) {
+          } else {
+            if(index == 0) {
+            } else {
+              take_mem_project(t, c, index - 1);
+            }
+          }
+      }
+  }
   
+}
 
 box_class stack_box(struct stack* s, predicate(list<void*>) I) {
   invariant s->top |-> ?top &*& lseg(top, 0, ?nodes, ?vs) &*& 
             myclients(s, ?client_states) &*& foreach(?junk, is_node) &*& I(vs) &*&
             // derived info
-            (top == 0 ? nodes == nil : nodes != nil && head(nodes) == top);
+            (top == 0 ? nodes == nil : nodes != nil && head(nodes) == top) &*&
+            distinct(nodes) == true &*&
+            forall(nodes, (not_contains)(project_nodes(junk))) == true &*&
+            distinct(project_nodes(junk)) == true;
   
   action noop();
     requires true;
     ensures (top == old_top && nodes == old_nodes && vs == old_vs && client_states == old_client_states && junk == old_junk);
   
   action push(struct node* new_node, void* v);
-    requires true;
+    requires !mem(new_node, nodes) && ! mem(new_node, project_nodes(junk));
     ensures (top == old_top && nodes == old_nodes && vs == old_vs && client_states == old_client_states && junk == old_junk) 
             ||
             (top == new_node && nodes == cons(new_node, old_nodes) && vs == cons(v, old_vs) && client_states == old_client_states && junk == old_junk);
@@ -623,9 +771,9 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
   
   action validate_hazard_pointer(struct stack_client* client);
     requires mem(client, project_stack_clients(client_states)) == true && actionHandle == get_handle(client, client_states);
-    ensures (get_hp(client, client_states) != old_top && top == old_top && nodes == old_nodes && vs == old_vs && client_states == old_client_states && junk == old_junk) 
+    ensures (get_hp(client, old_client_states) != old_top && top == old_top && nodes == old_nodes && vs == old_vs && client_states == old_client_states && junk == old_junk) 
             ||
-            (get_hp(client, client_states) == old_top && top == old_top && nodes == old_nodes && vs == old_vs && client_states == validate_hp(client, old_client_states) && junk == old_junk);
+            (get_hp(client, old_client_states) == old_top && old_top != 0 && top == old_top && nodes == old_nodes && vs == old_vs && client_states == validate_hp(client, old_client_states) && junk == old_junk);
   
   action release_node(struct stack_client* client, struct node* n);
     requires mem(client, project_stack_clients(client_states)) && mem(pair(n, client), junk) && actionHandle == get_handle(client, client_states) &&
@@ -671,7 +819,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove( pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
     }
@@ -708,7 +856,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
     }
@@ -756,25 +904,18 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
       if(!success) {
       } else {
         if(mem(t, old_nodes)) {
         } else {
-          assert mem(t, project_nodes(old_junk)) == true;
-          assert junk == remove(pair(action_n, action_client), old_junk);
           if(action_n != t) {
             junk_mem_remove(old_junk, action_n, action_client);
-            mem_remove(action_n, t, project_nodes(old_junk));
+            neq_mem_remove(t, action_n, project_nodes(old_junk));
           } else {
-            if(no_validated_hps(t, client_states)) {
-              assert get_hp(client, old_client_states) == t;
-              assert is_valid(client, old_client_states) == true;
-              invalidated_hps_lemma(old_client_states, client);
-            } else {
-            }
+            invalidated_hps_lemma(old_client_states, client);
           }
         }
       }
@@ -785,13 +926,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     invariant mem(client,  project_stack_clients(client_states)) == true &&
               forall(retired, (is_good_retired)(junk, client)) && 
               get_handle(client, client_states) == predicateHandle &&
-              //get_hp(client, client_states) == t &&
               (! success || mem(pair(t, client), junk));
               
     preserved_by noop() { }
-    preserved_by push(new_node, v) {
-      assume(false);
-    }
+    preserved_by push(new_node, v) { }
     preserved_by pop(action_client) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
@@ -815,10 +953,12 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
-      assume(false);
+      if(success) {
+        neq_mem_remove(pair(t, client), pair(action_n, action_client), old_junk);
+      }
     }
   }
   
@@ -826,9 +966,8 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     invariant mem(client,  project_stack_clients(client_states)) == true &&
               forall(retired, (is_good_retired)(junk, client)) && 
               get_handle(client, client_states) == predicateHandle &&
-              get_hp(client, client_states) == t &&
+              get_hp(client, client_states) == t && is_valid(client, client_states) &&
               t != 0 &&
-              (mem(t, nodes) || mem(t, project_nodes(junk))) &&
               (mem(t, nodes) ?
                 (tn != 0 ? 
                   mem(tn, nodes) && index_of(tn, nodes) == index_of(t, nodes) + 1
@@ -836,41 +975,52 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
                   index_of(t, nodes) == length(nodes) - 1
                 )
                 :
-                  true
+                  mem(t, project_nodes(junk))
               );
               
     preserved_by noop() { }
-    preserved_by push(new_node, v) {
-      assume(false);
-    }
+    preserved_by push(new_node, v) { }
     preserved_by pop(action_client) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
       }
-      assume(false);
+      switch(old_nodes) {
+        case nil:
+        case cons(hh, tt):
+      }
     }
     preserved_by set_hazard_pointer(action_client, action_n) {
       update_hp_preserves_clients(action_client, action_n, old_client_states);
       update_hp_preserves_other_hps(client, action_client, action_n, old_client_states);
       update_hp_preserves_length(action_client, action_n, old_client_states);
       update_hp_preserves_handles(client, action_client, action_n, old_client_states);
+      update_hp_preserves_is_valid(client, action_client, action_n, old_client_states);
     }
     preserved_by validate_hazard_pointer(action_client) {
       validate_hp_preserves_clients(action_client, old_client_states);
       validate_hp_preserves_hps(client, action_client, old_client_states);
       validate_hp_preserves_length(action_client, old_client_states);
       validate_hp_preserves_handles(client, action_client, old_client_states);
+      validate_hp_preserves_is_valid(client, action_client, old_client_states);
     }
     preserved_by release_node(action_client, action_n) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
-      assume(false);
+      if(mem(t, old_nodes)) {
+      } else {
+        if(action_n != t) {
+          junk_mem_remove(old_junk, action_n, action_client);
+          neq_mem_remove(t, action_n, project_nodes(old_junk));
+        } else {
+          invalidated_hps_lemma(old_client_states, client);
+        }
+      }
     }
   }
   
@@ -878,15 +1028,14 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     invariant mem(client,  project_stack_clients(client_states)) == true &&
               forall(retired, (is_good_retired)(junk, client)) && 
               get_handle(client, client_states) == predicateHandle &&
+              0 <= index && index <= length(client_states) &&
               (!phase2 ?
                 (curr != 0 ? 
                  mem(curr,  project_stack_clients(client_states)) == true &&
                  (curratindex ?
                      index < length(client_states) && 
-                    // index_of(curr, project_stack_clients(client_states)) == index
                      nth(index,  project_stack_clients(client_states)) == curr
                    :
-                     index <= length(client_states) &&
                      nth(index - 1,  project_stack_clients(client_states)) == curr
                  )
                 : 
@@ -906,22 +1055,90 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     }
     preserved_by set_hazard_pointer(action_client, action_n) {
       update_hp_preserves_clients(action_client, action_n, old_client_states);
+      update_hp_preserves_other_hps(client, action_client, action_n, old_client_states);
       update_hp_preserves_length(action_client, action_n, old_client_states);
       update_hp_preserves_handles(client, action_client, action_n, old_client_states);
-      assume(false);
+      update_hp_preserves_is_valid(client, action_client, action_n, old_client_states);
+      if(!phase2) {
+        if(!forall(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, client_states)))) {
+          struct node* ex = not_forall(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, client_states)));
+          forall_elim(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, old_client_states)), ex);
+          if(!mem(ex, observedhps)) {
+            update_hp_preserves_no_validated_hps(ex, action_client, action_n, take(index, old_client_states)); 
+            take_update_hp(action_client, action_n, old_client_states, index);
+          }
+        }
+      } else {
+        if(!forall(retired, (was_observed_or_no_validated_hps)(observedhps, client_states))) {
+          struct node* ex = not_forall(retired, (was_observed_or_no_validated_hps)(observedhps, client_states));
+          assert ! ((was_observed_or_no_validated_hps)(observedhps, client_states, ex));
+          forall_elim(retired, (was_observed_or_no_validated_hps)(observedhps, old_client_states), ex);
+          if(!mem(ex, observedhps)) {
+            update_hp_preserves_no_validated_hps(ex, action_client, action_n, old_client_states); 
+          }
+        }
+      }
     }
     preserved_by validate_hazard_pointer(action_client) {
+      switch(old_nodes) {
+        case nil:
+        case cons(hh, tt):
+      }
       validate_hp_preserves_clients(action_client, old_client_states);
+      validate_hp_preserves_hps(client, action_client, old_client_states);
       validate_hp_preserves_length(action_client, old_client_states);
       validate_hp_preserves_handles(client, action_client, old_client_states);
-      assume(false);
+      validate_hp_preserves_is_valid(client, action_client, old_client_states);
+      if(!phase2) {
+        if(get_hp(action_client, old_client_states) != old_top) {  
+        } else {
+          if(!forall(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, client_states)))) {
+             struct node* ex = not_forall(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, client_states)));
+             forall_elim(retired, (was_observed_or_no_validated_hps)(observedhps, take(index, old_client_states)), ex);
+             forall_elim(retired, (is_good_retired)(junk, client), ex);
+             if(!mem(ex, observedhps)) {
+               take_validate_hp(action_client, old_client_states, index);
+               assert no_validated_hps(ex, take(index, old_client_states)) == true;
+               if(ex != old_top) {
+                 if(mem(action_client, project_stack_clients(take(index, old_client_states)))) {
+                   take_mem_project(old_client_states, action_client, index);
+                 }
+                 validate_different_hp_preserves_no_validated_hps(ex, action_client, take(index, old_client_states));
+               } else {
+                 forall_elim(nodes, (not_contains)(project_nodes(junk)), ex);
+                 mem_project_nodes(old_junk, ex, client);
+               }
+             }
+           }
+        }
+      } else {
+        if(get_hp(action_client, old_client_states) != old_top) {
+        } else {
+          if(!forall(retired, (was_observed_or_no_validated_hps)(observedhps, client_states))) {
+            struct node* ex = not_forall(retired, (was_observed_or_no_validated_hps)(observedhps, client_states));
+            assert ! ((was_observed_or_no_validated_hps)(observedhps, client_states, ex));
+            forall_elim(retired, (was_observed_or_no_validated_hps)(observedhps, old_client_states), ex);
+            forall_elim(retired, (is_good_retired)(junk, client), ex);
+            if(!mem(ex, observedhps)) {
+              assert no_validated_hps(ex, old_client_states) == true;
+              if(ex != old_top) {
+                validate_different_hp_preserves_no_validated_hps(ex, action_client, old_client_states); 
+              } else {
+                forall_elim(nodes, (not_contains)(project_nodes(junk)), ex);
+                mem_project_nodes(old_junk, ex, client);
+              }
+            }
+          }
+        }
+      }
     }
+    
     preserved_by release_node(action_client, action_n) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
     }
@@ -948,30 +1165,59 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     }
     preserved_by set_hazard_pointer(action_client, action_n) {
       update_hp_preserves_clients(action_client, action_n, old_client_states);
+      update_hp_preserves_other_hps(client, action_client, action_n, old_client_states);
       update_hp_preserves_length(action_client, action_n, old_client_states);
       update_hp_preserves_handles(client, action_client, action_n, old_client_states);
-      assume(false); // prove by showing that set_hazard_pointer, invalidates it
+      update_hp_preserves_is_valid(client, action_client, action_n, old_client_states);
+      if(!forall(todos, (was_observed_or_no_validated_hps)(observedhps, client_states))) {
+        struct node* ex = not_forall(todos, (was_observed_or_no_validated_hps)(observedhps, client_states));
+        forall_elim(todos, (was_observed_or_no_validated_hps)(observedhps, old_client_states), ex);
+        if(!mem(ex, observedhps)) {
+          update_hp_preserves_no_validated_hps(ex, action_client, action_n, old_client_states); 
+        }
+      }
     }
     preserved_by validate_hazard_pointer(action_client) {
+      switch(old_nodes) {
+        case nil:
+        case cons(hh, tt):
+      }
       validate_hp_preserves_clients(action_client, old_client_states);
+      validate_hp_preserves_hps(client, action_client, old_client_states);
       validate_hp_preserves_length(action_client, old_client_states);
       validate_hp_preserves_handles(client, action_client, old_client_states);
-      assume(false);
-      // prove by showing that validate_hazard_pointer must be equal to the top of the stack, but all todos are junk
+      validate_hp_preserves_is_valid(client, action_client, old_client_states);
+      if(get_hp(action_client, old_client_states) != old_top) {
+      } else {
+        if(!forall(todos, (was_observed_or_no_validated_hps)(observedhps, client_states))) {
+          struct node* ex = not_forall(todos, (was_observed_or_no_validated_hps)(observedhps, client_states));
+          forall_elim(todos, (was_observed_or_no_validated_hps)(observedhps, old_client_states), ex);
+          forall_elim(todos, (is_good_retired)(junk, client), ex);
+          if(!mem(ex, observedhps)) {
+            if(ex != old_top) {
+              validate_different_hp_preserves_no_validated_hps(ex, action_client, old_client_states); 
+            } else {
+              forall_elim(nodes, (not_contains)(project_nodes(junk)), ex);
+              mem_project_nodes(old_junk, ex, client);
+            }
+          }
+        }
+      }
     }
+    
     preserved_by release_node(action_client, action_n) {
       if(! forall(todos, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(todos, (is_good_retired)(junk, client));
         forall_elim(todos, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
         if(pair(action_n, action_client) != pair(n, client)) {
-          mem_remove(pair(action_n, action_client), pair(n, client), old_junk);
+          neq_mem_remove(pair(n, client), pair(action_n, action_client), old_junk);
         }
       }
     }
@@ -980,9 +1226,6 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
 @*/
 
 /*@
-//predicate half_data(struct node* n) =
-//  [1/2]n->data |-> _;
-
 predicate one_third_data(struct node* n) =
   [1/3]n->data |-> _;
 
@@ -1003,6 +1246,26 @@ typedef lemma void stack_push_lemma(predicate(list<void*> vs) I, void* data)();
   requires stack_push_pre(this)() &*& I(?vs);
   ensures stack_push_post(this)() &*& I(cons(data, vs));
 @*/
+
+/*@
+predicate stack(struct stack* s, predicate(list<void*>) I) =
+  stack_box(?id, s, I) &*& malloc_block_stack(s);
+@*/
+
+struct stack* create_stack()
+  //@ requires exists<predicate(list<void*>)>(?I) &*& I(nil);
+  //@ ensures result == 0 ? I(nil) : stack(result, I); 
+{
+  //@ open exists(I);
+  struct stack* s = malloc(sizeof(struct stack));
+  if(s == 0) abort();
+  s->top = 0;
+  s->clients = 0;
+  //@ close foreach(nil, is_node);
+  //@ create_box id = stack_box(s, I); 
+  //@ close stack(s, I);
+  return s;
+}
 
 void stack_push(struct stack* s, struct stack_client* client, void* data)
   //@ requires stack_client(s, ?f, ?I, client) &*& is_stack_push_lemma(?lem, I, data) &*& stack_push_pre(lem)();
@@ -1033,6 +1296,10 @@ void stack_push(struct stack* s, struct stack_client* client, void* data)
     consuming_handle_predicate basic_client_handle(ha, client, retired)
     perform_action push(new_node, data) atomic
     {
+      assert lseg(?hd, ?lst, ?nds, _);
+      assert foreach(?junk, _);
+      lseg_mem(hd, lst, new_node);
+      junk_mem(junk, new_node);
       @*/ struct node* old = atomic_compare_and_set_pointer(&s->top, t, new_node); /*@
       if(old == t) {
         lem();
@@ -1089,7 +1356,6 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
   //@ ensures [f]stack_box(id, s, I) &*& client->rlist |-> rlist &*& [1/2]client->myhandle |-> ha &*& list(rlist, retired) &*& client->rcount |-> length(retired) &*& list(plist, ?hazards) &*& phase2_handle(ha, id, client, nil, retired, hazards);
 {
   ;
-  //@ assume(false);
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate basic_client_handle(ha, client, retired)
@@ -1194,6 +1460,23 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
 fixpoint bool not_contains<t>(list<t> xs, t x) {
   return ! mem(x, xs); 
 }
+
+lemma void not_contains_remove_project_nodes(list<pair<struct node*, struct stack_client*> > junk, struct node* n, struct stack_client* c, struct node* nn)
+  requires ! mem(nn, project_nodes(junk));
+  ensures ! mem(nn, project_nodes(remove(pair(n, c), junk)));
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(n0, c0):
+          if(n0 == n && c0 == c) {
+          } else {
+            not_contains_remove_project_nodes(t, n, c, nn);
+          }
+      }
+  }
+}
 @*/
 
 void phase2(struct stack* s, struct stack_client* client, struct list* plist)
@@ -1245,20 +1528,28 @@ void phase2(struct stack* s, struct stack_client* client, struct list* plist)
         open myclients(_, _);
         assert clients(_, _, ?client_states);
         assert foreach(?junk, _);
+        assert lseg(_, _, ?nodes, _);
         switch(todos) { case nil: case cons(currr, rest): }
         forall_elim(todos, (was_observed_or_no_validated_hps)(hazards, client_states), curr);
         foreach_remove(pair(curr, client), junk);
         if(! forall(newretired, (is_good_retired)(remove(pair(curr, client), junk), client))) {
           struct node* ex = not_forall(newretired, (is_good_retired)(remove(pair(curr, client), junk), client));
           forall_elim(newretired, (is_good_retired)(junk, client), ex);
-          mem_remove(pair(curr, client), pair(ex, client), junk);
+          neq_mem_remove(pair(ex, client), pair(curr, client), junk);
         }
         
         if(! forall(tail(todos), (is_good_retired)(remove(pair(curr, client), junk), client))) {
            struct node* ex = not_forall(tail(todos), (is_good_retired)(remove(pair(curr, client), junk), client));
            forall_elim(todos, (is_good_retired)(junk, client), ex);
-           mem_remove(pair(curr, client), pair(ex, client), junk);
+           neq_mem_remove(pair(ex, client), pair(curr, client), junk);
         }
+        if(! forall(nodes, (not_contains)(project_nodes(remove(pair(curr, client), junk))))) {
+           struct node* ex = not_forall(nodes, (not_contains)(project_nodes(remove(pair(curr, client), junk))));
+           forall_elim(nodes, (not_contains)(project_nodes(junk)), ex);
+           not_contains_remove_project_nodes(junk, curr, client, ex);
+        }
+        junk_mem_remove(junk, curr, client);
+        distinct_remove(curr, project_nodes(junk));
       }
       producing_handle_predicate phase2_handle(client, newretired, tail(todos), hazards);
       @*/
@@ -1328,6 +1619,50 @@ lemma void foreach_two_thirds_mem(list<struct node*> retired, struct node* n)
   }
   close foreach(retired, two_thirds_data);
 }
+
+lemma void append_update_hp(list<client_state> states1, list<client_state> states2, struct stack_client* client, struct node* n)
+  requires ! mem(client, project_stack_clients(states1));
+  ensures update_hp(client, n, append(states1, states2)) == append(states1, update_hp(client, n, states2));
+{
+  switch(states1) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          append_update_hp(t, states2, client, n); 
+      }
+  }
+}
+
+lemma void append_validate_hp(list<client_state> states1, list<client_state> states2, struct stack_client* client)
+  requires ! mem(client, project_stack_clients(states1));
+  ensures validate_hp(client, append(states1, states2)) == append(states1, validate_hp(client, states2));
+{
+  switch(states1) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          append_validate_hp(t, states2, client); 
+      }
+  }
+}
+
+lemma void validate_hp_is_valid(list<client_state> states, struct stack_client* client)
+  requires mem(client, project_stack_clients(states)) == true;
+  ensures is_valid(client, validate_hp(client, states)) == true;
+{
+  switch(states) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case client_state(client0, hp0, valid0, active0, ha0):
+          if(client0 != client) {
+            validate_hp_is_valid(t, client); 
+          }
+      }
+  }
+}
 @*/
 
 /*@
@@ -1345,13 +1680,44 @@ fixpoint struct stack_client* get_owner(struct node* n, list<pair<struct node*, 
   }
 }
 
-lemma void junk_remove(list<pair<struct node*, struct stack_client*> > junk, struct node* t);
-  requires foreach(junk, is_node) &*& mem(t, project_nodes(junk)) == true;
-  ensures foreach(remove_node(junk, t), is_node) &*& is_node(pair(t, get_owner(t, junk))); 
+lemma void junk_remove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
+  requires foreach(junk, is_node) &*& mem(n, project_nodes(junk)) == true;
+  ensures foreach(remove_node(junk, n), is_node) &*& is_node(pair(n, get_owner(n, junk))); 
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      open foreach(_, _);
+      switch(h) {
+        case pair(n0, owner0):
+          if(n0 == n) {
+          } else {
+            junk_remove(t, n);
+            close foreach(remove_node(junk, n), is_node);
+          }
+      }
+  }
+}
 
-lemma void junk_unremove(list<pair<struct node*, struct stack_client*> > junk, struct node* t);
-  requires foreach(remove_node(junk, t), is_node) &*& mem(t, project_nodes(junk)) == true &*& is_node(pair(t, ?owner)) &*& get_owner(t, junk) == owner;
+lemma void junk_unremove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
+  requires foreach(remove_node(junk, n), is_node) &*& mem(n, project_nodes(junk)) == true &*& is_node(pair(n, ?owner)) &*& get_owner(n, junk) == owner;
   ensures foreach(junk, is_node); 
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(n0, owner0):
+          if(n0 == n && owner0 == owner) {
+            close foreach(junk, is_node);
+          } else {
+            open foreach(remove_node(junk, n), is_node);
+            junk_unremove(t, n);
+            close foreach(junk, is_node);
+          }
+      }
+  }
+}
 @*/
 
 bool stack_pop(struct stack* s, struct stack_client* client, void** out)
@@ -1395,7 +1761,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
       @*/ atomic_set_pointer(&client->hp, t); /*@
       client->valid = false;
       clients_merge(head, client);
-      assume(update_hp(client, t, states) == append(states1, update_hp(client, t, states2)));
+      append_update_hp(states1, states2, client, t);
       update_hp_get_hp(client, t, states);
       update_hp_preserves_handles(client, client, t, states);
       update_hp_preserves_clients(client, t, states);
@@ -1418,11 +1784,11 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
         client->valid = true;
         clients_merge(head_, client);
         assert clients(head_, 0, ?poststates_);
-        assume(validate_hp(client, states_) == append(states1_, validate_hp(client, states2_)));
+        append_validate_hp(states1_, states2_, client);
         validate_hp_preserves_hps(client, client, states_);
         validate_hp_preserves_handles(client, client, states_);
         validate_hp_preserves_clients(client, states_);
-        assume(is_valid(client, poststates_) == true);
+        validate_hp_is_valid(states_, client);
       } else {
       }
     } 
@@ -1483,6 +1849,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
         open lseg(_, _, ?thenodes, _);
         open myclients(s, _);
         assert clients(_, _, ?states__);
+        assert foreach(?thejunk, _);
         @*/ old = atomic_compare_and_set_pointer(&s->top, t, n); /*@
         close stack_top(s, _);
         if(old == t) {
@@ -1495,8 +1862,11 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
           if(! forall(retired, (is_good_retired)(cons(pair(t, client), junk_), client))){
             struct node* ex = not_forall(retired, (is_good_retired)(cons(pair(t, client), junk_), client));
             forall_elim(retired, (is_good_retired)(junk_, client), ex);
-          } else {
-          }          
+          }
+          if(!forall(tail(thenodes), (not_contains)(project_nodes(cons(pair(t, client), junk_))))){
+            struct node* ex = not_forall(tail(thenodes), (not_contains)(project_nodes(cons(pair(t, client), junk_))));
+            forall_elim(thenodes, (not_contains)(project_nodes(junk_)), ex);
+          }    
         }
       }
       producing_handle_predicate is_junk(client, retired, old == t, t);

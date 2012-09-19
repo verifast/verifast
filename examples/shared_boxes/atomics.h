@@ -5,6 +5,10 @@ void *atomic_load_pointer(void **pp); // atomic
     //@ requires pointer(pp, ?p);
     //@ ensures pointer(pp, p) &*& result == p;
 
+void atomic_set_pointer(void **pp, void* p); // atomic
+    //@ requires pointer(pp, _);
+    //@ ensures pointer(pp, p);
+
 int atomic_load_int(int *i); // atomic
     //@ requires integer(i, ?v);
     //@ ensures integer(i, v) &*& result == v;
