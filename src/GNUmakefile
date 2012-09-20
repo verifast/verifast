@@ -87,7 +87,8 @@ build: env \
        ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/java_card_applet ../bin/dlsymtool \
        ../bin/vfstrip ../bin/list.vfmanifest \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
-       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest
+       ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest \
+       ../bin/assoclist.vfmanifest
 
 test_plugin: build
 	$(SET_ENV); \
@@ -170,6 +171,10 @@ distclean: clean
  ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest quantifiers.c
 
+../bin/assoclist.vfmanifest: ../bin/assoclist.c ../bin/assoclist.gh \
+ ../bin/list.vfmanifest
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest assoclist.c
+	
 ../bin/vfstrip: vfstrip.ml
 	${OCAMLOPTOPT} -o ../bin/vfstrip vfstrip.ml
 
