@@ -170,6 +170,35 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             iter (chunk::hdone) htodo
       in
       iter [] h
+
+  let pointer_pred_symb () =
+    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
+    pointer_pred_symb
+
+  let int_pred_symb () =
+    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
+    int_pred_symb
+
+  let u_int_pred_symb () =
+    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
+    u_int_pred_symb
+
+  let char_pred_symb () =
+    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
+    char_pred_symb
+
+  let u_char_pred_symb () =
+    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
+    u_char_pred_symb
+    
+  let try_pointee_pred_symb pointeeType =
+    match pointeeType with
+    PtrType _ -> Some (pointer_pred_symb ())
+    | IntType -> Some (int_pred_symb ())
+    | UintPtrType -> Some (u_int_pred_symb ())
+    | Char -> Some (char_pred_symb ())
+    | UChar -> Some (u_char_pred_symb ())
+    | _ -> None
   
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
@@ -200,6 +229,34 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let slice = Chunk ((array_element_symb(), true), [tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
+    | WPointsTo (l, Var (lv, x, scope), tp, rhs) -> 
+      let (_, type_, symbn, _) = List.assoc x globalmap in    
+      evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
+      let (symb, args) = 
+        match try_pointee_pred_symb type_ with
+          Some (s) -> (s, [symbn; t])
+        | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
+      in
+      produce_chunk h (symb, false) [] coef (Some 1) args None $. fun h ->
+      cont h ghostenv env
+      | WPointsTo (l, Deref(ld, Var(lv, x, scope), td), tp, rhs) ->  
+        let symbn = lookup env x in
+        evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
+        let td' = 
+          match !td with
+            Some(t) -> t 
+          | _ -> static_error ld "Dereferencing untyped variable" None
+        in
+        if tp != td' then
+          static_error ld "Variable dereferenced to incorrect type" None
+        else
+          let (symb, args) = 
+            match try_pointee_pred_symb tp with
+            Some (s) -> (s, [symbn; t])
+            | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
+          in
+          produce_chunk h (symb, false) [] coef (Some 1) args None $. fun h ->
+          cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
         if not is_global_predref then 
@@ -578,35 +635,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       None -> assert_false h env l "No matching array element or array slice chunk" None
     | Some v -> v
   
-  let pointer_pred_symb () =
-    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
-    pointer_pred_symb
-
-  let int_pred_symb () =
-    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
-    int_pred_symb
-
-  let u_int_pred_symb () =
-    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
-    u_int_pred_symb
-  
-  let char_pred_symb () =
-    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
-    char_pred_symb
-
-  let u_char_pred_symb () =
-    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
-    u_char_pred_symb
-  
-  let try_pointee_pred_symb pointeeType =
-    match pointeeType with
-      PtrType _ -> Some (pointer_pred_symb ())
-    | IntType -> Some (int_pred_symb ())
-    | UintPtrType -> Some (u_int_pred_symb ())
-    | Char -> Some (char_pred_symb ())
-    | UChar -> Some (u_char_pred_symb ())
-    | _ -> None
-  
   let pointee_pred_symb l pointeeType =
     match try_pointee_pred_symb pointeeType with
       Some symb -> symb
@@ -811,6 +839,29 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
+      | Var (lv, x, scope) -> 
+        let (_, type_, symbn, _) = List.assoc x globalmap in  
+        let (symb, args) = 
+          match try_pointee_pred_symb type_ with
+            Some (s) -> (s, [TermPat symbn; rhs])
+          | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None
+        in
+        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) args
+          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
+      | Deref(ld, Var(lv, x, scope), td) ->  
+        let symbn = lookup env x in
+        let td' = 
+          match !td with
+            Some(t) -> t 
+          | _ -> static_error ld "Dereferencing untyped variable" None
+        in
+        let (symb, args) = 
+          match try_pointee_pred_symb td' with
+            Some (s) -> (s, [TermPat symbn; rhs])
+          | _ -> static_error l "A dereferenced variable in the left-hand side of a points-to assertion must be of a pointer-to-primitive type" None
+        in
+        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) args
+          (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =
       let (g_symb, pats0, pats, types) =

@@ -61,6 +61,7 @@ verifast_both -disable_overflow_check -c gcl0.c
 verifast_both -disable_overflow_check -c gcl.c
 verifast_both ghost_field.c
 verifast_both -disable_overflow_check globals.c
+verifast_both -disable_overflow_check global_points_to_syntax.c
 verifast_both -shared goto.c
 verifast_both -disable_overflow_check -c gui-app.c
 verifast_both -I headertest -c headertest.c
@@ -97,6 +98,7 @@ cd ..
 verifast_both -c tokenizer_test.c
 verifast_both -disable_overflow_check listex.o arrays.o stringBuffers.c tokenizer.c ghostlist.o rcl.c
 verifast_both reallittest.c
+verifast_both -disable_overflow_check ref_points_to_syntax.c
 verifast_both -c short.c
 verifast_both sorted_bintree.c
 verifast_both spouse.c
