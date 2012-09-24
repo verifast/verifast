@@ -243,9 +243,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let symbn = eval None env e in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
       let symb = 
-	match try_pointee_pred_symb tp with
+        match try_pointee_pred_symb tp with
           Some s -> s
-        | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
+        | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None 
       in
       produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
       cont h ghostenv env
@@ -846,7 +846,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let symb = 
           match try_pointee_pred_symb td' with
             Some s -> s
-          | _ -> static_error l "A dereferenced variable in the left-hand side of a points-to assertion must be of a pointer-to-primitive type" None
+          | _ -> static_error l "The left-hand side of this points-to assertion must be of a primitive type" None
         in
         consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
