@@ -1,4 +1,6 @@
-void modify_ints_refs_old_syntax(int* first, int* second)
+#include "stdlib.h"
+
+void modify_int_refs_old_syntax(int* first, int* second)
     //@ requires integer(first, ?val1) &*& integer(second, ?val2);
     //@ ensures integer(first, val1 + 1) &*& integer(second, val2 - 1);
 {
@@ -6,7 +8,7 @@ void modify_ints_refs_old_syntax(int* first, int* second)
     (*second)--;
 }
 
-void modify_ints_refs_new_syntax(int* first, int* second)
+void modify_int_refs_new_syntax(int* first, int* second)
     //@ requires *first |-> ?val1 &*& *second |-> ?val2;
     //@ ensures *first |-> val1 + 1 &*& *second |-> val2 - 1;
 {
@@ -14,7 +16,7 @@ void modify_ints_refs_new_syntax(int* first, int* second)
     (*second)--;
 }
 
-void modify_uints_refs_old_syntax(unsigned int* first, unsigned int* second)
+void modify_uint_refs_old_syntax(unsigned int* first, unsigned int* second)
     //@ requires u_integer(first, ?val1) &*& u_integer(second, ?val2);
     //@ ensures u_integer(first, val1 + 1) &*& u_integer(second, val2 - 1);
 {
@@ -22,7 +24,7 @@ void modify_uints_refs_old_syntax(unsigned int* first, unsigned int* second)
     *second = *second - 1;
 }
 
-void modify_uints_refs_new_syntax(unsigned int* first, unsigned int* second)
+void modify_uint_refs_new_syntax(unsigned int* first, unsigned int* second)
     //@ requires *first |-> ?val1 &*& *second |-> ?val2;
     //@ ensures *first |-> val1 + 1 &*& *second |-> val2 - 1;
 {
@@ -30,7 +32,7 @@ void modify_uints_refs_new_syntax(unsigned int* first, unsigned int* second)
     *second = *second - 1;
 }
 
-void modify_chars_refs_old_syntax(char* first, char* second)
+void modify_char_refs_old_syntax(char* first, char* second)
     //@ requires character(first, ?val1) &*& character(second, ?val2);
     //@ ensures character(first, (char) (val1 + 1)) &*& character(second, (char) (val2 - 1));
 {
@@ -38,12 +40,20 @@ void modify_chars_refs_old_syntax(char* first, char* second)
     (*second)--;
 }
 
-void modify_chars_refs_new_syntax(char* first, char* second)
+void modify_char_refs_new_syntax(char* first, char* second)
     //@ requires *first |-> ?val1 &*& *second |-> ?val2;
     //@ ensures *first |-> (char) (val1 + 1) &*& *second |-> (char) (val2 - 1);
 {
     (*first)++;
     (*second)--;
+}
+
+void modify_calculated_address_new_syntax(int* foo)
+    //@ requires *(foo + 1) |-> ?val1 &*& *(foo + 2) |-> ?val2;
+    //@ ensures *(foo + 1) |-> val1 + 5 &*& *(foo + 2) |-> val2 - 5;
+{
+  *(foo + 1) = *(foo + 1) + 5;
+  *(foo + 2) = *(foo + 2) - 5;
 }
 
 int main() //@ : main
@@ -56,26 +66,52 @@ int main() //@ : main
     unsigned int l = 20;
     char m = 'a';
     char n = 'z';
+    int* int_pointer;
     
     //@ assert i == -10 && j == 10;
-    modify_ints_refs_old_syntax(&i, &j);
+    modify_int_refs_old_syntax(&i, &j);
     //@ assert i == -9 && j == 9;
-    modify_ints_refs_new_syntax(&i, &j);
+    modify_int_refs_new_syntax(&i, &j);
     //@ assert i == -8 && j == 8;
 
     
     //@ assert k == 10 && l == 20;
-    modify_uints_refs_old_syntax(&k, &l);
+    modify_uint_refs_old_syntax(&k, &l);
     //@ assert k == 11 && l == 19;
-    modify_uints_refs_new_syntax(&k, &l);
+    modify_uint_refs_new_syntax(&k, &l);
     //@ assert k == 12 && l == 18;    
     
     
     //@ assert m == 'a' && n == 'z';
-    modify_chars_refs_old_syntax(&m, &n);
+    modify_char_refs_old_syntax(&m, &n);
     //@ assert m == 'b' && n == 'y';
-    modify_chars_refs_new_syntax(&m, &n);
+    modify_char_refs_new_syntax(&m, &n);
     //@ assert m == 'c' && n == 'x';
+    
+    
+    int_pointer = malloc(5 * sizeof(int));
+    if (int_pointer == 0) abort();
+    //@ chars_split((void *)int_pointer, sizeof(int));
+    //@ chars_to_integer(int_pointer);
+    //@ chars_split((void *)int_pointer + sizeof(int), sizeof(int));
+    //@ chars_to_integer(int_pointer + 1);
+    //@ chars_split((void *)int_pointer + 2 * sizeof(int), sizeof(int));
+    //@ chars_to_integer(int_pointer + 2);
+    
+    *(int_pointer + 1) = 5;
+    *(int_pointer + 2) = 5;
+    //@ assert *(int_pointer + 1) |-> 5 &*& *(int_pointer + 2) |-> 5;
+    modify_calculated_address_new_syntax(int_pointer);
+    //@ assert *(int_pointer + 1) |-> 10 &*& *(int_pointer + 2) |-> 0;
+    
+    //@ integer_to_chars(int_pointer + 2);
+    //@ chars_join((void *)int_pointer + 2 * sizeof(int));
+    //@ integer_to_chars(int_pointer + 1);
+    //@ chars_join((void *)int_pointer + sizeof(int));
+    //@ integer_to_chars(int_pointer);
+    //@ chars_join((void *)int_pointer);
+    free((void*)int_pointer);
+    
     
     return 0;
 }

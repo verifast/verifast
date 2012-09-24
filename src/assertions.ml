@@ -232,31 +232,23 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | WPointsTo (l, Var (lv, x, scope), tp, rhs) -> 
       let (_, type_, symbn, _) = List.assoc x globalmap in    
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let (symb, args) = 
+      let symb = 
         match try_pointee_pred_symb type_ with
-          Some (s) -> (s, [symbn; t])
+          Some s -> s
         | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
       in
-      produce_chunk h (symb, false) [] coef (Some 1) args None $. fun h ->
+      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
       cont h ghostenv env
-      | WPointsTo (l, Deref(ld, Var(lv, x, scope), td), tp, rhs) ->  
-        let symbn = lookup env x in
-        evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-        let td' = 
-          match !td with
-            Some(t) -> t 
-          | _ -> static_error ld "Dereferencing untyped variable" None
-        in
-        if tp != td' then
-          static_error ld "Variable dereferenced to incorrect type" None
-        else
-          let (symb, args) = 
-            match try_pointee_pred_symb tp with
-            Some (s) -> (s, [symbn; t])
-            | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
-          in
-          produce_chunk h (symb, false) [] coef (Some 1) args None $. fun h ->
-          cont h ghostenv env
+    | WPointsTo (l, Deref(ld, e, td), tp, rhs) ->  
+      let symbn = eval None env e in
+      evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
+      let symb = 
+	match try_pointee_pred_symb tp with
+          Some s -> s
+        | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None 
+      in
+      produce_chunk h (symb, true) [] coef (Some 1) [symbn; t] None $. fun h ->
+      cont h ghostenv env
     | WPredAsn (l, g, is_global_predref, targs, pats0, pats) ->
       let (g_symb, pats0, pats, types, auto_info) =
         if not is_global_predref then 
@@ -841,26 +833,22 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         cont [chunk] h ghostenv env env' size
       | Var (lv, x, scope) -> 
         let (_, type_, symbn, _) = List.assoc x globalmap in  
-        let (symb, args) = 
+        let symb = 
           match try_pointee_pred_symb type_ with
-            Some (s) -> (s, [TermPat symbn; rhs])
+            Some s -> s
           | _ -> static_error l "A global variable in the left-hand side of a points-to assertion must be of a primitive type" None
         in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) args
+        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
-      | Deref(ld, Var(lv, x, scope), td) ->  
-        let symbn = lookup env x in
-        let td' = 
-          match !td with
-            Some(t) -> t 
-          | _ -> static_error ld "Dereferencing untyped variable" None
-        in
-        let (symb, args) = 
+      | Deref(ld, e, td) ->  
+        let symbn = eval None env e in
+        let Some(td') = !td in 
+        let symb = 
           match try_pointee_pred_symb td' with
-            Some (s) -> (s, [TermPat symbn; rhs])
+            Some s -> s
           | _ -> static_error l "A dereferenced variable in the left-hand side of a points-to assertion must be of a pointer-to-primitive type" None
         in
-        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) args
+        consume_chunk rules h ghostenv env env' l (symb, true) [] coef coefpat (Some 1) [TermPat symbn; rhs]
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
     in
     let pred_asn l coefpat g is_global_predref targs pats0 pats =

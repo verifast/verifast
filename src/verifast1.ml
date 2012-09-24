@@ -3505,8 +3505,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
-      | Var (_, _, _) -> ()  
-      | Deref(_, Var(_, _, _), _) -> ()
+      | Var (_, _, scope) when !scope = Some GlobalName -> ()
+      | Deref (_, _, _) -> ()
       | _ -> static_error l "The left-hand side of a points-to assertion must be a field dereference, a global variable, a pointer variable dereference or an array element expression." None
       end;
       let (wv, tenv') = check_pat (pn,ilist) tparams tenv t v in
