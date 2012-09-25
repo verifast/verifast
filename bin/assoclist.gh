@@ -69,12 +69,16 @@ lemma void take_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t
 lemma_auto(assoc(key, update_entry(key, f, map))) void assoc_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map);
   requires mem(key, keys(map)) == true;
   ensures assoc(key, update_entry(key, f, map)) == f(assoc(key, map));
+  
+lemma void take_assoc<t1, t2>(int n, t1 key, list<pair<t1, t2> > map);
+  requires mem(key, keys(take(n, map))) == true;
+  ensures assoc(key, take(n, map)) == assoc(key, map);
 
 lemma_auto(keys(update_entry(key, f, map))) void update_entry_preserves_keys<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map);
   requires true;
   ensures keys(update_entry(key, f, map)) == keys(map);
 
-lemma_auto(append(map1, update_entry(key, f, map2))) void append_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map1, list<pair<t1, t2> > map2);
+lemma void append_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map1, list<pair<t1, t2> > map2);
   requires ! mem(key, keys(map1));
   ensures append(map1, update_entry(key, f, map2)) == update_entry(key, f, append(map1, map2));
 
@@ -82,10 +86,28 @@ lemma_auto(assoc(otherkey, update_entry(key, f, map))) void update_entry_preserv
   requires key != otherkey;
   ensures assoc(otherkey, update_entry(key, f, map)) == assoc(otherkey, map);
 
-lemma_auto(mem(pair(key, value), map)) void mem_keys<t1, t2>(t1 key, t2 value, list<pair<t1, t2> > map);
+lemma void mem_keys<t1, t2>(t1 key, t2 value, list<pair<t1, t2> > map);
   requires mem(pair(key, value), map) == true;
   ensures mem(key, keys(map)) == true;
 
+lemma_auto(keys(update_entry(key, f, map))) void keys_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map);
+  requires true;
+  ensures keys(update_entry(key, f, map)) == keys(map);
 
+lemma_auto(length(update_entry(key, f, map))) void length_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map);
+  requires true;
+  ensures length(update_entry(key, f, map)) == length(map);
+  
+lemma void distinct_keys_implies_distinct_entries<t1, t2>(list<pair<t1, t2> > map);
+  requires distinct(keys(map)) == true;
+  ensures distinct(map) == true;
+  
+lemma void nth_values<t1, t2>(int i, list<pair<t1, t2> > map);
+  requires 0 <= i && i < length(map);
+  ensures nth(i, values(map)) == snd(nth(i, map));
+  
+lemma void append_keys<t1, t2>(list<pair<t1, t2> > map1, list<pair<t1, t2> > map2);
+  requires true;
+  ensures keys(append(map1, map2)) == append(keys(map1), keys(map2));
 
 #endif

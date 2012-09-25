@@ -126,4 +126,52 @@ lemma_auto(mem(pair(key, value), map)) void mem_keys<t1, t2>(t1 key, t2 value, l
       }
   }
 }
+
+lemma_auto(keys(update_entry(key, f, map))) void keys_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map)
+  requires true;
+  ensures keys(update_entry(key, f, map)) == keys(map);
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          if(key == key0) {
+          } else {
+            keys_update_entry(key, f, t);
+          }
+      }
+  }
+}
+
+lemma_auto(length(update_entry(key, f, map))) void length_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map)
+  requires true;
+  ensures length(update_entry(key, f, map)) == length(map);
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          if(key == key0) {
+          } else {
+            length_update_entry(key, f, t);
+          }
+      }
+  }
+}
+  
+lemma void distinct_keys_implies_distinct_entries<t1, t2>(list<pair<t1, t2> > map)
+  requires distinct(keys(map)) == true;
+  ensures distinct(map) == true;
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          distinct_keys_implies_distinct_entries(t);
+      }
+  }
+}
 @*/
