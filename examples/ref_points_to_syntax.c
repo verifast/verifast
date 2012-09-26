@@ -52,8 +52,16 @@ void modify_calculated_address_new_syntax(int* foo)
     //@ requires *(foo + 1) |-> ?val1 &*& *(foo + 2) |-> ?val2;
     //@ ensures *(foo + 1) |-> val1 + 5 &*& *(foo + 2) |-> val2 - 5;
 {
-  *(foo + 1) = *(foo + 1) + 5;
-  *(foo + 2) = *(foo + 2) - 5;
+    *(foo + 1) = *(foo + 1) + 5;
+    *(foo + 2) = *(foo + 2) - 5;
+}
+
+void modify_array_new_syntax(int* foo)
+    //@ requires foo[1] |-> ?val1 &*& foo[2] |-> ?val2;
+    //@ ensures foo[1] |-> val1 + 5 &*& foo[2] |-> val2 - 5;
+{
+    *(foo + 1) = *(foo + 1) + 5;
+    *(foo + 2) = *(foo + 2) - 5;
 }
 
 int main() //@ : main
@@ -100,10 +108,13 @@ int main() //@ : main
     
     *(int_pointer + 1) = 5;
     *(int_pointer + 2) = 5;
-    //@ assert *(int_pointer + 1) |-> 5 &*& *(int_pointer + 2) |-> 5;
+    
+    //@ assert integer(int_pointer + 1, 5) &*& integer(int_pointer + 2, 5);
     modify_calculated_address_new_syntax(int_pointer);
     //@ assert *(int_pointer + 1) |-> 10 &*& *(int_pointer + 2) |-> 0;
-    
+    modify_array_new_syntax(int_pointer);
+    //@ assert int_pointer[1] |-> 15 &*& int_pointer[2] |-> -5;
+        
     //@ integer_to_chars(int_pointer + 2);
     //@ chars_join((void *)int_pointer + 2 * sizeof(int));
     //@ integer_to_chars(int_pointer + 1);

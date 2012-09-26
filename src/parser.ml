@@ -885,7 +885,11 @@ and
 | [< '(_, Kwd "#"); '(l, String s) >] -> PluginAsn (l, s)
 | [< '(l, Kwd "ensures"); p = parse_pred >] -> EnsuresAsn (l, p)
 | [< e = parse_disj_expr; p = parser
-    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> PointsTo (l, e, rhs)
+    [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
+    (match e with
+       ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1], ref None), ref None), rhs) 
+     | _ -> PointsTo (l, e, rhs)
+    )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
   | [< >] ->
     (match e with
