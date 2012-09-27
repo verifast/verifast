@@ -18,11 +18,21 @@ fixpoint bintree bintree_of_list(nat n, list<int> xs) {
     }
 }
 
-lemma void pow_gt_zero(int m, nat n)
-    requires 0 < m;
-    ensures 0 < pow(m, n);
+lemma void note(boolean b)
+    requires b;
+    ensures b;
 {
-    assume(false);
+}
+
+lemma void pow2_gt_zero(nat n)
+    requires true;
+    ensures 0 < pow(2, n);
+{
+    switch (n) {
+        case zero:
+        case succ(n0):
+            pow2_gt_zero(n0);
+    }
 }
 
 lemma void flatten_bintree_of_list(nat n, list<int> xs)
@@ -33,7 +43,7 @@ lemma void flatten_bintree_of_list(nat n, list<int> xs)
         case zero:
             switch (xs) { case nil: case cons(x0, xs0): }
         case succ(n0):
-            pow_gt_zero(2, n);
+            pow2_gt_zero(n);
             append_take_drop(length(xs) / 2, xs);
             flatten_bintree_of_list(n0, take(length(xs) / 2, xs));
             //assume(length(xs) - length(xs) / 2 == length(xs) / 2);
@@ -51,6 +61,7 @@ fixpoint list<int> flatten(bintree t) {
 }
 
 predicate array_tree0(int[] a, int left, int right, bintree values) =
+    0 <= left &*& left < right &*&
     right > left + 1 ?
         array_tree0(a, left - (right - left) / 2, left, ?lvalues) &*&
         array_tree0(a, right - (right - left) / 2, right, ?rvalues) &*&
@@ -59,12 +70,6 @@ predicate array_tree0(int[] a, int left, int right, bintree values) =
     :
         array_element(a, left, ?l) &*& array_element(a, right, ?r) &*& values == node(leaf(l), leaf(r)) &*&
         right == left + 1;
-
-lemma void note(boolean b)
-    requires b;
-    ensures b;
-{
-}
 
 lemma void even_lemma(int x)
     requires x == x / 2 * 2;
@@ -101,7 +106,7 @@ lemma void array_slice_to_array_tree0(nat n, int[] a, int start, int end)
             assert length(drop((end - start) / 2, vs)) == pow(2, n);
             assert length(drop((end - start) / 2, drop(0, vs))) == pow(2, n);
             array_slice_to_array_tree0(n0, a, start + (end - start) / 2, end);
-            pow_gt_zero(2, n0);
+            pow2_gt_zero(n0);
             assert 0 < (end - start) / 2;
             assert end == start + (end - start) / 2 * 2;
             note(end == start + (end - start) / 2 * 2);

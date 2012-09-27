@@ -53,6 +53,9 @@ verifast_both -allow_assume -disable_overflow_check dyncode.c
 verifast_both enums.c
 verifast_both -c equalsmap.c
 verifast_both -disable_overflow_check expr.c
+cd fm2012
+mysh < fm2012.mysh
+cd ..
 verifast_both -disable_overflow_check -c fractions-counting.c
 verifast_both -disable_overflow_check -c full_func_io.c
 verifast_both -disable_overflow_check -c full_func_io_mod.c
