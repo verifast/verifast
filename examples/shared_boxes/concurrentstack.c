@@ -1,105 +1,16 @@
 #include "atomics.h"
 #include "stdlib.h"
+#include "list.h"
 //@ #include "quantifiers.gh"
 //@ #include "listex.gh"
 //@ #include "assoclist.gh"
-
-/*@
-lemma_auto(mem(x, append(xs, ys))) void mem_append<t>(list<t> xs, list<t> ys, t x)
-  requires true;
-  ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t): mem_append(t, ys, x);
-  }
-}
-lemma_auto(index_of(x, append(xs, ys))) void index_of_append<t>(list<t> xs, list<t> ys, t x)
-  requires mem(x, xs) == true;
-  ensures index_of(x, xs) == index_of(x, append(xs, ys));
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t):
-      if(x != h) 
-        index_of_append(t, ys, x);
-  }
-}
-
-lemma_auto(index_of(x, append(xs, ys))) void index_of_append2<t>(list<t> xs, list<t> ys, t x)
-  requires mem(x, ys) == true && !mem(x, xs);
-  ensures length(xs) + index_of(x, ys) == index_of(x, append(xs, ys));
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t):
-        index_of_append2(t, ys, x);
-  }
-}
-
-lemma void nth_append2<t>(list<t> xs, list<t> ys, int i)
-  requires 0 <= i && i < length(ys);
-  ensures nth(i, ys) == nth(length(xs) + i, append(xs, ys));
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t):
-        nth_append2(t, ys, i);
-  }
-}
-
-lemma void nth_index_of<t>(int i, list<t> xs)
-  requires distinct(xs) == true &*& 0 <= i && i < length(xs);
-  ensures index_of(nth(i, xs), xs) == i;
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t):
-      if(i != 0) {
-      nth_index_of(i - 1, t);
-      }
-  }
-}
-@*/
 
 /*
 TODO:
   - add actions for adding and removing clients
   - take into account the 'active' bit
-  - specify that junk nodes are owned by active clients (needed to dispose a stack)
+  - specify that junk nodes have valid owners (needed to dispose a stack)
 */
-
-//@ predicate list(struct list* l, list<void*> vs);
-
-struct list;
-
-struct list* create_list();
-  //@ requires true;
-  //@ ensures list(result, nil); 
-  
-void list_add_first(struct list* l, void* p);
-  //@ requires list(l, ?vs);
-  //@ ensures list(l, cons(p, vs));
-  
-struct list* list_remove_all(struct list* l);
-  //@ requires list(l, ?vs);
-  //@ ensures list(l, nil) &*& result != 0 &*& list(result, vs);
-
-void* list_remove_first(struct list* l);
-  //@ requires list(l, ?vs) &*& vs != nil;
-  //@ ensures list(l, tail(vs)) &*& result == head(vs); 
-  
-bool list_contains(struct list* l, void* p);
-  //@ requires list(l, ?vs);
-  //@ ensures list(l, vs) &*& result == mem(p, vs);
-
-bool list_is_empty(struct list* l);
-  //@ requires list(l, ?vs);
-  //@ ensures list(l, vs) &*& result == (vs == nil);
-
-void list_dispose(struct list* l);
-  //@ requires list(l, _);
-  //@ ensures true;
 
 struct node {
   void* data;
@@ -124,6 +35,65 @@ struct stack_client {
 
 /*@ 
 inductive client_state = client_state(struct node* hp, bool valid, bool active, handle ha);
+
+
+fixpoint handle get_handle(client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return ha;
+  }
+}
+
+fixpoint struct node* get_hp(client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return hp;
+  }
+}
+
+fixpoint bool is_valid(client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return valid;
+  }
+}
+
+fixpoint client_state update_hp(struct node* n, client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return client_state(n, false, active, ha);
+  }
+}
+
+fixpoint client_state validate_hp(client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return client_state(hp, true, active, ha);
+  }
+}
+
+fixpoint bool not_has_valid_hp(struct node* n, client_state state) {
+  switch(state) {
+    case client_state(hp, valid, active, ha): return ! valid || hp != n; 
+  }
+}
+
+predicate clients(struct stack_client* client, struct stack_client* client2; list<pair<struct stack_client*, client_state> > client_states) =
+  client == client2 ?
+    client_states == nil
+  :
+    client != 0 &*& client->hp |-> ?hp &*& client->active |-> ?active &*& [1/2]client->myhandle |-> ?ha &*& 
+    client->valid |-> ?valid &*& client->next |-> ?next &*& clients(next, client2, ?nclient_states) &*& 
+    client_states == cons(pair(client, client_state(hp, valid, active, ha)), nclient_states);
+
+predicate myclients(struct stack* s; list<pair<struct stack_client*, client_state> > client_states) = 
+  s->clients |-> ?head_client &*& clients(head_client, 0, client_states);
+    
+predicate lseg(struct node* from, struct node* to; list<struct node*> nodes, list<void*> vs) =
+  from == to ?
+    nodes == nil &*& vs == nil
+  :
+    from != 0 &*& from->data |-> ?data &*& from->next |-> ?next &*& from->owner |-> _ &*& malloc_block_node(from) &*&
+    lseg(next, to, ?nnodes, ?nvs) &*& nodes == cons(from, nnodes) &*& vs == cons(data, nvs);
+
+/*
+LEMMAS
+*/
 
 lemma void update_hp_preserves_no_validated_hps(struct node* nn, struct stack_client* client, struct node* n, list<pair<struct stack_client*, client_state> > states) 
   requires no_validated_hps(nn, values(states)) == true ;
@@ -194,15 +164,6 @@ fixpoint bool is_good_retired(list<pair<struct node*, struct stack_client*> > ju
 {
   return retired != 0 && mem(pair(retired, owner), junk);
 }
-@*/
-
-/*@
-predicate clients(struct stack_client* client, struct stack_client* client2; list<pair<struct stack_client*, client_state> > client_states) =
-  client == client2 ?
-    client_states == nil
-  :
-    client != 0 &*& client->hp |-> ?hp &*& client->active |-> ?active &*& [1/2]client->myhandle |-> ?ha &*& client->valid |-> ?valid &*& client->next |-> ?next &*& clients(next, client2, ?nclient_states) &*& 
-    client_states == cons(pair(client, client_state(hp, valid, active, ha)), nclient_states);
 
 lemma void clients_mem(struct stack_client* c1, struct stack_client* c2, struct stack_client* c3)
   requires clients(c1, c2, ?states) &*& c3->hp |-> ?hp;
@@ -250,15 +211,6 @@ lemma void clients_merge(struct stack_client* c1, struct stack_client* c2)
   } 
 }
 
-predicate myclients(struct stack* s; list<pair<struct stack_client*, client_state> > client_states) = 
-  s->clients |-> ?head_client &*& clients(head_client, 0, client_states);
-    
-predicate lseg(struct node* from, struct node* to; list<struct node*> nodes, list<void*> vs) =
-  from == to ?
-    nodes == nil &*& vs == nil
-  :
-    from != 0 &*& from->data |-> ?data &*& from->next |-> ?next &*& from->owner |-> _ &*& malloc_block_node(from) &*&
-    lseg(next, to, ?nnodes, ?nvs) &*& nodes == cons(from, nnodes) &*& vs == cons(data, nvs);
 
 lemma void lseg_split(struct node* from, struct node* to, struct node* n)
   requires lseg(from, to, ?nodes, ?vs) &*& mem(n, nodes) == true;
@@ -381,47 +333,111 @@ lemma void invalidated_hps_lemma(list<pair<struct stack_client*, client_state> >
   }
 }
 
-fixpoint handle get_handle(client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return ha;
+lemma void foreach_two_thirds_mem(list<struct node*> retired, struct node* n)
+  requires foreach(retired, two_thirds_data) &*& [2/3]n->data |-> ?data;
+  ensures foreach(retired, two_thirds_data) &*& [2/3]n->data |-> data &*& ! mem(n, retired);
+{
+  open foreach(retired, two_thirds_data);
+  switch(retired) {
+    case nil:
+    case cons(h, t):
+      foreach_two_thirds_mem(t, n);
+      if(h == n) {
+        open two_thirds_data(n);
+      } else {
+        
+      }
+  }
+  close foreach(retired, two_thirds_data);
+}
+
+fixpoint list<pair<struct node*, struct stack_client*> > remove_node(list<pair<struct node*, struct stack_client*> > junk, struct node* n) {
+  switch(junk) {
+    case nil: return nil;
+    case cons(h, t): return switch(h) { case pair(nd, owner): return nd == n ? t : cons(h, remove_node(t, n)); };
   }
 }
 
-fixpoint struct node* get_hp(client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return hp;
+fixpoint struct stack_client* get_owner(struct node* n, list<pair<struct node*, struct stack_client*> > junk) {
+  switch(junk) {
+    case nil: return 0;
+    case cons(h, t): return switch(h) { case pair(nd, owner): return nd == n ? owner : get_owner(n, t); };
   }
 }
 
-fixpoint bool is_valid(client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return valid;
+lemma void junk_remove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
+  requires foreach(junk, is_node) &*& mem(n, keys(junk)) == true;
+  ensures foreach(remove_node(junk, n), is_node) &*& is_node(pair(n, get_owner(n, junk))); 
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      open foreach(_, _);
+      switch(h) {
+        case pair(n0, owner0):
+          if(n0 == n) {
+          } else {
+            junk_remove(t, n);
+            close foreach(remove_node(junk, n), is_node);
+          }
+      }
   }
 }
 
-fixpoint client_state update_hp(struct node* n, client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return client_state(n, false, active, ha);
+lemma void junk_unremove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
+  requires foreach(remove_node(junk, n), is_node) &*& mem(n, keys(junk)) == true &*& is_node(pair(n, ?owner)) &*& get_owner(n, junk) == owner;
+  ensures foreach(junk, is_node); 
+{
+  switch(junk) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(n0, owner0):
+          if(n0 == n && owner0 == owner) {
+            close foreach(junk, is_node);
+          } else {
+            open foreach(remove_node(junk, n), is_node);
+            junk_unremove(t, n);
+            close foreach(junk, is_node);
+          }
+      }
   }
 }
 
-fixpoint client_state validate_hp(client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return client_state(hp, true, active, ha);
+lemma void lseg_mem_zero(struct node* a, struct node* b)
+  requires lseg(a, b, ?nodes, ?vs);
+  ensures lseg(a, b, nodes, vs) &*& ! mem((void*) 0, nodes);
+{
+  open lseg(a, b, nodes, vs);
+  if(a == b) {
+  } else {
+      lseg_mem_zero(a->next, b);
   }
 }
 
-fixpoint bool not_has_valid_hp(struct node* n, client_state state) {
-  switch(state) {
-    case client_state(hp, valid, active, ha): return ! valid || hp != n; 
+lemma void lseg_mem(struct node* a, struct node* b, struct node* n)
+  requires lseg(a, b, ?nodes, ?vs) &*& n->next |-> ?nxt;
+  ensures lseg(a, b, nodes, vs) &*& n->next |-> nxt &*& ! mem(n, nodes);
+{
+  open lseg(a, b, nodes, vs);
+  if(a == b) {
+  } else {
+    if(a == n) {
+    } else {
+      lseg_mem(a->next, b, n);
+    }
   }
 }
+
+/*
+BOX
+*/
 
 box_class stack_box(struct stack* s, predicate(list<void*>) I) {
   invariant s->top |-> ?top &*& lseg(top, 0, ?nodes, ?vs) &*& 
             myclients(s, ?client_states) &*& foreach(?junk, is_node) &*& I(vs) &*&
             // derived info
-            (top == 0 ? nodes == nil : nodes != nil && head(nodes) == top) &*&
+            true && (top == 0 ? nodes == nil : nodes != nil && head(nodes) == top) &*&
             distinct(nodes) == true &*&
             forall(nodes, (not_contains)(keys(junk))) == true &*&
             distinct(keys(junk)) == true;
@@ -527,7 +543,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
               forall(retired, (is_good_retired)(junk, client)) && 
               get_handle(assoc(client, client_states)) == predicateHandle &&
               (!success || t != 0) &&
-              (! success || (get_hp(assoc(client, client_states)) == t && is_valid(assoc(client, client_states)))) &&
+              (!success || (get_hp(assoc(client, client_states)) == t && is_valid(assoc(client, client_states)))) &&
               (!success || mem(t, nodes) || mem(t, keys(junk)));
               
     preserved_by noop() { }
@@ -585,12 +601,8 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         forall_elim(retired, (is_good_retired)(old_junk, client), n);
       }
     }
-    preserved_by set_hazard_pointer(action_client, action_n) {
-      
-    }
-    preserved_by validate_hazard_pointer(action_client) {
-      
-    }
+    preserved_by set_hazard_pointer(action_client, action_n) { }
+    preserved_by validate_hazard_pointer(action_client) { }
     preserved_by release_node(action_client, action_n) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
@@ -633,12 +645,8 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         case cons(hh, tt):
       }
     }
-    preserved_by set_hazard_pointer(action_client, action_n) {
-     
-    }
-    preserved_by validate_hazard_pointer(action_client) {
-      
-    }
+    preserved_by set_hazard_pointer(action_client, action_n) { }
+    preserved_by validate_hazard_pointer(action_client) { }
     preserved_by release_node(action_client, action_n) {
       if(! forall(retired, (is_good_retired)(junk, client))) {
         struct node* n = not_forall(retired, (is_good_retired)(junk, client));
@@ -863,18 +871,7 @@ predicate stack_client(struct stack* s, real f, predicate(list<void*>) I, struct
   [f]stack_box(?id, s, I) &*& client != 0 &*& client->rlist |-> ?rlist &*& [1/2]client->myhandle |-> ?ha &*& 
   list(rlist, ?retired) &*& client->rcount |-> length(retired) &*& basic_client_handle(ha, id, client, retired) &*&
   foreach(retired, two_thirds_data) &*& distinct(retired) == true;
-@*/
 
-/*@
-predicate_family stack_push_pre(void* index)();
-predicate_family stack_push_post(void* index)();
-
-typedef lemma void stack_push_lemma(predicate(list<void*> vs) I, void* data)();
-  requires stack_push_pre(this)() &*& I(?vs);
-  ensures stack_push_post(this)() &*& I(cons(data, vs));
-@*/
-
-/*@
 predicate stack(struct stack* s, predicate(list<void*>) I) =
   stack_box(?id, s, I) &*& malloc_block_stack(s);
 @*/
@@ -893,6 +890,15 @@ struct stack* create_stack()
   //@ close stack(s, I);
   return s;
 }
+
+/*@
+predicate_family stack_push_pre(void* index)();
+predicate_family stack_push_post(void* index)();
+
+typedef lemma void stack_push_lemma(predicate(list<void*> vs) I, void* data)();
+  requires stack_push_pre(this)() &*& I(?vs);
+  ensures stack_push_post(this)() &*& I(cons(data, vs));
+@*/
 
 void stack_push(struct stack* s, struct stack_client* client, void* data)
   //@ requires stack_client(s, ?f, ?I, client) &*& is_stack_push_lemma(?lem, I, data) &*& stack_push_pre(lem)();
@@ -942,42 +948,6 @@ void stack_push(struct stack* s, struct stack_client* client, void* data)
   }
 }
 
-/*@
-predicate_family stack_pop_pre(void* index)();
-predicate_family stack_pop_post(void* index)(bool success, void* res);
-
-typedef lemma void stack_pop_lemma(predicate(list<void*> vs) I)();
-  requires stack_pop_pre(this)() &*& I(?vs);
-  ensures stack_pop_post(this)(vs != nil, ?out) &*& (vs == nil ? I(nil) : I(tail(vs)) &*& out == head(vs));
-@*/
-
-/*@
-lemma void lseg_mem_zero(struct node* a, struct node* b)
-  requires lseg(a, b, ?nodes, ?vs);
-  ensures lseg(a, b, nodes, vs) &*& ! mem((void*) 0, nodes);
-{
-  open lseg(a, b, nodes, vs);
-  if(a == b) {
-  } else {
-      lseg_mem_zero(a->next, b);
-  }
-}
-
-lemma void lseg_mem(struct node* a, struct node* b, struct node* n)
-  requires lseg(a, b, ?nodes, ?vs) &*& n->next |-> ?nxt;
-  ensures lseg(a, b, nodes, vs) &*& n->next |-> nxt &*& ! mem(n, nodes);
-{
-  open lseg(a, b, nodes, vs);
-  if(a == b) {
-  } else {
-    if(a == n) {
-    } else {
-      lseg_mem(a->next, b, n);
-    }
-  }
-}
-@*/
-
 void phase1(struct stack* s, struct stack_client* client, struct list* plist)
   //@ requires [?f]stack_box(?id, s, ?I) &*& client->rlist |-> ?rlist &*& [1/2]client->myhandle |-> ?ha &*& list(rlist, ?retired) &*& client->rcount |-> length(retired) &*& list(plist, nil) &*& basic_client_handle(ha, id, client, retired);
   //@ ensures [f]stack_box(id, s, I) &*& client->rlist |-> rlist &*& [1/2]client->myhandle |-> ha &*& list(rlist, retired) &*& client->rcount |-> length(retired) &*& list(plist, ?hazards) &*& phase2_handle(ha, id, client, nil, retired, hazards);
@@ -1018,10 +988,9 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
       list<struct node*> nhps = hp == 0 ? hps : cons(hp, hps);
       assert clients(curr, 0, cons(pair(curr, client_state(hp, ?valid, ?curract, ?currha)), ?rest));
       struct stack_client* currnext = curr->next;
-      open clients(currnext, 0, _);
       clients_merge(head, curr);
       clients_distinct(head, 0);
-      nth_append2(thestates1, thestates2, 0);
+      nth_append_r(thestates1, thestates2, 0);
       assert(length(thestates1) == index_of(curr, keys(states)));
       distinct_keys_implies_distinct_entries(states);
       nth_index_of(i, states);
@@ -1049,7 +1018,6 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
     if(hp != 0) {
       list_add_first(plist, hp);
     }
-    
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate phase1_handle(ha, client, retired, curr, i + 1, false, hp == 0 ? hps : cons(hp, hps), false)
@@ -1070,11 +1038,10 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
       append_keys(states1, states2);
       assert i + 1 <= length(states_);
       if(curr != 0) {
-        nth_append2( keys(states1),  keys(states2), 1);
+        nth_append_r(keys(states1),  keys(states2), 1);
       } else {
         assert newstates2 == nil;
       }
-      
     }
     producing_handle_predicate phase1_handle(client, retired, curr, i + 1, true, hp == 0 ? hps : cons(hp, hps), curr == 0);
     @*/
@@ -1237,79 +1204,15 @@ void retire_node(struct stack* s, struct stack_client* client, struct node* n)
   }
 }
 
-/*@
-lemma void foreach_two_thirds_mem(list<struct node*> retired, struct node* n)
-  requires foreach(retired, two_thirds_data) &*& [2/3]n->data |-> ?data;
-  ensures foreach(retired, two_thirds_data) &*& [2/3]n->data |-> data &*& ! mem(n, retired);
-{
-  open foreach(retired, two_thirds_data);
-  switch(retired) {
-    case nil:
-    case cons(h, t):
-      foreach_two_thirds_mem(t, n);
-      if(h == n) {
-        open two_thirds_data(n);
-      } else {
-        
-      }
-  }
-  close foreach(retired, two_thirds_data);
-}
-@*/
+
 
 /*@
-fixpoint list<pair<struct node*, struct stack_client*> > remove_node(list<pair<struct node*, struct stack_client*> > junk, struct node* n) {
-  switch(junk) {
-    case nil: return nil;
-    case cons(h, t): return switch(h) { case pair(nd, owner): return nd == n ? t : cons(h, remove_node(t, n)); };
-  }
-}
+predicate_family stack_pop_pre(void* index)();
+predicate_family stack_pop_post(void* index)(bool success, void* res);
 
-fixpoint struct stack_client* get_owner(struct node* n, list<pair<struct node*, struct stack_client*> > junk) {
-  switch(junk) {
-    case nil: return 0;
-    case cons(h, t): return switch(h) { case pair(nd, owner): return nd == n ? owner : get_owner(n, t); };
-  }
-}
-
-lemma void junk_remove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
-  requires foreach(junk, is_node) &*& mem(n, keys(junk)) == true;
-  ensures foreach(remove_node(junk, n), is_node) &*& is_node(pair(n, get_owner(n, junk))); 
-{
-  switch(junk) {
-    case nil:
-    case cons(h, t):
-      open foreach(_, _);
-      switch(h) {
-        case pair(n0, owner0):
-          if(n0 == n) {
-          } else {
-            junk_remove(t, n);
-            close foreach(remove_node(junk, n), is_node);
-          }
-      }
-  }
-}
-
-lemma void junk_unremove(list<pair<struct node*, struct stack_client*> > junk, struct node* n)
-  requires foreach(remove_node(junk, n), is_node) &*& mem(n, keys(junk)) == true &*& is_node(pair(n, ?owner)) &*& get_owner(n, junk) == owner;
-  ensures foreach(junk, is_node); 
-{
-  switch(junk) {
-    case nil:
-    case cons(h, t):
-      switch(h) {
-        case pair(n0, owner0):
-          if(n0 == n && owner0 == owner) {
-            close foreach(junk, is_node);
-          } else {
-            open foreach(remove_node(junk, n), is_node);
-            junk_unremove(t, n);
-            close foreach(junk, is_node);
-          }
-      }
-  }
-}
+typedef lemma void stack_pop_lemma(predicate(list<void*> vs) I)();
+  requires stack_pop_pre(this)() &*& I(?vs);
+  ensures stack_pop_post(this)(vs != nil, ?out) &*& (vs == nil ? I(nil) : I(tail(vs)) &*& out == head(vs));
 @*/
 
 bool stack_pop(struct stack* s, struct stack_client* client, void** out)

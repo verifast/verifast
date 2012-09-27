@@ -82,6 +82,16 @@ lemma void mem_nth<t>(int n, list<t> xs)
     }
 }
 
+lemma_auto(mem(x, append(xs, ys))) void mem_append<t>(t x, list<t> xs, list<t> ys)
+  requires true;
+  ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t): mem_append(x, t, ys);
+  }
+}
+
 lemma void drop_0<t>(list<t> xs)
     requires true;
     ensures drop(0, xs) == xs;
@@ -176,6 +186,17 @@ lemma void nth_append<t>(list<t> xs, list<t> ys, int i)
   switch(xs) {
     case nil: 
     case cons(h, t): if(i != 0) nth_append(t, ys, i - 1); 
+  }
+}
+
+lemma void nth_append_r<t>(list<t> xs, list<t> ys, int i)
+  requires 0 <= i && i < length(ys);
+  ensures nth(i, ys) == nth(length(xs) + i, append(xs, ys));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+        nth_append_r(t, ys, i);
   }
 }
 

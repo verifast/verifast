@@ -11,10 +11,6 @@ fixpoint list<t> snoc<t>(list<t> vs, t v)
     return append(vs, cons(v, nil));
 }
 
-lemma void mem_append<t>(t v, list<t> vs1, list<t> vs2) ;
-    requires true; 
-    ensures mem(v, append(vs1, vs2)) == (mem(v, vs1) || mem(v, vs2));
-
 lemma void mem_snoc<t>(t v1, list<t> vs, t v2) ;
     requires true;
     ensures mem(v1, snoc(vs, v2)) == (mem(v1, vs) || v1 == v2);

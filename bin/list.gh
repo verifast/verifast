@@ -73,6 +73,10 @@ lemma void nth_append<t>(list<t> xs, list<t> ys, int i);
   requires 0 <= i &*& i < length(xs);
   ensures nth(i, xs) == nth(i, append(xs, ys));
 
+lemma void nth_append_r<t>(list<t> xs, list<t> ys, int i);
+  requires 0 <= i && i < length(ys);
+  ensures nth(i, ys) == nth(length(xs) + i, append(xs, ys));
+
 lemma void reverse_append<t>(list<t> xs, list<t> ys);
     requires true;
     ensures reverse(append(xs, ys)) == append(reverse(ys), reverse(xs));
@@ -98,6 +102,10 @@ fixpoint t nth<t>(int n, list<t> xs) {
 lemma_auto(mem(nth(n, xs), xs)) void mem_nth<t>(int n, list<t> xs);
     requires 0 <= n && n < length(xs);
     ensures mem(nth(n, xs), xs) == true;
+
+lemma_auto(mem(x, append(xs, ys))) void mem_append<t>(t x, list<t> xs, list<t> ys);
+  requires true;
+  ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
 
 fixpoint bool distinct<t>(list<t> xs) {
     switch (xs) {

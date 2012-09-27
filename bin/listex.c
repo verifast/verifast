@@ -128,6 +128,19 @@ lemma void index_of_append_r<t>(t x, list<t> xs, list<t> ys)
     }
 }
 
+lemma void nth_index_of<t>(int i, list<t> xs)
+  requires distinct(xs) == true &*& 0 <= i && i < length(xs);
+  ensures index_of(nth(i, xs), xs) == i;
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(i != 0) {
+      nth_index_of(i - 1, t);
+      }
+  }
+}
+
 lemma void map_append<a, b>(fixpoint(a, b) f, list<a> xs, list<a> ys)
     requires true;
     ensures map(f, append(xs, ys)) == append(map(f, xs), map(f, ys));

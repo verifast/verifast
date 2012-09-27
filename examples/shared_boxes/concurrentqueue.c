@@ -14,16 +14,6 @@ struct queue {
 };
 
 /*@
-lemma_auto(mem(x, append(xs, ys))) void mem_append<t>(list<t> xs, list<t> ys, t x)
-  requires true;
-  ensures mem(x, append(xs, ys)) == (mem(x, xs) || mem(x, ys));
-{
-  switch(xs) {
-    case nil:
-    case cons(h, t): mem_append(t, ys, x);
-  }
-}
-
 lemma_auto(index_of(x, append(xs, ys))) void index_of_append<t>(list<t> xs, list<t> ys, t x)
   requires mem(x, xs) == true;
   ensures index_of(x, xs) == index_of(x, append(xs, ys));

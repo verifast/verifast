@@ -3,16 +3,7 @@
 /*@
 
     //TODO: move general lemma's to list.h or listex.h 
-    
-lemma void mem_append<t>(t v, list<t> vs1, list<t> vs2) 
-    requires true; 
-    ensures mem(v, append(vs1, vs2)) == (mem(v, vs1) || mem(v, vs2));
-{
-    switch(vs1) {
-        case nil:
-        case cons(h, t): mem_append(v, t, vs2);
-    }
-}
+
 lemma void mem_snoc<t>(t v1, list<t> vs, t v2) 
     requires true;
     ensures mem(v1, snoc(vs, v2)) == (mem(v1, vs) || v1 == v2);
