@@ -16,7 +16,7 @@ verifast_both -disable_overflow_check array_of_struct.c
 verifast_both -disable_overflow_check -c arraylist.c
 verifast_both -disable_overflow_check threading.o barrier.c
 verifast_both -c static_array.c
-verifast -disable_overflow_check -allow_assume quantifiers.o priorityqueue-forall_nth.c
+ifnotmac verifast -disable_overflow_check -allow_assume quantifiers.o priorityqueue-forall_nth.c
 verifast_both set.c
 cd BeepDriver
 mysh < BeepKernel.mysh
@@ -25,7 +25,7 @@ cd shared_boxes
 ifnotmac verifast -c threading.o sblock.c
 verifast_both -c threading.o sglock.c
 verifast_both -c threading.o tblock.c
-verifast -allow_assume listex.o atomics.o threading.o concurrentqueue.h concurrentqueue.c concurrentqueue_client.c
+ifnotmac verifast -allow_assume listex.o atomics.o threading.o concurrentqueue.h concurrentqueue.c concurrentqueue_client.c
 cd ..
 ifnotmac verifast listex.o arrays.o stringBuffers.c sockets.o bot.c
 verifast_both -disable_overflow_check cat.c
