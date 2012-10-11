@@ -89,6 +89,9 @@ cd ..
 cd MockKernel
 mysh < MockKernel.mysh
 cd ..
+cd module_imports
+verifast_both mymodule.c client.c
+cd ..
 verifast_both -c odd_even_lemmas.c
 verifast_both threading.o philosophers.c
 verifast_both -c -run_preprocessor -disable_overflow_check preprocessor.c

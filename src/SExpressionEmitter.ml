@@ -451,6 +451,10 @@ and sexpr_of_decl (decl : decl) : sexpression =
                  [ "type-parameters", List (List.map symbol tparams)
                  ; "parameters", List (List.map arg_pair params)
                  ; "predicate", sexpr_of_pred predicate ]
+    | ImportModuleDecl (loc,
+                        name) ->
+        List [ Symbol "declare-import-module"
+             ; Symbol name ]
     | Inductive _                 -> unsupported "Inductive"
     | Class _                     -> unsupported "Class"
     | Interface _                 -> unsupported "Interface"

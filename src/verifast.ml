@@ -392,7 +392,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
-      consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
+      consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ -> (* TODO: produce imported module chunks here somewhere *)
       begin fun cont ->
         let rec iter h globals =
           match globals with
@@ -403,6 +403,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         in
         iter h globalmap
       end $. fun h ->
+      begin fun cont ->
+        let rec iter h modules =
+          match modules with
+            | [] -> cont h
+            | (x, module_term)::modules -> if module_term == current_module_term then 
+              iter h modules else
+              iter (Chunk((module_symb, true), [], real_unit, [module_term; ctxt#mk_true], None)::h) modules
+        in
+        iter h modulemap
+      end $. fun h ->
       let codeChunks =
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
       in
@@ -411,6 +421,16 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if args <> [] then static_error l "close_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
+      begin fun cont ->
+        let rec iter h modules =
+          match modules with
+            | [] -> cont h
+            | (x, module_term)::modules -> if module_term == current_module_term then 
+              iter h modules else
+              consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat module_term; SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ -> iter h modules
+        in
+        iter h modulemap
+      end $. fun h ->
       begin fun cont ->
         let rec iter h globals =
           match globals with
@@ -2372,7 +2392,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let () = verify_funcs' [] lems0 ps
   
-  let result = ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  let result = ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, modulemap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
   
   end (* CheckFile *)
   

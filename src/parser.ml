@@ -23,7 +23,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"
+  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"
 ]
 
 let c_keywords = [
@@ -407,6 +407,7 @@ and
     [FuncTypeDecl (l, Ghost, rt, g, tps, ftps, ps, (pre, post))]
   | [< '(l, Kwd "unloadable_module"); '(_, Kwd ";") >] -> [UnloadableModuleDecl l]
   | [< '(l, Kwd "load_plugin"); '(lx, Ident x); '(_, Kwd ";") >] -> [LoadPluginDecl (l, lx, x)]
+  | [< '(l, Kwd "import_module"); '(_, Ident g); '(lx, Kwd ";") >] -> [ImportModuleDecl (l, g)]
 and
   parse_action_decls = parser
   [< ad = parse_action_decl; ads = parse_action_decls >] -> ad::ads
