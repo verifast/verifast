@@ -2,6 +2,8 @@
 
 #include "mymodule.h"
 
+//@ import_module mymodule;
+
 int main() //@ : main_full(client)
 //@ requires module(client, true);
 //@ ensures true;

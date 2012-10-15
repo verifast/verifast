@@ -418,7 +418,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | CLang -> Filename.chop_extension (Filename.basename path)
   
   let current_module_term = get_unique_var_symb current_module_name IntType
-  (* let modulemap = [(current_module_name, current_module_term)] *)
   
   let programDir = Filename.dirname path
   let rtpath = match options.option_runtime with None -> concat rtdir "rt.jarspec" | Some path -> path
@@ -683,6 +682,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * enum_info map
       * global_info map
       * module_info map
+      * module_info map
       * inductive_info map
       * pure_func_info map
       * pred_ctor_info map
@@ -712,6 +712,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type check_file_output =
         implemented_prototype_info list
       * implemented_function_type_info list
+      * module_info map
   end
   
   include CheckFileTypes
@@ -761,6 +762,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (enummap0: enum_info map),
       (globalmap0: global_info map),
       (modulemap0: module_info map),
+      (importmodulemap0: module_info map),
       (inductivemap0: inductive_info map),
       (purefuncmap0: pure_func_info map),
       (predctormap0: pred_ctor_info map),
@@ -792,13 +794,16 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let id x = x in
     let merge_maps l
-      (structmap, enummap, globalmap, modulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
-      (structmap0, enummap0, globalmap0, modulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
+      (structmap, enummap, globalmap, modulemap, importmodulemap, inductivemap, purefuncmap, predctormap, malloc_block_pred_map, field_pred_map, predfammap, predinstmap, typedefmap, functypemap, funcmap, boxmap, classmap, interfmap, classterms, interfaceterms, pluginmap)
+      (structmap0, enummap0, globalmap0, modulemap0, importmodulemap0, inductivemap0, purefuncmap0, predctormap0, malloc_block_pred_map0, field_pred_map0, predfammap0, predinstmap0, typedefmap0, functypemap0, funcmap0, boxmap0, classmap0, interfmap0, classterms0, interfaceterms0, pluginmap0)
       =
       (append_nodups structmap structmap0 id l "struct",
        append_nodups enummap enummap0 id l "enum",
        append_nodups globalmap globalmap0 id l "global variable",
        modulemap @ modulemap0,
+(*       append_nodups modulemap modulemap0 id l "module", *)
+       importmodulemap @ importmodulemap0,
+(*     append_nodups importmodulemap importmodulemap0 id l "imported module", *)
        append_nodups inductivemap inductivemap0 id l "inductive datatype",
        append_nodups purefuncmap purefuncmap0 id l "pure function",
        append_nodups predctormap predctormap0 id l "predicate constructor",
@@ -882,7 +887,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         end
     in
 
-    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
+    let maps0 = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []) in
     
     let (maps0, headers_included) =
       if include_prelude then
@@ -1433,20 +1438,21 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let globalmap1 = globaldeclmap
   let globalmap = globalmap1 @ globalmap0
  
+
   (* Region: modulemap *)
 
   let modulemap1 = 
-    let rec iter imm ds = 
+    let rec iter mm ds = 
       match ds with
-        [] -> List.rev imm
-      | ImportModuleDecl(l, name) :: ds ->
+        [] -> List.rev mm
+      | RequireModuleDecl(l, name)::ds ->
         begin
-          match try_assoc name imm with
-        | Some(_) -> iter imm ds (* Ignore duplicate module imports *)
-        | None -> let module_term = get_unique_var_symb name IntType in
-                  iter ((name, module_term) :: imm) ds
+          match try_assoc name mm with
+          | Some(_) -> iter mm ds (* Ignore duplicate module requirement *)
+          | None -> let module_term = get_unique_var_symb name IntType in
+                    iter ((name, module_term) :: mm) ds
         end
-      | _ :: ds -> iter imm ds
+      | _ :: ds -> iter mm ds
     in
     match ps with
       [PackageDecl(_,"",[],ds)] -> iter [(current_module_name, current_module_term)] ds
@@ -1454,6 +1460,32 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
   let modulemap = modulemap1 @ modulemap0
 
+  (* Region: importmodulemap *)
+ 
+  let importmodulemap1 = 
+    let rec iter imm ds = 
+      match ds with
+        [] -> List.rev imm
+      | ImportModuleDecl(l, name)::ds ->
+        begin
+          match try_assoc name modulemap with
+          | None -> static_error l ("Unknown module '" ^ name ^ "'.") None
+          | Some(module_term) when module_term == current_module_term -> 
+              static_error l ("Cannot import current module.") None
+          | Some(module_term) ->
+            begin
+              match try_assoc name imm with
+              | Some(_) -> iter imm ds (* Ignore duplicate module imports *)
+              | None -> iter ((name,module_term)::imm) ds
+            end
+        end
+      | _ :: ds -> iter imm ds
+    in
+    match ps with
+      [PackageDecl(_,"",[],ds)] -> iter [] ds
+    | _ when file_type path=Java -> []
+
+  let importmodulemap = importmodulemap1 @ importmodulemap0
 
   (* Region: type compatibility checker *)
   

@@ -404,14 +404,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         iter h globalmap
       end $. fun h ->
       begin fun cont ->
-        let rec iter h modules =
-          match modules with
+        let rec iter h importmodules =
+          match importmodules with
             | [] -> cont h
-            | (x, module_term)::modules -> if module_term == current_module_term then 
-              iter h modules else
-              iter (Chunk((module_symb, true), [], real_unit, [module_term; ctxt#mk_true], None)::h) modules
+            | (x,importmodule_term)::importmodules when importmodule_term != current_module_term -> 
+              iter (Chunk((module_symb, true), [], real_unit, [importmodule_term; ctxt#mk_true], None)::h) importmodules
         in
-        iter h modulemap
+        iter h importmodulemap
       end $. fun h ->
       let codeChunks =
         if unloadable then [Chunk ((module_code_symb, true), [], coef, [current_module_term], None)] else []
@@ -422,14 +421,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
       begin fun cont ->
-        let rec iter h modules =
-          match modules with
+        let rec iter h importmodules =
+          match importmodules with
             | [] -> cont h
-            | (x, module_term)::modules -> if module_term == current_module_term then 
-              iter h modules else
-              consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat module_term; SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ -> iter h modules
+            | (x,importmodule_term)::importmodules ->
+              consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit real_unit_pat (Some 2) [TermPat importmodule_term; SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ -> iter h importmodules
         in
-        iter h modulemap
+        iter h importmodulemap
       end $. fun h ->
       begin fun cont ->
         let rec iter h globals =
@@ -1212,7 +1210,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             assume v cont
           end
           begin fun () ->
-            assume (ctxt#mk_not v) $. fun () ->
+            assume (ctxt#mk_not v) $. fun () ->
             tcont sizemap tenv' ghostenv' (h' @ h) env'
           end
       end $. fun () ->
@@ -2392,7 +2390,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let () = verify_funcs' [] lems0 ps
   
-  let result = ((prototypes_implemented, !functypes_implemented), (structmap1, enummap1, globalmap1, modulemap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
+  let result = ((prototypes_implemented, !functypes_implemented, importmodulemap1), (structmap1, enummap1, globalmap1, modulemap1, importmodulemap1, inductivemap1, purefuncmap1,predctormap1, malloc_block_pred_map1, field_pred_map1, predfammap1, predinstmap1, typedefmap1, functypemap1, funcmap1, boxmap,classmap1,interfmap1,classterms1,interfaceterms1, pluginmap1))
   
   end (* CheckFile *)
   
@@ -2413,7 +2411,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let jardeps = ref []
   let provide_files = ref []
-  let (prototypes_implemented, functypes_implemented) =
+  let (prototypes_implemented, functypes_implemented, modules_imported) =
     let (headers, ds)=
       match file_type path with
         | Java ->
@@ -2459,8 +2457,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             parse_c_file path reportRange reportShouldFail options.option_run_preprocessor options.option_include_paths
     in
     emitter_callback ds;
-    let result =
-      check_should_fail ([], []) $. fun () ->
+    let result = 
+      check_should_fail ([], [], []) $. fun () ->
       let (linker_info, _) = check_file path false true programDir "" headers ds in
       linker_info
     in
@@ -2502,6 +2500,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       List.sort compare lines
     in
+    let sorted_module_lines modules =
+      let lines =
+        modules |> List.map begin fun (name, _) -> name
+	end
+      in
+      List.sort compare lines
+    in
     let lines =
       List.map (fun line -> ".requires " ^ line) (sorted_lines !prototypes_used)
       @
@@ -2516,6 +2521,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
             functypes_implemented
         end
+      @
+      List.map (fun line -> ".imports module " ^ line)  (sorted_module_lines modules_imported)
       @
       [".produces module " ^ current_module_name]
     in
@@ -2678,9 +2685,17 @@ let parse_line line =
   (command, symbol)
 
 let link_program isLibrary modulepaths emitDllManifest exports =
-  let rec iter impls modulepaths =
+  let consume msg x xs =
+    let rec iter xs' xs =
+      match xs with
+        [] -> raise (LinkError (msg x))
+      | x'::xs -> if x = x' then xs' @ xs else iter (x'::xs') xs
+    in
+    iter [] xs
+  in
+  let rec iter impls mods modulepaths =
     match modulepaths with
-      [] -> impls
+      [] -> (impls, mods)
     | modulepath::modulepaths ->
       let manifest_path = 
         try Filename.chop_extension modulepath ^ ".vfmanifest" with
@@ -2698,31 +2713,24 @@ let link_program isLibrary modulepaths emitDllManifest exports =
             with FileNotFound ->
               failwith ("VeriFast link phase error: could not find .vfmanifest file '" ^ manifest_path ^ "' for module '" ^ modulepath ^ "'. Re-verify the module using the -emit_vfmanifest option.")
       in
-      let rec iter0 impls' lines =
+      let rec iter0 impls' mods' lines =
         match lines with
-          [] -> iter impls' modulepaths
+          [] -> iter impls' mods' modulepaths
         | line::lines ->
           let (command, symbol) = parse_line line in
           begin
             match command with
-              ".requires" -> if List.mem symbol impls then iter0 impls' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
-            | ".provides" -> iter0 (symbol::impls') lines
-            | ".produces" -> iter0 (symbol::impls') lines
+              ".requires" -> if List.mem symbol impls then iter0 impls' mods' lines else raise (LinkError ("Module '" ^ modulepath ^ "': unsatisfied requirement '" ^ symbol ^ "'."))
+            | ".provides" -> iter0 (symbol::impls') mods' lines
+            | ".produces" -> iter0 (symbol::impls') (symbol::mods') lines
+            | ".imports" -> iter0 impls' (consume (fun x -> "Module '" ^ modulepath ^ "': unsatisfied import '" ^ x ^ "'.") symbol mods) lines
           end
       in
-      iter0 impls lines
+      iter0 impls mods lines
   in
-  let impls = iter [] modulepaths in
+  let (impls, _) = iter [] [] modulepaths in
   let mainModulePath = match List.rev modulepaths with [] -> raise (LinkError "DLL must contain at least one module.") | m::_ -> m in
   let mainModuleName = try Filename.chop_extension (Filename.basename mainModulePath) with Invalid_argument _ -> raise (CompilationError "file without extension") in
-  let consume msg x xs =
-    let rec iter xs' xs =
-      match xs with
-        [] -> raise (LinkError (msg x))
-      | x'::xs -> if x = x' then xs' @ xs else iter (x'::xs') xs
-    in
-    iter [] xs
-  in
   let impls =
     if not isLibrary then
       if not (List.mem "main : prelude.h#main()" impls) then
