@@ -24,6 +24,7 @@ struct node {
 struct stack {
   struct node* top;
   struct stack_client* clients;
+  //@ int help;
 };
 
 struct stack_client {
@@ -34,55 +35,75 @@ struct stack_client {
   int rcount;
   struct stack_client* next;
   //@ handle myhandle;
+  //@ real myfrac;
 };
 
 /*@ 
-inductive client_state = client_state(struct node* hp, bool valid, bool active, handle ha);
+inductive client_state = client_state(struct node* hp, bool valid, bool active, handle ha, real myfrac);
 
 
 fixpoint handle get_handle(client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return ha;
+    case client_state(hp, valid, active, ha, myf): return ha;
   }
 }
 
 fixpoint struct node* get_hp(client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return hp;
+    case client_state(hp, valid, active, ha, myf): return hp;
   }
 }
 
 fixpoint bool is_valid(client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return valid;
+    case client_state(hp, valid, active, ha, myf): return valid;
   }
 }
 
 fixpoint client_state update_hp(struct node* n, client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return client_state(n, false, active, ha);
+    case client_state(hp, valid, active, ha, myf): return client_state(n, false, active, ha, myf);
   }
 }
 
 fixpoint client_state validate_hp(client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return client_state(hp, true, active, ha);
+    case client_state(hp, valid, active, ha, myf): return client_state(hp, true, active, ha, myf);
   }
 }
 
 fixpoint bool not_has_valid_hp(struct node* n, client_state state) {
   switch(state) {
-    case client_state(hp, valid, active, ha): return ! valid || hp != n; 
+    case client_state(hp, valid, active, ha, myf): return ! valid || hp != n; 
   }
 }
+
+predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
+    switch (xs) {
+        case nil: return true;
+        case cons(x, xs0): return p(x) &*& foreachp(xs0, p);
+    };
+
+lemma void foreachp_remove<t>(t x, list<t> xs);
+    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures foreachp(remove(x, xs), p) &*& p(x);
+
+predicate client_local(struct stack_client* client, bool active, real frac;) = 
+  active ? 
+    true
+  : 
+    [1/2]client->myfrac |-> frac &*& client->rlist |-> ?rlist &*& [1/2]client->myhandle |-> ?ha &*& 
+    list(rlist, ?retired) &*& client->rcount |-> length(retired)  &*&
+    foreachp(retired, two_thirds_data) &*& distinct(retired) == true &*& malloc_block_stack_client(client);
 
 predicate clients(struct stack_client* client, struct stack_client* client2; list<pair<struct stack_client*, client_state> > client_states) =
   client == client2 ?
     client_states == nil
   :
-    client != 0 &*& client->hp |-> ?hp &*& client->active |-> ?active &*& [1/2]client->myhandle |-> ?ha &*& 
-    client->valid |-> ?valid &*& client->next |-> ?next &*& clients(next, client2, ?nclient_states) &*& 
-    client_states == cons(pair(client, client_state(hp, valid, active, ha)), nclient_states);
+    client != 0 &*& client->hp |-> ?hp &*& client->active |-> ?active &*& [1/2]client->myhandle |-> ?ha &*& [1/2]client->myfrac |-> ?myfrac &*& 
+    client_local(client, active, myfrac) &*&
+    client->valid |-> ?valid &*& client->next |-> ?next  &*& clients(next, client2, ?nclient_states) &*& 
+    client_states == cons(pair(client, client_state(hp, valid, active, ha, myfrac)), nclient_states);
 
 predicate myclients(struct stack* s; list<pair<struct stack_client*, client_state> > client_states) = 
   s->clients |-> ?head_client &*& clients(head_client, 0, client_states);
@@ -108,7 +129,7 @@ lemma void update_hp_preserves_no_validated_hps(struct node* nn, struct stack_cl
       switch(h) {
         case pair(client0, state0):
           switch(state0) {
-            case client_state(hp, valid, active, ha):
+            case client_state(hp, valid, active, ha, myf):
               update_hp_preserves_no_validated_hps(nn, client, n, nstates);
           }           
       }
@@ -125,7 +146,7 @@ lemma void validate_different_hp_preserves_no_validated_hps(struct node* n, stru
       switch(h) {
         case pair(client0, state0):
           switch(state0){
-        case client_state(hp, valid, active, ha): 
+        case client_state(hp, valid, active, ha, myf): 
           if(client == client0) {
           } else {
             validate_different_hp_preserves_no_validated_hps(n, client, nstates);
@@ -143,7 +164,7 @@ lemma void append_no_validated_hps(struct node* n, list<client_state> states1, l
     case nil:
     case cons(h, t):
       switch(h) {
-        case client_state(hp0, valid0, active0, ha0):
+        case client_state(hp0, valid0, active0, ha0, myf0):
         append_no_validated_hps(n, t, states2);
       }
   }
@@ -154,7 +175,7 @@ fixpoint bool no_validated_hps(struct node* node, list<client_state> states) {
     case nil: return true;
     case cons(h, nstates):
       return switch(h) {
-        case client_state(hp0, valid0, active0, ha0): return (hp0 != node || ! valid0) && no_validated_hps(node, nstates);
+        case client_state(hp0, valid0, active0, ha0, myf0): return (hp0 != node || ! valid0) && no_validated_hps(node, nstates);
       };
   }
 }
@@ -177,6 +198,7 @@ lemma void clients_mem(struct stack_client* c1, struct stack_client* c2, struct 
   if(c1 != c2) {
     clients_mem(c1->next, c2, c3);
   }
+  close clients(c1, c2, states);
 }
 
 lemma void clients_distinct(struct stack_client* c1, struct stack_client* c2)
@@ -189,6 +211,7 @@ lemma void clients_distinct(struct stack_client* c1, struct stack_client* c2)
     clients_mem(c1->next, c2, c1);
     clients_distinct(c1->next, c2);
   }
+  close clients(c1, c2, states);
 }
 
 lemma void clients_split(struct stack_client* client, struct stack_client* curr) 
@@ -202,7 +225,8 @@ lemma void clients_split(struct stack_client* client, struct stack_client* curr)
     if(client != curr) {
       clients_split(client->next, curr);
     }
-  } 
+  }
+  close clients(client, curr, _);
 }
 
 lemma void clients_merge(struct stack_client* c1, struct stack_client* c2) 
@@ -327,7 +351,7 @@ lemma void invalidated_hps_lemma(list<pair<struct stack_client*, client_state> >
       switch(h) {
         case pair(client0, state0):
           switch(state0) {
-              case client_state(hp0, valid0, active0, ha0):
+              case client_state(hp0, valid0, active0, ha0, myf0):
                 if(client == client0) {
                 } else {
                   invalidated_hps_lemma(t, client);
@@ -479,11 +503,11 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
              no_validated_hps(n, values(client_states));
     ensures top == old_top && nodes == old_nodes && vs == old_vs && client_states == old_client_states && junk == remove(pair(n, client), old_junk);
   
-  action add_client(struct stack_client* new_client, handle new_client_ha);
+  action add_client(struct stack_client* new_client, handle new_client_ha, real myf);
     requires !mem(new_client, keys(client_states));
     ensures top == old_top && nodes == old_nodes && vs == old_vs && junk == old_junk &&
             (client_states == old_client_states || 
-            client_states == append(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil)));
+            client_states == append(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil)));
   
   handle_predicate dummy_handle() {
     invariant true;
@@ -494,7 +518,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     preserved_by set_hazard_pointer(client, n) { }
     preserved_by validate_hazard_pointer(client) { }
     preserved_by release_node(client, n) { }
-    preserved_by add_client(new_client, new_client_ha) { }
+    preserved_by add_client(new_client, new_client_ha, myf) { }
   }
   
   handle_predicate is_client(struct stack_client* client) {
@@ -506,8 +530,8 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     preserved_by set_hazard_pointer(action_client, n) { }
     preserved_by validate_hazard_pointer(action_client) { }
     preserved_by release_node(action_client, n) { }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
     }
   }
@@ -525,10 +549,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
     preserved_by set_hazard_pointer(action_client, action_n) { }
     preserved_by validate_hazard_pointer(action_client) { }
     preserved_by release_node(action_client, action_n) { }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      if(success) assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      if(success) assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -556,10 +580,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -588,10 +612,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -642,10 +666,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -677,10 +701,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         neq_mem_remove(pair(t, client), pair(action_n, action_client), old_junk);
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -732,10 +756,10 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
     }
   }
   
@@ -801,7 +825,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         case cons(hh, tt):
       }
       switch(assoc<struct stack_client*, client_state>(action_client, old_client_states)) {
-              case client_state(a, b, c, d):
+              case client_state(a, b, c, d, e):
       }
       if(!phase2) {
         
@@ -858,11 +882,11 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
       }
     }
     
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
-      append_values(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
+      append_values(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       if(! phase2 && curr != 0) {
         if(curratindex) {
           nth_append(keys(old_client_states), cons(new_client, nil), index);
@@ -871,13 +895,13 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
       if(!phase2) {
-        take_append(index, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+        take_append(index, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       } else {
         if(! forall(retired, (was_observed_or_no_validated_hps)(observedhps, values(client_states))) ) {
           struct node* ex = not_forall(retired, (was_observed_or_no_validated_hps)(observedhps, values(client_states)));
           forall_elim(retired, (was_observed_or_no_validated_hps)(observedhps, values(old_client_states)), ex);
           if(! mem(ex, observedhps)) {
-            append_no_validated_hps(ex, values(old_client_states), cons(client_state(0, false, true, new_client_ha), nil));
+            append_no_validated_hps(ex, values(old_client_states), cons(client_state(0, false, true, new_client_ha, myf), nil));
           }
         }
       }
@@ -918,7 +942,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         case cons(hh, tt):
       }
       switch(assoc<struct stack_client*, client_state>(action_client, old_client_states)) {
-        case client_state(hp0, valid0, active0, ha0): 
+        case client_state(hp0, valid0, active0, ha0, myf0): 
       }
       if(get_hp(assoc(action_client, old_client_states)) != old_top) {
       } else {
@@ -954,16 +978,16 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
         }
       }
     }
-    preserved_by add_client(new_client, new_client_ha) { 
-      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
-      append_values(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+    preserved_by add_client(new_client, new_client_ha, myf) { 
+      append_keys(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
+      append_values(old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       mem_append(client, keys(old_client_states), cons(new_client, nil));
-      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha)), nil));
+      assoc_append_l(client, old_client_states, cons(pair(new_client, client_state(0, false, true, new_client_ha, myf)), nil));
       if(! forall(todos, (was_observed_or_no_validated_hps)(observedhps, values(client_states))) ) {
         struct node* ex = not_forall(todos, (was_observed_or_no_validated_hps)(observedhps, values(client_states)));
         forall_elim(todos, (was_observed_or_no_validated_hps)(observedhps, values(old_client_states)), ex);
         if(! mem(ex, observedhps)) {
-          append_no_validated_hps(ex, values(old_client_states), cons(client_state(0, false, true, new_client_ha), nil));
+          append_no_validated_hps(ex, values(old_client_states), cons(client_state(0, false, true, new_client_ha, myf), nil));
         }
       }
     }
@@ -972,19 +996,20 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
 @*/
 
 /*@
-predicate one_third_data(struct node* n) =
+predicate one_third_data(struct node* n;) =
   [1/3]n->data |-> _;
 
-predicate two_thirds_data(struct node* n) =
+predicate two_thirds_data(struct node* n;) =
   [2/3]n->data |-> _;
   
 predicate stack_client(struct stack* s, real f, predicate(list<void*>) I, struct stack_client* client) =
   [f]stack_box(?id, s, I) &*& client != 0 &*& client->rlist |-> ?rlist &*& [1/2]client->myhandle |-> ?ha &*& 
   list(rlist, ?retired) &*& client->rcount |-> length(retired) &*& basic_client_handle(ha, id, client, retired) &*&
-  foreach(retired, two_thirds_data) &*& distinct(retired) == true &*& malloc_block_stack_client(client);
+  foreach(retired, two_thirds_data) &*& distinct(retired) == true &*& malloc_block_stack_client(client) &*&
+  [1/2]client->myfrac |-> ?myfrac &*& [myfrac]s->help |-> _;
 
 predicate stack(struct stack* s, predicate(list<void*>) I) =
-  stack_box(?id, s, I);
+  stack_box(?id, s, I) &*& s->help |-> _;
 @*/
 
 struct stack* create_stack()
@@ -1016,13 +1041,14 @@ struct stack_client* create_client(struct stack* s)
   new_client->valid = false;
   new_client->active = true;
   //@ new_client->myhandle = ha;
+  //@ new_client->myfrac = f / 2;
   struct list* l = create_list();
   new_client->rlist = l;
   new_client->rcount = 0;
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate stack_box_handle(ha)
-  perform_action add_client(new_client, ha) atomic
+  perform_action add_client(new_client, ha, f/ 2) atomic
   {
     open myclients(_, _);
     assert clients(?head, 0,  ?states);
@@ -1036,9 +1062,9 @@ struct stack_client* create_client(struct stack* s)
     if(old == 0) {
       assert states == nil;
       assert mem(new_client, append(keys(states), cons(new_client, nil))) == true;
-      assert get_handle(assoc(new_client, append(nil, cons(pair(new_client, client_state(0, false, true, ha)), nil)))) == ha;
+      assert get_handle(assoc(new_client, append(nil, cons(pair(new_client, client_state(0, false, true, ha, f/2)), nil)))) == ha;
+     
     } else {
-      
     }
   } 
   producing_handle_predicate is_new_client(old == 0, old == 0 ? new_client : old);
@@ -1058,15 +1084,15 @@ struct stack_client* create_client(struct stack* s)
     return new_client;
   }
   while(true)
-    /*@ invariant [f]stack_box(id, s, I) &*& new_client != 0 &*& new_client->next |-> 0 &*& new_client->myhandle |-> ha &*& new_client->valid |-> false &*&
-                  new_client->hp |-> 0 &*& new_client->active |-> true &*& new_client->rlist |-> ?rlist &*& list(rlist, nil) &*& new_client->rcount |-> 0 &*&
+    /*@ invariant [f]stack_box(id, s, I) &*& [f]s->help |-> _ &*& new_client != 0 &*& new_client->next |-> 0 &*& new_client->myhandle |-> ha &*& new_client->valid |-> false &*&
+                  new_client->hp |-> 0 &*& new_client->active |-> true &*&  new_client->myfrac |-> f / 2 &*& new_client->rlist |-> ?rlist &*& list(rlist, nil) &*& new_client->rcount |-> 0 &*&
                   malloc_block_stack_client(new_client) &*& is_new_client(ha, id, false, old); @*/ 
   {
     struct stack_client* prev = old;
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate is_new_client(ha, false, prev)
-    perform_action add_client(new_client, ha) atomic
+    perform_action add_client(new_client, ha, f / 2) atomic
     {
       open myclients(s, _);
       open clients(?head_, 0, ?states_);
@@ -1083,10 +1109,10 @@ struct stack_client* create_client(struct stack* s)
       clients_merge(head_, prev);
       if(new_old == 0) {
         assert states2_tail == nil;
-        append_assoc(states1, states2, cons(pair(new_client, client_state(0, false, true, ha)), nil));
-        assoc_append(new_client, states_, cons(pair(new_client, client_state(0, false, true, ha)), nil));
-        append_keys(states_, cons(pair(new_client, client_state(0, false, true, ha)), nil));
-        mem_append(new_client, keys(states_), keys(cons(pair(new_client, client_state(0, false, true, ha)), nil)));
+        append_assoc(states1, states2, cons(pair(new_client, client_state(0, false, true, ha, f/2)), nil));
+        assoc_append(new_client, states_, cons(pair(new_client, client_state(0, false, true, ha, f/2)), nil));
+        append_keys(states_, cons(pair(new_client, client_state(0, false, true, ha, f/2)), nil));
+        mem_append(new_client, keys(states_), keys(cons(pair(new_client, client_state(0, false, true, ha, f/2)), nil)));
         close myclients(s, ?new_states);
       } else {
         append_keys(states1, states2);
@@ -1201,7 +1227,7 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
       assert clients(curr, 0, ?thestates2);
       @*/ struct node* hp = atomic_load_pointer(&curr->hp); /*@
       list<struct node*> nhps = hp == 0 ? hps : cons(hp, hps);
-      assert clients(curr, 0, cons(pair(curr, client_state(hp, ?valid, ?curract, ?currha)), ?rest));
+      assert clients(curr, 0, cons(pair(curr, client_state(hp, ?valid, ?curract, ?currha, ?myf)), ?rest));
       struct stack_client* currnext = curr->next;
       clients_merge(head, curr);
       clients_distinct(head, 0);
@@ -1212,7 +1238,7 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
       nth_index_of(i, keys(states));
       assert length(thestates1) == i;
       assert nth(i, keys(states)) == curr;
-      assert (pair(curr, client_state(hp, valid, curract, currha)) == nth(i, states));
+      assert (pair(curr, client_state(hp, valid, curract, currha, myf)) == nth(i, states));
       nth_values(i, states);
       assert nth(i, values(states)) == snd(nth(i, states));
       if(! forall(retired, (was_observed_or_no_validated_hps)(hp == 0 ? hps : cons(hp, hps), take(i + 1, values(states))))) {
@@ -1465,7 +1491,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
       append_update_entry(client, (update_hp)(t), states1, states2); 
       assoc_update_entry(client, (update_hp)(t), states);
       switch(assoc<struct stack_client*, client_state>(client, states)) {
-        case client_state(asdf, aqwer, ag, adg):
+        case client_state(asdf, aqwer, ag, adg, myf):
       }
     } 
     producing_handle_predicate hazard_pointer_set(client, retired, t);
@@ -1489,10 +1515,10 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
         append_update_entry(client, (validate_hp), states1_, states2_);
         assoc_update_entry(client, (validate_hp), states_);
         switch(assoc<struct stack_client*, client_state>(client, states_)) {
-          case client_state(asdf, aqwer, ag, adg):
+          case client_state(asdf, aqwer, ag, adg, myf):
         }
         switch(assoc<struct stack_client*, client_state>(client, poststates_)) {
-          case client_state(asdf, aqwer, ag, adg):
+          case client_state(asdf, aqwer, ag, adg, myf):
         }
         assert poststates_ == update_entry(client, (validate_hp), states_);
         assert is_valid(assoc(client, poststates_)) == true;
@@ -1612,5 +1638,56 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
       }
     }
   }
+}
+
+void stack_dipose(struct stack* s)
+  //@ requires stack(s, ?I);
+  //@ ensures I(?vs);
+{
+  //@ open stack(s, I);
+  //@ assert stack_box(?id, s, I);
+  //@ dispose_box stack_box(id, s, I);
+  //@ open myclients(s, _);
+  struct stack_client* curr = s->clients;
+  while(curr != 0)
+    //@ invariant clients(curr, 0, ?states) &*& s->help |-> _ &*& foreach(?junk, is_node);
+  {
+    struct stack_client* nxt = curr->next;
+    //@ open client_local(curr, _, _);
+    //@ assert curr->active |-> ?active;
+    //@ assume(! active); // need to add s->help chunk to client_local
+    struct list* retired = curr->rlist;
+    while(!list_is_empty(retired))
+      //@ invariant list(retired, ?nodes) &*& foreachp(nodes, two_thirds_data) &*& foreach(?junk_, is_node);
+    {
+      //@ switch(nodes) { case nil: case cons(h, t): }
+      struct node* n = list_remove_first(retired);
+      //@ assume(mem(pair(n, curr), junk_));
+      //@ assume(mem(n, nodes));
+      //@ foreach_remove(pair(n, curr), junk_);
+      //@ foreachp_remove(n, nodes);
+      //@ open is_node(pair(n, curr));
+      //@ open two_thirds_data(n);
+      free(n);
+    }
+    //@ open foreachp(_, _);
+    list_dispose(retired);
+    free(curr);
+    curr = nxt;
+  }
+  struct node* n = s->top;
+  while(n != 0)
+    //@ invariant lseg(n, 0, _, _);
+  {
+    struct node* nxt = n->next;
+    free(n);
+    n = nxt;
+  }
+  //@ open clients(0, 0, _);
+  //@ open lseg(0, 0, _, _);
+  //@ assert foreach(junk, is_node);
+  //@ assume(junk == nil);
+  //@ open foreach(_, is_node);
+  free(s);
 }
 
