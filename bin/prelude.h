@@ -12,7 +12,7 @@ lemma void assume(bool b);
 
 @*/
 
-//@ predicate exists<t>(t x) = true;
+//@ predicate exists<t>(t x;) = true;
 
 /*@
 predicate array<t>(void* a, int n, int elemsize, predicate(t*; t) q; list<t> elems) =

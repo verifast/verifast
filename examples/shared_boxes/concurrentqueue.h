@@ -28,7 +28,6 @@ void enqueue(struct queue* q, int x);
 predicate_family try_dequeue_pre(void* index)();
 predicate_family try_dequeue_post(void* index)(bool success, int res);
 
-// todo: write client
 typedef lemma void queue_try_dequeue(predicate(list<int> vs) I)();
   requires try_dequeue_pre(this)() &*& I(?vs);
   ensures try_dequeue_post(this)(vs != nil, ?res) &*& vs != nil ? res == head(vs) &*& I(tail(vs)) : I(vs);

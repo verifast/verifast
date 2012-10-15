@@ -174,4 +174,52 @@ lemma void distinct_keys_implies_distinct_entries<t1, t2>(list<pair<t1, t2> > ma
       }
   }
 }
+
+lemma void append_values<t1, t2>(list<pair<t1, t2> > map1, list<pair<t1, t2> > map2)
+  requires true;
+  ensures values(append(map1, map2)) == append(values(map1), values(map2));
+{
+  switch(map1) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          append_values(t, map2);
+      }
+  }
+}
+
+lemma void assoc_append<t1, t2>(t1 key, list<pair<t1, t2> > map1,  list<pair<t1, t2> > map2)
+  requires !mem(key, keys(map1));
+  ensures assoc(key, append(map1, map2)) == assoc(key, map2);
+{
+  switch(map1) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          if(key == key0) {
+          } else {
+            assoc_append(key, t, map2);
+          }
+      }
+  }
+}
+  
+lemma void assoc_append_l<t1, t2>(t1 key, list<pair<t1, t2> > map1,  list<pair<t1, t2> > map2)
+  requires mem(key, keys(map1)) == true;
+  ensures assoc(key, append(map1, map2)) == assoc(key, map1);
+{
+  switch(map1) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          if(key == key0) {
+          } else {
+            assoc_append_l(key, t, map2);
+          }
+      }
+  }
+}
 @*/

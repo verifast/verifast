@@ -531,18 +531,11 @@ lemma void is_heap_extend(nat i, list<int> vs, int x, int prev)
   }
 }
 
-lemma_auto(append(take(j, vs), cons(nth(j, vs), nil))) void take_append<t>(list<t> vs, int j)
+lemma_auto(append(take(j, vs), cons(nth(j, vs), nil))) void take_plus_one_auto<t>(list<t> vs, int j)
   requires 0 <= j && j < length(vs);
   ensures take(j + 1, vs) == append(take(j, vs), cons(nth(j, vs), nil));
 {
-  switch(vs) {
-    case nil:
-    case cons(h, t):
-      if(j == 0) {
-      } else  {
-        take_append(t, j - 1);
-      }
-  }
+  take_plus_one(j, vs);
 }
 
 lemma void mylemma(nat i, list<int> h, int k, int prevk)
@@ -683,7 +676,7 @@ void insert(struct heap* h, int x)
   //@ int prevk = div2(size+1);
   //@ is_heap_extend(nat_of_int(size + 1), take(size + 1, vsa2), x, prevk);
   //@ assert is_heap(nat_of_int(size + 1), append(take(size + 1, vsa2), cons(x, nil)), cons(nat_of_int(prevk), nil)) == true;
-  //@ take_append(vsa2, size + 1);
+  //@ take_plus_one(size + 1, vsa2);
   //@ assert is_heap(nat_of_int(size + 1), take(size + 2, vsa2), cons(nat_of_int(prevk), nil)) == true;
   //@ succ_int(size + 1);
   //@ assert is_heap(nat_of_int(size + 2), take(size + 2, vsa2), cons(nat_of_int(prevk), nil)) == true;

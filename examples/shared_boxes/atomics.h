@@ -17,12 +17,16 @@ void atomic_set_int(int *i, int v); // atomic
     //@ requires integer(i, _);
     //@ ensures integer(i, v);
 
+int atomic_increment(int *i); // atomic
+    //@ requires integer(i, ?v);
+    //@ ensures integer(i, v + 1) &*& result == v;
+
 void* atomic_compare_and_set_pointer(void **pp, void *old, void *new); // atomic
     //@ requires pointer(pp, ?p0);
     //@ ensures pointer(pp, ?p1) &*& (p0 == old ? p1 == new : p1 == p0) &*& result == p0;
 
 int atomic_compare_and_set_int(int *pp, int old, int new); // atomic
-    //@ requires integer(pp, ?p0);
-    //@ ensures integer(pp, ?p1) &*& (p0 == old ? p1 == new : p1 == p0) &*& result == p0;
+    //@ requires [?f]integer(pp, ?p0) &*& p0 == old ? f == 1 : true;
+    //@ ensures [f]integer(pp, ?p1) &*& (p0 == old ? p1 == new : p1 == p0) &*& result == p0;
     
 #endif

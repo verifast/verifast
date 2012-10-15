@@ -15,8 +15,6 @@ fixpoint list<t2> values<t1, t2>(list<pair<t1, t2> > map) {
   }
 }
 
-
-
 fixpoint t2 assoc<t1, t2>(t1 key, list<pair<t1, t2> > as) {
   switch(as) {
     case nil: return default_value<t2>;
@@ -109,5 +107,16 @@ lemma void nth_values<t1, t2>(int i, list<pair<t1, t2> > map);
 lemma void append_keys<t1, t2>(list<pair<t1, t2> > map1, list<pair<t1, t2> > map2);
   requires true;
   ensures keys(append(map1, map2)) == append(keys(map1), keys(map2));
+  
+lemma void append_values<t1, t2>(list<pair<t1, t2> > map1, list<pair<t1, t2> > map2);
+  requires true;
+  ensures values(append(map1, map2)) == append(values(map1), values(map2));
 
+lemma void assoc_append<t1, t2>(t1 key, list<pair<t1, t2> > map1,  list<pair<t1, t2> > map2);
+  requires !mem(key, keys(map1));
+  ensures assoc(key, append(map1, map2)) == assoc(key, map2);
+  
+lemma void assoc_append_l<t1, t2>(t1 key, list<pair<t1, t2> > map1,  list<pair<t1, t2> > map2);
+  requires mem(key, keys(map1)) == true;
+  ensures assoc(key, append(map1, map2)) == assoc(key, map1);
 #endif

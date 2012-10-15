@@ -15,6 +15,20 @@ lemma void take_plus_one<t>(int i, list<t> xs)
     }
 }
 
+lemma void take_append<t>(int n, list<t> xs, list<t> ys)
+  requires 0 <= n && n <= length(xs);
+  ensures take(n, append(xs, ys)) == take(n, xs);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(n == 0) {
+      } else {
+        take_append(n - 1, t, ys);
+      }
+  }
+}
+
 lemma void distinct_mem_nth_take<t>(list<t> xs, int i)
     requires distinct(xs) == true &*& 0 <= i &*& i < length(xs);
     ensures !mem(nth(i, xs), take(i, xs));
