@@ -157,6 +157,7 @@ let _ =
   let include_paths: string list ref = ref [] in
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
+  let linkShouldFail = ref false in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
@@ -188,6 +189,7 @@ let _ =
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)"
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
+            ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
             ]
   in
   let process_file filename =
@@ -239,9 +241,12 @@ let _ =
           let modules = libs @ List.rev !modules in
           let modules = if !allowAssume then assume_lib::modules else modules in
           link_program (!isLibrary) modules !emitDllManifest !exports; 
-          print_endline "Program linked successfully."
+          if (!linkShouldFail) then 
+            (print_endline "Error: link phase succeeded, while expected to fail (option -link_should_fail)."; exit 1)
+          else print_endline "Program linked successfully."
         with
-            LinkError msg -> print_endline msg; exit 1
+            LinkError msg when (!linkShouldFail) -> print_endline msg; print_endline "Link phase failed as expected (option -link_should_fail)."
+          | LinkError msg -> print_endline msg; exit 1
           | CompilationError msg -> print_endline ("error: " ^ msg); exit 1
       end
   end
