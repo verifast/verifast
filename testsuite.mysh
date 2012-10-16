@@ -91,6 +91,10 @@ mysh < MockKernel.mysh
 cd ..
 cd module_imports
 verifast_both mysubmodule.c mymodule.c client.c
+verifast_both -link_should_fail mysubmodule.c mymodule.c fail_client.c
+cd circular_deps
+verifast_both -link_should_fail b.c a.c
+cd ..
 cd ..
 verifast_both -c odd_even_lemmas.c
 verifast_both threading.o philosophers.c
