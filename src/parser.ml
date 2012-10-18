@@ -651,6 +651,12 @@ and
 and
   parse_coef = parser
   [< '(l, Kwd "["); pat = parse_pattern; '(_, Kwd "]") >] -> pat
+and parse_producing_handle_predicate = parser
+  [< '(lph, Ident post_hpn); post_hp_args = parse_arglist; >] -> (lph, post_hpn, post_hp_args)
+and
+  parse_producing_handle_predicate_list = parser
+  [< '(l, Kwd "if"); '(_, Kwd "("); condition = parse_expr; '(_, Kwd ")"); (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate; '(_, Kwd "else"); rest = parse_producing_handle_predicate_list >] -> ConditionalProducingHandlePredicate(lph, condition, post_hpn, post_hp_args, rest); 
+| [< (lph, post_hpn, post_hp_args) = parse_producing_handle_predicate >] -> BasicProducingHandlePredicate(lph, post_hpn, post_hp_args)
 and
   parse_stmt0 = parser
   [< '((sp1, _), Kwd "/*@"); s = parse_stmt0; '((_, sp2), Kwd "@*/") >] -> PureStmt ((sp1, sp2), s)
@@ -768,9 +774,9 @@ and
              if post_bpn <> pre_bpn then raise (ParseException (lpb, "The box predicate name cannot change."));
              (lpb, post_bp_args)
          end;
-     '(lph, Kwd "producing_handle_predicate"); '(_, Ident post_hpn); post_hp_args = parse_arglist;
+     '(_, Kwd "producing_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list;
      '(_, Kwd ";") >] ->
-     PerformActionStmt (lcb, (match is_atomic with None -> false | _ -> true), ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, lph, post_hpn, post_hp_args)
+     PerformActionStmt (lcb, (match is_atomic with None -> false | _ -> true), ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, producing_hp_list)
 | [< '(l, Kwd ";") >] -> NoopStmt l
 | [< '(l, Kwd "super"); s = parser 
      [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))

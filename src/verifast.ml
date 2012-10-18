@@ -1458,7 +1458,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let tcont _ _ _ _ _ = success() in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
-    | PerformActionStmt (lcb, is_atomic, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, lph, post_hpn, post_hp_args) ->
+    | PerformActionStmt (lcb, is_atomic, nonpure_ctxt, pre_bcn, pre_bcp_pats, lch, pre_hpn, pre_hp_pats, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, posthandles) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
           None -> static_error lcb "No such box class." None
@@ -1549,33 +1549,49 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure." None;
-                 let (post_handlePred_parammap, post_handlePred_inv) =
-                   if post_hpn = pre_bcn ^ "_handle" then
-                     ([], True l)
-                   else
-                     match try_assoc post_hpn hpmap with
-                       None -> static_error lph "Post-state handle predicate: No such handle predicate in box class." None
-                     | Some (_, hppmap, inv, _) ->
-                       (hppmap, inv)
+                 
+                 let produce_post_handle lph post_hpn post_hp_args tcont =
+                   let (post_handlePred_parammap, post_handlePred_inv) =
+                     if post_hpn = pre_bcn ^ "_handle" then
+                       ([], True l)
+                     else
+                       match try_assoc post_hpn hpmap with
+                         None -> static_error lph "Post-state handle predicate: No such handle predicate in box class." None
+                       | Some (_, hppmap, inv, _) ->
+                         (hppmap, inv)
+                   in
+                   let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
+                     None-> static_error lph ("No such predicate family: "^post_hpn) None
+                   | Some x-> x
+                   in
+                   let post_hpargs =
+                     match zip post_handlePred_parammap post_hp_args with
+                       None -> static_error lph "Post-state handle predicate: Incorrect number of arguments." None
+                     | Some bs ->
+                       List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
+
+                   in
+                   let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
+                   with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
+                   assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure." None;
+                   let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
+                   let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
+                   let h = boxChunk::hpChunk::h in
+                   with_context PopSubcontext $. fun () ->
+                   tcont sizemap tenv ghostenv h env
                  in
-                 let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
-                   None-> static_error lph ("No such predicate family: "^post_hpn) None
-                 | Some x-> x
+                 let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+                 let rec produce_post_handles phandles =
+                   match phandles with
+                     ConditionalProducingHandlePredicate(l, condition, name, args, rest) ->
+                       let e = check_expr_t (pn,ilist) tparams tenv condition boolt in
+                       let condition_term = eval env e in
+                       branch
+                         (fun _ -> assume condition_term (fun _ -> produce_post_handle l name args tcont))
+                         (fun _ -> assume (ctxt#mk_not condition_term) (fun _ -> produce_post_handles rest))
+                   | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle l name args tcont
                  in
-                 let post_hpargs =
-                   match zip post_handlePred_parammap post_hp_args with
-                     None -> static_error lph "Post-state handle predicate: Incorrect number of arguments." None
-                   | Some bs ->
-                     List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
-                 in
-                 let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
-                 with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
-                 assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure." None;
-                 let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
-                 let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
-                 let h = boxChunk::hpChunk::h in
-                 with_context PopSubcontext $. fun () ->
-                 tcont sizemap tenv ghostenv h env
+                 produce_post_handles posthandles
                ) return_cont econt
              )
           )
@@ -1684,7 +1700,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PureStmt (l, s) ->
       begin
         match s with
-          PerformActionStmt (_, _, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _, _, _) ->
+          PerformActionStmt (_, _, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _, _, _) ->
           nonpure_ctxt := not pure
         | _ -> ()
       end;

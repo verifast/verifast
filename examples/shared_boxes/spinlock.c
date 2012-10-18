@@ -24,8 +24,8 @@ box_class spinlock_box(struct spinlock* l, predicate() I)
     requires is_locked == 1 && owner == actionHandle;
     ensures is_locked == 0;
     
-  handle_predicate locked_handle(bool success, real f) {
-    invariant success ? is_locked == 1 && owner == predicateHandle && myf == f : true;
+  handle_predicate locked_handle(real f) {
+    invariant is_locked == 1 && owner == predicateHandle && myf == f;
     
     preserved_by noop() { }
     preserved_by acquire(f0) { }
@@ -38,7 +38,7 @@ predicate spinlock(struct spinlock* l, predicate() I) =
   spinlock_box(?id, l, I) &*& l->helper |-> _;
   
 predicate locked(struct spinlock* l, predicate() I, real f) =
-  [f]spinlock_box(?id, l, I) &*& locked_handle(?ha, id, true, f);
+  [f]spinlock_box(?id, l, I) &*& locked_handle(?ha, id, f);
 @*/
 
 struct spinlock* create_spinlock()
@@ -61,12 +61,12 @@ void spinlock_acquire(struct spinlock* l)
   //@ requires [?f]spinlock(l, ?I);
   //@ ensures locked(l, I, f) &*& I();
 {
+  //@ open [f]spinlock(l, I);
+  //@ assert [f]spinlock_box(?id, l, I);
+  //@ handle ha = create_handle spinlock_box_handle(id);
   while(true)
-    //@ invariant [f]spinlock(l, I);
+    //@ invariant [f]spinlock_box(id, l, I) &*& [f]l->helper |-> _ &*& spinlock_box_handle(ha, id);
   {
-    //@ open [f]spinlock(l, I);
-    //@ assert [f]spinlock_box(?id, l, I);
-    //@ handle ha = create_handle spinlock_box_handle(id);
     /*@
     consuming_box_predicate spinlock_box(id, l, I)
     consuming_handle_predicate spinlock_box_handle(ha)
@@ -78,14 +78,11 @@ void spinlock_acquire(struct spinlock* l)
         open exists<handle>(_); close exists<handle>(ha);       
       }
     }
-    producing_handle_predicate locked_handle(old == 0, f);
+    producing_handle_predicate if (old != 0) spinlock_box_handle() else locked_handle(f);
     @*/
     if(old == 0) {
       //@ close locked(l, I, f);
       break;
-    } else {
-      //@ close [f]spinlock(l, I);
-      //@ leak locked_handle(ha, id, false, _);
     }
   }
 }
@@ -97,10 +94,10 @@ void spinlock_release(struct spinlock* l)
   ;
   //@ open locked(l, I, f);
   //@ assert [f]spinlock_box(?id, l, I);
-  //@ assert locked_handle(?owner, id, true, f);
+  //@ assert locked_handle(?owner, id, f);
   /*@
   consuming_box_predicate spinlock_box(id, l, I)
-  consuming_handle_predicate locked_handle(owner, true, f)
+  consuming_handle_predicate locked_handle(owner, f)
   perform_action release() atomic
   {
     @*/ atomic_set_int(&l->is_locked, 0); /*@
@@ -141,3 +138,4 @@ lemma void change_invariant(struct spinlock* l, predicate() J)
   leak spinlock_box_handle(_, _);
 }
 @*/
+

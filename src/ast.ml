@@ -194,6 +194,10 @@ and
         loc *
         string *
         string option (* None betekent heel package, Some string betekent 1 ding eruit *)
+and 
+  producing_handle_predicate =
+    ConditionalProducingHandlePredicate of loc * expr (* condition *) * string (* handle name *) * (expr list) (* args *) * producing_handle_predicate
+  | BasicProducingHandlePredicate of loc * string (* handle name *) * (expr list) (* args *)
 and
   stmt = (* ?stmt *)
     PureStmt of (* Statement of the form /*@ ... @*/ *)
@@ -262,9 +266,10 @@ and
       stmt list *
       loc (* close brace of body *) *
       (loc * expr list) option *
-      loc *
+      producing_handle_predicate
+      (*loc *
       string *
-      expr list
+      expr list*)
   | SplitFractionStmt of (* split_fraction ... by ... *)
       loc *
       string *
@@ -700,7 +705,7 @@ let stmt_loc s =
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
   | BlockStmt (l, ds, ss, _, _) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l

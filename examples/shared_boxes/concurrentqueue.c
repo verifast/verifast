@@ -129,7 +129,7 @@ lemma_auto void drop_append_l<t>(list<t> xs, list<t> ys, int i)
 box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
   invariant q->initial |-> ?initial &*& q->head |-> ?head &*& q->tail |-> ?tail &*& lseg(initial, 0, ?nodes, ?vs) &*&
             mem(head, nodes) == true &*& mem(tail, nodes) == true &*& index_of(head, nodes) <= index_of(tail, nodes) &*&
-            length(nodes) - 2 <= index_of(tail, nodes) &*& I(drop(index_of(head, nodes) + 1, vs)) &*&
+            length(nodes) - 2 <= index_of(tail, nodes) &*& I(drop(index_of(head, nodes) + 1, vs)) &*& malloc_block_queue(q) &*&
             //derived
             length(nodes) == length(vs);
             
@@ -167,12 +167,8 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
   }
   
   handle_predicate was_head_with_succ(struct node* h, struct node* n) {
-    invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) &&
-              (n != 0 ? 
-                index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes)
-              :
-                true
-              );
+    invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) && n != 0 &&
+              index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
               
     preserved_by enqueue(new_node, x) { }
     preserved_by dequeue() { }
@@ -182,11 +178,7 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
   
   handle_predicate was_head_with_succ_not_tail(struct node* h, struct node* n) {
     invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) && index_of(h, nodes) < index_of(tail, nodes) &&
-              (n != 0 ? 
-                index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes)
-              :
-                true
-              );
+              n != 0 && index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
               
     preserved_by enqueue(new_node, x) { }
     preserved_by dequeue() { }
@@ -194,12 +186,9 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
     preserved_by noop() { }
   }
   
-  handle_predicate is_good_node(bool dequeued, struct node* n, int v) {
-    invariant dequeued ?
-                mem(n, nodes) == true && nth(index_of(n, nodes), vs) == v
-              :
-                true 
-               ;
+  handle_predicate is_good_node(struct node* n, int v) {
+    invariant mem(n, nodes) == true && nth(index_of(n, nodes), vs) == v;
+
               
     preserved_by enqueue(new_node, x) { }
     preserved_by dequeue() { }
@@ -303,7 +292,7 @@ lemma void lseg_distinct(struct node* from, struct node* to)
   }
 }
 
-predicate queue(struct queue* q, predicate(list<int>) I) = msqueue_box(?id, q, I) &*& malloc_block_queue(q);
+predicate queue(struct queue* q, predicate(list<int>) I) = msqueue_box(?id, q, I);
 @*/
 
 struct queue* create_queue()
@@ -408,12 +397,12 @@ bool try_dequeue(struct queue* q, int* res)
   //@ requires [?f]queue(q, ?I) &*& integer(res, ?v) &*& is_queue_try_dequeue(?lem, I) &*& try_dequeue_pre(lem)();
   //@ ensures [f]queue(q, I) &*& integer(res, ?nv) &*& try_dequeue_post(lem)(result, ?ret) &*& result ? ret == nv : true;
 {
+  //@ open [f]queue(q, I);
+  //@ assert [f]msqueue_box(?id, q, I);
+  //@ handle ha = create_handle msqueue_box_handle(id);
   while(true)
-    //@ invariant [f]queue(q, I) &*& integer(res, v) &*& is_queue_try_dequeue(lem, I) &*& try_dequeue_pre(lem)();
+    //@ invariant [f]msqueue_box(id, q, I) &*& integer(res, v) &*& is_queue_try_dequeue(lem, I) &*& try_dequeue_pre(lem)() &*& msqueue_box_handle(ha, id);
   {
-    //@ open [f]queue(q, I);
-    //@ assert [f]msqueue_box(?id, q, I);
-    //@ handle ha = create_handle msqueue_box_handle(id);
     // h = q->head
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
@@ -454,12 +443,12 @@ bool try_dequeue(struct queue* q, int* res)
         leak is_queue_try_dequeue(_, _);
       }
     }
-    producing_handle_predicate was_head_with_succ(h, n);
+    producing_handle_predicate if(n == 0) msqueue_box_handle() else was_head_with_succ(h, n);
     @*/
     if(n == 0) {
       return false;
       //@ close [f]queue(q, I);
-      //@ leak was_head_with_succ(_, _, _, _);
+      //@ leak msqueue_box_handle(_, _);
     } else {
       // old = cas(&q->tail, h, n);
           /*@
@@ -498,19 +487,19 @@ bool try_dequeue(struct queue* q, int* res)
         } else {
           ret = 0;
         }
-      } producing_handle_predicate is_good_node(old == h, n, ret); @*/
+      } producing_handle_predicate if (old == h) is_good_node(n, ret) else msqueue_box_handle(); @*/
       if(old == h) {
         // read n->value
         /*@
         consuming_box_predicate msqueue_box(id, q, I)
-        consuming_handle_predicate is_good_node(ha, true, n, ret)
+        consuming_handle_predicate is_good_node(ha, n, ret)
         perform_action noop() atomic
         {
           assert q->initial |-> ?initial__;
           assert q->head |-> ?head__;
           assert q->tail |-> ?tail__;
           assert lseg(_, _, ?lnodes, ?lvs);
-         lseg_nodes_values(initial__, 0);
+          lseg_nodes_values(initial__, 0);
           lseg_split(initial__, 0, n);
            assert lseg(initial__, n, ?lnodes1, ?lvs1);
            assert lseg(n, 0, ?lnodes2, ?lvs2);
@@ -528,8 +517,6 @@ bool try_dequeue(struct queue* q, int* res)
         return true;
         //@ close [f]queue(q, I);
       }
-      //@ close [f]queue(q, I);
-      //@ leak is_good_node(_, _, _, _, _);
     }
   }
 }
