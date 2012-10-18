@@ -14,6 +14,10 @@ struct stack* create_stack();
 struct stack_client* create_client(struct stack* s);
   //@ requires [?f]stack(s, ?I);
   //@ ensures [?g]stack(s, I) &*& result == 0 ? f == g : stack_client(s, ?h, I, result) &*& f == g + h;
+
+void deactivate_client(struct stack* s, struct stack_client* client)
+  //@ requires stack_client(s, ?f, ?I, client);
+  //@ ensures [f]stack(s, I);
   
 /*@
 predicate_family stack_push_pre(void* index)();
