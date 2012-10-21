@@ -2519,7 +2519,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     let sorted_module_lines modules =
       let lines =
         modules |> List.map begin fun (name, _) -> name
-	end
+        end
       in
       List.sort compare lines
     in
