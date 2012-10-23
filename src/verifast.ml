@@ -392,7 +392,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       if args <> [] then static_error l "open_module requires no arguments." None;
       let (_, _, _, _, module_symb, _) = List.assoc "module" predfammap in
       let (_, _, _, _, module_code_symb, _) = List.assoc "module_code" predfammap in
-      consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ -> (* TODO: produce imported module chunks here somewhere *)
+      consume_chunk rules h [] [] [] l (module_symb, true) [] real_unit (SrcPat DummyPat) (Some 2) [TermPat current_module_term; TermPat ctxt#mk_true] $. fun _ h coef _ _ _ _ _ ->
       begin fun cont ->
         let rec iter h globals =
           match globals with
