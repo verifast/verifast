@@ -3883,7 +3883,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         x::fixed
       else
         fixed
-    | ExprAsn (_, _) -> fixed
+    | ExprAsn (_, e) -> assert_expr_fixed fixed e; fixed
     | WMatchAsn (l, e, pat, tp) ->
       if expr_is_fixed fixed e then
         fixed_pat_fixed_vars pat @ fixed
