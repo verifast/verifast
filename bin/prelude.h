@@ -135,11 +135,6 @@ lemma void character_to_u_character(void *p);
     requires [?f]character(p, _);
     ensures [f]u_character(p, _);
 
-
-
-lemma void chars_to_intarray(void* a, int n);
-  requires chars(a, ?cs) &*& length(cs) == n * sizeof(int);
-  ensures array<int>(a, n, sizeof(int), integer, _);
 @*/
 
 /*@

@@ -2402,7 +2402,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     let promote l e1 e2 ts =
       match promote_numeric e1 e2 ts with
-        (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _)) as result -> result
+        (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar)) as result -> result
       | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected." None
     in
     let check_pure_fun_value_call l w t es =
@@ -4313,25 +4313,31 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         check_overflow l min_uint_term (ctxt#mk_mul v1 v2) max_uint_term
       | (RealType, RealType) ->
         ctxt#mk_real_mul v1 v2
+      | (UShortType, UShortType) ->
+        check_overflow l min_ushort_term (ctxt#mk_mul v1 v2) max_ushort_term
+      | (UChar, UChar) ->
+        check_overflow l min_uchar_term (ctxt#mk_mul v1 v2) max_uchar_term
       end
     | Le ->
       let Some [tp1; tp2] = ts in
       begin match (tp1, tp2) with
         ((IntType, IntType) | (PtrType _, PtrType _) |
-              (UintPtrType, UintPtrType)) -> ctxt#mk_le v1 v2
+         (UintPtrType, UintPtrType)) | (UShortType, UShortType) |
+         (UChar, UChar)-> ctxt#mk_le v1 v2
       | (RealType, RealType) -> ctxt#mk_real_le v1 v2
       end
     | Lt ->
       let Some [tp1; tp2] = ts in
       begin match (tp1, tp2) with
         ((IntType, IntType) | (PtrType _, PtrType _) |
-              (UintPtrType, UintPtrType)) -> ctxt#mk_lt v1 v2
+         (UintPtrType, UintPtrType)) | (UShortType, UShortType) |
+         (UChar, UChar) -> ctxt#mk_lt v1 v2
       | (RealType, RealType) -> ctxt#mk_real_lt v1 v2
       end
     | Div ->
       begin match ts with
         Some ([RealType; RealType]) -> static_error l "Realdiv not supported yet in /=." None
-      | Some ([IntType; IntType]) -> 
+      | Some ([IntType; IntType]) | Some([UShortType; UShortType]) | Some([UChar; UChar]) -> 
         begin match ass_term with
           Some assert_term -> assert_term l (ctxt#mk_not (ctxt#mk_eq v2 (ctxt#mk_intlit 0))) "Denominator might be 0." None
         | None -> ()

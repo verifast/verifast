@@ -1843,7 +1843,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let (min_term, max_term) = 
             match lhs_type with
               Char -> (min_char_term, max_char_term)
+            | UChar -> (min_uchar_term, max_uchar_term)
             | ShortType -> (min_short_term, max_short_term)
+            | UShortType -> (min_ushort_term, max_ushort_term)
             | IntType -> (min_int_term, max_int_term)
             | UintPtrType -> (min_uint_term, max_uint_term)
             | PtrType t -> ((ctxt#mk_intlit 0), max_ptr_term)
@@ -1854,7 +1856,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some ([UintPtrType; _] | [_; UintPtrType]) -> Some (int_zero_term, max_ptr_term)
             | Some ([IntType; _] | [_; IntType]) -> Some (min_int_term, max_int_term)
             | Some ([ShortType; _] | [_; ShortType]) -> Some (min_short_term, max_short_term)
+            | Some ([UShortType; _] | [_; UShortType]) -> Some (min_ushort_term, max_ushort_term)
             | Some ([Char; _] | [_; Char]) -> Some (min_char_term, max_char_term)
+            | Some ([UChar; _] | [_; UChar]) -> Some (min_uchar_term, max_uchar_term)
             | _ -> None
           in
           let new_value = 
@@ -1872,7 +1876,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             end
           | Sub ->
             begin match !ts with
-              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | (Some [UintPtrType; UintPtrType])->
+              (Some [IntType; IntType]) | (Some [ShortType; ShortType]) | (Some [Char; Char]) | 
+              (Some [UintPtrType; UintPtrType]) | (Some [UChar; UChar]) | (Some [UShortType; UShortType])->
               check_overflow min_term (ctxt#mk_sub v1 v2) max_term
             | Some [PtrType t; IntType] ->
               let n = sizeof l t in

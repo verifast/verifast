@@ -27,6 +27,18 @@ char* fgets(char* buffer, int n, FILE* fp);
   //@ requires chars(buffer, ?cs) &*& length(cs) == n &*& file(fp);
   //@ ensures chars(buffer, ?cs2) &*& length(cs2) == n &*& file(fp) &*& result == 0 ? true : mem('\0', cs2) == true;
 
+int fseek (FILE* fp, /*long*/ int offset, int origin);
+  //@ requires file(fp) &*& origin == 0 || origin == 1 || origin == 2;
+  //@ ensures file(fp);
+  
+/* long */ int ftell(FILE* fp);
+  //@ requires file(fp);
+  //@ ensures file(fp);
+  
+void rewind(FILE* fp);
+  //@ requires file(fp);
+  //@ ensures file(fp);
+
 int puts(char* format);
   //@ requires [?f]chars(format, ?cs) &*& mem('\0', cs) == true;
   //@ ensures [f]chars(format, cs);
@@ -34,6 +46,10 @@ int puts(char* format);
 int printf(char* format, int arg);
   //@ requires [?f]chars(format, ?cs) &*& cs == cons('%', cons('i', cons('\0', nil)));
   //@ ensures [f]chars(format, cs);
+  
+int scanf(char* format, int* arg);
+  //@ requires [?f]chars(format, ?cs) &*& cs == cons('%', cons('i', cons('\0', nil))) &*& integer(arg, _);
+  //@ ensures [f]chars(format, cs) &*& integer(arg, _);
   
 int feof(FILE* fp);
   //@ requires file(fp);

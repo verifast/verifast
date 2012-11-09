@@ -4,6 +4,7 @@
 #include "malloc.h"
 
 //@ #include "quantifiers.gh"
+//@ #include "arrays.gh"
 
 typedef int ElementType;
 
@@ -69,7 +70,7 @@ struct heap* heap_create(int capacity)
   int acapacity = capacity + 1;
   int *array = malloc(4 * acapacity);
   if (array == 0) abort();
-  //@ chars_to_intarray(array,acapacity);
+  //@ chars_to_int_array(array,acapacity);
   q->elems = array;
   if (q->elems == 0) abort();
   q->capacity = capacity + 1;
