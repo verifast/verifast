@@ -30,7 +30,8 @@ let c_keywords = [
   "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
-  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef"
+  "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
+  "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"
 ]
 
 let java_keywords = [
@@ -1026,6 +1027,9 @@ and
 | [< '(l, Kwd "INT_MIN") >] -> IntLit (l, big_int_of_string "-2147483648", ref None)
 | [< '(l, Kwd "INT_MAX") >] -> IntLit (l, big_int_of_string "2147483647", ref None)
 | [< '(l, Kwd "UINTPTR_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
+| [< '(l, Kwd "UCHAR_MAX") >] -> IntLit (l, big_int_of_string "255", ref None)
+| [< '(l, Kwd "USHRT_MAX") >] -> IntLit (l, big_int_of_string "65535", ref None)
+| [< '(l, Kwd "UINT_MAX") >] -> IntLit (l, big_int_of_string "4294967295", ref None)
 | [< '(l, String s); ss = rep (parser [< '(_, String s) >] -> s) >] -> StringLit (l, String.concat "" (s::ss))
 | [< '(l, Kwd "truncating"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)
 | [< e = peek_in_ghost_range (parser [< '(l, Kwd "truncating"); '(_, Kwd "@*/"); '(_, Kwd "("); t = parse_type; '(_, Kwd ")"); e = parse_expr_suffix >] -> CastExpr (l, true, t, e)) >] -> e

@@ -375,6 +375,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let assume_bounds term tp = 
     match tp with
       Char -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_char_term term) (ctxt#mk_le term max_char_term));
+    | UChar -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_uchar_term term) (ctxt#mk_le term max_uchar_term));
     | ShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_short_term term) (ctxt#mk_le term max_short_term));
     | UShortType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_ushort_term term) (ctxt#mk_le term max_ushort_term));
     | IntType -> ignore $. ctxt#assume (ctxt#mk_and (ctxt#mk_le min_int_term term) (ctxt#mk_le term max_int_term));
@@ -2395,6 +2396,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
         ts := Some [IntType; IntType];
         (w1, w2, IntType)
+      | (UChar, UChar) | (UShortType, UShortType) | (UintPtrType, UintPtrType)->
+        ts := Some [UintPtrType;UintPtrType];
+        (w1, w2, UintPtrType)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
         ts := Some [t1; t1];

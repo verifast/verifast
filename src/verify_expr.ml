@@ -1295,6 +1295,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       IntType -> assume (ctxt#mk_and (ctxt#mk_le min_int_term t) (ctxt#mk_le t max_int_term)) cont
     | PtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont
     | ShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_short_term t) (ctxt#mk_le t max_short_term)) cont
+    | UShortType _ -> assume (ctxt#mk_and (ctxt#mk_le min_ushort_term t) (ctxt#mk_le t max_ushort_term)) cont
     | Char _ -> assume (ctxt#mk_and (ctxt#mk_le min_char_term t) (ctxt#mk_le t max_char_term)) cont
     | UChar _ -> assume (ctxt#mk_and (ctxt#mk_le min_uchar_term t) (ctxt#mk_le t max_uchar_term)) cont
     | UintPtrType _ -> assume (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) t) (ctxt#mk_le t max_ptr_term)) cont

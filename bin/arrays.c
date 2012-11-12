@@ -3,27 +3,27 @@
 /*@
 
 lemma void array_split<t>(void *a, int offset)
-    requires array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
-    ensures array<t>(a, offset, size, q, take(offset, as)) &*& array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));
+    requires [?f]array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
+    ensures [f]array<t>(a, offset, size, q, take(offset, as)) &*& [f]array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));
 {
   if (offset == 0) {
     take_0<t>(as);
-    close array<t>(a, 0, size, q, nil);
+    close [f]array<t>(a, 0, size, q, nil);
   } else {
-    open array<t>(a, n, size, q, as);
+    open [f]array<t>(a, n, size, q, as);
     array_split(a + size, offset - 1);
-    close array<t>(a, offset, size, q, take(offset, as));
+    close [f]array<t>(a, offset, size, q, take(offset, as));
   }
 }
 
 lemma void array_merge<t>(void *a)
-    requires array<t>(a, ?M, ?size, ?q, ?as) &*& array<t>(a + M * size, ?N, size, q, ?bs);
-    ensures array<t>(a, M + N, size, q, append(as, bs));
+    requires [?f]array<t>(a, ?M, ?size, ?q, ?as) &*& [f]array<t>(a + M * size, ?N, size, q, ?bs);
+    ensures [f]array<t>(a, M + N, size, q, append(as, bs));
 {
     open array<t>(a, M, size, q, as);
     if (M != 0) {
         array_merge((char*) a + size);
-        close array<t>(a, M + N, size, q, append(as, bs));
+        close [f]array<t>(a, M + N, size, q, append(as, bs));
     }
 }
 

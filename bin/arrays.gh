@@ -4,12 +4,12 @@
 #include "listex.gh"
 
 lemma void array_split<t>(void *a, int offset);
-    requires array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
-    ensures array<t>(a, offset, size, q, take(offset, as)) &*& array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));
+    requires [?f]array<t>(a, ?n, ?size, ?q, ?as) &*& 0 <= offset &*& offset <= n;
+    ensures [f]array<t>(a, offset, size, q, take(offset, as)) &*& [f]array<t>(a + (offset * size), n - offset, size, q, drop(offset, as));
 
 lemma void array_merge<t>(void *a);
-    requires array<t>(a, ?M, ?size, ?q, ?as) &*& array<t>(a + M * size, ?N, size, q, ?bs);
-    ensures array<t>(a, M + N, size, q, append(as, bs));
+    requires [?f]array<t>(a, ?M, ?size, ?q, ?as) &*& [f]array<t>(a + M * size, ?N, size, q, ?bs);
+    ensures [f]array<t>(a, M + N, size, q, append(as, bs));
 
 lemma void array_unseparate_same<t>(void *a, list<t> xs);
     requires array<t>(a, ?M, ?size, ?q, take(M, xs)) &*& q(a + M * size, head(drop(M, xs))) &*& array<t>(a + (M *size) + size, ?N, size, q, tail(drop(M, xs))) &*& length(xs) == M + N + 1;
