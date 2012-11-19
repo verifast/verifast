@@ -3,6 +3,7 @@
 .provides malloc.h#malloc_block_null
 .provides malloc.h#malloc_block_limits
 .provides stdlib.h#abort
+.provides stdlib.h#exit
 .provides string.h#memcmp
 .provides string.h#memcpy
 .provides string.h#memchr
@@ -40,6 +41,10 @@
 .provides stdio.h#feof
 .provides stdio.h#getchar
 .provides stdio.h#putchar
+.provides stdio.h#fseek
+.provides stdio.h#ftell
+.provides stdio.h#rewind
+.provides stdio.h#scanf
 .provides ghost_cells.gh#create_ghost_cell
 .provides ghost_cells.gh#ghost_cell_mutate
 .provides ghost_cells.gh#ghost_cell_leak

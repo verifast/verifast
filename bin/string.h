@@ -10,8 +10,8 @@ int strlen(char *string);
     //@ ensures [f]chars(string, cs) &*& result == index_of('\0', cs);
 
 int memcmp(char *array, char *array0, int count);
-    //@ requires [?f]chars(array, ?cs) &*& [?f0]chars(array0, ?cs0) &*& count == length(cs) &*& count == length(cs0);
-    //@ ensures [f]chars(array, cs) &*& [f0]chars(array0, cs0) &*& true == ((result == 0) == (cs == cs0));
+    //@ requires [?f]chars(array, ?cs) &*& [?f0]chars(array0, ?cs0) &*& count <= length(cs) &*& count <= length(cs0);
+    //@ ensures [f]chars(array, cs) &*& [f0]chars(array0, cs0) &*& true == ((result == 0) == (take(count, cs) == take(count, cs0)));
 
 int strcmp(char *s1, char *s2);
     //@ requires [?f1]chars(s1, ?cs1) &*& mem('\0', cs1) == true &*& [?f2]chars(s2, ?cs2) &*& mem('\0', cs2) == true;

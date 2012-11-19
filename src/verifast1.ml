@@ -2396,7 +2396,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
         ts := Some [IntType; IntType];
         (w1, w2, IntType)
-      | (UChar, UChar) | (UShortType, UShortType) | (UintPtrType, UintPtrType)->
+      | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
         ts := Some [UintPtrType;UintPtrType];
         (w1, w2, UintPtrType)
       | (t1, t2) ->
@@ -4437,6 +4437,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, ShortType, false) ->
           ev state e $. fun state t ->
           cont state (check_overflow l min_short_term t max_short_term)
+        | (e, IntType, false) ->
+          ev state e $. fun state t ->
+          cont state (check_overflow l min_int_term t max_int_term)
         | (e, Char, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
