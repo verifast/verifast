@@ -4,7 +4,7 @@
 #include "stdio.h"
 
 int main(int argc, char **argv) //@ : main
-    //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+    //@ requires 0 <= argc &*& [_]argv(argv, argc);
     //@ ensures true;
 {
     struct widget *window = 0;

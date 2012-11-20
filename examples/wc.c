@@ -46,13 +46,13 @@ void test()
 }
 
 int main(int argc, char** argv) //@ : main
-  //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+  //@ requires 0 <= argc &*& [_]argv(argv, argc);
   //@ ensures true;
 {
   bool inword = false; struct file* fp = 0; char* buff = 0; int total = 0; char* res = 0;
   if(argc < 2) { puts("No input file specified."); return -1; }
-  //@ open [_]char_array(argv, argc);
-  //@ open [_]char_array(argv + 1, argc - 1);
+  //@ open [_]argv(argv, argc);
+  //@ open [_]argv(argv + 1, argc - 1);
   fp = fopen(* (argv + 1), "r");
   buff = malloc(100);
   if(buff == 0 || fp == 0) { abort(); }

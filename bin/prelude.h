@@ -142,17 +142,17 @@ lemma void character_to_u_character(void *p);
 predicate module(int moduleId, bool initialState);
 predicate module_code(int moduleId;);
 
-predicate char_array(char **a, int count) =
-    count <= 0 ? true : pointer(a, ?c) &*& chars(c, ?cs) &*& mem('\0', cs) == true &*& char_array(a + 1, count - 1);
+predicate argv(char **argv, int argc) =
+    argc <= 0 ? true : pointer(argv, ?arg) &*& chars(arg, ?argChars) &*& mem('\0', argChars) == true &*& argv(argv + 1, argc - 1);
 
 @*/
 
 typedef int main(int argc, char **argv);
-    //@ requires 0 <= argc &*& [_]char_array(argv, argc);
+    //@ requires 0 <= argc &*& [_]argv(argv, argc);
     //@ ensures true;
 
 typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
-    //@ requires module(mainModule, true) &*& [_]char_array(argv, argc);
+    //@ requires module(mainModule, true) &*& [_]argv(argv, argc);
     //@ ensures true;
 
 #endif
