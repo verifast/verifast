@@ -1,6 +1,6 @@
 class LimitsTest {
     static void test(byte[] xs, byte[] ys)
-        //@ requires array_slice(xs, 0, 10, _) &*& ys[0] |-> _;
+        //@ requires xs[0..10] |-> _ &*& ys[0] |-> _;
         //@ ensures true;
     {
         int x = xs[0];
@@ -61,15 +61,15 @@ class ArrayTest {
       /*@
       requires
           0 <= i &*&
-          array_slice(a, 0, i + 10, ?l) &*&
-          array_slice(a, i + 10, i + 20, ?l2) &*&
-          array_slice(a, i + 20, i + 35, ?l3);
+          a[0..i + 10] |-> ?l &*&
+          a[i + 10..i + 20] |-> ?l2 &*&
+          a[i + 20..i + 35] |-> ?l3;
       @*/
       /*@
       ensures
-          array_slice(a, i, i + 30, append(drop(i,l), append(l2, take(10,l3)))) &*&
-          array_slice(a, 0, i, take(i, l)) &*&
-          array_slice(a, i + 30, i + 35, drop(10, l3));
+          a[i..i + 30] |-> append(drop(i,l), append(l2, take(10,l3))) &*&
+          a[0..i] |-> take(i, l) &*&
+          a[i + 30..i + 35] |-> drop(10, l3);
       @*/
     {
     }
@@ -111,7 +111,7 @@ class ArrayTest {
         Object[] records = new Object[count];
         int i = 0;
         while (i < count)
-            //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& array_slice(records, i, records.length, ?elems) &*& all_eq(elems, null) == true;
+            //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& records[i..records.length] |-> ?elems &*& all_eq(elems, null) == true;
         {
             Object tmp = records[i];
             assert tmp == null;

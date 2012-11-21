@@ -457,6 +457,13 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         start_token();
         text_junk ();
         reset_buffer (); store c; ident2 ()
+    | '.' ->
+      start_token(); text_junk();
+      if text_peek() = '.' then begin
+        text_junk();
+        Some (keyword_or_error "..")
+      end else
+        Some (keyword_or_error ".")
     | ':' -> 
       start_token();
       text_junk ();
@@ -514,7 +521,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       ('0'..'9' as c) ->
         text_junk (); store c; number ()
     | 'x' -> text_junk (); store 'x'; hex_number ()
-    | '.' ->
+    | '.' when !textpos + 1 < textlength && (match text.[!textpos + 1] with '0'..'9' -> true | _ -> false) ->
         text_junk (); store '.'; decimal_part ()
     | ('e' | 'E') ->
         text_junk (); store 'E'; exponent_part ()

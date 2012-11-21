@@ -171,35 +171,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       iter [] h
 
-  let pointer_pred_symb () =
-    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
-    pointer_pred_symb
-
-  let int_pred_symb () =
-    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
-    int_pred_symb
-
-  let u_int_pred_symb () =
-    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
-    u_int_pred_symb
-
-  let char_pred_symb () =
-    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
-    char_pred_symb
-
-  let u_char_pred_symb () =
-    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
-    u_char_pred_symb
-    
-  let try_pointee_pred_symb pointeeType =
-    match pointeeType with
-    PtrType _ -> Some (pointer_pred_symb ())
-    | IntType -> Some (int_pred_symb ())
-    | UintPtrType -> Some (u_int_pred_symb ())
-    | Char -> Some (char_pred_symb ())
-    | UChar -> Some (u_char_pred_symb ())
-    | _ -> None
-  
   let rec produce_asn_core_with_post tpenv h ghostenv env p coef size_first size_all (assuming: bool) cont_with_post: symexec_result =
     let cont h env ghostenv = cont_with_post h env ghostenv None in
     let with_context_helper cont =
@@ -639,8 +610,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       head_flatmap
         begin function
           Chunk (g, [tp2], coef, [a'; n'; size'; q'; vs'], _)
-            when predname_eq g (c_array_symb, true) && tp = tp2 && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
-            ctxt#query (ctxt#mk_eq size' (sizeof l tp)) ->
+            when
+              predname_eq g (c_array_symb, true) &&
+              tp = tp2 &&
+              definitely_equal a' a &&
+              definitely_equal q' predsym &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
+              ctxt#query (ctxt#mk_eq size' (sizeof l tp)) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [i; vs'])]
         | _ -> []
@@ -650,10 +626,15 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match slices with
       None ->
         begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
-          None -> assert_false h env l ("No matching array chunk: array<" ^
-                  (string_of_type tp) ^ ">(" ^ (ctxt#pprint a) ^ ", 0<=" ^
-                  (ctxt#pprint i) ^ "<n, " ^ (ctxt#pprint (sizeof l tp)) ^
-                  ", _, _).") None
+          None ->
+          assert_false h env l
+            (sprintf "No matching array chunk: array<%s>(%s, 0<=%s<n, %s, %s, _)"
+               (string_of_type tp)
+               (ctxt#pprint a)
+               (ctxt#pprint i)
+               (ctxt#pprint (sizeof l tp))
+               (ctxt#pprint predsym))
+            None
         | Some v -> v
         end
     | Some v -> v

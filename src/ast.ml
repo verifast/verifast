@@ -85,7 +85,7 @@ type
 
 type
   operator =  (* ?operator *)
-  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
+  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight | Slice
 and
   expr = (* ?expr *)
     True of loc
@@ -337,7 +337,7 @@ and
   | SwitchStmtDefaultClause of loc * stmt list
 and
   asn = (* A separation logic assertion *) (* ?asn *)
-    PointsTo of (* toegang tot veld regel-expr-veld-pattern *)
+    PointsTo of
         loc *
         expr *
         pat
@@ -377,7 +377,7 @@ and
   | ExprAsn of (* uitdrukking regel-expr *)
       loc *
       expr
-  | Sep of (* separate conjunction *)
+  | Sep of (* separating conjunction *)
       loc *
       asn *
       asn

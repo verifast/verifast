@@ -3561,10 +3561,88 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
     end
   
+  let pointer_pred_symb () =
+    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
+    pointer_pred_symb
+
+  let int_pred_symb () =
+    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
+    int_pred_symb
+
+  let u_int_pred_symb () =
+    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
+    u_int_pred_symb
+
+  let char_pred_symb () =
+    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
+    char_pred_symb
+
+  let u_char_pred_symb () =
+    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
+    u_char_pred_symb
+  
+  let try_pointee_pred_symb0 pointeeType =
+    match pointeeType with
+      PtrType _ -> Some ("pointer", pointer_pred_symb ())
+    | IntType -> Some ("integer", int_pred_symb ())
+    | UintPtrType -> Some ("u_integer", u_int_pred_symb ())
+    | Char -> Some ("character", char_pred_symb ())
+    | UChar -> Some ("u_character", u_char_pred_symb ())
+    | _ -> None
+  
+  let supported_types_text = "int, unsigned int, char, unsigned char, or a pointer type"
+  
+  let try_pointee_pred_symb pointeeType = option_map snd (try_pointee_pred_symb0 pointeeType)
+  
+  let list_type elemType = InductiveType ("list", [elemType])
+  
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let check_asn = check_asn_core in
     match p with
-      PointsTo (l, lhs, v) ->
+    | PointsTo (l, ReadArray (lread, earray, Operation (lslice, Slice, [estart; eend], _)), rhs) ->
+      let (warray, tarray) = check_expr (pn,ilist) tparams tenv earray in
+      let wstart = check_expr_t (pn,ilist) tparams tenv estart IntType in
+      let wend = check_expr_t (pn,ilist) tparams tenv eend IntType in
+      begin match language with
+      | CLang ->
+        let elemtype =
+          match tarray with
+            PtrType t -> t
+          | _ -> static_error lread "Array in array dereference must be of pointer type." None
+        in
+        let (pointee_pred_name, pointee_pred_symb) =
+          match try_pointee_pred_symb0 elemtype with
+            Some info -> info
+          | None -> static_error l ("Only arrays whose element type is "^supported_types_text^" are currently supported here.") None
+        in
+        let (wrhs, tenv') = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+        let p = new predref "array" in
+        p#set_domain [PtrType elemtype; IntType; IntType; PredType ([], [PtrType elemtype; elemtype], Some 1); list_type elemtype];
+        p#set_inputParamCount (Some 4);
+        let wfirst, wlength =
+          match estart with
+            IntLit (_, n, _) when eq_big_int n zero_big_int -> warray, wend
+          | _ ->
+            Operation (lslice, Add, [warray; wstart], ref (Some [PtrType elemtype; IntType])),
+            Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType]))
+        in
+        let elemsize = SizeofExpr (l, ManifestTypeExpr (l, elemtype)) in
+        let pointee_pred_expr = Var (l, pointee_pred_name, ref (Some PredFamName)) in
+        let args = List.map (fun e -> LitPat e) [wfirst; wlength; elemsize; pointee_pred_expr] @ [wrhs] in
+        (WPredAsn (l, p, true, [elemtype], [], args), tenv', [])
+      | Java ->
+        let elemtype =
+          match tarray with
+            ArrayType t -> t
+          | _ -> static_error lread "Array in array dereference must be of array type." None
+        in
+        let (wrhs, tenv') = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+        let p = new predref "java.lang.array_slice" in
+        p#set_domain [ArrayType elemtype; IntType; IntType; list_type elemtype]; p#set_inputParamCount (Some 3);
+        let args = List.map (fun e -> LitPat e) [warray; wstart; wend] @ [wrhs] in
+        (WPredAsn (l, p, true, [elemtype], [], args), tenv', [])
+      end
+    | PointsTo (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
