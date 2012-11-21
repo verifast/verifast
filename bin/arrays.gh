@@ -45,18 +45,6 @@ lemma void ints_unseparate(int *array, int i, list<int> xs);
 
 // ---- Arrays to chars ---- //
 
-lemma void u_int_array_to_chars(void *ptr);
-    requires [?f]array<unsigned int>(ptr, ?array_nb_items, sizeof(unsigned int), u_integer, ?array_elems);
-    ensures
-        [f]chars(ptr, ?chars_elems)
-        &*& length(chars_elems) == array_nb_items * sizeof(unsigned int);
-
-lemma void u_char_array_to_chars(void *ptr);
-    requires [?f]array<unsigned char>(ptr, ?array_nb_items, sizeof(unsigned char), u_character, ?elems);
-    ensures
-        [f]chars(ptr, ?chars_elems)
-        &*& length(chars_elems) == array_nb_items * sizeof(unsigned char);
-
 lemma void char_array_to_chars(void *ptr);
     requires [?f]array<char>(ptr, ?array_nb_items, sizeof(char), character, ?elems);
     ensures [f]chars(ptr, elems) &*& array_nb_items == length(elems);
@@ -67,38 +55,55 @@ lemma void int_array_to_chars(void *ptr);
         [f]chars(ptr, ?chars_elems)
         &*& length(chars_elems) == array_nb_items * sizeof(int);
 
+lemma void pointer_array_to_chars(void *ptr);
+    requires [?f]array<void *>(ptr, ?array_nb_items, sizeof(void *), pointer, ?elems);
+    ensures
+        [f]chars(ptr, ?chars_elems)
+        &*& length(chars_elems) == array_nb_items * sizeof(void *);
+
+lemma void u_char_array_to_chars(void *ptr);
+    requires [?f]array<unsigned char>(ptr, ?array_nb_items, sizeof(unsigned char), u_character, ?elems);
+    ensures
+        [f]chars(ptr, ?chars_elems)
+        &*& length(chars_elems) == array_nb_items * sizeof(unsigned char);
+
+lemma void u_int_array_to_chars(void *ptr);
+    requires [?f]array<unsigned int>(ptr, ?array_nb_items, sizeof(unsigned int), u_integer, ?array_elems);
+    ensures
+        [f]chars(ptr, ?chars_elems)
+        &*& length(chars_elems) == array_nb_items * sizeof(unsigned int);
+
 // ---- chars to arrays ---- //
-
-lemma void chars_to_u_int_array(void *ptr, int array_nb_items);
-    requires
-        [?f]chars(ptr, ?orig_elems)
-        &*& array_nb_items >= 0
-        &*& array_nb_items * sizeof(unsigned int) == length(orig_elems);
-    ensures
-        [f]array<unsigned int>(ptr, array_nb_items, sizeof(unsigned int), u_integer, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(unsigned int) == length(orig_elems)
-        &*& length(orig_array_elems) == array_nb_items;
-        
-lemma void chars_to_u_char_array(void *ptr);
-    requires
-        [?f]chars(ptr, ?orig_elems);
-    ensures
-        [f]array<unsigned char>(ptr, length(orig_elems), sizeof(unsigned char), u_character, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(unsigned char) == length(orig_elems)
-        &*& length(orig_array_elems) == length(orig_elems);
-
-lemma void chars_to_int_array(void *ptr, int array_nb_items);
-    requires
-        [?f]chars(ptr, ?orig_elems)
-        &*& array_nb_items >= 0
-        &*& array_nb_items * sizeof(int) == length(orig_elems);
-    ensures
-        [f]array<int>(ptr, array_nb_items, sizeof(int), integer, ?orig_array_elems)
-        &*& length(orig_array_elems) * sizeof(int) == length(orig_elems)
-        &*& length(orig_array_elems) == array_nb_items;
 
 lemma void chars_to_char_array(void *ptr);
     requires [?f]chars(ptr, ?elems);
     ensures [f]array<char>(ptr, length(elems), sizeof(char), character, elems);
+
+lemma void chars_to_int_array(void *ptr, int array_nb_items);
+    requires
+        [?f]chars(ptr, ?orig_elems)
+        &*& array_nb_items * sizeof(int) == length(orig_elems);
+    ensures
+        [f]array<int>(ptr, array_nb_items, sizeof(int), integer, ?orig_array_elems);
+
+lemma void chars_to_pointer_array(void *ptr, int array_nb_items);
+    requires
+        [?f]chars(ptr, ?orig_elems)
+        &*& array_nb_items * sizeof(void *) == length(orig_elems);
+    ensures
+        [f]array<void *>(ptr, array_nb_items, sizeof(void *), pointer, ?orig_array_elems);
+
+lemma void chars_to_u_char_array(void *ptr);
+    requires
+        [?f]chars(ptr, ?orig_elems);
+    ensures
+        [f]array<unsigned char>(ptr, length(orig_elems), sizeof(unsigned char), u_character, ?orig_array_elems);
+
+lemma void chars_to_u_int_array(void *ptr, int array_nb_items);
+    requires
+        [?f]chars(ptr, ?orig_elems)
+        &*& array_nb_items * sizeof(unsigned int) == length(orig_elems);
+    ensures
+        [f]array<unsigned int>(ptr, array_nb_items, sizeof(unsigned int), u_integer, ?orig_array_elems);
 
 #endif

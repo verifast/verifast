@@ -3,6 +3,10 @@ open Util
 open Lexer
 open Ast
 
+(** Keeps manifests produced by the compilation phase, for use during the linking phase. Avoids writing manifest files to disk. *)
+let manifest_map: (string * string list) list ref = ref []
+let jardeps_map: (string * string list) list ref = ref []
+
 (* Region: some auxiliary types and functions *)
 
 let lookup env x = List.assoc x env

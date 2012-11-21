@@ -1,11 +1,3 @@
-(*
-
-You can get an outline of this file in Notepad++ by copying the text
-"Region:" to the clipboard and choosing TextFX->Viz->Hide Lines without (clipboard) text.
-Get all lines back by choosing TextFX->Viz->Show Between-Selected or All-Reset Lines.
-
-*)
-
 open Proverapi
 open Big_int
 open Printf
@@ -19,10 +11,6 @@ let num_of_ints p q = div_num (num_of_int p) (num_of_int q)
 let fprintff format = kfprintf (fun chan -> flush chan) format
 (** Same as printf followed by a flush. *)
 let printff format = fprintff stdout format
-
-(** Keeps manifests produced by the compilation phase, for use during the linking phase. Avoids writing manifest files to disk. *)
-let manifest_map: (string * string list) list ref = ref []
-let jardeps_map: (string * string list) list ref = ref []
 
 let option_map f x =
   match x with

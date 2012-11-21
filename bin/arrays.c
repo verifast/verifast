@@ -209,6 +209,21 @@ lemma void int_array_to_chars(void *ptr)
     }
 }
 
+lemma void pointer_array_to_chars(void *ptr)
+    requires [?f]array<void *>(ptr, ?array_nb_items, sizeof(void *), pointer, ?elems);
+    ensures
+        [f]chars(ptr, ?chars_elems)
+        &*& length(chars_elems) == array_nb_items * sizeof(void *);
+{
+    produce_lemma_function_pointer_chunk(pointer_to_chars)
+        : any_to_chars<void *>(pointer, sizeof(void *))(args)
+    {
+        call();
+    }{
+        array_to_chars(ptr);
+    }
+}
+
 
 // ---- chars to arrays ---- //
 
@@ -328,6 +343,25 @@ lemma void chars_to_int_array(void *ptr, int array_nb_items)
 {
     produce_lemma_function_pointer_chunk(chars_to_integer)
         : chars_to_any<int>(integer, sizeof(int))(args)
+    {
+        call();
+    }{
+        chars_to_array(ptr, array_nb_items);
+    }
+}
+
+lemma void chars_to_pointer_array(void *ptr, int array_nb_items)
+    requires
+        [?f]chars(ptr, ?orig_elems)
+        &*& array_nb_items >= 0
+        &*& array_nb_items * sizeof(void *) == length(orig_elems);
+    ensures
+        [f]array<void *>(ptr, array_nb_items, sizeof(void *), pointer, ?orig_array_elems)
+        &*& length(orig_array_elems) * sizeof(void *) == length(orig_elems)
+        &*& length(orig_array_elems) == array_nb_items;
+{
+    produce_lemma_function_pointer_chunk(chars_to_pointer)
+        : chars_to_any<void *>(pointer, sizeof(void *))(args)
     {
         call();
     }{
