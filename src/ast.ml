@@ -85,7 +85,7 @@ type
 
 type
   operator =  (* ?operator *)
-  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight | Slice
+  | Add | Sub | Le | Lt | Eq | Neq | And | Or | Xor | Not | Mul | Div | Mod | BitNot | BitAnd | BitXor | BitOr | ShiftLeft | ShiftRight
 and
   expr = (* ?expr *)
     True of loc
@@ -161,6 +161,7 @@ and
   | SuperMethodCall of loc * string * expr list
   | WSuperMethodCall of loc * string * expr list * (loc * ghostness * (type_ option) * (string * type_) list * asn * asn * ((type_ * asn) list) * visibility)
   | InitializerList of loc * expr list
+  | SliceExpr of loc * pat option * pat option
 and
   pat = (* ?pat *)
     LitPat of expr (* literal pattern *)
@@ -632,6 +633,7 @@ let rec expr_loc e =
   | StringLit (l, s) -> l
   | ClassLit (l, s) -> l
   | Operation (l, op, es, ts) -> l
+  | SliceExpr (l, p1, p2) -> l
   | Read (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
   | WRead (l, _, _, _, _, _, _, _) -> l
@@ -736,11 +738,18 @@ let expr_fold_open iter state e =
     match es with
       [] -> state
     | e::es -> iters (iter state e) es
+  and iterpat state pat =
+    match pat with
+      LitPat e -> iter state e
+    | _ -> state
+  and iterpatopt state patopt =
+    match patopt with
+      None -> state
+    | Some pat -> iterpat state pat
   and iterpats state pats =
     match pats with
       [] -> state
-    | LitPat e::pats -> iterpats (iter state e) pats
-    | _::pats -> iterpats state pats
+    | pat::pats -> iterpats (iterpat state pat) pats
   and itercs state cs =
     match cs with
       [] -> state
@@ -752,6 +761,7 @@ let expr_fold_open iter state e =
   | Null l -> state
   | Var (l, x, scope) -> state
   | Operation (l, op, es, ts) -> iters state es
+  | SliceExpr (l, p1, p2) -> iterpatopt (iterpatopt state p1) p2
   | IntLit (l, n, tp) -> state
   | RealLit(l, n) -> state
   | StringLit (l, s) -> state

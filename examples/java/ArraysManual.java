@@ -111,7 +111,7 @@ class ArrayTest {
         Object[] records = new Object[count];
         int i = 0;
         while (i < count)
-            //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& records[i..records.length] |-> ?elems &*& all_eq(elems, null) == true;
+            //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, 0, i, record, recordLength, _, _) &*& records[i..] |-> ?elems &*& all_eq(elems, null) == true;
         {
             Object tmp = records[i];
             assert tmp == null;

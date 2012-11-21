@@ -39,9 +39,9 @@ predicate optional_data_records(byte[] array, int start, int count;) =
         true
     :
         0 < count &*&
-        array_slice(array, start, start + 2, _) &*&
+        array[start..start + 2] |-> _ &*&
         array[start + 2] |-> ?length &*& 0 <= length &*& length <= NewMyApplet.MAX_LEN_OPTIONAL_DATA &*&
-        array_slice(array, start + 3, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, _) &*&
+        array[start + 3..start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA] |-> _ &*&
         optional_data_records(array, start + 3 + NewMyApplet.MAX_LEN_OPTIONAL_DATA, count - 1);
 
 lemma void optional_data_records_split(byte[] array, int start, int offset)
@@ -84,14 +84,14 @@ predicate my_record(int maxSizeRecord, Object record; unit info) =
   record(maxSizeRecord, ^record, unit) &*& info == unit;
 
 predicate MyApplet_(NewMyApplet applet; char nbRecords, byte maxSizeRecord) =
-  applet.NewEPurseAID |-> ?newEPurseAid &*& array_slice(newEPurseAid, 0, newEPurseAid.length, _) &*& newEPurseAid.length == 6 &*&
-  applet.NewEidAID |-> ?newEidAid &*& array_slice(newEidAid, 0, newEidAid.length, _) &*& newEidAid.length == 9 &*&
+  applet.NewEPurseAID |-> ?newEPurseAid &*& newEPurseAid[..] |-> _ &*& newEPurseAid.length == 6 &*&
+  applet.NewEidAID |-> ?newEidAid &*& newEidAid[..] |-> _ &*& newEidAid.length == 9 &*&
   applet.NewEidPointsObject |-> _ &*&
   applet.NewEPurseDebitObject |-> _ &*&
   applet.NewEPurseCreditObject |-> _ &*&
   applet.NewMyAppletPointsObject |-> ?pointsObject &*& [_]pointsObject.applet |-> applet &*&
   NewMyApplet_Points(_) &*&
-  NewMyApplet_bya_FCI(?fci) &*& array_slice(fci, 0, 23, _) &*& fci.length == 23 &*&
+  NewMyApplet_bya_FCI(?fci) &*& fci[..] |-> _ &*& fci.length == 23 &*&
   applet.by_NbRecords |-> nbRecords &*& 0 <= nbRecords &*&
   applet.by_MaxNbRecord |-> ?maxNbRecord &*& nbRecords <= maxNbRecord &*&
   applet.by_MaxSizeRecord |-> maxSizeRecord &*& maxSizeRecord >= NewMyApplet.OFF_DATA_IN_RECORD + 5 &*&
@@ -99,7 +99,7 @@ predicate MyApplet_(NewMyApplet applet; char nbRecords, byte maxSizeRecord) =
   optional_data_records(optionalData, 0, 3) &*&
   applet.o_Records |-> ?records &*& records != null &*& records.length == maxNbRecord &*&
   array_slice_deep(records, 0, nbRecords, my_record, maxSizeRecord, _, _) &*&
-  array_slice(records, nbRecords, maxNbRecord, ?elems) &*& all_eq(elems, null) == true;
+  records[nbRecords..maxNbRecord] |-> ?elems &*& all_eq(elems, null) == true;
 
 @*/
 

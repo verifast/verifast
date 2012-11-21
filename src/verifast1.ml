@@ -3599,10 +3599,22 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let rec check_asn_core (pn,ilist) tparams tenv p =
     let check_asn = check_asn_core in
     match p with
-    | PointsTo (l, ReadArray (lread, earray, Operation (lslice, Slice, [estart; eend], _)), rhs) ->
+    | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
       let (warray, tarray) = check_expr (pn,ilist) tparams tenv earray in
-      let wstart = check_expr_t (pn,ilist) tparams tenv estart IntType in
-      let wend = check_expr_t (pn,ilist) tparams tenv eend IntType in
+      let (wstart, tenv) =
+        match pstart with
+          None -> (None, tenv)
+        | Some pstart ->
+          let (wstart, tenv) = check_pat (pn,ilist) tparams tenv IntType pstart in
+          Some wstart, tenv
+      in
+      let (wend, tenv) =
+        match pend with
+          None -> (None, tenv)
+        | Some pend ->
+          let (wend, tenv) = check_pat (pn,ilist) tparams tenv IntType pend in
+          Some wend, tenv
+      in
       begin match language with
       | CLang ->
         let elemtype =
@@ -3615,32 +3627,36 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             Some info -> info
           | None -> static_error l ("Only arrays whose element type is "^supported_types_text^" are currently supported here.") None
         in
-        let (wrhs, tenv') = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+        let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
         let p = new predref "array" in
         p#set_domain [PtrType elemtype; IntType; IntType; PredType ([], [PtrType elemtype; elemtype], Some 1); list_type elemtype];
         p#set_inputParamCount (Some 4);
         let wfirst, wlength =
-          match estart with
-            IntLit (_, n, _) when eq_big_int n zero_big_int -> warray, wend
-          | _ ->
+          match wstart, wend with
+            None, Some wend -> warray, wend
+          | Some (LitPat (IntLit (_, n, _))), Some wend when eq_big_int n zero_big_int -> warray, wend
+          | Some (LitPat wstart), Some (LitPat wend) ->
             Operation (lslice, Add, [warray; wstart], ref (Some [PtrType elemtype; IntType])),
-            Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType]))
+            LitPat (Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType])))
+          | _ -> static_error l "Malformed array assertion." None
         in
         let elemsize = SizeofExpr (l, ManifestTypeExpr (l, elemtype)) in
         let pointee_pred_expr = Var (l, pointee_pred_name, ref (Some PredFamName)) in
-        let args = List.map (fun e -> LitPat e) [wfirst; wlength; elemsize; pointee_pred_expr] @ [wrhs] in
-        (WPredAsn (l, p, true, [elemtype], [], args), tenv', [])
+        let args = [LitPat wfirst; wlength; LitPat elemsize; LitPat pointee_pred_expr; wrhs] in
+        (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
       | Java ->
         let elemtype =
           match tarray with
             ArrayType t -> t
           | _ -> static_error lread "Array in array dereference must be of array type." None
         in
-        let (wrhs, tenv') = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
+        let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
         let p = new predref "java.lang.array_slice" in
         p#set_domain [ArrayType elemtype; IntType; IntType; list_type elemtype]; p#set_inputParamCount (Some 3);
-        let args = List.map (fun e -> LitPat e) [warray; wstart; wend] @ [wrhs] in
-        (WPredAsn (l, p, true, [elemtype], [], args), tenv', [])
+        let wstart = match wstart with None -> LitPat (IntLit (lslice, zero_big_int, ref (Some IntType))) | Some wstart -> wstart in
+        let wend = match wend with None -> LitPat (ArrayLengthExpr (lslice, warray)) | Some wend -> wend in
+        let args = [LitPat warray; wstart; wend; wrhs] in
+        (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
       end
     | PointsTo (l, lhs, v) ->
       let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in

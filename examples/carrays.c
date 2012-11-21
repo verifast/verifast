@@ -8,8 +8,8 @@ void array_test1(int* a)
 }
 
 void array_test2(int* a)
-  //@ requires array<int>(a, ?n, sizeof(int), integer, ?vs) &*& 1 < n;
-  //@ ensures array<int>(a, n, sizeof(int), integer, update(0, 10, vs));
+  //@ requires a[..?n] |-> ?vs &*& 1 < n;
+  //@ ensures a[..n] |-> update(0, 10, vs);
 {
   int a1_old = a[1];
   a[0] = 10;

@@ -20,8 +20,8 @@ predicate string_buffer(struct string_buffer *buffer; list<char> cs) =
     buffer->capacity |-> ?capacity &*&
     buffer->chars |-> ?charsArray &*&
     malloc_block_string_buffer(buffer) &*&
-    array<char>(charsArray, length, 1, character, cs) &*&
-    array<char>(charsArray + length, capacity - length, 1, character, _) &*&
+    charsArray[0..length] |-> cs &*&
+    charsArray[length..capacity] |-> _ &*&
     malloc_block(charsArray, capacity);
 
 predicate string_buffer_minus_chars(struct string_buffer *buffer; char *charsArray, int length) =
@@ -29,7 +29,7 @@ predicate string_buffer_minus_chars(struct string_buffer *buffer; char *charsArr
     buffer->capacity |-> ?capacity &*&
     buffer->chars |-> charsArray &*&
     malloc_block_string_buffer(buffer) &*&
-    array<char>(charsArray + length, capacity - length, 1, character, _) &*&
+    charsArray[length..capacity] |-> _ &*&
     malloc_block(charsArray, capacity) &*&
     0 <= length;
 

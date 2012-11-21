@@ -52,6 +52,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | AssignOpExpr (l, Var (_, x, _), op, e, _, _, _) -> [x] @ expr_assigned_variables e
     | AssignOpExpr (l, e1, op, e2, _, _, _) -> expr_assigned_variables e1 @ expr_assigned_variables e2
     | InstanceOfExpr(_, e, _) -> expr_assigned_variables e
+    | SliceExpr (l, p1, p2) -> flatmap (function Some (LitPat e) -> expr_assigned_variables e | _ -> []) [p1; p2]
     | SuperMethodCall(_, _, args) -> flatmap expr_assigned_variables args
     | WSuperMethodCall(_, _, args, _) -> flatmap expr_assigned_variables args
     | _ -> []
@@ -936,6 +937,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Upcast (e, _, _) -> expr_mark_addr_taken e locals
     | WidenedParameterArgument e -> expr_mark_addr_taken e locals
     | InstanceOfExpr(_, e, _) ->  expr_mark_addr_taken e locals
+    | SliceExpr (_, p1, p2) -> List.iter (function Some p -> pat_expr_mark_addr_taken p locals | _ -> ()) [p1; p2]
     | SizeofExpr _ -> ()
     | AddressOf(_, e) ->  expr_mark_addr_taken e locals
     | ProverTypeConversion(_, _, e) ->  expr_mark_addr_taken e locals
@@ -1069,6 +1071,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | Upcast (e, fromType, toType) -> expr_address_taken e
     | WidenedParameterArgument e -> expr_address_taken e
     | InstanceOfExpr(_, e, _) -> expr_address_taken e
+    | SliceExpr (_, p1, p2) -> flatmap (function Some p -> pat_address_taken p | _ -> []) [p1; p2]
     | SizeofExpr _ -> []
     | AddressOf(_, Var(_, x, scope)) -> [x]
     | AddressOf(_, e) -> expr_address_taken e

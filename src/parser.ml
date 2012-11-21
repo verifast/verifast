@@ -896,7 +896,7 @@ and
 | [< e = parse_disj_expr; p = parser
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     (match e with
-       ReadArray (_, _, Operation (_, Slice, _, _)) -> PointsTo (l, e, rhs)
+       ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
      | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1], ref None), ref None), rhs) 
      | _ -> PointsTo (l, e, rhs)
     )
@@ -1096,10 +1096,10 @@ and
 | [< '(l, Kwd "["); 
      e = begin parser
        [< '(_, Kwd "]") >] -> ArrayTypeExpr' (l, e0)
-     | [< e1 = parse_expr;
+     | [< p1 = opt parse_pattern;
           e = begin parser
-            [< '(ls, Kwd ".."); e2 = parse_expr; '(_, Kwd "]") >] -> ReadArray (l, e0, Operation (ls, Slice, [e1; e2], ref None))
-          | [< '(_, Kwd "]") >] -> ReadArray (l, e0, e1)
+            [< '(ls, Kwd ".."); p2 = opt parse_pattern; '(_, Kwd "]") >] -> ReadArray (l, e0, SliceExpr (ls, p1, p2))
+          | [< '(_, Kwd "]") >] -> begin match p1 with Some (LitPat e1) -> ReadArray (l, e0, e1) | _ -> raise (ParseException (l, "Malformed array access.")) end
           end
        >] -> e
      end; e = parse_expr_suffix_rest e >] -> e
