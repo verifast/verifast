@@ -3561,38 +3561,47 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | _ -> static_error l (Printf.sprintf "Ambiguous instance predicate assertion: multiple predicates named '%s' in scope" g) None
     end
   
-  let pointer_pred_symb () =
-    let (_, _, _, _, pointer_pred_symb, _) = List.assoc "pointer" predfammap in
-    pointer_pred_symb
-
-  let int_pred_symb () =
-    let (_, _, _, _, int_pred_symb, _) = List.assoc "integer" predfammap in
-    int_pred_symb
-
-  let u_int_pred_symb () =
-    let (_, _, _, _, u_int_pred_symb, _) = List.assoc "u_integer" predfammap in
-    u_int_pred_symb
-
-  let char_pred_symb () =
-    let (_, _, _, _, char_pred_symb, _) = List.assoc "character" predfammap in
-    char_pred_symb
-
-  let u_char_pred_symb () =
-    let (_, _, _, _, u_char_pred_symb, _) = List.assoc "u_character" predfammap in
-    u_char_pred_symb
+  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb
+  
+  let lazy_value f =
+    let cell = ref None in
+    fun () ->
+      match !cell with
+        None -> let result = f() in cell := Some result; result
+      | Some result -> result
+  
+  let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
+  
+  let array_element_symb = lazy_predfamsymb "java.lang.array_element"
+  let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
+  let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
+  
+  let pointee_tuple chunk_pred_name array_pred_name =
+    let array_malloc_block_pred_name = "malloc_block_" ^ array_pred_name in
+    chunk_pred_name, lazy_predfamsymb chunk_pred_name, array_pred_name, lazy_predfamsymb array_pred_name, array_malloc_block_pred_name, lazy_predfamsymb array_malloc_block_pred_name
+  
+  let _, pointer_pred_symb, _, pointers_pred_symb, _, malloc_block_pointers_pred_symb as pointer_pointee_tuple = pointee_tuple "pointer" "pointers"
+  let _, int_pred_symb, _, ints_pred_symb, _, malloc_block_ints_pred_symb as int_pointee_tuple = pointee_tuple "integer" "ints"
+  let _, uint_pred_symb, _, uints_pred_symb, _, malloc_block_uints_pred_symb as uint_pointee_tuple = pointee_tuple "u_integer" "uints"
+  let _, char_pred_symb, _, chars_pred_symb, _, malloc_block_chars_pred_symb as char_pointee_tuple = pointee_tuple "character" "chars"
+  let _, uchar_pred_symb, _, uchars_pred_symb, _, malloc_block_uchars_pred_symb as uchar_pointee_tuple = pointee_tuple "u_character" "uchars"
+  
+  let deref_pointee_tuple (cn, csym, an, asym, mban, mbasym) = (cn, csym(), an, asym(), mban, mbasym())
   
   let try_pointee_pred_symb0 pointeeType =
-    match pointeeType with
-      PtrType _ -> Some ("pointer", pointer_pred_symb ())
-    | IntType -> Some ("integer", int_pred_symb ())
-    | UintPtrType -> Some ("u_integer", u_int_pred_symb ())
-    | Char -> Some ("character", char_pred_symb ())
-    | UChar -> Some ("u_character", u_char_pred_symb ())
+    option_map deref_pointee_tuple
+    begin match pointeeType with
+      PtrType _ -> Some pointer_pointee_tuple
+    | IntType -> Some int_pointee_tuple
+    | UintPtrType -> Some uint_pointee_tuple
+    | Char -> Some char_pointee_tuple
+    | UChar -> Some uchar_pointee_tuple
     | _ -> None
+    end
   
   let supported_types_text = "int, unsigned int, char, unsigned char, or a pointer type"
   
-  let try_pointee_pred_symb pointeeType = option_map snd (try_pointee_pred_symb0 pointeeType)
+  let try_pointee_pred_symb pointeeType = option_map (fun (_, x, _, _, _, _) -> x) (try_pointee_pred_symb0 pointeeType)
   
   let list_type elemType = InductiveType ("list", [elemType])
   
@@ -3620,17 +3629,18 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         let elemtype =
           match tarray with
             PtrType t -> t
+          | StaticArrayType (t, _) -> t
           | _ -> static_error lread "Array in array dereference must be of pointer type." None
         in
-        let (pointee_pred_name, pointee_pred_symb) =
+        let (pointee_pred_name, pointee_pred_symb, array_pred_name, array_pred_symb, _, _) =
           match try_pointee_pred_symb0 elemtype with
             Some info -> info
           | None -> static_error l ("Only arrays whose element type is "^supported_types_text^" are currently supported here.") None
         in
         let (wrhs, tenv) = check_pat (pn,ilist) tparams tenv (list_type elemtype) rhs in
-        let p = new predref "array" in
-        p#set_domain [PtrType elemtype; IntType; IntType; PredType ([], [PtrType elemtype; elemtype], Some 1); list_type elemtype];
-        p#set_inputParamCount (Some 4);
+        let p = new predref array_pred_name in
+        p#set_domain [PtrType elemtype; IntType; list_type elemtype];
+        p#set_inputParamCount (Some 2);
         let wfirst, wlength =
           match wstart, wend with
             None, Some wend -> warray, wend
@@ -3640,10 +3650,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             LitPat (Operation (lslice, Sub, [wend; wstart], ref (Some [IntType; IntType])))
           | _ -> static_error l "Malformed array assertion." None
         in
-        let elemsize = SizeofExpr (l, ManifestTypeExpr (l, elemtype)) in
-        let pointee_pred_expr = Var (l, pointee_pred_name, ref (Some PredFamName)) in
-        let args = [LitPat wfirst; wlength; LitPat elemsize; LitPat pointee_pred_expr; wrhs] in
-        (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
+        (WPredAsn (l, p, true, [], [], [LitPat wfirst; wlength; wrhs]), tenv, [])
       | Java ->
         let elemtype =
           match tarray with
@@ -4233,21 +4240,6 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let prover_convert_term term t t0 =
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
   
-  let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb
-  
-  let lazy_value f =
-    let cell = ref None in
-    fun () ->
-      match !cell with
-        None -> let result = f() in cell := Some result; result
-      | Some result -> result
-  
-  let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
-  
-  let array_element_symb = lazy_predfamsymb "java.lang.array_element"
-  let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
-  let array_slice_deep_symb = lazy_predfamsymb "java.lang.array_slice_deep"
-  
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
     mk_app nil_symb []
@@ -4336,13 +4328,16 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
 
   (* Region: evaluation *)
   
+  let check_overflow l min t max assert_term =
+    if not disable_overflow_check then begin
+      assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
+      assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
+    end
+  
   let eval_op l op v1 v2 ts ass_term =
-     let check_overflow l min t max =
-      begin
-      match ass_term with
-        Some assert_term when not disable_overflow_check ->
-        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
-        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
+    let check_overflow l min t max =
+      begin match ass_term with
+        Some assert_term -> check_overflow l min t max assert_term
       | _ -> ()
       end;
       t
@@ -4480,9 +4475,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let check_overflow l min t max =
       begin
       match ass_term with
-        Some assert_term when not disable_overflow_check ->
-        assert_term l (ctxt#mk_le min t) "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
-        assert_term l (ctxt#mk_le t max) "Potential arithmetic overflow." (Some "potentialarithmeticoverflow")
+        Some assert_term -> check_overflow l min t max assert_term
       | _ -> ()
       end;
       t

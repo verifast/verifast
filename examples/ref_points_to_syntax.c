@@ -99,13 +99,7 @@ int main() //@ : main
     
     int_pointer = malloc(5 * sizeof(int));
     if (int_pointer == 0) abort();
-    //@ chars_split((void *)int_pointer, sizeof(int));
-    //@ chars_to_integer(int_pointer);
-    //@ chars_split((void *)int_pointer + sizeof(int), sizeof(int));
-    //@ chars_to_integer(int_pointer + 1);
-    //@ chars_split((void *)int_pointer + 2 * sizeof(int), sizeof(int));
-    //@ chars_to_integer(int_pointer + 2);
-    
+    //@ open ints(int_pointer, _, _);
     *(int_pointer + 1) = 5;
     *(int_pointer + 2) = 5;
     
@@ -115,13 +109,7 @@ int main() //@ : main
     modify_array_new_syntax(int_pointer);
     //@ assert int_pointer[1] |-> 15 &*& int_pointer[2] |-> -5;
         
-    //@ integer_to_chars(int_pointer + 2);
-    //@ chars_join((void *)int_pointer + 2 * sizeof(int));
-    //@ integer_to_chars(int_pointer + 1);
-    //@ chars_join((void *)int_pointer + sizeof(int));
-    //@ integer_to_chars(int_pointer);
-    //@ chars_join((void *)int_pointer);
-    free((void*)int_pointer);
+    free(int_pointer);
     
     
     return 0;

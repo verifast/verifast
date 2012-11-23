@@ -35,40 +35,33 @@ void process(int n)
     for (int i = 0; i < n; i++)
         /*@
         invariant
-            array<struct thread *>(threads, i, sizeof(struct thread *), pointer, ?ts)
+            threads[0..i] |-> ?ts
             &*& foreach(ts, thread_info)
-            &*& chars((void *)(threads + i), (n - i) * sizeof(struct thread *), _)
+            &*& threads[i..n] |-> _
             &*& counting(integer, &cell, i, v);
         @*/
     {
-        //@ chars_split((void *)(threads + i), 4);
-        //@ chars_limits((void *)(threads + i));
-        //@ chars_to_pointer(threads + i);
         //@ create_ticket(integer, &cell);
         //@ close thread_run_pre(m)(0, unit);
         struct thread *t = thread_start_joinable(m, 0);
         *(threads + i) = t;
-        //@ close array<struct thread *>(threads + i + 1, 0, sizeof(struct thread *), pointer, nil);
         //@ close foreach(nil, thread_info);
         //@ close thread_info(t);
         //@ close foreach(cons(t, nil), thread_info);
-        //@ close array<struct thread *>(threads + i, 1, sizeof(struct thread *), pointer, cons(t, nil));
+        //@ close pointers(threads + i, 1, _);
         //@ foreach_append(ts, cons(t, nil));
-        //@ array_merge(threads);
+        //@ pointers_join(threads);
     }
-    //@ open chars(_, _, _);
     
-    //@ close chars((void *)threads, 0, nil);
     for (int i = 0; i < n; i++)
         /*@
         invariant
-            chars((void *)threads, i * sizeof(struct thread *), _) &*&
-            array<struct thread *>(threads + i, n - i, sizeof(struct thread *), pointer, ?ts)
+            threads[0..i] |-> _ &*&
+            threads[i..n] |-> ?ts
             &*& foreach(ts, thread_info)
             &*& counting(integer, &cell, n - i, v);
         @*/
     {
-        //@ open array(threads + i, _, _, _, _);
         //@ pointer_limits(threads + i);
         struct thread *t = *(threads + i);
         //@ open foreach(_, _);
@@ -76,12 +69,11 @@ void process(int n)
         thread_join(t);
         //@ open thread_run_post(m)(_, _);
         //@ destroy_ticket(integer, &cell);
-        //@ pointer_to_chars(threads + i);
-        //@ chars_join((void *)threads);
+        //@ close pointers(threads + i, 1, _);
+        //@ pointers_join(threads);
     }
-    //@ open array(_, _, _, _, _);
     //@ open foreach(_, _);
     
     //@ stop_counting(integer, &cell);
-    free((void *)threads);
+    free(threads);
 }

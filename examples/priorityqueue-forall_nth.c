@@ -36,18 +36,18 @@ fixpoint bool ge_nth(int i, list<int> vs, int index) { return nth(i, vs) >= nth(
 
 fixpoint bool ge_nth_except(int i, int except, list<int> vs, int index) { return index == except || nth(i, vs) >= nth(index, vs) || index == 0; }
 
-predicate heap(struct heap *heap, list<int> values) =
+predicate heap(struct heap *heap; list<int> values) =
   malloc_block_heap(heap)
   &*& heap->capacity |-> ?capacity
   &*& 0 <= capacity
   &*& heap->size |-> ?size
-  &*& length(values) == size
   &*& size + 1 <= capacity
   &*& heap->elems |-> ?elems
-  &*& array<int>(elems, size + 1, sizeof(int), integer, ?vs)
-  &*& tail(vs) == values
-  &*& array<int>(elems + (size + 1), capacity - (size + 1), sizeof(int), integer, ?rest)
-  &*& malloc_block(elems,4 * capacity)
+  &*& elems[0..size + 1] |-> ?vs
+  &*& values == tail(vs)
+  &*& length(values) == size
+  &*& elems[size + 1..capacity] |-> ?rest
+  &*& malloc_block_ints(elems, capacity)
   &*& forall_nth(vs, heap_index) == true
   &*& switch(values) { case nil: return true; case cons(h, t): return forall_nth(vs, (ge_nth)(1)) == true; };
 @*/		
@@ -68,15 +68,14 @@ struct heap* heap_create(int capacity)
   if (q == 0) abort();
   if (sizeof(ElementType) == 0) abort();
   int acapacity = capacity + 1;
-  int *array = malloc(4 * acapacity);
+  int *array = malloc(acapacity * sizeof(int));
   if (array == 0) abort();
-  //@ chars_to_int_array(array,acapacity);
   q->elems = array;
   if (q->elems == 0) abort();
   q->capacity = capacity + 1;
   q->size = 0;
-  //@ open array<int>(array, capacity + 1, sizeof(int), integer, _);
-  //@ close array<int>(array, 1, sizeof(int), integer, _);
+  //@ open ints(array, capacity + 1, _);
+  //@ close ints(array, 1, _);
   //@ close heap(q,nil);
   return q;
 }
@@ -91,39 +90,26 @@ bool heap_is_empty(struct heap* heap)
 }
 
 /*@
-lemma void merge_array(int* arr)
-  requires array<int>(arr, ?N, sizeof(int), integer, ?vs1) &*& array<int>(arr + N, ?M, sizeof(int), integer, ?vs2);
-  ensures array<int>(arr, N + M, sizeof(int), integer, append(vs1, vs2));
-{
-  switch(vs1) {
-    case nil:
-    case cons(h, t):
-      open array<int>(arr, N, sizeof(int), integer, vs1);
-      merge_array(arr + 1);
-  }
-}
-
-
 lemma void move_array_elem(int* arr, int N)
-  requires array<int>(arr, N, sizeof(int), integer, ?vs1) &*& integer(arr + N, ?v);
-  ensures array<int>(arr, N + 1, sizeof(int), integer, append(vs1, cons(v, nil)));
+  requires arr[0..N] |-> ?vs1 &*& integer(arr + N, ?v);
+  ensures arr[0..N + 1] |-> append(vs1, cons(v, nil));
 {
   switch(vs1) {
     case nil:
     case cons(h, t):
-      open array<int>(arr, N, 4, integer, vs1);
+      open ints(arr, _, _);
       move_array_elem(arr + 1, N - 1);
   }
 }
 
 lemma void intarray_to_chars(void* a)
-  requires array<int>(a, ?n, sizeof(int), integer, _);
+  requires ints(a, ?n, _);
   ensures chars(a, n * sizeof(int), _);
 {
   if(n == 0) {
     close chars(a, 0, nil);
   } else {
-    open array<int>(a, n, sizeof(int), integer, _);
+    open ints(_, _, _);
     integer_to_chars(a);
     intarray_to_chars(a + sizeof(int));
     chars_join(a);
@@ -141,8 +127,8 @@ void heap_insert(struct heap* heap, ElementType x)
   if(heap->size + 1 == heap->capacity) {
     abort();
   }
-  //@ assert array<int>(arr, length(values) + 1, sizeof(int), integer, ?vs);
-  //@ open array<int>(heap->elems + (heap->size + 1), heap->capacity - (heap->size + 1), sizeof(int), integer, ?rest);
+  //@ assert arr[0..length(values) + 1] |-> ?vs;
+  //@ open ints(heap->elems + (heap->size + 1), heap->capacity - (heap->size + 1), ?rest);
   //@ move_array_elem(heap->elems, heap->size + 1);
   /*@
   if(! forall_nth(append(vs, cons(head(rest), nil)), (heap_index_e)(length(vs)))) {
@@ -154,9 +140,9 @@ void heap_insert(struct heap* heap, ElementType x)
   } 
   @*/
   int in = ++heap->size;
-  //@ assert array<int>(arr, length(values) + 2, sizeof(int), integer, ?es);
+  //@ assert ints(arr, length(values) + 2, ?es);
   heap->elems[in] = x;
-  //@ assert array<int>(arr, length(values) + 2, sizeof(int), integer, ?us);
+  //@ assert ints(arr, length(values) + 2, ?us);
   //@ assert 0 <= in && in < length(es);
   /*@
   if(! forall_nth(update(length(es) - 1, x, es), (heap_index_e)(length(es) - 1))) {
@@ -187,7 +173,7 @@ void heap_insert(struct heap* heap, ElementType x)
     }
   @*/
   swim(heap->elems, heap->size + 1, in);
-  //@ assert array<int>(arr, in + 1, sizeof(int), integer, ?values2);
+  //@ assert ints(arr, in + 1, ?values2);
   //@ switch(values2) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): } }
   //@ close heap(heap, tail(values2));
 }
@@ -202,12 +188,12 @@ lemma_auto(i/2) void div_mul(int i)
 @*/
 
 void swim(int* arr, int N, int k)
-  /*@ requires array<int>(arr, N, sizeof(int), integer, ?vs) &*& 0 < k &*& k < N &*& 
+  /*@ requires arr[0..N] |-> ?vs &*& 0 < k &*& k < N &*& 
                forall_nth(vs, (heap_index_e)(k)) == true &*&
                (k == 1 || 2*k >= length(vs) || nth(k/2, vs) >= nth(2*k, vs)) &*&
                (k == 1 || 2*k + 1 >= length(vs) || nth(k/2, vs) >= nth(2*k + 1, vs)) &*&
                forall_nth(vs, (ge_nth_except)(1, k)) == true; @*/
-  /*@ ensures array<int>(arr, N, sizeof(int), integer, ?vs2) &*& 
+  /*@ ensures arr[0..N] |-> ?vs2 &*& 
               forall_nth(vs2, heap_index) == true &*&
               forall_nth(vs2, (ge_nth)(1)) == true; @*/
 {
@@ -275,7 +261,7 @@ ElementType heap_max(struct heap* heap)
   //@ open heap(heap, values);
   //@ int tmp = heap->elems[1];
   //@ int* elems = heap->elems;
-  //@ assert array<int>(elems, _, _, _, ?vs);
+  //@ assert ints(elems, _, ?vs);
   return heap->elems[1];
   /*@
   if(! forall_nth(values, (ge)(tmp))) {
@@ -301,9 +287,8 @@ void heap_dispose(struct heap* heap)
   //@ ensures true;
 {
   //@ open heap(heap, values);
-  //@ merge_array(heap->elems);
-  //@ intarray_to_chars(heap->elems);
-  free((void*) (heap->elems));
+  //@ ints_join(heap->elems);
+  free(heap->elems);
   free(heap);
 }
 

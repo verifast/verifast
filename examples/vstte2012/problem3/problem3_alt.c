@@ -23,9 +23,9 @@ predicate ring_buffer(struct ring_buffer *buffer, int size, list<int> items) =
 	&*& len <= size  
 	&*& fields + size <= (void*)UINTPTR_MAX
 	
-	&*& malloc_block(fields, 4 * size)
+	&*& malloc_block_ints(fields, size)
 	&*& malloc_block_ring_buffer(buffer)
-	&*& array<int>(fields, size, sizeof(int), integer, ?elems)
+	&*& fields[0..size] |-> ?elems
 	&*& items == take(len,append(drop(first, elems), take(first, elems)))
 	;
 	
@@ -46,8 +46,6 @@ struct ring_buffer *ring_buffer_create(int size)
 		free(ring_buffer);
 		return 0;
 	}
-	//@ chars_limits((void*)fields);	
-	//@ chars_to_int_array(fields, size);
 	ring_buffer->fields =  fields;
 	ring_buffer->size = size;
 	ring_buffer->first = 0;
@@ -62,8 +60,7 @@ void ring_buffer_dispose(struct ring_buffer *ring_buffer)
 {
     //@ open ring_buffer(ring_buffer, size, items);
     int* fields = ring_buffer->fields;
-    //@ int_array_to_chars(fields);
-    free((void *)fields);
+    free(fields);
     free(ring_buffer);
 }
 
@@ -83,11 +80,11 @@ int ring_buffer_head(struct ring_buffer *ring_buffer)
     //@ open ring_buffer(ring_buffer, size, items);
     int* fields = ring_buffer->fields;
     int offset = ring_buffer->first;
-    //@ assert array<int>(fields, size, sizeof(int), integer, ?elems);
-    //@ array_split(fields, offset);
-    //@ open array(fields+offset, size-offset, _, _, _);
+    //@ assert ints(fields, size, ?elems);
+    //@ ints_split(fields, offset);
+    //@ open ints(fields+offset, size-offset, _);
     int result = *(fields+offset);
-    //@ array_unseparate_same(fields, elems);
+    //@ ints_unseparate_same(fields, elems);
     //@ close ring_buffer(ring_buffer, size, items);
     return result; 
 }
@@ -180,13 +177,13 @@ void ring_buffer_push(struct ring_buffer *ring_buffer, int element)
     int offset = ring_buffer->first + ring_buffer->len;
     if(offset >= size2) offset -= size2; //instead of modulo
     int* fields = ring_buffer->fields;
-    //@ assert array<int>(fields, size, sizeof(int), integer, ?elems);
-    //@ array_split(fields, offset);
-    //@ open array(fields+offset, size-offset, _, _, _);
+    //@ assert ints(fields, size, ?elems);
+    //@ ints_split(fields, offset);
+    //@ open ints(fields+offset, size-offset, _);
     *(fields+offset) = element;
-    //@ array_unseparate(fields, offset, elems);
+    //@ ints_unseparate(fields, offset, elems);
     ring_buffer->len++;
-    //@ assert array<int>(fields, size, sizeof(int), integer, update(offset, element, elems));
+    //@ assert ints(fields, size, update(offset, element, elems));
     //@ assert items == take(length(items),append(drop(first, elems), take(first, elems)));
     //@ append_take_drop(first, elems);
     //@ take_append(length(items), drop(first, elems), take(first, elems));
@@ -260,7 +257,7 @@ int ring_buffer_pop(struct ring_buffer *ring_buffer)
     ring_buffer->first = newfirst;
     ring_buffer->len--;
     //@ switch(items) { case nil: case cons(ih, it): } //switch to force case analysis
-    //@ assert array<int>(?fields, size, sizeof(int), integer, ?elems);
+    //@ assert ints(?fields, size, ?elems);
     //@ assert items == take(length(items),append(drop(first, elems), take(first, elems)));
     //@ append_take_drop(first, elems);
     /*@

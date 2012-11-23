@@ -1133,7 +1133,6 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let elemSize = sizeof l elemTp in
       let arraySize = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
       ignore (ctxt#assume (ctxt#mk_and (ctxt#mk_le int_zero_term addr) (ctxt#mk_le (ctxt#mk_add addr arraySize) max_ptr_term)));
-      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
       let produce_char_array_chunk h addr elemCount =
         let elems = get_unique_var_symb "elems" (InductiveType ("list", [Char])) in
         let length = ctxt#mk_mul (ctxt#mk_intlit elemCount) elemSize in
@@ -1144,14 +1143,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont ()
         end $. fun () ->
         assume_eq (mk_length elems) length $. fun () ->
-        cont (Chunk ((c_array_symb, true), [Char], coef, [addr; length; ctxt#mk_intlit 1; char_pred_symb (); elems], None)::h)
+        cont (Chunk ((chars_pred_symb(), true), [], coef, [addr; length; elems], None)::h)
       in
       let produce_array_chunk addr elems elemCount =
-        match try_pointee_pred_symb elemTp with
-          Some elemPred ->
+        match try_pointee_pred_symb0 elemTp with
+          Some (_, _, _, arrayPredSymb, _, _) ->
           let length = ctxt#mk_intlit elemCount in
           assume_eq (mk_length elems) length $. fun () ->
-          cont (Chunk ((c_array_symb, true), [elemTp], coef, [addr; length; elemSize; elemPred; elems], None)::h)
+          cont (Chunk ((arrayPredSymb, true), [], coef, [addr; length; elems], None)::h)
         | None -> (* Produce a character array of the correct size *)
           produce_char_array_chunk h addr elemCount
       in
@@ -1252,15 +1251,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec consume_c_object l addr tp h consumePaddingChunk cont =
     match tp with
       StaticArrayType (elemTp, elemCount) ->
-      let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-      begin match try_pointee_pred_symb elemTp with
-        Some elemPred ->
-        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); TermPat (sizeof l elemTp); TermPat elemPred; dummypat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [elemTp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+      begin match try_pointee_pred_symb0 elemTp with
+        Some (_, _, _, arrayPredSymb, _, _) ->
+        let pats = [TermPat addr; TermPat (ctxt#mk_intlit elemCount); dummypat] in
+        consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
         cont h
       | None ->
-        let pats = [TermPat addr; TermPat (sizeof l tp); TermPat (ctxt#mk_intlit 1); TermPat (char_pred_symb ()); dummypat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [Char] real_unit real_unit_pat (Some 4) pats $. fun _ h _ _ _ _ _ _ ->
+        let pats = [TermPat addr; TermPat (sizeof l tp); dummypat] in
+        consume_chunk rules h [] [] [] l (chars_pred_symb(), true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ _ _ _ _ _ ->
         cont h
       end
     | StructType sn ->
@@ -1581,15 +1579,18 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
+        let arrayPredSymb =
+          match try_pointee_pred_symb0 elem_tp with
+            Some (_, _, _, asymb, _, _) -> asymb
+          | None -> static_error l ("Dereferencing array elements of type "^string_of_type elem_tp^" is not yet supported.") None
+        in
         let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
-        let predsym = pointee_pred_symb l elem_tp in
-        let pats = [TermPat arr; SrcPat DummyPat; TermPat (sizeof l elem_tp); TermPat predsym; SrcPat DummyPat] in
-        consume_chunk rules h [] [] [] l (c_array_symb, true) [elem_tp] real_unit real_unit_pat (Some 4) pats $. fun _ h _ [a; n; size; q; vs] _ _ _ _ ->
+        let pats = [TermPat arr; SrcPat DummyPat; SrcPat DummyPat] in
+        consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [a; n; vs] _ _ _ _ ->
         let term = ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n) in
-        assert_term term h env l ("Could not prove that index is in bounds of the array: " ^ (ctxt#pprint term)) None;
+        assert_term term h env l "Could not prove that index is in bounds of the array" None;
         let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
-        cont (Chunk ((c_array_symb, true), [elem_tp], real_unit, [a; n; size; q; updated], None) :: h) env
+        cont (Chunk ((arrayPredSymb, true), [], real_unit, [a; n; updated], None) :: h) env
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
@@ -1608,7 +1609,36 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     match e with
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
       expect_type lc (PtrType (StructType tn)) tp;
-      verify_expr readonly h env xo e cont 
+      verify_expr readonly h env xo e cont
+    | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]), _)]) ->
+      if pure then static_error l "Cannot call a non-pure function from a pure context." None;
+      let elemTp = check_pure_type (pn,ilist) tparams te in
+      let w = check_expr_t (pn,ilist) tparams tenv e IntType in
+      eval_h h env w $. fun h env n ->
+      let arraySize = ctxt#mk_mul n (sizeof ls elemTp) in
+      check_overflow lmul int_zero_term arraySize max_int_term (fun l t -> assert_term t h env l);
+      let resultType = PtrType elemTp in
+      let result = get_unique_var_symb (match xo with None -> "array" | Some x -> x) resultType in
+      let cont h = cont h env result in
+      branch
+        begin fun () ->
+          assume_eq result int_zero_term $. fun () ->
+          cont h
+        end
+        begin fun () ->
+          assume_neq result int_zero_term $. fun () ->
+          let n, elemTp, arrayPredSymb, mallocBlockSymb =
+            match try_pointee_pred_symb0 elemTp with
+              Some (_, _, _, asym, _, mbsym) -> n, elemTp, asym, mbsym
+            | None -> arraySize, Char, chars_pred_symb(), malloc_block_chars_pred_symb()
+          in
+          assume (ctxt#mk_and (ctxt#mk_le int_zero_term result) (ctxt#mk_le (ctxt#mk_add result arraySize) max_ptr_term)) $. fun () ->
+          let values = get_unique_var_symb "values" (list_type elemTp) in
+          assume (ctxt#mk_eq (mk_length values) n) $. fun () ->
+          let mallocBlockChunk = Chunk ((mallocBlockSymb, true), [], real_unit, [result; n], None) in
+          let arrayChunk = Chunk ((arrayPredSymb, true), [], real_unit, [result; n; values], None) in
+          cont (mallocBlockChunk::arrayChunk::h)
+        end
     | WFunCall (l, "malloc", [], [SizeofExpr (ls, te)]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
       let t = check_pure_type (pn,ilist) tparams te in
@@ -1628,7 +1658,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let (_, (_, _, _, _, malloc_block_symb, _)) = List.assoc sn malloc_block_pred_map in
             cont (Chunk ((malloc_block_symb, true), [], real_unit, [result], None)::h)
           | _ ->
-            cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
+            match try_pointee_pred_symb0 t with
+              Some (_, _, _, _, _, arrayMallocBlockSymb) ->
+              cont (Chunk ((arrayMallocBlockSymb, true), [], real_unit, [result; ctxt#mk_intlit 1], None)::h)
+            | _ ->
+              cont (Chunk ((get_pred_symb "malloc_block", true), [], real_unit, [result; sizeof l t], None)::h)
         end
     | WFunPtrCall (l, g, args) ->
       let (PtrType (FuncType ftn)) = List.assoc g tenv in
@@ -1834,11 +1868,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let Some lhs_type = ! lhs_type in
         let get_values = (fun h env v1 cont -> eval_h h env rhs (fun h env v2 ->
           let check_overflow min t max =
-            (if not disable_overflow_check && not pure then begin
-            assert_term (ctxt#mk_le min t) h env l "Potential arithmetic underflow." (Some "potentialarithmeticunderflow");
-            assert_term (ctxt#mk_le t max) h env l "Potential arithmetic overflow." (Some "potentialarithmeticoverflow");
-            end
-            );
+            if not pure then check_overflow l min t max (fun l t -> assert_term t h env l);
             t
           in
           let (min_term, max_term) = 

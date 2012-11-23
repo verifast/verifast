@@ -231,13 +231,11 @@ void print_string_buffer(struct string_buffer *buffer)
 	int n = string_buffer_get_length(buffer);
 	char *pcs = string_buffer_get_chars(buffer);
 	int i;
-	//@ chars_to_char_array(pcs);
 	for (i = 0; i < n; i++)
-		//@ invariant [f]array<char>(pcs, n, 1, character, cs) &*& 0 <= i;
+		//@ invariant [f]pcs[0..n] |-> cs &*& 0 <= i;
 	{
 		putchar(pcs[i]);
 	}
-	//@ char_array_to_chars(pcs);
 	//@ string_buffer_merge_chars(buffer);
 }
 

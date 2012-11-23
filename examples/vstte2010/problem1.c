@@ -69,7 +69,7 @@ void problem1(int *a, int N)
     for (; i < N; i++)
         /*@
         invariant
-            array<int>(a, N, sizeof(int), integer, elems) &*&
+            a[0..N] |-> elems &*&
             0 <= i &*& i <= N &*&
             0 <= max &*&
             sum == fold_left(0, (plus)(unit), take(i, elems)) &*&

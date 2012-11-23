@@ -19,7 +19,7 @@ void array_test2(int* a)
   assert(a1_old == a1);
 }
 
-//@ predicate p(int* a, int n;) = array<int>(a, n, sizeof(int), integer, ?vs) &*& 0 < n;
+//@ predicate p(int* a, int n;) = a[0..n] |-> ?vs &*& 0 < n;
 
 void array_test_fail(int* a, int n)
   //@ requires a[0..5] |-> _;

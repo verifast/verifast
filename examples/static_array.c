@@ -33,7 +33,7 @@ void check_local_inits()
   check(buf[1] == 2);
 }
 
-//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& array<int>(&s->ar, 7, sizeof(int), integer, _) &*& s->y |-> _;
+//@ predicate struct_with_array(struct struct_with_array *s;) = s->x |-> _ &*& ints(s->ar, 7, _) &*& s->y |-> _;
 
 struct mystruct {
   struct struct_with_array s1;
@@ -73,12 +73,11 @@ static void foo()
 static int ar2 [55];
 
 void mod_ar2 (void)
-/*@ requires array<int>(&ar2, 55, 4, integer, ?elems)
+/*@ requires ar2[0..55] |-> ?elems
     &*& nth (1, elems) >= 0 &*& nth (1, elems) <= 50
     &*& nth (26, elems) >= 0 &*& nth (26, elems) <= 50;
   @*/
-/*@ ensures array<int>(&ar2, 55, 4, integer,
-      update (1, nth (1, elems) + nth (26, elems), elems));
+/*@ ensures ar2[0..55] |-> update (1, nth (1, elems) + nth (26, elems), elems);
   @*/
  {
   ar2[ 1] = ar2[ 1] + ar2[26];
@@ -144,7 +143,7 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
 
   /* global array */
-  //@ assert array(&ar2, _, _, _, ?ar2Elems);
+  //@ assert ar2[0.._] |-> ?ar2Elems;
   //@ all_eq_nth(ar2Elems, 0, 0);
   check(ar2[0] == 0);
   ar2[ 0] = 1;
@@ -162,13 +161,11 @@ int main(int argc, char **argv) //@ : main_full(static_array)
 
   //@ open_struct(bigArrayPtr);
   //@ assert chars((void *)bigArrayPtr, sizeof(struct struct_with_array), _);
-  //@ chars_to_char_array(bigArrayPtr);
   //@ open_struct(bigArrayPtr + 1);
   //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct struct_with_array), _);
-  //@ chars_to_char_array(bigArrayPtr + 1);
-  //@ array_merge(bigArrayPtr + 1);
-  //@ array_merge(bigArrayPtr);
-  //@ assert array<char>((void *)bigArrayPtr, sizeof(struct struct_with_array) * 10, 1, character, _);
+  //@ chars_join((void *)(bigArrayPtr + 1));
+  //@ chars_join((void *)bigArrayPtr);
+  //@ assert chars((void *)bigArrayPtr, sizeof(struct struct_with_array) * 10, _);
   //@ close_module();
   //@ leak module(static_array, _);
 

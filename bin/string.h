@@ -5,6 +5,24 @@ void memcpy(void *array, void *array0, int count);
     //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);
     //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);
 
+void memmove(void *dest, void *src, int count);
+    /*@
+    requires
+        chars(src, count, ?cs) &*&
+        dest <= src ?
+            chars(dest, src - dest, _)
+        :
+            chars(src + count, dest - src, _);
+    @*/
+    /*@
+    ensures
+        chars(dest, count, cs) &*&
+        dest <= src ?
+            chars(dest + count, src - dest, _)
+        :
+            chars(src, dest - src, _);
+    @*/
+
 int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);

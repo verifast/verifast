@@ -604,19 +604,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | None -> static_error l ("Dereferencing pointers of type " ^ string_of_type pointeeType ^ " is not yet supported.") None
   
   let read_c_array h env l a i tp =
-    let (_, _, _, _, c_array_symb, _) = List.assoc "array" predfammap in
-    let predsym = pointee_pred_symb l tp in
+    let (predsym, array_predsym) =
+      match try_pointee_pred_symb0 tp with
+        Some (_, psym, _, asym, _, _) -> psym, asym
+      | None -> static_error l ("Dereferencing array elements of type " ^ string_of_type tp ^ " is not yet supported.") None
+    in
     let slices =
       head_flatmap
         begin function
-          Chunk (g, [tp2], coef, [a'; n'; size'; q'; vs'], _)
+          Chunk (g, [], coef, [a'; n'; vs'], _)
             when
-              predname_eq g (c_array_symb, true) &&
-              tp = tp2 &&
+              predname_eq g (array_predsym, true) &&
               definitely_equal a' a &&
-              definitely_equal q' predsym &&
-              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) &&
-              ctxt#query (ctxt#mk_eq size' (sizeof l tp)) ->
+              ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) ->
             let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
             [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [i; vs'])]
         | _ -> []
@@ -628,12 +628,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin match lookup_points_to_chunk_core h predsym (ctxt#mk_add a (ctxt#mk_mul i (sizeof l tp))) with
           None ->
           assert_false h env l
-            (sprintf "No matching array chunk: array<%s>(%s, 0<=%s<n, %s, %s, _)"
-               (string_of_type tp)
+            (sprintf "No matching array chunk: %s(%s, 0<=%s<n, _)"
+               (ctxt#pprint array_predsym)
                (ctxt#pprint a)
-               (ctxt#pprint i)
-               (ctxt#pprint (sizeof l tp))
-               (ctxt#pprint predsym))
+               (ctxt#pprint i))
             None
         | Some v -> v
         end

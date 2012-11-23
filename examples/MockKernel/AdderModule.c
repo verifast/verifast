@@ -99,7 +99,6 @@ void module_dispose(struct module *self)
     //@ open adderLockInv();
     return;
     //@ string_to_chars(adderName);
-    //@ chars_to_char_array(adderName);
     //@ close_module();
 }
 
@@ -112,7 +111,6 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     @*/
 {
     //@ open_module();
-    //@ char_array_to_chars(adderName);
     //@ chars_to_string(adderName);
     
     //@ close adderLockInv();

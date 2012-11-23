@@ -4,7 +4,7 @@
 struct arraylist;
 
 /*@
-predicate arraylist(struct arraylist *a, list<void*> vs);
+predicate arraylist(struct arraylist *a; list<void*> vs);
 @*/
 
 struct arraylist *create_arraylist() ;

@@ -12,24 +12,10 @@ struct heap {
 
 /*@
 predicate heap(struct heap* h, int size, int capacity, list<int> vs) =
-  h->elems |-> ?arr &*& h->capacity |-> capacity + 1 &*& array<int>(arr, capacity + 1, sizeof(int), integer, ?vs2) &*& is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), nil) == true &*& malloc_block(arr, 4 * (capacity + 1)) &*& h->size |-> size &*&
+  h->elems |-> ?arr &*& h->capacity |-> capacity + 1 &*& arr[0..capacity + 1] |-> ?vs2 &*&
+  is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), nil) == true &*&
+  malloc_block_ints(arr, capacity + 1) &*& h->size |-> size &*&
   0 <= size &*& size <= capacity &*& malloc_block_heap(h);
-
-lemma void chars_to_intarray(void* arr, int capacity)
-  requires chars(arr, 4*capacity, ?vs);
-  ensures array<int>(arr, capacity, sizeof(int), integer, _);
-{
-  open chars(arr, _, vs);
-  if(capacity == 0) {
-  } else {
-    switch(vs) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): switch(t0) { case nil: case cons(h1, t1): }}};
-    open chars(arr + 1, _, _);
-    open chars(arr + 2, _, _);
-    open chars(arr + 3, _, _);
-    chars_to_intarray(arr+4, capacity-1);
-    chars_to_integer(arr);
-  }
-}
 
 fixpoint bool is_perm<t>(list<t> xs, list<t> ys)
 {
@@ -126,10 +112,8 @@ struct heap* create_heap(int capacity)
   h->size = 0;
   h->capacity = capacity + 1;
   h->elems = arr;
-  //@ chars_to_intarray(arr, capacity + 1);
   //@ succ_int(0);
-  ////@ is_perm(take(1, vs2), cons(nth(0, vs2), vs)) == true;
-  //@ assert array<int>(arr, capacity + 1, sizeof(int), integer, ?vs2);
+  //@ assert arr[0..capacity + 1] |-> ?vs2;
   //@ switch(vs2) { case nil: case cons(h0, t0): }
   //@ assert take(1, vs2) == cons(nth(0, vs2), nil);
   //@ close heap(h, 0, capacity, nil);
@@ -137,8 +121,8 @@ struct heap* create_heap(int capacity)
 }
 
 void exch(int* arr, int i, int j)
-  //@ requires array<int>(arr, ?capacity, sizeof(int), integer, ?vs) &*& 0 <= i &*& i < capacity &*& 0 <= j &*& j < capacity;
-  //@ ensures array<int>(arr, capacity, sizeof(int), integer, update(j, nth(i, vs), update(i, nth(j, vs), vs)));
+  //@ requires arr[0..?capacity] |-> ?vs &*& 0 <= i &*& i < capacity &*& 0 <= j &*& j < capacity;
+  //@ ensures arr[0..capacity] |-> update(j, nth(i, vs), update(i, nth(j, vs), vs));
 {
   int tmp = arr[i]; 
   arr[i] = arr[j];
@@ -397,13 +381,13 @@ fixpoint bool le(unit u, int x, int y) {
 @*/
 
 void sink(int* arr, int size, int k)
-  //@ requires array<int>(arr, ?capacity, sizeof(int), integer, ?vs2) &*& k == 1 &*& 1 <= k &*& k <= size+1 &*& size < capacity &*& is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), cons(nat_of_int(k), nil)) == true;
-  //@ ensures array<int>(arr, capacity, sizeof(int), integer, ?vs2b) &*& is_heap(nat_of_int(length(take(size + 1, vs2b))), take(size + 1, vs2b), nil) == true &*& is_perm(take(size + 1, vs2), take(size+ 1, vs2b)) == true;
+  //@ requires arr[0..?capacity] |-> ?vs2 &*& k == 1 &*& 1 <= k &*& k <= size+1 &*& size < capacity &*& is_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), cons(nat_of_int(k), nil)) == true;
+  //@ ensures arr[0..capacity] |-> ?vs2b &*& is_heap(nat_of_int(length(take(size + 1, vs2b))), take(size + 1, vs2b), nil) == true &*& is_perm(take(size + 1, vs2), take(size+ 1, vs2b)) == true;
 {
   //@ int prevk = div2(k); 
   //@ int oldk = k;
   while(2*k <= size)
-    //@ invariant k == 1 || 2* prevk ==k || 2*prevk+1 == k &*& oldk <= k &*& k <= size+1 &*& array<int>(arr, capacity, sizeof(int), integer, ?vs3) &*& (1 < k && 2*k < size + 1 ? nth<int>(prevk, vs3) <= nth(2*k, vs3) : true) &*& (1 < k && 2*k +1< size + 1 ? nth<int>(prevk, vs3) <= nth(2*k+1, vs3) : true) &*& is_heap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), cons(nat_of_int(k), nil)) == true &*& is_perm(take(size + 1, vs2), take(size + 1, vs3)) == true;
+    //@ invariant k == 1 || 2* prevk ==k || 2*prevk+1 == k &*& oldk <= k &*& k <= size+1 &*& arr[0..capacity] |-> ?vs3 &*& (1 < k && 2*k < size + 1 ? nth<int>(prevk, vs3) <= nth(2*k, vs3) : true) &*& (1 < k && 2*k +1< size + 1 ? nth<int>(prevk, vs3) <= nth(2*k+1, vs3) : true) &*& is_heap(nat_of_int(length(take(size + 1, vs3))), take(size + 1, vs3), cons(nat_of_int(k), nil)) == true &*& is_perm(take(size + 1, vs2), take(size + 1, vs3)) == true;
   {
     int j = 2 * k;
     if(j < size && arr[j] > arr[j + 1]) {
@@ -422,7 +406,7 @@ void sink(int* arr, int size, int k)
     }
     exch(arr, k, j);
     //@ is_perm_swap(take(size + 1, vs3), j, k);
-    //@ assert array<int>(arr, capacity, sizeof(int), integer, ?myvs);
+    //@ assert arr[0..capacity] |-> ?myvs;
     //@ assert is_perm(take(size + 1, myvs), take(size + 1, vs3)) == true;
   
     //@ is_perm_symmetric(take(size + 1, myvs), take(size + 1, vs3));
@@ -466,7 +450,7 @@ int extract_min(struct heap* h)
 {
   //@ open heap(h, size, cap, vs);
   //@ int* arr = h->elems;
-  //@ assert array<int>(arr, cap + 1, sizeof(int), integer, ?vs2);
+  //@ assert arr[0..cap + 1] |-> ?vs2;
   int res = h->elems[1];
   h->elems[1] = h->elems[h->size];
   //@ minimum_of_heap(nat_of_int(length(take(size + 1, vs2))), take(size + 1, vs2), size);
@@ -474,11 +458,11 @@ int extract_min(struct heap* h)
   //@ update_take(vs2, 1, nth(h->size, vs2), size + 1);
   h->size--;
   //@ succ_int(length(take(size, vs2)));
-  //@ assert array<int>(arr, cap + 1, sizeof(int), integer, ?vs3);
+  //@ assert arr[0..cap + 1] |-> ?vs3;
   //@ is_heap_shrink_list(nat_of_int(length(take(size, vs3))), take(size + 1, vs3), cons(succ(zero), nil));
   //@ take_take(vs3, size, size + 1);
   sink(h->elems, h->size, 1);
-  //@ assert array<int>(arr, cap + 1, sizeof(int), integer, ?vsa);
+  //@ assert arr[0..cap + 1] |-> ?vsa;
   //@ assert is_perm(take(size, vs3), take(size, vsa)) == true;
   //@ close heap(h, size-1, cap, remove(res, vs)); // todo
   return res;
@@ -587,8 +571,8 @@ int div2real(int j); // todo: implement integer division
   //@ ensures 2 * result == j || 2 * result + 1 == j;
 
 void swim(int* arr, int size, int k) 
-  //@ requires array<int>(arr, ?capacity, sizeof(int), integer, ?vs) &*& 1 <= k &*& k < size+1 &*& size + 1 <= capacity &*& ghostparam(?prevkk) &*& is_heap(nat_of_int(size + 1), take(size + 1, vs), cons(nat_of_int(prevkk), nil)) == true  &*& 2 * prevkk == k || 2 * prevkk + 1 == k &*& (k == 1 ? true : (2*prevkk == k ? 2*prevkk +1 >= size + 1 || nth<int>(prevkk, vs) <= nth<int>(2*prevkk + 1, vs) : nth<int>(prevkk, vs) <= nth<int>(2*prevkk, vs)))  &*& 2*k >= size + 1 || nth<int>(prevkk, vs) <= nth(2*k, vs) &*& 2*k + 1 >= size + 1 || nth<int>(prevkk, vs) <= nth(2*k + 1, vs); 
-  //@ ensures array<int>(arr, capacity, sizeof(int), integer, ?vs2) &*& is_heap(nat_of_int(size + 1), take(size + 1, vs2), nil) == true;
+  //@ requires arr[0..?capacity] |-> ?vs &*& 1 <= k &*& k < size+1 &*& size + 1 <= capacity &*& ghostparam(?prevkk) &*& is_heap(nat_of_int(size + 1), take(size + 1, vs), cons(nat_of_int(prevkk), nil)) == true  &*& 2 * prevkk == k || 2 * prevkk + 1 == k &*& (k == 1 ? true : (2*prevkk == k ? 2*prevkk +1 >= size + 1 || nth<int>(prevkk, vs) <= nth<int>(2*prevkk + 1, vs) : nth<int>(prevkk, vs) <= nth<int>(2*prevkk, vs)))  &*& 2*k >= size + 1 || nth<int>(prevkk, vs) <= nth(2*k, vs) &*& 2*k + 1 >= size + 1 || nth<int>(prevkk, vs) <= nth(2*k + 1, vs); 
+  //@ ensures arr[0..capacity] |-> ?vs2 &*& is_heap(nat_of_int(size + 1), take(size + 1, vs2), nil) == true;
 {
   //@ assume(false);
   //@ open ghostparam(prevkk);
@@ -660,10 +644,10 @@ void insert(struct heap* h, int x)
   //@ ensures heap(h, size + 1, cap, cons(x, vs));
 {
   //@ open heap(h, size, cap, _);
-  //@ assert array<int>(?arr, cap + 1, 4, integer, ?vsa);
+  //@ assert ints(?arr, cap + 1, ?vsa);
   //@ assert is_heap(nat_of_int(size + 1), take(size + 1, vsa), nil) == true; 
   h->elems[h->size + 1] = x;
-  //@ assert array<int>(arr, cap + 1, 4, integer, ?vsa2);
+  //@ assert ints(arr, cap + 1, ?vsa2);
   //@ assert take(size + 1, vsa2) == take(size +1, vsa);
   //@ assert is_heap(nat_of_int(size + 1), take(size + 1, vsa2), nil) == true; 
   h->size++;

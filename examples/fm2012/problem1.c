@@ -14,18 +14,18 @@ fixpoint int lcp_<t>(list<t> xs, list<t> ys) {
 @*/
 
 int lcp(int *a, int N, int x, int y)
-    //@ requires [?f]array<int>(a, N, sizeof(int), integer, ?elems) &*& 0 <= x &*& x < N &*& 0 <= y &*& y < N;
-    //@ ensures [f]array<int>(a, N, sizeof(int), integer, elems) &*& result == lcp_(drop(x, elems), drop(y, elems));
+    //@ requires [?f]a[0..N] |-> ?elems &*& 0 <= x &*& x < N &*& 0 <= y &*& y < N;
+    //@ ensures [f]a[0..N] |-> elems &*& result == lcp_(drop(x, elems), drop(y, elems));
 {
     int l = 0;
     for (;;)
         /*@
         requires
-            [f]array<int>(a, N, sizeof(int), integer, elems) &*& 0 <= l &*& x + l <= N &*& y + l <= N;
+            [f]a[0..N] |-> elems &*& 0 <= l &*& x + l <= N &*& y + l <= N;
         @*/
         /*@
         ensures 
-            [f]array<int>(a, N, sizeof(int), integer, elems) &*& l - old_l == lcp_(drop(x + old_l, elems), drop(y + old_l, elems));
+            [f]a[0..N] |-> elems &*& l - old_l == lcp_(drop(x + old_l, elems), drop(y + old_l, elems));
         @*/
         //@ decreases N - l;
     {

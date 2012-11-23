@@ -187,7 +187,7 @@ lemma void is_inverse_symm(list<int> as, nat n, list<int> bs, int i)
 @*/
 
 void invert(int *A, int N, int *B)
-    //@ requires ints(A, N, ?as) &*& ints(B, N, _) &*& forall(as, (between)(unit, 0, N - 1)) == true &*& distinct(as) == true;
+    //@ requires A[0..N] |-> ?as &*& B[0..N] |-> _ &*& forall(as, (between)(unit, 0, N - 1)) == true &*& distinct(as) == true;
     /*@
     ensures
         ints(A, N, as) &*& ints(B, N, ?bs) &*&
@@ -198,7 +198,7 @@ void invert(int *A, int N, int *B)
 {
     for (int i = 0; i < N; i++)
         /*@
-        invariant array<int>(A, N, sizeof(int), integer, as) &*& array<int>(B, N, sizeof(int), integer, ?bs) &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
+        invariant A[0..N] |-> as &*& B[0..N] |-> ?bs &*& 0 <= i &*& i <= N &*& forall(with_index(0, take(i, as)), (is_inverse)(bs)) == true;
         @*/
     {
         int ai = A[i];

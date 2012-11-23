@@ -5,22 +5,6 @@
 
 /*@
 
-predicate ints(int *array, int n; list<int> elems) =
-    n == 0 ?
-        elems == nil
-    :
-        integer(array, ?elem) &*& ints(array + 1, n - 1, ?elems0) &*& elems == cons(elem, elems0);
-
-lemma_auto void ints_inv()
-    requires ints(?array, ?n, ?elems);
-    ensures ints(array, n, elems) &*& 0 <= n &*& length(elems) == n;
-{
-    open ints(array, n, elems);
-    if (n != 0)
-        ints_inv();
-    close ints(array, n, elems);
-}
-
 fixpoint bool between(unit u, int lower, int upper, int x) {
     switch (u) {
         case unit: return lower <= x && x <= upper;

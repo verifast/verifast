@@ -37,7 +37,6 @@ lemma void string_buffer_merge_chars(struct string_buffer *buffer)
     requires [?f]string_buffer_minus_chars(buffer, ?pcs, ?n) &*& [f]chars(pcs, n, ?cs);
     ensures [f]string_buffer(buffer, cs);
 {
-    chars_to_char_array(pcs);
     close [f]string_buffer(buffer, cs);
 }
 
@@ -63,7 +62,6 @@ char *string_buffer_get_chars(struct string_buffer *buffer)
     //@ ensures [f]string_buffer_minus_chars(buffer, result, length(cs)) &*& [f]chars(result, ?n, cs);
 {
     return buffer->chars;
-    //@ char_array_to_chars(buffer->chars);
 }
 
 int string_buffer_get_length(struct string_buffer *buffer)
@@ -78,7 +76,7 @@ void string_buffer_clear(struct string_buffer *buffer)
     //@ ensures string_buffer(buffer, nil);
 {
     buffer->length = 0;
-    //@ array_merge(buffer->chars);
+    //@ chars_join(buffer->chars);
 }
 
 void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity)
@@ -87,8 +85,8 @@ void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity
         buffer->length |-> ?length &*&
         buffer->capacity |-> ?capacity0 &*&
         buffer->chars |-> ?charsArray0 &*&
-        array<char>(charsArray0, length, 1, character, ?cs) &*&
-        array<char>(charsArray0 + length, capacity0 - length, 1, character, _) &*&
+        charsArray0[0..length] |-> ?cs &*&
+        charsArray0[length..capacity0] |-> _ &*&
         malloc_block(charsArray0, capacity0);
     @*/
     /*@
@@ -96,9 +94,9 @@ void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity
         buffer->length |-> length &*&
         buffer->capacity |-> ?capacity1 &*&
         buffer->chars |-> ?charsArray1 &*&
-        array<char>(charsArray1, length, 1, character, cs) &*&
-        array<char>(charsArray1 + length, capacity1 - length, 1, character, _) &*&
-        malloc_block(charsArray1, capacity1) &*&
+        charsArray1[0..length] |-> cs &*&
+        charsArray1[length..capacity1] |-> _ &*&
+        malloc_block_chars(charsArray1, capacity1) &*&
         newCapacity <= capacity1;
     @*/
 {
@@ -106,15 +104,11 @@ void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity
         char *newChars = malloc(newCapacity);
         if (newChars == 0) abort();
         buffer->capacity = newCapacity;
-        //@ char_array_to_chars(buffer->chars);
         //@ chars_split(newChars, buffer->length);
         memcpy(newChars, buffer->chars, buffer->length);
-        //@ char_array_to_chars(buffer->chars + length);
         //@ chars_join(buffer->chars);
         free((void *)buffer->chars);
         buffer->chars = newChars;
-        //@ chars_to_char_array(newChars);
-        //@ chars_to_char_array(newChars + buffer->length);
     }
 }
 
@@ -128,13 +122,10 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     if (INT_MAX - buffer->length < count) abort();
     newLength = buffer->length + count;
     string_buffer_ensure_capacity(buffer, newLength);
-    //@ char_array_to_chars(buffer->chars + buffer->length);
     //@ chars_split(buffer->chars + buffer->length, count);
     //@ malloc_block_limits(buffer->chars);
     memcpy(buffer->chars + buffer->length, chars, count);
-    //@ chars_to_char_array(buffer->chars + buffer->length);
-    //@ chars_to_char_array(buffer->chars + buffer->length + count);
-    //@ array_merge(buffer->chars);
+    //@ chars_join(buffer->chars);
     buffer->length = newLength;
 }
 
@@ -142,9 +133,7 @@ void string_buffer_append_string_buffer(struct string_buffer *buffer, struct str
     //@ requires string_buffer(buffer, ?cs) &*& [?f]string_buffer(buffer0, ?cs0);
     //@ ensures string_buffer(buffer, append(cs, cs0)) &*& [f]string_buffer(buffer0, cs0);
 {
-    //@ char_array_to_chars(buffer0->chars);
     string_buffer_append_chars(buffer, buffer0->chars, buffer0->length);
-    //@ chars_to_char_array(buffer0->chars);
 }
 
 void string_buffer_append_string(struct string_buffer *buffer, char *string)
@@ -166,10 +155,7 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
     if (copy == 0 || chars == 0) abort();
     copy->length = buffer->length;
     copy->capacity = buffer->length;
-    //@ char_array_to_chars(buffer->chars);
     memcpy(chars, buffer->chars, buffer->length);
-    //@ chars_to_char_array(buffer->chars);
-    //@ chars_to_char_array(chars);
     copy->chars = chars;
     return copy;
 }
@@ -180,11 +166,7 @@ bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *bu
 {
     bool result = false;
     if (buffer->length == buffer0->length) {
-        //@ char_array_to_chars(buffer->chars);
-        //@ char_array_to_chars(buffer0->chars);
         int result0 = memcmp(buffer->chars, buffer0->chars, buffer->length);
-        //@ chars_to_char_array(buffer->chars);
-        //@ chars_to_char_array(buffer0->chars);
         result = result0 == 0;
     }
     return result;
@@ -197,11 +179,9 @@ bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
     bool result = false;
     int length = strlen(string);
     if (length == buffer->length) {
-        //@ char_array_to_chars(buffer->chars);
         //@ string_to_body_chars(string);
         int result0 = memcmp(buffer->chars, string, length);
         //@ body_chars_to_string(string);
-        //@ chars_to_char_array(buffer->chars);
         result = result0 == 0;
     }
     return result;
@@ -211,9 +191,8 @@ void string_buffer_dispose(struct string_buffer *buffer)
     //@ requires string_buffer(buffer, _);
     //@ ensures emp;
 {
-    //@ array_merge(buffer->chars);
-    //@ char_array_to_chars(buffer->chars);
-    free((void *)buffer->chars);
+    //@ chars_join(buffer->chars);
+    free(buffer->chars);
     free(buffer);
 }
 
@@ -269,12 +248,9 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     int n = strlen(separator);
     char *chars = buffer->chars;
     int length = buffer->length;
-    //@ char_array_to_chars(buffer->chars);
     int index = chars_index_of_string(chars, length, separator);
-    //@ chars_to_char_array(buffer->chars);
     if (index == -1) { return false; }
     string_buffer_clear(before);
-    //@ char_array_to_chars(buffer->chars);
     //@ chars_split(chars, index);
     string_buffer_append_chars(before, chars, index);
     //@ chars_join(chars);
@@ -285,6 +261,5 @@ bool string_buffer_split(struct string_buffer *buffer, char *separator, struct s
     string_buffer_append_chars(after, chars + index + n, length - index - n);
     //@ chars_join(chars + index + n);
     //@ chars_join(chars);
-    //@ chars_to_char_array(chars);
     return true;
 }

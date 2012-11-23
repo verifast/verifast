@@ -330,9 +330,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin
         match List.map (check_expr (pn,ilist) tparams tenv) args with
-          [(arg, PtrType t)] when t <> Void && t <> Char ->
+          [(arg, PtrType t)] when t <> Void ->
           if pure then static_error l "Cannot call a non-pure function from a pure context." None;
           let arg = ev arg in
+          begin match try_pointee_pred_symb0 t with
+            Some (_, _, _, arrayPredSymb, _, arrayMallocBlockPredSymb) ->
+            consume_chunk rules h [] [] [] l (arrayMallocBlockPredSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat arg; dummypat] $. fun _ h _ [_; n] _ _ _ _ ->
+            consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) [TermPat arg; TermPat n; dummypat] $. fun _ h _ _ _ _ _ _ ->
+            cont h env
+          | None ->
           consume_c_object l arg t h false $. fun h ->
           begin match t with
             StructType sn ->
@@ -342,6 +348,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | _ ->
             consume_chunk rules h [] [] [] l (get_pred_symb "malloc_block", true) [] real_unit real_unit_pat (Some 1) [TermPat arg; TermPat (sizeof l t)] $. fun _ h _ _ _ _ _ _ ->
             cont h env
+          end
           end
         | _ ->
           let (w, _) = check_expr (pn,ilist) tparams tenv e in
