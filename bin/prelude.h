@@ -67,14 +67,18 @@ lemma_auto(chars_of_pointer(pointer_of_chars(cs))) void chars_of_pointer_of_char
 
 /*@
 
-predicate chars(char *array, list<char> cs) =
-    switch (cs) {
-        case nil: return true;
-        case cons(c, cs0): return character(array, c) &*& chars(array + 1, cs0);
-    };
+predicate chars(char *array, int count; list<char> cs) =
+    count == 0 ?
+        cs == nil
+    :
+        character(array, ?c) &*& chars(array + 1, count - 1, ?cs0) &*& cs == cons(c, cs0);
+
+lemma_auto void chars_inv();
+    requires [?f]chars(?array, ?count, ?cs);
+    ensures [f]chars(array, count, cs) &*& length(cs) == count;
 
 lemma void chars_zero(); // There is nothing at address 0.
-    requires [?f]chars(0, ?cs);
+    requires [?f]chars(0, _, ?cs);
     ensures cs == nil;
 
 lemma void char_limits(char *pc);
@@ -82,49 +86,45 @@ lemma void char_limits(char *pc);
     ensures [f]character(pc, c) &*& true == ((char *)0 <= pc) &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
 
 lemma void chars_limits(char *array);
-    requires [?f]chars(array, ?cs);
-    ensures [f]chars(array, cs) &*& cs == nil ? true : true == ((char *)0 < array) &*& array + length(cs) <= (char *)UINTPTR_MAX;
+    requires [?f]chars(array, ?n, ?cs) &*& true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
+    ensures [f]chars(array, n, cs) &*& true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
 
 lemma void chars_split(char *array, int offset);
-   requires [?f]chars(array, ?cs) &*& 0 <= offset &*& offset <= length(cs);
+   requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
    ensures
-       [f]chars(array, take(offset, cs))
-       &*& [f]chars(array + offset, drop(offset, cs))
-       &*& length(take(offset, cs)) == offset
-       &*& length(drop(offset, cs)) == length(cs) - offset
+       [f]chars(array, offset, take(offset, cs))
+       &*& [f]chars(array + offset, n - offset, drop(offset, cs))
        &*& append(take(offset, cs), drop(offset, cs)) == cs;
 
 lemma void chars_join(char *array);
-    requires [?f]chars(array, ?cs) &*& [f]chars(array + length(cs), ?cs0);
-    ensures
-        [f]chars(array, append(cs, cs0))
-        &*& length(append(cs, cs0)) == length(cs) + length(cs0); // To avoid lemma call at call site in common scenario.
+    requires [?f]chars(array, ?n, ?cs) &*& [f]chars(array + n, ?n0, ?cs0);
+    ensures [f]chars(array, n + n0, append(cs, cs0));
 
 // chars to ...
 lemma void chars_to_integer(void *p);
-    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(int);
+    requires [?f]chars(p, sizeof(int), ?cs);
     ensures [f]integer(p, _);
 
 lemma void chars_to_u_integer(void *p);
-    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+    requires [?f]chars(p, sizeof(unsigned int), ?cs);
     ensures [f]u_integer(p, _);
 
 lemma void chars_to_pointer(void *p);
-    requires [?f]chars(p, ?cs) &*& length(cs) == sizeof(void *);
+    requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
 
 // ... to chars
 lemma void integer_to_chars(void *p);
     requires [?f]integer(p, _);
-    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(int);
+    ensures [f]chars(p, sizeof(int), ?cs);
 
 lemma void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
-    ensures [f]chars(p, ?cs) &*& length(cs) == sizeof(unsigned int);
+    ensures [f]chars(p, sizeof(unsigned int), ?cs);
 
 lemma void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
-    ensures [f]chars(p, chars_of_pointer(v)) &*& length(chars_of_pointer(v)) == sizeof(void *);
+    ensures [f]chars(p, sizeof(void *), chars_of_pointer(v));
 
 // u_character to/from character
 lemma void u_character_to_character(void *p);
@@ -143,7 +143,7 @@ predicate module(int moduleId, bool initialState);
 predicate module_code(int moduleId;);
 
 predicate argv(char **argv, int argc) =
-    argc <= 0 ? true : pointer(argv, ?arg) &*& chars(arg, ?argChars) &*& mem('\0', argChars) == true &*& argv(argv + 1, argc - 1);
+    argc <= 0 ? true : pointer(argv, ?arg) &*& chars(arg, _, ?argChars) &*& mem('\0', argChars) == true &*& argv(argv + 1, argc - 1);
 
 @*/
 

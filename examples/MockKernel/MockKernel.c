@@ -45,7 +45,7 @@ predicate ghost_set_member_handle_wrapper(pair<int, void *> input; unit output) 
     ghost_set_member_handle(fst(input), snd(input)) &*& output == unit;
 
 predicate_ctor kernel_module(int modulesId, int devicesId)(struct module *module) =
-    module->name |-> ?name &*& chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, length(nameChars)) &*&
+    module->name |-> ?name &*& chars(name, ?nameSize, ?nameChars) &*& mem('\0', nameChars) == true &*& malloc_block(name, nameSize) &*&
     module->library |-> ?library &*& library(library, ?mainModule) &*&
     module->dispose |-> ?dispose &*& [_]is_module_dispose_(dispose, ?state, mainModule) &*& state(module, ?deviceCount) &*&
     module->ref_count |-> ?refCount &*&
@@ -64,7 +64,7 @@ predicate file_ops_wrapper2(pair<struct device *, predicate(;)> device_state; st
 
 predicate_ctor device(int modulesId, int devicesId)(struct device *device) =
     [1/2]device->name |-> ?name &*&
-    [1/2]device->nameChars |-> ?nameChars &*& chars(name, nameChars) &*& mem('\0', nameChars) == true &*&
+    [1/2]device->nameChars |-> ?nameChars &*& chars(name, _, nameChars) &*& mem('\0', nameChars) == true &*&
     [1/2]device->owner |-> ?owner &*&
     ticket(ghost_set_member_handle_wrapper, pair(modulesId, owner), ?f1) &*& [f1]ghost_set_member_handle(modulesId, owner) &*&
     device->useCount |-> ?useCount &*& 0 <= useCount &*&
@@ -119,7 +119,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     /*@
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
-        chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
+        chars(name, _, ?nameChars) &*& mem('\0', nameChars) == true &*&
         file_ops(ops, ?devicePred, ?fileState) &*& devicePred();
     @*/
     //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, devicePred);
@@ -172,7 +172,7 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
 
 void unregister_device(struct device *device)
     //@ requires kernel_device(device, ?owner, ?name, ?nameChars, ?ops, ?device_) &*& kernel_module_disposing(owner, ?deviceCount);
-    //@ ensures chars(name, nameChars) &*& file_ops(ops, _, _) &*& device_() &*& kernel_module_disposing(owner, deviceCount - 1);
+    //@ ensures chars(name, _, nameChars) &*& file_ops(ops, _, _) &*& device_() &*& kernel_module_disposing(owner, deviceCount - 1);
 {
     //@ open kernel_device(device, owner, name, nameChars, ops, device_);
     //@ open kernel_module_disposing(owner, deviceCount);
@@ -432,11 +432,11 @@ void handle_connection(struct socket *socket) //@ : thread_run
             pm = &modules;
             done = false;
             //@ predicate(struct module *) kernel_module_ = kernel_module(modulesId, devicesId);
-            //@ assert chars(name, ?nameChars);
+            //@ assert chars(name, ?nameSize, ?nameChars);
             while (!done)
                 /*@
                 invariant
-                    writer(writer) &*& chars(name, nameChars) &*&
+                    writer(writer) &*& chars(name, nameSize, nameChars) &*&
                     pointer(&directory, ?devices_) &*& lseg(devices_, 0, ?ds, device(modulesId, devicesId)) &*& ghost_set(devicesId, ds) &*&
                     pointer(&modules, ?modules_) &*&
                     ghost_set<struct module *>(modulesId, ?ms) &*&
@@ -539,7 +539,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
             writer_write_string(writer, "Device name:\r\n");
             name = reader_read_line_as_string(reader);
             if (name == 0) abort();
-            //@ assert chars(name, ?nameChars);
+            //@ assert chars(name, ?nameSize, ?nameChars);
             //@ assert [?lockFrac]lock(kernelLock_, _, _);
             lock_acquire(kernelLock);
             //@ open kernel_inv(modulesId, devicesId)();
@@ -549,7 +549,7 @@ void handle_connection(struct socket *socket) //@ : thread_run
             while (!done)
                 /*@
                 invariant
-                    writer(writer) &*& reader(reader) &*& chars(name, nameChars) &*&
+                    writer(writer) &*& reader(reader) &*& chars(name, nameSize, nameChars) &*&
                     [_]pointer(&kernelLock, kernelLock_) &*& locked(kernelLock_, ?kernelLockId, kernel_inv(modulesId, devicesId), currentThread, lockFrac) &*&
                     lockset(currentThread, cons(kernelLockId, nil)) &*&
                     pointer(&modules, ?modules_) &*& lseg(modules_, 0, ?ms, kernel_module(modulesId, devicesId)) &*& ghost_set(modulesId, ms) &*&

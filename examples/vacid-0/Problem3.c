@@ -16,22 +16,17 @@ predicate heap(struct heap* h, int size, int capacity, list<int> vs) =
   0 <= size &*& size <= capacity &*& malloc_block_heap(h);
 
 lemma void chars_to_intarray(void* arr, int capacity)
-  requires chars(arr, ?vs) &*& length(vs) == 4*capacity &*& 0 <= capacity;
+  requires chars(arr, 4*capacity, ?vs);
   ensures array<int>(arr, capacity, sizeof(int), integer, _);
 {
-  open chars(arr, vs);
+  open chars(arr, _, vs);
   if(capacity == 0) {
   } else {
     switch(vs) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): switch(t0) { case nil: case cons(h1, t1): }}};
-    open chars(arr + 1, tail(vs));
-    open chars(arr + 2, tail(tail(vs)));
-    open chars(arr + 3, tail(tail(tail(vs))));
+    open chars(arr + 1, _, _);
+    open chars(arr + 2, _, _);
+    open chars(arr + 3, _, _);
     chars_to_intarray(arr+4, capacity-1);
-    close chars(arr+4, nil);
-    close chars(arr + 3, cons(nth(3, vs), nil));
-    close chars(arr + 2, cons(nth(2, vs), cons(nth(3, vs), nil)));
-    close chars(arr + 1, cons(nth(1, vs), cons(nth(2, vs), cons(nth(3, vs), nil))));
-    close chars(arr, cons(nth(0, vs), cons(nth(1, vs), cons(nth(2, vs), cons(nth(3, vs), nil)))));
     chars_to_integer(arr);
   }
 }

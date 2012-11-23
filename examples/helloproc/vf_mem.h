@@ -10,8 +10,7 @@
 void vf_kfree(void *ptr);
 	/*@ requires
 		vf_kmalloc_block(ptr, ?size)
-		&*& chars(ptr, ?cs)
-		&*& length(cs) == size;
+		&*& chars(ptr, size, _);
 	@*/
 	//@ ensures true;
 
@@ -28,8 +27,7 @@ void *vf_kmalloc(int size);
 			true
 		:
 			vf_kmalloc_block(result, size)
-			&*& chars(result, ?chars)
-			&*& length(chars) == size
+			&*& chars(result, size, _)
 		;
 	@*/
 
@@ -56,8 +54,7 @@ void *vf_kzalloc(int size);
 			true
 		:
 			vf_kmalloc_block(result, size)
-			&*& chars(result, ?chars)
-			&*& length(chars) == size
+			&*& chars(result, size, ?chars)
 			&*& forall(chars, (equals)(unit, '\0')) == true
 		;
 	@*/
@@ -74,17 +71,18 @@ void vf_memcpy(void *dest, void *src, int count);
 	 * chars for the same memory location "twice".
 	 */
 	/*@ requires count > 0
-		&*& [?frac]chars(src, ?srcList)
-		&*& chars(dest, ?destList)
-		&*& length(srcList) >= count
-		&*& length(destList) >= count;
+		&*& [?frac]chars(src, ?srcCount, ?srcList)
+		&*& chars(dest, ?destCount, ?destList)
+		&*& srcCount >= count
+		&*& destCount >= count;
 	@*/
 	/*@ ensures
-		[frac]chars(src, srcList)
+		[frac]chars(src, srcCount, srcList)
 		&*& chars(
 			dest,
+			destCount,
 			append(take(count, srcList),
-			drop(count, destList))
+			  drop(count, destList))
 		);
 	@*/
 

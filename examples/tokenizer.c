@@ -104,11 +104,7 @@ void string_buffer_append_char(struct string_buffer *buffer, char c)
  //@ ensures string_buffer(buffer, _);
 {
 	char cc = c;
-	//@ close chars(&cc + 1, nil);
-	//@ close chars(&cc, cons(c, nil));
 	string_buffer_append_chars(buffer, &cc, 1);
-	//@ open chars(&cc, _);
-	//@ open chars(&cc + 1, _);
 }
 
 int tokenizer_eat_number(struct tokenizer* tokenizer)

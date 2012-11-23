@@ -99,11 +99,6 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   check((&my_global_nested_struct)->s2 == -99);
   
   struct struct_with_array *bigArrayPtr = bigArray;
-  //@ open [1/2]struct_with_array_x(bigArrayPtr + 1, 300);
-  //@ integer_to_chars((void *)(bigArrayPtr + 1));
-  //@ chars_limits((void *)(bigArrayPtr + 1));
-  //@ chars_to_integer((void *)(bigArrayPtr + 1));
-  //@ close [1/2]struct_with_array_x(bigArrayPtr + 1, _);
   check((bigArrayPtr + 1)->x == 300);
   check((bigArrayPtr + 1)->ar[2] == 7);
   
@@ -166,10 +161,10 @@ int main(int argc, char **argv) //@ : main_full(static_array)
   assert (ar2[1] == 7);
 
   //@ open_struct(bigArrayPtr);
-  //@ assert chars((void *)bigArrayPtr, ?cs) &*& length(cs) == sizeof(struct struct_with_array);
+  //@ assert chars((void *)bigArrayPtr, sizeof(struct struct_with_array), _);
   //@ chars_to_char_array(bigArrayPtr);
   //@ open_struct(bigArrayPtr + 1);
-  //@ assert chars((void *)(bigArrayPtr + 1), ?cs2) &*& length(cs2) == sizeof(struct struct_with_array);
+  //@ assert chars((void *)(bigArrayPtr + 1), sizeof(struct struct_with_array), _);
   //@ chars_to_char_array(bigArrayPtr + 1);
   //@ array_merge(bigArrayPtr + 1);
   //@ array_merge(bigArrayPtr);

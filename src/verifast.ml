@@ -310,13 +310,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env w $. fun h env pointerTerm ->
       with_context (Executing (h, env, l, "Consuming character array")) $. fun () ->
       let (_, _, _, _, chars_symb, _) = List.assoc ("chars") predfammap in
-      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; SrcPat DummyPat] $. fun _ h coef ts _ _ _ _ ->
+      consume_chunk rules h ghostenv [] [] l (chars_symb, true) [] real_unit dummypat None [TermPat pointerTerm; TermPat (List.assoc sn struct_sizes); SrcPat DummyPat] $. fun _ h coef _ _ _ _ _ ->
       if not (definitely_equal coef real_unit) then assert_false h env l "Closing a struct requires full permission to the character array." None;
-      let [_; cs] = ts in
-      with_context (Executing (h, env, l, "Checking character array length")) $. fun () ->
-      let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
-      if not (definitely_equal (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) then
-        assert_false h env l "Could not prove that length of character array equals size of struct." None;
       produce_c_object l real_unit pointerTerm (StructType sn) None false true h $. fun h ->
       cont h env
     | ExprStmt (CallExpr (l, "open_struct", targs, [], args, Static)) when language = CLang ->
@@ -328,8 +323,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
       let cs = get_unique_var_symb "cs" (InductiveType ("list", [Char])) in
       let Some (_, _, _, _, length_symb) = try_assoc' (pn,ilist) "length" purefuncmap in
-      assume (ctxt#mk_eq (mk_app length_symb [cs]) (List.assoc sn struct_sizes)) $. fun () ->
-      cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; cs], None)::h) env
+      let size = List.assoc sn struct_sizes in
+      assume (ctxt#mk_eq (mk_app length_symb [cs]) size) $. fun () ->
+      cont (Chunk ((chars_symb, true), [], real_unit, [pointerTerm; size; cs], None)::h) env
     | ExprStmt (CallExpr (l, "free", [], [], args,Static) as e) ->
       let args = List.map (function LitPat e -> e | _ -> static_error l "No patterns allowed here" None ) args in
       begin

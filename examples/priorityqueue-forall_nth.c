@@ -118,10 +118,10 @@ lemma void move_array_elem(int* arr, int N)
 
 lemma void intarray_to_chars(void* a)
   requires array<int>(a, ?n, sizeof(int), integer, _);
-  ensures chars(a, ?cs) &*& length(cs) == n * sizeof(int);
+  ensures chars(a, n * sizeof(int), _);
 {
   if(n == 0) {
-    close chars(a, nil);
+    close chars(a, 0, nil);
   } else {
     open array<int>(a, n, sizeof(int), integer, _);
     integer_to_chars(a);

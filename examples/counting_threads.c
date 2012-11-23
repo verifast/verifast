@@ -37,7 +37,7 @@ void process(int n)
         invariant
             array<struct thread *>(threads, i, sizeof(struct thread *), pointer, ?ts)
             &*& foreach(ts, thread_info)
-            &*& chars((void *)(threads + i), ?cs) &*& length(cs) == (n - i) * sizeof(struct thread *)
+            &*& chars((void *)(threads + i), (n - i) * sizeof(struct thread *), _)
             &*& counting(integer, &cell, i, v);
         @*/
     {
@@ -56,13 +56,13 @@ void process(int n)
         //@ foreach_append(ts, cons(t, nil));
         //@ array_merge(threads);
     }
-    //@ open chars(_, _);
+    //@ open chars(_, _, _);
     
-    //@ close chars((void *)threads, nil);
+    //@ close chars((void *)threads, 0, nil);
     for (int i = 0; i < n; i++)
         /*@
         invariant
-            chars((void *)threads, ?cs) &*& length(cs) == i * sizeof(struct thread *) &*&
+            chars((void *)threads, i * sizeof(struct thread *), _) &*&
             array<struct thread *>(threads + i, n - i, sizeof(struct thread *), pointer, ?ts)
             &*& foreach(ts, thread_info)
             &*& counting(integer, &cell, n - i, v);

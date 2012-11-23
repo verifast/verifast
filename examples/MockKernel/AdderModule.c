@@ -102,43 +102,6 @@ void module_dispose(struct module *self)
     //@ close_module();
 }
 
-/*@
-
-predicate chars2(char *c0, int length; list<char> cs) =
-    length == 0 ?
-        cs == nil
-    :
-        character(c0, ?c) &*& chars2(c0 + 1, length - 1, ?cs0) &*& cs == cons(c, cs0);
-
-lemma void chars_to_chars2(char *c0)
-    requires chars(c0, ?cs);
-    ensures chars2(c0, length(cs), cs);
-{
-    open chars(c0, cs);
-    switch (cs) {
-        case nil:
-        case cons(c, cs0):
-            length_nonnegative(cs0);
-            chars_to_chars2(c0 + 1);
-    }
-    close chars2(c0, length(cs), cs);
-}
-
-lemma void chars2_to_chars(char *c0)
-    requires chars2(c0, ?n, ?cs);
-    ensures chars(c0, cs);
-{
-    open chars2(c0, n, cs);
-    switch (cs) {
-        case nil:
-        case cons(c, cs0):
-            chars2_to_chars(c0 + 1);
-    }
-    close chars(c0, cs);
-}
-
-@*/
-
 module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule)
     //@ requires module(AdderModule, true) &*& kernel_module_initializing(self, 0);
     /*@

@@ -10,7 +10,7 @@ typedef int sillyfunc/*#(predicate() p)#*/();
     //# requires [?f]p();
     //# ensures [f]p() &*& result == 1;
 
-//# predicate_ctor chars_ctor(char *start, list<char> contents)() = chars(start, contents);
+//# predicate_ctor chars_ctor(char *start, list<char> contents)() = chars(start, _, contents);
 
 int main() //# : main
     //# requires true;
@@ -26,21 +26,12 @@ int main() //# : main
     // 40      inc eax
     // C3      ret
     
-    //# open chars(code, _);
     *(code + 0) = 0x33;
-    //# open chars(code + 1, _);
     *(code + 1) = (char)0xC0;
-    //# open chars(code + 2, _);
     *(code + 2) = 0x40;
-    //# open chars(code + 3, _);
     *(code + 3) = (char)0xC3;
-    //# assert chars(code + 4, ?cs);
-    //# close chars(code + 3, cons((char)0xC3, cs));
-    //# close chars(code + 2, cons((char)0x40, cons((char)0xC3, cs)));
-    //# close chars(code + 1, cons((char)0xC0, cons((char)0x40, cons((char)0xC3, cs))));
-    //# close chars(code, cons((char)0x33, cons((char)0xC0, cons((char)0x40, cons((char)0xC3, cs)))));
     
-    //# assert chars(code, ?contents);
+    //# close chars(code, 4, ?contents);
     //# close chars_ctor(code, contents)();
     funcptr = (void *)code;
     {

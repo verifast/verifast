@@ -19,7 +19,7 @@ int main(int argc, char** argv) //@ : main
   if(fp == 0 || buffer == 0) { abort(); }
   res = fgets(buffer, 100, fp);
   while(res != 0) 
-    //@ invariant file(fp) &*& chars(buffer, ?cs) &*& length(cs) == 100 &*& res != 0 ? mem('\0', cs) == true : true;
+    //@ invariant file(fp) &*& chars(buffer, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
   {
     puts(buffer);
     res = fgets(buffer, 100, fp);

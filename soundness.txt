@@ -16,6 +16,21 @@ Known VeriFast unsoundnesses:
   However, this unsoundness does not apply to gcc -O2 -fno-strict-aliasing.
 - The C standard says that reading an uninitialized variable or using the value so obtained can cause a trap. VeriFast does not check that the program does not read or use uninitialized variables.
 - I am not 100% sure that a statement of the form "x = foo();" where x is a global and foo modifies x is allowed by the C standard. VeriFast allows this statement.
+- The pointer arithmetic implied by field or array dereference should be checked for arithmetic overflow. For example, the following program verifies, even though
+  the assert(false); is reachable:
+
+struct bar { int x; int y; };
+
+void foo()
+  //@ requires true;
+  //@ ensures true;
+{
+  void *p = (void *)UINTPTR_MAX;
+  void *q = &((struct bar *)p)->y;
+  //@ produce_limits(q);
+  if (q > p)
+    assert(false);
+}
 
 - -run_preprocessor:
   - Preprocessor macros defined inside annotations are applied both inside and outside annotations.

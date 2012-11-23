@@ -50,14 +50,14 @@ struct device *register_device(struct module *owner, char *name, struct file_ops
     /*@
     requires
         kernel_module_initializing(owner, ?deviceCount) &*&
-        chars(name, ?nameChars) &*& mem('\0', nameChars) == true &*&
+        chars(name, _, ?nameChars) &*& mem('\0', nameChars) == true &*&
         file_ops(ops, ?device, _) &*& device();
     @*/
     //@ ensures kernel_module_initializing(owner, deviceCount + 1) &*& kernel_device(result, owner, name, nameChars, ops, device);
 
 void unregister_device(struct device *device);
     //@ requires kernel_device(device, ?owner, ?name, ?nameChars, ?ops, ?device_) &*& kernel_module_disposing(owner, ?deviceCount);
-    //@ ensures chars(name, nameChars) &*& file_ops(ops, _, _) &*& device_() &*& kernel_module_disposing(owner, deviceCount - 1);
+    //@ ensures chars(name, _, nameChars) &*& file_ops(ops, _, _) &*& device_() &*& kernel_module_disposing(owner, deviceCount - 1);
 
 typedef void module_dispose_/*@(predicate(struct module *, int) state, int moduleMainModule)@*/(struct module *self);
     //@ requires state(self, ?deviceCount) &*& kernel_module_disposing(self, deviceCount);

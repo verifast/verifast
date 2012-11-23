@@ -1,6 +1,6 @@
 void puts(char *s);
-    //@ requires [?f]chars(s, ?cs) &*& mem('\0', cs) == true;
-    //@ ensures [f]chars(s, cs);
+    //@ requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
+    //@ ensures [f]chars(s, n, cs);
 
 /*@
 

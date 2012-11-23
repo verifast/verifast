@@ -18,11 +18,11 @@ predicate pointer_array(void* data, list<void*> vs) =
   
 lemma void pointer_array_to_chars(void* data);
   requires pointer_array(data, ?vs);
-  ensures chars(data, ?vs2) &*& length(vs2) == length(vs) * sizeof(void*) &*& vs2 == pointers_as_char_list(vs);
+  ensures chars(data, length(vs) * sizeof(void*), ?vs2) &*& vs2 == pointers_as_char_list(vs);
 
-lemma void chars_to_pointer_array(void* data);
-  requires chars(data, ?vs);
-  ensures pointer_array(data, ?vs2) &*& length(vs2) * sizeof(void*) == length(vs) &*& vs2 == char_list_as_pointers(vs);
+lemma void chars_to_pointer_array(void* data, int n);
+  requires chars(data, n * sizeof(void*), ?vs);
+  ensures pointer_array(data, ?vs2) &*& length(vs2) == n &*& vs2 == char_list_as_pointers(vs);
 
 fixpoint list<char> pointers_as_char_list(list<void*> c);
 fixpoint list<void*> char_list_as_pointers(list<char> c);
@@ -42,7 +42,7 @@ lemma void merge_pointer_array(void* data, int i);
 predicate arraylist(struct arraylist *a, list<void*> vs) =
   a->data |-> ?data &*& a->size |-> ?size &*& a->capacity |-> ?capacity &*&
   malloc_block_arraylist(a) &*& malloc_block(data, capacity * sizeof(void*)) &*& 0<=size &*& size <= capacity &*& size == length(vs) &*&
-  pointer_array(data, vs) &*& chars((void*) data + (size * sizeof(void*)), ?unused) &*& length(unused) == sizeof(int) * (capacity - size);
+  pointer_array(data, vs) &*& chars((void*) data + (size * sizeof(void*)), sizeof(int) * (capacity - size), _);
 @*/
 
 struct arraylist *create_arraylist() 
@@ -118,11 +118,11 @@ void list_add(struct arraylist *a, void *v)
     int capacity = a->capacity;
     void** newData = malloc((capacity + 100) * sizeof(void*));
     if(newData == 0) abort();
-    //@ assert chars((void*) newData, ?junk);
+    //@ assert chars((void*) newData, _, ?junk);
     //@ chars_split((void*) newData, size * sizeof(void*));
     //@ pointer_array_to_chars(data);
     memcpy(newData, data, size * sizeof(void*));
-    //@  chars_to_pointer_array(newData);
+    //@  chars_to_pointer_array(newData, size);
     a->data = newData;
     a->capacity = capacity + 100;
     //@ chars_join((void*) data);
@@ -131,7 +131,7 @@ void list_add(struct arraylist *a, void *v)
   }
   size = a->size;
   data = a->data;
-  //@ assert chars((void*) data + (size * sizeof(void*)), ?unused); 
+  //@ assert chars((void*) data + (size * sizeof(void*)), _, ?unused); 
   //@ chars_split((void*) (data + size), sizeof(void*));
   //@ chars_to_pointer(data + size);
   * (data + size) = v;
@@ -146,7 +146,7 @@ void list_add(struct arraylist *a, void *v)
 
 void shift(void** data, int n) 
   //@ requires pointer_array(data, ?vs) &*& 0 <= n &*& n + 1 == length(vs);
-  //@ ensures pointer_array(data, tail(vs)) &*& chars((void*) data + (n*sizeof(void*)), ?cs) &*& length(cs) == sizeof(void*);
+  //@ ensures pointer_array(data, tail(vs)) &*& chars((void*) data + (n*sizeof(void*)), sizeof(void*), ?cs);
 {
   if(n == 0) {
     //@ switch(vs) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): } }

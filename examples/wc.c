@@ -16,22 +16,22 @@ fixpoint int wcount(list<char> cs, bool inword) {
 @*/
 
 int wc(char* string, bool inword)
-  //@ requires [?f]chars(string, ?cs) &*& mem('\0', cs) == true;  
-  //@ ensures [f]chars(string, cs) &*& result == wcount(cs, inword);
+  //@ requires [?f]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;  
+  //@ ensures [f]chars(string, n, cs) &*& result == wcount(cs, inword);
 {
-  //@ open [f]chars(string, cs);
+  //@ open [f]chars(string, n, cs);
   char head = * string;
   if(head == 0) {
-    //@ close [f]chars(string, cs);
+    //@ close [f]chars(string, n, cs);
     return inword ? 1 : 0;
   } else {
     if(head == ' ') {
       int result = wc(string + 1, false);
-      //@ close [f]chars(string, cs);
+      //@ close [f]chars(string, n, cs);
       return inword ? 1 + result: result;
     } else {
       int result = wc(string + 1, true);
-      //@ close [f]chars(string, cs);
+      //@ close [f]chars(string, n, cs);
       return result;
     }
   }
@@ -58,7 +58,7 @@ int main(int argc, char** argv) //@ : main
   if(buff == 0 || fp == 0) { abort(); }
   res = fgets(buff, 100, fp);
   while(res != 0)
-    //@ invariant file(fp) &*& chars(buff, ?cs) &*& length(cs) == 100 &*& res != 0 ? mem('\0', cs) == true : true;
+    //@ invariant file(fp) &*& chars(buff, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
   {
     int tmp = wc(buff, inword);
     total = total + tmp;
