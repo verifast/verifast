@@ -21,7 +21,9 @@ int main(int argc, char** argv) //@ : main
   while(res != 0) 
     //@ invariant file(fp) &*& chars(buffer, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
   {
+    //@ chars_separate_string(buffer);
     puts(buffer);
+    //@ chars_unseparate_string(buffer);
     res = fgets(buffer, 100, fp);
   }
   free((void *)buffer);

@@ -35,9 +35,9 @@ quires true;
 {
   char *c = "A\
 B";
-  //@ open [_]chars(c, _, _);
+  //@ open [_]string(c, _);
   char c0 = *c;
-  //@ open [_]chars(c + 1, _, _);
+  //@ open [_]string(c + 1, _);
   char c1 = *(c + 1);
   assert(c0 == 'A' && c1 == 'B');
   assert(FOO == 10);

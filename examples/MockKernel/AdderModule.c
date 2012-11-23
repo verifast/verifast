@@ -83,7 +83,7 @@ predicate adderState(struct module *self, int deviceCount) =
     pointer(&adderDevice, ?adderDevice_) &*&
     kernel_device(adderDevice_, self, adderName, ?adderNameChars, &adderOps, adderDeviceState) &*&
     struct_file_ops_padding(&adderOps) &*&
-    length(adderNameChars) == 11;
+    length(adderNameChars) == 10;
 
 @*/
 
@@ -98,6 +98,7 @@ void module_dispose(struct module *self)
     lock_dispose(adderLock);
     //@ open adderLockInv();
     return;
+    //@ string_to_chars(adderName);
     //@ chars_to_char_array(adderName);
     //@ close_module();
 }
@@ -112,6 +113,7 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
 {
     //@ open_module();
     //@ char_array_to_chars(adderName);
+    //@ chars_to_string(adderName);
     
     //@ close adderLockInv();
     //@ close create_lock_ghost_args(adderLockInv, nil, nil);

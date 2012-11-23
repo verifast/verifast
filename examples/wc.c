@@ -9,29 +9,29 @@
 /*@
 fixpoint int wcount(list<char> cs, bool inword) {
   switch(cs) {
-    case nil: return 0;
+    case nil: return inword ? 1 : 0;
     case cons(h, t): return 0 == h ? (inword ? 1 : 0) : (' ' == h ? ((inword ? 1 : 0) + wcount(t, false)) : wcount(t, true));
   }
 }
 @*/
 
 int wc(char* string, bool inword)
-  //@ requires [?f]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;  
-  //@ ensures [f]chars(string, n, cs) &*& result == wcount(cs, inword);
+  //@ requires [?f]string(string, ?cs);
+  //@ ensures [f]string(string, cs) &*& result == wcount(cs, inword);
 {
-  //@ open [f]chars(string, n, cs);
+  //@ open [f]string(string, cs);
   char head = * string;
   if(head == 0) {
-    //@ close [f]chars(string, n, cs);
+    //@ close [f]string(string, cs);
     return inword ? 1 : 0;
   } else {
     if(head == ' ') {
       int result = wc(string + 1, false);
-      //@ close [f]chars(string, n, cs);
+      //@ close [f]string(string, cs);
       return inword ? 1 + result: result;
     } else {
       int result = wc(string + 1, true);
-      //@ close [f]chars(string, n, cs);
+      //@ close [f]string(string, cs);
       return result;
     }
   }
@@ -60,7 +60,9 @@ int main(int argc, char** argv) //@ : main
   while(res != 0)
     //@ invariant file(fp) &*& chars(buff, 100, ?cs) &*& res != 0 ? mem('\0', cs) == true : true;
   {
+    //@ chars_separate_string(buff);
     int tmp = wc(buff, inword);
+    //@ chars_unseparate_string(buff);
     total = total + tmp;
     res = fgets(buff, 100, fp);
   }

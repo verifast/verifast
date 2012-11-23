@@ -1736,17 +1736,13 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         )
       | _ ->
         if unloadable then static_error l "The use of string literals as expressions in unloadable modules is not supported. Put the string literal in a named global array variable instead." None;
-        let (_, _, _, _, chars_symb, _) = List.assoc "chars" predfammap in
-        let (_, _, _, _, mem_symb) = List.assoc "mem" purefuncmap in
-        let (_, _, _, _, length_symb) = List.assoc "length" purefuncmap in
+        let (_, _, _, _, string_symb, _) = List.assoc "string" predfammap in
         let cs = get_unique_var_symb "stringLiteralChars" (InductiveType ("list", [Char])) in
-        let length = mk_app length_symb [cs] in
         let value = get_unique_var_symb "stringLiteral" (PtrType Char) in
         let coef = get_dummy_frac_term () in
-        assume (mk_app mem_symb [ctxt#mk_boxed_int (ctxt#mk_intlit 0); cs]) $. fun () ->     (* mem(0, cs) == true *)
         assume (ctxt#mk_not (ctxt#mk_eq value (ctxt#mk_intlit 0))) $. fun () ->
-        assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s + 1) s) cs) $. fun () ->
-        cont (Chunk ((chars_symb, true), [], coef, [value; length; cs], None)::h) env value
+        assume (ctxt#mk_eq (mk_char_list_of_c_string (String.length s) s) cs) $. fun () ->
+        cont (Chunk ((string_symb, true), [], coef, [value; cs], None)::h) env value
       end
     | Operation (l, Add, [e1; e2], t) when !t = Some [ObjType "java.lang.String"; ObjType "java.lang.String"] ->
       eval_h h env e1 $. fun h env v1 ->

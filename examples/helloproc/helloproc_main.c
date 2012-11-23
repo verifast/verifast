@@ -59,8 +59,7 @@ predicate module_state() =
 			cons('r',
 			cons('o',
 			cons('c',
-			cons('\0',
-			nil)))))))))
+			nil))))))))
 		)
 		, 1
 	)
@@ -73,8 +72,7 @@ predicate module_state() =
 			cons('l',
 			cons('u',
 			cons('e',
-			cons('\0',
-			nil)))))
+			nil))))
 		),
 		dir_ptr, 
 		read_proc_callback

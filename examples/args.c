@@ -1,6 +1,4 @@
-void puts(char *s);
-    //@ requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
-    //@ ensures [f]chars(s, n, cs);
+#include "stdio.h"
 
 /*@
 

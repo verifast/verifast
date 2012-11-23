@@ -139,11 +139,50 @@ lemma void character_to_u_character(void *p);
 
 /*@
 
+predicate string(char *s; list<char> cs) =
+    character(s, ?c) &*&
+    c == 0 ?
+        cs == nil
+    :
+        string(s + 1, ?cs0) &*& cs == cons(c, cs0);
+
+lemma void string_to_body_chars(char *s);
+    requires [?f]string(s, ?cs);
+    ensures [f]chars(s, _, cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
+
+lemma void body_chars_to_string(char *s);
+    requires [?f]chars(s, _, ?cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
+    ensures [f]string(s, cs);
+
+lemma void chars_to_string(char *s);
+    requires [?f]chars(s, ?n, ?cs) &*& index_of('\0', cs) == n - 1;
+    ensures [f]string(s, take(n - 1, cs));
+
+lemma void string_to_chars(char *s);
+    requires [?f]string(s, ?cs);
+    ensures [f]chars(s, _, append(cs, cons('\0', nil))) &*& !mem('\0', cs);
+
+lemma void chars_separate_string(char *s);
+    requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
+    ensures [f]string(s, take(index_of('\0', cs), cs)) &*& [f]chars(s + index_of('\0', cs) + 1, n - index_of('\0', cs) - 1, drop(index_of('\0', cs) + 1, cs));
+
+lemma void chars_unseparate_string(char *s);
+    requires [?f]string(s, ?cs) &*& [f]chars(s + length(cs) + 1, ?n, ?cs1);
+    ensures [f]chars(s, length(cs) + 1 + n, append(cs, cons('\0', cs1)));
+
+lemma void string_limits(char *s);
+    requires [?f]string(s, ?cs);
+    ensures [f]string(s, cs) &*& true == ((char *)0 < s) &*& s + length(cs) < (char *)UINTPTR_MAX;
+
+@*/
+
+/*@
+
 predicate module(int moduleId, bool initialState);
 predicate module_code(int moduleId;);
 
 predicate argv(char **argv, int argc) =
-    argc <= 0 ? true : pointer(argv, ?arg) &*& chars(arg, _, ?argChars) &*& mem('\0', argChars) == true &*& argv(argv + 1, argc - 1);
+    argc <= 0 ? true : pointer(argv, ?arg) &*& string(arg, _) &*& argv(argv + 1, argc - 1);
 
 @*/
 

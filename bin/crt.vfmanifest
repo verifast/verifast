@@ -32,6 +32,14 @@
 .provides prelude.h#character_to_u_character
 .provides prelude.h#pointer_to_chars
 .provides prelude.h#chars_to_intarray
+.provides prelude.h#string_to_body_chars
+.provides prelude.h#body_chars_to_string
+.provides prelude.h#chars_to_string
+.provides prelude.h#string_to_chars
+.provides prelude.h#chars_separate_string
+.provides prelude.h#chars_unseparate_string
+.provides prelude.h#string_limits
+.provides prelude_core.gh#default_value_eq_zero
 .provides stdio.h#fopen
 .provides stdio.h#fclose
 .provides stdio.h#fgets

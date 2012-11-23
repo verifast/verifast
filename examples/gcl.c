@@ -56,7 +56,7 @@ TODO:
 #include "assert.h"
 
 void error(char *msg)
-    //@ requires [?f]chars(msg, _, ?cs) &*& mem('\0', cs) == true;
+    //@ requires [?f]string(msg, _);
     //@ ensures false;
 {
     puts(msg);
@@ -1070,8 +1070,8 @@ struct atom *create_atom(struct string_buffer *buffer)
 }
 
 struct atom *create_atom_from_string(char *string)
-    //@ requires globals(?objects0, ?roots) &*& [?f]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;
-    //@ ensures globals(?objects1, roots) &*& [f]chars(string, n, cs) &*& mem((void *)result, objects1) == true;
+    //@ requires globals(?objects0, ?roots) &*& [?f]string(string, ?cs);
+    //@ ensures globals(?objects1, roots) &*& [f]string(string, cs) &*& mem((void *)result, objects1) == true;
 {
     struct string_buffer *buffer = create_string_buffer();
     string_buffer_append_string(buffer, string);
@@ -1457,8 +1457,8 @@ void map_cons(struct atom *key, struct object *value, struct object **map)
 }
 
 void map_cons_s(char *key, struct object *value, struct object **map)
-    //@ requires globals(?objects, ?roots) &*& [?f]chars(key, ?n, ?cs) &*& mem('\0', cs) == true &*& mem(value, objects) == true &*& [1/2]pointer(map, _) &*& mem(map, roots) == true;
-    //@ ensures globals(_, roots) &*& [f]chars(key, n, cs) &*& [1/2]pointer(map, _);
+    //@ requires globals(?objects, ?roots) &*& [?f]string(key, ?cs) &*& mem(value, objects) == true &*& [1/2]pointer(map, _) &*& mem(map, roots) == true;
+    //@ ensures globals(_, roots) &*& [f]string(key, cs) &*& [1/2]pointer(map, _);
 {
     struct atom *atom;
     void *result;
@@ -1471,8 +1471,8 @@ void map_cons_s(char *key, struct object *value, struct object **map)
 }
 
 void map_cons_s_func_nil(char *key, apply_func *function, struct object **map)
-    //@ requires globals(?objects, ?roots) &*& [?f]chars(key, ?n, ?cs) &*& mem('\0', cs) == true &*& is_apply_func(function) == true &*& [1/2]pointer(map, _) &*& mem(map, roots) == true;
-    //@ ensures globals(_, roots) &*& [f]chars(key, n, cs) &*& [1/2]pointer(map, _);
+    //@ requires globals(?objects, ?roots) &*& [?f]string(key, ?cs) &*& is_apply_func(function) == true &*& [1/2]pointer(map, _) &*& mem(map, roots) == true;
+    //@ ensures globals(_, roots) &*& [f]string(key, cs) &*& [1/2]pointer(map, _);
 {
     struct object *nil = create_nil();
     void *func = create_function(function, nil);

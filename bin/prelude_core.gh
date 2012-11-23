@@ -3,6 +3,10 @@
 
 fixpoint t default_value<t>();
 
+lemma_auto void default_value_eq_zero();
+    requires true;
+    ensures default_value<int> == 0;
+
 inductive unit = unit;
 
 inductive option<t> = none | some(t);

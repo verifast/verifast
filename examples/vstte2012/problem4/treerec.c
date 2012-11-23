@@ -376,18 +376,18 @@ fixpoint check_result check_tree_pure(tree t, list<char> spec) {
 @*/
 
 char *check_tree(struct tree *t, char *spec)
-    //@ requires tree(t, ?v) &*& [_]chars(spec, _, ?cs) &*& mem('\0', cs) == true;
+    //@ requires tree(t, ?v) &*& [_]string(spec, ?cs);
     /*@
     ensures
         switch (check_tree_pure(v, cs)) {
             case check_fail: return result == 0;
-            case check_success(cs0): return result != 0 &*& [_]chars(result, _, cs0) &*& mem('\0', cs0) == true;
+            case check_success(cs0): return result != 0 &*& [_]string(result, cs0);
         };
     @*/
 {
     bool b = tree_is_leaf(t);
-    //@ chars_limits(spec);
-    //@ open chars(spec, _, _);
+    //@ string_limits(spec);
+    //@ open string(spec, _);
     if (*spec == 'L') {
         tree_dispose(t);
         if (!b) return 0;

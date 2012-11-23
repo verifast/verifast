@@ -2,7 +2,7 @@
 #define VF_PRINTK_H
 
 void vf_printk(char *string);
-	//@ requires [?frac]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;
-	//@ ensures [frac]chars(string, n, cs);
+	//@ requires [?frac]string(string, ?cs);
+	//@ ensures [frac]string(string, cs);
 
 #endif /* VF_PRINTK_H */

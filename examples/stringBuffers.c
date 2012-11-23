@@ -148,13 +148,13 @@ void string_buffer_append_string_buffer(struct string_buffer *buffer, struct str
 }
 
 void string_buffer_append_string(struct string_buffer *buffer, char *string)
-    //@ requires string_buffer(buffer, ?bcs) &*& [?f]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;
-    //@ ensures string_buffer(buffer, append(bcs, take(index_of('\0', cs), cs))) &*& [f]chars(string, n, cs);
+    //@ requires string_buffer(buffer, ?bcs) &*& [?f]string(string, ?cs);
+    //@ ensures string_buffer(buffer, append(bcs, cs)) &*& [f]string(string, cs);
 {
     int length = strlen(string);
-    //@ chars_split(string, length);
+    //@ string_to_body_chars(string);
     string_buffer_append_chars(buffer, string, length);
-    //@ chars_join(string);
+    //@ body_chars_to_string(string);
 }
 
 struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
@@ -191,16 +191,16 @@ bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *bu
 }
 
 bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
-    //@ requires [?f1]string_buffer(buffer, ?cs1) &*& [?f2]chars(string, ?n, ?cs2) &*& mem('\0', cs2) == true;
-    //@ ensures [f1]string_buffer(buffer, cs1) &*& [f2]chars(string, n, cs2) &*& result == (cs1 == take(index_of('\0', cs2), cs2));
+    //@ requires [?f1]string_buffer(buffer, ?cs1) &*& [?f2]string(string, ?cs2);
+    //@ ensures [f1]string_buffer(buffer, cs1) &*& [f2]string(string, cs2) &*& result == (cs1 == cs2);
 {
     bool result = false;
     int length = strlen(string);
     if (length == buffer->length) {
         //@ char_array_to_chars(buffer->chars);
-        //@ chars_split(string, length);
+        //@ string_to_body_chars(string);
         int result0 = memcmp(buffer->chars, string, length);
-        //@ chars_join(string);
+        //@ body_chars_to_string(string);
         //@ chars_to_char_array(buffer->chars);
         result = result0 == 0;
     }
@@ -218,11 +218,11 @@ void string_buffer_dispose(struct string_buffer *buffer)
 }
 
 int chars_index_of_string(char *chars, int length, char *string)
-    //@ requires [?f1]chars(chars, length, ?charsChars) &*& [?f2]chars(string, _, ?stringChars) &*& mem('\0', stringChars) == true;
+    //@ requires [?f1]chars(chars, length, ?charsChars) &*& [?f2]string(string, ?stringChars);
     /*@
     ensures
-        [f1]chars(chars, _, charsChars) &*& [f2]chars(string, _, stringChars) &*&
-        result == -1 ? true : 0 <= result &*& result + index_of('\0', stringChars) <= length(charsChars);
+        [f1]chars(chars, length, charsChars) &*& [f2]string(string, stringChars) &*&
+        result == -1 ? true : 0 <= result &*& result + length(stringChars) <= length(charsChars);
     @*/
 {
     int n = strlen(string);
@@ -232,15 +232,15 @@ int chars_index_of_string(char *chars, int length, char *string)
     //@ chars_limits(chars);
     end = chars + length;
     while (true)
-        //@ invariant [f1]chars(chars, _, charsChars) &*& [f2]chars(string, _, stringChars) &*& chars <= p &*& p <= end;
+        //@ invariant [f1]chars(chars, _, charsChars) &*& [f2]string(string, stringChars) &*& chars <= p &*& p <= end;
     {
         if (end - p < n) return -1;
         //@ chars_split(chars, p - chars);
         //@ chars_split(p, n);
-        //@ chars_split(string, n);
+        //@ string_to_body_chars(string);
         {
             int cmp = memcmp(p, string, n);
-            //@ chars_join(string);
+            //@ body_chars_to_string(string);
             //@ chars_join(p);
             //@ chars_join(chars);
             if (cmp == 0) return p - chars;
@@ -251,20 +251,20 @@ int chars_index_of_string(char *chars, int length, char *string)
             //@ assert(charsChars2 == charsChars);
             //@ assert p + 1 - chars <= length(charsChars2);
             p++;
-            //@ open chars(string, _, stringChars);
+            //@ open string(string, stringChars);
             //@ chars_split(chars, p - chars);
             //@ assert [_]chars(p, _, ?pChars) &*& [_]character(string, ?c0);        
             p = memchr(p, *string, end - p);
             //@ chars_join(chars);
-            //@ close [f2]chars(string, length(stringChars), stringChars);
+            //@ close [f2]string(string, stringChars);
             if (p == 0) return -1;
         }
     }
 }
 
 bool string_buffer_split(struct string_buffer *buffer, char *separator, struct string_buffer *before, struct string_buffer *after)
-    //@ requires [?f1]string_buffer(buffer, ?bcs) &*& [?f2]chars(separator, _, ?cs) &*& mem('\0', cs) == true &*& string_buffer(before, _) &*& string_buffer(after, _);
-    //@ ensures [f1]string_buffer(buffer, bcs) &*& [f2]chars(separator, _, cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
+    //@ requires [?f1]string_buffer(buffer, ?bcs) &*& [?f2]string(separator, ?cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
+    //@ ensures [f1]string_buffer(buffer, bcs) &*& [f2]string(separator, cs) &*& string_buffer(before, _) &*& string_buffer(after, _);
 {
     int n = strlen(separator);
     char *chars = buffer->chars;

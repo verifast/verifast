@@ -45,7 +45,7 @@ that it is relatively safe to run untrusted code with this interpreter.
 //@ #include "counting.gh"
 
 void error(char *msg)
-    //@ requires [?f]chars(msg, _, ?cs) &*& mem('\0', cs) == true;
+    //@ requires [?f]string(msg, ?cs);
     //@ ensures false;
 {
     puts(msg);
@@ -383,8 +383,8 @@ struct atom *create_atom(struct string_buffer *buffer)
 }
 
 struct atom *create_atom_from_string(char *string)
-    //@ requires heap() &*& [?f]chars(string, ?n, ?cs) &*& mem('\0', cs) == true;
-    //@ ensures heap() &*& [f]chars(string, n, cs) &*& ref((void *)result);
+    //@ requires heap() &*& [?f]string(string, ?cs);
+    //@ ensures heap() &*& [f]string(string, cs) &*& ref((void *)result);
 {
     struct string_buffer *buffer = create_string_buffer();
     string_buffer_append_string(buffer, string);
@@ -785,16 +785,16 @@ struct object *map_cons(struct atom *key, struct object *value, struct object *m
 }
 
 struct object *map_cons_s(char *key, struct object *value, struct object *map)
-    //@ requires heap() &*& [?f]chars(key, ?n, ?cs) &*& mem('\0', cs) == true &*& ref(value) &*& ref(map);
-    //@ ensures heap() &*& [f]chars(key, n, cs) &*& ref(result);
+    //@ requires heap() &*& [?f]string(key, ?cs) &*& ref(value) &*& ref(map);
+    //@ ensures heap() &*& [f]string(key, cs) &*& ref(result);
 {
     struct atom *atom = create_atom_from_string(key);
     return map_cons(atom, value, map);
 }
 
 struct object *map_cons_s_func_nil(char *key, apply_func *function, struct object *map)
-    //@ requires heap() &*& [?f]chars(key, ?n, ?cs) &*& mem('\0', cs) == true &*& is_apply_func(function) == true &*& ref(map);
-    //@ ensures heap() &*& [f]chars(key, n, cs) &*& ref(result);
+    //@ requires heap() &*& [?f]string(key, ?cs) &*& is_apply_func(function) == true &*& ref(map);
+    //@ ensures heap() &*& [f]string(key, cs) &*& ref(result);
 {
     struct object *data = create_nil();
     void *func = create_function(function, data);
