@@ -28,6 +28,11 @@ lemma void character_limits(char *pc);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
 
 
+lemma void integer_unique(int *p);
+    requires [?f]integer(p, ?v);
+    ensures [f]integer(p, v) &*& f <= 1;
+
+
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
     ensures pointer(pp1, p1) &*& pointer(pp2, p2) &*& pp1 != pp2;
