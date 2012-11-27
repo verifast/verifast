@@ -4,8 +4,7 @@
 
 /*@
 box_class prodcons(int* x, int* data, handle producer, handle consumer) {
-  invariant integer(x, ?xval) &*& exists<bool>(?in) &*& in ? integer(data, _) : true; 
- 
+  invariant integer(x, ?xval) &*& exists<bool>(?in) &*& in ? integer(data, _) : true;
   
   action consumer_get();
     requires actionHandle == consumer && !(xval != 0 && !in);
@@ -28,11 +27,8 @@ box_class prodcons(int* x, int* data, handle producer, handle consumer) {
     invariant predicateHandle == producer && !(xval == 0 && !in);
     
     preserved_by consumer_get() { }
-    
     preserved_by consumer_release() { }
-    
     preserved_by producer_get() { }
-    
     preserved_by producer_release() { }
   }
   
@@ -41,11 +37,8 @@ box_class prodcons(int* x, int* data, handle producer, handle consumer) {
     invariant predicateHandle == consumer && !(xval != 0 && !in);
     
     preserved_by consumer_get() { }
-    
     preserved_by consumer_release() { }
-    
     preserved_by producer_get() { }
-    
     preserved_by producer_release() { }
   }
   
@@ -54,11 +47,8 @@ box_class prodcons(int* x, int* data, handle producer, handle consumer) {
     invariant xval == 0 && in == false && predicateHandle == producer;
     
     preserved_by consumer_get() { }
-    
     preserved_by consumer_release() { }
-    
     preserved_by producer_get() { }
-    
     preserved_by producer_release() { }
   }
   
@@ -67,11 +57,8 @@ box_class prodcons(int* x, int* data, handle producer, handle consumer) {
     invariant xval != 0 && in == false && predicateHandle == consumer;
     
     preserved_by consumer_get() { }
-    
     preserved_by consumer_release() { }
-    
     preserved_by producer_get() { }
-    
     preserved_by producer_release() { }
   }
 }
@@ -190,7 +177,6 @@ int main()
   //@ requires true;
   //@ ensures true;
 {
-  //@ handle dummy1, dummy2;
   int x = 0;
   int data = 0;
   //@ close exists(false);

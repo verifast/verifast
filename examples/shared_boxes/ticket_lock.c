@@ -46,9 +46,9 @@ box_class ticket_lock_box(struct ticket_lock* l, predicate() I) {
   }
   
   handle_predicate is_ticket(int ticket) {
-    invariant  owner <= ticket && ticket < next && nth(ticket - owner, thandles) == predicateHandle &&
-               (acquiringFrac > 0 ? owner < ticket : true) &&
-               length(thandles) >= ticket - owner + 1;
+    invariant owner <= ticket && ticket < next && nth(ticket - owner, thandles) == predicateHandle &&
+              (acquiringFrac > 0 ? owner < ticket : true) &&
+              length(thandles) >= ticket - owner + 1;
         
     preserved_by get_ticket() {
      nth_append(old_thandles, cons(actionHandle, nil), ticket - owner);

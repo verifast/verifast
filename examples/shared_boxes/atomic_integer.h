@@ -34,5 +34,25 @@ typedef lemma void atomic_integer_get_lemma(predicate(int) I)();
 int atomic_integer_get(int* i);
   //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_get_lemma(?lem, I)  &*& atomic_integer_get_pre(lem)();
   //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_get_post(lem)(result);
-#endif
 
+/*@
+predicate_family atomic_integer_cas_pre(void* index)(int old, int new);
+predicate_family atomic_integer_cas_post(void* index)(bool success, int old, int new);
+
+typedef lemma void atomic_integer_cas_lemma(predicate(int) I, int old, int new)();
+  requires atomic_integer_cas_pre(this)(old, new) &*& I(?value);
+  ensures atomic_integer_cas_post(this)(value == old, old, new) &*& I(value == old ? new : value);
+@*/
+
+bool atomic_integer_cas(int* i, int old, int new);
+  //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_cas_lemma(?lem, I, old, new)  &*& atomic_integer_cas_pre(lem)(old, new);
+  //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_cas_post(lem)(result, old, new);
+
+/*@
+lemma void atomic_integer_dispose(int* i);
+  requires atomic_integer(i, ?I);
+  ensures integer(i, ?value) &*& I(value);
+@*/
+
+
+#endif

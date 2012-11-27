@@ -16,7 +16,6 @@ box_class atomic_integer_box(int* i, predicate(int) I) {
   action cas(int old, int new);
     requires true;
     ensures old_value == old ? value == new : value == old_value;
-     
 }
 
 predicate atomic_integer(int* i, predicate(int) I) =
@@ -75,4 +74,38 @@ int atomic_integer_get(int* i)
   //@ leak is_atomic_integer_get_lemma(lem, I);
   return res;
 }
+
+bool atomic_integer_cas(int* i, int old, int new)
+  //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_cas_lemma(?lem, I, old, new)  &*& atomic_integer_cas_pre(lem)(old, new);
+  //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_cas_post(lem)(result, old, new);
+{
+  ;
+  //@ open [f]atomic_integer(i, I);
+  //@ assert [f]atomic_integer_box(?id, i, I);
+  //@ handle ha = create_handle atomic_integer_box_handle(id);
+  /*@ consuming_box_predicate atomic_integer_box(id, i, I)
+  consuming_handle_predicate atomic_integer_box_handle(ha)
+  perform_action cas(old, new) atomic
+  {
+    @*/ int res = atomic_compare_and_set_int(i, old, new); /*@
+    lem();
+  }
+  producing_handle_predicate atomic_integer_box_handle();
+  @*/
+  //@ close [f]atomic_integer(i, I);
+  //@ leak atomic_integer_box_handle(ha, id);
+  //@ leak is_atomic_integer_cas_lemma(lem, I, old, new);
+  return res == old;
+}
+
+/*@
+lemma void atomic_integer_dispose(int* i)
+  requires atomic_integer(i, ?I);
+  ensures integer(i, ?value) &*& I(value);
+{
+  open atomic_integer(i, I);
+  assert atomic_integer_box(?id, i, I);
+  dispose_box atomic_integer_box(id, i, I);
+}
+@*/
 

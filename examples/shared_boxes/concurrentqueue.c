@@ -166,9 +166,8 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
     preserved_by noop() { }
   }
   
-  handle_predicate was_head_with_succ(struct node* h, struct node* n) {
-    invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) && n != 0 &&
-              index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
+  handle_predicate was_head_with_succ(struct node* h, struct node* n) extends was_head {
+    invariant n != 0 && index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
               
     preserved_by enqueue(new_node, x) { }
     preserved_by dequeue() { }
@@ -176,9 +175,8 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
     preserved_by noop() { }
   }
   
-  handle_predicate was_head_with_succ_not_tail(struct node* h, struct node* n) {
-    invariant mem(h, nodes) == true && index_of(h, nodes) <= index_of(head, nodes) && index_of(h, nodes) < index_of(tail, nodes) &&
-              n != 0 && index_of(h, nodes) < length(nodes) - 1 && n == nth(index_of(h, nodes) + 1, nodes) && index_of(h, nodes) + 1 == index_of(n, nodes);
+  handle_predicate was_head_with_succ_not_tail(struct node* h, struct node* n) extends was_head_with_succ {
+    invariant index_of(h, nodes) < index_of(tail, nodes);
               
     preserved_by enqueue(new_node, x) { }
     preserved_by dequeue() { }
@@ -209,9 +207,8 @@ box_class msqueue_box(struct queue* q, predicate(list<int>) I) {
     preserved_by noop() { }
   }
   
-  handle_predicate was_tail_with_succ(struct node* t, struct node* n) {
-    invariant mem(t, nodes) == true && index_of(t, nodes) <= index_of(tail, nodes) &&
-              (n != 0 ? 
+  handle_predicate was_tail_with_succ(struct node* t, struct node* n) extends was_tail {
+    invariant (n != 0 ? 
                 index_of(t, nodes) < length(nodes) - 1 && n == nth(index_of(t, nodes) + 1, nodes) && index_of(t, nodes) + 1 == index_of(n, nodes)
               :
                 true

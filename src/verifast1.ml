@@ -669,6 +669,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     type box_handle_predicate_info =
         loc
       * type_ map (* parameters *)
+      * string option (* name of extended handle, if any *)
       * expr (* invariant *)
       * preserved_by_clause list
     type box_info = (* shared boxes *)
@@ -2037,7 +2038,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let rec iter pfm hpm hpds =
             match hpds with
               [] -> (pfm, List.rev hpm)
-            | HandlePredDecl (l, hpn, ps, inv, pbcs)::hpds ->
+            | HandlePredDecl (l, hpn, ps, extends, inv, pbcs)::hpds -> (* todo: jans *)
               if List.mem_assoc hpn hpm then static_error l "Duplicate handle predicate name." None;
               if List.mem_assoc hpn pfm then static_error l "Handle predicate name clashes with existing predicate name." None;
               let pmap =
@@ -2052,7 +2053,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 iter [] ps
               in
-              iter (mk_predfam hpn l [] 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, inv, pbcs))::hpm) hpds
+              (match extends with 
+                None -> ()
+              | Some(ehn) -> 
+                if not (List.mem_assoc ehn hpm) then static_error l "Extended handle must appear earlier in same box class." None;
+                let (el, epmap, extendedInv, einv, epbcs) = List.assoc ehn hpm in
+                if (List.length pmap) < (List.length epmap) then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list" None;
+                if not 
+                (List.for_all2
+                  (fun (name1, tp1) (name2, tp2) -> name1 = name2 && tp1 = tp2)
+                  (take (List.length epmap) pmap) epmap) 
+                then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list." None;
+              );
+              iter (mk_predfam hpn l [] 0 (HandleIdType::BoxIdType::List.map (fun (x, t) -> t) pmap) (Some 1)::pfm) ((hpn, (l, pmap, extends, inv, pbcs))::hpm) hpds
           in
           iter pfm [] hpds
         in
@@ -3902,9 +3915,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         in
         let hpmap =
         List.map
-          (fun (hpn, (l, pmap, inv, pbcs)) ->
+          (fun (hpn, (l, pmap, einv, inv, pbcs)) ->
              let inv = check_expr_t (pn,ilist) [] ([("predicateHandle", HandleIdType)] @ pmap @ boxvarmap) inv boolt in
-             (hpn, (l, pmap, inv, pbcs))
+             (hpn, (l, pmap, einv, inv, pbcs))
           )
           hpmap
         in

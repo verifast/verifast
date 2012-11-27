@@ -544,7 +544,7 @@ and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd
   | ActionDecl of loc * string * (type_expr * string) list * expr * expr
 and (* action, kan value van shared box wijzigen*)
   handle_pred_decl = (* ?handle_pred_decl *)
-  | HandlePredDecl of loc * string * (type_expr * string) list * expr * preserved_by_clause list
+  | HandlePredDecl of loc * string * (type_expr * string) list * string option (* extends *) * expr * preserved_by_clause list
 and (* handle predicate geeft info over ghost state van shared box, zelfs als er geen volledige eigendom is vd box*)
   preserved_by_clause = (* ?preserved_by_clause *)
   | PreservedByClause of loc * string * string list * stmt list

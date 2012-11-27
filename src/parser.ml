@@ -23,7 +23,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "and_handle"; "create_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"; "require_module"; ".."
+  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"; "require_module"; ".."; "extends"
 ]
 
 let c_keywords = [
@@ -426,8 +426,9 @@ and
 and
   parse_handle_pred_decl = parser
   [< '(l, Kwd "handle_predicate"); '(_, Ident hpn); ps = parse_paramlist;
+     extends = opt (parser [< '(l, Kwd "extends"); '(_, Ident ehn) >] -> ehn);
      '(_, Kwd "{"); '(_, Kwd "invariant"); inv = parse_expr; '(_, Kwd ";"); pbcs = parse_preserved_by_clauses; '(_, Kwd "}") >]
-     -> HandlePredDecl (l, hpn, ps, inv, pbcs)
+     -> HandlePredDecl (l, hpn, ps, extends, inv, pbcs)
 and
   parse_preserved_by_clauses = parser
   [< pbc = parse_preserved_by_clause; pbcs = parse_preserved_by_clauses >] -> pbc::pbcs
