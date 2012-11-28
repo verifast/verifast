@@ -2406,12 +2406,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let w2 = checkt e2 RealType in
         ts := Some [RealType; RealType];
         (w1, w2, RealType)
-      | ((Char|ShortType|IntType), (Char|ShortType|IntType)) ->
-        ts := Some [IntType; IntType];
-        (w1, w2, IntType)
       | ((UChar | UShortType | UintPtrType), (UChar | UShortType | UintPtrType)) ->
         ts := Some [UintPtrType;UintPtrType];
         (w1, w2, UintPtrType)
+      | ((Char|ShortType|IntType|UChar|UShortType), (Char|ShortType|IntType|UChar|UShortType)) ->
+        ts := Some [IntType; IntType];
+        (w1, w2, IntType)
       | (t1, t2) ->
         let w2 = checkt e2 t1 in
         ts := Some [t1; t1];

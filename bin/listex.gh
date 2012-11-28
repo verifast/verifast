@@ -188,4 +188,12 @@ lemma void remove_intersection<t>(t x, list<t> xs, list<t> ys);
     requires !mem(x, remove(x, intersection(xs, ys))) &*& !mem(x, remove(x, xs));
     ensures remove(x, intersection(xs, ys)) == intersection(remove(x, xs), ys);
 
+lemma void foreach_remove_nth<t>(int n);
+    requires [?f]foreach<t>(?xs, ?p) &*& 0 <= n &*& n < length(xs);
+    ensures [f]foreach<t>(remove_nth(n, xs), p) &*& [f]p(nth(n, xs));
+
+lemma void foreach_unremove_nth<t>(list<t> xs, int n);
+    requires 0 <= n &*& n < length(xs) &*& [?f]foreach<t>(remove_nth(n, xs), ?p) &*& [f]p(nth(n, xs));
+    ensures [f]foreach(xs, p);
+
 #endif

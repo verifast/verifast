@@ -1563,7 +1563,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           | None -> []
         in
         let pats = List.map (fun t -> TermPat t) targets @ [dummypat] in
-        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit (TermPat real_unit) (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
+        consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit real_unit_pat (Some 1) pats $. fun _ h _ _ _ _ _ _ ->
         cont (Chunk ((f_symb, true), [], real_unit, targets @ [value], None)::h) env
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = Java ->
         has_heap_effects();
@@ -1579,24 +1579,37 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | LValues.ArrayElement (l, arr, elem_tp, i) when language = CLang ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
-        let arrayPredSymb =
+        let predSymb, arrayPredSymb =
           match try_pointee_pred_symb0 elem_tp with
-            Some (_, _, _, asymb, _, _) -> asymb
+            Some (_, psymb, _, asymb, _, _) -> psymb, asymb
           | None -> static_error l ("Dereferencing array elements of type "^string_of_type elem_tp^" is not yet supported.") None
         in
-        let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
-        let pats = [TermPat arr; SrcPat DummyPat; SrcPat DummyPat] in
-        consume_chunk rules h [] [] [] l (arrayPredSymb, true) [] real_unit real_unit_pat (Some 2) pats $. fun _ h _ [a; n; vs] _ _ _ _ ->
-        let term = ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n) in
-        assert_term term h env l "Could not prove that index is in bounds of the array" None;
-        let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
-        cont (Chunk ((arrayPredSymb, true), [], real_unit, [a; n; updated], None) :: h) env
+        let arrayPredSymb1 = (arrayPredSymb, true) in
+        let h0 = h in
+        begin match h |> extract begin function
+          Chunk (g, [], coef, [arr'; size'; elems'], _) as c
+            when
+              predname_eq g arrayPredSymb1 &&
+              definitely_equal arr' arr &&
+              ctxt#query (ctxt#mk_and (ctxt#mk_le int_zero_term i) (ctxt#mk_lt i size')) ->
+              Some c
+        | _ -> None
+        end with
+        | Some (Chunk (_, _, coef, [a; n; vs], _), h) ->
+          if not (definitely_equal coef real_unit) then assert_false h0 env l "Assignment requires full permission." None;
+          let (_, _, _, _, update_symb) = List.assoc "update" purefuncmap in
+          let updated = mk_app update_symb [i; apply_conversion (provertype_of_type elem_tp) ProverInductive value; vs] in
+          cont (Chunk (arrayPredSymb1, [], real_unit, [a; n; updated], None) :: h) env
+        | None ->
+          let target = ctxt#mk_add arr (ctxt#mk_mul i (sizeof l elem_tp)) in
+          consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat target; dummypat] $. fun _ h _ _ _ _ _ _ ->
+          cont (Chunk ((predSymb, true), [], real_unit, [target; value], None)::h) env
+        end
       | LValues.Deref (l, target, pointeeType) ->
         has_heap_effects();
         if pure then static_error l "Cannot write in a pure context." None;
         let predSymb = pointee_pred_symb l pointeeType in
-        consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit dummypat (Some 1) [TermPat target; dummypat] $. fun _ h coef _ _ _ _ _ ->
-        if not (definitely_equal coef real_unit) then assert_false h env l "Writing to a memory location requires full permission." None;
+        consume_chunk rules h [] [] [] l (predSymb, true) [] real_unit real_unit_pat (Some 1) [TermPat target; dummypat] $. fun _ h _ _ _ _ _ _ ->
         cont (Chunk ((predSymb, true), [], real_unit, [target; value], None)::h) env
     in
     let rec execute_assign_op_expr h env lhs get_values cont =

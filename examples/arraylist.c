@@ -70,7 +70,7 @@ void list_add(struct arraylist *a, void *v)
   }
   size = a->size;
   data = a->data;
-  * (data + size) = v;
+  data[size] = v;
   a->size += 1;
   //@ close pointers(data + size, 1, _);
   //@ pointers_join(data);

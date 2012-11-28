@@ -533,4 +533,27 @@ lemma void subset_intersection_subset<t>(list<t> xs, list<t> ys)
     subset_subset_intersection_subset(xs, xs, ys);
 }
 
+lemma void foreach_remove_nth<t>(int n)
+    requires [?f]foreach<t>(?xs, ?p) &*& 0 <= n &*& n < length(xs);
+    ensures [f]foreach<t>(remove_nth(n, xs), p) &*& [f]p(nth(n, xs));
+{
+    open foreach(_, _);
+    if (n != 0) {
+        foreach_remove_nth(n - 1);
+        close [f]foreach(remove_nth(n, xs), p);
+    }
+}
+
+lemma void foreach_unremove_nth<t>(list<t> xs, int n)
+    requires [?f]foreach<t>(remove_nth(n, xs), ?p) &*& [f]p(nth(n, xs)) &*& 0 <= n &*& n < length(xs);
+    ensures [f]foreach(xs, p);
+{
+    assert xs == cons(?x, ?xs0);
+    if (n != 0) {
+        open foreach(_, _);
+        foreach_unremove_nth(xs0, n - 1);
+    }
+    close [f]foreach(xs, p);
+}
+
 @*/
