@@ -1,5 +1,6 @@
 #include "stdlib.h"
 #include "malloc.h"
+#include "stdio.h"
 #include "threading.h"
 
 int rand();
@@ -154,5 +155,6 @@ int main()
     struct fold_data *productData = start_fold_thread(tree, product_function, 1);
     int sum = join_fold_thread(sumData);
     int product = join_fold_thread(productData);
-    return product - sum;
+    printf("%i", product - sum);
+    return 0;
 }

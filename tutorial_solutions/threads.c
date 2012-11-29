@@ -1,5 +1,6 @@
 #include "stdlib.h"
 #include "malloc.h"
+#include "stdio.h"
 #include "threading.h"
 
 int rand();
@@ -134,5 +135,6 @@ int main()
     int sumRight = join_sum_thread(rightData);
     int f = fac(tree->value);
     //@ leak tree->left |-> _ &*& tree->right |-> _ &*& tree->value |-> _ &*& malloc_block_tree(tree);
-    return sumLeft + sumRight + f;
+    printf("%i", sumLeft + sumRight + f);
+    return 0;
 }

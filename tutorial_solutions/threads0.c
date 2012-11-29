@@ -1,5 +1,6 @@
 #include "stdlib.h"
 #include "malloc.h"
+#include "stdio.h"
 
 int rand();
     //@ requires true;
@@ -78,5 +79,6 @@ int main()
     struct tree *tree = make_tree(22);
     int sum = tree_compute_sum_facs(tree);
     //@ leak tree(tree, _);
-    return sum;
+    printf("%i", sum);
+    return 0;
 }
