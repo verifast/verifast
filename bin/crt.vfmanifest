@@ -56,6 +56,12 @@
 .provides prelude.h#divrem_intro
 .provides prelude.h#divrem_elim
 .provides prelude_core.gh#default_value_eq_zero
+.provides quantifiers.gh#get_forall_t
+.provides quantifiers.gh#not_forall_t
+.provides quantifiers.gh#forall_t_elim
+.provides quantifiers.gh#get_forall_int
+.provides quantifiers.gh#not_forall_int
+.provides quantifiers.gh#forall_int_elim
 .provides stdio.h#fopen
 .provides stdio.h#fclose
 .provides stdio.h#fgets

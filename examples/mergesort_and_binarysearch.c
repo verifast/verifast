@@ -1,6 +1,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 //@ #include "arrays.gh"
+//@ #include "quantifiers.gh"
 
 int read_int()
     //@ requires true;
@@ -31,6 +32,51 @@ fixpoint list<int> sorted(list<int> xs) {
     switch (xs) {
         case nil: return nil;
         case cons(x, xs0): return insert_sorted(x, sorted(xs0));
+    }
+}
+
+fixpoint int count<t>(t x, list<t> xs) {
+    switch (xs) {
+        case nil: return 0;
+        case cons(x0, xs0): return (x0 == x ? 1 : 0) + count(x, xs0);
+    }
+}
+
+fixpoint bool same_count<t>(list<t> xs, list<t> ys, t x) { return count(x, xs) == count(x, ys); }
+
+fixpoint bool is_permutation<t>(fixpoint(fixpoint(t, bool), bool) forall_t, list<t> xs, list<t> ys) { return forall_t((same_count)(xs, ys)); }
+
+lemma void count_insert_sorted(int x, int y, list<int> xs)
+    requires true;
+    ensures count(x, insert_sorted(y, xs)) == count(x, cons(y, xs));
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            count_insert_sorted(x, y, xs0);
+    }
+}
+
+lemma void count_sorted(int x, list<int> xs)
+    requires true;
+    ensures count(x, sorted(xs)) == count(x, xs);
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            count_sorted(x, xs0);
+            count_insert_sorted(x, x0, sorted(xs0));
+    }
+}
+
+lemma void is_permutation_sorted(list<int> xs)
+    requires true;
+    ensures is_permutation(forall_int, sorted(xs), xs) == true;
+{
+    if (!is_permutation(forall_int, sorted(xs), xs)) {
+        get_forall_int();
+        int x = not_forall_t(forall_int, (same_count)(sorted(xs), xs));
+        count_sorted(x, xs);
     }
 }
 
