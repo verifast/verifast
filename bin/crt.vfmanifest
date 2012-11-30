@@ -19,6 +19,7 @@
 .provides prelude.h#chars_of_pointer_of_chars
 .provides prelude.h#chars_zero
 .provides prelude.h#char_limits
+.provides prelude.h#integer_limits
 .provides prelude.h#chars_limits
 .provides prelude.h#chars_split
 .provides prelude.h#chars_join

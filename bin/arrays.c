@@ -2,6 +2,18 @@
 
 /*@
 
+lemma void ints_limits(int *pxs)
+    requires [?f]ints(pxs, ?N, ?xs) &*& pxs <= (int *)UINTPTR_MAX;
+    ensures [f]ints(pxs, N, xs) &*& pxs + N <= (int *)UINTPTR_MAX &*& forall(xs, int_within_limits) == true;
+{
+    open [f]ints(pxs, N, xs);
+    if (N > 0) {
+        integer_limits(pxs);
+        ints_limits(pxs + 1);
+    }
+    close [f]ints(pxs, N, xs);
+}
+
 lemma void ints_split(int *array, int offset)
     requires ints(array, ?N, ?as) &*& 0 <= offset &*& offset <= N;
     ensures ints(array, offset, take(offset, as)) &*& ints(array + offset, N - offset, drop(offset, as));

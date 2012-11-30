@@ -14,6 +14,12 @@ lemma void assume(bool b);
 predicate exists<t>(t x;) = true;
 
 
+fixpoint int abs(int x) { return x < 0 ? -x : x; }
+
+lemma void div_rem(int D, int d);
+    requires d != 0;
+    ensures D == D / d * d + D % d &*& abs(D % d) < abs(d) &*& abs(D / d * d) <= abs(D);
+
 predicate character(char *p; char c);
 predicate u_character(unsigned char *p; unsigned char c);
 
@@ -31,6 +37,10 @@ lemma void character_limits(char *pc);
 lemma void integer_unique(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& f <= 1;
+
+lemma void integer_limits(int *p);
+    requires [?f]integer(p, ?v);
+    ensures [f]integer(p, v) &*& p > (int *)0 &*& p + 1 <= (int *)UINTPTR_MAX &*& INT_MIN <= v &*& v <= INT_MAX;
 
 
 lemma void pointer_distinct(void *pp1, void *pp2);

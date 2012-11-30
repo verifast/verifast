@@ -86,6 +86,7 @@ verifast_both map.c
 cd mcas
 verifast_both -c -disable_overflow_check rdcss.c mcas.c mcas_client.c
 cd ..
+verifast_both -c mergesort_and_binarysearch.c
 cd MockKernel
 mysh < MockKernel.mysh
 cd ..
