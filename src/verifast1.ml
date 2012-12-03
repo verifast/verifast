@@ -3790,7 +3790,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | SwitchAsn (l, e, cs) ->
       let (w, t) = check_expr (pn,ilist) tparams tenv e in
       begin
-      match t with
+      match unfold_inferred_type t with
       | InductiveType (i, targs) ->
         begin
         match try_assoc i inductivemap with

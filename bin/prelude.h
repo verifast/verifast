@@ -279,6 +279,9 @@ lemma void string_limits(char *s);
     requires [?f]string(s, ?cs);
     ensures [f]string(s, cs) &*& true == ((char *)0 < s) &*& s + length(cs) < (char *)UINTPTR_MAX;
 
+
+inductive vararg = vararg_int(int) | vararg_uint(unsigned int) | vararg_pointer(void *);
+
 @*/
 
 /*@

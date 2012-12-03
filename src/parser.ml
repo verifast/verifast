@@ -12,7 +12,8 @@ let common_keywords = [
   "void"; "if"; "else"; "while"; "!="; "<"; ">"; "<="; ">="; "&&"; "++"; "--"; "+="; "-="; "*="; "/="; "&="; "|="; "^="; "%="; "<<="; ">>="; ">>>=";
   "||"; "!"; "."; "["; "]"; "{"; "break"; "default";
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
-  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "short"; ">>"; "<<";
+(* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
+  "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
   "truncating"; "typedef"; "do"
 ]
 
@@ -31,7 +32,7 @@ let c_keywords = [
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
-  "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"
+  "USHRT_MAX"; "UINT_MAX"; "UCHAR_MAX"; "..."
 ]
 
 let java_keywords = [
@@ -588,6 +589,7 @@ and
         end
       end
     end
+  | [< '(l, Kwd "...") >] -> (ConstructedTypeExpr (l, "list", [IdentTypeExpr (l, None, "vararg")]), "varargs")
 and
   parse_param_name = parser
     [< '(l, Ident pn) >] -> Some (l, pn)
@@ -993,6 +995,7 @@ and
 | [< '(l, CharToken c) >] -> IntLit(l, big_int_of_int (Char.code c), ref (Some Char))
 | [< '(l, Kwd "null") >] -> Null l
 | [< '(l, Kwd "currentThread") >] -> Var (l, "currentThread", ref None)
+| [< '(l, Kwd "varargs") >] -> Var (l, "varargs", ref None)
 | [< '(l, Kwd "new"); tp = parse_primary_type; res = (parser 
                     [< args0 = parse_patlist >] -> 
                     begin match tp with

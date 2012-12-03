@@ -1307,6 +1307,16 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: verification of calls *)
   
+  let get_purefuncsymb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
+  
+  let vararg_int_symb = lazy (get_purefuncsymb "vararg_int")
+  let vararg_uint_symb = lazy (get_purefuncsymb "vararg_uint")
+  let vararg_pointer_symb = lazy (get_purefuncsymb "vararg_pointer")
+  
+  let mk_vararg_int t = mk_app (Lazy.force vararg_int_symb) [t]
+  let mk_vararg_uint t = mk_app (Lazy.force vararg_uint_symb) [t]
+  let mk_vararg_pointer t = mk_app (Lazy.force vararg_pointer_symb) [t]
+  
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
     let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
     let eval_h h env pat cont =
@@ -1325,19 +1335,39 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some tpenv -> tpenv
     in
     let ys: string list = List.map (function (p, t) -> p) ps in
-    let ws =
-      match zip pats ps with
-        None -> static_error l "Incorrect number of arguments." None
-      | Some bs ->
-        List.map
-          (function
-            (SrcPat (LitPat e), (x, t0)) ->
-            let t = instantiate_type tpenv t0 in
-            SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e t) t t0))
-          | (TermPat t, _) -> TermPat t
-          ) bs
-    in
-    evhs h env ws $. fun h env ts ->
+    begin fun cont ->
+      let rec iter h env ts pats ps =
+        match pats, ps with
+          [], [] -> cont h env (List.rev ts)
+        | pats, [("varargs", _)] ->
+          let rec mk_varargs h env args pats =
+            match pats with
+              SrcPat (LitPat e) as pat::pats ->
+              let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+              eval_h h env pat $. fun h env t ->
+              let arg =
+                match tp with
+                  IntType|ShortType|Char -> mk_vararg_int t
+                | UintPtrType|UShortType|UChar -> mk_vararg_uint t
+                | PtrType _ | StaticArrayType _ -> mk_vararg_pointer t
+                | _ -> static_error (expr_loc e) ("Expressions of type '"^string_of_type tp^"' are not yet supported as arguments for a varargs function.") None
+              in
+              mk_varargs h env (arg::args) pats
+            | [] ->
+              let varargs = mk_list (InductiveType ("vararg", [])) (List.rev args) in
+              cont h env (List.rev (varargs::ts))
+          in
+          mk_varargs h env [] pats
+        | SrcPat (LitPat e)::pats, (x, tp0)::ps ->
+          let tp = instantiate_type tpenv tp0 in
+          eval_h h env (SrcPat (LitPat (box (check_expr_t (pn,ilist) tparams tenv e tp) tp tp0))) $. fun h env t ->
+          iter h env (t::ts) pats ps
+        | TermPat t::pats, _::ps ->
+          iter h env (t::ts) pats ps
+        | _ -> static_error l "Incorrect number of arguments." None
+      in
+      iter h env [] pats ps
+    end $. fun h env ts ->
     let Some env' = zip ys ts in
     let _ = if file_type path = Java && match try_assoc "this" ps with Some ObjType _ -> true | _ -> false then 
       let this_term = List.assoc "this" env' in

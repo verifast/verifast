@@ -461,7 +461,11 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       start_token(); text_junk();
       if text_peek() = '.' then begin
         text_junk();
-        Some (keyword_or_error "..")
+        if text_peek() = '.' then begin
+          text_junk();
+          Some (keyword_or_error "...")
+        end else
+          Some (keyword_or_error "..")
       end else
         Some (keyword_or_error ".")
     | ':' -> 
