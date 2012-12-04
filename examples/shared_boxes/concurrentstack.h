@@ -50,4 +50,3 @@ void stack_dipose(struct stack* s);
   //@ ensures I(?vs);
 
 #endif
-

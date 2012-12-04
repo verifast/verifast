@@ -35,20 +35,20 @@ fixpoint list<int> sorted(list<int> xs) {
     }
 }
 
-fixpoint int count<t>(t x, list<t> xs) {
+fixpoint int count_eq<t>(t x, list<t> xs) {
     switch (xs) {
         case nil: return 0;
-        case cons(x0, xs0): return (x0 == x ? 1 : 0) + count(x, xs0);
+        case cons(x0, xs0): return (x0 == x ? 1 : 0) + count_eq(x, xs0);
     }
 }
 
-fixpoint bool same_count<t>(list<t> xs, list<t> ys, t x) { return count(x, xs) == count(x, ys); }
+fixpoint bool same_count<t>(list<t> xs, list<t> ys, t x) { return count_eq(x, xs) == count_eq(x, ys); }
 
 fixpoint bool is_permutation<t>(fixpoint(fixpoint(t, bool), bool) forall_t, list<t> xs, list<t> ys) { return forall_t((same_count)(xs, ys)); }
 
 lemma void count_insert_sorted(int x, int y, list<int> xs)
     requires true;
-    ensures count(x, insert_sorted(y, xs)) == count(x, cons(y, xs));
+    ensures count_eq(x, insert_sorted(y, xs)) == count_eq(x, cons(y, xs));
 {
     switch (xs) {
         case nil:
@@ -59,7 +59,7 @@ lemma void count_insert_sorted(int x, int y, list<int> xs)
 
 lemma void count_sorted(int x, list<int> xs)
     requires true;
-    ensures count(x, sorted(xs)) == count(x, xs);
+    ensures count_eq(x, sorted(xs)) == count_eq(x, xs);
 {
     switch (xs) {
         case nil:

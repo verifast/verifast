@@ -1553,7 +1553,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
-                 assert_term (eval pre_env pre) h pre_env closeBraceLoc "Action precondition failure." None;
+                 assert_expr pre_env pre h pre_env closeBraceLoc "Action precondition failure." None;
                  let post_boxArgMap =
                    match post_bcp_args_opt with
                      None -> pre_boxArgMap
@@ -1569,8 +1569,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  consume_asn rules [] h ghostenv post_boxArgMap inv true real_unit $. fun _ h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
-                 assert_term (eval post_env post) h post_env closeBraceLoc "Action postcondition failure." None;
-                 
+                 assert_expr post_env post h post_env closeBraceLoc "Action postcondition failure." None;
                  let produce_post_handle lph post_hpn post_hp_args tcont =
                    let (post_handlePred_parammap, post_handlePred_extended, post_handlePred_inv) =
                      if post_hpn = pre_bcn ^ "_handle" then
@@ -1599,12 +1598,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                      else
                        let (l, _, extended, inv, _) = List.assoc hname hpmap in
                        match extended with
-                         None -> assert_term (eval hpInvEnv inv) h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont ()
-                       | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv (fun () -> assert_term (eval hpInvEnv inv) h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont ())
+                         None -> assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont()
+                       | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv (fun () -> 
+                           assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont())
                    in
                    assert_handle_invs hpmap post_hpn post_hpinv_env $. fun () ->
-                   (*with_context (Executing (h, post_hpinv_env, expr_loc post_handlePred_inv, "Checking post-state handle predicate invariant")) $. fun () ->
-                   assert_term (eval post_hpinv_env post_handlePred_inv) h post_hpinv_env lph "Post-state handle predicate invariant failure." None;*)
                    let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                    let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
                    let h = boxChunk::hpChunk::h in

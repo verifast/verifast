@@ -4324,6 +4324,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont
   let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont
   
+  let query_term t = 
+    stats#proverOtherQuery;
+    (ctxt#query t)
+  
   let assert_term t h env l msg url = 
     stats#proverOtherQuery;
     if not (ctxt#query t) then

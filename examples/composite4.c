@@ -15,23 +15,23 @@ inductive tree =
     empty
   | tree(struct node *, tree, tree);
 
-fixpoint int count(tree nodes) {
+fixpoint int tcount(tree nodes) {
   switch (nodes) {
     case empty: return 0;
     case tree(root, left, right):
-      return 1 + count(left) + count(right);
+      return 1 + tcount(left) + tcount(right);
   }
 }
 
-lemma void count_nonnegative(tree nodes)
+lemma void tcount_nonnegative(tree nodes)
   requires true;
-  ensures 0 <= count(nodes);
+  ensures 0 <= tcount(nodes);
 {
   switch (nodes) {
     case empty:
     case tree(n, l, r):
-      count_nonnegative(l);
-      count_nonnegative(r);
+      tcount_nonnegative(l);
+      tcount_nonnegative(r);
   }
 }
 
@@ -44,7 +44,7 @@ predicate subtree(struct node * root, struct node * parent, tree t) =
         root->left |-> ?left &*&
         root->right |-> ?right &*&
         root->parent |-> parent &*&
-        root->count |-> count(t) &*&
+        root->count |-> tcount(t) &*&
         malloc_block_node(root) &*&
         subtree(left, root, leftNodes) &*&
         subtree(right, root, rightNodes);
@@ -69,7 +69,7 @@ predicate context(struct node * node, struct node * parent,
         malloc_block_node(parent) &*&
         context(parent, gp, pcount, pns) &*&
         subtree(right, parent, rightNodes) &*&
-        pcount == 1 + count + count(rightNodes);
+        pcount == 1 + count + tcount(rightNodes);
     case right_context(pns, parent0, leftNodes):
       return
         parent == parent0 &*& parent != 0 &*&
@@ -80,11 +80,11 @@ predicate context(struct node * node, struct node * parent,
         malloc_block_node(parent) &*&
         context(parent, gp, pcount, pns) &*&
         subtree(left, parent, leftNodes) &*&
-        pcount == 1 + count(leftNodes) + count;
+        pcount == 1 + tcount(leftNodes) + count;
   };
 
 predicate tree(struct node * node, context c, tree subtree) =
-  context(node, ?parent, count(subtree), c) &*&
+  context(node, ?parent, tcount(subtree), c) &*&
   subtree(node, parent, subtree);
 
 @*/
@@ -120,13 +120,13 @@ struct node *create_tree()
 int subtree_get_count(struct node *node)
   //@ requires subtree(node, ?parent, ?nodes);
   /*@ ensures subtree(node, parent, nodes) &*&
-              result == count(nodes) &*& 0 <= result; @*/
+              result == tcount(nodes) &*& 0 <= result; @*/
 {
   int result = 0;
   //@ open subtree(node, parent, nodes);
   if (node != 0) { result = node->count; }
   //@ close subtree(node, parent, nodes);
-  //@ count_nonnegative(nodes);
+  //@ tcount_nonnegative(nodes);
   return result;
 }
 
@@ -245,7 +245,7 @@ struct node *tree_get_parent(struct node *node)
   //@ open subtree(node, _, t);
   struct node *p = node->parent;
   //@ close subtree(node, p, t);
-  //@ open context(node, p, count(t), c);
+  //@ open context(node, p, tcount(t), c);
   //@ assert context(p, ?gp, ?pcount, ?pns);
   /*@ switch (c) {
         case root:
@@ -414,7 +414,7 @@ lemma void go_to_descendant(struct node *node0, path path, struct node *node)
                 case empty:
                 case tree(node00, leftNodes, rightNodes):
                     struct node *left = node0->left;
-                    close context(left, node0, count(leftNodes), left_context(contextNodes, node0, rightNodes));
+                    close context(left, node0, tcount(leftNodes), left_context(contextNodes, node0, rightNodes));
                     close tree(left, left_context(contextNodes, node0, rightNodes), leftNodes);
                     go_to_descendant(left, path0, node);
             }
@@ -425,7 +425,7 @@ lemma void go_to_descendant(struct node *node0, path path, struct node *node)
                 case empty:
                 case tree(node00, leftNodes, rightNodes):
                     struct node *right = node0->right;
-                    close context(right, node0, count(rightNodes), right_context(contextNodes, node0, leftNodes));
+                    close context(right, node0, tcount(rightNodes), right_context(contextNodes, node0, leftNodes));
                     close tree(right, right_context(contextNodes, node0, leftNodes), rightNodes);
                     go_to_descendant(right, path0, node);
             }

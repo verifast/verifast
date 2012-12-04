@@ -162,51 +162,51 @@ lemma void is_perm_swap<t>(list<t> vs, int i, int j);
 
 
 
-fixpoint int count<t>(t x, list<t> xs) {
+fixpoint int count_eq<t>(t x, list<t> xs) {
   switch(xs) {
     case nil: return 0;
-    case cons(h, t): return h == x ? 1 + count(x, t) : count(x, t);
+    case cons(h, t): return h == x ? 1 + count_eq(x, t) : count_eq(x, t);
   }
 }
 
 fixpoint bool count_same<t>(unit u, list<t> vs, list<t> vs2, t x) {
   switch(u) {
-    case unit: return count(x, vs) == count(x, vs2);
+    case unit: return count_eq(x, vs) == count_eq(x, vs2);
   }
 }
 
-lemma_auto(count(x, vs)) void count_non_negative<t>(t x, list<t> vs)
+lemma_auto(count_eq(x, vs)) void count_eq_non_negative<t>(t x, list<t> vs)
   requires true;
-  ensures 0 <= count(x, vs);
+  ensures 0 <= count_eq(x, vs);
 {
   switch(vs) {
     case nil:
     case cons(h, t):
-      count_non_negative(x, t);
+      count_eq_non_negative(x, t);
   }
 }
 
-lemma_auto(count(x, remove(x, vs))) void count_remove<t>(t x, list<t> vs)
+lemma_auto(count_eq(x, remove(x, vs))) void count_eq_remove<t>(t x, list<t> vs)
   requires true;
-  ensures count(x, remove(x, vs)) == (mem(x, vs) ? count(x, vs) - 1 : count(x, vs));
+  ensures count_eq(x, remove(x, vs)) == (mem(x, vs) ? count_eq(x, vs) - 1 : count_eq(x, vs));
 {
   switch(vs) {
     case nil:
     case cons(h, t):
       if(h != x) {
-        count_remove<t>(x, t);
+        count_eq_remove<t>(x, t);
       }
   }
 }
 
-lemma_auto(mem(x, vs)) void mem_count<t>(t x, list<t> vs)
+lemma_auto(mem(x, vs)) void mem_count_eq<t>(t x, list<t> vs)
   requires  true;
-  ensures mem(x, vs) == (0 < count(x, vs));
+  ensures mem(x, vs) == (0 < count_eq(x, vs));
 {
   switch(vs) {
     case nil:
     case cons(h, t):
-      mem_count(x, t);
+      mem_count_eq(x, t);
   }
 }
 

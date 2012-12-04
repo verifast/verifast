@@ -367,4 +367,64 @@ lemma_auto(append(take(n, xs), drop(n, xs))) void append_take_drop_n<t>(list<t> 
     }
 }
 
+lemma void count_nonnegative<t>(list<t> xs, fixpoint(t, bool) p)
+  requires true;
+  ensures 0 <= count(xs, p);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t): count_nonnegative(t, p);
+  }
+}
+
+lemma void count_remove<t>(list<t> xs, fixpoint(t, bool) p, t x)
+  requires mem(x, xs) == true;
+  ensures count(remove(x, xs), p) == count(xs, p) - (p(x) ? 1 : 0);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t): if(h != x) count_remove(t, p, x);
+  }
+}
+
+lemma void count_zero_mem<t>(list<t> xs, fixpoint(t, bool) p, t x)
+  requires count(xs, p) == 0 && mem(x, xs) == true;
+  ensures ! p(x);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t): 
+      count_nonnegative(t, p);
+      if(h != x) { 
+        count_zero_mem(t, p, x);
+      }
+  }
+}
+
+lemma t count_non_zero<t>(list<t> xs, fixpoint(t, bool) p)
+  requires count(xs, p) != 0;
+  ensures mem(result, xs) && p(result);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      if(p(h)) {
+        return h;
+      } else {
+        return count_non_zero(t, p);
+      }
+  }
+}
+
+lemma void count_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p)
+  requires true;
+  ensures count(append(xs, ys), p) == count(xs, p) + count(ys, p);
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t):
+      count_append(t, ys, p);
+  }
+}
+
 @*/

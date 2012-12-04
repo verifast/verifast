@@ -266,4 +266,31 @@ lemma void all_eq_nth<t>(list<t> xs, t x, int i);
     requires all_eq(xs, x) && 0 <= i &*& i < length(xs);
     ensures nth(i, xs) == x;
 
+fixpoint int count<t>(list<t> xs, fixpoint(t, bool) p) {
+  switch(xs) {
+    case nil: return 0;
+    case cons(h, t): return count(t, p) + (p(h) ? 1 : 0); 
+  }
+}
+
+lemma void count_nonnegative<t>(list<t> xs, fixpoint(t, bool) p);
+  requires true;
+  ensures 0 <= count(xs, p);
+
+lemma void count_remove<t>(list<t> xs, fixpoint(t, bool) p, t x);
+  requires mem(x, xs) == true;
+  ensures count(remove(x, xs), p) == count(xs, p) - (p(x) ? 1 : 0);
+
+lemma void count_zero_mem<t>(list<t> xs, fixpoint(t, bool) p, t x);
+  requires count(xs, p) == 0 && mem(x, xs) == true;
+  ensures ! p(x);
+
+lemma t count_non_zero<t>(list<t> xs, fixpoint(t, bool) p);
+  requires count(xs, p) != 0;
+  ensures mem(result, xs) && p(result);
+
+lemma void count_append<t>(list<t> xs, list<t> ys, fixpoint(t, bool) p);
+  requires true;
+  ensures count(append(xs, ys), p) == count(xs, p) + count(ys, p);
+
 #endif

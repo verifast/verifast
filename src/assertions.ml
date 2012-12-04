@@ -29,17 +29,23 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (* Region: production of assertions *)
   
-  let assert_expr env e h env l msg url = assert_term (eval None env e) h env l msg url
-
   let success() = SymExecSuccess
   
-  let branch cont1 cont2 =
+  let rec assert_expr env e h env l msg url = 
+    let t = eval None env e in
+    if query_term t then
+      ()
+    else begin
+      ignore (assert_expr_split e h env l msg url); ()
+    end
+  
+  and branch cont1 cont2 =
     stats#branch;
     execute_branch cont1;
     execute_branch cont2;
     SymExecSuccess
   
-  let rec assert_expr_split e h env l msg url = 
+  and assert_expr_split e h env l msg url = 
     match e with
       IfExpr(l0, con, e1, e2) -> 
         branch
@@ -49,7 +55,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       branch
         (fun () -> assert_expr_split e1 h env l msg url)
         (fun () -> assert_expr_split e2 h env l msg url)
-    | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_expr env e h env l msg url; SymExecSuccess)
+    | _ -> with_context (Executing (h, env, expr_loc e, "Consuming expression")) (fun () -> assert_term (eval None env e) h env l msg url; SymExecSuccess)
   
   let rec evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
