@@ -739,7 +739,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let this = List.assoc "this" env in
               open_instance_predicate this target_cn
             end
-          | Some (PredCtorInfo (_, ps1, ps2, body, funcsym)) ->
+          | Some (PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym)) ->
             if targs <> [] then static_error l "Predicate constructor expects 0 type arguments." None;
             let bs0 =
               match zip pats0 ps1 with
@@ -749,7 +749,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             in
             let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
             let ps2 = List.map (fun (x, t) -> (x, t, t)) ps2 in
-            ([], [], (g_symb, false), [], 0, ps2, bs0, body, None)
+            ([], [], (g_symb, false), [], 0, ps2, bs0, body, inputParamCount)
           end
       in
       let (coefpat, tenv) =
@@ -1019,7 +1019,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 close_instance_predicate this cn
               | _ -> static_error l "No such predicate instance." None
               end
-            | Some (PredCtorInfo (lpred, ps1, ps2, body, funcsym)) ->
+            | Some (PredCtorInfo (lpred, ps1, ps2, inputParamCount, body, funcsym)) ->
               let bs0 =
                 match zip pats0 ps1 with
                   None -> static_error l "Incorrect number of predicate constructor arguments." None
@@ -1028,7 +1028,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               let g_symb = mk_app funcsym (List.map (fun (x, t) -> t) bs0) in
               if targs <> [] then static_error l "Incorrect number of type arguments." None;
-              (lpred, [], [], ps2, bs0, (g_symb, false), body, [], None)
+              (lpred, [], [], ps2, bs0, (g_symb, false), body, [], inputParamCount)
           end
       in
       let ps =
@@ -1149,7 +1149,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> ()
                 | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv;
                 end;
-                assert_term (eval hpInvEnv inv) h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None;
+                assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) ("Cannot prove handle predicate invariant: " ^ hname) None;
               in
               with_context (Executing (h, hpInvEnv, expr_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
               let _ = assert_handle_invs hpmap hpn hpInvEnv in
@@ -1598,9 +1598,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                      else
                        let (l, _, extended, inv, _) = List.assoc hname hpmap in
                        match extended with
-                         None -> assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont()
+                         None -> assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) ("Cannot prove handle predicate invariant: " ^ hname) None; cont()
                        | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv (fun () -> 
-                           assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) "Cannot prove handle predicate invariant." None; cont())
+                           assert_expr hpInvEnv inv h hpInvEnv (expr_loc inv) ("Cannot prove handle predicate invariant: " ^ hname) None; cont())
                    in
                    assert_handle_invs hpmap post_hpn post_hpinv_env $. fun () ->
                    let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in

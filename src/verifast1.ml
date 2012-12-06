@@ -108,6 +108,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        | PopSubcontext -> PopSubcontext)
       cs
 
+  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list))) list ref = ref []
+  
+  let register_pred_ctor_application t symbol symbol_term ts =
+    pred_ctor_applications := (t, (symbol, symbol_term, ts)) :: !pred_ctor_applications
+
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
   
@@ -527,6 +532,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         loc
       * (string * type_) list (* constructor parameters *)
       * (string * type_) list (* predicate parameters *)
+      * int option (* inputParamCount *)
       * asn (* body *)
       * func_symbol
     type pred_fam_info =
@@ -2210,7 +2216,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let (predctormap1, purefuncmap1) =
     let rec iter (pn,ilist) pcm pfm ds =
       match ds with
-        PredCtorDecl (l, p, ps1, ps2, body)::ds -> let p=full_name pn p in
+        PredCtorDecl (l, p, ps1, ps2, inputParamCount, body)::ds -> let p=full_name pn p in
         begin
           match try_assoc2' (pn,ilist) p pfm purefuncmap0 with
             Some _ -> static_error l "Predicate constructor name clashes with existing pure function name." None
@@ -2252,8 +2258,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter ps1 [] ps2
         in
         let funcsym = mk_func_symbol p (List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
-        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, None), List.map (fun (x, t) -> t) ps1, funcsym)) in
-        iter (pn,ilist) ((p, (l, ps1, ps2, body, funcsym,pn,ilist))::pcm) (pf::pfm) ds
+        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount), List.map (fun (x, t) -> t) ps1, funcsym)) in
+        iter (pn,ilist) ((p, (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter (pn,ilist) pcm pfm ds
     in
@@ -3704,14 +3710,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           | None ->
             begin match
               match try_assoc p#name predctormap1 with
-                Some (l, ps1, ps2, body, funcsym, pn, ilist) -> Some (ps1, ps2)
+                Some (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist) -> Some (ps1, ps2, inputParamCount)
               | None ->
               match try_assoc p#name predctormap0 with
-                Some (PredCtorInfo (l, ps1, ps2, body, funcsym)) -> Some (ps1, ps2)
+                Some (PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym)) -> Some (ps1, ps2, inputParamCount)
               | None -> None
             with
-              Some (ps1, ps2) ->
-              cont (new predref (p#name), true, [], List.map snd ps1, List.map snd ps2, None)
+              Some (ps1, ps2, inputParamCount) ->
+              cont (new predref (p#name), true, [], List.map snd ps1, List.map snd ps2, inputParamCount)
             | None ->
               let error () = 
                 begin match try_assoc p#name tenv with
@@ -4162,9 +4168,21 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     List.map
       (
         function
-          (g, (l, ps1, ps2, body, funcsym,pn,ilist)) ->
+          (g, (l, ps1, ps2, inputParamCount, body, funcsym,pn,ilist)) ->
           let (wbody, _) = check_asn (pn,ilist) [] (ps1 @ ps2) body in
-          (g, PredCtorInfo (l, ps1, ps2, wbody, funcsym))
+          begin match inputParamCount with
+            None -> ()
+          | Some(n) -> 
+            let (inps, outps) = take_drop n (List.map (fun (x, t) -> x) ps2) in
+            let inps = (List.map (fun (x, t) -> x) ps1) @ inps in
+            let fixed = check_pred_precise inps wbody in
+            List.iter
+              (fun x ->
+                if not (List.mem x fixed) then
+                  static_error l ("Preciseness check failure: body does not fix output parameter '" ^ x ^ "'.") None)
+              outps
+          end;
+          (g, PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, funcsym))
       )
       predctormap1
   
@@ -4609,11 +4627,20 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       ev state target $. fun state t ->
       cont state (ctxt#mk_app get_class_symbol [t])
     | WPureFunCall (l, g, targs, args) ->
-      begin match try_assoc g purefuncmap with
-        None -> static_error l ("No such pure function: "^g) None
-      | Some (lg, tparams, t, pts, s) ->
-        evs state args $. fun state vs ->
-        cont state (mk_app s vs)
+      begin match try_assoc g predctormap with
+        Some (PredCtorInfo(l, ps1, ps2, inputParamCount, body, (s, st))) ->
+          evs state args $. fun state vs ->
+          let fun_app = (mk_app (s, st) vs) in
+          (if((List.length ps1) = (List.length vs)) then
+            register_pred_ctor_application fun_app s st vs);
+          cont state fun_app
+      | None ->
+        begin match try_assoc g purefuncmap with
+          None -> static_error l ("No such pure function: "^g) None
+        | Some (lg, tparams, t, pts, s) ->
+          evs state args $. fun state vs ->
+          cont state (mk_app s vs)
+        end
       end
     | WPureFunValueCall (l, e, es) ->
       evs state (e::es) $. fun state (f::args) ->

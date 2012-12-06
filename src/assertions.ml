@@ -234,9 +234,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match try_assoc g#name predfammap with
             Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
-            let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
+            let (symbol, symbol_term) = funcsym in
+            register_pred_ctor_application g_symb symbol symbol_term ctorargs;
             ((g_symb, false), [], pats, List.map snd ps2, None)
           end
       in
@@ -723,12 +725,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           end $. fun ts ->
           match g with
             (g, _) ->
-            begin match try_assq g rules with
-              Some rules ->
+            let try_rules rules ts = 
               let terms_are_well_typed = List.for_all (function SrcPat (LitPat (WidenedParameterArgument _)) -> false | _ -> true) pats in
               let rec iter rules =
                 match rules with
-                  [] -> cont ()
+                 [] -> cont ()
                 | rule::rules ->
                   rule h targs terms_are_well_typed ts $. fun h ->
                   match h with
@@ -737,8 +738,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     with_context (Executing (h, env, l, "Consuming chunk (retry)")) $. fun () ->
                     consume_chunk_core_core h
               in
-              iter rules
-            | None -> cont ()
+                iter rules
+            in
+            begin match try_assq g rules with
+              Some rules -> try_rules rules ts
+            | None -> 
+              begin match try_assq g ! pred_ctor_applications with 
+                None -> print_endline ("not registered: " ^ (ctxt#pprint g)); cont () (*(g, ts)*)
+              | Some (_, symbol_term, ctor_args) -> 
+                begin match try_assq symbol_term rules with
+                  Some rules -> try_rules rules (ctor_args @ ts)
+                | None -> cont ()
+                end
+              end
             end
         end $. fun () ->
         let message =
@@ -842,9 +854,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            match try_assoc g#name predfammap with
             Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
           | None -> 
-            let PredCtorInfo (l, ps1, ps2, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
+            let (symbol, symbol_term) = funcsym in
+            register_pred_ctor_application g_symb symbol symbol_term ctorargs;
             ((g_symb, false), [], pats, List.map snd ps2)
         else
           let Some term = try_assoc (g#name) env in ((term, false), pats0, pats, g#domain)
@@ -892,22 +906,6 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         Some t -> assert_term (ctxt#mk_eq t (ev e)) h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
       | None -> let binding = (x, ev e) in cont [] h ghostenv (binding::env) (binding::env') None
       end
-   (* | ExprAsn(l, Operation(lo, And, [e1; e2], tps)) ->
-      consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef (fun chunks h ghostenv env env' size ->
-        consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef (fun chunks' h ghostenv env env' _ ->
-          cont (chunks @ chunks') h ghostenv env env' size
-        )
-      )
-    | ExprAsn(l, IfExpr(lo, con, e1, e2)) ->
-      let cont chunks h _ _ env'' _ = cont chunks h ghostenv (env'' @ env) (env'' @ env') None in
-      let env' = [] in
-      branch
-        (fun _ ->
-           assume (ev con) (fun _ ->
-             consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e1, e1)) checkDummyFracs coef cont))
-        (fun _ ->
-           assume (ctxt#mk_not (ev con)) (fun _ ->
-             consume_asn_core rules tpenv h ghostenv env env' (ExprAsn (expr_loc e2, e2)) checkDummyFracs coef cont))*)
     | ExprAsn (l, e) ->
       assert_expr env e h env l "Cannot prove condition." None; cont [] h ghostenv env env' None
     | WMatchAsn (l, e, pat, tp) ->
@@ -1093,9 +1091,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
   in*)
   
+  (*type predsym = TermSym of termnode | FuncSym of symbol*)
+  
   (* direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
-       (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
+       (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
   *)
   let pred_fam_contains_edges =
     flatmap
@@ -1111,7 +1111,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
               if expr_is_fixed inputParameters e || fstatic then
                 let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
+                [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
               else
                 []
             | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
@@ -1119,17 +1119,32 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Some _ -> []
               | None ->
                 begin match try_assoc q#name predfammap with
-                  None -> [] (* can this happen? *)
-                | Some (_, qtparams, _, qtps, qsymb, _) ->
+                  Some (_, qtparams, _, qtps, qsymb, _) ->
                   begin match q#inputParamCount with
                     None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
                   | Some qInputParamCount ->
                     let qIndices = List.map (fun (LitPat e) -> e) qfns in
                     let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
                     if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                      [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
+                      [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
                     else
                       []
+                  end
+                | None ->
+                  begin match try_assoc q#name predctormap with
+                    None -> []
+                  | Some(PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
+                    
+                    begin match inputParamCount with
+                      None -> []
+                    | Some qInputParamCount ->
+                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+                        [(psymb, pindices, vsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], qIndices @ qInputActuals, conds)])]
+                      else
+                        []
+                    end
                   end
                 end
               end
@@ -1152,7 +1167,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
               if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
                 let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
-                [(psymb, pindices, qsymb, [(l, (psymb, true), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
+                [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
               end else
                 []
             | CoefAsn(_, DummyPat, asn) ->
@@ -1177,6 +1192,83 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter None [] wbody0
       )
       predinstmap
+  
+  let predicate_ctor_contains_edges = 
+    predctormap |> flatmap
+      (fun (g, PredCtorInfo (l, ps1, ps2, inputParamCount, wbody0, (psymbol, psymbol_term))) ->
+        match inputParamCount with
+          None -> []
+        | Some(nbInputParameters) ->
+          let nbInputParameters = (List.length ps1) + nbInputParameters in
+          let predinst_tparams = [] in
+          let fns = [] in
+          let xs = ps1 @ ps2 in
+          let inputParameters = List.map fst (take nbInputParameters xs) in
+          let inputFormals = (take nbInputParameters xs) in
+          let outer_nb_curried = (List.length ps1) in
+          let rec iter coef conds asn =
+            match asn with
+              WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
+              if expr_is_fixed inputParameters e || fstatic then
+                let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
+                [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
+              else
+                []
+            | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
+              begin match try_assoc q#name xs with
+                Some _ -> []
+              | None ->
+                begin match try_assoc q#name predfammap with
+                  Some (_, qtparams, _, qtps, qsymb, _) ->
+                  begin match q#inputParamCount with
+                    None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
+                  | Some qInputParamCount ->
+                    let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                    let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                    if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then begin 
+                      [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
+                    end else begin
+                      []
+                    end
+                  end
+                | None ->
+                  begin match try_assoc q#name predctormap with
+                    None -> []
+                  | Some(PredCtorInfo (l, ps1_, ps2_, inputParamCount, wbody, (funcsym, vsymb))) ->
+                    begin match inputParamCount with
+                      None -> []
+                    | Some qInputParamCount ->
+                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+                        [(psymbol_term, [], vsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], qIndices @ qInputActuals, conds)])]
+                      else
+                        []
+                    end
+                  end
+                end
+              end
+            | CoefAsn(_, DummyPat, asn) ->
+              iter (Some DummyPat) conds asn
+            | CoefAsn(_, LitPat(frac), asn) when expr_is_fixed inputParameters frac -> (* extend to arbitrary fractions? *)
+              let new_coef = 
+                match coef with
+                  None -> Some (LitPat frac)
+                | Some DummyPat -> Some DummyPat
+                | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
+              in
+              iter new_coef conds asn
+            | Sep(_, asn1, asn2) ->
+              (iter coef conds asn1) @ (iter coef conds asn2)
+            | IfAsn(_, cond, asn1, asn2) ->
+              if expr_is_fixed inputParameters cond then
+                (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
+              else
+                (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
+            | _ -> []
+          in
+          iter None [] wbody0
+      )
    
   let instance_predicate_contains_edges = 
     classmap1 |> flatmap 
@@ -1195,7 +1287,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
                 if expr_is_fixed inputParameters e || fstatic then
                   let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                  [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
+                  [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
                 else
                   []
               | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
@@ -1211,7 +1303,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       let qIndices = List.map (fun (LitPat e) -> e) qfns in
                       let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
                       if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                        [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
+                        [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
                       else
                         []
                     end
@@ -1236,7 +1328,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
                   let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
-                  [(psymb, pindices, qsymb, [(l, (psymb, true), true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
+                  [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
                 end else
                   []
               | CoefAsn(_, DummyPat, asn) ->
@@ -1262,17 +1354,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           )
       )
   
-  let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges
-  
+  let contains_edges = pred_fam_contains_edges @ instance_predicate_contains_edges @ predicate_ctor_contains_edges
+    
   let close1_ edges =
     flatmap
     (fun (from_symb, from_indices, to_symb, path) ->
       flatmap 
-        (fun (from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) ->
+        (fun (from_symb0, from_indices0, to_symb0, (((outer_l0, outer_symb0, outer_nb_curried0, outer_fun_sym0, outer_is_inst_pred0, outer_formal_targs0, outer_actual_indices0, outer_formal_args0, outer_formal_input_args0, outer_wbody0, inner_frac_expr_opt0, inner_target_opt0, inner_formal_targs0, inner_formal_indices0, inner_input_exprs0, conds0) :: rest) as path0)) ->
           if to_symb == from_symb0 then
             let rec add_extra_conditions path = 
               match path with
-                [(outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
+                [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)] ->
                 let extra_conditions: expr list = List.map2 (fun cn e2 -> 
                     if language = Java then 
                       Operation(dummy_loc, Eq, [ClassLit(dummy_loc, cn); e2], ref (Some [ObjType "java.lang.Class"; ObjType "java.lang.Class"]))
@@ -1280,7 +1372,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       Operation(dummy_loc, Eq, [Var(dummy_loc, cn, ref (Some FuncName)); e2], ref (Some [PtrType Void; PtrType Void]))
                 ) outer_actual_indices0 inner_formal_indices in
                 (* these extra conditions ensure that the actual indices match the expected ones *)
-                [(outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
+                [(outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, extra_conditions @ conds)]
                  
               | head :: rest -> head :: (add_extra_conditions rest)
             in
@@ -1319,8 +1411,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (from_symb, from_indices, to_symb, path) ->
         print_endline ((ctxt#pprint from_symb) ^ " -> " ^ (ctxt#pprint to_symb));
       )
-    contains_edges
-  in*)
+    contains_edges*)
   
   let rules_cell = ref [] (* A hack to allow the rules to recursively use the rules *)
   
@@ -1342,9 +1433,22 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               [] -> 
                 begin match try_find
                   (fun (Chunk (found_symb, found_targs, found_coef, found_ts, _)) ->
-                    predname_eq found_symb (to_symb, true) &&
-                    (let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
-                    (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts))
+                    if predname_eq found_symb (to_symb, true) then begin
+                      let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
+                      (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts)
+                     end else begin
+                      let (fsymb, literal) = found_symb in 
+                      begin match try_assq fsymb !pred_ctor_applications with
+                        None -> false
+                      | Some (symbol, symbol_term, ctor_args) ->
+                        let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
+                        let found_ts = ctor_args @ found_ts in
+                        if to_symb == symbol_term then begin
+                          (for_all2 definitely_equal (take (List.length (expected_ts)) found_ts) expected_ts)
+                        end else
+                          false
+                      end
+                    end
                   )
                   h
                 with
@@ -1369,7 +1473,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   end
                 | Some (Chunk (found_symb, found_targs, found_coef, found_ts, _)) -> Some (fun h cont -> cont h found_coef)
                 end
-            | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
+            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let Some tpenv = zip outer_formal_targs current_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
               let env = match current_this_opt with
@@ -1414,27 +1518,36 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
                             let input_param_count = match current_this_opt with Some _ -> Some 2 | None -> Some((List.length current_indices) + (List.length current_input_args)) in
-                            produce_chunk h outer_symb current_targs new_coef input_param_count ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs) None (fun h -> 
+                            let (symb, args) = begin match outer_fun_sym with
+                              None ->
+                              (outer_symb, ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs))
+                            | Some(funsym) ->
+                              assert (List.length current_indices = 0);
+                              ((ctxt#mk_app funsym (take outer_nb_curried (current_input_args @ outputArgs)), false) , drop outer_nb_curried (current_input_args @ outputArgs))
+                            end in
+                            produce_chunk h symb current_targs new_coef input_param_count args None (fun h -> 
                             cont h new_coef) (* todo: properly set the size *)
                     )
                   )
-              else 
+              else begin
+                
                 None (* conditions do not hold, so give up *)
+              end
           in
           let wanted_indices = match List.hd path with
-            (_, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
+            (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
              (take (List.length indices) (List.tl wanted_indices_and_input_ts))
-          | (_, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
+          | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
              (take (List.length indices) wanted_indices_and_input_ts)
           in
           if terms_are_well_typed &&
              (for_all2 definitely_equal indices wanted_indices) (* check that you are actually looking for from_symb at indices *) then
             let (wanted_target_opt, wanted_indices, wanted_inputs) = 
               match List.hd path with
-                  (_, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
+                  (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) -> 
                   (Some (List.hd wanted_indices_and_input_ts), (take (List.length indices) (List.tl wanted_indices_and_input_ts)),
                   (drop (List.length indices) (List.tl wanted_indices_and_input_ts)))
-                | (_, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
+                | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> 
                   (None, (take (List.length indices) wanted_indices_and_input_ts), (drop (List.length indices) wanted_indices_and_input_ts))
             in
             match can_apply_rule wanted_target_opt wanted_targs wanted_indices wanted_inputs path with
@@ -1457,8 +1570,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Some (fun h_opt cont -> begin match h_opt with None -> cont None | Some(h) -> cont (Some h) end)
               else
                 None
-            | (outer_l, outer_symb, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
-              
+            | (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds) :: path ->
               let actual_input_args = (take (List.length outer_formal_input_args) actual_input_args) in (* to fix first call *)
               let Some tpenv = zip outer_formal_targs actual_targs in
               let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args actual_input_args in
@@ -1497,7 +1609,20 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                (for_all2 definitely_equal (take (List.length actuals) found_ts)) actuals) then
                                Some ((hdone @ htodo, found_targs, found_coef, found_ts))
                             else
-                              iter (chunk::hdone) htodo
+                              let (osymb, _) = outer_symb in
+                              let (fsymb, literal) = found_symb in 
+                              begin match try_assq fsymb !pred_ctor_applications with
+                                None -> iter (chunk::hdone) htodo
+                              | Some (symbol, symbol_term, ctor_args) -> 
+                                if symbol_term == osymb then
+                                  let actuals = (match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args in
+                                  if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
+                                    Some ((hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
+                                  else 
+                                    iter (chunk::hdone) htodo
+                                else 
+                                  iter (chunk::hdone) htodo
+                              end
                         in
                         iter [] h
                       in
@@ -1522,24 +1647,39 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let rec try_apply_rule0 hdone htodo = 
               match htodo with
                 [] -> None
-              | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, _)) as chnk) :: rest 
-                  when (predname_eq actual_name (from_symb, true)) && (
+              | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, _)) as chnk) :: rest ->
+                  if (predname_eq actual_name (from_symb, true)) && (
                        let indices0 = match List.hd path with
-                         (_, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (take (List.length indices) (List.tl actual_ts))
-                       | (_, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (take (List.length indices) actual_ts)
+                         (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (take (List.length indices) (List.tl actual_ts))
+                       | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (take (List.length indices) actual_ts)
                        in
                         (for_all2 definitely_equal indices0 indices)
-                       ) ->
-                let (actual_target_opt, actual_indices, actual_inputs) = 
-                  match List.hd path with
-                    (_, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (Some (List.hd actual_ts), indices, (drop (List.length indices) (List.tl actual_ts)))
-                  | (_, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (None, indices, (drop (List.length indices) actual_ts))
-                in
-                begin match try_apply_rule_core actual_target_opt actual_targs actual_indices actual_inputs path with
-                  None -> try_apply_rule0 (chnk :: hdone) rest
-                | Some exec_rule -> Some exec_rule
-                end
-              | chnk :: rest -> try_apply_rule0 (chnk :: hdone) rest
+                       ) 
+                  then
+                    let (actual_target_opt, actual_indices, actual_inputs) = 
+                      match List.hd path with
+                        (_, _, _, _, true, _, _, _, _, _, _, _, _, _, _, _) ->  (Some (List.hd actual_ts), indices, (drop (List.length indices) (List.tl actual_ts)))
+                      | (_, _, _, _, false, _, _, _, _, _, _, _, _, _, _, _) -> (None, indices, (drop (List.length indices) actual_ts))
+                    in
+                    begin match try_apply_rule_core actual_target_opt actual_targs actual_indices actual_inputs path with
+                      None -> try_apply_rule0 (chnk :: hdone) rest
+                    | Some exec_rule -> Some exec_rule
+                    end
+                  else  
+                    let (fsymb, literal) = actual_name in 
+                    begin match try_assq fsymb !pred_ctor_applications with
+                      None -> try_apply_rule0 (chnk :: hdone) rest
+                    | Some (symbol, symbol_term, ctor_args) -> 
+                        if from_symb == symbol_term then
+                          begin match try_apply_rule_core None actual_targs [] (ctor_args @ actual_ts) path with
+                            None -> try_apply_rule0 (chnk :: hdone) rest
+                          | Some exec_rule -> Some exec_rule
+                          end
+                        else
+                          try_apply_rule0 (chnk :: hdone) rest
+                    end
+                    
+              (*| chnk :: rest -> try_apply_rule0 (chnk :: hdone) rest*)
             in
             try_apply_rule0 hdone htodo
           in
