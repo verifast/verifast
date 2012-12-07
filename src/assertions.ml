@@ -744,7 +744,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               Some rules -> try_rules rules ts
             | None -> 
               begin match try_assq g ! pred_ctor_applications with 
-                None -> print_endline ("not registered: " ^ (ctxt#pprint g)); cont () (*(g, ts)*)
+                None -> cont ()
               | Some (_, symbol_term, ctor_args) -> 
                 begin match try_assq symbol_term rules with
                   Some rules -> try_rules rules (ctor_args @ ts)
@@ -1091,9 +1091,93 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     end
   in*)
   
-  (*type predsym = TermSym of termnode | FuncSym of symbol*)
+  (** Find nested predicates in wbody0 *)
+  let find_edges construct_edge inputParameters xs wbody0 =
+    let rec iter coef conds wbody =
+      match wbody with
+        WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
+        if expr_is_fixed inputParameters e || fstatic then
+          let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
+          construct_edge qsymb coef None [] [] (if fstatic then [] else [e]) conds
+        else
+          []
+      | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
+        begin match try_assoc q#name xs with
+          Some _ -> []
+        | None ->
+          begin match try_assoc q#name predfammap with
+            Some (_, qtparams, _, qtps, qsymb, _) ->
+            begin match q#inputParamCount with
+              None -> assert false;
+            | Some qInputParamCount ->
+              let qIndices = List.map (fun (LitPat e) -> e) qfns in
+              let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+              if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+               construct_edge qsymb coef None qtargs qIndices qInputActuals conds
+              else
+                []
+            end
+          | None ->
+            begin match try_assoc q#name predctormap with
+              None -> []
+            | Some(PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
+              begin match inputParamCount with
+                None -> []
+              | Some qInputParamCount ->
+                let qIndices = List.map (fun (LitPat e) -> e) qfns in
+                let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
+                if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
+                construct_edge vsymb coef None [] [] (qIndices @ qInputActuals) conds
+                else
+                  []
+              end
+            end
+          end
+        end
+      | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
+        let (pmap, qsymb) =
+          match try_assoc static_type_name classmap1 with
+            Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
+            let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
+          | None ->
+            match try_assoc static_type_name classmap0 with
+              Some {cpreds} ->
+              let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
+            | None ->
+              match try_assoc static_type_name interfmap1 with
+                Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
+              | None ->
+                let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
+                let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
+                (pmap, symb)
+        in
+        if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
+          let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
+          construct_edge qsymb coef target [] [index] [] conds
+        end else
+          []
+      | CoefAsn(_, DummyPat, asn) ->
+        iter (Some DummyPat) conds asn
+      | CoefAsn(_, LitPat(frac), asn) when expr_is_fixed inputParameters frac -> (* extend to arbitrary fractions? *)
+        let new_coef = 
+          match coef with
+            None -> Some (LitPat frac)
+          | Some DummyPat -> Some DummyPat
+          | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
+        in
+        iter new_coef conds asn
+      | Sep(_, asn1, asn2) ->
+        (iter coef conds asn1) @ (iter coef conds asn2)
+      | IfAsn(_, cond, asn1, asn2) ->
+        if expr_is_fixed inputParameters cond then
+          (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
+        else
+          (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
+      | _ -> []
+    in
+    iter None [] wbody0
   
-  (* direct edges from a precise predicate or predicate family to other precise predicates 
+  (** direct edges from a precise predicate or predicate family to other precise predicates 
      - each element of path is of the form:
        (outer_l, outer_symb, outer_nb_curried, outer_fun_sym, outer_is_inst_pred, outer_formal_targs, outer_actual_indices, outer_formal_args, outer_formal_input_args, outer_wbody, inner_frac_expr_opt, inner_target_opt, inner_formal_targs, inner_formal_indices, inner_input_exprs, conds)
   *)
@@ -1106,90 +1190,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some nbInputParameters ->
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
-          let rec iter coef conds wbody =
-            match wbody with
-              WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-              if expr_is_fixed inputParameters e || fstatic then
-                let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
-              else
-                []
-            | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
-              begin match try_assoc q#name xs with
-                Some _ -> []
-              | None ->
-                begin match try_assoc q#name predfammap with
-                  Some (_, qtparams, _, qtps, qsymb, _) ->
-                  begin match q#inputParamCount with
-                    None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
-                  | Some qInputParamCount ->
-                    let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                    let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                    if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                      [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
-                    else
-                      []
-                  end
-                | None ->
-                  begin match try_assoc q#name predctormap with
-                    None -> []
-                  | Some(PredCtorInfo (l, ps1, ps2, inputParamCount, wbody, (funcsym, vsymb))) ->
-                    
-                    begin match inputParamCount with
-                      None -> []
-                    | Some qInputParamCount ->
-                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                        [(psymb, pindices, vsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], qIndices @ qInputActuals, conds)])]
-                      else
-                        []
-                    end
-                  end
-                end
-              end
-            | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
-              let (pmap, qsymb) =
-                match try_assoc static_type_name classmap1 with
-                  Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-                  let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
-                | None ->
-                  match try_assoc static_type_name classmap0 with
-                    Some {cpreds} ->
-                    let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
-                  | None ->
-                    match try_assoc static_type_name interfmap1 with
-                      Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
-                    | None ->
-                      let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
-                      let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
-                      (pmap, symb)
-              in
-              if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
-                let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
-                [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
-              end else
-                []
-            | CoefAsn(_, DummyPat, asn) ->
-              iter (Some DummyPat) conds asn
-            | CoefAsn(_, LitPat(frac), asn) when expr_is_fixed inputParameters frac -> (* extend to arbitrary fractions? *)
-              let new_coef = 
-                match coef with
-                  None -> Some (LitPat frac)
-                | Some DummyPat -> Some DummyPat
-                | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
-              in
-              iter new_coef conds asn
-            | Sep(_, asn1, asn2) ->
-              (iter coef conds asn1) @ (iter coef conds asn2)
-            | IfAsn(_, cond, asn1, asn2) ->
-              if expr_is_fixed inputParameters cond then
-                (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
-              else
-                (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
-            | _ -> []
+          let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
+            [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
           in
-          iter None [] wbody0
+          find_edges construct_edge inputParameters xs wbody0
       )
       predinstmap
   
@@ -1206,68 +1210,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let inputParameters = List.map fst (take nbInputParameters xs) in
           let inputFormals = (take nbInputParameters xs) in
           let outer_nb_curried = (List.length ps1) in
-          let rec iter coef conds asn =
-            match asn with
-              WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-              if expr_is_fixed inputParameters e || fstatic then
-                let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
-              else
-                []
-            | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
-              begin match try_assoc q#name xs with
-                Some _ -> []
-              | None ->
-                begin match try_assoc q#name predfammap with
-                  Some (_, qtparams, _, qtps, qsymb, _) ->
-                  begin match q#inputParamCount with
-                    None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
-                  | Some qInputParamCount ->
-                    let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                    let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                    if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then begin 
-                      [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
-                    end else begin
-                      []
-                    end
-                  end
-                | None ->
-                  begin match try_assoc q#name predctormap with
-                    None -> []
-                  | Some(PredCtorInfo (l, ps1_, ps2_, inputParamCount, wbody, (funcsym, vsymb))) ->
-                    begin match inputParamCount with
-                      None -> []
-                    | Some qInputParamCount ->
-                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                        [(psymbol_term, [], vsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], qIndices @ qInputActuals, conds)])]
-                      else
-                        []
-                    end
-                  end
-                end
-              end
-            | CoefAsn(_, DummyPat, asn) ->
-              iter (Some DummyPat) conds asn
-            | CoefAsn(_, LitPat(frac), asn) when expr_is_fixed inputParameters frac -> (* extend to arbitrary fractions? *)
-              let new_coef = 
-                match coef with
-                  None -> Some (LitPat frac)
-                | Some DummyPat -> Some DummyPat
-                | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
-              in
-              iter new_coef conds asn
-            | Sep(_, asn1, asn2) ->
-              (iter coef conds asn1) @ (iter coef conds asn2)
-            | IfAsn(_, cond, asn1, asn2) ->
-              if expr_is_fixed inputParameters cond then
-                (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
-              else
-                (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
-            | _ -> []
+          let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
+            [(psymbol_term, [], qsymb, [(l, (psymbol_term, true), outer_nb_curried, Some(psymbol), false, predinst_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
           in
-          iter None [] wbody0
+          find_edges construct_edge inputParameters xs wbody0
       )
    
   let instance_predicate_contains_edges = 
@@ -1282,75 +1228,10 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let xs = pmap in
             let inputParameters = ["this"] in
             let inputFormals = [] in
-            let rec iter coef conds wbody =
-              match wbody with
-                WPointsTo(_, WRead(lr, e, fparent, fname, frange, fstatic, fvalue, fghost), tp, v) ->
-                if expr_is_fixed inputParameters e || fstatic then
-                  let (_, (_, _, _, _, qsymb, _)) = List.assoc (fparent, fname) field_pred_map in
-                  [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, [], [], (if fstatic then [] else [e]), conds)])]
-                else
-                  []
-              | WPredAsn(_, q, true, qtargs, qfns, qpats) ->
-                begin match try_assoc q#name xs with
-                  Some _ -> []
-                | None ->
-                  begin match try_assoc q#name predfammap with
-                    None -> [] (* can this happen? *)
-                  | Some (_, qtparams, _, qtps, qsymb, _) ->
-                    begin match q#inputParamCount with
-                      None -> [] (* predicate is not precise, can this happen in a precise predicate? *)
-                    | Some qInputParamCount ->
-                      let qIndices = List.map (fun (LitPat e) -> e) qfns in
-                      let qInputActuals = List.map (fun (LitPat e) -> e) (take qInputParamCount qpats) in
-                      if List.for_all (fun e -> expr_is_fixed inputParameters e) (qIndices @ qInputActuals) then
-                        [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, None, qtargs, qIndices, qInputActuals, conds)])]
-                      else
-                        []
-                    end
-                  end
-                end
-              | WInstPredAsn(l2, target_opt, static_type_name, static_type_finality, family_type_string, instance_pred_name, index, args) ->
-                let (pmap, qsymb) =
-                  match try_assoc static_type_name classmap1 with
-                    Some (lcn, abstract, fin, methods, fds_opt, ctors, super, interfs, preds, pn, ilist) ->
-                    let (_, pmap, _, symb, _) = List.assoc instance_pred_name preds in (pmap, symb)
-                  | None ->
-                    match try_assoc static_type_name classmap0 with
-                      Some {cpreds} ->
-                      let (_, pmap, _, symb, _) = List.assoc instance_pred_name cpreds in (pmap, symb)
-                    | None ->
-                      match try_assoc static_type_name interfmap1 with
-                        Some (li, fields, methods, preds, interfs, pn, ilist) -> let (_, pmap, family, symb) = List.assoc instance_pred_name preds in (pmap, symb)
-                      | None ->
-                        let InterfaceInfo (li, fields, methods, preds, interfs) = List.assoc static_type_name interfmap0 in
-                        let (_, pmap, family, symb) = List.assoc instance_pred_name preds in
-                        (pmap, symb)
-                in
-                if match target_opt with Some e -> expr_is_fixed inputParameters e | None -> true then begin
-                  let target = match target_opt with Some e -> Some e | None -> Some (Var(l2, "this", ref (Some LocalVar))) in
-                  [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, target, [], [index], [], conds)])]
-                end else
-                  []
-              | CoefAsn(_, DummyPat, asn) ->
-                iter (Some DummyPat) conds asn
-              | CoefAsn(_, LitPat(frac), asn) when expr_is_fixed inputParameters frac -> (* extend to arbitrary fractions? *)
-                let new_coef = 
-                  match coef with
-                    None -> Some (LitPat frac)
-                  | Some DummyPat -> Some DummyPat
-                  | Some (LitPat coef) -> Some (LitPat (Operation(dummy_loc, Mul, [frac;coef], ref (Some [RealType; RealType]))))
-                in
-                iter new_coef conds asn
-              | Sep(_, asn1, asn2) ->
-                (iter coef conds asn1) @ (iter coef conds asn2)
-              | IfAsn(_, cond, asn1, asn2) ->
-                if expr_is_fixed inputParameters cond then
-                  (iter coef (cond :: conds) asn1) @ (iter coef (Operation(dummy_loc, Not, [cond], ref None) :: conds) asn2)
-                else
-                  (iter coef conds asn1) @ (iter coef conds asn2) (* replace this with []? *)
-              | _ -> []
+            let construct_edge qsymb coef target qtargs qIndices qInputActuals conds =
+              [(psymb, pindices, qsymb, [(l, (psymb, true), 0, None, true, instpred_tparams, fns, xs, inputFormals, wbody0, coef, target, qtargs, qIndices, qInputActuals, conds)])]
             in
-            iter None [] wbody0
+            find_edges construct_edge inputParameters xs wbody0
           )
       )
   

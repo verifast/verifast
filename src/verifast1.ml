@@ -58,6 +58,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let used_ids_undo_stack = ref []
   (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
   let dummy_frac_terms = ref []
+  (** The terms that represent predicate constructor applications. *)
+  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list))) list ref = ref []
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref []
   
@@ -108,8 +110,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        | PopSubcontext -> PopSubcontext)
       cs
 
-  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list))) list ref = ref []
-  
   let register_pred_ctor_application t symbol symbol_term ts =
     pred_ctor_applications := (t, (symbol, symbol_term, ts)) :: !pred_ctor_applications
 
@@ -176,7 +176,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   (** Remember the current path condition, set of used IDs, and set of dummy fraction terms. *)  
   let push() =
-    used_ids_stack := (!used_ids_undo_stack, !dummy_frac_terms)::!used_ids_stack;
+    used_ids_stack := (!used_ids_undo_stack, !dummy_frac_terms, !pred_ctor_applications)::!used_ids_stack;
     used_ids_undo_stack := [];
     ctxt#push;
     push_contextStack ()
@@ -185,9 +185,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let pop() =
     pop_contextStack ();
     List.iter (fun r -> decr r) !used_ids_undo_stack;
-    let ((usedIdsUndoStack, dummyFracTerms)::t) = !used_ids_stack in
+    let ((usedIdsUndoStack, dummyFracTerms, predCtorApplications)::t) = !used_ids_stack in
     used_ids_undo_stack := usedIdsUndoStack;
     dummy_frac_terms := dummyFracTerms;
+    pred_ctor_applications := predCtorApplications;
     used_ids_stack := t;
     ctxt#pop
   
