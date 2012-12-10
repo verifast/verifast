@@ -33,6 +33,9 @@ lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
 
+lemma void integer_distinct(int* i, int* j);
+    requires integer(i, ?v1) &*& integer(j, ?v2);
+    ensures integer(i, v1) &*& integer(j, v2) &*& i != j;
 
 lemma void integer_unique(int *p);
     requires [?f]integer(p, ?v);

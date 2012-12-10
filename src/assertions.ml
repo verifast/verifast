@@ -230,7 +230,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (g_symb, pats0, pats, types, auto_info) =
         if not is_global_predref then 
           let Some term = try_assoc g#name env in ((term, false), pats0, pats, g#domain, None)
-        else
+       else
           begin match try_assoc g#name predfammap with
             Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
@@ -1304,7 +1304,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (fun (from_symb, from_indices, to_symb, path) ->
         print_endline ((ctxt#pprint from_symb) ^ " -> " ^ (ctxt#pprint to_symb));
       )
-    contains_edges*)
+    contains_edges *)
   
   let rules_cell = ref [] (* A hack to allow the rules to recursively use the rules *)
   
@@ -1404,6 +1404,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                             None -> coef
                           | Some DummyPat -> real_unit
                           | Some (LitPat (RealLit(_, n))) -> ctxt#mk_real_mul coef (ctxt#mk_reallit_of_num ((num_of_big_int unit_big_int) // n))
+                          | Some (LitPat f) -> (* ideally: newcoef = coef / f, but real_div is not supported yet *)
+                              let fterm = (eval None env f) in
+                              if ctxt#query (ctxt#mk_real_le fterm coef) then
+                                real_unit
+                              else
+                                coef 
                           | Some _ -> coef (* todo *)
                         in
                         consume_asn rules tpenv h ghostenv env outer_wbody checkDummyFracs new_coef $. fun _ h ghostenv env2 size_first ->
