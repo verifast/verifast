@@ -59,7 +59,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (** The terms that represent coefficients of leakable chunks. These come from [_] patterns in the source code. *)
   let dummy_frac_terms = ref []
   (** The terms that represent predicate constructor applications. *)
-  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list))) list ref = ref []
+  let pred_ctor_applications : (termnode * (symbol * termnode * (termnode list) * int option)) list ref = ref []
   (** When switching to the next symbolic execution branch, this stack is popped to forget about fresh identifiers generated in the old branch. *)
   let used_ids_stack = ref []
   
@@ -110,8 +110,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
        | PopSubcontext -> PopSubcontext)
       cs
 
-  let register_pred_ctor_application t symbol symbol_term ts =
-    pred_ctor_applications := (t, (symbol, symbol_term, ts)) :: !pred_ctor_applications
+  let register_pred_ctor_application t symbol symbol_term ts inputParamCount =
+    pred_ctor_applications := (t, (symbol, symbol_term, ts, inputParamCount)) :: !pred_ctor_applications
 
   let assert_false h env l msg url =
     raise (SymbolicExecutionError (pprint_context_stack !contextStack, "false", l, msg, url))
@@ -4633,7 +4633,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           evs state args $. fun state vs ->
           let fun_app = (mk_app (s, st) vs) in
           (if((List.length ps1) = (List.length vs)) then
-            register_pred_ctor_application fun_app s st vs);
+            register_pred_ctor_application fun_app s st vs inputParamCount);
           cont state fun_app
       | None ->
         begin match try_assoc g purefuncmap with

@@ -1284,9 +1284,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             consume_c_object l (field_address l addr sn f) t h true $. fun h ->
             iter h fields
           | _ ->
-            get_field h addr sn f l $. fun h coef _ ->
-            if not (definitely_equal coef real_unit) then assert_false h [] l "Full field chunk permission required" None;
-            iter h fields
+             let (_, (_, _, _, _, f_symb, _)) = List.assoc (sn, f) field_pred_map in
+             consume_chunk rules h [] [] [] l (f_symb, true) [] real_unit (TermPat(real_unit)) (Some 1) [TermPat addr; dummypat] $.
+             (fun chunk h coef [_; t] size ghostenv env env' -> iter h fields)
       in
       iter h fields
     | _ ->

@@ -17,17 +17,6 @@ struct tlock {
 
 //Some lemma's about lists
 
-lemma void append_nth<t>(int i, list<t> xs, list<t> ys)
-    requires 0<=i &*& i < length(xs);
-    ensures nth(i, append(xs,ys)) ==  nth(i, xs);
-{
-  switch (xs) {
-    case nil: 
-    case cons(x0, xs0): 
-      if(i!=0)append_nth<t>(i-1, xs0, ys);
-  }
-}
-
 lemma void nth_zero<t>(list<t> l) 
   requires length(l) > 0;
   ensures nth(0, l) == head(l);
@@ -119,7 +108,7 @@ box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<h
                   (ticket == owner ? isLocked == locked : !isLocked);
         
         preserved_by get_ticket() {
-           append_nth(ticket - owner, old_thandles, cons(actionHandle, nil));
+           nth_append(old_thandles, cons(actionHandle, nil), ticket - owner);
         }
         preserved_by try_acquire(t) {
         }

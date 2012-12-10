@@ -297,52 +297,52 @@ plugins2.mli: ../examples/plugin/plugins2.mli
 	cat generated_file_warning.txt ../examples/plugin/plugins2.mli > plugins2.mli
 
 plugins2.cmi: plugins.cmi plugins2.mli
-	${OCAMLOPTOPT} -c plugins2.mli
+	${OCAMLOPTOPT} -annot -c plugins2.mli
 
 plugins2.cmx: plugins_private.cmx plugins2.cmi plugins2.ml
-	${OCAMLOPTOPT} -c plugins2.ml
+	${OCAMLOPTOPT} -annot -c plugins2.ml
 
 pa_verifast.cmo: pa_verifast.ml
-	${OCAMLC} -I +camlp4 dynlink.cma camlp4lib.cma -pp "${CAMLP4O} pa_extend.cmo q_MLast.cmo" pa_verifast.ml
+	${OCAMLC} -I +camlp4 dynlink.cma camlp4lib.cma -annot -pp "${CAMLP4O} pa_extend.cmo q_MLast.cmo" pa_verifast.ml
 
 util.cmx: linux/Perf.cmxa vfversion.cmi proverapi.cmx plugins2.cmx pa_verifast.cmo util.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux util.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux util.ml
 
 stats.cmx: util.cmx stats.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux stats.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux stats.ml
 
 lexer.cmx: stats.cmx lexer.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux lexer.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux lexer.ml
 
 ast.cmx: lexer.cmx ast.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux ast.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux ast.ml
 
 parser.cmx: ast.cmx parser.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -pp ${CAMLP4O} -c -I ./linux parser.ml
 
 verifast0.cmx: parser.cmx verifast0.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast0.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast0.ml
 
 verifast1.cmx: verifast0.cmx verifast1.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast1.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast1.ml
 
 assertions.cmx: verifast1.cmx assertions.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux assertions.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux assertions.ml
 
 verify_expr.cmx: assertions.cmx verify_expr.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verify_expr.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verify_expr.ml
 
 verifast.cmx: verify_expr.cmx verifast.ml
-	${OCAMLOPTOPT} -w p -warn-error FSU -c -I ./linux verifast.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
-	${OCAMLCOPT} -warn-error F -g -pp ${CAMLP4O} -I ./linux -c verifast.ml
+	${OCAMLCOPT} -annot -warn-error F -g -pp ${CAMLP4O} -I ./linux -c verifast.ml
 
 simplex.cmo: simplex.ml
-	${OCAMLC} -warn-error F -g -c simplex.ml
+	${OCAMLC} -annot -warn-error F -g -c simplex.ml
 
 proverapi.cmo: proverapi.ml
-	${OCAMLC} -warn-error F -g -c proverapi.ml
+	${OCAMLC} -annot -warn-error F -g -c proverapi.ml
 
 redux.cmo: proverapi.cmo simplex.cmo redux.ml
 	${OCAMLC} -warn-error F -w p -g -c redux.ml

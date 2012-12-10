@@ -238,7 +238,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term ctorargs;
+            register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
             ((g_symb, false), [], pats, List.map snd ps2, None)
           end
       in
@@ -708,7 +708,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         begin fun cont ->
           if !consume_chunk_recursion_depth > 100 then cont () else
           with_updated_ref consume_chunk_recursion_depth ((+) 1) $. fun () ->
-          if inputParamCount = None then cont () else
+          let (g, inputParamCount) = match inputParamCount with 
+            Some (n) -> (g, inputParamCount)
+          | None when not (snd g) ->
+            begin match try_find (fun (_, (_, _, _, _, symb, _)) -> symb == fst(g)) predfammap with
+              Some (_, (_, _, _, _, symb, inputParamCount)) -> ((symb, true), inputParamCount)
+            | None -> begin match try_assq (fst g) !pred_ctor_applications with
+                None -> (g, None)
+              | Some (funsym, funterm, args, inputParamCount) -> (g, inputParamCount)
+              end
+            end
+          | None -> (g, None)
+          in 
+          if inputParamCount = None then begin cont () end else
           begin fun cont' ->
             let Some inputParamCount = inputParamCount in
             let rec iter n ts pats tps0 tps =
@@ -745,7 +757,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | None -> 
               begin match try_assq g ! pred_ctor_applications with 
                 None -> cont ()
-              | Some (_, symbol_term, ctor_args) -> 
+              | Some (_, symbol_term, ctor_args, _) -> 
                 begin match try_assq symbol_term rules with
                   Some rules -> try_rules rules (ctor_args @ ts)
                 | None -> cont ()
@@ -858,7 +870,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
-            register_pred_ctor_application g_symb symbol symbol_term ctorargs;
+            register_pred_ctor_application g_symb symbol symbol_term ctorargs inputParamCount;
             ((g_symb, false), [], pats, List.map snd ps2)
         else
           let Some term = try_assoc (g#name) env in ((term, false), pats0, pats, g#domain)
@@ -1321,7 +1333,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       let (fsymb, literal) = found_symb in 
                       begin match try_assq fsymb !pred_ctor_applications with
                         None -> false
-                      | Some (symbol, symbol_term, ctor_args) ->
+                      | Some (symbol, symbol_term, ctor_args, _) ->
                         let expected_ts = (match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args in
                         let found_ts = ctor_args @ found_ts in
                         if to_symb == symbol_term then begin
@@ -1494,7 +1506,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                               let (fsymb, literal) = found_symb in 
                               begin match try_assq fsymb !pred_ctor_applications with
                                 None -> iter (chunk::hdone) htodo
-                              | Some (symbol, symbol_term, ctor_args) -> 
+                              | Some (symbol, symbol_term, ctor_args, _) -> 
                                 if symbol_term == osymb then
                                   let actuals = (match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args in
                                   if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
@@ -1550,7 +1562,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let (fsymb, literal) = actual_name in 
                     begin match try_assq fsymb !pred_ctor_applications with
                       None -> try_apply_rule0 (chnk :: hdone) rest
-                    | Some (symbol, symbol_term, ctor_args) -> 
+                    | Some (symbol, symbol_term, ctor_args, _) -> 
                         if from_symb == symbol_term then
                           begin match try_apply_rule_core None actual_targs [] (ctor_args @ actual_ts) path with
                             None -> try_apply_rule0 (chnk :: hdone) rest
