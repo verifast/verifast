@@ -58,3 +58,50 @@ void test6(int* i)
   //@ close exists(eq(i));
   helper(i);
 }
+
+void test7(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [f]chars(c, 0, nil);
+{
+}
+
+void test8(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [_]chars(c, 0, nil);
+{
+}
+/* todo
+//@ predicate foo(char* c, real f;) = [f]chars(c, 0, nil); 
+//@ predicate bar(char* c, real f;) = [1/4]foo(c, f);
+//@ predicate bar_(char* c, real f;) = [_]foo(c, f);
+
+void test9(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [1/2]foo(c, f);
+{
+}
+
+void test10(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [_]foo(c, f);
+{
+}
+
+void test11(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [1/2]bar(c, f);
+{
+}
+
+void test12(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [1/2]bar_(c, f);
+{
+}
+
+void test13(char* c)
+  //@ requires [_]exists<real>(?f);
+  //@ ensures [_]bar(c, f);
+{
+}
+*/
