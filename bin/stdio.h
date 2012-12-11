@@ -61,10 +61,10 @@ void putchar(char c);
 
 /*@
 
-fixpoint option<list<char *> > printf_cons(char *p, option<list<char *> > ps) {
-    switch (ps) {
+fixpoint option<list<t> > option_cons<t>(t x, option<list<t> > xs) {
+    switch (xs) {
         case none: return none;
-        case some(ps0): return some(cons(p, ps0));
+        case some(xs0): return some(cons(x, xs0));
     }
 }
 
@@ -112,7 +112,7 @@ fixpoint option<list<char *> > printf_parse_format(list<char> fcs, list<vararg> 
                                 case nil: return none;
                                 case cons(arg, args1): return
                                     switch (arg) {
-                                        case vararg_pointer(v): return printf_cons(v, printf_parse_format(fcs1, args1));
+                                        case vararg_pointer(v): return option_cons(v, printf_parse_format(fcs1, args1));
                                         default: return none;
                                     };
                             }
@@ -151,8 +151,96 @@ int printf(char* format, ...);
     @*/
     //@ ensures emp;
 
-int scanf(char* format, int* arg);
-    //@ requires [?f]string(format, ?cs) &*& cs == cons('%', cons('i', nil)) &*& integer(arg, _);
-    //@ ensures [f]string(format, cs) &*& integer(arg, _);
+/*@
+
+inductive scanf_parse_mode = scanf_format | scanf_format_spec | scanf_scanset;
+
+fixpoint option<list<pair<char, pair<void *, int> > > > scanf_parse_format(list<char> fcs, scanf_parse_mode mode, int width, list<vararg> args) {
+    switch (fcs) {
+        case nil: return mode == scanf_format ? some(nil) : none;
+        case cons(fc0, fcs0): return
+            mode == scanf_format ?
+                fc0 != '%' ?
+                    scanf_parse_format(fcs0, scanf_format, 0, args)
+                :
+                    scanf_parse_format(fcs0, scanf_format_spec, 0, args)
+            : mode == scanf_scanset ?
+                fc0 == '-' && (fcs0 == nil || head(fcs0) != ']') ? none :
+                fc0 != ']' ? scanf_parse_format(fcs0, scanf_scanset, width, args) :
+                    switch (args) {
+                        case nil: return none;
+                        case cons(arg0, args0): return
+                            switch (arg0) {
+                                case vararg_pointer(p): return option_cons(pair('s', pair(p, width)), scanf_parse_format(fcs0, scanf_format, 0, args0));
+                                default: return none;
+                            };
+                    }
+            :
+                '0' <= fc0 && fc0 <= '9' ?
+                    scanf_parse_format(fcs0, scanf_format_spec, width * 10 + fc0 - '0', args)
+                : fc0 == 'i' || fc0 == 'd' ?
+                    switch (args) {
+                        case nil: return none;
+                        case cons(arg0, args0): return
+                            switch (arg0) {
+                                case vararg_pointer(p): return option_cons(pair('i', pair(p, 0)), scanf_parse_format(fcs0, scanf_format, 0, args0));
+                                default: return none;
+                            };
+                    }
+                : fc0 == 's' ?
+                    width == 0 ? none :
+                    switch (args) {
+                        case nil: return none;
+                        case cons(arg0, args0): return
+                            switch (arg0) {
+                                case vararg_pointer(p): return option_cons(pair('s', pair(p, width)), scanf_parse_format(fcs0, scanf_format, 0, args0));
+                                default: return none;
+                            };
+                    }
+                : fc0 == '[' ?
+                    width == 0 ? none :
+                    switch (fcs0) {
+                        case nil: return none;
+                        case cons(fc1, fcs1): return
+                            // Always skip first char, even if it's ']' or '-'.
+                            fc1 == '^' ?
+                                switch (fcs1) {
+                                    case nil: return none;
+                                    case cons(fc2, fcs2): return
+                                        scanf_parse_format(fcs2, scanf_scanset, width, args);
+                                }
+                            :
+                                scanf_parse_format(fcs1, scanf_scanset, width, args);
+                    }
+                : none;
+    }
+}
+
+predicate scanf_targets(list<pair<char, pair<void *, int> > > targets, int fillCount;) =
+    targets == nil ?
+        emp
+    :
+        scanf_targets(tail(targets), fillCount - 1) &*&
+        fst(head(targets)) == 'i' ?
+            integer(fst(snd(head(targets))), _)
+        :
+            chars(fst(snd(head(targets))), snd(snd(head(targets))) + 1, ?cs) &*& fillCount <= 0 || mem('\0', cs) == true;
+
+@*/
+
+int scanf(char *format, ...);
+    /*@
+    requires // scanf_targets unrolled once to reduce reliance on auto-open/close
+        [?f]string(format, ?fcs) &*& scanf_parse_format(fcs, scanf_format, 0, varargs) == some(?targets) &*&
+        switch (targets) {
+            case nil: return ensures [f]string(format, fcs);
+            case cons(t0, ts0): return scanf_targets(ts0, 0) &*&
+                fst(t0) == 'i' ?
+                    integer(fst(snd(t0)), _) &*& ensures [f]string(format, fcs) &*& integer(fst(snd(t0)), _) &*& scanf_targets(ts0, result - 1)
+                :
+                    chars(fst(snd(t0)), snd(snd(t0)) + 1, _) &*& ensures[f]string(format, fcs) &*& chars(fst(snd(t0)), snd(snd(t0)) + 1, ?cs) &*& result < 1 || mem('\0', cs) &*& scanf_targets(ts0, result - 1);
+        };
+    @*/
+    //@ ensures emp;
 
 #endif

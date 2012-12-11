@@ -9,6 +9,7 @@
 .provides string.h#memchr
 .provides string.h#strcmp
 .provides string.h#strlen
+.provides string.h#strdup
 .provides prelude.h#array_inv
 .provides prelude.h#integer_distinct
 .provides prelude.h#pointer_distinct

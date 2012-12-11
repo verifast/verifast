@@ -43,4 +43,8 @@ void memset(void *array, char value, int size);
     //@ requires chars(array, size, ?cs);
     //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true;
 
+char *strdup(char *string);
+    //@ requires [?f]string(string, ?cs);
+    //@ ensures [f]string(string, cs) &*& result == 0 ? true : string(result, cs) &*& malloc_block_chars(result, length(cs) + 1);
+
 #endif
