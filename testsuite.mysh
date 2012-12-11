@@ -250,6 +250,8 @@ verifast_both -c -disable_overflow_check xor.c
 verifast_both -c -disable_overflow_check characters_loop.c
 verifast_both -c -disable_overflow_check tuerk.c
 verifast_both -c -disable_overflow_check stack_tuerk.c
+verifast_both -c memcpy.c
+verifast_both -c memcmp.c
 verifast_both -c -disable_overflow_check strlen.c
 cd ..
 cd tests
