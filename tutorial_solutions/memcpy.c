@@ -9,7 +9,6 @@ void memcpy(char *dest, char *src, int count)
         //@ open chars(dest + i, _, _);
         //@ open chars(src + i, _, _);
         if (i == count) {
-            //@ close [f]chars(src + i, 0, _);
             break;
         }
         dest[i] = src[i];
@@ -27,7 +26,6 @@ void memcpy1(char *dest, char *src, int count) // Identical but uses array slice
         //@ open chars(dest + i, _, _);
         //@ open chars(src + i, _, _);
         if (i == count) {
-            //@ close [f]chars(src + i, 0, _);
             break;
         }
         dest[i] = src[i];

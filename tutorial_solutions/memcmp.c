@@ -10,8 +10,6 @@ int memcmp(char *p1, char *p2, int count)
         //@ open chars(p1 + i, _, _);
         //@ open chars(p2 + i, _, _);
         if (i == count) {
-            //@ close [f1]chars(p1 + i, 0, _);
-            //@ close [f2]chars(p2 + i, 0, _);
             break;
         }
         if (p1[i] < p2[i]) {
