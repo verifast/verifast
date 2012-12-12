@@ -9,7 +9,6 @@ int strlen(char *s)
     {
         //@ open [f]string(s + i, cs1);
         if (s[i] == 0) {
-            //@ close [f]string(s + i, cs1);
             break;
         }
     }
