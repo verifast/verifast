@@ -1951,6 +1951,49 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt
   
   (* Region: verification of function bodies *)
+  and add_rule_for_lemma l pre post ps fracname p_ref p_args condition q_ref q_input_args = 
+    let (_, _, _, _, p_symb, Some p_inputParamCount) = List.assoc p_ref#name predfammap in
+    let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
+    let rule h targs terms_are_well_typed coef coefpat ts cont =
+      (* locate p in the heap *)
+      let rec try_apply_rule hdone htodo =
+        match htodo with
+	  [] -> cont None
+        | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, actual_size)) as chunk) :: hrest when predname_eq actual_name (p_symb ,true) -> 
+          let env0 = List.map2 (fun (x, tp) t -> (x, t)) ps (take (List.length ps) actual_ts) in
+          let env1 = (match fracname with None -> env0 | Some(f) -> (f, actual_coef) :: env0) in
+          let rec construct_env env es actuals failcont cont =
+            match (es, actuals) with
+              ([], []) -> cont env
+            | (VarPat(_, x) :: es, t :: actuals) -> construct_env ((x, t) :: env) es actuals failcont cont
+            | (LitPat(e) :: es, t :: actuals) -> if definitely_equal (eval None env e) t then construct_env env es actuals failcont cont else failcont None
+            | ((DummyPat _) :: es, t :: actuals) -> construct_env env es actuals failcont cont
+          in 
+          construct_env env1  (drop (List.length ps) p_args) (drop (List.length ps) actual_ts) cont $. fun env ->
+          let ghostenv = [] in
+          let tpenv = [] in
+          assert ((List.length ts) = q_inputParamCount);
+          if
+             actual_targs = [] &&
+             (match fracname with None -> definitely_equal actual_coef real_unit | Some(f) -> true) &&
+             (match condition with None -> true | Some(e) -> ctxt#query (eval None env e)) &&
+             (List.for_all2 (fun wanted e -> definitely_equal wanted (eval None env e)) ts (List.map (function LitPat e -> e) q_input_args))
+          then
+             (* HACK: putting "chunk" first such that it will be selected for consumption;
+                otherwise, the wrong chunk may be selected for consumption (because of existentials in "pre").
+                Note it is also possible to work around this problem by using lemma parameters instead of existentials. *) 
+            let h = chunk :: hdone @ hrest in
+            with_context (Executing (h, env0, l, "Auto-applying lemma")) $. fun () ->
+	      consume_asn rules tpenv h ghostenv env0 pre true real_unit $. fun _ h ghostenv env size -> 
+		produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h) 
+          else
+            try_apply_rule (hdone @ [chunk]) hrest
+        | chunk :: hrest -> try_apply_rule (hdone @ [chunk]) hrest
+      in
+        try_apply_rule [] h
+    in
+    add_lemma_rule q_symb rule 
+
   and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
     match (pre, post) with
     (ExprAsn(_, pre), ExprAsn(_, post)) ->
@@ -1988,13 +2031,48 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let body = ctxt#mk_implies t_pre t_post in
       ctxt#end_formal;
       ctxt#assume_forall g trigger tps body
-  | (WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
+  | (WPredAsn(p_loc, p_ref, true, p_targs, p_args1, p_args2), Sep(_, WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2), conditions))
+    when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(Var(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && is_pure_spatial_assertion conditions -> 
       (Hashtbl.add auto_lemmas (p_ref#name) (None, tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
-  | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), _) when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
-         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) ->
+  | (CoefAsn(loc, VarPat(_,f), WPredAsn(p_loc, p_ref, _, p_targs, p_args1, p_args2)), Sep(_, CoefAsn(_, LitPat(Var(_, g, _)), WPredAsn(_, q_ref, true, q_targs, q_args1, q_args2)), conditions)) 
+    when List.length ps = 0 && List.for_all (fun arg -> match arg with | VarPat(_,_) -> true | _ -> false) (p_args1 @ p_args2) && 
+         List.length p_targs = List.length tparams' && (List.for_all (fun (tp, t) -> match (tp, t) with (x, TypeParam(y)) when x = y -> true | _ -> false) (zip2 tparams' p_targs)) &&
+         p_ref#name = q_ref#name && List.for_all2 (fun (VarPat(_, x)) arg2 -> match arg2 with LitPat(Var(_, y, _)) -> x = y | _ -> false) (p_args1 @ p_args2) (q_args1 @ q_args2) &&
+         List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
-  | _ -> static_error l (sprintf "contract of auto lemma %s has wrong form" g) None
+  | _ ->
+    let (fracname, p_ref, p_args, conds) =
+      match pre with
+        WPredAsn(p_loc, p_ref, true, (* p_targs *) [], (* p_args1 *) [], p_args2) -> (None, p_ref, p_args2, None)
+      | CoefAsn(_, VarPat(_, f), WPredAsn(p_loc, p_ref, true, [], [], p_args2)) -> (Some f, p_ref, p_args2, None)
+      | Sep(_, WPredAsn(p_loc, p_ref, true, (* p_targs *) [], (* p_args1 *) [], p_args2), ExprAsn(_, e)) -> (None, p_ref, p_args2, Some e)
+      | Sep(_, CoefAsn(_, VarPat(_, f), WPredAsn(p_loc, p_ref, true, [], [], p_args2)), ExprAsn(_, e)) -> (Some f, p_ref, p_args2, Some e)
+      | _ -> static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None
+    in
+    if tparams' = [] && List.length ps <= List.length p_args &&
+       (List.for_all (function (LitPat(Var(_, x, _)), (y, tp)) -> x = y | _-> false) (zip2 (take (List.length ps) p_args) ps))
+    then begin
+      let (fracexpr, q_ref, q_args) =
+        match post with
+          WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2) -> (None, q_ref, q_args2)
+        | CoefAsn(_, LitPat(g), WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2)) -> (Some g, q_ref, q_args2)          
+        | Sep(_, WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2), _) -> (None, q_ref, q_args2)
+        | Sep(_, CoefAsn(_, LitPat(g), WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2)), _) -> (Some g, q_ref, q_args2)
+	| _ ->  static_error l (sprintf "postcondition of auto lemma %s has wrong form" g) None
+      in
+      let Some q_nb_inputs = q_ref#inputParamCount in 
+      let q_input_args = take q_nb_inputs q_args in
+      if (List.for_all (function LitPat _ -> true | _ -> false) q_input_args) &&
+         p_ref#is_precise && q_ref#is_precise
+      then
+        add_rule_for_lemma l pre post ps fracname p_ref p_args conds q_ref q_input_args
+      else
+        static_error l (sprintf "postcondition of auto lemma %s has wrong form" g) None
+    end else
+      static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None
   and heapify_params h tenv env ps =
     begin match ps with
       [] -> (h, tenv, env)

@@ -55,8 +55,10 @@
 .provides prelude.h#ints_to_chars
 .provides prelude.h#chars_to_uints
 .provides prelude.h#uints_to_chars
+.provides prelude.h#div_rem
 .provides prelude.h#divrem_intro
 .provides prelude.h#divrem_elim
+.provides prelude.h#pointers_to_chars
 .provides prelude_core.gh#default_value_eq_zero
 .provides quantifiers.gh#get_forall_t
 .provides quantifiers.gh#not_forall_t

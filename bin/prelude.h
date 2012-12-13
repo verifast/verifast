@@ -106,37 +106,37 @@ lemma void chars_join(char *array);
 
 
 // chars to ...
-lemma void chars_to_integer(void *p);
+lemma_auto void chars_to_integer(void *p);
     requires [?f]chars(p, sizeof(int), ?cs);
     ensures [f]integer(p, _);
 
-lemma void chars_to_u_integer(void *p);
+lemma_auto void chars_to_u_integer(void *p);
     requires [?f]chars(p, sizeof(unsigned int), ?cs);
     ensures [f]u_integer(p, _);
 
-lemma void chars_to_pointer(void *p);
+lemma_auto void chars_to_pointer(void *p);
     requires [?f]chars(p, sizeof(void *), ?cs);
     ensures [f]pointer(p, pointer_of_chars(cs));
 
 // ... to chars
-lemma void integer_to_chars(void *p);
+lemma_auto void integer_to_chars(void *p);
     requires [?f]integer(p, _);
     ensures [f]chars(p, sizeof(int), ?cs);
 
-lemma void u_integer_to_chars(void *p);
+lemma_auto void u_integer_to_chars(void *p);
     requires [?f]u_integer(p, _);
     ensures [f]chars(p, sizeof(unsigned int), ?cs);
 
-lemma void pointer_to_chars(void *p);
+lemma_auto void pointer_to_chars(void *p);
     requires [?f]pointer(p, ?v);
     ensures [f]chars(p, sizeof(void *), chars_of_pointer(v));
 
 // u_character to/from character
-lemma void u_character_to_character(void *p);
+lemma_auto void u_character_to_character(void *p);
     requires [?f]u_character(p, _);
     ensures [f]character(p, _);
 
-lemma void character_to_u_character(void *p);
+lemma_auto void character_to_u_character(void *p);
     requires [?f]character(p, _);
     ensures [f]u_character(p, _);
 
@@ -190,11 +190,11 @@ lemma void pointers_join(void **pp);
     ensures [f]pointers(pp, count1 + count2, append(ps1, ps2));
 
 
-lemma void chars_to_uchars(void *p);
+lemma_auto void chars_to_uchars(void *p);
     requires [?f]chars(p, ?n, _);
     ensures [f]uchars(p, n, _);
 
-lemma void uchars_to_chars(void *p);
+lemma_auto void uchars_to_chars(void *p);
     requires [?f]uchars(p, ?n, _);
     ensures [f]chars(p, n, _);
 
@@ -202,7 +202,7 @@ lemma void chars_to_ints(void *p, int n);
     requires [?f]chars(p, n * sizeof(int), _);
     ensures [f]ints(p, n, _);
 
-lemma void ints_to_chars(void *p);
+lemma_auto void ints_to_chars(void *p);
     requires [?f]ints(p, ?n, _);
     ensures [f]chars(p, n * sizeof(int), _);
 
@@ -210,7 +210,7 @@ lemma void chars_to_uints(void *p, int n);
     requires [?f]chars(p, n * sizeof(unsigned int), _);
     ensures [f]uints(p, n, _);
 
-lemma void uints_to_chars(void *p);
+lemma_auto void uints_to_chars(void *p);
     requires [?f]uints(p, ?n, _);
     ensures [f]chars(p, n * sizeof(unsigned int), _);
 
@@ -221,8 +221,8 @@ lemma void chars_to_pointers(void *p, int n);
     requires [?f]chars(p, n * sizeof(void *), ?cs);
     ensures [f]pointers(p, n, pointers_of_chars(cs)) &*& chars_of_pointers(pointers_of_chars(cs)) == cs;
 
-lemma void pointers_to_chars(void *pp);
-    requires [?f]pointers(pp, ?n, ?ps);
+lemma_auto void pointers_to_chars(void *pp);
+    requires [?f]pointers(pp, ?n, ?ps) &*& true;
     ensures [f]chars(pp, n * sizeof(void *), chars_of_pointers(ps)) &*& pointers_of_chars(chars_of_pointers(ps)) == ps;
 
 
@@ -254,23 +254,23 @@ predicate string(char *s; list<char> cs) =
     :
         string(s + 1, ?cs0) &*& cs == cons(c, cs0);
 
-lemma void string_to_body_chars(char *s);
+lemma_auto void string_to_body_chars(char *s);
     requires [?f]string(s, ?cs);
-    ensures [f]chars(s, _, cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
+    ensures [f]chars(s, length(cs), cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
 
 lemma void body_chars_to_string(char *s);
     requires [?f]chars(s, _, ?cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
     ensures [f]string(s, cs);
 
-lemma void chars_to_string(char *s);
+lemma_auto void chars_to_string(char *s);
     requires [?f]chars(s, ?n, ?cs) &*& index_of('\0', cs) == n - 1;
     ensures [f]string(s, take(n - 1, cs));
 
-lemma void string_to_chars(char *s);
+lemma_auto void string_to_chars(char *s);
     requires [?f]string(s, ?cs);
-    ensures [f]chars(s, _, append(cs, cons('\0', nil))) &*& !mem('\0', cs);
+    ensures [f]chars(s, length(cs) + 1, append(cs, cons('\0', nil))) &*& !mem('\0', cs);
 
-lemma void chars_separate_string(char *s);
+lemma_auto void chars_separate_string(char *s);
     requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
     ensures [f]string(s, take(index_of('\0', cs), cs)) &*& [f]chars(s + index_of('\0', cs) + 1, n - index_of('\0', cs) - 1, drop(index_of('\0', cs) + 1, cs));
 

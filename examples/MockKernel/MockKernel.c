@@ -377,7 +377,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
             library = load_library(name);
             if (library == 0) {
                 writer_write_string(writer, "Could not load the module.\r\n");
-                //@ string_to_chars(name);
                 free(name);
                 goto skipLoad;
             }
@@ -482,7 +481,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
                             //@ close kernel_module_disposing(m, _);
                             dispose(m);
                             //@ open kernel_module_disposing(m, 0);
-                            //@ string_to_chars(m->name);
                             free(m->name);
                             library_free(m->library);
                             //@ stop_counting(ghost_set_member_handle_wrapper, pair(modulesId, m));
@@ -531,7 +529,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
             }
             //@ close kernel_inv(modulesId, devicesId)();
             lock_release(kernelLock);
-            //@ string_to_chars(name);
             free(name);
             
         } else if (choice == 3) {
@@ -665,7 +662,6 @@ void handle_connection(struct socket *socket) //@ : thread_run
             //@ lseg_append_final(directory);
             //@ close kernel_inv(modulesId, devicesId)();
             lock_release(kernelLock);
-            //@ string_to_chars(name);
             free(name);
             
         } else {

@@ -986,7 +986,6 @@ lemma void object_not_null(struct object *object)
     if (object == 0) {
         chars_zero();
     }
-    chars_to_integer((void *)object);
     close [1/2]object_refCount(object, _);
     open [1/2]hide_object_refCount(object, _);
 }

@@ -70,6 +70,64 @@ void test8(char* c)
   //@ ensures [_]chars(c, 0, nil);
 {
 }
+
+//@ predicate pos(int x;) = x == 0 ? true : pos(x - 1);
+
+void test9()
+  //@ requires true;
+  //@ ensures pos(0);
+{
+}
+
+void test9b()
+  //@ requires true;
+  //@ ensures pos(1);
+{
+}
+
+void test10()
+  //@ requires pos(7);
+  //@ ensures pos(8); 
+{
+}
+
+//@ predicate pos0(int x;) = x == 0 ? true : pos0(x - 1);
+
+/*@
+lemma_auto void pos_to_pos0()
+  requires pos(?x);
+  ensures pos0(x);
+{
+  open pos(x);
+  if(x != 0)
+    pos_to_pos0();
+}
+@*/
+
+
+void test11()
+  //@ requires pos(?x);
+  //@ ensures pos0(x);
+{
+}
+
+/*@
+lemma_auto void pos0_to_pos(int x)
+  requires [?f]pos0(x);
+  ensures [f]pos(x);
+{
+  open [f]pos0(x);
+  if(x != 0)
+    pos0_to_pos(x - 1);
+}
+@*/
+
+void test12()
+  //@ requires [1/2]pos0(?x);
+  //@ ensures [1/2]pos(x);
+{
+}
+
 /* todo
 //@ predicate foo(char* c, real f;) = [f]chars(c, 0, nil); 
 //@ predicate bar(char* c, real f;) = [1/4]foo(c, f);

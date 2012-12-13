@@ -84,9 +84,7 @@ bool heap_is_empty(struct heap* heap)
 	//@ requires heap(heap,?values);
 	//@ ensures heap(heap,values) &*& result == (length(values) == 0);
 {
-	//@ open heap(heap,values);
-        return heap->size == 0;
-        //@ close heap(heap,values);
+  return heap->size == 0;
 }
 
 /*@
@@ -101,20 +99,6 @@ lemma void move_array_elem(int* arr, int N)
       move_array_elem(arr + 1, N - 1);
   }
 }
-
-lemma void intarray_to_chars(void* a)
-  requires ints(a, ?n, _);
-  ensures chars(a, n * sizeof(int), _);
-{
-  if(n == 0) {
-    close chars(a, 0, nil);
-  } else {
-    open ints(_, _, _);
-    integer_to_chars(a);
-    intarray_to_chars(a + sizeof(int));
-    chars_join(a);
-  }
-}
 @*/
 
 
@@ -122,7 +106,6 @@ void heap_insert(struct heap* heap, ElementType x)
   //@ requires heap(heap, ?values);
   //@ ensures heap(heap, ?values2) &*& length(values2) == length(values) + 1;
 {
-  //@ open heap(heap, values);
   //@ int* arr = heap->elems;
   if(heap->size + 1 == heap->capacity) {
     abort();
@@ -175,7 +158,6 @@ void heap_insert(struct heap* heap, ElementType x)
   swim(heap->elems, heap->size + 1, in);
   //@ assert ints(arr, in + 1, ?values2);
   //@ switch(values2) { case nil: case cons(h, t): switch(t) { case nil: case cons(h0, t0): } }
-  //@ close heap(heap, tail(values2));
 }
 
 /*@
@@ -183,7 +165,7 @@ lemma_auto(i/2) void div_mul(int i)
   requires 1 < i;
   ensures 2*(i/2) == i || 2*(i/2) + 1 == i;
 {
-  assume(false);
+  div_rem(i, 2);
 }
 @*/
 
@@ -258,7 +240,7 @@ ElementType heap_max(struct heap* heap)
   //@ requires heap(heap, ?values) &*& 0 < length(values);
   //@ ensures heap(heap, values) &*& forall_nth(values, (ge)(result)) == true &*& mem(result, values) == true;
 {
-  //@ open heap(heap, values);
+ 
   //@ int tmp = heap->elems[1];
   //@ int* elems = heap->elems;
   //@ assert ints(elems, _, ?vs);
@@ -270,23 +252,19 @@ ElementType heap_max(struct heap* heap)
   }
   @*/
   //@ switch(vs) { case nil: case cons(h, t): }
-  //@ close heap(heap, values);
 }
 
 int heap_size(struct heap* heap)
   //@ requires heap(heap, ?values);
   //@ ensures heap(heap, values) &*& result == length(values);
 {
-  //@ open heap(heap, values);
   return heap->size;
-  //@ close heap(heap, values);
 }
 
 void heap_dispose(struct heap* heap)
   //@ requires heap(heap, ?values) ;
   //@ ensures true;
 {
-  //@ open heap(heap, values);
   //@ ints_join(heap->elems);
   free(heap->elems);
   free(heap);

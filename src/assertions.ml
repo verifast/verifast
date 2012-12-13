@@ -22,6 +22,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     * asn (* pre *)
     * asn (* post *)
   let auto_lemmas: (string, auto_lemma_info) Hashtbl.t = Hashtbl.create 10
+
+  let lemma_rules = ref []
+
+  let add_lemma_rule symb rule = 
+    (begin match try_assq symb !lemma_rules with
+      None -> lemma_rules := (symb, ref [rule]) :: !lemma_rules
+    | Some(rs) -> rs := rule :: !rs end)
   
   module CheckFile_Assertions(CheckFileArgs: CHECK_FILE_ARGS) = struct
   
@@ -30,6 +37,15 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (* Region: production of assertions *)
   
   let success() = SymExecSuccess
+
+  let rec is_pure_spatial_assertion a =
+    match a with
+      ExprAsn(_, _) -> true
+    | Sep(_, a1, a2) -> (is_pure_spatial_assertion a1) && (is_pure_spatial_assertion a2)
+    | IfAsn(_, _, a1, a2) -> (is_pure_spatial_assertion a1) && (is_pure_spatial_assertion a2)
+    | EmpAsn _ -> true
+    | ForallAsn _ -> true
+    | _ -> false
   
   let rec assert_expr env e h env l msg url = 
     let t = eval None env e in
@@ -739,6 +755,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             (g, _) ->
             let try_rules rules ts = 
               let terms_are_well_typed = List.for_all (function SrcPat (LitPat (WidenedParameterArgument _)) -> false | _ -> true) pats in
+             (* let _ = print_endline ("#rules for " ^ (ctxt#pprint g) ^ "=" ^ (string_of_int (List.length rules))) in *)
               let rec iter rules =
                 let coefpat = match coefpat with SrcPat (LitPat e) -> TermPat (eval None env e) | _ -> coefpat in 
                 match rules with
@@ -753,17 +770,18 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               in
                 iter rules
             in
-            begin match try_assq g rules with
-              Some rules -> try_rules rules ts
-            | None -> 
-              begin match try_assq g ! pred_ctor_applications with 
-                None -> cont ()
-              | Some (_, symbol_term, ctor_args, _) -> 
-                begin match try_assq symbol_term rules with
-                  Some rules -> try_rules rules (ctor_args @ ts)
-                | None -> cont ()
-                end
-              end
+            let open_close_rules = match try_assq g ! rules with None -> [] | Some(rules) -> !rules in
+            let lemma_rules = match try_assq g !lemma_rules with None -> [] | Some(rules) -> !rules in
+            begin match open_close_rules @ lemma_rules with
+              [] ->  begin match try_assq g ! pred_ctor_applications with 
+                  None -> cont ()
+		| Some (_, symbol_term, ctor_args, _) -> 
+                  begin match try_assq symbol_term ! rules with
+                    Some rules -> try_rules !rules (ctor_args @ ts)
+                  | None -> cont ()
+                  end
+	      end
+            | rules -> try_rules rules ts
             end
         end $. fun () ->
         let message =
@@ -1307,9 +1325,9 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       )
     contains_edges *)
   
-  let rules_cell = ref [] (* A hack to allow the rules to recursively use the rules *)
+ let rules_cell = ref [] (* A hack to allow the rules to recursively use the rules *)
   
-  let rules =
+ let rules =
     let rulemap = ref [] in
     let add_rule predSymb rule =
       match try_assq predSymb !rulemap with
@@ -1322,6 +1340,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_close_rule h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+          (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
           let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
             match path with
               [] -> 
@@ -1391,7 +1410,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   None -> None
                 | Some exec_rule -> Some (fun h cont ->
                     exec_rule h (fun h coef ->
-                      let rules = ! rules_cell in
+                      let rules = rules_cell in
                       let ghostenv = [] in
                       let checkDummyFracs = true in
                       let env = List.map2 (fun (x, tp0) actual -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term actual tp tp0)) outer_formal_input_args current_input_args in
@@ -1463,6 +1482,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.iter 
       (fun (from_symb, indices, to_symb, path) ->
         let transitive_auto_open_rule h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+          (*let _ = print_endline ("trying to auto-open : " ^ (ctxt#pprint from_symb)) in *)
           let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
             match path with
             | [] ->
@@ -1609,13 +1629,13 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             List.exists (fun conds -> List.for_all (fun cond -> ctxt#query (eval None env cond)) conds) conds
           in
           let exec_func h targs coef coefpat ts cont =
-            let rules = !rules_cell in
+            let rules = rules_cell in
             let (indices, inputArgs) = take_drop indexCount ts in
             let Some tpenv = zip predinst_tparams targs in
             let env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) inputParams inputArgs in
             let ghostenv = [] in
             let checkDummyFracs = true in
-            let coef = match coefpat with TermPat f -> ctxt#mk_real_mul coef f | SrcPat (DummyPat) -> get_dummy_frac_term () | SrcPat (LitPat _) -> assert false; | SrcPat (VarPat(_, x)) -> real_unit  in
+            let coef = match coefpat with TermPat f -> (real_mul dummy_loc coef f) | SrcPat (DummyPat) -> get_dummy_frac_term () | SrcPat (LitPat _) -> assert false; | SrcPat (VarPat(_, x)) -> real_unit  in
             with_context (Executing (h, env, l, "Auto-closing predicate")) $. fun () ->
             consume_asn rules tpenv h ghostenv env wbody checkDummyFracs coef $. fun _ h ghostenv env size_first ->
             let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env) tp0 tp)) outputParams in
@@ -1623,6 +1643,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
           in
           let rule h targs terms_are_well_typed coef coefpat ts cont =
+            (*let _ = print_endline "trying to close empty predicate" in*)
             if terms_are_well_typed && match_func h targs ts then exec_func h targs coef coefpat ts (fun h -> cont (Some h)) else cont None
           in
           rule
@@ -1815,7 +1836,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   let ghostenv = [] in
                   let [xinfo, _; xelem, _; xvalue, _] = xs in
                   let env = [xinfo, info; xelem, elem] in
-                  let rules = !rules_cell in
+                  let rules = rules_cell in
                   with_context (Executing (h, env, asn_loc wbody, "Auto-closing array slice")) $. fun () ->
                   consume_asn rules tpenv h ghostenv env wbody true coef' $. fun _ h ghostenv env size_first ->
                   match try_assoc xvalue env with
@@ -1871,10 +1892,17 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       add_rule array_slice_deep_symb get_slice_deep_rule
       end
     end;
-    List.map (fun (predSymb, rules) -> (predSymb, !rules)) !rulemap
+    rulemap
+    (*ref (List.map (fun (predSymb, rules) -> (predSymb, !rules)) !rulemap) *)
   
-  let () = rules_cell := rules
-  
+  let () = rules_cell := ! rules
+
+  let add_rule symb rule = 
+    (begin match try_assq symb !rules with
+      None -> rules := (symb, ref [rule]) :: !rules
+    | Some(rs) -> rs := rule :: !rs end;
+    rules_cell := !rules)
+
   end
   
 end

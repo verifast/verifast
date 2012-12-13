@@ -98,7 +98,6 @@ void module_dispose(struct module *self)
     lock_dispose(adderLock);
     //@ open adderLockInv();
     return;
-    //@ string_to_chars(adderName);
     //@ close_module();
 }
 
@@ -111,7 +110,6 @@ module_dispose_ *module_init(struct module *self) //@ : module_init_(AdderModule
     @*/
 {
     //@ open_module();
-    //@ chars_to_string(adderName);
     
     //@ close adderLockInv();
     //@ close create_lock_ghost_args(adderLockInv, nil, nil);

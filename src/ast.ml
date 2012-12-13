@@ -70,6 +70,7 @@ class predref (name: string) = (* ?predref *)
     method inputParamCount = match inputParamCount with None -> assert false | Some c -> c
     method set_domain d = domain <- Some d
     method set_inputParamCount c = inputParamCount <- Some c
+    method is_precise = match inputParamCount with None -> assert false; | Some None -> false | Some (Some _) -> true 
   end
 
 type

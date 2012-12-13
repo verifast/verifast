@@ -27,7 +27,6 @@ struct arraylist *create_arraylist()
   if(data == 0) abort();
   a->data = data;
   a->capacity = 100;
-  //@ close pointers(data, 0, nil);
   return a; 
 }
 
@@ -51,7 +50,6 @@ void list_add(struct arraylist *a, void *v)
 {
   int size = 0;
   void** data = 0;
-  //@ open arraylist(a, vs);
   if(a->capacity <= a->size) {
     data = a->data;
     size = a->size;
@@ -59,8 +57,6 @@ void list_add(struct arraylist *a, void *v)
     void** newData = malloc((capacity + 100) * sizeof(void*));
     if(newData == 0) abort();
     //@ pointers_split(newData, size);
-    //@ pointers_to_chars(newData);
-    //@ pointers_to_chars(data);
     memcpy(newData, data, size * sizeof(void*));
     //@ chars_to_pointers(data, size);
     //@ chars_to_pointers(newData, size);
@@ -84,12 +80,9 @@ void list_remove_nth(struct arraylist *a, int n)
   int size = a->size;
   //@ pointers_split(data, n);
   //@ open pointers(data + n, _, _);
-  //@ pointer_to_chars(data + n);
-  //@ pointers_to_chars(data + n + 1);
   memmove(data + n, data + n + 1, (size - n - 1) * sizeof(void *));
   //@ chars_to_pointers(data + n, size - n - 1);
   //@ chars_to_pointer(data + size - 1);
-  //@ close pointers(data + size - 1, a->capacity - a->size + 1, _);
   //@ pointers_join(data);
   a->size = a->size - 1;
 }
@@ -116,6 +109,6 @@ void main()
   list_add(a, (void *)20);
   
   tmp = list_get(a, 1);
-  //@ assert tmp == (void *)20;
+  assert tmp == (void*) 20;
   list_dispose(a);
 }

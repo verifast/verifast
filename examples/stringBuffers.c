@@ -141,7 +141,6 @@ void string_buffer_append_string(struct string_buffer *buffer, char *string)
     //@ ensures string_buffer(buffer, append(bcs, cs)) &*& [f]string(string, cs);
 {
     int length = strlen(string);
-    //@ string_to_body_chars(string);
     string_buffer_append_chars(buffer, string, length);
     //@ body_chars_to_string(string);
 }
@@ -207,7 +206,7 @@ int chars_index_of_string(char *chars, int length, char *string)
     int n = strlen(string);
     char *p = chars;
     char *end = 0;
-    //@ length_nonnegative(charsChars);
+    ////@ length_nonnegative(charsChars);
     //@ chars_limits(chars);
     end = chars + length;
     while (true)
