@@ -1342,7 +1342,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | pats, [("varargs", _)] ->
           let rec mk_varargs h env args pats =
             match pats with
-              SrcPat (LitPat e) as pat::pats ->
+              SrcPat (LitPat e) ::pats ->
               let (w, tp) = check_expr (pn,ilist) tparams tenv e in
               eval_h h env (SrcPat (LitPat w)) $. fun h env t ->
               let arg =

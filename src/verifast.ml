@@ -1951,7 +1951,69 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     verify_cont (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env ss tcont return_cont econt
   
   (* Region: verification of function bodies *)
-  and add_rule_for_lemma l pre post ps fracname p_ref p_args condition q_ref q_input_args = 
+  and add_rule_for_lemma lemma_name l pre post ps frac q_ref q_input_args unbound =
+    let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
+    let rule h targs terms_are_well_typed coef coefpat ts cont =
+      let rec f input_args ts unbound env =
+        if unbound = [] then
+          env
+        else begin
+          match (input_args, ts) with
+            ([], []) -> assert false;
+          | (LitPat(Var(_, x, _)) :: input_args, t :: ts) when List.mem x unbound -> f input_args ts (remove (fun y -> x = y) unbound) ((x, t) :: env)
+          | (_ :: input_args, _ :: ts) -> f input_args ts unbound env
+        end
+      in
+      let param_env0 = f q_input_args ts unbound [] in (* env0 maps all parameters not bound by precondition to term *)
+      let try_consume_pred h consumed param_env env asn frac p_ref p_args success_cont fail =
+        let (_, _, _, _, p_symb, Some p_inputParamCount) = List.assoc p_ref#name predfammap in
+        let rec find_chunk hdone htodo =
+          match htodo with
+            [] -> fail ()
+          | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, actual_size)) as chunk) :: hrest when predname_eq actual_name (p_symb ,true) -> 
+            let rec match_pats param_env env actuals pats nb_inputs =
+              match (actuals, pats) with
+                ([], []) ->
+                 success_cont (hdone @ hrest) (consumed @ [chunk]) param_env env (fun () -> find_chunk (hdone @ [chunk]) hrest)
+              | (t :: actuals, LitPat(Var(_, x, _)) :: pats) when List.mem_assoc x ps -> 
+                  match_pats ((x, t) :: param_env) ((x, t) :: env) actuals pats (nb_inputs - 1)
+              | (t :: actuals, LitPat(e) :: pats) -> if nb_inputs <= 0 || (definitely_equal t (eval None env e)) then match_pats param_env env actuals pats (nb_inputs - 1) else find_chunk (hdone @ [chunk]) hrest
+              | (t :: actuals, DummyPat _ :: pats) -> match_pats param_env env actuals pats (nb_inputs - 1)
+              | (t :: actuals, VarPat(_, x) :: pats) -> match_pats param_env ((x, t) :: env) actuals pats (nb_inputs - 1)
+            in
+            let check_frac cont = match frac with
+              None -> cont env
+            | Some(VarPat(_, f)) -> cont ((f, actual_coef) :: env)
+            | Some(LitPat(e)) -> if ctxt#query (ctxt#mk_le (eval None env e) actual_coef) then cont env else fail ()
+            | Some(DummyPat) -> if is_dummy_frac_term actual_coef then cont env else fail ()
+            in
+            check_frac (fun env -> match_pats param_env env actual_ts p_args p_inputParamCount) 
+          | chunk :: rest -> find_chunk (hdone @ [chunk]) rest
+        in
+        find_chunk [] h
+      in
+      let rec try_consume h consumed param_env env asn success_cont fail =
+        match asn with
+          EmpAsn _ -> success_cont h consumed param_env env fail
+        | ExprAsn(_, e) -> if ctxt#query (eval None env e) then success_cont h consumed param_env env fail else fail () 
+        | WPredAsn(_, p_ref, true, [], [], p_args) -> try_consume_pred h consumed param_env env asn None p_ref p_args success_cont fail
+        | CoefAsn(_, frac,  WPredAsn(_, p_ref, true, [], [], p_args)) -> try_consume_pred h consumed param_env env asn (Some frac) p_ref p_args success_cont fail
+        | Sep(_, a1, a2) -> try_consume h consumed param_env env a1 (fun h consumed param_env env fail -> try_consume h consumed param_env env a2 success_cont fail) fail
+      in
+      try_consume h [] param_env0 param_env0 pre (fun h h_consumed param_env env fail ->
+        if List.for_all2 (fun wanted e -> definitely_equal wanted (eval None env e)) ts (List.map (function LitPat e -> e) q_input_args) then   
+          let tpenv = [] in
+          let ghostenv = [] in
+          let h = h_consumed @ h in
+          with_context (Executing (h, param_env, l, "Auto-applying lemma")) $. fun () ->
+            consume_asn rules tpenv h ghostenv param_env pre true real_unit $. fun _ h ghostenv env size ->
+             produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h)
+        else 
+          fail ()
+      ) (fun () -> cont None)
+    in
+    add_lemma_rule q_symb rule
+  (* and add_rule_for_lemma l pre post ps fracname p_ref p_args condition q_ref q_input_args = 
     let (_, _, _, _, p_symb, Some p_inputParamCount) = List.assoc p_ref#name predfammap in
     let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
     let rule h targs terms_are_well_typed coef coefpat ts cont =
@@ -1992,7 +2054,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
         try_apply_rule [] h
     in
-    add_lemma_rule q_symb rule 
+    add_lemma_rule q_symb rule*)
 
   and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
     match (pre, post) with
@@ -2044,6 +2106,58 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
          List.for_all2 (fun ta1 ta2 -> ta1 = ta2) p_targs q_targs && f = g && is_pure_spatial_assertion conditions->
       (Hashtbl.add auto_lemmas (p_ref#name) (Some(f), tparams', List.map (fun (VarPat(_,x)) -> x) p_args1, List.map (fun (VarPat(_,x)) -> x) p_args2, pre, post))
   | _ ->
+    (* todo: determine values of parameters based on postcondition (instead of precondition) to avoid backtracking search *)
+    let bound_param_vars_pred p_args vars must = 
+     List.fold_left (fun (vars, must) arg ->
+        match arg with 
+          LitPat(Var(_, x, _)) -> if List.mem_assoc x ps then (x :: vars, must) else (vars, must)
+        | LitPat(e) ->
+          let newmust = List.filter (fun x -> (List.mem_assoc x ps) && not (List.mem x vars)) (vars_used e) in
+          (vars, must @ newmust)
+        | DummyPat -> (vars, must)
+        | VarPat(_, _) -> (vars, must)) (vars,must) p_args
+    in 
+    let rec bound_param_vars asn vars must = match asn with
+      EmpAsn _ -> (vars, must)
+    | WPredAsn(p_loc, p_ref, true, [], [], p_args) when p_ref#is_precise ->
+      bound_param_vars_pred p_args vars must
+    | CoefAsn(_, frac, WPredAsn(p_loc, p_ref, true, [], [], p_args)) when p_ref#is_precise ->
+      bound_param_vars_pred (frac :: p_args) vars must
+    | Sep(_, a1, a2) -> let (vars', must') = bound_param_vars a1 vars must in bound_param_vars a2 vars' must'
+    | ExprAsn(_, e) -> 
+        let newmust = List.filter (fun x -> (List.mem_assoc x ps) && not (List.mem x vars)) (vars_used e) in
+        (vars, must @ newmust)
+    | _ -> static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None
+    in
+    let (bound_ps, must) = bound_param_vars pre [] [] in
+    let unbound_ps = List.filter (fun x -> not (List.mem x bound_ps)) (List.map (fun (x, t) -> x) ps) in
+    List.iter (fun x -> if not (List.mem x unbound_ps) then static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None) must;
+    let rec generate_rules asn = 
+      let generate_rules_pred frac q_ref q_args =
+        let Some nb_inputs = q_ref#inputParamCount in
+        let q_input_args = take nb_inputs q_args in
+        let remaining_unbound = List.fold_left (fun unbound a -> match a with
+            LitPat(Var(_, x, _)) when List.mem x unbound -> remove (fun y -> x = y) unbound
+          | _ -> unbound
+        ) unbound_ps q_input_args 
+        in
+        if remaining_unbound = [] && List.for_all (function LitPat(e) -> true | _ -> false) q_input_args then
+          (add_rule_for_lemma g l pre post ps frac q_ref q_input_args unbound_ps; 1)
+        else
+          0
+      in
+      match asn with
+      | WPredAsn(q_loc, q_ref, true, [], [], q_args) when q_ref#is_precise -> 
+        generate_rules_pred None q_ref q_args
+      | CoefAsn(_, frac, WPredAsn(q_loc, q_ref, true, [], [], q_args)) when q_ref#is_precise ->
+        generate_rules_pred (Some frac) q_ref q_args
+      | Sep(_, a1, a2) -> (generate_rules a1) + (generate_rules a2)
+      | _ -> 0
+    in
+    let nb_rules_generated = generate_rules post in
+    if nb_rules_generated = 0 then static_error l (sprintf "no suitable predicates found in postcondition to generate rules") None
+      
+ (* | _ ->
     let (fracname, p_ref, p_args, conds) =
       match pre with
         WPredAsn(p_loc, p_ref, true, (* p_targs *) [], (* p_args1 *) [], p_args2) -> (None, p_ref, p_args2, None)
@@ -2072,7 +2186,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       else
         static_error l (sprintf "postcondition of auto lemma %s has wrong form" g) None
     end else
-      static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None
+      static_error l (sprintf "precondition of auto lemma %s has wrong form" g) None*)
   and heapify_params h tenv env ps =
     begin match ps with
       [] -> (h, tenv, env)

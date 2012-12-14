@@ -58,7 +58,6 @@ void list_add(struct arraylist *a, void *v)
     if(newData == 0) abort();
     //@ pointers_split(newData, size);
     memcpy(newData, data, size * sizeof(void*));
-    //@ chars_to_pointers(data, size);
     //@ chars_to_pointers(newData, size);
     a->data = newData;
     a->capacity = capacity + 100;
@@ -69,7 +68,6 @@ void list_add(struct arraylist *a, void *v)
   data[size] = v;
   a->size += 1;
   //@ close pointers(data + size, 1, _);
-  //@ pointers_join(data);
 }
 
 void list_remove_nth(struct arraylist *a, int n)
@@ -82,8 +80,6 @@ void list_remove_nth(struct arraylist *a, int n)
   //@ open pointers(data + n, _, _);
   memmove(data + n, data + n + 1, (size - n - 1) * sizeof(void *));
   //@ chars_to_pointers(data + n, size - n - 1);
-  //@ chars_to_pointer(data + size - 1);
-  //@ pointers_join(data);
   a->size = a->size - 1;
 }
 
@@ -94,7 +90,6 @@ void list_dispose(struct arraylist* a)
   void** data = a->data;
   int size = a->size;
   int capacity = a->capacity;
-  //@ pointers_join(data);
   free(data);
   free(a);
 }

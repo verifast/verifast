@@ -28,7 +28,6 @@ predicate u_integer(unsigned int *p; unsigned int v);
 
 predicate pointer(void **pp; void *p);
 
-
 lemma void character_limits(char *pc);
     requires [?f]character(pc, ?c);
     ensures [f]character(pc, c) &*& pc > (char *)0 &*& pc < (char *)UINTPTR_MAX &*& -128 <= c &*& c <= 127;
@@ -44,7 +43,6 @@ lemma void integer_unique(int *p);
 lemma void integer_limits(int *p);
     requires [?f]integer(p, ?v);
     ensures [f]integer(p, v) &*& p > (int *)0 &*& p + 1 <= (int *)UINTPTR_MAX &*& INT_MIN <= v &*& v <= INT_MAX;
-
 
 lemma void pointer_distinct(void *pp1, void *pp2);
     requires pointer(pp1, ?p1) &*& pointer(pp2, ?p2);
@@ -181,11 +179,11 @@ lemma_auto void pointers_inv();
     requires [?f]pointers(?pp, ?count, ?ps);
     ensures [f]pointers(pp, count, ps) &*& count == length(ps);
 
-lemma void pointers_split(void **pp, int offset);
+lemma_auto void pointers_split(void **pp, int offset);
     requires [?f]pointers(pp, ?count, ?ps) &*& 0 <= offset &*& offset <= count;
     ensures [f]pointers(pp, offset, take(offset, ps)) &*& [f]pointers(pp + offset, count - offset, drop(offset, ps));
 
-lemma void pointers_join(void **pp);
+lemma_auto void pointers_join(void **pp);
     requires [?f]pointers(pp, ?count1, ?ps1) &*& [f]pointers(pp + count1, ?count2, ?ps2);
     ensures [f]pointers(pp, count1 + count2, append(ps1, ps2));
 
@@ -198,7 +196,7 @@ lemma_auto void uchars_to_chars(void *p);
     requires [?f]uchars(p, ?n, _);
     ensures [f]chars(p, n, _);
 
-lemma void chars_to_ints(void *p, int n);
+lemma_auto void chars_to_ints(void *p, int n);
     requires [?f]chars(p, n * sizeof(int), _);
     ensures [f]ints(p, n, _);
 
@@ -206,7 +204,7 @@ lemma_auto void ints_to_chars(void *p);
     requires [?f]ints(p, ?n, _);
     ensures [f]chars(p, n * sizeof(int), _);
 
-lemma void chars_to_uints(void *p, int n);
+lemma_auto void chars_to_uints(void *p, int n);
     requires [?f]chars(p, n * sizeof(unsigned int), _);
     ensures [f]uints(p, n, _);
 
@@ -217,7 +215,7 @@ lemma_auto void uints_to_chars(void *p);
 fixpoint list<void *> pointers_of_chars(list<char> cs);
 fixpoint list<char> chars_of_pointers(list<void *> ps);
 
-lemma void chars_to_pointers(void *p, int n);
+lemma_auto void chars_to_pointers(void *p, int n);
     requires [?f]chars(p, n * sizeof(void *), ?cs);
     ensures [f]pointers(p, n, pointers_of_chars(cs)) &*& chars_of_pointers(pointers_of_chars(cs)) == cs;
 
