@@ -1958,7 +1958,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (* locate p in the heap *)
       let rec try_apply_rule hdone htodo =
         match htodo with
-	  [] -> cont None
+          [] -> cont None
         | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, actual_size)) as chunk) :: hrest when predname_eq actual_name (p_symb ,true) -> 
           let env0 = List.map2 (fun (x, tp) t -> (x, t)) ps (take (List.length ps) actual_ts) in
           let env1 = (match fracname with None -> env0 | Some(f) -> (f, actual_coef) :: env0) in
@@ -1984,8 +1984,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 Note it is also possible to work around this problem by using lemma parameters instead of existentials. *) 
             let h = chunk :: hdone @ hrest in
             with_context (Executing (h, env0, l, "Auto-applying lemma")) $. fun () ->
-	      consume_asn rules tpenv h ghostenv env0 pre true real_unit $. fun _ h ghostenv env size -> 
-		produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h) 
+              consume_asn rules tpenv h ghostenv env0 pre true real_unit $. fun _ h ghostenv env size -> 
+                produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h) 
           else
             try_apply_rule (hdone @ [chunk]) hrest
         | chunk :: hrest -> try_apply_rule (hdone @ [chunk]) hrest
@@ -2061,7 +2061,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | CoefAsn(_, LitPat(g), WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2)) -> (Some g, q_ref, q_args2)          
         | Sep(_, WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2), _) -> (None, q_ref, q_args2)
         | Sep(_, CoefAsn(_, LitPat(g), WPredAsn(q_loc, q_ref, true, (* q_targs *) [], (* q_args1 *) [], q_args2)), _) -> (Some g, q_ref, q_args2)
-	| _ ->  static_error l (sprintf "postcondition of auto lemma %s has wrong form" g) None
+        | _ ->  static_error l (sprintf "postcondition of auto lemma %s has wrong form" g) None
       in
       let Some q_nb_inputs = q_ref#inputParamCount in 
       let q_input_args = take q_nb_inputs q_args in

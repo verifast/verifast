@@ -775,12 +775,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin match open_close_rules @ lemma_rules with
               [] ->  begin match try_assq g ! pred_ctor_applications with 
                   None -> cont ()
-		| Some (_, symbol_term, ctor_args, _) -> 
+                | Some (_, symbol_term, ctor_args, _) -> 
                   begin match try_assq symbol_term ! rules with
                     Some rules -> try_rules !rules (ctor_args @ ts)
                   | None -> cont ()
                   end
-	      end
+              end
             | rules -> try_rules rules ts
             end
         end $. fun () ->

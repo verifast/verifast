@@ -386,7 +386,7 @@ SExpressionEmitter.cmi: verifast.cmx SExpressionEmitter.mli
 SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SExpressionEmitter.ml
 	${OCAMLOPTOPT} -c nums.cmxa SExpressionEmitter.ml
 
-../bin/verifast: vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+../bin/verifast: tabhunt vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
