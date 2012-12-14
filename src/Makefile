@@ -61,7 +61,7 @@ cmo: Fonts.cmo Printexc_proxy.cmo record_backtrace.cmo vfversion_cmo Fonts.cmo v
 cmx: Fonts.cmx Printexc_proxy.cmx record_backtrace.cmx vfversion_cmx Fonts.cmx verifast.cmx simplex.cmx proverapi.cmx redux.cmx z3prover.cmx SExpressions.cmx SExpressionEmitter.cmx
 
 tabhunter.exe: tabhunter.ml
-	ocamlc -o tabhunter.exe tabhunter.ml
+	ocamlopt.opt -o tabhunter.exe tabhunter.ml
 
 tabhunt: tabhunter.exe
 	tabhunter.exe

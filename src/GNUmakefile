@@ -174,7 +174,13 @@ distclean: clean
 ../bin/assoclist.vfmanifest: ../bin/assoclist.c ../bin/assoclist.gh \
  ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest assoclist.c
-	
+
+tabhunter: tabhunter.ml
+	${OCAMLOPTOPT} -o tabhunter tabhunter.ml
+
+tabhunt: tabhunter
+	./tabhunter
+
 ../bin/vfstrip: vfstrip.ml
 	${OCAMLOPTOPT} -o ../bin/vfstrip vfstrip.ml
 
