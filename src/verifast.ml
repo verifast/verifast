@@ -1975,7 +1975,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match (actuals, pats) with
                 ([], []) ->
                  success_cont (hdone @ hrest) (consumed @ [chunk]) param_env env (fun () -> find_chunk (hdone @ [chunk]) hrest)
-              | (t :: actuals, LitPat(Var(_, x, _)) :: pats) when List.mem_assoc x ps -> 
+              | (t :: actuals, LitPat(Var(_, x, _)) :: pats) when List.mem_assoc x ps && not (List.mem_assoc x param_env) -> 
                   match_pats ((x, t) :: param_env) ((x, t) :: env) actuals pats (nb_inputs - 1)
               | (t :: actuals, LitPat(e) :: pats) -> if nb_inputs <= 0 || (definitely_equal t (eval None env e)) then match_pats param_env env actuals pats (nb_inputs - 1) else find_chunk (hdone @ [chunk]) hrest
               | (t :: actuals, DummyPat _ :: pats) -> match_pats param_env env actuals pats (nb_inputs - 1)

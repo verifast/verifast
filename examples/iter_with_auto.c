@@ -47,7 +47,7 @@ lemma void distinct_nodes(struct node *n1, struct node *n2)
   close node(n2, _, _);
 }
 
-lemma void lseg_add(struct node *n2)
+lemma_auto void lseg_add(struct node *n2)
   requires lseg(?n1, n2, ?_v) &*& node(n2, ?n3, ?_x) &*& node(n3, ?n3next, ?n3value);
   ensures lseg(n1, n3, append(_v, cons(_x, nil))) &*& node(n3, n3next, n3value);
 {
@@ -77,7 +77,7 @@ void llist_add(struct llist *list, int x)
 }
 
 /*@
-lemma void lseg_append(struct node *n1, struct node *n2, struct node *n3)
+lemma_auto void lseg_append(struct node *n1, struct node *n2, struct node *n3)
   requires lseg(n1, n2, ?_v1) &*& lseg(n2, n3, ?_v2) &*& node(n3, ?n3n, ?n3v);
   ensures lseg(n1, n3, append(_v1, _v2)) &*& node(n3, n3n, n3v);
 {
@@ -141,7 +141,7 @@ predicate lseg2(struct node *first, struct node *last, struct node *final, list<
         return first != final &*& node(first, ?next, head) &*& lseg2(next, last, final, tail);
     };
 
-lemma void lseg2_add(struct node *first)
+lemma_auto void lseg2_add(struct node *first)
   requires [?f]lseg2(first, ?last, ?final, ?v) &*& [f]node(last, ?next, ?value) &*& last != final;
   ensures [f]lseg2(first, next, final, append(v, cons(value, nil)));
 {

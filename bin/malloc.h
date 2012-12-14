@@ -4,7 +4,7 @@
 /*@
 
 // In Standard C, freeing a null pointer is allowed and is a no-op.
-lemma void malloc_block_null();
+lemma_auto void malloc_block_null();
     requires emp;
     ensures malloc_block(0, 0);
 

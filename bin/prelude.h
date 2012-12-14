@@ -91,14 +91,14 @@ lemma void chars_limits(char *array);
     requires [?f]chars(array, ?n, ?cs) &*& true == ((char *)0 <= array) &*& array <= (char *)UINTPTR_MAX;
     ensures [f]chars(array, n, cs) &*& true == ((char *)0 <= array) &*& array + n <= (char *)UINTPTR_MAX;
 
-lemma void chars_split(char *array, int offset);
+lemma_auto void chars_split(char *array, int offset);
    requires [?f]chars(array, ?n, ?cs) &*& 0 <= offset &*& offset <= n;
    ensures
        [f]chars(array, offset, take(offset, cs))
        &*& [f]chars(array + offset, n - offset, drop(offset, cs))
        &*& append(take(offset, cs), drop(offset, cs)) == cs;
 
-lemma void chars_join(char *array);
+lemma_auto void chars_join(char *array);
     requires [?f]chars(array, ?n, ?cs) &*& [f]chars(array + n, ?n0, ?cs0);
     ensures [f]chars(array, n + n0, append(cs, cs0));
 
@@ -256,7 +256,7 @@ lemma_auto void string_to_body_chars(char *s);
     requires [?f]string(s, ?cs);
     ensures [f]chars(s, length(cs), cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
 
-lemma void body_chars_to_string(char *s);
+lemma_auto void body_chars_to_string(char *s);
     requires [?f]chars(s, _, ?cs) &*& [f]character(s + length(cs), 0) &*& !mem('\0', cs);
     ensures [f]string(s, cs);
 
@@ -272,7 +272,7 @@ lemma_auto void chars_separate_string(char *s);
     requires [?f]chars(s, ?n, ?cs) &*& mem('\0', cs) == true;
     ensures [f]string(s, take(index_of('\0', cs), cs)) &*& [f]chars(s + index_of('\0', cs) + 1, n - index_of('\0', cs) - 1, drop(index_of('\0', cs) + 1, cs));
 
-lemma void chars_unseparate_string(char *s);
+lemma_auto void chars_unseparate_string(char *s);
     requires [?f]string(s, ?cs) &*& [f]chars(s + length(cs) + 1, ?n, ?cs1);
     ensures [f]chars(s, length(cs) + 1 + n, append(cs, cons('\0', cs1)));
 
