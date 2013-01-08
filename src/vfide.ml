@@ -130,7 +130,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
   let runPreprocessor = ref false in
-  let simplifyTerms = ref true in
+  let simplifyTerms = ref false in
   let current_tab = ref None in
   let showLineNumbers enable =
     match !current_tab with

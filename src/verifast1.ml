@@ -677,7 +677,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         loc
       * type_ map (* parameters *)
       * string option (* name of extended handle, if any *)
-      * expr (* invariant *)
+      * asn (* invariant *)
       * preserved_by_clause list
     type box_info = (* shared boxes *)
         loc
@@ -3923,8 +3923,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         let hpmap =
         List.map
           (fun (hpn, (l, pmap, einv, inv, pbcs)) ->
-             let inv = check_expr_t (pn,ilist) [] ([("predicateHandle", HandleIdType)] @ pmap @ boxvarmap) inv boolt in
-             (hpn, (l, pmap, einv, inv, pbcs))
+             let (winv, _) = check_asn (pn,ilist) [] ([("predicateHandle", HandleIdType)] @ pmap @ boxvarmap) inv in
+             (hpn, (l, pmap, einv, winv, pbcs))
           )
           hpmap
         in

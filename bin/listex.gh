@@ -202,6 +202,14 @@ predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
     :
         xs == cons(head(xs), tail(xs)) &*& p(head(xs)) &*& foreachp(tail(xs), p);
 
+lemma void foreachp_remove<t>(t x, list<t> xs);
+    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures foreachp(remove(x, xs), p) &*& p(x);
+
+lemma void foreachp_unremove<t>(t x, list<t> xs);
+    requires foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
+    ensures foreachp(xs, p);
+
 lemma void foreachp_remove_nth<t>(int n);
     requires foreachp<t>(?xs, ?p) &*& 0 <= n &*& n < length(xs);
     ensures foreachp<t>(remove_nth(n, xs), p) &*& p(nth(n, xs));

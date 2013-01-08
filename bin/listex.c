@@ -556,6 +556,36 @@ lemma void foreach_unremove_nth<t>(list<t> xs, int n)
     close [f]foreach(xs, p);
 }
 
+lemma void foreachp_remove<t>(t x, list<t> xs)
+    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
+    ensures foreachp(remove(x, xs), p) &*& p(x);
+{
+  open foreachp(xs, p);
+  switch(xs) {
+    case nil:
+    case cons(x0, xs0):
+      if(x0 != x) {
+        foreachp_remove(x, xs0);
+        close foreachp(remove(x, xs), p);
+      }
+  }
+}
+
+lemma void foreachp_unremove<t>(t x, list<t> xs)
+    requires foreachp(remove(x, xs), ?p) &*& mem(x, xs) == true &*& p(x);
+    ensures foreachp(xs, p);
+{
+  open foreachp(remove(x, xs), p);
+  switch(xs) {
+    case nil:
+    case cons(x0, xs0):
+      if(x != x0) {
+        foreachp_unremove(x, xs0);
+      }
+      close foreachp(xs, p);
+  }
+}
+
 lemma void foreachp_remove_nth<t>(int n)
     requires foreachp<t>(?xs, ?p) &*& 0 <= n &*& n < length(xs);
     ensures foreachp<t>(remove_nth(n, xs), p) &*& p(nth(n, xs));

@@ -1,5 +1,7 @@
 #include "atomics.h"
 #include "spinlock.h"
+#include "bool.h"
+#include "malloc.h"
 
 struct spinlock {
   int is_locked;
