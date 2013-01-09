@@ -1,5 +1,5 @@
 /*
-Michael-Scott queue (without hazard pointers)
+Michael-Scott queue (without memory reclamation)
 */
 
 #include "stdlib.h"

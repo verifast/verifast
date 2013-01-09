@@ -89,12 +89,6 @@ fixpoint bool not_has_valid_hp(struct node* n, client_state state) {
   }
 }
 
-predicate foreachp<t>(list<t> xs, predicate(t;) p;) =
-    switch (xs) {
-        case nil: return true;
-        case cons(x, xs0): return p(x) &*& foreachp(xs0, p);
-    };
-    
 lemma void foreach2foreachp<t>(list<t>xs, predicate(t;) p)
   requires foreach(xs, p);
   ensures foreachp(xs, p);
@@ -106,10 +100,6 @@ lemma void foreach2foreachp<t>(list<t>xs, predicate(t;) p)
   }
   close foreachp(xs, p);
 }
-
-lemma void foreachp_remove<t>(t x, list<t> xs);
-    requires foreachp(xs, ?p) &*& mem(x, xs) == true;
-    ensures foreachp(remove(x, xs), p) &*& p(x);
 
 fixpoint bool has_owner(struct stack_client* client, pair<struct node*, struct stack_client*> pr) {
   return snd(pr) == client;
@@ -633,7 +623,7 @@ box_class stack_box(struct stack* s, predicate(list<void*>) I) {
   }
   
   handle_predicate was_top(struct stack_client* client, list<struct node*> retired, struct node* t) extends hazard_pointer_set {
-    invariant (t != 0) &&
+    invariant true && (true && t != 0) &&
               (is_valid(assoc(client, client_states)) && is_active(assoc(client, client_states))) &&
               (mem(t, nodes) || mem(t, keys(junk)));
               

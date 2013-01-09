@@ -33,14 +33,15 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match extended with (* tpenv h ghostenv (env: (string * termnode) list) p coef size_first size_all cont *)
         None -> produce_asn [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h)
       | Some(ehname) -> assume_handle_invs bcn hpmap ehname hpInvEnv h (fun h -> produce_asn [] h [] hpInvEnv inv real_unit None None (fun h _ _ -> cont h))
-  
 
-  let rec assert_handle_invs hpmap hname hpInvEnv h cont = 
-    let (l, _, extended, inv, _) = List.assoc hname hpmap in
-    begin match extended with
-      None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
-    | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv h (fun h -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
-    end
+  let rec assert_handle_invs bcn hpmap hname hpInvEnv h cont = 
+    if hname = bcn ^ "_handle" then
+      cont h
+    else
+      let (l, _, extended, inv, _) = List.assoc hname hpmap in
+      match extended with
+        None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
+      | Some(ehname) -> assert_handle_invs bcn hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
   
   let rec verify_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env s tcont return_cont econt =
     stats#stmtExec;
@@ -1152,7 +1153,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let handleIdTerm = (List.assoc x env) in
               let hpInvEnv = [("predicateHandle", handleIdTerm)] @ hpArgMap @ boxVarMap in
               with_context (Executing (h, hpInvEnv, asn_loc hpInv, "Checking handle predicate invariant")) $. fun () ->
-              assert_handle_invs hpmap hpn hpInvEnv h $. fun h ->
+              assert_handle_invs bcn hpmap hpn hpInvEnv h $. fun h ->
               let (_, _, _, _, hpn_symb, _) = match try_assoc' (pn,ilist) hpn predfammap with 
                 None-> static_error l ("No such predicate family: "^hpn) None
               | Some x -> x
@@ -1592,16 +1593,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
 
                    in
                    let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
-                   let rec assert_handle_invs hpmap hname hpInvEnv h cont = 
-                     if hname = pre_bcn ^ "_handle" then
-                       cont h
-                     else
-                       let (l, _, extended, inv, _) = List.assoc hname hpmap in
-                       match extended with
-                         None -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h)
-                       | Some(ehname) -> assert_handle_invs hpmap ehname hpInvEnv h (fun h ->  consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h))
-                   in
-                   assert_handle_invs hpmap post_hpn post_hpinv_env h $. fun h ->
+                   assert_handle_invs pre_bcn hpmap post_hpn post_hpinv_env h $. fun h ->
                    let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                    let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
                    let h = boxChunk::hpChunk::h in
@@ -2558,7 +2550,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                   produce_asn [] hinv [] post_boxargs boxinv real_unit None None $. fun h_post_hinv _ post_boxvars ->
                                     with_context PopSubcontext $. fun () ->
                                     let ghostenv = List.map (fun (x, t) -> x) tenv in
-                                      (* what is the equivalent of assuming the extended handle invs? *)
                                       assume (eval None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) $. fun () ->
                                         let aarg_env = List.map (fun (x, y, t) -> (x, t)) aargs in
                                         let env = ["actionHandle", actionHandle; "predicateHandle", predicateHandle; "currentThread", currentThread] @
@@ -2566,7 +2557,28 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                         let tenv = ["actionHandle", HandleIdType; "predicateHandle", HandleIdType; "currentThread", IntType] @ tenv in
                                         verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv h_post_hinv env ss begin fun _ _ _ h _ ->
                                           let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                                          assert_handle_invs hpmap hpn post_inv_env h (fun h -> success ())
+                                          let rec assert_spatial_handle_invs bcn hpmap hname hpInvEnv h cont = 
+                                            if hname = bcn ^ "_handle" then
+                                              cont h
+                                            else
+                                              let (l, _, extended, inv, _) = List.assoc hname hpmap in
+                                              let consume_inv h =
+                                                match inv with
+                                                  ExprAsn(_, e) -> assume (eval None hpInvEnv e) $. fun () -> cont h (* for non-spatial assertions, preservation was already proven *)
+                                                | _ -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h) 
+                                              in
+                                              match extended with
+                                                None -> consume_inv h
+                                              | Some(ehname) -> assert_spatial_handle_invs bcn hpmap ehname hpInvEnv h (fun h -> consume_inv h)
+                                          in
+                                          let assert_spatial_handle_invs_opt bcn hpmap hname hpInvEnv h cont =
+                                            match hname with 
+                                              None -> cont h
+                                            | Some hname -> assert_spatial_handle_invs bcn hpmap hname hpInvEnv h cont
+                                          in
+                                          let (l, _, extended, inv, _) = List.assoc hpn hpmap in
+                                          assert_spatial_handle_invs_opt bcn hpmap extended post_inv_env h $. fun h ->
+                                            consume_asn rules [] h [] post_inv_env inv true real_unit (fun _ h _ _ _ -> success ())
                                         end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
                                         begin fun _ _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
                     end
