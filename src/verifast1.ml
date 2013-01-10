@@ -670,6 +670,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * termnode (* predicate symbol for plugin chunk *)
     type box_action_info =
         loc
+      * termnode option (* term representing action permission predicate, if any *)
       * type_ map (* parameters *)
       * expr (* precondition *)
       * expr (* postcondition *)
@@ -1571,7 +1572,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let unbox e t0 t =
     match unfold_inferred_type t0 with TypeParam _ -> convert_provertype_expr e ProverInductive (provertype_of_type t) | _ -> e
   
-  (* Region: type-checking of inductive datatypes and fixpoint functions *)
+  (* Region: type-checking of inductive datatypes and fixpoint functions*)
   
   let check_tparams l tparams0 tparams =
     let rec iter tparams =
@@ -2013,18 +2014,20 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | (te, x)::ps ->
               if List.mem_assoc x pmap then static_error l "Duplicate parameter name." None;
               if startswith x "old_" then static_error l "Box parameter name cannot start with old_." None;
+               if x = "this" then static_error l "Box parameter may not be named \"this\"." None;
               iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
           in
           iter [] ps
         in
         let pfm = mk_predfam bcn l [] 0 (BoxIdType::List.map (fun (x, t) -> t) boxpmap) (Some 1)::pfm in
         let pfm = mk_predfam default_hpn l [] 0 (HandleIdType::BoxIdType::[]) (Some 1)::pfm in
-        let amap =
-          let rec iter amap ads =
+        let (pfm, amap) =
+          let rec iter pfm amap ads =
             match ads with
-              [] -> List.rev amap
-            | ActionDecl (l, an, ps, pre, post)::ads ->
+              [] -> (pfm, List.rev amap)
+            | ActionDecl (l, an, permbased, ps, pre, post)::ads ->
               if List.mem_assoc an amap then static_error l "Duplicate action name." None;
+              if permbased && List.length ps > 0 then static_error l "Parameters not supported yet for permission-based actions." None; 
               let pmap =
                 let rec iter pmap ps =
                   match ps with
@@ -2033,13 +2036,27 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     if List.mem_assoc x boxpmap then static_error l "Action parameter clashes with box parameter." None;
                     if List.mem_assoc x pmap then static_error l "Duplicate action parameter name." None;
                     if startswith x "old_" then static_error l "Action parameter name cannot start with old_." None;
+                    if x = "this" then static_error l "Action parameter may not be named \"this\"." None;
                     iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
                 in
                 iter [] ps
               in
-              iter ((an, (l, pmap, pre, post))::amap) ads
+              let (pfm, action_permission_predicate) = 
+                if not permbased then
+                  (pfm, None)
+                else begin
+                  let predname = (bcn ^ "_" ^ an) in
+                  if List.mem_assoc predname pfm || List.mem_assoc predname purefuncmap0 then static_error l "Action permission name clashes with existing predicate name." None;
+                  let predfam = (mk_predfam predname l [] 0 ([BoxIdType]) (Some 1)) in
+                  let  (_, (_, _, _, _, symb, _)) = predfam in
+                  let (_, _, _, _, is_action_permission0_symb) = List.assoc "is_action_permission0" purefuncmap0 in
+                  ignore (ctxt#assume (mk_app is_action_permission0_symb [symb]));
+                  (predfam :: pfm, Some symb)
+                end
+              in
+              iter pfm ((an, (l, action_permission_predicate, pmap, pre, post))::amap) ads
           in
-          iter [] ads
+          iter pfm [] ads
         in
         let (pfm, hpm) =
           let rec iter pfm hpm hpds =
@@ -2056,6 +2073,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     if List.mem_assoc x boxpmap then static_error l "Handle predicate parameter clashes with box parameter." None;
                     if List.mem_assoc x pmap then static_error l "Duplicate handle predicate parameter name." None;
                     if startswith x "old_" then static_error l "Handle predicate parameter name cannot start with old_." None;
+                    if x = "this" then static_error l "Handle predicate parameter may not be named \"this\"." None;
                     iter ((x, check_pure_type (pn,ilist) [] te)::pmap) ps
                 in
                 iter [] ps
@@ -2065,8 +2083,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some(ehn) -> 
                 if not (List.mem_assoc ehn hpm) then static_error l "Extended handle must appear earlier in same box class." None;
                 let (el, epmap, extendedInv, einv, epbcs) = List.assoc ehn hpm in
-                if (List.length pmap) < (List.length epmap) then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list" None;
-                if not 
+                (match einv with ExprAsn(_, _) -> () | _ -> static_error l "Extended handle's invariant must be pure assertion." None); 
+                if (List.length pmap) < (List.length epmap) then static_error l "Extended handle's parameter list must be prefix of extending handle's parameter list." None;
+                if not
                 (List.for_all2
                   (fun (name1, tp1) (name2, tp2) -> name1 = name2 && tp1 = tp2)
                   (take (List.length epmap) pmap) epmap) 
@@ -3909,14 +3928,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     List.map
       begin
         fun (bcn, (l, boxpmap, inv, amap, hpmap,pn,ilist)) ->
-        let (winv, boxvarmap) = check_asn (pn,ilist) [] boxpmap inv in
+        let (winv, boxvarmap) = check_asn (pn,ilist) [] (("this", BoxIdType) :: boxpmap)  inv in
         let old_boxvarmap = List.map (fun (x, t) -> ("old_" ^ x, t)) boxvarmap in
         let amap =
         List.map
-          (fun (an, (l, pmap, pre, post)) ->
+          (fun (an, (l, action_pred_sym, pmap, pre, post)) ->
              let pre = check_expr_t (pn,ilist) [] ([("actionHandle", HandleIdType)] @ pmap @ boxvarmap) pre boolt in
              let post = check_expr_t (pn,ilist) [] ([("actionHandle", HandleIdType)] @ pmap @ boxvarmap @ old_boxvarmap) post boolt in
-             (an, (l, pmap, pre, post))
+             (an, (l, action_pred_sym, pmap, pre, post))
           )
           amap
         in
@@ -4271,7 +4290,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   
   let prover_convert_term term t t0 =
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
-  
+
   let mk_nil () =
     let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
     mk_app nil_symb []

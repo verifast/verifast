@@ -543,7 +543,7 @@ and
   | RequireModuleDecl of loc * string
 and (* shared box is deeltje ghost state, waarde kan enkel via actions gewijzigd worden, handle predicates geven info over de ghost state, zelfs als er geen eigendom over de box is*)
   action_decl = (* ?action_decl *)
-  | ActionDecl of loc * string * (type_expr * string) list * expr * expr
+  | ActionDecl of loc * string * bool (* does performing this action require a corresponding action permission? *) * (type_expr * string) list * expr * expr
 and (* action, kan value van shared box wijzigen*)
   handle_pred_decl = (* ?handle_pred_decl *)
   | HandlePredDecl of loc * string * (type_expr * string) list * string option (* extends *) * asn * preserved_by_clause list

@@ -34,4 +34,10 @@ fixpoint bool unboxed_bool(boxed_bool b) { switch (b) { case boxed_bool(value): 
 inductive boxed_real = boxed_real(real);
 fixpoint real unboxed_real(boxed_real r) { switch (r) { case boxed_real(value): return value; } }
 
+fixpoint bool is_action_permission0(predicate(box;) p);
+
+lemma void action_permission0_unique(predicate(box;) p, box id);
+  requires [?f]p(id) &*& is_action_permission0(p) == true;
+  ensures [f]p(id) &*& f <= 1;
+
 #endif

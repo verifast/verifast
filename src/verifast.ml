@@ -913,8 +913,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let boxId::argts = ts in
       let Some boxArgMap = zip boxpmap argts in
       let boxArgMap = List.map (fun ((x, _), t) -> (x, t)) boxArgMap in
+      let boxArgMapWithThis = ("this", boxId) :: boxArgMap in
       with_context PushSubcontext $. fun () ->
-      produce_asn [] h ghostenv boxArgMap inv real_unit None None $. fun h _ boxVarMap ->
+      produce_asn [] h ghostenv boxArgMapWithThis inv real_unit None None $. fun h _ boxVarMap ->
       let rec dispose_handles tenv ghostenv h env handleClauses cont =
         match handleClauses with
           [] -> cont tenv ghostenv h env
@@ -1128,9 +1129,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             bs
       in
       let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
-      with_context PushSubcontext $. fun () ->
-      consume_asn rules [] h ghostenv boxArgMap inv true real_unit $. fun _ h _ boxVarMap _ ->
       let boxIdTerm = get_unique_var_symb x BoxIdType in
+      let boxArgMapWithThis = ("this", boxIdTerm) :: boxArgMap in
+      let rec action_permission_chunks amap =
+        match amap with
+          [] -> []
+        | (_, (_, None, _, _, _)) :: rest -> action_permission_chunks rest
+        | (_, (_, (Some symb), _, _, _)) :: rest ->
+          Chunk((symb, true), [], real_unit, [boxIdTerm], None) :: (action_permission_chunks rest)
+      in
+      let h = (action_permission_chunks amap) @ h in
+      with_context PushSubcontext $. fun () ->
+      consume_asn rules [] h ghostenv boxArgMapWithThis inv true real_unit $. fun _ h _ boxVarMap _ ->
       begin fun cont ->
         let rec iter handleChunks handleClauses h =
           match handleClauses with
@@ -1486,6 +1496,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> static_error lcb "No such box class." None
         | Some boxinfo -> boxinfo
       in
+      let inv_variables = List.filter (fun (x, t) -> not (List.mem_assoc x boxpmap)) boxvarmap in 
       let pre_bcn=
         match search' pre_bcn (pn,ilist) boxmap with
           None-> static_error lcb "You cannot perform an action on a box class that has not yet been declared." None
@@ -1520,10 +1531,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (fun _ h coef ts chunk_size ghostenv env [] ->
              if not (coef == real_unit) then assert_false h env lch "Handle predicate coefficient must be 1." None;
              let (handleId::_::pre_handlePredArgs) = ts in
-             let (apmap, pre, post) =
+             let (act_l, act_pred_symb, apmap, pre, post) =
                match try_assoc an amap with
                  None -> static_error l "No such action in box class." None
-               | Some (_, apmap, pre, post) -> (apmap, pre, post)
+               | Some (act_l, act_pred_symb, apmap, pre, post) -> (act_l, act_pred_symb, apmap, pre, post)
              in
              let aargbs =
                match zip apmap aargs with
@@ -1533,12 +1544,20 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              in
              let Some pre_boxargbs = zip boxpmap pre_boxPredArgs in
              let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
-             let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in
+             let pre_boxArgMapWithThis = ("this", boxId) :: pre_boxArgMap in
+             let Some pre_hpargbs = zip pre_handlePred_parammap pre_handlePredArgs in (*consume_chunk rules h ghostenv env env' l g targs coef dummypat inputParamCount pats cont*)
              let pre_hpArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_hpargbs in
+             let consume_action_permission h cont =
+               match act_pred_symb with
+                 None -> cont h []
+               | Some act_pred_symb -> consume_chunk rules h ghostenv (("#boxId", boxId)::env) [] act_l (act_pred_symb, true) [] real_unit dummypat (Some 1) ([TermPat boxId]) (fun consumed h act_perm_coef _ _ _ _ _ -> cont h [consumed]) 
+             in 
              with_context PushSubcontext $. fun () ->
-             produce_asn [] h ghostenv pre_boxArgMap inv real_unit None None $. fun h _ pre_boxVarMap ->
-             with_context PopSubcontext $. fun () ->
-               assume_handle_invs pre_bcn hpmap pre_hpn ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxVarMap) h $. (fun h ->
+               let inv_env = List.map (fun (x, tp) -> (x, get_unique_var_symb_ x tp true)) inv_variables in 
+               assume_handle_invs pre_bcn hpmap pre_hpn ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMapWithThis @ inv_env) h $. (fun h ->
+               consume_action_permission h $. fun h act_perm_chunks ->
+               with_context PushSubcontext $. fun () ->
+               produce_asn [] h ghostenv  ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
                let nonpureStmtCount = ref 0 in
                let ss =
                  List.map
@@ -1551,6 +1570,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    ss
                in
                verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
+                 let h = act_perm_chunks @ h in
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
                  with_context PushSubcontext $. fun () ->
                  let pre_env = [("actionHandle", handleId)] @ pre_boxVarMap @ aargbs in
@@ -1567,7 +1587,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                          List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
                      end
                  in
-                 consume_asn rules [] h ghostenv post_boxArgMap inv true real_unit $. fun _ h _ post_boxVarMap _ ->
+                 let post_boxArgMapWithThis = ("this", boxId) :: post_boxArgMap in
+                 consume_asn rules [] h ghostenv post_boxArgMapWithThis inv true real_unit $. fun _ h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_expr post_env post h post_env closeBraceLoc "Action postcondition failure." None;
@@ -1596,7 +1617,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    assert_handle_invs pre_bcn hpmap post_hpn post_hpinv_env h $. fun h ->
                    let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                    let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
-                   let h = boxChunk::hpChunk::h in
+                   let h = boxChunk::hpChunk :: h  in
                    with_context PopSubcontext $. fun () ->
                    tcont sizemap tenv ghostenv h env
                  in
@@ -2509,7 +2530,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   begin
                   match try_assoc an amap with
                     None -> static_error l "No such action." None
-                  | Some (_, apmap, pre, post) ->
+                  | Some (_, act_pred_symb, apmap, pre, post) ->
                     let () =
                       let rec iter ys xs =
                         match xs with
@@ -2531,23 +2552,35 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     let apmap' = List.map (fun (x, (_, t)) -> (x, t)) apbs in
                     let tenv = boxvarmap @ old_boxvarmap @ pmap @ apmap' in
                     execute_branch begin fun () ->
+                    let boxId = get_unique_var_symb "this" BoxIdType in
                     let currentThread = get_unique_var_symb "currentThread" IntType in
                     let actionHandle = get_unique_var_symb "actionHandle" HandleIdType in
                     let predicateHandle = get_unique_var_symb "predicateHandle" HandleIdType in
                     assume (ctxt#mk_not (ctxt#mk_eq actionHandle predicateHandle)) begin fun () ->
                       let pre_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb ("old_" ^ x) t)) boxpmap in
+                      let pre_boxargsWithThis = ("this", boxId) :: pre_boxargs in
                       with_context (Executing ([], [], l, "Checking preserved_by clause.")) $. fun () ->
                         with_context PushSubcontext $. fun () ->
-                          produce_asn [] [] [] pre_boxargs boxinv real_unit None None $. fun h_pre _ pre_boxvars ->
+                          produce_asn [] [] [] pre_boxargsWithThis boxinv real_unit None None $. fun h_pre _ pre_boxvars ->
                             let aargs = List.map (fun (x, (y, t)) -> (x, y, get_unique_var_symb x t)) apbs in
                             let apre_env = List.map (fun (x, y, t) -> (y, t)) aargs in
                             assume (eval None ([("actionHandle", actionHandle)] @ pre_boxvars @ apre_env) pre) $. fun () ->
+                              let produce_action_permission h cont =
+                                match act_pred_symb with
+                                  None -> cont h
+                                | Some(act_pred_symb) -> 
+                                  let actionFrac = get_unique_var_symb "#actionFrac" RealType in
+                                  assume (ctxt#mk_real_lt real_zero actionFrac) $. fun () -> 
+                                    produce_chunk h (act_pred_symb, true) [] actionFrac (Some 1) [boxId] None cont
+                              in
+                              produce_action_permission h_pre $. fun h_pre ->
                               let hpargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) pmap in
                               assume_handle_invs bcn hpmap hpn ([("predicateHandle", predicateHandle)] @ pre_boxvars @ hpargs) h_pre $. fun h_pre_hinv ->
-                                consume_asn rules [] h_pre_hinv [] pre_boxargs boxinv true real_unit $. fun _ hinv _ _ _ ->                         
+                                consume_asn rules [] h_pre_hinv [] pre_boxargsWithThis boxinv true real_unit $. fun _ hinv _ _ _ ->                         
                                   let old_boxvars = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxvars in
                                   let post_boxargs = List.map (fun (x, t) -> (x, get_unique_var_symb x t)) boxpmap in
-                                  produce_asn [] hinv [] post_boxargs boxinv real_unit None None $. fun h_post_hinv _ post_boxvars ->
+                                  let post_boxargsWithThis = ("this", boxId) :: post_boxargs in
+                                  produce_asn [] hinv [] post_boxargsWithThis boxinv real_unit None None $. fun h_post_hinv _ post_boxvars ->
                                     with_context PopSubcontext $. fun () ->
                                     let ghostenv = List.map (fun (x, t) -> x) tenv in
                                       assume (eval None ([("actionHandle", actionHandle)] @ post_boxvars @ old_boxvars @ apre_env) post) $. fun () ->
@@ -2557,28 +2590,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                         let tenv = ["actionHandle", HandleIdType; "predicateHandle", HandleIdType; "currentThread", IntType] @ tenv in
                                         verify_cont (pn,ilist) [] [] [] boxes true leminfo funcmap predinstmap [] tenv ghostenv h_post_hinv env ss begin fun _ _ _ h _ ->
                                           let post_inv_env = [("predicateHandle", predicateHandle)] @ post_boxvars @ hpargs in
-                                          let rec assert_spatial_handle_invs bcn hpmap hname hpInvEnv h cont = 
-                                            if hname = bcn ^ "_handle" then
-                                              cont h
-                                            else
-                                              let (l, _, extended, inv, _) = List.assoc hname hpmap in
-                                              let consume_inv h =
-                                                match inv with
-                                                  ExprAsn(_, e) -> assume (eval None hpInvEnv e) $. fun () -> cont h (* for non-spatial assertions, preservation was already proven *)
-                                                | _ -> consume_asn rules [] h [] hpInvEnv inv true real_unit (fun _ h _ _ _ -> cont h) 
-                                              in
-                                              match extended with
-                                                None -> consume_inv h
-                                              | Some(ehname) -> assert_spatial_handle_invs bcn hpmap ehname hpInvEnv h (fun h -> consume_inv h)
-                                          in
-                                          let assert_spatial_handle_invs_opt bcn hpmap hname hpInvEnv h cont =
-                                            match hname with 
-                                              None -> cont h
-                                            | Some hname -> assert_spatial_handle_invs bcn hpmap hname hpInvEnv h cont
-                                          in
-                                          let (l, _, extended, inv, _) = List.assoc hpn hpmap in
-                                          assert_spatial_handle_invs_opt bcn hpmap extended post_inv_env h $. fun h ->
-                                            consume_asn rules [] h [] post_inv_env inv true real_unit (fun _ h _ _ _ -> success ())
+                                          (* does not consume extended handles, only suffices if one can only extend pure handles *)
+                                          consume_asn rules [] h [] post_inv_env inv true real_unit (fun _ h _ _ _ -> success ())
                                         end begin fun _ _ -> static_error l "Return statements are not allowed in handle predicate preservation proofs." None end
                                         begin fun _ _ _ _ _ -> static_error l "Exceptions are not allowed in handle predicate preservation proofs." None end
                     end

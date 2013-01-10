@@ -76,7 +76,8 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec evalpat ghost ghostenv env pat tp0 tp cont =
     match pat with
       LitPat e -> cont ghostenv env (prover_convert_term (eval None env e) tp0 tp)
-    | VarPat (_, x) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
+    | VarPat (_, x) when not (List.mem_assoc x env) -> let t = get_unique_var_symb_ x tp ghost in cont (x::ghostenv) (update env x (prover_convert_term t tp tp0)) t
+    | VarPat(_, x) -> cont (x :: ghostenv) env (List.assoc x env)
     | DummyPat -> let t = get_unique_var_symb_ "dummy" tp ghost in cont ghostenv env t
     | WCtorPat (l, i, targs, g, ts0, ts, pats) ->
       let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
