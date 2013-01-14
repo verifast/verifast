@@ -26,6 +26,7 @@ cd shared_boxes
 ifnotmac verifast -c threading.o sblock.c
 verifast_both -c threading.o sglock.c
 verifast_both -c threading.o tblock.c
+verifast_both -c ticketlock_cap.c
 ifnotmac verifast -allow_assume listex.o atomics.o threading.o concurrentqueue.h concurrentqueue.c concurrentqueue_client.c
 cd ..
 ifnotmac verifast listex.o arrays.o stringBuffers.c sockets.o bot.c

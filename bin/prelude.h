@@ -302,5 +302,32 @@ typedef int main(int argc, char **argv);
 typedef int main_full/*@(int mainModule)@*/(int argc, char **argv);
     //@ requires module(mainModule, true) &*& [_]argv(argv, argc);
     //@ ensures true;
+    
+// action permissions
+
+/*@
+fixpoint bool is_action_permission0(predicate(box;) p);
+
+lemma void action_permission0_unique(predicate(box;) p, box id);
+  requires [?f]p(id) &*& is_action_permission0(p) == true;
+  ensures [f]p(id) &*& f <= 1;
+  
+fixpoint bool is_action_permission1_dispenser<t>(predicate(box, list<t>) p);
+fixpoint predicate(box, t) get_action_permission1_for_dispenser<t>(predicate(box, list<t>) p);
+
+lemma void action_permission1_split<t>(predicate(box, list<t>) dispenser, predicate(box, t) p, box id, t x);
+  requires is_action_permission1_dispenser(dispenser) == true &*& dispenser(id, ?used) &*& ! mem(x, used) &*& get_action_permission1_for_dispenser(dispenser) == p;
+  ensures dispenser(id, cons(x, used)) &*& p(id, x);
+
+lemma void action_permission1_split2<t>(predicate(box, list<t>) dispenser, predicate(box, t) p, box id, t x);
+  requires is_action_permission1_dispenser(dispenser) == true &*& dispenser(id, ?used) &*& ! mem(x, used) &*& get_action_permission1_for_dispenser(dispenser) == p;
+  ensures dispenser(id, append(used, cons(x, nil))) &*& p(id, x);
+  
+fixpoint bool is_action_permission1<t>(predicate(box, t;) p);
+
+lemma void action_permission1_unique<t>(predicate(box, t;) p, box id, t x);
+  requires [?f]p(id, x) &*& is_action_permission1<t>(p) == true;
+  ensures [f]p(id, x) &*& f <= 1;
+@*/
 
 #endif

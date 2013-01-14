@@ -668,9 +668,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (  Plugins.plugin
          * termnode Plugins.plugin_instance)
       * termnode (* predicate symbol for plugin chunk *)
+    type box_action_permission_info =
+        termnode (* term representing action permission predicate *)
+      * termnode option (* term representing action permission dispenser predicate *)
     type box_action_info =
         loc
-      * termnode option (* term representing action permission predicate, if any *)
+      * box_action_permission_info option (* information about permissions required to perform this action, if it is permission-based *)
       * type_ map (* parameters *)
       * expr (* precondition *)
       * expr (* postcondition *)
@@ -2027,7 +2030,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               [] -> (pfm, List.rev amap)
             | ActionDecl (l, an, permbased, ps, pre, post)::ads ->
               if List.mem_assoc an amap then static_error l "Duplicate action name." None;
-              if permbased && List.length ps > 0 then static_error l "Parameters not supported yet for permission-based actions." None; 
+              if permbased && List.length ps > 1 then static_error l "Permission-based actions can have at most one parameter." None; 
               let pmap =
                 let rec iter pmap ps =
                   match ps with
@@ -2041,20 +2044,41 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 in
                 iter [] ps
               in
-              let (pfm, action_permission_predicate) = 
+              let (pfm, action_permission_info) = 
                 if not permbased then
                   (pfm, None)
                 else begin
-                  let predname = (bcn ^ "_" ^ an) in
-                  if List.mem_assoc predname pfm || List.mem_assoc predname purefuncmap0 then static_error l "Action permission name clashes with existing predicate name." None;
-                  let predfam = (mk_predfam predname l [] 0 ([BoxIdType]) (Some 1)) in
-                  let  (_, (_, _, _, _, symb, _)) = predfam in
-                  let (_, _, _, _, is_action_permission0_symb) = List.assoc "is_action_permission0" purefuncmap0 in
-                  ignore (ctxt#assume (mk_app is_action_permission0_symb [symb]));
-                  (predfam :: pfm, Some symb)
+                  let nb_action_parameters = List.length ps in
+                  let action_permission_pred_name = (bcn ^ "_" ^ an) in
+                  if List.mem_assoc action_permission_pred_name pfm || List.mem_assoc action_permission_pred_name purefuncmap0 then static_error l "Action permission name clashes with existing predicate name." None;
+                  let action_permission_pred_param_types = BoxIdType :: (List.map (fun (x, t) -> t) pmap) in
+                  let action_permission_pred_inputParamCount = Some (1 + nb_action_parameters) in
+                  let action_permission_pred = (mk_predfam action_permission_pred_name l [] 0 action_permission_pred_param_types action_permission_pred_inputParamCount) in
+                  let  (_, (_, _, _, _, action_permission_pred_symb, _)) = action_permission_pred in
+                  let (_, _, _, _, is_action_permissionx_symb) = List.assoc ("is_action_permission" ^ (string_of_int nb_action_parameters)) purefuncmap0 in
+                  ignore (ctxt#assume (mk_app is_action_permissionx_symb [action_permission_pred_symb]));
+                  if ps = [] then
+                    (action_permission_pred :: pfm, Some (action_permission_pred_symb, None))
+                  else begin
+                    assert (List.length ps = 1);
+                    let action_permission_dispenser_pred_name = action_permission_pred_name ^ "_dispenser" in
+                    if List.mem_assoc action_permission_dispenser_pred_name pfm || List.mem_assoc action_permission_dispenser_pred_name purefuncmap0 then static_error l "Action permission name clashes with existing predicate name." None;
+                    let [(_, action_param_type)] = pmap in 
+                    let action_permission_dispenser_pred_param_types = [BoxIdType; InductiveType("list", [action_param_type])] in
+                    let action_permission_dispenser_pred_inputParamCount = Some 2 in
+                    let action_permission_dispenser_pred = (mk_predfam action_permission_dispenser_pred_name l [] 0 action_permission_dispenser_pred_param_types action_permission_dispenser_pred_inputParamCount) in
+                    let  (_, (_, _, _, _, action_permission_dispenser_pred_symb, _)) = action_permission_dispenser_pred in
+                    (* assuming is_action_permission1_dispenser(action_permission_dispenser_pred_symb) *)
+                    let (_, _, _, _, is_action_permission1_dispenser_symb) = List.assoc "is_action_permission1_dispenser" purefuncmap0 in
+                    ignore (ctxt#assume (mk_app is_action_permission1_dispenser_symb [action_permission_dispenser_pred_symb]));
+                    (* assuming get_action_permission1_for_dispenser(action_permission_dispenser_pred_symb) = action_permission_pred_symb *)
+                    let (_, _, _, _, get_action_permission1_for_dispenser_symb) = List.assoc "get_action_permission1_for_dispenser" purefuncmap0 in
+                    ignore (ctxt#assume (ctxt#mk_eq (mk_app get_action_permission1_for_dispenser_symb [action_permission_dispenser_pred_symb]) action_permission_pred_symb));
+                    (action_permission_pred :: action_permission_dispenser_pred :: pfm, Some (action_permission_pred_symb, Some action_permission_dispenser_pred_symb))
+                  end
                 end
               in
-              iter pfm ((an, (l, action_permission_predicate, pmap, pre, post))::amap) ads
+              iter pfm ((an, (l, action_permission_info, pmap, pre, post))::amap) ads
           in
           iter pfm [] ads
         in
@@ -2062,7 +2086,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let rec iter pfm hpm hpds =
             match hpds with
               [] -> (pfm, List.rev hpm)
-            | HandlePredDecl (l, hpn, ps, extends, inv, pbcs)::hpds -> (* todo: jans *)
+            | HandlePredDecl (l, hpn, ps, extends, inv, pbcs) :: hpds ->
               if List.mem_assoc hpn hpm then static_error l "Duplicate handle predicate name." None;
               if List.mem_assoc hpn pfm then static_error l "Handle predicate name clashes with existing predicate name." None;
               let pmap =
