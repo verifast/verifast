@@ -131,6 +131,11 @@ cd helloproc
 # the default number of cpus forever, so we explicitly specify it to be 1.  
 mysh -cpus 1 < helloproc.mysh
 cd ..
+cd usbkbd
+cd src
+verifast -c -prover redux usbkbd_verified.c
+cd ..
+cd ..
 cd java
 cd channels
 verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
@@ -281,3 +286,5 @@ verifast -c -allow_should_fail erasure.c
 verifast -c -allow_should_fail erasure2.c
 verifast -c -allow_should_fail erasure3.c
 verifast_both -c -allow_should_fail autoclose_bad_downcast.c
+
+

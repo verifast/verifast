@@ -1,0 +1,116 @@
+#ifndef __GHOST_FIELDS_H
+#define __GHOST_FIELDS_H
+
+
+
+	// Typedef for lemmas that proves a predicate is unique.
+	typedef lemma void pred_unique<A>(predicate(A) p, fixpoint(A, bool) f)(A a);
+		requires p(a) &*& p(a) &*& f(a) == true;
+		ensures false;
+
+
+
+//----- uniq -----//
+	
+	// Converts one unique predicate into multiple different ones.
+	
+		
+	// We have some trouble with managing our data ^_^
+	// We can't pass an unknown amount of parameters
+	// You can't pass predicates with type parameters as argument (to a predicate)
+	// you can't have an inductive with type-parameter A containing a predicate(A),
+	// but we can mess with (nested) pairs as much as we love to hate,
+	// and pass around predicates with (statically known) type-parameters by embedding
+	// them in other parameters.
+	//
+	// XXX this "passing multiple parameters as one" is done in an ugly way. Make it pretty.
+	
+	predicate uniq_child<A>(pair<pair<A, predicate(A)>,int> args;);
+	
+	predicate uniq_children<A>(predicate(A) p, A a, int nb, int start;) =
+		start >= 1 && start <= nb
+		&*& uniq_child(pair(pair(a, p), start))
+		&*& start == nb ?
+			true
+		:
+			uniq_children(p, a, nb, start+1)
+		;
+	
+	lemma void uniq_uniqueness_proof<A>(pair<pair<A, predicate(A)>,int> args);
+		requires uniq_child(args) &*& uniq_child(args);
+		ensures false;
+	
+	
+	lemma void uniq_produce<A>(predicate(A) p, A a, int nb_children, fixpoint(A, bool) f, pred_unique *pu);
+		requires p(a) &*& nb_children >= 1 &*& is_pred_unique(pu, p, f) &*& f(a) == true;
+		ensures uniq_children(p, a, nb_children, 1) &*& is_pred_unique(pu, p, f);
+	
+	lemma void uniq_destroy<A>(predicate(A) p, A a, int nb_children);
+		requires uniq_children(p, a, nb_children, 1);
+		ensures p(a);
+	
+// end
+
+// ----- ghost fields ----- //
+
+	// Assigns a modifiable value to a unique predicate's pointer and its arguments.
+
+	predicate ghost_field<A, B>(predicate(A) p, A a; B b);
+
+	lemma void create_ghost_field<A, B>(predicate(A) p, fixpoint(A, bool) f, A a, B b, pred_unique *pu);
+		requires is_pred_unique(pu, p, f) &*& p(a) &*& f(a) == true;
+		ensures  is_pred_unique(pu, p, f) &*& ghost_field(p, a, b);
+
+	lemma void dispose_ghost_field<A, B>(predicate(A) p, A a);
+		requires ghost_field<A, B>(p, a, _);
+		ensures p(a);
+
+	lemma void write_ghost_field<A, B>(predicate(A) p, A a, B newB);	
+		requires ghost_field<A,B>(p, a, ?oldB);
+		ensures ghost_field (p, a, newB);
+
+// end
+
+
+//----- countdiff ------//
+
+	// Counter that associates a unique predicate with a positive counter value.
+
+	predicate countdiff<A>(predicate (A) p, A a; int count);
+	
+	predicate countdiff_ticket<A>(predicate (A) p, A a;);	
+
+	lemma void start_countdiff<A>(predicate (A) p, fixpoint(A, bool) f, A a, pred_unique *pu);
+		requires is_pred_unique (pu, p, f) &*& p(a) &*& f(a) == true;
+		ensures  is_pred_unique (pu, p, f) &*& countdiff(p, a, 0);
+
+	lemma void inc_countdiff<A>(predicate (A) p, A a);
+		requires countdiff<A>(p, a, ?count);
+		ensures countdiff<A>(p, a, count+1) &*& countdiff_ticket(p, a) &*& count >= 0;
+	
+	lemma void dec_countdiff<A>(predicate (A) p, A a);
+		requires countdiff<A>(p, a, ?count) &*& countdiff_ticket(p, a);
+		ensures countdiff<A>(p, a, count-1) &*& count-1 >= 0;
+	
+	lemma void stop_countdiff<A>(predicate (A) p, A a);
+		requires countdiff(p, a, 0);
+		ensures  p(a);
+
+	predicate countdiff_tickets<A>(predicate (A) p, A a, int n;) =
+		n >= 0
+		&*& n == 0 ?
+			true
+		:
+			countdiff_ticket(p, a)
+			&*& countdiff_tickets(p, a, n-1)
+		;
+	
+	lemma void minimum_prove_countdiff<A>(predicate (A) p, A a, int min);
+		requires [?f]countdiff(p, a, ?count) &*& countdiff_tickets<A>(p, a, min);
+		ensures [f]countdiff(p, a, count)  &*& countdiff_tickets<A>(p, a, min) &*& count >= min;
+
+// end
+
+
+
+#endif

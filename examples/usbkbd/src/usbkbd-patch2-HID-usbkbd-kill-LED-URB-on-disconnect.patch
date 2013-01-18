@@ -1,0 +1,29 @@
+From a2b2c20ba2f6e22c065f401d63f7f883779cf642 Mon Sep 17 00:00:00 2001
+From: Willem Penninckx <willem.penninckx@cs.kuleuven.be>
+Date: Wed, 23 Nov 2011 11:26:45 +0100
+Subject: [PATCH] HID: usbkbd: kill LED URB on disconnect
+
+The LED URB was left unkilled when the USB device is disconnected.
+
+Signed-off-by: Willem Penninckx <willem.penninckx@cs.kuleuven.be>
+Signed-off-by: Jiri Kosina <jkosina@suse.cz>
+---
+ drivers/hid/usbhid/usbkbd.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/hid/usbhid/usbkbd.c b/drivers/hid/usbhid/usbkbd.c
+index 052346f..a7b925a 100644
+--- a/drivers/hid/usbhid/usbkbd.c
++++ b/drivers/hid/usbhid/usbkbd.c
+@@ -387,6 +387,7 @@ static void usb_kbd_disconnect(struct usb_interface *intf)
+ 	if (kbd) {
+ 		usb_kill_urb(kbd->irq);
+ 		input_unregister_device(kbd->dev);
++		usb_kill_urb(kbd->led);
+ 		usb_kbd_free_mem(interface_to_usbdev(intf), kbd);
+ 		kfree(kbd);
+ 	}
+-- 
+1.7.6.2
+
+

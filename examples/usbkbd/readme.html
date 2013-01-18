@@ -1,0 +1,72 @@
+<html><head>
+	<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+	<title>Verification of usbkbd</title>
+</head><body>
+<h1>Verification of usbkbd</h1>
+By Willem Penninckx, Jan Tobias M&uuml;hlberg, Jan Smans, Bart Jacobs, and Frank Piessens
+
+<h2>Introduction</h2>
+This project verified Linux's USB Boot Protocol Keyboard Driver (usbkbd), shipped with the Linux kernel.
+
+<p>As far as we know, prior to this work, no device driver verification has been carried out that successfully combines:
+<ul>
+	<li>verifying software not written with verification in mind, and</li>
+	<li>using a sound approach (we don't "try to find bugs", but "prove absence of bugs"), and</li>
+	<li>not avoiding concurrency (concurrency is common in this driver, and we do prove absence of race conditions), and</li>
+	<li>not relying on any bounding (there's an unbounded number of threads, unbounded number of keyboards, unbounded amount of time the driver is running, ...)</li>
+</ul>
+
+<p>The purpose of this page is to have one URL to point to where you can find all (references to) files related to usbkbd verification and an overview of the directory structure. The latest version of this page can be found at <a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/">http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/</a>.
+
+<h2>Links</h2>
+<ul>
+<li><a href="http://people.cs.kuleuven.be/~bart.jacobs/verifast/">VeriFast webpage</a> (including download-link of VeriFast)</li>
+<li>All sources and annotations of usbkbd are shipped with VeriFast, in the directory <tt>examples/usbkbd</tt> (starting from the VeriFast after and different from version 12.12)</li>
+<li>If you want a really old outdated version of the verified usbkbd, you can find it at <a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/usbkbd-verified-release2.tar.gz">here (OUTDATED)</a>. This version is closer to the version the paper describes.</li>
+<li><a href="https://lirias.kuleuven.be/handle/123456789/336725">Paper</a> (with public download) <span style="background-color: #ffff00;">(you're probably looking for this)</span></li>
+<li>10-minutes presentation (made for NASA Formal Methods 2012):
+	<ul>
+		<li><a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/presentation/presentation-expanded-animations-pdfexport.pdf">[PDF, animations expanded to multiple slides]</a> (only high-level overview)</li>
+		<li><a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/presentation/presentation-no-animations.pdf">[PDF, animations not expanded]</a> (only high-level overview)</li>
+	</ul>
+</li>
+<li><a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/usbkbd-ghost-counters-draft.pdf">usbkbd-ghost-counters-draft.pdf</a>: longer (but draft) explanation than the paper's section about ghost counters used.</li>
+</ul>
+
+<h2>Which file is what</h2>
+<ul>
+	<li>src/usbkbd_unpatched.c: usbkbd.c as it was before fixing the bugs found during the verification process</li>
+	<li>src/usbkbd_patch*.patch: patches to fix these bugs. These patches are accepted by the maintainer (update: since Linux 3.3 the patches are part of Linux releases)</li>
+	<li>src/usbkbd_verified.c: usbkbd.c with VeriFast annotations</li>
+	<li>src/*.{h,gh}: API specifications and other ghostcode</li>
+	<li>build/*: files to compile src/usbkbd_verified.c into a kernel module</li>
+</ul>
+
+<h2>How to launch verification</h2>
+if $DIR is the directory where <tt>usbkbd_verified.c</tt> is located, execute
+<pre>
+prompt$ cd $DIR
+prompt$ verifast -prover redux -c usbkbd_verified.c
+</pre>
+
+<h2>How to build and load the kernel module</h2>
+if $DIR is the directory where <tt>usbkbd_verified.c</tt> is located, execute as root
+<pre>
+prompt# cd $DIR/../build/
+prompt# make
+prompt# insmod usbkbd_verified_build.ko
+</pre>
+
+<p>Keep in mind another kernel module (typically usbhid) might also handle USB keyboards, and "steal" away the keyboard from usbkbd_verified_build. The usbhid kernel module might be autoloaded by your Linux distribution when you plug in a keyboard.
+
+<hr>
+News / changelog / latest update:
+<ul>
+<li>2011-12-18: the webpage was born; first release of annotated files.</li>
+<li>2012-03-30: added link to paper; annotated files contain a few more comments; driver now builds on a wider range of kernel versions (including 2.6.35 and 3.2.0)</li>
+<li>2012-04-05: added presentation; added motivation/"why is this interesting"; made intro-sections compacter and in one section</li>
+<li>2012-04-11: (minor changes)</li>
+<li>2012-04-16: +usbkbd-ghost-counters-draft.pdf</li>
+<li>2013-01-18: updated annotations to newer version of VeriFast. Added as official VeriFast example.</li>
+</ul>
+</body></html>
