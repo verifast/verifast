@@ -1,4 +1,5 @@
 #include "atomics.h"
+#include "ticketlock_cap.h"
 
 struct ticketlock {
   int next;
