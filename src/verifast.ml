@@ -2025,7 +2025,10 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Sep(_, a1, a2) -> try_consume h consumed param_env env a1 (fun h consumed param_env env fail -> try_consume h consumed param_env env a2 success_cont fail) fail
       in
       try_consume h [] param_env0 param_env0 pre (fun h h_consumed param_env env fail ->
-        if List.for_all2 (fun wanted e -> definitely_equal wanted (eval None env e)) ts (List.map (function LitPat e -> e) q_input_args) then   
+        let dummy_fraction_chunk_generated = match frac with None -> false | Some(f) -> is_dummy_frac_term (eval None env f) in
+        if (List.for_all2 (fun wanted e -> definitely_equal wanted (eval None env e)) ts (List.map (function LitPat e -> e) q_input_args)) &&
+           (not dummy_fraction_chunk_generated)
+        then   
           let tpenv = [] in
           let ghostenv = [] in
           let h = h_consumed @ h in
@@ -2037,48 +2040,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       ) (fun () -> cont None)
     in
     add_lemma_rule q_symb rule
-  (* and add_rule_for_lemma l pre post ps fracname p_ref p_args condition q_ref q_input_args = 
-    let (_, _, _, _, p_symb, Some p_inputParamCount) = List.assoc p_ref#name predfammap in
-    let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
-    let rule h targs terms_are_well_typed coef coefpat ts cont =
-      (* locate p in the heap *)
-      let rec try_apply_rule hdone htodo =
-        match htodo with
-          [] -> cont None
-        | ((Chunk (actual_name, actual_targs, actual_coef, actual_ts, actual_size)) as chunk) :: hrest when predname_eq actual_name (p_symb ,true) -> 
-          let env0 = List.map2 (fun (x, tp) t -> (x, t)) ps (take (List.length ps) actual_ts) in
-          let env1 = (match fracname with None -> env0 | Some(f) -> (f, actual_coef) :: env0) in
-          let rec construct_env env es actuals failcont cont =
-            match (es, actuals) with
-              ([], []) -> cont env
-            | (VarPat(_, x) :: es, t :: actuals) -> construct_env ((x, t) :: env) es actuals failcont cont
-            | (LitPat(e) :: es, t :: actuals) -> if definitely_equal (eval None env e) t then construct_env env es actuals failcont cont else failcont None
-            | ((DummyPat _) :: es, t :: actuals) -> construct_env env es actuals failcont cont
-          in 
-          construct_env env1  (drop (List.length ps) p_args) (drop (List.length ps) actual_ts) cont $. fun env ->
-          let ghostenv = [] in
-          let tpenv = [] in
-          assert ((List.length ts) = q_inputParamCount);
-          if
-             actual_targs = [] &&
-             (match fracname with None -> definitely_equal actual_coef real_unit | Some(f) -> true) &&
-             (match condition with None -> true | Some(e) -> ctxt#query (eval None env e)) &&
-             (List.for_all2 (fun wanted e -> definitely_equal wanted (eval None env e)) ts (List.map (function LitPat e -> e) q_input_args))
-          then
-             (* HACK: putting "chunk" first such that it will be selected for consumption;
-                otherwise, the wrong chunk may be selected for consumption (because of existentials in "pre").
-                Note it is also possible to work around this problem by using lemma parameters instead of existentials. *) 
-            let h = chunk :: hdone @ hrest in
-            with_context (Executing (h, env0, l, "Auto-applying lemma")) $. fun () ->
-              consume_asn rules tpenv h ghostenv env0 pre true real_unit $. fun _ h ghostenv env size -> 
-                produce_asn tpenv h ghostenv env post real_unit None None $. fun h ghostenv env -> cont (Some h) 
-          else
-            try_apply_rule (hdone @ [chunk]) hrest
-        | chunk :: hrest -> try_apply_rule (hdone @ [chunk]) hrest
-      in
-        try_apply_rule [] h
-    in
-    add_lemma_rule q_symb rule*)
 
   and create_auto_lemma l (pn,ilist) g trigger pre post ps pre_tenv tparams' =
     match (pre, post) with
@@ -2173,7 +2134,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match asn with
       | WPredAsn(q_loc, q_ref, true, [], [], q_args) when q_ref#is_precise -> 
         generate_rules_pred None q_ref q_args
-      | CoefAsn(_, frac, WPredAsn(q_loc, q_ref, true, [], [], q_args)) when q_ref#is_precise ->
+      | CoefAsn(_, LitPat(frac), WPredAsn(q_loc, q_ref, true, [], [], q_args)) when q_ref#is_precise ->
         generate_rules_pred (Some frac) q_ref q_args
       | Sep(_, a1, a2) -> (generate_rules a1) + (generate_rules a2)
       | _ -> 0
