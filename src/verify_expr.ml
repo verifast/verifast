@@ -258,9 +258,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let functypes_implemented = ref []
   
   let check_func_header pn ilist tparams0 tenv0 env0 l k tparams rt fn fterm xs nonghost_callers_only functype_opt contract_opt body =
-    if tparams0 <> [] then static_error l "Declaring local functions in the scope of type parameters is not yet supported." None;
     check_tparams l tparams0 tparams;
-    let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams rt) in
+    let tparams1 = tparams0 @ tparams in
+    let rt = match rt with None -> None | Some rt -> Some (check_pure_type (pn,ilist) tparams1 rt) in
     let xmap =
       let rec iter xm xs =
         match xs with
@@ -268,7 +268,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (te, x)::xs ->
           if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
           if List.mem_assoc x tenv0 then static_error l ("Parameter '" ^ x ^ "' hides existing variable '" ^ x ^ "'.") None;
-          let t = check_pure_type (pn,ilist) tparams te in
+          let t = check_pure_type (pn,ilist) tparams1 te in
           iter ((x, t)::xm) xs
       in
       iter [] xs
@@ -278,10 +278,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match contract_opt with
         None -> static_error l "Non-fixpoint function must have contract." None
       | Some (pre, post) ->
-        let (wpre, pre_tenv) = check_asn (pn,ilist) tparams tenv pre in
+        let (wpre, pre_tenv) = check_asn (pn,ilist) tparams1 tenv pre in
         let pre_tenv = List.remove_assoc "#pre" pre_tenv in
         let postmap = match rt with None -> pre_tenv | Some rt -> ("result", rt)::pre_tenv in
-        let (wpost, tenv) = check_asn (pn,ilist) tparams postmap post in
+        let (wpost, tenv) = check_asn (pn,ilist) tparams1 postmap post in
         (wpre, pre_tenv, wpost)
     in
     if nonghost_callers_only then begin
