@@ -171,8 +171,39 @@ type token = (* ?token *)
   | String of string
   | CharToken of char
   | PreprocessorSymbol of string
+  | BeginInclude of string * string
+  | SecondaryInclude of string * string
+  | EndInclude
   | Eol
   | ErrorToken
+
+let string_of_token t =
+  begin match t with
+    Kwd(s) -> "Keyword:" ^ s
+  | Ident(s) -> "Identifier:" ^ s
+  | Int(bi) -> "Int:" ^ (Big_int.string_of_big_int bi)
+  | RealToken(bi) -> "RealToken:" ^ (Big_int.string_of_big_int bi)
+  | Float(fl) -> "Float:" ^ (Pervasives.string_of_float fl)
+  | String(s) -> "String: " ^ s
+  | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
+  | PreprocessorSymbol(s) -> "PPSymbol: " ^ s
+  | BeginInclude(s, _) -> "BeginInclude: " ^ s
+  | SecondaryInclude(s, _) -> "SecondaryInclude: " ^ s
+  | EndInclude -> "EndInclude"
+  | Eol -> "Eol"
+  | _ -> "Error"
+  end
+
+(* necessary because e.g. for two Big_ints bi1 bi2, the comparison bi1 = bi2 is not allowed *)
+let compare_tokens t1 t2 =
+  begin match (t1,t2) with
+    (None,None) -> true
+  | (Some(_,Int(bi1)),Some(_,Int(bi2))) -> compare_big_int bi1 bi2 = 0
+  | (Some(_,RealToken(bi1)),Some(_,RealToken(bi2))) -> compare_big_int bi1 bi2 = 0
+  | (Some(_,Float(fl1)),Some(_,Float(fl2))) -> (Pervasives.string_of_float fl1) = (Pervasives.string_of_float fl2)
+  | (Some(_,t1),Some(_,t2)) -> t1 = t2
+  | _ -> false
+end
 
 (** Base path, relative path, line (1-based), column (1-based) *)
 type srcpos = ((string * string) * int * int) (* ?srcpos *)
@@ -183,7 +214,9 @@ type loc = (srcpos * srcpos) (* ?loc *)
 let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
 let dummy_loc = (dummy_srcpos, dummy_srcpos)
 
+let error msg = raise (Stream.Error msg)
 exception ParseException of loc * string
+exception PreprocessorDivergence of loc * string
 
 (** Like the Stream module of the O'Caml library, except that it supports a limited form of backtracking using [push].
     Used implicitly by the parser. *)
@@ -373,10 +406,6 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         if !last_line_with_ghost = !line then incr mixed_line_count
       end
     end
-  in
-
-  let error msg =
-      raise (Stream.Error msg)
   in
   
   let kwd_table = Hashtbl.create 17 in
@@ -659,6 +688,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
           ghost_range_start := Some !token_srcpos;
           reportRange GhostRangeDelimiter (current_loc());
           Some (Kwd "/*@")
+        | '~' -> text_junk (); reportShouldFail (current_loc()); multiline_comment ()
         | _ -> multiline_comment ()
       )
     | '=' ->
@@ -721,63 +751,121 @@ let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange report
 
 (* The preprocessor *)
 
-let make_preprocessor make_lexer basePath relPath include_paths =
-  let macros = Hashtbl.create 10 in
+class type t_lexer =
+  object
+    method peek          : unit -> (loc * token) option
+    method peekn         : int  -> ((loc * token) option) list
+    method junk          : unit -> unit
+    method push          : (loc * token) option -> unit
+    method loc           : unit -> loc
+    method ignore_eol    : unit -> bool
+    method reset         : unit -> unit
+    method commit        : unit -> unit
+    method isGhostHeader : unit -> bool
+  end
+
+class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * token) Stream.t) : t_lexer =
+  object (this)
+    val mutable counter = 0
+    val mutable counter_old = 0
+    val mutable buffer = []
+    val mutable locs = [lloc()]
+
+    method peek() =
+      if counter < List.length buffer then
+        List.nth buffer counter
+      else begin
+        this#fetch();
+        this#peek()
+      end
+    method peekn(n) =
+      if counter + n < List.length buffer then
+        Array.to_list (Array.sub (Array.of_list buffer) counter n)
+      else begin
+        this#fetch();
+        this#peekn(n)
+      end
+    method junk() =
+      counter <- counter + 1; 
+    method push(tok) =
+      counter <- counter - 1;
+      if (tok <> List.nth buffer counter) then
+        raise (Stream.Error "Pushing incorrect token back into tentative lexer");
+    method loc() =
+      List.nth locs counter
+    method ignore_eol() =
+      !lignore_eol
+    method reset() = 
+      counter_old <- counter;
+      counter <- 0
+    method commit() =
+      if counter <> counter_old then raise (PreprocessorDivergence (this#loc(), 
+           "Different amount of tokens were consumed by normal and context-free preprocessors"));
+      counter_old <- 0;
+      while counter <> 0 do
+        buffer <- List.tl buffer;
+        locs <- List.tl locs;
+        counter <- counter - 1
+      done
+    method isGhostHeader() =
+      begin match this#peek() with 
+        None -> false
+      | Some ((((_,f), _, _),_), _) -> Filename.check_suffix f ".gh"
+      end
+      
+    method private fetch () =
+      buffer <- List.append buffer [Stream.peek (lstream)];
+      Stream.junk lstream;
+      locs <- List.append locs [lloc()]
+  end
+
+let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
+  let macros = ref [Hashtbl.create 10] in
+  let expanding_macro = ref false in
   let streams = ref [] in
   let callers = ref [[]] in
-  let paths = ref [] in
-  let locs = ref [] in
-  let loc = ref dummy_loc in
-  let in_ghost_range = ref false in
-  let push_lexer basePath relPath =
-    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths ~inGhostRange:!in_ghost_range in
-    lexer_ignore_eol := false;
-    streams := stream::!streams;
-    callers := List.hd !callers::!callers;
-    paths := (basePath, relPath)::!paths;
-    locs := loc::!locs
-  in
   let push_list newCallers body =
     streams := Stream.of_list body::!streams;
     callers := (newCallers @ List.hd !callers)::!callers;
-    paths := List.hd !paths::!paths;
-    locs := List.hd !locs::!locs
   in
   let pop_stream () =
     streams := List.tl !streams;
     callers := List.tl !callers;
-    paths := List.tl !paths;
-    locs := List.tl !locs
   in
-  push_lexer basePath relPath;
-  let pp_ignore_eol = ref true in
   let next_at_start_of_line = ref true in
   let ghost_range_delimiter_allowed = ref false in
-  let error msg = raise (Stream.Error msg) in
   let peek () =
-    loc := List.hd !locs ();
-    let t = Stream.peek (List.hd !streams) in
+    let t = 
+      match !streams with 
+        s::_ -> Stream.peek s
+      | [] -> !tlexer#peek()
+    in
     if not !ghost_range_delimiter_allowed then begin match t with
       (Some (_, Kwd "/*@") | Some (_, Kwd "@*/")) -> error "Ghost range delimiters not allowed inside preprocessor directives."
     | _ -> ()
     end;
     t
   in
-  let junk () = Stream.junk (List.hd !streams) in
+  let junk () = 
+    match !streams with 
+      s::_ -> Stream.junk s
+    | [] -> !tlexer#junk()
+  in
   let syntax_error () = error "Preprocessor syntax error" in
   let rec skip_block () =
     let at_start_of_line = !next_at_start_of_line in
     next_at_start_of_line := false;
+    ghost_range_delimiter_allowed := true;
     match peek () with
-      None -> ()
+      None -> ghost_range_delimiter_allowed := false
     | Some (_, Eol) -> junk (); next_at_start_of_line := true; skip_block ()
     | Some (_, Kwd "#") when at_start_of_line ->
       junk ();
       begin match peek () with
-        Some (_, Kwd ("endif"|"else"|"elif")) -> ()
+        Some (_, Kwd ("endif"|"else"|"elif")) -> ghost_range_delimiter_allowed := false
       | Some (_, Kwd ("ifdef"|"ifndef"|"if")) -> junk (); skip_branches (); skip_block ()
       | Some _ -> junk (); skip_block ()
-      | None -> ()
+      | None -> ghost_range_delimiter_allowed := false
       end
     | _ -> junk (); skip_block ()
   and skip_branches () =
@@ -800,7 +888,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
       match peek () with
         None | Some (_, Eol) -> []
       | Some (l, Ident "defined") ->
-        let check x = (if Hashtbl.mem macros x then (l, Int unit_big_int) else (l, Int zero_big_int))::condition () in
+        let check x = (if Hashtbl.mem (List.hd !macros) x then (l, Int unit_big_int) else (l, Int zero_big_int))::condition () in
         junk ();
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
@@ -841,12 +929,31 @@ let make_preprocessor make_lexer basePath relPath include_paths =
       ghost_range_delimiter_allowed := false;
       t
     with
-      None -> pop_stream (); if !streams = [] then None else next_token ()
+      None -> 
+        if !streams = [] then begin
+          begin match !macros with
+              m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest; next_token ()
+            | _ -> None
+          end
+        end
+        else begin
+          pop_stream ();
+          if !expanding_macro then
+            None
+          else
+            next_token ()
+        end
     | Some t ->
     match t with
       (_, Eol) -> junk (); next_at_start_of_line := true; next_token ()
-    | (_, Kwd "/*@") -> junk (); in_ghost_range := true; next_at_start_of_line := at_start_of_line; Some t
-    | (_, Kwd "@*/") -> junk (); in_ghost_range := false; Some t
+    | (l, Kwd "/*@") -> 
+        if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+        junk (); in_ghost_range := true; 
+        next_at_start_of_line := at_start_of_line; Some t
+    | (l, Kwd "@*/") -> 
+        if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
+        junk (); in_ghost_range := false; 
+        next_at_start_of_line := true; Some t
     | (l, Kwd "#") when at_start_of_line ->
       junk ();
       begin match peek () with
@@ -856,24 +963,19 @@ let make_preprocessor make_lexer basePath relPath include_paths =
         begin match peek () with
         | Some (l, String s) ->
           junk ();
-          if List.mem s ["bool.h"; "assert.h"; "limits.h"] then next_token () else
-          let basePath0, relPath0 = List.hd !paths in
-          let rellocalpath = concat (Filename.dirname relPath0) s in
-          let includepaths = List.append include_paths [basePath0; bindir] in
-          let rec find_include_file includepaths =
-            match includepaths with
-              [] -> error (Printf.sprintf "No such file: '%s'" rellocalpath)
-            | head::body ->
-              let headerpath = concat head rellocalpath in
-              if Sys.file_exists headerpath then
-                (head, rellocalpath)
-              else
-                (find_include_file body)
-          in
-          let basePath, relPath = find_include_file includepaths in
-          push_lexer basePath relPath;
-          next_at_start_of_line := true;
-          next_token ()
+          if List.mem s ["bool.h"; "assert.h"; "limits.h"] then 
+            next_token () 
+          else begin
+            if !tlexer#isGhostHeader() then
+              if not (Filename.check_suffix s ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends in .gh)."))
+            else begin
+              if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
+              if not !in_ghost_range && (Filename.check_suffix s ".gh") then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."))
+            end;
+            macros := (plugin_begin_include (List.hd !macros))::!macros; 
+            next_at_start_of_line := true;
+            Some (!tlexer#loc(), BeginInclude(s,""))
+          end
         | _ -> error "Filename expected"
         end
       | Some (l, Kwd "define") ->
@@ -912,7 +1014,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
             | Some t -> junk (); t::body ()
           in
           let body = body () in
-          Hashtbl.replace macros x (params, body);
+          Hashtbl.replace (List.hd !macros) x (params, body);
           next_token ()
         | _ -> error "Macro definition syntax error"
         end
@@ -921,7 +1023,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
-          Hashtbl.remove macros x;
+          Hashtbl.remove (List.hd !macros) x;
           next_token ()
         | _ -> syntax_error ()
         end
@@ -930,7 +1032,7 @@ let make_preprocessor make_lexer basePath relPath include_paths =
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
-          if Hashtbl.mem macros x <> (cond = "ifdef") then
+          if Hashtbl.mem (List.hd !macros) x <> (cond = "ifdef") then
             skip_branch ();
           next_token ()
         | _ -> syntax_error ()
@@ -946,9 +1048,9 @@ let make_preprocessor make_lexer basePath relPath include_paths =
       | Some (l, Kwd "endif") -> junk (); next_token ()
       | _ -> syntax_error ()
       end
-    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem macros x && not (List.mem x (List.hd !callers)) ->
+    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem (List.hd !macros) x && not (List.mem x (List.hd !callers)) ->
       junk ();
-      let (params, body) = Hashtbl.find macros x in
+      let (params, body) = Hashtbl.find (List.hd !macros) x in
       begin match params with
         None -> push_list [x] body; next_token ()
       | Some params ->
@@ -1000,6 +1102,8 @@ let make_preprocessor make_lexer basePath relPath include_paths =
       end
     | t -> junk (); Some t
   and macro_expand newCallers tokens =
+    let expending_macro_old = !expanding_macro in
+    expanding_macro := true;
     let oldStreams = !streams in
     streams := [];
     push_list newCallers tokens;
@@ -1009,7 +1113,100 @@ let make_preprocessor make_lexer basePath relPath include_paths =
       | Some t -> get_tokens (t::ts)
     in
     let ts = get_tokens [] in
+    if expending_macro_old = false then expanding_macro := false;
     streams := oldStreams;
     ts
   in
-  ((fun () -> !loc), pp_ignore_eol, Stream.from (fun _ -> next_token ()))
+  next_token
+  
+let make_sound_preprocessor make_lexer basePath relPath include_paths =
+  let tlexers = ref [] in
+  let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
+  let is_ghost_header h = Filename.check_suffix h ".gh" in
+  let p_in_ghost_range = ref [] in
+  let cfp_in_ghost_range = ref [] in
+  let included_files = ref [] in
+  let paths = ref [] in  
+  let push_tlexer basePath relPath =
+    p_in_ghost_range := (ref (is_ghost_header relPath))::!p_in_ghost_range;
+    cfp_in_ghost_range := (ref (is_ghost_header relPath))::!cfp_in_ghost_range;
+    let (loc, lexer_ignore_eol, stream) = make_lexer basePath relPath include_paths ~inGhostRange:!(List.hd !p_in_ghost_range) in
+    lexer_ignore_eol := false;
+    curr_tlexer := new tentative_lexer loc lexer_ignore_eol stream;
+    tlexers := !curr_tlexer::!tlexers;
+    paths := (basePath, relPath)::!paths
+  in
+  let pop_tlexer () =
+    p_in_ghost_range := List.tl !p_in_ghost_range;
+    cfp_in_ghost_range := List.tl !cfp_in_ghost_range;
+    tlexers := List.tl !tlexers;
+    curr_tlexer := List.hd !tlexers;
+    paths := List.tl !paths
+  in
+  push_tlexer basePath relPath;
+  let p_begin_include macros =
+    macros
+  in
+  let p_end_include macros1 macros2 =
+    macros1
+  in
+  let cfp_begin_include macros =
+    Hashtbl.create 10
+  in
+  let cfp_end_include macros1 macros2 =
+    Hashtbl.iter (fun k v -> Hashtbl.replace macros2 k v) macros1;
+    macros2
+  in
+  let current_loc () = !curr_tlexer#loc() in
+  let p_next = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) in
+  let cfp_next = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) in
+  let divergence s = 
+    pop_tlexer();
+    raise (PreprocessorDivergence (current_loc() , s))    
+  in
+  let rec next_token () =
+    let p_t = p_next() in
+    !curr_tlexer#reset();
+    let cfp_t = cfp_next() in
+    !curr_tlexer#commit();
+    if (compare_tokens p_t cfp_t) && (!(List.hd !p_in_ghost_range) = !(List.hd !cfp_in_ghost_range)) then begin
+      begin match p_t with
+        Some (l,BeginInclude(i, _)) ->    
+          let basePath0, relPath0 = List.hd !paths in
+          let rellocalpath = concat (Filename.dirname relPath0) i in
+          let includepaths = List.append include_paths [basePath0; bindir] in
+          let rec find_include_file includepaths =
+            match includepaths with
+              [] -> error (Printf.sprintf "No such file: '%s'" rellocalpath)
+            | head::body ->
+              let headerpath = concat head rellocalpath in
+              if Sys.file_exists headerpath then
+                (head, rellocalpath)
+              else
+                (find_include_file body)
+          in
+          let (basePath, relPath) = find_include_file includepaths in push_tlexer basePath relPath;
+          let path = reduce_path (concat basePath relPath) in
+          if List.mem path !included_files then begin
+            match p_next() with
+              Some _ -> divergence ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
+            | None -> let l = current_loc () in pop_tlexer(); Some(l, SecondaryInclude(i, path))
+          end else begin
+            included_files := path::!included_files;
+            Some (l,BeginInclude(i, path))
+          end;  
+      | None -> if List.length !tlexers > 1 then begin 
+                  let l = current_loc () in pop_tlexer(); Some (l, EndInclude) 
+                end 
+                else None
+      | _ -> p_t
+      end
+    end
+    else begin
+      divergence "The expansion of a header cannot depend upon its context of defined macros"
+    end
+  in
+  ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
+
+let make_preprocessor make_lexer basePath relPath include_paths =
+  make_sound_preprocessor make_lexer basePath relPath include_paths

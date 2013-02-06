@@ -102,7 +102,9 @@ cd ..
 cd ..
 verifast_both -c odd_even_lemmas.c
 verifast_both threading.o philosophers.c
-verifast_both -c -run_preprocessor -disable_overflow_check preprocessor.c
+cd preprocessor
+mysh < preprocessor.mysh
+cd ..
 verifast_both printf.c
 verifast_both -c pthreads.c
 verifast_both -c public_invariant.c

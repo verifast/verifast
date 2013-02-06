@@ -2626,6 +2626,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let jardeps = ref []
   let provide_files = ref []
   let (prototypes_implemented, functypes_implemented, modules_imported) =
+    let result = check_should_fail ([], [], []) $. fun () ->
     let (headers, ds)=
       match file_type path with
         | Java ->
@@ -2634,13 +2635,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if Filename.check_suffix path ".jarsrc" then
               let (jars, javas, provides) = parse_jarsrc_file_core path in
               let specPath = Filename.chop_extension path ^ ".jarspec" in
-              let jarspecs = List.map (fun path -> (l, path ^ "spec")) jars in (* Include the location where the jar is referenced *)
+              let jarspecs = List.map (fun path -> (l, (path ^ "spec",""), [], [])) jars in (* Include the location where the jar is referenced *)
               let pathDir = Filename.dirname path in
               let javas = List.map (concat pathDir) javas in
               if Sys.file_exists specPath then begin
                 let (specJars, _) = parse_jarspec_file_core specPath in
                 jardeps := specJars @ jars;
-                ((l, Filename.basename specPath) :: jarspecs, javas, provides)
+                ((l, (Filename.basename specPath,""), [], []) :: jarspecs, javas, provides)
               end else
                 (jarspecs, javas, provides)
             else
@@ -2666,15 +2667,14 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (headers, ds)
         | CLang ->
           if Filename.check_suffix path ".h" then
-            parse_header_file "" path reportRange reportShouldFail
+            parse_header_file "" path reportRange reportShouldFail options.option_run_preprocessor []
           else
             parse_c_file path reportRange reportShouldFail options.option_run_preprocessor options.option_include_paths
     in
     emitter_callback ds;
-    let result = 
-      check_should_fail ([], [], []) $. fun () ->
-      let (linker_info, _) = check_file path false true programDir "" headers ds in
-      linker_info
+    check_should_fail ([], [], []) $. fun () ->
+    let (linker_info, _) = check_file path false true programDir "" headers ds in
+    linker_info
     in
     begin
       match !shouldFailLocs with
