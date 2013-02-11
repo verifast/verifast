@@ -1528,7 +1528,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                             if (predname_eq outer_symb found_symb) && 
                                (let actuals = ((match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args) in
                                (for_all2 definitely_equal (take (List.length actuals) found_ts)) actuals) then
-                               Some ((hdone @ htodo, found_targs, found_coef, found_ts))
+                               Some ((chunk, hdone @ htodo, found_targs, found_coef, found_ts))
                             else
                               let (osymb, _) = outer_symb in
                               let (fsymb, literal) = found_symb in 
@@ -1538,7 +1538,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                                 if symbol_term == osymb then
                                   let actuals = (match actual_this_opt with None -> [] | Some t -> [t]) @ actual_indices @ actual_input_args in
                                   if for_all2 definitely_equal (take (List.length actuals) (ctor_args @ found_ts)) actuals then
-                                    Some ((hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
+                                    Some ((chunk, hdone @ htodo, found_targs, found_coef, ctor_args @ found_ts))
                                   else 
                                     iter (chunk::hdone) htodo
                                 else 
@@ -1549,15 +1549,19 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                       in
                       begin match result_opt with
                         None -> cont None
-                      | Some ((h, found_targs, found_coef, found_ts)) -> 
+                      | Some ((Chunk (consumed_symb, consumed_targs, consumed_coef, consumed_ts, consumed_size), h, found_targs, found_coef, found_ts)) -> 
                         (* produce from_symb body *)
                         let full_env = List.map2 (fun (x, tp0) t -> let tp = instantiate_type tpenv tp0 in (x, prover_convert_term t tp tp0)) outer_formal_args (drop ((List.length actual_indices) + (match actual_this_opt with None -> 0 | Some _ -> 1)) found_ts) in 
                         let full_env = match actual_this_opt with None -> full_env | Some t -> ("this", t) :: full_env in
                         let ghostenv = [] in
+                        let produce_coef = if is_dummy_frac_term found_coef then get_dummy_frac_term () else found_coef in
                         with_context (Executing (h, full_env, outer_l, "Auto-opening predicate")) $. fun () ->
-                          produce_asn tpenv h ghostenv full_env outer_wbody found_coef None None $. fun h ghostenv env ->
+                          produce_asn tpenv h ghostenv full_env outer_wbody produce_coef None None $. fun h ghostenv env ->
                             (* perform remaining opens *)
-                            exec_rule (Some h) cont
+                            if is_dummy_frac_term found_coef then
+                              exec_rule (Some (Chunk(consumed_symb, consumed_targs, get_dummy_frac_term () , consumed_ts, consumed_size) :: h)) cont
+                            else
+                              exec_rule (Some h) cont
                       end
                     end
                   )
