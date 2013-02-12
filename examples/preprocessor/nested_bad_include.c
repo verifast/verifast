@@ -1,9 +1,8 @@
-// Test that the result of an inclusion cannot depend upon the 
+// Test that the result of a nested inclusion cannot depend upon the 
 // current environment of defined macros.
 
 /*~*/#define FOO false
-
-#include "bad_include.h"
+#include "nested_bad_include2.h"
 
 void foo()
     //@ requires false;

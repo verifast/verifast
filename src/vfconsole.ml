@@ -16,7 +16,8 @@ let _ =
       verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback (fun _ -> ()) None None;
       print_endline "0 errors found"
     with
-      ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
+      PreprocessorDivergence (l, msg) -> print_msg l msg; exit 1
+    | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
     | CompilationError(msg) -> print_endline (msg); exit 1
     | StaticError (l, msg, url) -> print_msg l msg; exit 1
     | SymbolicExecutionError (ctxts, phi, l, msg, url) ->

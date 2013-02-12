@@ -1222,7 +1222,9 @@ let show_ide initialPath prover codeFont traceFont runtime =
               msg := Some (if targetPath <> None then "0 errors found (target path not reached)" else if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
             with
-              ParseException (l, emsg) ->
+              PreprocessorDivergence (l, emsg) ->
+              handleStaticError l ("Preprocessing error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
+            | ParseException (l, emsg) ->
               handleStaticError l ("Parse error" ^ (if emsg = "" then "." else ": " ^ emsg)) None
             | CompilationError(emsg) ->
               clearTrace();

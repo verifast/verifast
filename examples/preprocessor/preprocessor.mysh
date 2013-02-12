@@ -4,4 +4,7 @@ verifast -prover redux
 in
 verifast_both -c -run_preprocessor -disable_overflow_check preprocessor.c
 verifast_both -c -run_preprocessor -allow_should_fail bad_include.c
+verifast_both -c -run_preprocessor -allow_should_fail nested_bad_include.c
+verifast_both -c -run_preprocessor -allow_should_fail circular_include.c
 verifast_both -c -run_preprocessor -disable_overflow_check multiple_include.c
+verifast_both -c -run_preprocessor -disable_overflow_check nested_multiple_include.c

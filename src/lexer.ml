@@ -214,8 +214,42 @@ type loc = (srcpos * srcpos) (* ?loc *)
 let dummy_srcpos = (("<nowhere>", "prelude"), 0, 0)
 let dummy_loc = (dummy_srcpos, dummy_srcpos)
 
-let error msg = raise (Stream.Error msg)
+(*
+Visual Studio format:
+C:\ddd\sss.xyz(123): error VF0001: blah
+C:\ddd\sss.xyz(123,456): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789): error VF0001: blah
+C:\ddd\sss.xyz(123,456-789,123): error VF0001: blah
+GNU format:
+C:\ddd\sss.xyz:123: error VF0001: blah
+C:\ddd\sss.xyz:123.456: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789: error VF0001: blah
+C:\ddd\sss.xyz:123.456-789.123: error VF0001: blah
+See
+http://blogs.msdn.com/msbuild/archive/2006/11/03/msbuild-visual-studio-aware-error-messages-and-message-formats.aspx
+and
+http://www.gnu.org/prep/standards/standards.html#Errors
+*)
+
+let string_of_srcpos (p,l,c) = p ^ "(" ^ string_of_int l ^ "," ^ string_of_int c ^ ")"
+
+let string_of_path (basedir, relpath) = concat basedir relpath
+
+let string_of_loc ((p1, l1, c1), (p2, l2, c2)) =
+  string_of_path p1 ^ "(" ^ string_of_int l1 ^ "," ^ string_of_int c1 ^
+  if p1 = p2 then
+    if l1 = l2 then
+      if c1 = c2 then
+        ")"
+      else
+        "-" ^ string_of_int c2 ^ ")"
+    else
+      "-" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+  else
+    ")-" ^ string_of_path p2 ^ "(" ^ string_of_int l2 ^ "," ^ string_of_int c2 ^ ")"
+
 exception ParseException of loc * string
+let error l msg = raise (ParseException(l, msg))
 exception PreprocessorDivergence of loc * string
 
 (** Like the Stream module of the O'Caml library, except that it supports a limited form of backtracking using [push].
@@ -376,6 +410,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
 
   let current_srcpos() = (path, !line, !textpos - !linepos + 1) in
   let current_loc() = (!token_srcpos, current_srcpos()) in
+  let error msg = error (current_loc()) msg in
 
   let in_single_line_annotation = ref false in
   
@@ -821,6 +856,13 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
 
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
   let macros = ref [Hashtbl.create 10] in
+  let last_macro_used = ref (dummy_loc, "") in
+  let update_last_macro_used x =
+    if Hashtbl.mem (List.hd !macros) x then begin
+      match Hashtbl.find (List.hd !macros) x with
+        (l, _, _) -> last_macro_used := (l, x);
+    end
+  in
   let expanding_macro = ref false in
   let streams = ref [] in
   let callers = ref [[]] in
@@ -841,7 +883,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | [] -> !tlexer#peek()
     in
     if not !ghost_range_delimiter_allowed then begin match t with
-      (Some (_, Kwd "/*@") | Some (_, Kwd "@*/")) -> error "Ghost range delimiters not allowed inside preprocessor directives."
+      (Some (l, Kwd "/*@") | Some (l, Kwd "@*/")) -> error l "Ghost range delimiters not allowed inside preprocessor directives."
     | _ -> ()
     end;
     t
@@ -851,6 +893,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       s::_ -> Stream.junk s
     | [] -> !tlexer#junk()
   in
+  let error msg = error (!tlexer#loc()) msg in
   let syntax_error () = error "Preprocessor syntax error" in
   let rec skip_block () =
     let at_start_of_line = !next_at_start_of_line in
@@ -887,8 +930,17 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     let rec condition () =
       match peek () with
         None | Some (_, Eol) -> []
-      | Some (l, Ident "defined") ->
-        let check x = (if Hashtbl.mem (List.hd !macros) x then (l, Int unit_big_int) else (l, Int zero_big_int))::condition () in
+      | Some (l, Ident "defined") ->      
+        let check x = 
+          let cond = 
+            if Hashtbl.mem (List.hd !macros) x then begin
+              update_last_macro_used x;
+              (l, Int unit_big_int) 
+            end
+            else (l, Int zero_big_int)
+          in
+          cond::condition ()
+        in
         junk ();
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
@@ -1014,7 +1066,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             | Some t -> junk (); t::body ()
           in
           let body = body () in
-          Hashtbl.replace (List.hd !macros) x (params, body);
+          Hashtbl.replace (List.hd !macros) x (lx, params, body);
           next_token ()
         | _ -> error "Macro definition syntax error"
         end
@@ -1032,6 +1084,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
+          update_last_macro_used x;
           if Hashtbl.mem (List.hd !macros) x <> (cond = "ifdef") then
             skip_branch ();
           next_token ()
@@ -1049,8 +1102,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | _ -> syntax_error ()
       end
     | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem (List.hd !macros) x && not (List.mem x (List.hd !callers)) ->
+      update_last_macro_used x;
       junk ();
-      let (params, body) = Hashtbl.find (List.hd !macros) x in
+      let (_,params, body) = Hashtbl.find (List.hd !macros) x in
       begin match params with
         None -> push_list [x] body; next_token ()
       | Some params ->
@@ -1117,7 +1171,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     streams := oldStreams;
     ts
   in
-  next_token
+  (next_token, fun _ -> !last_macro_used)
   
 let make_sound_preprocessor make_lexer basePath relPath include_paths =
   let tlexers = ref [] in
@@ -1158,11 +1212,11 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
     macros2
   in
   let current_loc () = !curr_tlexer#loc() in
-  let p_next = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) in
-  let cfp_next = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) in
-  let divergence s = 
+  let (p_next,last_macro_used) = make_plugin_preprocessor p_begin_include p_end_include curr_tlexer (List.hd !p_in_ghost_range) in
+  let (cfp_next,_) = make_plugin_preprocessor cfp_begin_include cfp_end_include curr_tlexer (List.hd !cfp_in_ghost_range) in
+  let divergence l s = 
     pop_tlexer();
-    raise (PreprocessorDivergence (current_loc() , s))    
+    raise (PreprocessorDivergence (l , s))    
   in
   let rec next_token () =
     let p_t = p_next() in
@@ -1177,7 +1231,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           let includepaths = List.append include_paths [basePath0; bindir] in
           let rec find_include_file includepaths =
             match includepaths with
-              [] -> error (Printf.sprintf "No such file: '%s'" rellocalpath)
+              [] -> error (current_loc()) (Printf.sprintf "No such file: '%s'" rellocalpath)
             | head::body ->
               let headerpath = concat head rellocalpath in
               if Sys.file_exists headerpath then
@@ -1189,8 +1243,8 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           let path = reduce_path (concat basePath relPath) in
           if List.mem path !included_files then begin
             match p_next() with
-              Some _ -> divergence ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
-            | None -> let l = current_loc () in pop_tlexer(); Some(l, SecondaryInclude(i, path))
+              Some _ -> divergence (current_loc()) ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
+            | None -> (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
           end else begin
             included_files := path::!included_files;
             Some (l,BeginInclude(i, path))
@@ -1203,7 +1257,8 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
       end
     end
     else begin
-      divergence "The expansion of a header cannot depend upon its context of defined macros"
+      match last_macro_used() with
+        (l,m) -> divergence l ("The expansion of a header (" ^ (string_of_loc (current_loc())) ^ ") cannot depend upon its context of defined macros (macro " ^ m ^ ")")
     end
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
