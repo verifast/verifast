@@ -15,8 +15,8 @@ lemma void ints_limits(int *pxs)
 }
 
 lemma void ints_split(int *array, int offset)
-    requires ints(array, ?N, ?as) &*& 0 <= offset &*& offset <= N;
-    ensures ints(array, offset, take(offset, as)) &*& ints(array + offset, N - offset, drop(offset, as));
+    requires [?f]ints(array, ?N, ?as) &*& 0 <= offset &*& offset <= N;
+    ensures [f]ints(array, offset, take(offset, as)) &*& [f]ints(array + offset, N - offset, drop(offset, as));
 {
   open ints(array, N, as);
   if (offset == 0) {
@@ -26,8 +26,8 @@ lemma void ints_split(int *array, int offset)
 }
 
 lemma void ints_join(int *a)
-    requires ints(a, ?M, ?as) &*& ints(a + M, ?N, ?bs);
-    ensures ints(a, M + N, append(as, bs));
+    requires [?f]ints(a, ?M, ?as) &*& [f]ints(a + M, ?N, ?bs);
+    ensures [f]ints(a, M + N, append(as, bs));
 {
     open ints(a, M, as);
     if (M == 0) {

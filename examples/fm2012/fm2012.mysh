@@ -4,6 +4,7 @@ verifast -prover redux
 in
 verifast_both -shared problem1.c
 verifast_both -c problem1-alternative.java
+verifast_both -shared listex.o arrays.o problem1-split.c
 ifnotmac verifast -c -disable_overflow_check problem2.java
 ifnotmac verifast -shared problem3.c
 verifast -prover redux -shared problem3-alternative.c
