@@ -3048,6 +3048,13 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       lhs_type := Some IntType;
       ts := Some [IntType; IntType];
       (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), IntType, None)
+    | InitializerList (l, es) ->
+      let rec to_list_expr es =
+        match es with
+          [] -> CallExpr (l, "nil", [], [], [], Static)
+        | e::es -> CallExpr (l, "cons", [], [], [LitPat e; LitPat (to_list_expr es)], Static)
+      in
+      check (to_list_expr es)
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
   and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
     check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false

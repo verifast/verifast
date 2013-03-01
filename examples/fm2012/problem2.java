@@ -322,23 +322,9 @@ class PrefixSumRec {
         //@ ensures true;
     {
         int [] a = {3,1,7,0,4,1,6,3};
-//        PrefixSumRec p = new PrefixSumRec(a);
-//        p.upsweep(3,7);
-//        a[7]=0;
-//        p.downsweep(3,7);
         //@ close exists(succ(succ(zero)));
         prefixsums(a);
-        //@ assert array_slice(a, 0, a.length, cons(0, cons(3, cons(4, cons(11, cons(11, cons(15, cons(16, cons(22, nil)))))))));
+        //@ assert a[..] |-> {0,3,4,11,11,15,16,22};
     }
 
 }
-
-
-/*
-[3, 1, 7, 0, 4, 1, 6, 3]
-[3, 4, 7, 11, 4, 5, 6, 25]
-[0, 3, 4, 11, 11, 15, 16, 22]
-
-
-
-*/
