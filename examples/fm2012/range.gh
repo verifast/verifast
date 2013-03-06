@@ -1,0 +1,14 @@
+#ifndef RANGE_H
+#define RANGE_H
+
+fixpoint list<int> range(int x, int y);
+
+lemma_auto(mem(z, range(x, y))) void mem_range(int x, int y, int z);
+  requires 0 <= x && x <= y;
+  ensures mem(z, range(x, y)) == (x <= z && z < y);
+
+lemma_auto(range(x, x)) void range_empty(int x);
+  requires true;
+  ensures range(x, x) == nil;
+  
+#endif
