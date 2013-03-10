@@ -1,294 +1,200 @@
 struct tree {
-  int data;
-  struct tree* left;
-  struct tree* right;
+    Tree left;
+    int data;
+    Tree right;
 };
 
+typedef struct tree *Tree;
+
 /*@
-inductive tree = empty | tree(int, tree, tree);
 
-predicate tree_single(struct tree* t; int data, struct tree* left, struct tree* right) =
-  t != 0 &*& t->data |-> data &*&
-  t->left |-> left &*& t->right |-> right &*&
-  malloc_block_tree(t);
-  
-lemma_auto void treesingle_non_zero()
-  requires tree_single(?t, ?data, ?left, ?right);
-  ensures tree_single(t, data, left, right) &*& t != 0;
+inductive tree_ = empty | node(tree_, Tree, int, tree_);
+
+fixpoint tree_ delete_min(tree_ t) {
+    switch (t) {
+        case empty: return empty;
+        case node(t1, p, v, t2): return t1 == empty ? t2 : node(delete_min(t1), p, v, t2);
+    }
+}
+
+predicate Tree(Tree t; tree_ vs) =
+    t == 0 ?
+        vs == empty
+    :
+        t != 0 &*& t->left |-> ?l &*& Tree(l, ?vsl) &*&
+        t->right |-> ?r &*& Tree(r, ?vsr) &*&
+        t->data |-> ?v &*& malloc_block_tree(t) &*&
+        vs == node(vsl, t, v, vsr);
+        
+lemma_auto void Tree_inv()
+    requires Tree(?t, ?vs);
+    ensures Tree(t, vs) &*& t == getptr(vs);
 {
-  open tree_single(t, data, left, right);
+    open Tree(_, _);
 }
 
-predicate tree(struct tree* t; tree tr) =
-  t == 0 ?
-    tr == empty
-  :
-    tree_single(t, ?data, ?left, ?right) &*&
-    tree(left, ?lt) &*& tree(right, ?rt) &*&
-    tr == tree(data, lt, rt);
-    
-lemma_auto void tree_zero()
-  requires tree(?t, ?tr);
-  ensures tree(t, tr) &*& (t == 0 ? tr == empty : true);
+fixpoint tree_ getleft(tree_ t) {
+    switch (t) {
+        case empty: return empty;
+        case node(l, p, v, r): return l;
+    }
+}
+
+fixpoint tree_ getright(tree_ t) {
+    switch (t) {
+        case empty: return empty;
+        case node(l, p, v, r): return r;
+    }
+}
+
+fixpoint int getvalue(tree_ t) {
+    switch (t) {
+        case empty: return 0;
+        case node(l, p, v, r): return v;
+    }
+}
+
+
+fixpoint Tree getptr(tree_ t) {
+    switch (t) {
+        case empty: return 0;
+        case node(l, p, v, r): return p;
+    }
+}
+
+fixpoint int min_value(tree_ vs) {
+    switch (vs) {
+        case empty: return 0;
+        case node(t1, p, v, t2): return t1 == empty ? v : min_value(t1);
+    }
+}
+
+fixpoint bool ordered_between(int min, tree_ t, int max) {
+    switch (t) {
+        case empty: return true;
+        case node(t1, p, v, t2): return min <= v && v <= max && ordered_between(min, t1, v) && ordered_between(v, t2, max);
+    }
+}
+
+lemma void ordered_between_weaken(int min0, int min1, tree_ t, int max0, int max1)
+    requires ordered_between(min1, t, max0) == true &*& min0 <= min1 &*& max0 <= max1;
+    ensures ordered_between(min0, t, max1) == true;
 {
-  open tree(t, tr);
+    switch (t) {
+        case empty:
+        case node(t1, p, v, t2):
+            ordered_between_weaken(min0, min1, t1, v, v);
+            ordered_between_weaken(v, v, t2, max0, max1);
+    }
 }
 
-predicate tree_with_hole(struct tree* t, struct tree* hole; tree tr) =
-  hole != 0 &*&
-  (t == hole ?
-    tr == empty
-  :
-    t != 0 &*& t->left |-> ?l &*& tree_with_hole(l, hole, ?trl) &*&
-    t->right |-> ?r &*& tree(r, ?trr) &*&
-    t->data |-> ?v &*& malloc_block_tree(t) &*&
-    tr == tree(v, trl, trr) &*& hole != 0
-  );
-  
-fixpoint tree delete_leftmost(tree t) {
-  switch(t) {
-    case empty: return empty;
-    case tree(v, l, r): 
-     return l == empty ? r : tree(v, delete_leftmost(l), r);
-  }
+lemma_auto void delete_min_ordered_between(int min, tree_ t, int max)
+    requires ordered_between(min, t, max) == true;
+    ensures ordered_between(min, delete_min(t), max) == true;
+{
+    switch (t) {
+        case empty:
+        case node(t1, p, v, t2):
+            if (t1 != empty) {
+                delete_min_ordered_between(min, t1, v);
+            } else {
+                ordered_between_weaken(min, v, t2, max, max);
+            }
+    }
 }
+@*/
 
-fixpoint int leftmost(tree tr) {
-  switch(tr) {
-    case empty: return 0;
-    case tree(v, l, r): return l == empty ? v : leftmost(l);
-  }
-}
-
-fixpoint tree merge(tree t1, tree holet) {
+/*@
+predicate Tree_with_hole(Tree t, Tree hole; tree_ vs) =
+    hole != 0 &*&
+    t == hole ?
+        vs == empty
+    :
+        t != 0 &*& t->left |-> ?l &*& Tree_with_hole(l, hole, ?vsl) &*&
+        t->right |-> ?r &*& Tree(r, ?vsr) &*&
+        t->data |-> ?v &*& malloc_block_tree(t) &*&
+        vs == node(vsl, t, v, vsr);
+        
+fixpoint tree_ merge(tree_ t1, tree_ t2) {
   switch(t1) {
-    case empty: return holet;
-    case tree(v, l, r): return tree(v, merge(l, holet), r); 
+    case empty: return t2;
+    case node(l, p, v, r): return node(merge(l, t2), p, v, r); 
   }
 }
 
-lemma void merge_tree(struct tree* t, struct tree* hole)
-  requires tree_with_hole(t, hole, ?hollow_tr) &*& tree(hole, ?tr);
-  ensures tree(t, merge(hollow_tr, tr)) ;
+lemma void move_hole(struct tree* t)
+  requires Tree_with_hole(t, ?hole, ?vs1) &*& Tree(hole, node(?left, hole, ?v, ?right)) &*& getptr(left) != 0;
+  ensures Tree_with_hole(t, getptr(left), merge(vs1, node(empty, hole, v, right))) &*& Tree(getptr(left), left) &*&
+          merge(vs1, node(left, hole, v, right)) == merge(merge(vs1, node(empty, hole, v, right)), left);
 {
-  open tree_with_hole(t, hole, hollow_tr);
+  open Tree_with_hole(t, hole, vs1);
+  open Tree(hole, _);
+  open Tree(getptr(left), _);
   if(t == hole) {
+    close Tree_with_hole(t, getptr(left), merge(vs1, node(empty, hole, v, right)));
   } else {
-    merge_tree(t->left, hole);
-    
+    move_hole(t->left);
+    close Tree_with_hole(t, getptr(left), merge(vs1, node(empty, hole, v, right)));
   }
 }
 
-lemma void merge_non_empty(tree hollow, tree hole)
-  requires hole != empty;
-  ensures merge(hollow, hole) != empty;
+lemma void plug_hole(struct tree* t1, struct tree* t2)
+  requires Tree_with_hole(t1, t2, ?vs1) &*& Tree(t2, ?vs2);
+  ensures Tree(t1, merge(vs1, vs2)) ;
 {
-  switch(hollow) 
-  {
-    case empty:
-    case tree(v, l, r):
-      merge_non_empty(l, hole);
+  open Tree_with_hole(t1, t2, vs1);
+  open Tree(t2, vs2);
+  if(t1 == t2) {
+  } else {
+    plug_hole(t1->left, t2);
+    close Tree(t1, merge(vs1, vs2));
   }
 }
 
-lemma void delete_leftmost_merge(tree hollow, tree hole)
-  requires hole != empty;
-  ensures delete_leftmost(merge(hollow, hole)) == merge(hollow, delete_leftmost(hole));
+lemma void delete_min_merge(tree_ t1, tree_ t2)
+  requires t2 != empty;
+  ensures merge(t1, t2) != empty &*&
+          delete_min(merge(t1, t2)) == merge(t1, delete_min(t2)) &*&
+          min_value(merge(t1, t2)) == min_value(t2);
 {
-  switch(hollow) {
+  switch(t1) {
     case empty:
-    case tree(v, l, r):
-      delete_leftmost_merge(l, hole);
-      merge_non_empty(l, hole);
-  }
-}
-
-lemma void leftmost_merge(tree hollow, tree hole)
-  requires hole != empty;
-  ensures leftmost(merge(hollow, hole)) == leftmost(hole);
-{
-  switch(hollow) {
-    case empty:
-    case tree(v, l, r):
-      merge_non_empty(l, hole);
-      leftmost_merge(l, hole);
+    case node(l, p, v, r):
+      delete_min_merge(l, t2);
   }
 }
 @*/
 
-void search_tree_delete_min(struct tree* t, struct tree** res, int* min)
-  //@ requires tree(t, ?tr) &*& tr != empty &*& pointer(res, _) &*& integer(min, _);
-  //@ ensures pointer(res, ?rest) &*& tree(rest, delete_leftmost(tr)) &*& integer(min, leftmost(tr));
+void search_tree_delete_min(struct tree* t, struct tree** r1, int* r2)
+  //@ requires Tree(t, ?vs) &*& vs != empty &*& pointer(r1, _) &*& integer(r2, _) &*& ordered_between(INT_MIN, vs, INT_MAX) == true;
+  //@ ensures pointer(r1, ?tresult) &*& Tree(tresult, delete_min(vs)) &*& integer(r2, min_value(vs)) &*& ordered_between(INT_MIN, vs, INT_MAX) == true;
 {
-  struct tree* tt, pp, p;
+  Tree tt, pp, p;
   int m;
+  //@ open Tree(t, vs);
   p = t->left;
   if (p == 0) {
+    //@ open Tree(p, _);
     m = t->data; tt = t->right; free (t); t = tt;
   } else {
     pp = t; tt = p->left;
     while (tt != 0)
-      /*@ requires tree_single(pp, ?ppd, p, ?ppr) &*& tree(ppr, ?pprtree) &*& 
-                   tree_single(p, ?pd, tt, ?pr) &*& tree(tt, ?tttree) &*& tree(pr, ?prtree);
-      @*/
-      /*@ ensures  tree_single(pp, ?nppd, p, ?nppr) &*& tree(nppr, ?npprtree) &*&
-                   tree_single(p, ?npd, tt, ?npr) &*& tree_with_hole(old_pp, pp, ?hollow_tree) &*& tree(npr, ?nprtree) &*&
-                   merge(hollow_tree, tree(nppd, tree(npd, empty, nprtree), npprtree)) == tree(ppd, tree(pd, tttree, prtree), pprtree);
+      /*@ invariant Tree_with_hole(t, pp, ?vs1) &*& Tree(pp, ?vs2) &*& getptr(getleft(vs2)) == p &*& 
+                    p != 0 &*& getptr(getleft(getleft(vs2))) == tt &*& vs == merge(vs1, vs2);
       @*/
     {
-      //@ open tree_single(pp, ppd, p, ppr);
+      //@ open Tree(pp, vs2);
+      //@ open Tree(pp->left, _);
       pp = p; p = tt; tt = p->left;
-      //@ recursive_call();
-      //@ open tree_single(pp, _, _, _);
+      //@ move_hole(t);
     }
+    //@ open Tree(pp, _);
+    //@ open Tree(pp->left, _);
+    //@ open Tree(tt, _);
     m = p->data; tt = p->right; free(p); pp->left= tt;
-    //@ merge_tree(t, pp);
-    //@ delete_leftmost_merge(hollow_tree, tree(nppd, tree(npd, empty, nprtree), npprtree));
-    //@ leftmost_merge(hollow_tree, tree(nppd, tree(npd, empty, nprtree), npprtree));     
+    //@ plug_hole(t, pp);
+    //@ delete_min_merge(vs1, vs2); 
    }
-   *res = t;
-   *min = m;
-}
-
-/*@
-fixpoint bool tree_contains(tree t, int x) {
-  switch(t) {
-    case empty: return false;
-    case tree(v, l, r): return v == x || tree_contains(l, x) || tree_contains(r, x); 
-  }
-}
-
-fixpoint int mathmin(int x, int y) {
-  return x <= y ? x : y;
-}
-
-fixpoint int mathmax(int x, int y) {
-  return x >= y ? x : y;
-}
-
-fixpoint int tree_min(tree t) {
-  switch(t) {
-    case empty: return 0;
-    case tree(v, l, r):
-      return l == empty ? 
-        (r == empty ? v : mathmin(v, tree_min(r)))
-      :
-        (r == empty ? mathmin(v, tree_min(l)) : mathmin(v, mathmin(tree_min(l), tree_min(r))));  
-  }
-}
-
-fixpoint int tree_max(tree t) {
-  switch(t) {
-    case empty: return 0;
-    case tree(v, l, r):
-      return l == empty ? 
-        (r == empty ? v : mathmax(v, tree_max(r)))
-      :
-        (r == empty ? mathmax(v, tree_max(l)) : mathmax(v, mathmax(tree_max(l), tree_max(r))));  
-  }
-}
-
-fixpoint bool in_order(tree t) {
-  switch(t) {
-    case empty: return true;
-    case tree(v, l, r):
-      return (l == empty ? true : v >= tree_max(l)) && (r == empty ? true : v <= tree_min(r)) && in_order(l) && in_order(r);
-  }
-}
-
-lemma void tree_min_le_tree_max(tree tr)
-  requires true;
-  ensures tree_min(tr) <= tree_max(tr);
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      tree_min_le_tree_max(l);
-      tree_min_le_tree_max(r);
-  }
-}
-
-
-lemma void tree_max_delete_leftmost(tree tr) 
-  requires tr != empty &*& in_order(tr) == true;
-  ensures delete_leftmost(tr) == empty || tree_max(delete_leftmost(tr)) == tree_max(tr);
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      if(l == empty) {
-        if(r == empty) {
-        } else {
-          assert delete_leftmost(tr) == r;
-          assert tree_max(tr) == v || tree_max(tr) == tree_max(r);
-          tree_min_le_tree_max(r);
-        }
-      } else {
-        tree_max_delete_leftmost(l);
-      }
-  }
-} 
-
-lemma void delete_leftmost_preserves_in_order(tree tr)
-  requires in_order(tr) == true &*& tr != empty;
-  ensures true == in_order(delete_leftmost(tr));
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r): 
-      if(l == empty) {
-      } else {
-        delete_leftmost_preserves_in_order(l);
-        if(delete_leftmost(l) == empty) {
-        } else {
-          tree_max_delete_leftmost(l); 
-        }
-      }
-  }
-}
-
-lemma void tree_min_le_all(tree tr, int x)
-  requires tree_contains(tr, x) == true;
-  ensures tree_min(tr) <= x;
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      if(v == x) {
-      } else if(tree_contains(l, x)) {
-        tree_min_le_all(l, x);
-      } else {
-        tree_min_le_all(r, x);
-      }
-  }
-}
-
-lemma void leftmost_eq_min(tree tr)
-  requires tr != empty &*& in_order(tr) == true;
-  ensures leftmost(tr) == tree_min(tr);
-{
-  switch(tr) {
-    case empty:
-    case tree(v, l, r):
-      if(l == empty) {
-      } else {
-        leftmost_eq_min(l);
-        tree_min_le_tree_max(l);
-      }  
-  }
-}
-@*/
-
-struct tree* test(struct tree* t, int x)
-  //@ requires tree(t, ?tr) &*& tr != empty &*& tree_contains(tr, x) == true &*& in_order(tr) == true;
-  //@ ensures tree(result, ?ntr) &*& in_order(ntr) == true; 
-{
-  struct tree* res;
-  int min;
-  search_tree_delete_min(t, &res, &min);
-  //@ delete_leftmost_preserves_in_order(tr);
-  //@ leftmost_eq_min(tr);
-  //@ tree_min_le_all(tr, x);
-  assert min <= x;
-  return res;
+   *r1 = t;
+   *r2 = m;
 }
