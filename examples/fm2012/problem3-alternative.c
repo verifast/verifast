@@ -140,7 +140,7 @@ lemma void delete_min_merge(tree t1, tree t2)
 }
 @*/
 
-void search_tree_delete_min(struct tree* t, struct tree** r1, int* r2)
+void search_tree_delete_min(Tree t, Tree* r1, int* r2)
   //@ requires Tree(t, ?vs) &*& vs != empty &*& *r1 |-> _ &*& *r2 |-> _ &*& sorted(vs) == true;
   //@ ensures *r1 |-> ?tresult &*& Tree(tresult, delete_min(vs)) &*& *r2 |-> min_value(vs) &*& sorted(delete_min(vs)) == true;
 {
