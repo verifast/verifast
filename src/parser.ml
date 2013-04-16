@@ -1287,79 +1287,46 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives_helper (parsed_headers : (string * string list * package list) list ref) 
-                         (ignore_eol: bool ref) (runPreprocessor: bool) ~inGhostHeader : (loc * (string * string) * string list * package list) list parser_ =
-  let rec parse_include_directives_core = parser
-  | [< headers = parse_include_directive; rest = parse_include_directives_core >] -> List.append headers rest
-  | [< >] -> []
-  and parse_include_directive = 
-    if runPreprocessor then begin
-      let is_ghost_header header = Filename.check_suffix header ".gh" in
-      let sec_include l h totalPath = 
-        let rec find_ds parsed_headers = 
-          match parsed_headers with
-            (totalPath',hs,ps)::rest -> if totalPath = totalPath' then [(l, (h, totalPath), hs, ps)] else find_ds rest
-          | [] -> static_error l "Circular include dependency - Secondary include of header should be already parsed" None
-        in
-        find_ds !parsed_headers
-      in
-      let rec paths_of headers = 
-        match headers with
-          (_,(_,tp),_,_)::rest -> tp::(paths_of rest)
-        | [] -> []
-      in
-      parser
-        [< '(l, SecondaryInclude(h, totalPath)) >] -> sec_include l h totalPath
-      | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> sec_include l h totalPath
-      | [< '(l, BeginInclude(h, totalPath)); headers = parse_include_directives_helper parsed_headers ignore_eol runPreprocessor (is_ghost_header h); 
-                                                  ds = parse_decls CLang ~inGhostHeader:(is_ghost_header h); '(_, EndInclude) >] -> 
-                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
-                                                         let hs = paths_of headers in
-                                                         parsed_headers := (totalPath, hs, ps)::!parsed_headers;
-                                                         (l, (h, totalPath), hs, ps)::headers
-                                                        
-      | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(h, p)) >] -> (l,h,p) end; 
-                                                  headers = parse_include_directives_helper parsed_headers ignore_eol runPreprocessor (is_ghost_header h); 
-                                                  ds = parse_decls CLang ~inGhostHeader:(is_ghost_header h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
-                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
-                                                         let hs = paths_of headers in
-                                                         parsed_headers := (totalPath, hs, ps)::!parsed_headers;
-                                                         (l, (h, totalPath), hs, ps)::headers
-    end
-    else begin
-      parser
-        [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "include"); '(l, String header); '(_, Eol) >] ->
-          ignore_eol := true;
-          if not inGhostHeader && Filename.check_suffix header ".gh" then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."));
-          if inGhostHeader && not (Filename.check_suffix header ".gh") then raise (ParseException (l, "#include directive in ghost header should specify a ghost header file (whose name ends with .gh)."));
-          [(l, (header,""), [], [])]
-      | [< d = peek_in_ghost_range begin parser
-          [< '(_, Kwd "#"); '(_, Kwd "include"); '(l, String header); '(_, Kwd "@*/") >] ->
-          if inGhostHeader then raise (ParseException (l, "Ghost #include directives are not allowed inside ghost headers."));
-          if not (Filename.check_suffix header ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
-          [(l, (header,""), [], [])]
-          end
-        >] -> d
-    end
+let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (string * string) * string list * package list) list * string list) parser_ =
+  let active_headers = ref [] in
+  let test_include_cycle l totalPath =
+    if List.mem totalPath !active_headers then raise (ParseException (l, "Include Cycle"));
   in
-    parse_include_directives_core
-    
-let parse_include_directives (ignore_eol: bool ref) (runPreprocessor: bool) ~inGhostHeader : (loc * (string * string) * string list * package list) list parser_ =
-    parse_include_directives_helper (ref []) ignore_eol runPreprocessor ~inGhostHeader
-  
-let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (runPreprocessor: bool) (include_paths: string list): 
-                                                                                      ((loc * (string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+  let rec parse_include_directives_core header_names = parser
+  | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
+          -> (List.append headers headers', header_names')
+  | [< >] -> ([], header_names)
+  and parse_include_directive = 
+    let isGhostHeader header = Filename.check_suffix header ".gh" in
+    parser
+      [< '(l, SecondaryInclude(h, totalPath)) >] -> test_include_cycle l totalPath; ([], totalPath)
+    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> test_include_cycle l totalPath; ([], totalPath)
+    | [< '(l, BeginInclude(h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+                                           ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] -> 
+                                                        active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
+                                                        let ps = [PackageDecl(dummy_loc,"",[],ds)] in
+                                                        (List.append headers [(l, (h, totalPath), header_names, ps)], totalPath)
+    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(h, p)) >] -> (l,h,p) end; 
+                                                (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+                                                ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
+                                                        active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
+                                                        let ps = [PackageDecl(dummy_loc,"",[],ds)] in
+                                                        (List.append headers [(l, (h, totalPath), header_names, ps)], totalPath)
+  in
+  parse_include_directives_core []
+
+  let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (include_paths: string list): 
+                                              ((loc * (string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
     let make_lexer basePath relPath include_paths ~inGhostRange =
       let text = readFile (concat basePath relPath) in
       make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange reportShouldFail
     in
-    let make_lexer = if runPreprocessor then make_preprocessor make_lexer else make_lexer ~inGhostRange:false in
-    let (loc, ignore_eol, token_stream) = make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer (Filename.dirname path) (Filename.basename path) include_paths in
     let parse_c_file =
       parser
-        [< headers = parse_include_directives ignore_eol runPreprocessor ~inGhostHeader:false; 
+        [< (headers, _) = parse_include_directives ignore_eol; 
                             ds = parse_decls CLang ~inGhostHeader:false; _ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
     in
     try
@@ -1371,46 +1338,25 @@ let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (report
   Stopwatch.stop parsing_stopwatch;  
   result
 
-(** Returns [(headers, packages)] where the paths in [headers] are unchanged from the source file. *)
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
-         (runPreprocessor: bool) (include_paths: string list): ((loc * (string * string) * string list * package list) list * package list) =
+         (include_paths: string list): ((loc * (string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   let isGhostHeader = Filename.check_suffix relPath ".gh" in
   let result =
-    if runPreprocessor then begin
-      let make_lexer basePath relPath include_paths ~inGhostRange =
-        let text = readFile (concat basePath relPath) in
-        make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange:inGhostRange reportShouldFail
-      in
-      let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer basePath relPath include_paths in
-      let p = parser
-        [< headers = parse_include_directives ignore_eol runPreprocessor ~inGhostHeader:isGhostHeader; ds = parse_decls CLang ~inGhostHeader:isGhostHeader; 
-                                                    _ = (fun _ -> ignore_eol := true);_ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
-      in
-      try
-        p token_stream
-      with
-        Stream.Error msg -> raise (ParseException (loc(), msg))
-      | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
-    end 
-    else begin
-      let lexer = make_lexer (common_keywords @ c_keywords) ghost_keywords in
-      let (loc, ignore_eol, token_stream) = lexer (basePath, relPath) (readFile (concat basePath relPath)) reportRange ~inGhostRange:isGhostHeader reportShouldFail in
-      let p = parser
-        [< '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "ifndef"); '(_, PreprocessorSymbol x); '(_, Eol);
-          '(_, Kwd "#"); '(_,Kwd "define"); '(lx', PreprocessorSymbol x'); '(_, Eol); _ = (fun _ -> ignore_eol := true);
-          headers = parse_include_directives ignore_eol runPreprocessor ~inGhostHeader:isGhostHeader; ds = parse_decls CLang ~inGhostHeader:isGhostHeader;
-          '(_, Kwd "#"); _ = (fun _ -> ignore_eol := false); '(_, Kwd "endif"); _ = (fun _ -> ignore_eol := true);
-          _ = Stream.empty >] ->
-        if x <> x' then raise (ParseException (lx', "Malformed header file prelude: preprocessor symbols do not match."));
-        (headers, [PackageDecl(dummy_loc,"",[],ds)])
-      in 
-      try
-        p token_stream
-      with
-        Stream.Error msg -> raise (ParseException (loc(), msg))
-      | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
-    end
+    let make_lexer basePath relPath include_paths ~inGhostRange =
+      let text = readFile (concat basePath relPath) in
+      make_lexer (common_keywords @ c_keywords) ghost_keywords (basePath, relPath) text reportRange ~inGhostRange:inGhostRange reportShouldFail
+    in
+    let (loc, ignore_eol, token_stream) = make_preprocessor make_lexer basePath relPath include_paths in
+    let p = parser
+      [< (headers, _) = parse_include_directives ignore_eol; ds = parse_decls CLang ~inGhostHeader:isGhostHeader; 
+                                                  _ = (fun _ -> ignore_eol := true);_ = Stream.empty >] -> (headers, [PackageDecl(dummy_loc,"",[],ds)])
+    in
+    try
+      p token_stream
+    with
+      Stream.Error msg -> raise (ParseException (loc(), msg))
+    | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
   in
   Stopwatch.stop parsing_stopwatch;
   result

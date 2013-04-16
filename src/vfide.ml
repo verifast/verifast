@@ -129,7 +129,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
-  let runPreprocessor = ref false in
   let simplifyTerms = ref false in
   let current_tab = ref None in
   let showLineNumbers enable =
@@ -180,7 +179,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
-      GAction.add_toggle_action "RunPreprocessor" ~label:"Run preprocessor" ~active:false ~callback:(fun toggleAction -> runPreprocessor := toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
@@ -229,7 +227,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='CheckOverflow' />
-          <menuitem action='RunPreprocessor' />
           <menuitem action='SimplifyTerms' />
           <menuitem action='Include paths' />
         </menu>
@@ -1204,7 +1201,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_allow_assume = true;
                 option_simplify_terms = !simplifyTerms;
                 option_runtime = runtime;
-                option_run_preprocessor = !runPreprocessor;
                 option_provides = [];
                 option_keep_provide_files = true;
                 option_include_paths = !include_paths;

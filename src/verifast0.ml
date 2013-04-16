@@ -131,7 +131,6 @@ type options = {
   option_allow_assume: bool;
   option_simplify_terms: bool;
   option_runtime: string option;
-  option_run_preprocessor: bool;
   option_provides: string list;
   option_keep_provide_files: bool;
   option_include_paths: string list;

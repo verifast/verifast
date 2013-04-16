@@ -152,7 +152,6 @@ let _ =
   let exports: string list ref = ref [] in
   let outputSExpressions : string option ref = ref None in
   let runtime: string option ref = ref None in
-  let runPreprocessor = ref false in
   let provides = ref [] in
   let keepProvideFiles = ref false in
   let include_paths: string list ref = ref [] in
@@ -171,7 +170,6 @@ let _ =
             ; "-emit_vfmanifest", Set emitManifest, ""
             ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
             ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, ""
-            ; "-run_preprocessor", Set runPreprocessor, ""
             ; "-provides", String (fun path -> provides := !provides @ [path]), ""
             ; "-keep_provide_files", Set keepProvideFiles, ""
             ; "-emit_sexpr",
@@ -205,7 +203,6 @@ let _ =
           option_allow_assume = !allowAssume;
           option_simplify_terms = !simplifyTerms;
           option_runtime = !runtime;
-          option_run_preprocessor = !runPreprocessor;
           option_provides = !provides;
           option_keep_provide_files = !keepProvideFiles;
           option_include_paths = !include_paths;

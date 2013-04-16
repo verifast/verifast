@@ -449,6 +449,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | StaticError (l, msg, url) when should_fail l -> has_failed l
     | SymbolicExecutionError (ctxts, phi, l, msg, url) when should_fail (loc_of_ctxts ctxts l) -> has_failed (loc_of_ctxts ctxts l)
     | PreprocessorDivergence (l,s) when should_fail l -> has_failed l
+    | ParseException (l,s) when should_fail l -> has_failed l
  
   let prototypes_used : (string * loc) list ref = ref []
   
@@ -838,12 +839,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
 
     (** [merge_header_maps maps0 headers] returns [maps0] plus all elements transitively declared in [headers]. *)
-    let rec merge_header_maps include_prelude maps0 headers_included basedir reldir headers =
+    let rec merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers =
       match headers with
         [] -> (maps0, headers_included)
       | (l, (header_path, total_path), hs, header_decls)::headers ->
         if List.mem header_path ["bool.h"; "assert.h"; "limits.h"] then
-          merge_header_maps include_prelude maps0 headers_included basedir reldir headers
+          merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
         else begin
           if (options.option_safe_mode || options.option_header_whitelist <> []) && not (List.mem header_path options.option_header_whitelist) then
             static_error l "This header file is not on the header whitelist." None;
@@ -861,9 +862,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let (basedir1, relpath) = find_include_file includepaths in
           let relpath = reduce_path relpath in
-          let path = if (options.option_run_preprocessor) then total_path else concat basedir1 relpath in
+          let path = concat basedir1 relpath in
           if List.mem path headers_included then
-            merge_header_maps include_prelude maps0 headers_included basedir reldir headers
+            merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
           else begin
             let reldir1 = Filename.dirname relpath in
             let (headers', maps) =
@@ -873,20 +874,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (headers', ds) =
                   match language with
                     CLang ->
-                      if (options.option_run_preprocessor) then begin
-                        let rec look_up hs headers =
-                          match headers with
-                            (l', (h',tp'), hs', ps')::rest -> 
-                              if (List.mem tp' hs && tp' <> total_path) then 
-                                (l', (h',tp'), hs', ps')::(look_up (List.append hs hs') rest)
-                              else 
-                                look_up hs rest
-                          | [] -> []
-                        in
-                        look_up hs headers, header_decls
-                      end
-                      else
-                        parse_header_file basedir1 relpath reportRange reportShouldFail false []
+                      let rec look_up h =
+                        try 
+                          List.find (fun (l', (h',tp'), hs', ps') -> h = tp') global_headers
+                        with
+                          Not_found -> static_error l (Printf.sprintf "Necessary header %s is not parsed" rellocalpath) None
+                      in
+                      (List.map (fun h -> look_up h) hs, header_decls)
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
@@ -906,8 +900,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               | Some (headers', maps) ->
                 (headers', maps)
             in
-            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included basedir1 reldir1 headers' in
-            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) basedir reldir headers
+            let (maps0, headers_included) = merge_header_maps include_prelude maps0 headers_included basedir1 reldir1 headers' global_headers in
+            merge_header_maps include_prelude (merge_maps l maps maps0) (path::headers_included) basedir reldir headers global_headers
           end
         end
     in
@@ -933,18 +927,15 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 (maps0, [])
           end
           | CLang ->
-            if (options.option_run_preprocessor) then begin
-              let (headers, prelude_decls) = parse_header_file bindir "prelude.h" reportRange reportShouldFail options.option_run_preprocessor [] in
-              let header_names = List.map (fun (_,(_,h),_,_) -> h) headers in
-              merge_header_maps false maps0 [] bindir "" ((dummy_loc, ("prelude.h",concat bindir "prelude.h"), header_names, prelude_decls)::headers)
-            end
-            else
-              merge_header_maps false maps0 [] bindir "" [(dummy_loc, ("prelude.h",""), [], [])]
+            let (headers, prelude_decls) = parse_header_file bindir "prelude.h" reportRange reportShouldFail [] in
+            let header_names = List.map (fun (_, (_, h), _, _) -> h) headers in
+            let headers = (dummy_loc, ("prelude.h", concat bindir "prelude.h"), header_names, prelude_decls)::headers in
+            merge_header_maps false maps0 [] bindir "" headers headers
       else
         (maps0, [])
     in
 
-    let (maps, _) = merge_header_maps include_prelude maps0 headers_included basedir reldir headers in
+    let (maps, _) = merge_header_maps include_prelude maps0 headers_included basedir reldir headers headers in
     maps
 
   (* Region: structdeclmap, enumdeclmap, inductivedeclmap, modulemap *)
