@@ -862,7 +862,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in
           let (basedir1, relpath) = find_include_file includepaths in
           let relpath = reduce_path relpath in
-          let path = concat basedir1 relpath in
+          let path = reduce_path (concat basedir1 relpath) in
           if List.mem path headers_included then
             merge_header_maps include_prelude maps0 headers_included basedir reldir headers global_headers
           else begin
