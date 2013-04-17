@@ -1243,7 +1243,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           let path = reduce_path (concat basePath relPath) in
           if List.mem path !included_files then begin
             match p_next() with
-              Some _ -> divergence (current_loc()) ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
+              Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
             | None -> (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
           end else begin
             included_files := path::!included_files;

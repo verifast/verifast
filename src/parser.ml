@@ -1290,7 +1290,7 @@ type 'result parser_ = (loc * token) Stream.t -> 'result
 let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
-    if List.mem totalPath !active_headers then raise (ParseException (l, "Include Cycle"));
+    if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
   in
   let rec parse_include_directives_core header_names = parser
   | [< (headers, header_name) = parse_include_directive; (headers', header_names') = parse_include_directives_core (header_name::header_names) >] 
