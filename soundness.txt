@@ -5,6 +5,7 @@ Target soundness statement:
 If "verifast A.c B.c C.c" succeeds, then "gcc -o ./program.exe A.c B.c C.c && ./program.exe" does not throw any assertion failures.
 
 Known VeriFast unsoundnesses:
+- sizeof(...) is of type "unsigned int" but VeriFast treats it as an expression of type "int", which may cause unsoundness due to integer promotion.
 - linking correctness: ensure header files have the same meaning in all modules
 - linking correctness: prevent duplicate struct definitions
 - predicate preciseness analysis: does not deal correctly with the local variable scopes induced by conditional assertions and switch assertions

@@ -7,7 +7,7 @@ class Cell
     int value;
 }
 
-//@ predicate_ctor Cell(Cell c)() = [1/2]c.min |-> ?min &*& c.value |-> ?v &*& min <= v;
+//@ predicate_ctor Cell(Cell c)() = [1/2]c.min |-> ?min &*& c.value |-> ?v &*& 0 <= min &*& min <= v;
 
 class IncrementorCriticalSection implements CriticalSection {
 
@@ -93,7 +93,7 @@ class ReaderThread implements Runnable {
 
     Cell cell;
     
-    //@ predicate pre() = cell |-> ?c &*& [_]c.monitor |-> ?m &*& [_]m.Monitor(Cell(c)) &*& [1/2]c.min |-> _;
+    //@ predicate pre() = cell |-> ?c &*& [_]c.monitor |-> ?m &*& [_]m.Monitor(Cell(c)) &*& [1/2]c.min |-> ?min &*& 0 <= min;
     //@ predicate post() = true;
     
     ReaderThread(Cell c)
