@@ -68,7 +68,7 @@ let rec exec_lines filepath file lineno =
     let rec exec_line line =
       if !failed_processes_log = [] then begin
       print_endline line;
-      match parse_cmdline line with
+      match parse_cmdline (String.trim line) with
         ["cd"; dir] -> Sys.chdir dir
       | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
@@ -78,6 +78,7 @@ let rec exec_lines filepath file lineno =
        *)
       | ["#"; line] -> () 
       | ["#"] -> () (* Also when "#" is the only contents of the line. *)
+      | [""] -> () (* Do not launch a process for empty lines. *)
       | ["let"; macroName] ->
         let lines =
           let rec read_macro_lines () =
