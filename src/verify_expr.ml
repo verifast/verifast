@@ -70,7 +70,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           None -> []
         | Some s -> assigned_variables s
       end
-    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> []
+    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> []
     | SwitchStmt (l, e, cs) -> expr_assigned_variables e @ flatmap (fun swtch -> match swtch with (SwitchStmtClause (_, _, ss)) -> block_assigned_variables ss | (SwitchStmtDefaultClause(_, ss)) -> block_assigned_variables ss) cs
     | Assert (l, p) -> []
     | Leak (l, p) -> []
@@ -248,6 +248,10 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     )
     end
   
+  (** Adds the assumption of the form "is_x(y) == true" to the set
+    * of symbolic assumptions, where y is a name of a function that
+    * implements a typedef with name x.
+    *)
   let assume_is_functype fn ftn =
     let (_, _, _, _, symb) = List.assoc ("is_" ^ ftn) purefuncmap in
     ignore (ctxt#assume (ctxt#mk_eq (mk_app symb [List.assoc fn funcnameterms]) ctxt#mk_true))
@@ -338,7 +342,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               (k', [], rt0, xmap0, false, fttpenv, cenv0, pre0, post0, []);
             if gh = Real then
             begin
-              if ftargs = [] then
+              if ftargs = [] && fttargs = [] then
                 assume_is_functype fn ftn;
               if not (List.mem_assoc ftn functypemap1) then
                 functypes_implemented := (fn, lft, ftn, List.map snd ftargs, unloadable)::!functypes_implemented
@@ -1718,7 +1722,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin
         match gh with
-          Real when ftxmap = [] ->
+          Real when ftxmap = [] && fttparams = [] ->
           let (lg, _, _, _, isfuncsymb) = List.assoc ("is_" ^ ftn) purefuncmap in
           let phi = mk_app isfuncsymb [fterm] in
           assert_term phi h env l ("Could not prove is_" ^ ftn ^ "(" ^ g ^ ")") None;
@@ -1726,8 +1730,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Real ->
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in
           let pats = TermPat fterm::List.map (fun _ -> SrcPat DummyPat) ftxmap in
-          consume_chunk rules h [] [] [] l (predsymb, true) [] real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
-          check_call [] h args $. fun h env retval ->
+          let targs = List.map (fun _ -> InferredType (ref None)) fttparams in
+          consume_chunk rules h [] [] [] l (predsymb, true) targs real_unit dummypat inputParamCount pats $. fun _ h coef (_::args) _ _ _ _ ->
+          check_call targs h args $. fun h env retval ->
           cont (Chunk ((predsymb, true), [], coef, fterm::args, None)::h) env retval
         | Ghost ->
           let [(_, (_, _, _, _, predsymb, inputParamCount))] = ft_predfammaps in

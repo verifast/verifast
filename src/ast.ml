@@ -310,8 +310,9 @@ and
       stmt option
   | ProduceFunctionPointerChunkStmt of
       loc *
-      string *
-      expr *
+      string * (* name of function typedef *)
+      expr * (* function pointer expression *)
+      type_expr list * (* type argument *)
       expr list *
       (loc * string) list *
       loc *
@@ -514,19 +515,25 @@ and
       (stmt list * loc (* Close brace *)) option *  (* body *)
       method_binding *  (* static or instance *)
       visibility
+      
+  (** Do not confuse with FuncTypeDecl *)
   | TypedefDecl of
       loc *
       type_expr *
       string
+      
+  (** Used for declaring a function type like "typedef void myfunc();"
+    * or "typedef lemma ..."
+    *)
   | FuncTypeDecl of
       loc *
-      ghostness *
-      type_expr option *
+      ghostness * (* e.g. a "typedef lemma" is ghost. *)
+      type_expr option * (* return type *)
       string *
-      string list *
+      string list * (* type parameters *)
       (type_expr * string) list *
       (type_expr * string) list *
-      (asn * asn)
+      (asn * asn) (* precondition, postcondition *)
   | BoxClassDecl of
       loc *
       string *
@@ -687,7 +694,7 @@ let stmt_loc s =
   | NoopStmt l -> l
   | InvariantStmt (l, _) -> l
   | ProduceLemmaFunctionPointerChunkStmt (l, _, _, _) -> l
-  | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) -> l
+  | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) -> l
   | Break (l) -> l
   | SuperConstructorCall(l, _) -> l
 

@@ -336,7 +336,25 @@ and
 and
   parse_functype_paramlists = parser
   [< ps1 = parse_paramlist; ps2 = opt parse_paramlist >] -> (match ps2 with None -> ([], ps1) | Some ps2 -> (ps1, ps2))
-| [< '(_, Kwd "/*@"); ps1 = parse_paramlist; '(_, Kwd "@*/"); ps2 = parse_paramlist >] -> (ps1, ps2)
+and
+  (** Parses
+   * /*@<ttparams>(tparams)@*/(params) where
+   * <ttparams> and (tparams) and /*@<ttparams>(tparams)@*/ are optional
+   *)
+  parse_functypedecl_paramlist_in_real_context = parser
+  [< '(_, Kwd "/*@");
+     functiontypetypeparams = opt parse_type_params_free;
+     functiontypeparams = opt parse_paramlist;
+     '(_, Kwd "@*/");
+     params = parse_paramlist
+  >] ->
+    let noneToEmptyList value = 
+      match value with 
+        None -> []
+        | Some x -> x
+    in
+    (noneToEmptyList functiontypetypeparams, noneToEmptyList functiontypeparams, params)
+  | [< params = parse_paramlist >] -> ([], [], params)
 and
   parse_decl = parser
   [< '(l, Kwd "struct"); '(_, Ident s); d = parser
@@ -344,13 +362,26 @@ and
   | [< '(_, Kwd ";") >] -> Struct (l, s, None)
   | [< t = parse_type_suffix (StructTypeExpr (l, s)); d = parse_func_rest Regular (Some t) Public >] -> d
   >] -> [d]
-| [< '(l, Kwd "typedef"); rt = parse_return_type; '(_, Ident g);
+| [< '(l, Kwd "typedef");
+     rt = parse_return_type; '(_, Ident g);
      ds = begin parser
-       [< (ftps, ps) = parse_functype_paramlists; '(_, Kwd ";"); spec = opt parse_spec >] ->
-       let spec = match spec with Some spec -> spec | None -> raise (ParseException (l, "Function type declaration should have contract.")) in
-       [FuncTypeDecl (l, Real, rt, g, [], ftps, ps, spec)]
-     | [< '(_, Kwd ";") >] -> begin match rt with None -> raise (ParseException (l, "Void not allowed here.")) | Some te -> [TypedefDecl (l, te, g)] end
-     end
+       [<
+         (tparams, ftps, ps) = parse_functypedecl_paramlist_in_real_context;
+         '(_, Kwd ";");
+         spec = opt parse_spec
+       >] ->
+         let spec = match spec with
+           Some spec -> spec
+           | None -> raise (ParseException (l, "Function type declaration should have contract."))
+         in
+         [FuncTypeDecl (l, Real, rt, g, tparams, ftps, ps, spec)]
+       | [< '(_, Kwd ";") >] ->
+         begin
+           match rt with
+             None -> raise (ParseException (l, "Void not allowed here."))
+             | Some te -> [TypedefDecl (l, te, g)]
+         end
+    end
   >] -> ds
 | [< '(_, Kwd "enum"); '(l, Ident n); '(_, Kwd "{");
      elems = rep_comma (parser [< '(_, Ident e); init = opt (parser [< '(_, Kwd "="); e = parse_expr >] -> e) >] -> (e, init));
@@ -443,7 +474,14 @@ and
 and
   parse_type_params_general = parser
   [< xs = parse_type_params_free >] -> xs
-| [< xs = peek_in_ghost_range (parser [< xs = parse_type_params_free; '(_, Kwd "@*/") >] -> xs) >] -> xs
+| [<
+    xs = peek_in_ghost_range (
+      parser [<
+        xs = parse_type_params_free;
+        '(_, Kwd "@*/")
+      >] -> xs
+    )
+  >] -> xs
 | [< >] -> []
 and
   parse_func_rest k t v = parser
@@ -718,12 +756,13 @@ and
        [< '(_, Kwd ";") >] -> None
      | [< s = parse_stmt >] -> Some s
   >] -> ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause, body)
-| [< '(l, Kwd "produce_function_pointer_chunk"); '(_, Ident ftn);
+| [< '(l, Kwd "produce_function_pointer_chunk"); '(li, Ident ftn);
+     targs = parse_type_args li;
      '(_, Kwd "("); fpe = parse_expr; '(_, Kwd ")");
      args = parse_arglist;
      '(_, Kwd "("); params = rep_comma (parser [< '(l, Ident x) >] -> (l, x)); '(_, Kwd ")");
      '(openBraceLoc, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}") >] ->
-  ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc)
+  ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc)
 | [< '(l, Kwd "goto"); '(_, Ident lbl); '(_, Kwd ";") >] -> GotoStmt (l, lbl)
 | [< '(l, Kwd "invariant"); inv = parse_pred; '(_, Kwd ";") >] -> InvariantStmt (l, inv)
 | [< '(l, Kwd "return"); eo = parser [< '(_, Kwd ";") >] -> None | [< e = parse_expr; '(_, Kwd ";") >] -> Some e >] -> ReturnStmt (l, eo)

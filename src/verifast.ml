@@ -150,7 +150,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               None -> static_error l "No such function type" None
             | Some (ftn, (lft, gh, fttparams, rt, ftxmap, xmap, pre, post, ft_predfammaps)) ->
               begin match stmt_ghostness with
-                Real -> if gh <> Real || ftxmap = [] then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized function types." None
+                Real -> if gh <> Real || (ftxmap = [] && fttparams = []) then static_error l "A produce_function_pointer_chunk statement may be used only for parameterized and type-parameterized function types." None
               | Ghost -> if gh <> Ghost then static_error l "Lemma function pointer type expected." None
               end;
               begin match (rt, rt1) with
@@ -177,8 +177,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   bs
               in
               let ftargenv =
+                
                 match zip ftxmap args with
-                  None -> static_error l "Incorrect number of function pointer chunk arguments" None
+                  None -> 
+                    if (ftxmap = []) && (args = []) then
+                      [] (* For function pointer chunks with type arguments it is possible to have no arguments *)
+                    else
+                      static_error l "Incorrect number of function pointer chunk arguments" None
                 | Some bs ->
                   List.map
                     begin fun ((x, tp), e) ->
@@ -319,8 +324,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       assume_is_of_type l (ev w) tp (fun () -> cont h env)
     | ProduceLemmaFunctionPointerChunkStmt (l, e, ftclause_opt, body) ->
       verify_produce_function_pointer_chunk_stmt Ghost l e ftclause_opt body
-    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, args, params, openBraceLoc, ss, closeBraceLoc) ->
-      verify_produce_function_pointer_chunk_stmt Real l fpe (Some (ftn, [], args, params, openBraceLoc, ss, closeBraceLoc)) None
+    | ProduceFunctionPointerChunkStmt (l, ftn, fpe, targs, args, params, openBraceLoc, ss, closeBraceLoc) ->
+      verify_produce_function_pointer_chunk_stmt Real l fpe (Some (ftn, targs, args, params, openBraceLoc, ss, closeBraceLoc)) None
     | ExprStmt (CallExpr (l, "close_struct", targs, [], args, Static)) when language = CLang ->
       let e = match (targs, args) with ([], [LitPat e]) -> e | _ -> static_error l "close_struct expects no type arguments and one argument." None in
       let (w, tp) = check_expr (pn,ilist) tparams tenv e in

@@ -1871,7 +1871,6 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | FuncTypeDecl (l, gh, rt, ftn, tparams, ftxs, xs, (pre, post))::ds ->
         let ftn0 = ftn in
         let ftn = full_name pn ftn in
-        if gh = Real && tparams <> [] then static_error l "Declaring type parameters on non-lemma function types is not supported." None;
         let _ = if List.mem_assoc ftn functypedeclmap1 || List.mem_assoc ftn functypemap0 then static_error l "Duplicate function type name." None in
         let rec check_tparams_distinct tparams =
           match tparams with
@@ -1930,7 +1929,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     List.map
       begin fun (g, (l, gh, tparams, rt, ftxmap, xmap, g0, pn, ilist, pre, post)) ->
         let predfammaps =
-          if gh = Ghost || ftxmap <> [] then
+          if gh = Ghost || ftxmap <> [] || tparams <> [] then
             let paramtypes = [PtrType (FuncType g)] @ List.map snd ftxmap in
             [mk_predfam (full_name pn ("is_" ^ g0)) l tparams 0 paramtypes (Some (List.length paramtypes))]
           else

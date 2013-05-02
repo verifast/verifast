@@ -139,6 +139,9 @@ cd src
 verifast -c -prover redux usbkbd_verified.c
 cd ..
 cd ..
+cd generic_functypedef
+mysh < runtests.mysh
+cd ..
 cd java
 cd channels
 verifast -prover redux -disable_overflow_check -c channels.jarsrc client.jarsrc
@@ -290,5 +293,4 @@ verifast -c -allow_should_fail erasure.c
 verifast -c -allow_should_fail erasure2.c
 verifast -c -allow_should_fail erasure3.c
 verifast_both -c -allow_should_fail autoclose_bad_downcast.c
-
-
+cd ..
