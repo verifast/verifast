@@ -179,11 +179,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let ftargenv =
                 
                 match zip ftxmap args with
-                  None -> 
-                    if (ftxmap = []) && (args = []) then
-                      [] (* For function pointer chunks with type arguments it is possible to have no arguments *)
-                    else
-                      static_error l "Incorrect number of function pointer chunk arguments" None
+                  None -> static_error l "Incorrect number of function pointer chunk arguments" None
                 | Some bs ->
                   List.map
                     begin fun ((x, tp), e) ->
