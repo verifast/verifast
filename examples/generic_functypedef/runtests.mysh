@@ -1,0 +1,19 @@
+let verifast_both
+ifnotmac verifast
+verifast -prover redux
+in
+
+# for a in bad_*.c ; do echo "verifast_both -allow_should_fail -c $a" ; done
+verifast_both -allow_should_fail -c bad_different_tparam_count_2.c
+verifast_both -allow_should_fail -c bad_different_tparam_count_3.c
+verifast_both -allow_should_fail -c bad_different_tparam_count.c
+verifast_both -allow_should_fail -c bad_nonmatching_type_parameter_2.c
+verifast_both -allow_should_fail -c bad_nonmatching_type_parameter_3.c
+verifast_both -allow_should_fail -c bad_nonmatching_type_parameter.c
+verifast_both -allow_should_fail -c bad_no_proof_of_function_type.c
+
+# for a in $(ls -1 *.c | grep -v bad_) ; do echo "verifast_both -c $a" ; done
+verifast_both -c nongeneric_test.c
+verifast_both -c sunnydayscenariotest.c
+verifast_both -c sunnydayscenariotest_with_functypeparam.c
+
