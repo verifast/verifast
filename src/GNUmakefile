@@ -55,7 +55,7 @@ else ifdef Z3V4
   Z3DEPS  = z3v4prover.cmx verifastPluginZ3v4.ml
   Z3ARGS  = -I $(Z3)/ocaml z3.cmxa z3v4prover.cmx verifastPluginZ3v4.ml \
             -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
-            -cclib -lz3 -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a
+            -cclib -lz3 -cclib -lz3stubs_dbg $(OCAMLLIB)/libcamlidl.a
   LDLPATH = $(Z3)/lib
 else ifdef NOZ3
   Z3DEPS  =
@@ -100,26 +100,6 @@ test: build test_plugin
 	$(SET_ENV); \
         cd ..; bin/mysh -cpus $(NUMCPU) < testsuite.mysh
 
-z3v4test: z3v4test.ml z3v4prover.cmo proverapi.cmo ${Z3DEPS} linux/Perf.cmxa
-	${OCAMLOPTOPT} \
-         -o z3v4test \
-         -I ./linux Perf.cmxa nums.cmxa \
-         -I $(Z3)/ocaml z3.cmxa z3v4prover.cmx proverapi.cmx \
-         -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib" \
-         -cclib -lz3 -cclib -lz3stubs $(OCAMLLIB)/libcamlidl.a \
-         z3v4test.ml
-	./z3v4test
-
-z3v4test2: z3v4test2.ml
-	${OCAMLOPTOPT} \
-         -dtypes -o z3v4test2 \
-         -ccopt "-I$(Z3)/ocaml -L$(Z3)/bin -L$(Z3)/lib -fopenmp" \
-         -I $(Z3)/ocaml/ \
-         -cclib -lz3 -cclib -lz3stubs ${OCAMLLIB}/libcamlidl.a \
-         z3.cmxa \
-         z3v4test2.ml
-	./z3v4test2
-
 env:
 	@echo "Configuration:"
 	@echo "---------------------"
@@ -154,6 +134,9 @@ distclean: clean
 
 ../bin/list.vfmanifest: ../bin/list.c ../bin/list.gh
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c
+
+debug:
+	@echo "$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest list.c"
 
 ../bin/listex.vfmanifest: ../bin/listex.c ../bin/listex.gh \
  ../bin/list.vfmanifest
@@ -367,7 +350,7 @@ endif
 
 z3v4prover.cmo: proverapi.cmo z3v4prover.ml linux/Perf.cmxa
 ifndef Z3V4
-	$(error "Z3V2 is not defined.")
+	$(error "Z3V4 is not defined.")
 endif
 	${OCAMLC} -warn-error F -g -c -I $(Z3)/ocaml -I ./linux z3v4prover.ml
 

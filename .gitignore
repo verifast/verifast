@@ -40,9 +40,10 @@ lgtk
 lablgtk-2.14.2.tar.gz
 lablgtk-2.14.2
 ocaml
-ocaml-3.12.1.tar.gz
-ocaml-3.12.1
+ocaml-4.00.1.tar.gz
+ocaml-4.00.1
 z3build
+lastz3
 
 test
 

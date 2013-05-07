@@ -10,10 +10,10 @@ B. How to build
 0. Using the local GNUmakefile
 ===================================
 
-Recent releases of VeriFast require OCaml >= 3.12.1 released in December
-2011. Currently not many Linux distributions provide packages of the latest
+Recent releases of VeriFast require OCaml >= 4.00 released in July
+2012. Currently not many Linux distributions provide packages of the latest
 OCaml and LABLGTK2. Thus, we provide a build script to automatically
-download and compile the OCaml 3.12.1, camlidl, lablgtk and the Z3 OCaml
+download and compile the OCaml 4.00.1, camlidl, lablgtk and the Z3 OCaml
 bindings.
 
 Required Packages

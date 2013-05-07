@@ -11,6 +11,85 @@ let display_version() =
     printf "Unsing Z3 version %d.%d.%d.%d.\n" major minor build revision;
   end;;
 
+let rec ast_contains_var_core ctxt ref ast =
+  begin
+    printf "ast_contains_var ast: %s\n%!" (Z3.ast_to_string ctxt ast);
+    match (Z3.get_ast_kind ctxt ast) with
+      Z3.APP_AST -> ( printf "pattern.App\n%!";
+                      let args = Z3.get_app_args ctxt (Z3.to_app ctxt ast) in
+                      Array.iter (ast_contains_var_core ctxt ref) args;
+                      printf "arguments: %i\n%!" (Array.length args)
+                    )
+    | Z3.VAR_AST -> ref := true; printf "pattern.Var\n%!"
+    | _          -> printf "--- pattern.other\n%!"
+  end;;
+
+let ast_contains_var ctxt ast =
+  begin
+    let ast_contains_var_ref = ref false in
+    ast_contains_var_core ctxt ast_contains_var_ref ast;
+    !ast_contains_var_ref
+  end;;
+
+let validate_pattern ctxt p =
+  begin
+    printf "*** Checking pattern: %s\n%!" (Z3.pattern_to_string ctxt p);
+    let ast = Z3.pattern_to_ast ctxt p in
+    match (Z3.get_pattern_num_terms ctxt p) with
+      0 ->  printf "Warning: no terms in pattern!\n%!"; [| |]
+    | _ ->  ( match (ast_contains_var ctxt ast) with
+                true  -> printf "pattern seems valid.\n%!"; [| p |]
+              | false -> printf "Warning: no vars in pattern!\n%!"; [| |] )
+  end;;
+
+(* we either have to filter out applies-terms excluding equality checks,
+ertc from body, or we drop this stuff at all. *)
+let rec get_terms_from_body_core ctxt ref body =
+  begin
+   printf "get_terms_from_body ast: %s\n%!" (Z3.ast_to_string ctxt body);
+   match (Z3.get_ast_kind ctxt body) with
+     Z3.APP_AST -> ( printf "body.App: %s\n%!" (Z3.ast_to_string ctxt body);
+                     let args = Z3.get_app_args ctxt (Z3.to_app ctxt body) in
+                     Array.iter (get_terms_from_body_core ctxt ref) args;
+                     printf "body.arguments: %i\n%!" (Array.length args)
+                    )
+   | Z3.VAR_AST -> ( (* ref := (List.append !ref [body]); *)
+                     printf "body.Var: %s\n%!" (Z3.ast_to_string ctxt body)
+                   )
+   | _          -> printf "--- body.ast.other\n%!"
+  end;;
+
+let get_terms_from_body ctxt body =
+  begin
+   let terms_ref  = ref [] in
+   get_terms_from_body_core ctxt terms_ref body;
+   !terms_ref
+  end;;
+
+let dbg_check ctxt solver =
+  begin
+    printf "dbg_check -- SOLVER:\n%sEND OF SOLVER\n%!"
+      (Z3.solver_to_string ctxt solver);
+    let result = Z3.solver_check ctxt solver in
+    begin
+     match result with
+       Z3.L_FALSE -> printf "Z3.false\n%!"
+     | Z3.L_UNDEF -> printf "Z3.unknown: %s\n%!" (Z3.solver_get_reason_unknown ctxt solver)
+     | Z3.L_TRUE  -> printf "Z3.true\n%!";
+    end
+  end;;
+
+let assert_cnstr ctxt solver cnstr =
+  begin
+    printf "Z3.solver_assert (%s)\n%!" (Z3.ast_to_string ctxt cnstr);  (*dbg*)
+    let result = Z3.solver_assert ctxt solver cnstr in
+    begin
+     dbg_check ctxt solver;
+     result
+    end
+  end;;
+
+
 type sexpr = Atom of string | List of sexpr list | String of char list
 
 let parse_sexpr text =
@@ -65,24 +144,29 @@ let rec string_of_sexpr e =
   | String cs -> "\"" ^ String.concat "" (List.map string_of_char cs) ^ "\""
 
 class z3_context () =
-  let cfg = Z3.mk_config () in
-
-  let _ = Z3.set_param_value cfg "MODEL" "false" in
-(*  let _ = Z3.set_param_value cfg "PROOF_MODE" "2" in
-  let _ = Z3.set_param_value cfg "MBQI_MAX_ITERATIONS" "10" in
-  let _ = Z3.set_param_value cfg "ARITH_PROCESS_ALL_EQS" "true" in
-  let _ = Z3.set_param_value cfg "ARITH_EQ_BOUNDS" "true" in
-  let _ = Z3.set_param_value cfg "ARITH_PROCESS_ALL_EQS" "true" in
-  let _ = Z3.set_param_value cfg "DISTRIBUTE_FORALL" "true" in *)
+  let cfg = [ ("AUTO_CONFIG", "false");
+              ("MODEL", "true");
+              ("MBQI", "false");
+              ("MBQI_TRACE", "false");
+(*              ("PROOF_MODE", "2");
+              ("MBQI_MAX_ITERATIONS", "10");
+              ("ARITH_PROCESS_ALL_EQS", "true");
+              ("ARITH_EQ_BOUNDS", "true");
+              ("ARITH_PROCESS_ALL_EQS", "true");
+              ("DISTRIBUTE_FORALL", "true"); *)
   (* debug options: *)
-  let _ = Z3.set_param_value cfg "VERBOSE" "1" in
-  let _ = Z3.set_param_value cfg "TRACE" "true" in
-  let _ = Z3.set_param_value cfg "DISPLAY_UNSAT_CORE" "true" in
-  let _ = Z3.set_param_value cfg "DISPLAY_PROOF" "true" in
-  (*let _ = Z3.set_param_value cfg "RESTART_INITIAL" "1000000" in *)
-  let _ = Z3.set_param_value cfg "SOFT_TIMEOUT" "20000" in
+              ("VERBOSE", "1000");
+              ("TRACE", "false");
+              ("DISPLAY_UNSAT_CORE", "true");
+              ("DISPLAY_PROOF", "true");
+              ("DISPLAY_CONFIG", "true");
+              ("SOFT_TIMEOUT", "0");
+              ("NL_ARITH_ROUNDS", "1024") ] in
 
   let ctxt = Z3.mk_context cfg in
+  let apm = Z3.set_ast_print_mode ctxt Z3.PRINT_SMTLIB_COMPLIANT in
+  let solver = Z3.mk_solver ctxt in
+
   let bool_type = Z3.mk_bool_sort ctxt in
   let int_type = Z3.mk_int_sort ctxt in
   let real_type = Z3.mk_real_sort ctxt in
@@ -95,25 +179,27 @@ class z3_context () =
   let get_ctor_tag () = let k = !ctor_counter in ctor_counter := k + 1; k in
   let mk_unary_app f t = Z3.mk_app ctxt f [| t |] in
   let assert_term t =
-    Z3.assert_cnstr ctxt t;
-    match Z3.check ctxt with
+    printf "assert_term:\n%!";
+    assert_cnstr ctxt solver t;
+    match Z3.solver_check ctxt solver with
       Z3.L_FALSE -> Unsat
     | Z3.L_UNDEF -> Unknown
     | Z3.L_TRUE -> Unknown
   in
   let query t =
-    Z3.push ctxt;
+    Z3.solver_push ctxt solver;
     let result = assert_term (Z3.mk_not ctxt t) = Unsat in
-    Z3.pop ctxt 1;
+    Z3.solver_pop ctxt solver 1;
     result
   in
   let assume_is_inverse f1 f2 dom2 =
+    printf "assume_is_inverse:\n%!";
     let name = Z3.mk_int_symbol ctxt 0 in
     let x = Z3.mk_bound ctxt 0 dom2 in
     let app1 = Z3.mk_app ctxt f2 [| x |] in
     let app2 = Z3.mk_app ctxt f1 [| app1 |] in
     let pat = Z3.mk_pattern ctxt [| app1 |] in
-    Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] [| dom2 |] [| name |] (Z3.mk_eq ctxt app2 x))
+    assert_cnstr ctxt solver (Z3.mk_forall ctxt 0 (validate_pattern ctxt pat) [| dom2 |] [| name |] (Z3.mk_eq ctxt app2 x))
   in
   let boxed_int = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(intbox)") [| int_type |] inductive_type in
   let unboxed_int = Z3.mk_func_decl ctxt (Z3.mk_string_symbol ctxt "(int)") [| inductive_type |] int_type in
@@ -150,14 +236,15 @@ class z3_context () =
             let xs = Array.init (Array.length tps) (fun j -> Z3.mk_bound ctxt j tps.(j)) in
             let app = Z3.mk_app ctxt c xs in
             if domain = [] then
-              Z3.assert_cnstr ctxt (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag)
+              assert_cnstr ctxt solver (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag)
             else
             begin
               let names = Array.init (Array.length tps) (Z3.mk_int_symbol ctxt) in
               let pat = Z3.mk_pattern ctxt [| app |] in
               (* disjointness axiom *)
               (* (forall (x1 ... xn) (PAT (C x1 ... xn)) (EQ (tag (C x1 ... xn)) Ctag)) *)
-              Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag));
+              assert_cnstr ctxt solver (Z3.mk_forall ctxt 0 (validate_pattern ctxt pat) tps names (Z3.mk_eq ctxt (mk_unary_app tag_func app) tag));
+              dbg_check ctxt solver; (*dbg*)
             end
           end;
           for i = 0 to Array.length tps - 1 do
@@ -168,7 +255,7 @@ class z3_context () =
             let pat = Z3.mk_pattern ctxt [| app |] in
             (* injectiveness axiom *)
             (* (forall (x1 ... x2) (PAT (C x1 ... xn)) (EQ (finv (C x1 ... xn)) xi)) *)
-            Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3.mk_eq ctxt (mk_unary_app finv app) (xs.(i))))
+            assert_cnstr ctxt solver (Z3.mk_forall ctxt 0 (validate_pattern ctxt pat) tps names (Z3.mk_eq ctxt (mk_unary_app finv app) (xs.(i))));
           done
         | Fixpoint j -> ()
         | Uninterp -> ()
@@ -193,10 +280,10 @@ class z3_context () =
            let pat = Z3.mk_pattern ctxt [| fapp |] in
            let body = fbody (Array.to_list fargs) (Array.to_list cargs) in
            if l = 0 then
-             Z3.assert_cnstr ctxt (Z3.mk_eq ctxt fapp body)
+             assert_cnstr ctxt solver (Z3.mk_eq ctxt fapp body)
            else
              (* (FORALL (x1 ... y1 ... ym ... xn) (PAT (f x1 ... (C y1 ... ym) ... xn)) (EQ (f x1 ... (C y1 ... ym) ... xn) body)) *)
-             Z3.assert_cnstr ctxt (Z3.mk_forall ctxt 0 [| pat |] tps names (Z3.mk_eq ctxt fapp body))
+             assert_cnstr ctxt solver (Z3.mk_forall ctxt 0 (validate_pattern ctxt pat) tps names (Z3.mk_eq ctxt fapp body))
         )
         cs
 
@@ -241,9 +328,9 @@ class z3_context () =
       if verbosity >= 1 then begin let t1 = Perf.time() in Printf.printf "%10.6fs: Z3 assume %s: %.6f seconds\n" t0 (Z3.ast_to_string ctxt t) (t1-. t0) end;
       result
     method push =
-      Z3.push ctxt
+      Z3.solver_push ctxt solver
     method pop =
-      Z3.pop ctxt 1
+      Z3.solver_pop ctxt solver 1
     method perform_pending_splits (cont: Z3.ast list -> bool) = cont []
     method stats: string * (string * int64) list = "(no statistics for Z3)", []
     method begin_formal = ()
@@ -251,12 +338,12 @@ class z3_context () =
     method mk_bound (i: int) (tp: Z3.sort) = Z3.mk_bound ctxt i tp
     method assume_forall (description: string) (triggers: Z3.ast list) (tps: Z3.sort list) (body: Z3.ast): unit = 
       let pats = (
-        match triggers with
-          [] -> [| |]
-         | _ -> [|(Z3.mk_pattern ctxt (Array.of_list triggers))|]
+        match (List.append triggers (get_terms_from_body ctxt body)) with
+          [] -> printf "*** empty trigger and body!\n"; [| |]
+         | _ -> (validate_pattern ctxt (Z3.mk_pattern ctxt (Array.of_list (List.append triggers (get_terms_from_body ctxt body)))))
       ) in
       let quant = (Z3.mk_forall ctxt 0 pats (Array.of_list tps) (Array.init (List.length tps) (Z3.mk_int_symbol ctxt)) (body)) in
       printf "%s\n" (string_of_sexpr (simplify (parse_sexpr (Z3.ast_to_string ctxt quant)))); (*dbg*)
-      Z3.assert_cnstr ctxt quant
+      assert_cnstr ctxt solver quant
    method simplify (t: Z3.ast): Z3.ast option = Some(Z3.simplify ctxt t)
   end
