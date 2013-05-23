@@ -856,7 +856,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           (fun chunk h coef ts size ghostenv env env' -> check_dummy_coefpat l coefpat coef; cont [chunk] h ghostenv env env' size)
       | WReadArray (la, ea, _, ei) ->
         let pats = [SrcPat (LitPat ea); SrcPat (LitPat ei); rhs] in
-        consume_chunk rules h ghostenv env env' l (array_element_symb(), true) [tp] coef coefpat (Some 2) pats $.
+        consume_chunk rules h ghostenv env env' l (array_element_symb(), true) [instantiate_type tpenv tp] coef coefpat (Some 2) pats $.
         fun chunk h coef ts size ghostenv env env' ->
         check_dummy_coefpat l coefpat coef;
         cont [chunk] h ghostenv env env' size
