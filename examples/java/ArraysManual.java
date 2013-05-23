@@ -55,6 +55,23 @@ class Persons {
 
 //@ predicate record(int recordLength, Object record; unit value) = array_slice<byte>(^record, 0, recordLength, _) &*& value == unit;
 
+/*@
+
+lemma void all_eq_take<t>(int n, list<t> xs, t x)
+    requires 0 <= n &*& n <= length(xs) &*& all_eq(xs, x) == true;
+    ensures all_eq(take(n, xs), x) == true;
+{
+    switch (xs) {
+        case nil:
+        case cons(x0, xs0):
+            if (n == 0) {
+            } else {
+                all_eq_take(n - 1, xs0, x);
+            }
+    }
+}
+
+@*/
 
 class ArrayTest {
     static void test(Object[] a, int i)
@@ -115,13 +132,26 @@ class ArrayTest {
         {
             Object tmp = records[i];
             assert tmp == null;
-            byte[] record2 = new byte[recordLength];
-            records[i] = record2;
-            Object tmp2 = record2;
-            //@ array_slice_split(records, i, i + 1);
-            //@ close record(recordLength, record2, unit);
-            //@ array_slice_deep_close(records, i, record, recordLength);
+            records[i] = new byte[recordLength];
             i++;
+        }
+        return records;
+    }
+
+    static Object[] createRecords2(int count, int recordLength)
+        //@ requires 0 <= count &*& 0 <= recordLength;
+        //@ ensures array_slice_deep(result, 0, result.length, record, recordLength, _, _);
+    {
+        Object[] records = new Object[count];
+        int i = count;
+        while (0 < i)
+            //@ invariant 0 <= i &*& i <= count &*& array_slice_deep(records, i, count, record, recordLength, _, _) &*& records[..i] |-> ?elems &*& all_eq(elems, null) == true;
+        {
+            i--;
+            Object tmp = records[i];
+            assert tmp == null;
+            records[i] = new byte[recordLength];
+            //@ all_eq_take(i, elems, null);
         }
         return records;
     }

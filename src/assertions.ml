@@ -589,8 +589,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           [v]
       | Chunk ((g, true), [tp], coef, [a'; istart; iend; vs], _)
           when g == array_slice_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
-          let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
-          [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [ctxt#mk_sub i istart; vs])]
+          [mk_nth tp (ctxt#mk_sub i istart) vs]
      (* | Chunk ((g, true), [tp;tp2;tp3], coef, [a'; istart; iend; p; info; elems; vs], _)
           when g == array_slice_deep_symb() && definitely_equal a' a && ctxt#query (ctxt#mk_and (ctxt#mk_le istart i) (ctxt#mk_lt i iend)) ->
           let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
@@ -642,8 +641,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               predname_eq g (array_predsym, true) &&
               definitely_equal a' a &&
               ctxt#query (ctxt#mk_and (ctxt#mk_le (ctxt#mk_intlit 0) i) (ctxt#mk_lt i n')) ->
-            let (_, _, _, _, nth_symb) = List.assoc "nth" purefuncmap in
-            [apply_conversion ProverInductive (provertype_of_type tp) (mk_app nth_symb [i; vs'])]
+            [mk_nth tp i vs']
         | _ -> []
         end
         h
@@ -1802,22 +1800,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let get_slice_deep_rule h [elem_tp; a_tp; v_tp] terms_are_well_typed coef coefpat [arr; istart; iend; p; info] cont = 
         let extract_slice_deep h cond cont' =
-          match extract
-            begin function
-              Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _) when
-                g' == array_slice_deep_symb && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
-                definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && cond coef' istart' (Some iend') ->
-              Some (Some (coef', istart', iend', elems', vs'), None)
-            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; index; elem], _) when
-                g' == array_element_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && cond coef' index None ->
-              Some (None, Some (coef', index, elem))
-            | _ -> None
-            end
-            h
-          with
-            None -> cont None
-          | Some ((Some slice, None), h) -> cont' (slice, h)
-          | Some ((None, Some (coef', index, elem)), h) ->
+          let consume_array_element coef' index elem h =
             (* Close a unit array_slice_deep chunk *)
             (* First check if there is a p(info, elem, ?value) chunk *)
             begin fun cont'' ->
@@ -1849,6 +1832,42 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | Some v -> cont'' v h
             end $. fun v h ->
             cont' ((coef', index, ctxt#mk_add index (ctxt#mk_intlit 1), mk_list elem_tp [elem], mk_list v_tp [v]), h)
+          in
+          match extract
+            begin function
+              Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _) as c when
+                g' == array_slice_deep_symb && unify elem_tp elem_tp' && unify a_tp a_tp' && unify v_tp v_tp' &&
+                definitely_equal arr' arr && definitely_equal p p' && definitely_equal info info' && cond coef' istart' (Some iend') ->
+              Some c
+            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; index; elem], _) as c when
+                g' == array_element_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && cond coef' index None ->
+              Some c
+            | Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _) as c when
+                g' == array_slice_symb && unify elem_tp elem_tp' && definitely_equal arr' arr && ctxt#query (ctxt#mk_lt istart' iend') &&
+                cond coef' istart' (Some (ctxt#mk_add istart' int_unit_term)) || cond coef' (ctxt#mk_sub iend' int_unit_term) (Some iend') ->
+              Some c
+            | _ -> None
+            end
+            h
+          with
+            None -> cont None
+          | Some (Chunk ((g', is_symb), [elem_tp'; a_tp'; v_tp'], coef', [arr'; istart'; iend'; p'; info'; elems'; vs'], _), h) when g' == array_slice_deep_symb ->
+            cont' ((coef', istart', iend', elems', vs'), h)
+          | Some (Chunk ((g', is_symb), [elem_tp'], coef', [arr'; index; elem], _), h) when g' == array_element_symb ->
+            consume_array_element coef' index elem h
+          | Some (Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _), h) when g' == array_slice_symb ->
+            let istart'p1 = ctxt#mk_add istart' int_unit_term in
+            if cond coef' istart' (Some istart'p1) then begin
+              let head = mk_head elem_tp elems' in
+              let tail = mk_tail elems' in
+              consume_array_element coef' istart' head (Chunk ((array_slice_symb, true), [elem_tp'], coef', [arr'; istart'p1; iend'; tail], None)::h)
+            end else begin
+              let iend'm1 = ctxt#mk_sub iend' int_unit_term in
+              let index = ctxt#mk_sub iend'm1 istart' in
+              let init = mk_take index elems' in
+              let last = mk_nth elem_tp index elems' in
+              consume_array_element coef' iend'm1 last (Chunk ((array_slice_symb, true), [elem_tp'], coef', [arr'; istart'; iend'm1; init], None)::h)
+            end
         in
         if definitely_equal istart iend then (* create empty array by default *)
           cont (Some (Chunk ((array_slice_deep_symb, true), [elem_tp; a_tp; v_tp], real_unit, [arr; istart; iend; p; info; mk_nil(); mk_nil()], None)::h))

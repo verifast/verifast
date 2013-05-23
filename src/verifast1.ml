@@ -337,6 +337,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let real_half = ctxt#mk_reallit_of_num (num_of_ints 1 2)
 
   let int_zero_term = ctxt#mk_intlit 0
+  let int_unit_term = ctxt#mk_intlit 1
 
   (* unsigned int & pointer types *)
   let min_uint_term = ctxt#mk_intlit_of_string "0"
@@ -3640,6 +3641,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     end
   
   let get_pred_symb p = let (_, _, _, _, symb, _) = List.assoc p predfammap in symb
+  let get_pure_func_symb g = let (_, _, _, _, symb) = List.assoc g purefuncmap in symb
   
   let lazy_value f =
     let cell = ref None in
@@ -3648,7 +3650,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         None -> let result = f() in cell := Some result; result
       | Some result -> result
   
+  let (!!) f = f ()
+  
   let lazy_predfamsymb name = lazy_value (fun () -> get_pred_symb name)
+  let lazy_purefuncsymb name = lazy_value (fun () -> get_pure_func_symb name)
   
   let array_element_symb = lazy_predfamsymb "java.lang.array_element"
   let array_slice_symb = lazy_predfamsymb "java.lang.array_slice"
@@ -4330,38 +4335,50 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let prover_convert_term term t t0 =
     if t = t0 then term else convert_provertype term (provertype_of_type t) (provertype_of_type t0)
 
-  let mk_nil () =
-    let (_, _, _, _, nil_symb) = List.assoc "nil" purefuncmap in
-    mk_app nil_symb []
+  let nil_symb = lazy_purefuncsymb "nil"
   
-  let mk_cons elem_tp head tail =
-    let (_, _, _, _, cons_symb) = List.assoc "cons" purefuncmap in
-    mk_app cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+  let mk_nil () = mk_app !!nil_symb []
   
-  let mk_all_eq elem_tp xs x =
-    let (_, _, _, _, all_eq_symb) = List.assoc "all_eq" purefuncmap in
-    mk_app all_eq_symb [xs; apply_conversion (provertype_of_type elem_tp) ProverInductive x]
+  let cons_symb = lazy_purefuncsymb "cons"
+
+  let mk_cons elem_tp head tail = mk_app !!cons_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive head; tail]
+  
+  let all_eq_symb = lazy_purefuncsymb "all_eq"
+
+  let mk_all_eq elem_tp xs x = mk_app !!all_eq_symb [xs; apply_conversion (provertype_of_type elem_tp) ProverInductive x]
+  
+  let head_symb = lazy_purefuncsymb "head"
+  
+  let mk_head elem_tp xs = apply_conversion ProverInductive (provertype_of_type elem_tp) (mk_app !!head_symb [xs])
+  
+  let nth_symb = lazy_purefuncsymb "nth"
+  
+  let mk_nth elem_tp n xs = apply_conversion ProverInductive (provertype_of_type elem_tp) (mk_app !!nth_symb [n; xs])
+  
+  let tail_symb = lazy_purefuncsymb "tail"
+  
+  let mk_tail xs = mk_app !!tail_symb [xs]
   
   let rec mk_list elem_tp elems =
     match elems with
       [] -> mk_nil()
     | e::es -> mk_cons elem_tp e (mk_list elem_tp es)
   
-  let mk_take n xs =
-    let (_, _, _, _, take_symb) = List.assoc "take" purefuncmap in
-    mk_app take_symb [n; xs]
+  let take_symb = lazy_purefuncsymb "take"
   
-  let mk_drop n xs =
-    let (_, _, _, _, drop_symb) = List.assoc "drop" purefuncmap in
-    mk_app drop_symb [n; xs]
+  let mk_take n xs = mk_app !!take_symb [n; xs]
   
-  let mk_append l1 l2 =
-    let (_, _, _, _, append_symb) = List.assoc "append" purefuncmap in
-    mk_app append_symb [l1; l2]
+  let drop_symb = lazy_purefuncsymb "drop"
   
-  let mk_length l =
-    let (_, _, _, _, length_symb) = List.assoc "length" purefuncmap in
-    mk_app length_symb [l]
+  let mk_drop n xs = mk_app !!drop_symb [n; xs]
+  
+  let append_symb = lazy_purefuncsymb "append"
+  
+  let mk_append l1 l2 = mk_app !!append_symb [l1; l2]
+  
+  let length_symb = lazy_purefuncsymb "length"
+  
+  let mk_length l = mk_app !!length_symb [l]
   
   let rec mk_zero_list n =
     assert (0 <= n);

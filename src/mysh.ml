@@ -2,6 +2,19 @@ let push xs x = xs := x::!xs
 
 let (|>) x f = f x
 
+let remove_leading_whitespace s =
+  let n = String.length s in
+  let first_nonwhite =
+    let rec iter k =
+      if k = n then n else
+      match s.[k] with
+        ' '|'\012'|'\n'|'\r'|'\t' -> iter (k + 1)
+      | _ -> k
+    in
+    iter 0
+  in
+  if first_nonwhite = 0 then s else String.sub s first_nonwhite (n - first_nonwhite)
+
 let max_processes =
   match Sys.argv with
     [| _; "-cpus"; n |] -> int_of_string n
@@ -68,7 +81,7 @@ let rec exec_lines filepath file lineno =
     let rec exec_line line =
       if !failed_processes_log = [] then begin
       print_endline line;
-      match parse_cmdline (String.trim line) with
+      match parse_cmdline (remove_leading_whitespace line) with
         ["cd"; dir] -> Sys.chdir dir
       | ["del"; file] -> while !active_processes_count > 0 do pump_events() done; Sys.remove file
       | ["ifnotmac"; line] -> if not Fonts.is_macos then exec_line line
