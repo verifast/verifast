@@ -221,7 +221,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let a = ev ea in
       let i = ev ei in
       evalpat false ghostenv env rhs tp tp $. fun ghostenv env t ->
-      let slice = Chunk ((array_element_symb(), true), [tp], coef, [a; i; t], None) in
+      let slice = Chunk ((array_element_symb(), true), [instantiate_type tpenv tp], coef, [a; i; t], None) in
       cont (slice::h) ghostenv env
     | WPointsTo (l, Var (lv, x, scope), tp, rhs) -> 
       let (_, type_, symbn, _) = List.assoc x globalmap in    
