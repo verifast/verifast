@@ -234,7 +234,7 @@ int input_register_device(struct input_dev *dev);
 		&*& input_open_callback_link(open_cb)(close_cb, event_cb)
 		&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 		&*& input_event_callback_link(event_cb)(open_cb, close_cb)
-		&*& [_]chars(name, _, ?cs) &*& length(cs) > 0 // XXX if the name needs to be freed, you're in trouble.
+		&*& [?f]chars(name, ?name_length, ?cs) &*& length(cs) > 0
 		
 		&*& [1/2]input_dev_reportable(dev, userdata) // why [1/2]? See comments at predicate.
 		
@@ -261,7 +261,7 @@ int input_register_device(struct input_dev *dev);
 			&*& input_open_callback_link(open_cb)(close_cb, event_cb)
 			&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 			&*& input_event_callback_link(event_cb)(open_cb, close_cb)
-			&*& [_]chars(name, _, cs)
+			&*& [f]chars(name, name_length, cs)
 			
 			// Not consumed on failure, so also not given back. See input_dev_ghost_registered
 			//&*& userdef_input_drvdata(dev, false, open_cb, close_cb, event_cb, userdata, fracsize)

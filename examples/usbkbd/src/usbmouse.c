@@ -63,10 +63,9 @@ predicate_family_instance complete_t_pred_fam(usb_mouse_irq)(
 	real fracsize,
 	struct urb *urb, struct usb_device *usb_dev, void *buffer, dma_addr_t buffer_dma, int buffer_alloc_size, bool user_alloc_dma, usb_complete_t complete, struct usb_mouse *context, void *setup
 ) =
-	[1/2]context->data |-> buffer &*& //uchars((void*) buffer, 8, _) &*& // uchars? &*&
+	[1/2]context->data |-> buffer &*&
 	[1/2]context->dev |-> ?inputdev &*&
 	buffer_alloc_size == 8 &*&
-	// need more stuff here? only fractions
 	[1/4]input_dev_reportable(inputdev, context);
 
 predicate_family_instance complete_t_pred_fam_out(usb_mouse_irq)(real fracsize,
@@ -107,7 +106,6 @@ static void usb_mouse_irq(struct urb *urb) //@: usb_complete_t_no_pointer
 	//@ open complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma, buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	signed char *data = mouse->data;
 	struct input_dev *dev = mouse->dev;
-	////@ close 
 	int status;
 
 	switch (urb->status) {
@@ -384,8 +382,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse->data = 0;
 	mouse->data_dma = 0;
 	
-	signed char* data_tmp = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
-	mouse->data = data_tmp;
+	mouse->data = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
+	signed char* data_tmp = mouse->data;
 	if (mouse->data == 0) {
 		//@ open_struct(mouse);
 		//@ chars_to_uchars(mouse);
@@ -394,8 +392,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 		goto fail1;
 	}
 
-	struct urb* urb_tmp = usb_alloc_urb(0, GFP_KERNEL);
-	mouse->irq = urb_tmp;
+	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);
 	if (mouse->irq == 0)
 		goto fail2;
 
@@ -407,9 +404,6 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	if (dev->product != 0) {
 		if (dev->manufacturer != 0) {
-			char* space_tmp = " ";
-			////@ chars_to_string(space_tmp);
-			////@ close string(space_tmp, _);
 			strlcat(mouse->name, " ", 128/*sizeof(mouse->name)*/);
 		}
 		strlcat(mouse->name, dev->product, 128/*sizeof(mouse->name)*/);
@@ -463,9 +457,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	
 	/*@ urb_transfer_flags_add_no_transfer_dma_map(
 		mouse->irq, data_tmp, mouse->data_dma, 8, mouse->irq->transfer_flags); @*/
-	//@ assert urb_tmp->transfer_flags |-> ?flags;
-	//@ assert flags == (flags | URB_NO_TRANSFER_DMA_MAP);
-	//@ close urb_struct(true, urb_tmp, _, data_tmp, mouse->data_dma, 8, true, usb_mouse_irq, mouse, 0);
+	//@ assert mouse->irq |-> ?irq;
+	//@ close urb_struct(true, irq, _, data_tmp, mouse->data_dma, 8, true, usb_mouse_irq, mouse, 0);
 	
 	//@ close input_open_t_ghost_param(usb_mouse_open, usb_mouse_open);
 	//@ close input_close_t_ghost_param(usb_mouse_close, usb_mouse_close);
@@ -478,12 +471,10 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ close input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 	//@ close input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
 	//@ close input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
-	//@ leak chars(mouse_name, _, _); // LEAK?
 	free_mouse_name = false;
 	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, ?input_register_result);
 	/*@
 	  if (input_register_result == 0){
-	  
 	    close userdef_input_drvdata(usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy)(input_dev, false, mouse, fracsize);
 	  }
 	@*/
@@ -506,7 +497,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	return 0;
 
 fail3:	
-   	//@ close urb_struct_maybe(true, urb_tmp, _, _, _, _, _, _, _, _);
+   	//@ close urb_struct_maybe(true, irq, _, _, _, _, _, _, _, _);
 	usb_free_urb(mouse->irq);
 fail2:	
 	usb_free_coherent(dev, 8, mouse->data, mouse->data_dma);
@@ -515,11 +506,7 @@ fail2:
 fail1:	
 	input_free_device(input_dev);
 	kfree(mouse);
-	if(free_mouse_name) kfree(mouse_name); 
-	else { 
-	  //@ leak kmalloc_block(mouse_name, 128);
-	}
-	kfree(mouse_phys); // not original code
+	kfree(mouse_name); kfree(mouse_phys); // not original code
 	//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
 	//@ close usb_host_endpoint(interface->endpoint, endpoint);
 	//@ close [f2]usb_host_interface(interface, desc);

@@ -2023,6 +2023,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         match (lhs, rhs) with
           (Var (_, _, _), WFunCall (_, _, _, _)) -> false (* Is this OK when the variable is a global? *)
         | (Var (_, _, scope), _) when !scope = Some LocalVar -> false
+        | (WRead (l, Var(_, _, scope), fparent, fname, tp, false, fvalue, fghost), _) when !scope = Some LocalVar -> false
         | _ -> true
       in
       verify_expr (true, rhsHeapReadOnly) h env varName rhs $. fun h env vrhs ->
