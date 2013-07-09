@@ -69,6 +69,7 @@ typedef input_event_t_no_pointer* input_event_t;
 
 struct input_dev {
 	char *name; //"The dev->name should be set before registering the input device by the input device driver" -- input-programming.txt
+	char* phys;
 	
 	input_open_t open;
 	input_close_t close;
@@ -109,6 +110,7 @@ struct input_dev {
 		&*& input_dev_close(input_dev, close_cb)
 		&*& input_dev->event |-> event_cb
 		&*& input_dev->name |-> name
+		&*& input_dev->phys |-> ?phys
 		&*& input_dev_unregistered_private(input_dev, userdata)
 		
 		&*& input_dev->evbit |-> ?evbit
@@ -309,6 +311,10 @@ void input_report_key(struct input_dev *dev, /*unsigned*/ int code, int value);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
 
+static /*inline*/ void input_report_rel(struct input_dev *dev, unsigned int code, int value);
+	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
+	//@ ensures [f]input_dev_reportable(dev, userdata);
+
 void input_sync(struct input_dev *dev);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
@@ -346,6 +352,32 @@ enum vf_input_leds {
 	LED_CNT                 = LED_MAX+1
 };
 
+// this should be moved to uapi/linux/input.h
+#define BTN_MOUSE		0x110
+#define BTN_LEFT		0x110
+#define BTN_RIGHT		0x111
+#define BTN_MIDDLE		0x112
+#define BTN_SIDE		0x113
+#define BTN_EXTRA		0x114
+#define BTN_FORWARD		0x115
+#define BTN_BACK		0x116
+#define BTN_TASK		0x117
 
+/*
+ * Relative axes
+ */
+
+#define REL_X			0x00
+#define REL_Y			0x01
+#define REL_Z			0x02
+#define REL_RX			0x03
+#define REL_RY			0x04
+#define REL_RZ			0x05
+#define REL_HWHEEL		0x06
+#define REL_DIAL		0x07
+#define REL_WHEEL		0x08
+#define REL_MISC		0x09
+#define REL_MAX			0x0f
+//#define REL_CNT			(REL_MAX+1) // crashes VERIFAST
 
 #endif

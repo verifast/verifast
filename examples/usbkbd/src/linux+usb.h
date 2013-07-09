@@ -183,6 +183,10 @@ void usb_deregister(struct usb_driver *driver);
 
 struct usb_device {
 	struct usb_host_endpoint ep0;
+	
+	char *product;
+	char *manufacturer;
+	char *serial;
 };
 /*@ predicate usb_device(struct usb_device *usb_device, struct usb_endpoint_descriptor *ep0;) =
 	usb_device_private(usb_device)
@@ -212,6 +216,9 @@ struct usb_device {
 	// I don't know yet and I should look at it...)
 	// XXX.
 	&*& usb_endpoint_descriptor_data(ep0, 0 /* = endpoint address */)
+	&*& usb_device->product |-> ?product &*& string(product, _)
+	&*& usb_device->manufacturer |-> ?manufacturer &*& string(manufacturer, _)
+	&*& usb_device->serial |-> ?serial &*& string(serial, _)	
 ;
 @*/
 
@@ -1175,6 +1182,9 @@ enum vf_urb_transfer_flags {
 //	URB_FREE_BUFFER         = 0x0100   /* Free transfer buffer with the URB */
 };
 
+static /*inline*/ int usb_make_path(struct usb_device *dev, char *buf, size_t size);
+  //@ requires chars(buf, ?bufsize, ?old_text) &*& size <= bufsize &*& usb_device_private(dev);
+  //@ ensures chars(buf, bufsize, ?new_text) &*& usb_device_private(dev) &*& ! mem('\0', old_text) || mem('\0', new_text);
 
 
 #endif
