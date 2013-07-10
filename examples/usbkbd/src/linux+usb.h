@@ -6,6 +6,7 @@
 #include "linux+usb+ch9.h"
 #include "linux+slab.h"
 #include "linux+types.h"
+#include "linux+device.h"
 
 /*---------------------------------------------------------*
  * Probe-Disconnect                                        *
@@ -183,6 +184,8 @@ void usb_deregister(struct usb_driver *driver);
 
 struct usb_device {
 	struct usb_host_endpoint ep0;
+	
+	struct usb_device_descriptor descriptor;
 	
 	char *product;
 	char *manufacturer;
@@ -852,7 +855,7 @@ void usb_fill_control_urb(struct urb *urb,
 		// This is actually an array, we currently only support the
 		// first element here (if there is a first element).
 		[?f]usb_host_interface->endpoint |-> ?endpoint
-		&*& usb_host_endpoint(endpoint, _)
+		&*& usb_host_endpoint(endpoint)
 	:
 		true
 	;
@@ -948,20 +951,11 @@ struct usb_device *interface_to_usbdev(struct usb_interface *intf);
 
 // usb_host_endpoint is a struct in usb.h that contains the usb_endpoint_descriptor struct.
 // So this predicate just follows the same structure (it's not just to tie together other predicates).
-/*@ predicate usb_host_endpoint(struct usb_host_endpoint *usb_host_endpoint, struct usb_endpoint_descriptor *desc) =
-	desc != 0
-	&*& usb_endpoint_descriptor(desc, ?dir, ?xfer_type, ?pipe)
-	&*& usb_endpoint_descriptor_data(desc, _)
+/*@ predicate usb_host_endpoint(struct usb_host_endpoint *usb_host_endpoint) =
+	usb_endpoint_descriptor(&usb_host_endpoint->desc, ?dir, ?xfer_type, ?pipe) &*&
+	usb_endpoint_descriptor_data(&usb_host_endpoint->desc, _)
 	;
 @*/
-
-struct usb_endpoint_descriptor *vf_usb_get_endpoint_descriptor_of_host_endpoint(struct usb_host_endpoint *usb_host_endpoint); // API INCOMPATIBILITY
-	//@ requires [?f]usb_host_endpoint(usb_host_endpoint, ?desc);
-	/*@ ensures [f]usb_host_endpoint(usb_host_endpoint, result)
-		&*& result != 0
-		&*& result == desc
-		;
-	@*/
 
 /* Creates a pipe, thus returns a pipe (thus not a bool obviously) */
 int usb_rcvintpipe (struct usb_device *dev, __u8 endpoint);
@@ -1095,6 +1089,7 @@ struct usb_host_interface{
 //	char *string;		/* iInterface string, if present */
 //	unsigned char *extra;   /* Extra descriptors */
 //	int extralen;
+	struct device dev;
 };
 
 
@@ -1127,6 +1122,7 @@ struct usb_interface {
 //	struct device *usb_dev;
 //	atomic_t pm_usage_cnt;		/* usage counter for autosuspend */
 //	struct work_struct reset_ws;	/* for resets in atomic context */
+	struct device dev;
 };
 
 
@@ -1141,8 +1137,8 @@ enum vf_usb_match_flags {
 
 
 
-struct usb_host_endpoint; // {
-	//struct usb_endpoint_descriptor          desc;
+struct usb_host_endpoint {
+	struct usb_endpoint_descriptor          desc;
 	//struct usb_ss_ep_comp_descriptor        ss_ep_comp;
 	//struct list_head                urb_list;
 	//void                            *hcpriv;
@@ -1151,7 +1147,7 @@ struct usb_host_endpoint; // {
 	//unsigned char *extra;   /* Extra descriptors */
 	//int extralen;
 	//int enabled;
-//};
+};
 
 
 enum vf_urb_transfer_flags {

@@ -321,7 +321,7 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 	&*& struct_usb_kbd_padding(kbd)
 	//&*& kmalloc_block(kbd, sizeof(struct usb_kbd)) // abused as unique pred, so moved away from here.
 	
-	&*& input_dev_registered(inputdev, _, usb_kbd_open, usb_kbd_close, usb_kbd_event, kbd, fracsize)
+	&*& input_dev_registered(inputdev, _, _, _, usb_kbd_open, usb_kbd_close, usb_kbd_event, kbd, fracsize)
 	&*& [1/2]input_dev_reportable(inputdev, kbd)
 	
 	&*& chars(name, 128, ?name_chars)
@@ -1425,6 +1425,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_kbd *kbd;
 	struct input_dev *input_dev;
+	struct usb_host_endpoint* ep;
 	int i, pipe, maxp;
 	int error = -ENOMEM;
 	
@@ -1470,17 +1471,17 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	 * Indeed, usb.h states "each interface setting has zero or (usually) more endpoints",
 	 * so if there are zero endpoints the control endpoint must be implicit.
 	 */
-	 
-	// endpoint = &interface->endpoint[0].desc; // <-- original code.
-	endpoint = vf_usb_get_endpoint_descriptor_of_host_endpoint(interface->endpoint);
+	ep = interface->endpoint;
+	endpoint = &ep->desc;
+	//original: endpoint = &interface->endpoint[0].desc;
 	
 	//@ assert [_]interface->endpoint |-> ?host_endpoint;
-	//@ open usb_host_endpoint(host_endpoint, endpoint);
+	//@ open usb_host_endpoint(host_endpoint);
 	
 	// original: if (!usb_endpoint_is_int_in(endpoint))
 	int is_int_in = usb_endpoint_is_int_in(endpoint);
 	if (is_int_in == 0){
-		//@ close usb_host_endpoint(host_endpoint, endpoint);
+		//@ close usb_host_endpoint(host_endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
 		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, usb_kbd_disconnect, iface, dev, originalData, false, fracsize);
@@ -1516,7 +1517,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	if (/*!kbd || !input_dev*/ kbd == 0 || input_dev == 0){
 		//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 		
-		//@ close usb_host_endpoint(host_endpoint, endpoint);
+		//@ close usb_host_endpoint(host_endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
 		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, disconnect, iface, dev, originalData, false, fracsize);
@@ -1554,7 +1555,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 
 		//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 		
-		//@ close usb_host_endpoint(host_endpoint, endpoint);
+		//@ close usb_host_endpoint(host_endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
 		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, usb_kbd_disconnect, iface, dev, originalData, false, fracsize);
@@ -1794,7 +1795,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 		// default closing stuff
 			//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 		
-			//@ close usb_host_endpoint(host_endpoint, endpoint);
+			//@ close usb_host_endpoint(host_endpoint);
 			//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
 			//@ close [f2]usb_host_interface(interface);
 			
@@ -1819,7 +1820,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	
 	//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 	
-	//@ close usb_host_endpoint(host_endpoint, endpoint);
+	//@ close usb_host_endpoint(host_endpoint);
 	//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
 	//@ close [f2]usb_host_interface(interface);	
 	
@@ -1974,6 +1975,8 @@ fail1:
 		//@ open input_open_callback_link(usb_kbd_open)(_,_);
 		//@ open input_event_callback_link(usb_kbd_event)(_, _);
 	}
+	//@ assert [?f]chars(_, _, _);
+	//@ leak [f]chars(_, _, _); // we know that [f] is a dummy fraction, but this information is not known here
 }
 
 

@@ -2,6 +2,8 @@
 #define _LINUX_INPUT_H
 
 #include "linux+stddef.h" // for not_in_interrupt_context predicate
+#include "linux+types.h"
+#include "linux+device.h"
 
 // "Calls to both callbacks [open, close] are serialized." -- input-programming.txt
 // We also assume event is serialized.  Check this. XXX
@@ -70,6 +72,7 @@ typedef input_event_t_no_pointer* input_event_t;
 struct input_dev {
 	char *name; //"The dev->name should be set before registering the input device by the input device driver" -- input-programming.txt
 	char* phys;
+	struct input_id id;
 	
 	input_open_t open;
 	input_close_t close;
@@ -98,6 +101,7 @@ struct input_dev {
 	unsigned int *led;
 	
 	// XXX I guess you can't just leave the above values to anything you like / garbage. This might have to be enforced in verification.
+	struct device dev;
 };
 
 /*@
@@ -111,6 +115,10 @@ struct input_dev {
 		&*& input_dev->event |-> event_cb
 		&*& input_dev->name |-> name
 		&*& input_dev->phys |-> ?phys
+		&*& input_id_bustype(&input_dev->id, _)
+		&*& input_id_vendor(&input_dev->id, _)
+		&*& input_id_product(&input_dev->id, _)
+		&*& input_id_version(&input_dev->id, _)
 		&*& input_dev_unregistered_private(input_dev, userdata)
 		
 		&*& input_dev->evbit |-> ?evbit
@@ -126,7 +134,7 @@ struct input_dev {
 	;
 	
 	// fracsize for getting the correct fracsize userdef_input_drvdata back when destroying an input_dev.
-	predicate input_dev_registered(struct input_dev *input_dev, char *name, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize);
+	predicate input_dev_registered(struct input_dev *input_dev, char *name, int name_length, real name_frac, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize);
 	
 	// To be defined by the user.
 	// The callback-arguments can be used to make it possible to
@@ -220,7 +228,7 @@ void input_free_device(struct input_dev *dev);
  */
 /*@
 // fracsize is here only because we can't pass it with userdef_input_drvdata if this predicate is only consumed conditionally.
-predicate input_dev_ghost_registered(struct input_dev *input_dev, char *name, input_open_t open_cb, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize, int return_value);
+predicate input_dev_ghost_registered(struct input_dev *input_dev, char* name, input_open_t open_cb, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize, int return_value);
 lemma int input_ghost_register_device(struct input_dev *dev, real fracsize);
 	requires input_dev_unregistered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?userdata);
 	ensures input_dev_ghost_registered(dev, name, open_cb, close_cb, event_cb, userdata, fracsize, result);
@@ -250,7 +258,7 @@ int input_register_device(struct input_dev *dev);
 		not_in_interrupt_context(currentThread)
 		&*& result == ghost_result
 		&*& result == 0 ? // success
-			input_dev_registered(dev, name, open_cb, close_cb, event_cb, userdata, fracsize)
+			input_dev_registered(dev, name, name_length, f, open_cb, close_cb, event_cb, userdata, fracsize)
 		: // failure
 			// give _unregistered and not _ghost_registered to enforce re-ghost-registering
 			// on re-c-registering.
@@ -273,7 +281,7 @@ int input_register_device(struct input_dev *dev);
 // we assume disconnect causes _close to be called (see top of this file).
 void input_unregister_device(struct input_dev *dev);
 	/*@ requires
-		input_dev_registered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize)
+		input_dev_registered(dev, ?name, ?name_length, ?name_frac, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize)
 		
 		// After unregistration, you can't do anything with the device anymore
 		// even not freeing or reporting events (source: input's sourcecode specs).
@@ -284,7 +292,8 @@ void input_unregister_device(struct input_dev *dev);
 		userdef_input_drvdata(open_cb, close_cb, event_cb)(dev, false, userdata, fracsize)
 		&*& input_open_callback_link(open_cb)(close_cb, event_cb)
 		&*& input_close_callback_link(close_cb)(open_cb, event_cb)
-		&*& input_event_callback_link(event_cb)(open_cb, close_cb);
+		&*& input_event_callback_link(event_cb)(open_cb, close_cb)
+		&*& [name_frac]chars(name, name_length, _);
 	@*/
 
 void input_set_drvdata(struct input_dev *dev, void *data);
@@ -319,6 +328,12 @@ void input_sync(struct input_dev *dev);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
 
+struct input_id {
+	__u16 bustype;
+	__u16 vendor;
+	__u16 product;
+	__u16 version;
+};
 
 enum vf_input_event_types {
 	EV_SYN                  = 0x00,

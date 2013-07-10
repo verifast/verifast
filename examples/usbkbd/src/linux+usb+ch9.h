@@ -44,6 +44,7 @@ struct usb_interface_descriptor {
          //__u8  bInterfaceProtocol;
          //__u8  iInterface;
 } /*__attribute__ ((packed))*/;
+
 /*@ predicate usb_interface_descriptor(struct usb_interface_descriptor *desc, __u8 bNumEndpoints, __u8 bInterfaceNumber) = 
 	// Fraction with specified size to avoid writing and stealing fractions.
 	[1/2]desc->bNumEndpoints |-> bNumEndpoints
@@ -111,7 +112,8 @@ struct usb_endpoint_descriptor {
 	&*& [1/2]epd->bInterval |-> _;
 @*/
 
-/*@ predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; enum vf_usb_dir direction, enum vf_usb_xfer_type xfer_type, int pipe);
+/*@ 
+  predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; enum vf_usb_dir direction, enum vf_usb_xfer_type xfer_type, int pipe);
 @*/
 
 /*static inline*/ int usb_endpoint_is_int_in(/*const*/ struct usb_endpoint_descriptor *epd);
@@ -141,6 +143,24 @@ struct usb_ctrlrequest{
 	requires true;
 	ensures sizeof(struct usb_ctrlrequest) == 8;
 @*/
+
+struct usb_device_descriptor {
+	__u8  bLength;
+	__u8  bDescriptorType;
+
+	__le16 bcdUSB;
+	__u8  bDeviceClass;
+	__u8  bDeviceSubClass;
+	__u8  bDeviceProtocol;
+	__u8  bMaxPacketSize0;
+	__le16 idVendor;
+	__le16 idProduct;
+	__le16 bcdDevice;
+	__u8  iManufacturer;
+	__u8  iProduct;
+	__u8  iSerialNumber;
+	__u8  bNumConfigurations;
+};
 
 
 #endif
