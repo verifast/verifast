@@ -1452,16 +1452,12 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	//@ open usb_interface(usb_kbd_probe, disconnect, iface, dev, originalData, false, fracsize);
 	interface = iface->cur_altsetting;
 	
-	// extra for VF parsing:
-	struct usb_interface_descriptor *desc =
-		vf_usb_get_interface_descriptor_of_host_interface(interface);
-	
-	//@ open [?f2]usb_host_interface(interface, _);
-	//@ open [?f3]usb_interface_descriptor(desc, ?bNumEndpoints, ?bInterfaceNumber);
-
-	if (/*interface->desc.bNumEndpoints != 1*/ desc->bNumEndpoints != 1){
+	//@ open [?f2]usb_host_interface(interface);
+	//@ open [?f3]usb_interface_descriptor(&interface->desc, ?bNumEndpoints, ?bInterfaceNumber);
+	//@ struct usb_interface_descriptor* desc = &interface->desc;
+	if (interface->desc.bNumEndpoints != 1){
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
-		//@ close [f2]usb_host_interface(interface, desc);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, disconnect, iface, dev, originalData, false, fracsize);
 		return -ENODEV;
 	}
@@ -1486,7 +1482,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	if (is_int_in == 0){
 		//@ close usb_host_endpoint(host_endpoint, endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
-		//@ close [f2]usb_host_interface(interface, desc);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, usb_kbd_disconnect, iface, dev, originalData, false, fracsize);
 		return -ENODEV;
 	}
@@ -1522,7 +1518,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 		
 		//@ close usb_host_endpoint(host_endpoint, endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
-		//@ close [f2]usb_host_interface(interface, desc);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, disconnect, iface, dev, originalData, false, fracsize);
 		
 		goto fail1;
@@ -1560,7 +1556,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 		
 		//@ close usb_host_endpoint(host_endpoint, endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
-		//@ close [f2]usb_host_interface(interface, desc);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_kbd_probe, usb_kbd_disconnect, iface, dev, originalData, false, fracsize);
 		
 		//@ close usb_kbd_alloc_mem_result(usb_kbd_alloc_mem_ret, stage, dev, kbd);
@@ -1689,7 +1685,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	__le16 tmp_le16 = cpu_to_le16(0x200);
 	kbd->cr->wValue = /* cpu_to_le16(0x200); */ tmp_le16;
 	
-	tmp_le16 = cpu_to_le16(/*interface->desc.bInterfaceNumber*/ desc->bInterfaceNumber);
+	tmp_le16 = cpu_to_le16(interface->desc.bInterfaceNumber);
 	kbd->cr->wIndex = tmp_le16; /* cpu_to_le16(interface->desc.bInterfaceNumber desc->bInterfaceNumber);*/
 	tmp_le16 = cpu_to_le16(1);
 	kbd->cr->wLength = /*cpu_to_le16(1);*/ tmp_le16;
@@ -1800,7 +1796,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 		
 			//@ close usb_host_endpoint(host_endpoint, endpoint);
 			//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
-			//@ close [f2]usb_host_interface(interface, desc);
+			//@ close [f2]usb_host_interface(interface);
 			
 			//@ close [1/2]usb_device(dev, ep0);
 			
@@ -1825,7 +1821,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum
 	
 	//@ close usb_host_endpoint(host_endpoint, endpoint);
 	//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
-	//@ close [f2]usb_host_interface(interface, desc);	
+	//@ close [f2]usb_host_interface(interface);	
 	
 	//@ close usb_interface(usb_kbd_probe, disconnect, iface, dev, originalData, false, fracsize);
 

@@ -49,8 +49,8 @@
 //MODULE_LICENSE(DRIVER_LICENSE);
 
 struct usb_mouse {
-	/*char name[128];*/ char* name;
-	/*char phys[64];*/ char* phys;
+	char name[128]; 
+	char phys[64];
 	struct usb_device *usbdev;
 	struct input_dev *dev;
 	struct urb *irq;
@@ -70,8 +70,9 @@ predicate_family_instance complete_t_pred_fam(usb_mouse_irq)(
 
 predicate_family_instance complete_t_pred_fam_out(usb_mouse_irq)(real fracsize,
 	struct urb *urb, struct usb_device *usb_dev, void *buffer, dma_addr_t buffer_dma, int buffer_alloc_size, bool user_alloc_dma, usb_complete_t complete, void *context, void *setup
-)= complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma, buffer_alloc_size, user_alloc_dma, complete, context, setup) &*&
-   urb_struct(true,
+)= 
+	complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma, buffer_alloc_size, user_alloc_dma, complete, context, setup) &*&
+   	urb_struct(true,
 		urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup
 	);
 @*/
@@ -114,7 +115,6 @@ static void usb_mouse_irq(struct urb *urb) //@: usb_complete_t_no_pointer
 	case -ECONNRESET:	/* unlink */
 	case -ENOENT:
 	case -ESHUTDOWN:
-		////@ open complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 		//@ close complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 		//@ close complete_t_pred_fam_out(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 		return;
@@ -163,7 +163,7 @@ predicate_family_instance userdef_input_drvdata(usb_mouse_open, usb_mouse_close,
   [1/4]mouse->dev |-> inputdev &*&
   ( is_opened == false ? 
     [1/2]mouse->dev |-> inputdev &*&
-    [1/2]mouse->data |-> data //&*& uchars((void*) data, 8, _)
+    [1/2]mouse->data |-> data
   : 
     true) &*&
   permission_to_submit_urb(_, false) &*&
@@ -218,7 +218,6 @@ static int usb_mouse_open(struct input_dev *dev) //@: input_open_t_no_pointer
 		return -EIO;
 	}
 	//@ close userdef_input_drvdata(usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy)(dev, true, context, fracsize);
-	////@ leak uchars(_, _, _);
 	return 0;
 }
 
@@ -239,7 +238,7 @@ static void usb_mouse_close(struct input_dev *dev) //@: input_close_t_no_pointer
 	/*@ ensures  userdef_input_drvdata(open_cb, usb_mouse_close, event_cb)(dev, false, data, fracsize)
 		&*& input_close_callback_link(usb_mouse_close)(open_cb, event_cb)
 		&*& [1/2]input_dev_reportable(dev, data)
-		&*& not_in_interrupt_context(currentThread); // empirically confirmed with in_interrupt()
+		&*& not_in_interrupt_context(currentThread);
 	@*/
 {
 	//@ open input_close_callback_link(usb_mouse_close)(open_cb, event_cb);
@@ -249,7 +248,6 @@ static void usb_mouse_close(struct input_dev *dev) //@: input_close_t_no_pointer
 	//@ close times_urb_submitted(0, fracsize, irq_urb, usb_dev, buffer, buffer_dma, buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	//@ close times_urb_submitted(1, fracsize, irq_urb, usb_dev, buffer, buffer_dma, buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	struct usb_mouse *mouse = input_get_drvdata(dev);
-	////@ open complete_t_
 	usb_kill_urb(mouse->irq);
 	//@ open times_complete_t_pred_fam_out(1, _, _, _, _, _, _, _, _, _, _);
 	//@ open complete_t_pred_fam_out(usb_mouse_irq)(_, _, _, _, _, _, _, _, _, _);
@@ -263,12 +261,8 @@ predicate_family_instance userdef_usb_interface_data(usb_mouse_probe, usb_mouse_
   input_dev_registered(?inputdev, ?mousename, usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy, mouse, probe_disconnect_fraction_size) &*&
   [1/4]mouse->dev |-> ?dev  &*&
   [1/2]input_dev_reportable(_, _) &*&
-  mouse->name |-> ?name &*&
-  mouse->phys |-> ?phys &*&
   struct_usb_mouse_padding(mouse) &*&
-  kmalloc_block(name, 128) &*&
-  kmalloc_block(phys, 64) &*&
-  chars(phys, 64, _) &*&
+  chars((void*) &mouse->phys, 64, _) &*&
   kmalloc_block(mouse, sizeof(struct usb_mouse)) &*&
   [probe_disconnect_fraction_size]probe_disconnect_userdata(usb_mouse_probe, usb_mouse_disconnect)();
   
@@ -314,22 +308,21 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	struct input_dev *input_dev;
 	int pipe, maxp;
 	int error = -ENOMEM;
-	bool free_mouse_name = true;
 	
 	//@ open usb_interface(usb_mouse_probe, _, _, _, _, _, _);
 
 	interface = intf->cur_altsetting;
 	
 		// extra for VF parsing:
-	struct usb_interface_descriptor *desc =
-		vf_usb_get_interface_descriptor_of_host_interface(interface);
+	//struct usb_interface_descriptor *desc =
+	//	vf_usb_get_interface_descriptor_of_host_interface(interface);
 	
-	//@ open [?f2]usb_host_interface(interface, _);
-	//@ open [?f3]usb_interface_descriptor(desc, ?bNumEndpoints, ?bInterfaceNumber);
+	//@ open [?f2]usb_host_interface(interface);
+	//@ open [?f3]usb_interface_descriptor(&interface->desc, ?bNumEndpoints, ?bInterfaceNumber);
 
-	if (desc->bNumEndpoints != 1) {
-		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
-		//@ close [f2]usb_host_interface(interface, desc);
+	if (interface->desc.bNumEndpoints /*desc->bNumEndpoints*/ != 1) {
+		//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_mouse_probe, disconnect_cb, intf, _, originalData, false, fracsize);
 		return -ENODEV;
 	}
@@ -341,8 +334,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	int usb_endpoint_is_int_in_res = usb_endpoint_is_int_in(endpoint);
 	if (usb_endpoint_is_int_in_res == 0) {
 	 	//@ close usb_host_endpoint(interface->endpoint, endpoint);
-	 	//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
-		//@ close [f2]usb_host_interface(interface, desc);
+	 	//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
+		//@ close [f2]usb_host_interface(interface);
 		//@ close usb_interface(usb_mouse_probe, disconnect_cb, intf, _, originalData, false, fracsize);
 		return -ENODEV;
 	}
@@ -353,12 +346,6 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	maxp = usb_maxpacket(dev, pipe, usb_pipeout_ret);
 
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
-	char *mouse_name = kzalloc(sizeof(char) * 128, GFP_KERNEL);
-	char *mouse_phys = kzalloc(sizeof(char) * 64 , GFP_KERNEL);
-	if (mouse_name == 0 || mouse_phys == 0){
-		kfree(mouse);
-		mouse = 0;
-	}
 	
 	input_dev = input_allocate_device();
 	if (mouse == 0 || input_dev == 0)
@@ -367,14 +354,10 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ uchars_to_chars(mouse);
 	//@ close_struct(mouse);
 	
-	//@ uchars_to_chars(mouse_name);	
-	//@ uchars_to_chars(mouse_phys);
-	*mouse_name = '\0';
-	*mouse_phys = '\0';
-	//@ close chars(mouse_name, 128, _);
-	//@ close chars(mouse_phys, 64, _);
-	mouse->name = mouse_name;
-	mouse->phys = mouse_phys;
+	//@ assert chars((void*) &mouse->name, 128, ?zeros);
+	//@ assume(mem(0, zeros)); // follows because kzalloc is used
+	//@ assert chars((void*) &mouse->phys, 64, ?zeros2);
+	//@ assume(mem(0, zeros2)); // follows because kzalloc is used
 	
 	mouse->usbdev = 0;
 	mouse->dev = 0;
@@ -387,8 +370,6 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	if (mouse->data == 0) {
 		//@ open_struct(mouse);
 		//@ chars_to_uchars(mouse);
-		//@ chars_to_uchars(mouse_name);
-		//@ chars_to_uchars(mouse_phys);
 		goto fail1;
 	}
 
@@ -444,7 +425,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	input_dev->open = usb_mouse_open;
 	input_dev->close = usb_mouse_close;
-	input_dev->event = usb_mouse_event_dummy; // not used
+	input_dev->event = usb_mouse_event_dummy; // not original code, HACK
 	
 	//@ close usb_device(dev, _);
 	//@ close complete_t_ghost_param(usb_mouse_irq, usb_mouse_irq);
@@ -471,12 +452,11 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ close input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 	//@ close input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
 	//@ close input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
-	free_mouse_name = false;
 	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, ?input_register_result);
 	/*@
-	  if (input_register_result == 0){
-	    close userdef_input_drvdata(usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy)(input_dev, false, mouse, fracsize);
-	  }
+	if (input_register_result == 0){
+		close userdef_input_drvdata(usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy)(input_dev, false, mouse, fracsize);
+	}
 	@*/
 	error = input_register_device(mouse->dev);
 	if (error != 0) {
@@ -488,9 +468,9 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 		//@ open input_event_t_ghost_param(usb_mouse_event_dummy, usb_mouse_event_dummy);
 		goto fail3;
 	}
-	//@ close usb_interface_descriptor(desc, 1, _);
+	//@ close usb_interface_descriptor(&interface->desc, 1, _);
 	//@ close usb_host_endpoint(interface->endpoint, endpoint);
-	//@ close [f2]usb_host_interface(interface, desc);
+	//@ close [f2]usb_host_interface(interface);
 	//@ close usb_interface(usb_mouse_probe, usb_mouse_disconnect, intf, dev, originalData, false, fracsize);
 	//@ close userdef_usb_interface_data(usb_mouse_probe, usb_mouse_disconnect)(intf, dev, mouse, fracsize);
 	usb_set_intfdata(intf, mouse);
@@ -506,10 +486,9 @@ fail2:
 fail1:	
 	input_free_device(input_dev);
 	kfree(mouse);
-	kfree(mouse_name); kfree(mouse_phys); // not original code
-	//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, bInterfaceNumber);
+	//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
 	//@ close usb_host_endpoint(interface->endpoint, endpoint);
-	//@ close [f2]usb_host_interface(interface, desc);
+	//@ close [f2]usb_host_interface(interface);
 	//@ close usb_interface(usb_mouse_probe, disconnect_cb, intf, _, originalData, false, fracsize);
 	return error;
 }

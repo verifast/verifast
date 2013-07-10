@@ -846,35 +846,17 @@ void usb_fill_control_urb(struct urb *urb,
 
 
 
-/*@ predicate usb_host_interface(struct usb_host_interface *usb_host_interface, struct usb_interface_descriptor *desc) = 
-	desc != 0 ?
-		usb_interface_descriptor(desc, ?bNumEndpoints, ?bInterfaceNumber)
-		&*& bNumEndpoints > 0 ?
-			// This is actually an array, we currently only support the
-			// first element here (if there is a first element).
-			[?f]usb_host_interface->endpoint |-> ?endpoint
-			&*& usb_host_endpoint(endpoint, _)
-		:
-			true
+/*@ predicate usb_host_interface(struct usb_host_interface *usb_host_interface) = 
+	usb_interface_descriptor(& usb_host_interface->desc, ?bNumEndpoints, ?bInterfaceNumber) &*&
+	bNumEndpoints > 0 ?
+		// This is actually an array, we currently only support the
+		// first element here (if there is a first element).
+		[?f]usb_host_interface->endpoint |-> ?endpoint
+		&*& usb_host_endpoint(endpoint, _)
 	:
 		true
 	;
 @*/
-
-/*---------------------------------------------------------*
- * Interface, descriptors, ...                             *
- *---------------------------------------------------------*/
-
-struct usb_interface_descriptor *vf_usb_get_interface_descriptor_of_host_interface(struct usb_host_interface *usb_host_interface); // API INCOMPATIBILITY
-	//@ requires [?f]usb_host_interface(usb_host_interface, ?desc);
-	/*@ ensures [f]usb_host_interface(usb_host_interface, result)
-		&*& result != 0
-		&*& result == desc
-		;
-	@*/
-
-
-
 
 // _probe gets a fraction of probe_disconnect_userdate,
 // _disconnect must give the same fraction back. But how does
@@ -888,7 +870,7 @@ struct usb_interface_descriptor *vf_usb_get_interface_descriptor_of_host_interfa
 	) =
 	// Fraction of specified size to disallow stealing fractions and writing.
 	[1/2] usb_interface->cur_altsetting |-> ?cur_altsetting
-	&*& usb_host_interface(cur_altsetting, _)
+	&*& usb_host_interface(cur_altsetting)
 	
 	&*& usb_device(usb_device, ?ep0)
 	&*& usb_interface_private(usb_interface, usb_device, data, has_data, probe_disconnect_fraction_size)
@@ -1103,7 +1085,7 @@ struct urb{
 struct usb_host_interface{
 
 // VeriFast crashes on this line:
-//	struct usb_interface_descriptor	desc;
+	struct usb_interface_descriptor	desc;
 
 //	/* array of desc.bNumEndpoint endpoints associated with this
 //	 * interface setting.  these will be in no particular order.

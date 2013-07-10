@@ -52,8 +52,8 @@ size_t strlcpy(char * dest, const char * src, size_t count);
   //@ ensures [f]string(src, src_text) &*& chars(dest, count, ?new_dest_txt) &*& count == 0 || mem('\0', new_dest_txt) == true;
 
 size_t strlcat(char* dest, const char * src, size_t count);
-  //@ requires 0 <= count &*& [?f]string(src, ?src_text) &*& chars(dest, ?dest_count, ?dest_txt) &*& mem('\0', dest_txt) == true;
-  //@ ensures [f]string(src, src_text) &*& chars(dest, dest_count, ?new_dest_txt) &*& mem('\0', new_dest_txt) == true;
+  //@ requires 0 <= count &*& [?f]string(src, ?src_text) &*& chars(dest, count, ?old_dest_txt);
+  //@ ensures [f]string(src, src_text) &*& chars(dest, count, ?new_dest_txt) &*& count == 0 || !mem('\0', old_dest_txt) || mem('\0', new_dest_txt) == true;
   
 size_t strlen(const char* s);
   //@ requires chars(s, ?count, ?text) &*& mem('\0', text) == true;
