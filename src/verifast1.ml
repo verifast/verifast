@@ -2415,6 +2415,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
     let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+    let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 false in
     let checkt_cast e t0 = 
       (*if (file_type path = Java) then
@@ -2633,11 +2634,11 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let (w1, w2, t) = promote_numeric e1 e2 ts in
       (Operation (l, operator, [w1; w2], ts), boolt, None)
     | Operation (l, (Or | And as operator), [e1; e2], ts) -> 
-      let w1 = checkt e1 boolt in
-      let w2 = checkt e2 boolt in
+      let w1 = checkcon e1 in
+      let w2 = checkcon e2 in
       (Operation (l, operator, [w1; w2], ts), boolt, None)
     | Operation (l, Not, [e], ts) -> 
-      let w = checkt e boolt in
+      let w = checkcon e in
       (Operation (l, Not, [w], ts), boolt, None)
     | Operation (l, BitAnd, [e1; e2], ts) ->
       let (w1, t1, _) = check e1 in
@@ -2878,7 +2879,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let t = check_pure_type (pn,ilist) tparams te in
       (e, ArrayType t, None)
     | IfExpr (l, e1, e2, e3) ->
-      let w1 = checkt e1 boolt in
+      let w1 = checkcon e1 in
       let (w2, t, _) = check e2 in
       let w3 = checkt e3 t in
       (IfExpr (l, w1, w2, w3), t, None)
@@ -3143,6 +3144,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         (Some(value), IntType, Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
       | (Some(value), IntType, ShortType) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
       | _ -> check ()
+  and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
+    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+    match t with
+      Bool -> w
+    | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang -> Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     begin
@@ -3207,6 +3213,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
    (w, tp)
   
   let check_expr (pn,ilist) tparams tenv e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv e
+  let check_condition (pn,ilist) tparams tenv e = check_condition_core [] [] [] [] (pn,ilist) tparams tenv e
   let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core [] [] [] [] (pn,ilist) tparams tenv e tp
   
   (* Region: Type checking of fixpoint function bodies *)

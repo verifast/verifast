@@ -139,7 +139,7 @@ resubmit:
 	//@ close usb_submit_urb_ghost_arg(true, fracsize);
 	status = usb_submit_urb (urb, GFP_ATOMIC);
 	//@ close complete_t_pred_fam(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
-	if (status != 0) {
+	if (status) {
 		//@ close complete_t_pred_fam_out(usb_mouse_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 		/*TODO: dev_err(&mouse->usbdev->dev,
 			"can't resubmit intr, %s-%s/input0, status %d\n",
@@ -209,7 +209,7 @@ static int usb_mouse_open(struct input_dev *dev) //@: input_open_t_no_pointer
 	//@ close urb_struct(true, mouse->irq, mouse->usbdev, buffer, mouse->data_dma, 8, true, usb_mouse_irq, mouse,  _);
 	int usb_submit_urb_result = usb_submit_urb(mouse->irq, GFP_KERNEL);
 	
-	if (usb_submit_urb_result != 0) {
+	if (usb_submit_urb_result) {
 		/*@ open complete_t_pred_fam(usb_mouse_irq)(fracsize,
 			mouse->irq, mouse->usbdev, mouse->data, mouse->data_dma, 8, true, usb_mouse_irq, mouse, 0
 		); @*/
@@ -335,7 +335,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ open usb_host_endpoint(interface->endpoint);
 	
 	int usb_endpoint_is_int_in_res = usb_endpoint_is_int_in(endpoint);
-	if (usb_endpoint_is_int_in_res == 0) {
+	if (! usb_endpoint_is_int_in_res) {
 	 	//@ close usb_host_endpoint(interface->endpoint);
 	 	//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
 		//@ close [f2]usb_host_interface(interface);
@@ -351,7 +351,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
 	
 	input_dev = input_allocate_device();
-	if (mouse == 0 || input_dev == 0)
+	if (! mouse || ! input_dev)
 		goto fail1;
 	
 	//@ uchars_to_chars(mouse);
@@ -370,30 +370,30 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	
 	mouse->data = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
 	signed char* data_tmp = mouse->data;
-	if (mouse->data == 0) {
+	if (! mouse->data) {
 		//@ open_struct(mouse);
 		//@ chars_to_uchars(mouse);
 		goto fail1;
 	}
 
 	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);
-	if (mouse->irq == 0)
+	if (! mouse->irq)
 		goto fail2;
 
 	mouse->usbdev = dev;
 	mouse->dev = input_dev;
 
-	if (dev->manufacturer != 0)
+	if (dev->manufacturer)
 		strlcpy(mouse->name, dev->manufacturer, 128/*sizeof(mouse->name)*/);
 
-	if (dev->product != 0) {
-		if (dev->manufacturer != 0) {
+	if (dev->product) {
+		if (dev->manufacturer) {
 			strlcat(mouse->name, " ", 128/*sizeof(mouse->name)*/);
 		}
 		strlcat(mouse->name, dev->product, 128/*sizeof(mouse->name)*/);
 	}
 	size_t mouse_name_length = strlen(mouse->name);
-	if (mouse_name_length != 0)
+	if (mouse_name_length)
 	  	; 
 	  	//TODO
 		//snprintf(mouse->name, 128 /*sizeof(mouse->name)*/,
