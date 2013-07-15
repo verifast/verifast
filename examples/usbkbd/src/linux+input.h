@@ -242,7 +242,7 @@ int input_register_device(struct input_dev *dev);
 		&*& input_open_callback_link(open_cb)(close_cb, event_cb)
 		&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 		&*& input_event_callback_link(event_cb)(open_cb, close_cb)
-		&*& [?f]chars(name, ?name_length, ?cs) &*& length(cs) > 0
+		&*& [?f]chars(name, ?name_length, ?cs) &*& mem('\0', cs) == true
 		
 		&*& [1/2]input_dev_reportable(dev, userdata) // why [1/2]? See comments at predicate.
 		
