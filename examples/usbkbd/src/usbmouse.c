@@ -335,7 +335,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ open usb_host_endpoint(interface->endpoint);
 	
 	int usb_endpoint_is_int_in_res = usb_endpoint_is_int_in(endpoint);
-	if (usb_endpoint_is_int_in_res == 0) {
+	if (! usb_endpoint_is_int_in_res) {
 	 	//@ close usb_host_endpoint(interface->endpoint);
 	 	//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
 		//@ close [f2]usb_host_interface(interface);
@@ -351,7 +351,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
 	
 	input_dev = input_allocate_device();
-	if (mouse == 0 || input_dev == 0)
+	if (! mouse || ! input_dev)
 		goto fail1;
 	
 	//@ uchars_to_chars(mouse);
@@ -370,30 +370,30 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	
 	mouse->data = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
 	signed char* data_tmp = mouse->data;
-	if (mouse->data == 0) {
+	if (! mouse->data) {
 		//@ open_struct(mouse);
 		//@ chars_to_uchars(mouse);
 		goto fail1;
 	}
 
 	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);
-	if (mouse->irq == 0)
+	if (! mouse->irq)
 		goto fail2;
 
 	mouse->usbdev = dev;
 	mouse->dev = input_dev;
 
-	if (dev->manufacturer != 0)
+	if (dev->manufacturer)
 		strlcpy(mouse->name, dev->manufacturer, 128/*sizeof(mouse->name)*/);
 
-	if (dev->product != 0) {
-		if (dev->manufacturer != 0) {
+	if (dev->product) {
+		if (dev->manufacturer) {
 			strlcat(mouse->name, " ", 128/*sizeof(mouse->name)*/);
 		}
 		strlcat(mouse->name, dev->product, 128/*sizeof(mouse->name)*/);
 	}
 	size_t mouse_name_length = strlen(mouse->name);
-	if (mouse_name_length != 0)
+	if (mouse_name_length)
 	  	; 
 	  	//TODO
 		//snprintf(mouse->name, 128 /*sizeof(mouse->name)*/,
@@ -464,7 +464,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	}
 	@*/
 	error = input_register_device(mouse->dev);
-	if (error != 0) {
+	if (error) {
 		//@ open input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 		//@ open input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
 		//@ open input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
@@ -539,7 +539,6 @@ static void usb_mouse_disconnect(struct usb_interface *intf) //@ : vf_usb_operat
 		//@ open input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 		//@ open input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
 	}
-	
 }
 
 static struct usb_device_id usb_mouse_id_table [] = {
@@ -555,6 +554,6 @@ static struct usb_device_id usb_mouse_id_table [] = {
 	.probe		= usb_mouse_probe,
 	.disconnect	= usb_mouse_disconnect,
 	.id_table	= usb_mouse_id_table,
-};
-*/
+};*/
+
 //module_usb_driver(usb_mouse_driver);

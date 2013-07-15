@@ -5,4 +5,8 @@ struct device {
   struct device	*parent;
 };
 
+int dev_err(const struct device *dev, const char *fmt, ...);
+  //@ requires false;
+  //@ ensures true;
+
 #endif

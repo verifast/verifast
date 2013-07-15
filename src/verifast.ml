@@ -1046,7 +1046,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let ps =
         match zip pats ps with
-          None -> static_error l "Wrong number of arguments." None
+          None -> static_error l ("Wrong number of arguments: expected " ^ (string_of_int (List.length ps)) ^ " but found " ^ (string_of_int (List.length pats))) None
         | Some bs ->
           List.map
             begin fun (pat, (p, tp0)) ->

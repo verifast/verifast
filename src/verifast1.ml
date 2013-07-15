@@ -3140,8 +3140,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         end
       in
       match (value, t, t0) with
-        (Some(value), IntType, Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w
+        (Some(value), IntType, Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
       | (Some(value), IntType, ShortType) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
+      | (_, (Char | ShortType | IntType | PtrType _ | UChar | UShortType | UintPtrType), Bool) when language = CLang ->  Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t; t])) (* automatic conversion of pointer and numeric types to bool as required in C *)
       | _ -> check ()
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in

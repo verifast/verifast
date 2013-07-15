@@ -1,12 +1,7 @@
 #ifndef _LINUX_STDDEF_H
 #define _LINUX_STDDEF_H
 
-// You can only use this for ints, if used for void* VeriFast will
-// give a typing error.
-enum vf_NULL_enum {
-	NULL = 0
-};
-
+#define NULL 0
 
 // stddef.h might be the wrong place for this predicate.
 // This predicate states that the current thread, which is threadId, is not

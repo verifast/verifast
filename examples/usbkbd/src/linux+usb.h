@@ -187,6 +187,8 @@ struct usb_device {
 	
 	struct usb_device_descriptor descriptor;
 	
+	struct device dev;
+	
 	char *product;
 	char *manufacturer;
 	char *serial;
