@@ -21,7 +21,11 @@ void *memscan(void *addr, int c, __kernel_size_t size);
 /**
  * memcpy - Copies count bytes from src to dest. 
  *
- * Overlap is not allowed.  Copying 0 bytes is not allowed.
+ * Overlap is not allowed (source: "Unlike memcpy(), memmove() copes with overlapping areas." -- Linux's string.c)
+ * 
+ * It is unknown/unchecked whether copying 0 bytes is allowed, so the formal specs do not allow it
+ * (note that, to be allowed, it must also work in the assembly implementations).
+ * 
  */
 // XXX return value.
 void *memcpy(void *dest, /*const*/ void *src, size_t count);
@@ -46,16 +50,67 @@ void *memcpy(void *dest, /*const*/ void *src, size_t count);
 		);
 	@*/
 
-// need precondition that dest contains '\0' if count > 0?
-size_t strlcpy(char * dest, const char * src, size_t count);
-  //@ requires 0 <= count &*& [?f]string(src, ?src_text) &*& chars(dest, count, ?dest_txt);
-  //@ ensures [f]string(src, src_text) &*& chars(dest, count, ?new_dest_txt) &*& count == 0 || mem('\0', new_dest_txt) == true;
 
+/**
+ * strlcpy - Copy a %NUL terminated string into a sized buffer
+ *
+ * 
+ * @dest: Where to copy the string to
+ * @src: Where to copy the string from
+ * @size: size of destination buffer
+ *
+ * Compatible with *BSD: the result is always a valid
+ * NUL-terminated string that fits in the buffer (unless,
+ * of course, the buffer size is zero). It does not pad
+ * out the result like strncpy() does.
+ *
+ * (the above are the official specs)
+ *
+ */
+size_t strlcpy(char * dest, const char * src, size_t size);
+	/*@ requires
+		// Based on the "unless, of course, the buffer size is zero" subsentence,
+		// we conclude that size==0 is allowed.
+		0 <= size
+		
+		&*& [?f]string(src, ?src_text)
+		&*& chars(dest, size, ?dest_txt)
+		
+		// It is unclear whether we need precondition that dest contains '\0'
+		// if 0 < size, so this is enforced in formal specs.
+		// If this becomes clear, please state your sources. Please note that
+		// it must be true for the assembly implementation as well.
+		&*& size == 0 || mem('\0', dest_txt) == true
+		;
+	@*/
+	//@ ensures [f]string(src, src_text) &*& chars(dest, size, ?new_dest_txt) &*& size == 0 || mem('\0', new_dest_txt) == true;
+
+/**
+ * strlcat - Append a length-limited, %NUL-terminated string to another
+ * @dest: The string to be appended to
+ * @src: The string to append to it
+ * @count: The size of the destination buffer.
+ *
+ * (the above are the official specs)
+ */
 size_t strlcat(char* dest, const char * src, size_t count);
-  //@ requires 0 <= count &*& [?f]string(src, ?src_text) &*& chars(dest, count, ?old_dest_txt);
-  //@ ensures [f]string(src, src_text) &*& chars(dest, count, ?new_dest_txt) &*& count == 0 || !mem('\0', old_dest_txt) || mem('\0', new_dest_txt) == true;
+	/*@ requires
+		// count==0 is not allowed because the string.c implementation writes to dest[0].
+		0 < count
+		
+		&*& [?f]string(src, ?src_text)
+		&*& chars(dest, count, ?old_dest_txt)
+		&*& mem('\0', old_dest_txt) == true
+		;
+	@*/
+	/*@ ensures
+		[f]string(src, src_text)
+		&*& chars(dest, count, ?new_dest_txt)
+		&*& mem('\0', new_dest_txt) == true;
+	@*/
   
+
 size_t strlen(const char* s);
-  //@ requires chars(s, ?count, ?text) &*& mem('\0', text) == true;
-  //@ ensures chars(s, count, text) &*& result == index_of('\0', text);
+	//@ requires [?f]chars(s, ?count, ?text) &*& mem('\0', text) == true;
+	//@ ensures [f]chars(s, count, text) &*& result == index_of('\0', text);
 #endif
