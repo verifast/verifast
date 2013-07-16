@@ -1490,6 +1490,21 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       * type_ (* pointee type *)
   end
   
+  (* This function checks whether e is a safe expression. An expression is safe if evaluation can never fail. 
+     For example, '1 == 0' is safe, but 'x / y' is not as evaluation fails when y is zero. 
+     Safe expressions never depend on the heap. *)
+  let rec is_safe_expr e =
+    match e with 
+      IntLit _ -> true
+    | True _ -> true
+    | False _ -> true
+    | Var(_, x, scope)  -> ! scope = (Some LocalVar)
+    | Operation(_, (Eq | Neq), es, _) -> List.for_all is_safe_expr es
+    | IfExpr(_, e1, e2, e3) -> List.for_all is_safe_expr [e1; e2; e3]
+    | SizeofExpr(_, _) -> true
+    | AddressOf(_, e) -> is_safe_expr e
+    | _ -> false
+  
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     let (envReadonly, heapReadonly) = readonly in
     let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e (fun h env v -> cont h env v) econt in
@@ -1529,7 +1544,9 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             cont (Chunk ((predSymb, true), [], real_unit, [symb; w], None)::h) env)
     in
     let check_correct xo g targs args (lg, callee_tparams, tr, ps, funenv, pre, post, epost, v) cont =
-      let eval_h = if List.length args = 1 then (fun h env e cont -> eval_h_core readonly h env e cont) else eval_h in
+      (* check_expr is needed here because args are not typechecked yet. Why does check_expr_t not check the arguments of a WFunCall? *)
+      let at_most_one_unsafe args = (List.length (List.filter (fun a -> let (w, t) = check_expr (pn,ilist) tparams tenv a in not (is_safe_expr w)) args)) <= 1 in
+      let eval_h = if language == CLang && not heapReadonly &&  (List.length args = 1 || at_most_one_unsafe args) then (fun h env e cont -> eval_h_core (true, false) h env e cont) else eval_h in
       verify_call funcmap eval_h l (pn, ilist) xo g targs (List.map (fun e -> SrcPat (LitPat e)) args) (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt
     in
     let new_array h env l elem_tp length elems =
@@ -1868,10 +1885,11 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       eval_h h env i $. fun h env i ->
       cont h env (read_c_array h env l arr i elem_tp)
     | Operation (l, Not, [e], ts) -> eval_h_core readonly h env e (fun h env v -> cont h env (ctxt#mk_not v))
-    | Operation (l, Eq, [e1; e2], ts) ->
-      eval_h h env e1 (fun h env v1 -> eval_h h env e2 (fun h env v2 -> cont h env (ctxt#mk_eq v1 v2)))
-    | Operation (l, Neq, [e1; e2], ts) ->
-      eval_h h env e1 (fun h env v1 -> eval_h h env e2 (fun h env v2 -> cont h env (ctxt#mk_not (ctxt#mk_eq v1 v2))))
+    | Operation (l, ((Eq | Neq) as op), [e1; e2], ts) ->
+      let create_term t1 t2 = match op with Eq -> ctxt#mk_eq t1 t2 | Neq -> ctxt#mk_not (ctxt#mk_eq t1 t2) in
+      let e1_safe = is_safe_expr e1 in
+      let e2_safe = is_safe_expr e2 in
+      eval_h_core (true, heapReadonly || not e2_safe) h env e1 (fun h env v1 -> eval_h_core (true, heapReadonly || not e1_safe) h env e2 (fun h env v2 -> cont h env (create_term v1 v2)))
     | Operation (l, And, [e1; e2], ts) ->
       eval_h h env e1 $. fun h env v1 ->
       branch

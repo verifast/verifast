@@ -334,8 +334,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	endpoint = &(ep->desc);
 	//@ open usb_host_endpoint(interface->endpoint);
 	
-	int usb_endpoint_is_int_in_res = usb_endpoint_is_int_in(endpoint);
-	if (! usb_endpoint_is_int_in_res) {
+	//int usb_endpoint_is_int_in_res = ;
+	if (! usb_endpoint_is_int_in(endpoint)) {
 	 	//@ close usb_host_endpoint(interface->endpoint);
 	 	//@ close [f3]usb_interface_descriptor(&interface->desc, bNumEndpoints, bInterfaceNumber);
 		//@ close [f2]usb_host_interface(interface);
@@ -345,8 +345,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 	
-	int usb_pipeout_ret = usb_pipeout(pipe);
-	maxp = usb_maxpacket(dev, pipe, usb_pipeout_ret);
+	//int usb_pipeout_ret = ;
+	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
 	
@@ -369,7 +369,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse->data_dma = 0;
 	
 	mouse->data = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &mouse->data_dma);
-	signed char* data_tmp = mouse->data;
+	//@ signed char* data_tmp = mouse->data;
 	if (! mouse->data) {
 		//@ open_struct(mouse);
 		//@ chars_to_uchars(mouse);
@@ -392,8 +392,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 		}
 		strlcat(mouse->name, dev->product, 128/*sizeof(mouse->name)*/);
 	}
-	size_t mouse_name_length = strlen(mouse->name);
-	if (mouse_name_length)
+	if (strlen(mouse->name))
 	  	; 
 	  	//TODO
 		//snprintf(mouse->name, 128 /*sizeof(mouse->name)*/,
