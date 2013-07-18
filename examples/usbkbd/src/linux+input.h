@@ -6,17 +6,29 @@
 #include "linux+device.h"
 
 // "Calls to both callbacks [open, close] are serialized." -- input-programming.txt
-// We also assume event is serialized.  Check this. XXX
+// Calls to event are serialized ("The call [to @event] is protected by @event_lock and must not sleep" -- input.h)
 
-// It is unclear whether unregistering a device causes the close function to be called.
-// We assume it is the case because it feels like otherwise it would be pretty hard to verify
-// (we have to make decisicions if we ever want to get somewhere).
+// We assume that unregistering an input devices (by input_unregister_device) causes the close callback to
+// be called if device is opened. This is undocumented in Linux but seems to be common accepted
+// and has been tested empirically.
+// Calling input_unregister_device calls the disconnect function of all input handlers (an input
+// handler is a piece of software in kernelspace that reads the events from the driver and distributes
+// them further to both kernelspace and userspace, i.e. it's the
+// one that will call input_open_device (multiple such calls only results in one open call of the driver,
+// the input layer takes care of that)). When the disconnect function of the input handler is called,
+// the input handler will close the input device if it has opened it, and if all input handlers have closed
+// the input device, the close callback of the device driver will be called. This of course is
+// only true if the assumption that all input handlers properly call input_close_device, which is
+// also undocumented, but we have to fill in the blank parts of the undocumented parts if we want
+// to write specifications. If we do this too strict ("everything undocumented cannot be made any assumptions")
+// then you cannot verify any driver because there are too many undocumented parts that people seem
+// to rely on.
 
 typedef int input_open_t_no_pointer (struct input_dev *dev);
 	/*@ requires userdef_input_drvdata(this, ?close_cb, ?event_cb)(dev, false, ?data, ?fracsize)
 		&*& input_open_callback_link(this)(close_cb, event_cb)
 		&*& [1/2]input_dev_reportable(dev, data)
-		&*& not_in_interrupt_context(currentThread); // empirically confirmed with in_interrupt()
+		&*& not_in_interrupt_context(currentThread); // empirically tested with in_interrupt()
 	@*/
 	/*@ ensures
 		not_in_interrupt_context(currentThread)
