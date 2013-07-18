@@ -1244,7 +1244,16 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           if List.mem path !included_files then begin
             match p_next() with
               Some _ -> divergence l ("Preprocessor does not skip secondary inclusion of file \n" ^ path)
-            | None -> (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
+            | None -> 
+                (* possible TODO: needs caching for more efficiency, but overhead is negligible *)
+                let rec import_macros () =
+                  match cfp_next() with 
+                    Some _ -> import_macros ()
+                  | None -> ()
+                in
+                import_macros ();
+                (* end *)
+                (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
           end else begin
             included_files := path::!included_files;
             Some (l,BeginInclude(i, path))

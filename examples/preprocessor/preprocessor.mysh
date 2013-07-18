@@ -8,4 +8,5 @@ verifast_both -c -allow_should_fail nested_bad_include.c
 verifast_both -c -allow_should_fail circular_include.c
 verifast_both -c -allow_should_fail bad_circular_include.c
 verifast_both -c -disable_overflow_check multiple_include.c
+verifast_both -c  repeated_include.c
 verifast_both -c -disable_overflow_check nested_multiple_include.c

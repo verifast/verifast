@@ -1,0 +1,6 @@
+#ifndef REAPEATED_INCLUDE_H
+#define REAPEATED_INCLUDE_H
+
+#define CONST 123
+
+#endif
