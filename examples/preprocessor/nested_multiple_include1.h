@@ -3,7 +3,9 @@
 
 #include "nested_multiple_include3.h"
 
+/*@
 #define STACK Stack
+@*/
 
 /*@
 

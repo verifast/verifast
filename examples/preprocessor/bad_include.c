@@ -1,7 +1,7 @@
 // Test that the result of an inclusion cannot depend upon the 
 // current environment of defined macros.
 
-/*~*/#define FOO false
+/*~*/ /*@#define FOO false @*/
 
 #include "bad_include.h"
 

@@ -856,10 +856,12 @@ class tentative_lexer (lloc:unit -> loc) (lignore_eol:bool ref) (lstream:(loc * 
 
 let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_ghost_range =
   let macros = ref [Hashtbl.create 10] in
+  let ghost_macros = ref [Hashtbl.create 10] in
+  let get_macros () = if !in_ghost_range then !ghost_macros else !macros in
   let last_macro_used = ref (dummy_loc, "") in
   let update_last_macro_used x =
-    if Hashtbl.mem (List.hd !macros) x then begin
-      match Hashtbl.find (List.hd !macros) x with
+    if Hashtbl.mem (List.hd (get_macros ())) x then begin
+      match Hashtbl.find (List.hd (get_macros ())) x with
         (l, _, _) -> last_macro_used := (l, x);
     end
   in
@@ -930,10 +932,10 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     let rec condition () =
       match peek () with
         None | Some (_, Eol) -> []
-      | Some (l, Ident "defined") ->      
+      | Some (l, Ident "defined") ->
         let check x = 
           let cond = 
-            if Hashtbl.mem (List.hd !macros) x then begin
+            if Hashtbl.mem (List.hd (get_macros ())) x then begin
               update_last_macro_used x;
               (l, Int unit_big_int) 
             end
@@ -983,10 +985,17 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     with
       None -> 
         if !streams = [] then begin
-          begin match !macros with
-              m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest; next_token ()
-            | _ -> None
-          end
+          let update_macros macros =
+            match !macros with
+              m1::m2::mrest -> macros := (plugin_end_include m1 m2)::mrest;
+            | _ -> ()
+          in
+          update_macros macros;
+          update_macros ghost_macros;
+          if List.length !macros > 1 then
+            next_token ()
+          else
+            None
         end
         else begin
           pop_stream ();
@@ -1024,7 +1033,8 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
               if !in_ghost_range && not (Filename.check_suffix s ".gh") then raise (ParseException (l, "Ghost #include directive should specify a ghost header file (whose name ends in .gh)."));
               if not !in_ghost_range && (Filename.check_suffix s ".gh") then raise (ParseException (l, "Non-ghost #include directive should not specify a ghost header file."))
             end;
-            macros := (plugin_begin_include (List.hd !macros))::!macros; 
+            macros := (plugin_begin_include (List.hd !macros))::!macros;
+            ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
             next_at_start_of_line := true;
             Some (!tlexer#loc(), BeginInclude(s,""))
           end
@@ -1066,7 +1076,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             | Some t -> junk (); t::body ()
           in
           let body = body () in
-          Hashtbl.replace (List.hd !macros) x (lx, params, body);
+          Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
           next_token ()
         | _ -> error "Macro definition syntax error"
         end
@@ -1075,7 +1085,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         begin match peek () with
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
-          Hashtbl.remove (List.hd !macros) x;
+          Hashtbl.remove (List.hd (get_macros ())) x;
           next_token ()
         | _ -> syntax_error ()
         end
@@ -1085,7 +1095,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
           update_last_macro_used x;
-          if Hashtbl.mem (List.hd !macros) x <> (cond = "ifdef") then
+          if Hashtbl.mem (List.hd (get_macros ())) x <> (cond = "ifdef") then
             skip_branch ();
           next_token ()
         | _ -> syntax_error ()
@@ -1101,10 +1111,10 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd "endif") -> junk (); next_token ()
       | _ -> syntax_error ()
       end
-    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem (List.hd !macros) x && not (List.mem x (List.hd !callers)) ->
+    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem (List.hd (get_macros ())) x && not (List.mem x (List.hd !callers)) ->
       update_last_macro_used x;
       junk ();
-      let (_,params, body) = Hashtbl.find (List.hd !macros) x in
+      let (_,params, body) = Hashtbl.find (List.hd (get_macros ())) x in
       begin match params with
         None -> push_list [x] body; next_token ()
       | Some params ->

@@ -3,11 +3,13 @@
 
 #include "stdlib.h"
 
+/*@
 #define ASSERT_TRUE(x) \
    x == true
 
 #define OWNERSHIP(x,y,z) \
    Ownership(x)(y,z)
+@*/
 
 /*
   Destructors

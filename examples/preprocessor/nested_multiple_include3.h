@@ -3,7 +3,9 @@
 
 #include "nested_multiple_include.h"
 
+/*@
 #define NIL Nil
+@*/
 
 /*@
 
