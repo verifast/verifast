@@ -347,37 +347,39 @@ struct input_id {
 	__u16 version;
 };
 
-enum vf_input_event_types {
-	EV_SYN                  = 0x00,
-	EV_KEY                 = 0x01,
-	EV_REL                 = 0x02,
-	EV_ABS                 = 0x03,
-	EV_MSC                =  0x04,
-	EV_SW                 =  0x05,
-	EV_LED                =  0x11,
-	EV_SND                =  0x12,
-	EV_REP                =  0x14,
-	EV_FF                 =  0x15,
-	EV_PWR                =  0x16,
-	EV_FF_STATUS          =  0x17,
-	EV_MAX                =  0x1f,
-	EV_CNT		       =  EV_MAX+1
-};
-enum vf_input_leds {
-	LED_NUML                = 0x00,
-	LED_CAPSL               = 0x01,
-	LED_SCROLLL             = 0x02,
-	LED_COMPOSE             = 0x03,
-	LED_KANA                = 0x04,
-	LED_SLEEP               = 0x05,
-	LED_SUSPEND             = 0x06,
-	LED_MUTE                = 0x07,
-	LED_MISC                = 0x08,
-	LED_MAIL                = 0x09,
-	LED_CHARGING            = 0x0a,
-	LED_MAX                 = 0x0f,
-	LED_CNT                 = LED_MAX+1
-};
+
+// Event types:
+#define	EV_SYN                 0x00
+#define	EV_KEY                 0x01
+#define	EV_REL                 0x02
+#define	EV_ABS                 0x03
+#define	EV_MSC                 0x04
+#define	EV_SW                  0x05
+#define	EV_LED                 0x11
+#define	EV_SND                 0x12
+#define	EV_REP                 0x14
+#define	EV_FF                  0x15
+#define	EV_PWR                 0x16
+#define	EV_FF_STATUS           0x17
+#define	EV_MAX                 0x1f
+// #define	EV_CNT		       0x20/* original: (EV_MAX+1)*/
+
+
+// LEDs:
+#define	LED_NUML                0x00
+#define	LED_CAPSL               0x01
+#define	LED_SCROLLL             0x02
+#define	LED_COMPOSE             0x03
+#define	LED_KANA                0x04
+#define	LED_SLEEP               0x05
+#define	LED_SUSPEND             0x06
+#define	LED_MUTE                0x07
+#define	LED_MISC                0x08
+#define	LED_MAIL                0x09
+#define	LED_CHARGING            0x0a
+#define	LED_MAX                 0x0f
+// #define	LED_CNT                 0x10 /* original: (LED_MAX+1)*/
+
 
 // this should be moved to uapi/linux/input.h
 #define BTN_MOUSE		0x110

@@ -12,25 +12,24 @@
  * conform to the USB specs. See http://www.usb.org/developers/defined_class
  * for an easy overview.
  */
-enum vf_usb_class{
-	USB_CLASS_PER_INTERFACE		= 0,	/* for DeviceClass */
-	USB_CLASS_AUDIO			= 1,
-	USB_CLASS_COMM			= 2,
-	USB_CLASS_HID			= 3,
-	USB_CLASS_PHYSICAL		= 5,
-	USB_CLASS_STILL_IMAGE		= 6,
-	USB_CLASS_PRINTER		= 7,
-	USB_CLASS_MASS_STORAGE		= 8,
-	USB_CLASS_HUB			= 9,
-	USB_CLASS_CDC_DATA		= 0x0a,
-	USB_CLASS_CSCID			= 0x0b,	/* chip+ smart card */
-	USB_CLASS_CONTENT_SEC		= 0x0d,	/* content security */
-	USB_CLASS_VIDEO			= 0x0e,
-	USB_CLASS_WIRELESS_CONTROLLER	= 0xe0,
-	USB_CLASS_MISC			= 0xef,
-	USB_CLASS_APP_SPEC		= 0xfe,
-	USB_CLASS_VENDOR_SPEC		= 0xff
-};
+#define	USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
+#define	USB_CLASS_AUDIO			1
+#define	USB_CLASS_COMM			2
+#define	USB_CLASS_HID			3
+#define	USB_CLASS_PHYSICAL		5
+#define	USB_CLASS_STILL_IMAGE		6
+#define	USB_CLASS_PRINTER		7
+#define	USB_CLASS_MASS_STORAGE		8
+#define	USB_CLASS_HUB			9
+#define	USB_CLASS_CDC_DATA		0x0a
+#define	USB_CLASS_CSCID			0x0b	/* chip+ smart card */
+#define	USB_CLASS_CONTENT_SEC		0x0d	/* content security */
+#define	USB_CLASS_VIDEO			0x0e
+#define	USB_CLASS_WIRELESS_CONTROLLER	0xe0
+#define	USB_CLASS_MISC			0xef
+#define	USB_CLASS_APP_SPEC		0xfe
+#define	USB_CLASS_VENDOR_SPEC		0xff
+
 
 struct usb_interface_descriptor {
          //__u8  bLength;
@@ -52,44 +51,51 @@ struct usb_interface_descriptor {
 @*/
 
 
-enum vf_usb_dir {
-	USB_DIR_OUT                    = 0,              /* to device */
-	USB_DIR_IN                     = 0x80            /* to host */
-};
 
-enum vf_usb_type {
-	/*
-	 * USB types, the second of three bRequestType fields
-	 */
-	USB_TYPE_MASK                  ,//= (0x03 << 5),
-	USB_TYPE_STANDARD              ,//= (0x00 << 5),
-	USB_TYPE_CLASS                 ,//= (0x01 << 5),
-	USB_TYPE_VENDOR                ,//= (0x02 << 5),
-	USB_TYPE_RESERVED              //= (0x03 << 5)
-};
+#define USB_DIR_OUT                    0              /* to device */
+/*@
+#define USB_DIR_OUT 0
+@*/
+#define USB_DIR_IN                     0x80            /* to host */
+/*@
+#define USB_DIR_IN 0x80
+@*/
 
 
-enum vf_usb_recipients {
-	/*
-	 * USB recipients, the third of three bRequestType fields
-	 */
-	USB_RECIP_MASK                 = 0x1f,
-	USB_RECIP_DEVICE               = 0x00,
-	USB_RECIP_INTERFACE            = 0x01,
-	USB_RECIP_ENDPOINT             = 0x02,
-	USB_RECIP_OTHER                = 0x03,
-	/* From Wireless USB 1.0 */
-	USB_RECIP_PORT                 = 0x04,
-	USB_RECIP_RPIPE                = 0x05
-};
 
-enum vf_usb_xfer_type {
-	USB_ENDPOINT_XFER_CONTROL       = 0,
-	USB_ENDPOINT_XFER_ISOC          = 1,
-	USB_ENDPOINT_XFER_BULK          = 2,
-	USB_ENDPOINT_XFER_INT           = 3
-};
+/*
+ * USB types, the second of three bRequestType fields
+ */
+#define USB_TYPE_MASK                  96 // original: (0x03 << 5),
+#define USB_TYPE_STANDARD              0  //= (0x00 << 5),
+#define USB_TYPE_CLASS                 32 //= (0x01 << 5),
+#define USB_TYPE_VENDOR                64 //= (0x02 << 5),
+#define USB_TYPE_RESERVED              96 //= (0x03 << 5)
 
+
+/*
+ * USB recipients, the third of three bRequestType fields
+ */
+#define USB_RECIP_MASK                 0x1f
+#define USB_RECIP_DEVICE               0x00
+#define USB_RECIP_INTERFACE            0x01
+#define USB_RECIP_ENDPOINT             0x02
+#define USB_RECIP_OTHER                0x03
+/* From Wireless USB 1.0 */
+#define USB_RECIP_PORT                 0x04
+#define USB_RECIP_RPIPE                0x05
+
+/* xfer type */
+#define USB_ENDPOINT_XFER_CONTROL       0
+#define USB_ENDPOINT_XFER_ISOC          1
+#define USB_ENDPOINT_XFER_BULK          2
+#define USB_ENDPOINT_XFER_INT           3
+/*@
+#define USB_ENDPOINT_XFER_CONTROL       0
+#define USB_ENDPOINT_XFER_ISOC          1
+#define USB_ENDPOINT_XFER_BULK          2
+#define USB_ENDPOINT_XFER_INT           3
+@*/
 
 struct usb_endpoint_descriptor {
 	//__u8  bLength;
@@ -113,7 +119,7 @@ struct usb_endpoint_descriptor {
 @*/
 
 /*@ 
-  predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; enum vf_usb_dir direction, enum vf_usb_xfer_type xfer_type, int pipe);
+  predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; int direction, int xfer_type, int pipe);
 @*/
 
 /*static inline*/ int usb_endpoint_is_int_in(/*const*/ struct usb_endpoint_descriptor *epd);

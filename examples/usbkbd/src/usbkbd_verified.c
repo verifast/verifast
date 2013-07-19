@@ -1388,7 +1388,7 @@ lemma void diffcount_tickets_minimum_prove()
  * _hide predicate such that VeriFast will take the correct one.
  */
 /*@
-predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; enum vf_usb_dir direction, enum vf_usb_xfer_type xfer_type, int pipe) =
+predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int direction, int xfer_type, int pipe) =
 	usb_endpoint_descriptor(epd, direction, xfer_type, pipe);
 @*/
 

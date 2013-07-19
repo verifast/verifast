@@ -7,6 +7,4 @@
  * instead of EXPORT_SYMBOL (e.g. usb_alloc_urb).
  */
 
-//@ // we need this line, VeriFast doesn't want to parse empty .h files.
-
 #endif

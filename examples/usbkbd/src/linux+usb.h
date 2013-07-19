@@ -8,6 +8,37 @@
 #include "linux+types.h"
 #include "linux+device.h"
 
+	
+#define USB_DEVICE_ID_MATCH_DEVICE  0x0003 // original: (USB_DEVICE_ID_MATCH_VENDOR | USB_DEVICE_ID_MATCH_PRODUCT)
+#define USB_DEVICE_ID_MATCH_DEV_RANGE 0x000C // original: (USB_DEVICE_ID_MATCH_DEV_LO | USB_DEVICE_ID_MATCH_DEV_HI)
+#define USB_DEVICE_ID_MATCH_DEVICE_AND_VERSION 0x000F // original: (USB_DEVICE_ID_MATCH_DEVICE | USB_DEVICE_ID_MATCH_DEV_RANGE)
+#define USB_DEVICE_ID_MATCH_DEV_INFO 0x0070  /* original: \
+	(USB_DEVICE_ID_MATCH_DEV_CLASS | \
+	USB_DEVICE_ID_MATCH_DEV_SUBCLASS | \
+	USB_DEVICE_ID_MATCH_DEV_PROTOCOL)*/
+#define USB_DEVICE_ID_MATCH_INT_INFO 0x0380 /* original: \
+	(USB_DEVICE_ID_MATCH_INT_CLASS | \
+	USB_DEVICE_ID_MATCH_INT_SUBCLASS | \
+	USB_DEVICE_ID_MATCH_INT_PROTOCOL) */
+
+
+#define URB_SHORT_NOT_OK        0x0001  /* report short reads as errors */
+#define URB_ISO_ASAP            0x0002  /* iso-only, urb->start_frame ignored */
+#define URB_NO_TRANSFER_DMA_MAP 0x0004  /* urb->transfer_dma valid on submit */
+#define URB_NO_FSBR             0x0020  /* UHCI-specific */
+#define URB_ZERO_PACKET         0x0040  /* Finish bulk OUT with short packet */
+#define URB_NO_INTERRUPT        0x0080  /* HINT: no non-error interrupt needed */
+#define URB_FREE_BUFFER         0x0100  /* Free transfer buffer with the URB */
+/*@
+#define URB_SHORT_NOT_OK        0x0001  /* report short reads as errors */
+#define URB_ISO_ASAP            0x0002  /* iso-only, urb->start_frame ignored */
+#define URB_NO_TRANSFER_DMA_MAP 0x0004  /* urb->transfer_dma valid on submit */
+#define URB_NO_FSBR             0x0020  /* UHCI-specific */
+#define URB_ZERO_PACKET         0x0040  /* Finish bulk OUT with short packet */
+#define URB_NO_INTERRUPT        0x0080  /* HINT: no non-error interrupt needed */
+#define URB_FREE_BUFFER         0x0100  /* Free transfer buffer with the URB */
+@*/
+
 /*---------------------------------------------------------*
  * Probe-Disconnect                                        *
  *---------------------------------------------------------*/
@@ -359,7 +390,7 @@ typedef usb_complete_t_no_pointer* usb_complete_t;
 /*@
 // Not all "standard urb arguments" here, otherwise user can't open urb_struct and
 // edit some fields.
-predicate urb_private(struct urb *urb, bool initialized, struct usb_device *dev, dma_addr_t data_dma, int actual_allocated_data_size, enum vf_urb_transfer_flags flags, void *setup_packet;);
+predicate urb_private(struct urb *urb, bool initialized, struct usb_device *dev, dma_addr_t data_dma, int actual_allocated_data_size, int flags, void *setup_packet;);
 @*/
 
 /* actual_allocated_data_size is not the urb->transfer_buffer_length field but the actually allocated amount of bytes.
@@ -449,7 +480,7 @@ struct urb *urb, struct usb_device *usb_dev, void *buffer, dma_addr_t buffer_dma
 	;
 
 // See urb_struct.
-lemma void urb_transfer_flags_add_no_transfer_dma_map(struct urb *urb, void *data, dma_addr_t data_dma, int data_size, enum vf_urb_transfer_flags flags);
+lemma void urb_transfer_flags_add_no_transfer_dma_map(struct urb *urb, void *data, dma_addr_t data_dma, int data_size, int flags);
 	// There is no need to have usb_alloc_coherent_block in the pre- an postcondition to enforce
 	// correct arguments, since usb_alloc_coherent_block is already in the usb_struct predicate.
 	requires
@@ -512,7 +543,7 @@ struct urb *urb, struct usb_device *usb_dev, void *buffer, dma_addr_t buffer_dma
 predicate permission_to_submit_urb(int nb_urbs_submitted, bool inside_completion_handler);
 @*/
 
-struct urb *usb_alloc_urb(int iso_packets, enum gfp_t mem_flags);
+struct urb *usb_alloc_urb(int iso_packets, gfp_t mem_flags);
 /*@ requires
 	// iso_packets must be null for non-isochronous URBs, and we don't support isochronous URBs yet.
 	iso_packets == 0
@@ -573,7 +604,7 @@ void usb_free_urb(struct urb *urb);
 
 //@ predicate usb_alloc_coherent_block(void *ptr; struct usb_device *dev, int size, int dma);
 
-void *usb_alloc_coherent(struct usb_device *dev, size_t size, enum gfp_t mem_flags, dma_addr_t* dma);
+void *usb_alloc_coherent(struct usb_device *dev, size_t size, gfp_t mem_flags, dma_addr_t* dma);
 	/*@ requires
 		not_in_interrupt_context(currentThread) // might be unnecessarry, replace with mem_flags==ATOMIC-check if confirmation found / sources checked.
 		&*& size >= 0 &*& integer(dma, ?ptr);
@@ -619,7 +650,7 @@ predicate usb_submit_urb_ghost_arg(bool deferred_data_xfer, real fracsize) = tru
 @*/
 
 // You shouldn't submit URBs twice, according to http://kerneltrap.org/mailarchive/linux-usb/2008/9/19/3343094
-int usb_submit_urb(struct urb *urb, enum gfp_t mem_flags);
+int usb_submit_urb(struct urb *urb, gfp_t mem_flags);
 /*@ requires
 	// Possible in interrupt context.
 	
@@ -1051,7 +1082,7 @@ struct urb{
 	//struct usb_host_endpoint *ep;	/* (internal) pointer to endpoint */
 	//unsigned int pipe;		/* (in) pipe information */
 	//unsigned int stream_id;		/* (in) stream ID */
-	/*int*/ enum vf_errno status;			/* (return) non-ISO status */
+	int status;			/* (return) non-ISO status */
 	
 	// UNSAFE We do bit operations here (bitwise or, ...), but the data type is
 	//     different (unsigned). If an if-then-else follows after an
@@ -1128,17 +1159,6 @@ struct usb_interface {
 };
 
 
-enum vf_usb_match_flags {
-	USB_DEVICE_ID_MATCH_DEVICE,
-	USB_DEVICE_ID_MATCH_DEV_RANGE,
-	USB_DEVICE_ID_MATCH_DEVICE_AND_VERSION,
-	USB_DEVICE_ID_MATCH_DEV_INFO,
-	USB_DEVICE_ID_MATCH_INT_INFO
-};
-
-
-
-
 struct usb_host_endpoint {
 	struct usb_endpoint_descriptor          desc;
 	//struct usb_ss_ep_comp_descriptor        ss_ep_comp;
@@ -1152,15 +1172,7 @@ struct usb_host_endpoint {
 };
 
 
-enum vf_urb_transfer_flags {
-//	URB_SHORT_NOT_OK        = 0x0001,  /* report short reads as errors */
-//	URB_ISO_ASAP            = 0x0002,  /* iso-only, urb->start_frame ignored */
-	URB_NO_TRANSFER_DMA_MAP = 0x0004  /* urb->transfer_dma valid on submit */
-//	URB_NO_FSBR             = 0x0020,  /* UHCI-specific */
-//	URB_ZERO_PACKET         = 0x0040,  /* Finish bulk OUT with short packet */
-//	URB_NO_INTERRUPT        = 0x0080,  /* HINT: no non-error interrupt needed */
-//	URB_FREE_BUFFER         = 0x0100   /* Free transfer buffer with the URB */
-};
+
 
 static /*inline*/ int usb_make_path(struct usb_device *dev, char *buf, size_t size);
   //@ requires chars(buf, ?bufsize, ?old_text) &*& size <= bufsize &*& usb_device_private(dev);

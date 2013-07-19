@@ -4,5 +4,4 @@
 #include "linux+gfp.h"
 #include "linux+slab_def.h"
 
-//@ // we need this line, VeriFast doesn't want to parse empty .h files.
 #endif

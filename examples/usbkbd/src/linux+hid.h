@@ -13,27 +13,11 @@
 //	//@ ensures [frac]chars(string, cs);
 
 
-/*
- * linux/include/linux/usb/ch9.h has constants for all the interface classes,
- * so it might be nicer to convert these constants to one enum instead of
- * using USB_INTERFACE_CLASS_HID. However, it has not the macros for subclasses
- * and some drivers use USB_INTERFACE_CLASS_HID (from hid.h) instead of
- * USB_CLASS_HID (from hid.h).
- */
-enum vf_usb_hid_usb_class {
-	USB_INTERFACE_CLASS_HID         = 3
-};
+#define USB_INTERFACE_CLASS_HID         3
 
-enum vf_usb_hid_subclasses {
-	USB_INTERFACE_SUBCLASS_BOOT     = 1
-};
+#define USB_INTERFACE_SUBCLASS_BOOT     1
 
-enum vf_usb_hid_protocols {
-	USB_INTERFACE_PROTOCOL_KEYBOARD = 1,
-	USB_INTERFACE_PROTOCOL_MOUSE    = 2
-};
-
-
-
+#define USB_INTERFACE_PROTOCOL_KEYBOARD 1
+#define USB_INTERFACE_PROTOCOL_MOUSE    2
 
 #endif
