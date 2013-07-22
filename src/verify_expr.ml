@@ -1379,7 +1379,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         assert_false h env l "Target of method call might be null." None
     in
     let cenv = [(current_thread_name, List.assoc current_thread_name env)] @ env' @ funenv in
-    (fun cont -> if language = Java then with_context (Executing (h, env, l, "Verifying call")) cont else cont ()) $. fun () ->
+    (fun cont -> with_context (Executing (h, env, l, "Verifying call")) cont) $. fun () ->
     with_context PushSubcontext (fun () ->
       consume_asn_with_post rules tpenv h ghostenv cenv pre true real_unit (fun _ h ghostenv' env' chunk_size post' ->
         let post =

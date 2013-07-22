@@ -83,7 +83,7 @@ typedef input_event_t_no_pointer* input_event_t;
 
 struct input_dev {
 	char *name; //"The dev->name should be set before registering the input device by the input device driver" -- input-programming.txt
-	char* phys;
+	char* phys; // Should this be initialized by the driver or can it remain equal to 0? We currently assume the latter.
 	struct input_id id;
 	
 	input_open_t open;
@@ -121,12 +121,12 @@ struct input_dev {
 	// and setting userdata via the API.
 	predicate input_dev_unregistered_private(struct input_dev *input_dev, void *userdata);
 
-	predicate input_dev_unregistered(struct input_dev *input_dev, char *name, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata) =
+	predicate input_dev_unregistered(struct input_dev *input_dev, char *name,  char *phys, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata) =
 		input_dev_open(input_dev, open_callback) // "input_dev->open" conflicts with parsing of open ghost statement I guess.
 		&*& input_dev_close(input_dev, close_cb)
 		&*& input_dev->event |-> event_cb
 		&*& input_dev->name |-> name
-		&*& input_dev->phys |-> ?phys
+		&*& input_dev->phys |-> phys
 		&*& input_id_bustype(&input_dev->id, _)
 		&*& input_id_vendor(&input_dev->id, _)
 		&*& input_id_product(&input_dev->id, _)
@@ -142,11 +142,10 @@ struct input_dev {
 		
 		&*& input_dev->led |-> ?led
 		&*& uints(led, 1, _)
-		
 	;
 	
 	// fracsize for getting the correct fracsize userdef_input_drvdata back when destroying an input_dev.
-	predicate input_dev_registered(struct input_dev *input_dev, char *name, int name_length, real name_frac, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize);
+	predicate input_dev_registered(struct input_dev *input_dev, char *name, int name_length, real name_frac, char *phys, int phys_length, real phys_frac, input_open_t open_callback, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize);
 	
 	// To be defined by the user.
 	// The callback-arguments can be used to make it possible to
@@ -203,7 +202,7 @@ struct input_dev *input_allocate_device(void);
 			// You can already report keys before registering the device.
 			input_dev_reportable(result,  0)
 			
-			&*& input_dev_unregistered(result, 0, _, _, _, 0)
+			&*& input_dev_unregistered(result, 0, 0, _, _, _, 0)
 		:
 			true
 		;
@@ -213,7 +212,7 @@ void input_free_device(struct input_dev *dev);
 	/*@ requires
 		not_in_interrupt_context(currentThread) // see input_allocate_device
 		&*& dev != 0 ?
-			input_dev_unregistered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?userdata)
+			input_dev_unregistered(dev, ?name, ?phys, ?open_cb, ?close_cb, ?event_cb, ?userdata)
 			&*& input_dev_reportable(dev, userdata)
 		:
 			true // no-op.
@@ -240,14 +239,20 @@ void input_free_device(struct input_dev *dev);
  */
 /*@
 // fracsize is here only because we can't pass it with userdef_input_drvdata if this predicate is only consumed conditionally.
-predicate input_dev_ghost_registered(struct input_dev *input_dev, char* name, input_open_t open_cb, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize, int return_value);
+predicate input_dev_ghost_registered(struct input_dev *input_dev, char* name, char* phys, input_open_t open_cb, input_close_t close_cb, input_event_t event_cb, void *userdata, real fracsize, int return_value);
 lemma int input_ghost_register_device(struct input_dev *dev, real fracsize);
-	requires input_dev_unregistered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?userdata);
-	ensures input_dev_ghost_registered(dev, name, open_cb, close_cb, event_cb, userdata, fracsize, result);
+	requires input_dev_unregistered(dev, ?name, ?phys, ?open_cb, ?close_cb, ?event_cb, ?userdata);
+	ensures input_dev_ghost_registered(dev, name, phys, open_cb, close_cb, event_cb, userdata, fracsize, result);
+
+predicate maybe_chars(real f, char* p, int length, list<char> data;) =
+  p == 0 ?
+    true
+  :
+    [f]chars(p, length, data); 
 @*/
 
 int input_register_device(struct input_dev *dev);
-	/*@ requires input_dev_ghost_registered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize, ?ghost_result)
+	/*@ requires input_dev_ghost_registered(dev, ?name, ?phys, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize, ?ghost_result)
 		&*& input_open_t_ghost_param(open_cb, open_cb)
 		&*& input_close_t_ghost_param(close_cb, close_cb)
 		&*& input_event_t_ghost_param(event_cb, event_cb)
@@ -255,6 +260,7 @@ int input_register_device(struct input_dev *dev);
 		&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 		&*& input_event_callback_link(event_cb)(open_cb, close_cb)
 		&*& [?f]chars(name, ?name_length, ?cs) &*& mem('\0', cs) == true
+		&*& maybe_chars(?f2, phys, ?phys_length, ?cs2) &*& phys == 0 || mem('\0', cs2) == true
 		
 		&*& [1/2]input_dev_reportable(dev, userdata) // why [1/2]? See comments at predicate.
 		
@@ -270,11 +276,11 @@ int input_register_device(struct input_dev *dev);
 		not_in_interrupt_context(currentThread)
 		&*& result == ghost_result
 		&*& result == 0 ? // success
-			input_dev_registered(dev, name, name_length, f, open_cb, close_cb, event_cb, userdata, fracsize)
+			input_dev_registered(dev, name, name_length, f, phys, phys_length, f2, open_cb, close_cb, event_cb, userdata, fracsize)
 		: // failure
 			// give _unregistered and not _ghost_registered to enforce re-ghost-registering
 			// on re-c-registering.
-			input_dev_unregistered(dev, name, open_cb, close_cb, event_cb, userdata)
+			input_dev_unregistered(dev, name, phys, open_cb, close_cb, event_cb, userdata)
 			&*& input_open_t_ghost_param(open_cb, open_cb)
 			&*& input_close_t_ghost_param(close_cb, close_cb)
 			&*& input_event_t_ghost_param(event_cb, event_cb)
@@ -282,6 +288,7 @@ int input_register_device(struct input_dev *dev);
 			&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 			&*& input_event_callback_link(event_cb)(open_cb, close_cb)
 			&*& [f]chars(name, name_length, cs)
+			&*& maybe_chars(f2, phys, phys_length, cs2)
 			
 			// Not consumed on failure, so also not given back. See input_dev_ghost_registered
 			//&*& userdef_input_drvdata(dev, false, open_cb, close_cb, event_cb, userdata, fracsize)
@@ -293,7 +300,7 @@ int input_register_device(struct input_dev *dev);
 // we assume disconnect causes _close to be called (see top of this file).
 void input_unregister_device(struct input_dev *dev);
 	/*@ requires
-		input_dev_registered(dev, ?name, ?name_length, ?name_frac, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize)
+		input_dev_registered(dev, ?name, ?name_length, ?name_frac, ?phys, ?phys_length, ?phys_frac, ?open_cb, ?close_cb, ?event_cb, ?userdata, ?fracsize)
 		
 		// After unregistration, you can't do anything with the device anymore
 		// even not freeing or reporting events (source: input's sourcecode specs).
@@ -305,16 +312,17 @@ void input_unregister_device(struct input_dev *dev);
 		&*& input_open_callback_link(open_cb)(close_cb, event_cb)
 		&*& input_close_callback_link(close_cb)(open_cb, event_cb)
 		&*& input_event_callback_link(event_cb)(open_cb, close_cb)
-		&*& [name_frac]chars(name, name_length, _);
+		&*& [name_frac]chars(name, name_length, _)
+		&*& maybe_chars(phys_frac, phys, phys_length, _);
 	@*/
 
 void input_set_drvdata(struct input_dev *dev, void *data);
 	/*@ requires
-		input_dev_unregistered(dev, ?name, ?open_cb, ?close_cb, ?event_cb, ?original_userdata)
+		input_dev_unregistered(dev, ?name, ?phys, ?open_cb, ?close_cb, ?event_cb, ?original_userdata)
 		&*& input_dev_reportable(dev, original_userdata);
 	@*/
 	/*@ ensures
-		input_dev_unregistered(dev, name, open_cb, close_cb, event_cb, data)
+		input_dev_unregistered(dev, name, phys, open_cb, close_cb, event_cb, data)
 		&*& input_dev_reportable(dev, data);
 	
 	@*/

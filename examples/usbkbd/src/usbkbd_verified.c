@@ -321,7 +321,7 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 	&*& struct_usb_kbd_padding(kbd)
 	//&*& kmalloc_block(kbd, sizeof(struct usb_kbd)) // abused as unique pred, so moved away from here.
 	
-	&*& input_dev_registered(inputdev, _, _, _, usb_kbd_open, usb_kbd_close, usb_kbd_event, kbd, fracsize)
+	&*& input_dev_registered(inputdev, _, _, _, 0, _, _, usb_kbd_open, usb_kbd_close, usb_kbd_event, kbd, fracsize)
 	&*& [1/2]input_dev_reportable(inputdev, kbd)
 	
 	&*& chars(name, 128, ?name_chars)
@@ -1547,7 +1547,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		kbd->cr = 0;
 		kbd->led_urb_submitted = false;
 	
-	//@ open input_dev_unregistered(input_dev, _, _, _, _, _);
+	//@ open input_dev_unregistered(input_dev, _, _, _, _, _, _);
 	
 	int usb_kbd_alloc_mem_ret = usb_kbd_alloc_mem(dev, kbd);
 	//@ open usb_kbd_alloc_mem_result(usb_kbd_alloc_mem_ret, ?stage, dev, kbd);
@@ -1561,7 +1561,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		//@ close usb_interface(usb_kbd_probe, usb_kbd_disconnect, iface, dev, originalData, false, fracsize);
 		
 		//@ close usb_kbd_alloc_mem_result(usb_kbd_alloc_mem_ret, stage, dev, kbd);
-		//@ close input_dev_unregistered(input_dev, _, _, _, _, _);
+		//@ close input_dev_unregistered(input_dev, _, _, _, _, _, _);
 		goto fail2;
 	}
 	
@@ -1575,11 +1575,11 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		input_dev->name = "usbkbd_verified keyboard";
 		//@ string_to_chars(input_dev->name);
 		//@ assert true;
-	//@ close input_dev_unregistered(input_dev, ?some_string, _, _, _, 0);
+	//@ close input_dev_unregistered(input_dev, ?some_string, _, _, _, _, 0);
 	
 
 	input_set_drvdata(input_dev, kbd);
-	//@ open input_dev_unregistered(input_dev, _, _, _, _, kbd);
+	//@ open input_dev_unregistered(input_dev, _, _, _, _, _, kbd);
 
 	// workaround "potentially side-effecting expression" error:
 	int x = BIT_MASK(EV_KEY);
@@ -1641,7 +1641,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	input_dev->event = usb_kbd_event;
 	input_dev->open = usb_kbd_open;
 	input_dev->close = usb_kbd_close;
-	//@ close input_dev_unregistered(input_dev, _, _, _, _, kbd);
+	//@ close input_dev_unregistered(input_dev, _, _, _, _, _, kbd);
 	
 	// (end fill input fields) //
 	
@@ -1749,7 +1749,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	//@ create_ghost_stuff(kbd);
 	
 	//@ input_ghost_register_device(input_dev, fracsize);
-	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, ?input_register_result);
+	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, _, ?input_register_result);
 	/*@
 	if (input_register_result == 0){
 	
@@ -1773,7 +1773,8 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	//@ close input_open_callback_link(usb_kbd_open)(usb_kbd_close, usb_kbd_event);
 	//@ close input_close_callback_link(usb_kbd_close)(usb_kbd_open, usb_kbd_event);
 	//@ close input_event_callback_link(usb_kbd_event)(usb_kbd_open, usb_kbd_close);
-	//@ assert input_dev_ghost_registered(_, ?somename, _, _, _, _, _, _);
+	//@ assert input_dev_ghost_registered(_, ?somename, ?somephys, _, _, _, _, _, _);
+	//@ close maybe_chars(1, somephys, 0, nil);
 	error = input_register_device(kbd->dev);
 	
 	if (/*error*/ error != 0){
@@ -1977,6 +1978,7 @@ fail1:
 	}
 	//@ assert [?f]chars(_, _, _);
 	//@ leak [f]chars(_, _, _); // we know that [f] is a dummy fraction, but this information is not known here
+	//@ open maybe_chars(_, _, _, _);
 }
 
 

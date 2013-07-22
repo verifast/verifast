@@ -259,7 +259,8 @@ static void usb_mouse_close(struct input_dev *dev) //@: input_close_t_no_pointer
 /*@
 predicate_family_instance userdef_usb_interface_data(usb_mouse_probe, usb_mouse_disconnect)(struct usb_interface *intf, struct usb_device *usb_device, struct usb_mouse *mouse, real probe_disconnect_fraction_size) =
   mouse != 0 &*&
-  input_dev_registered(?inputdev, mouse->name, 128, 1, usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy, mouse, probe_disconnect_fraction_size) &*&
+  true && (void*) mouse->phys != 0 &*& 
+  input_dev_registered(?inputdev, mouse->name, 128, 1, mouse->phys, 64, 1, usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy, mouse, probe_disconnect_fraction_size) &*&
   [1/2]mouse->usbdev |-> usb_device &*&
   [1/4]mouse->dev |-> inputdev  &*&
   [1/2]mouse->irq |-> ?urb &*&
@@ -267,7 +268,6 @@ predicate_family_instance userdef_usb_interface_data(usb_mouse_probe, usb_mouse_
   [1/2]input_dev_reportable(inputdev, mouse) &*&
   [1/2]mouse->data_dma |-> ?data_dma &*&
   struct_usb_mouse_padding(mouse) &*&
-  chars((void*) &mouse->phys, 64, _) &*&
   kmalloc_block(mouse, sizeof(struct usb_mouse)) &*&
   [probe_disconnect_fraction_size]probe_disconnect_userdata(usb_mouse_probe, usb_mouse_disconnect)();
   
@@ -345,7 +345,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 	
-	//int usb_pipeout_ret = ;
+	//int usb_pipeout_ret = usb_pipeout(pipe);
 	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
@@ -404,7 +404,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	strlcat(mouse->phys, "/input0", 64/*sizeof(mouse->phys)*/);
 
 	
-	//@ open input_dev_unregistered(input_dev, _, _, _, _, _);
+	//@ open input_dev_unregistered(input_dev, _, _, _, _, _, _);
 	
 	input_dev->name = mouse->name;
 	input_dev->phys = mouse->phys;
@@ -421,11 +421,11 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 		BIT_MASK(BTN_EXTRA);
 	input_dev->relbit[0] |= BIT_MASK(REL_WHEEL);*/
 	
-	//@ close input_dev_unregistered(input_dev, _, _, _, _, _);
+	//@ close input_dev_unregistered(input_dev, _, _, _, _, _, _);
 
 	input_set_drvdata(input_dev, mouse);
 	
-	//@ open input_dev_unregistered(input_dev, _, _, _, _, _);
+	//@ open input_dev_unregistered(input_dev, _, _, _, _, _, _);
 
 	input_dev->open = usb_mouse_open;
 	input_dev->close = usb_mouse_close;
@@ -450,20 +450,24 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	//@ assume(is_input_event_t_no_pointer(usb_mouse_event_dummy) == true); // HACK HACK HACK, there are no events for this driver
 	//@ close input_event_t_ghost_param(usb_mouse_event_dummy, usb_mouse_event_dummy);
 	
-	//@ close input_dev_unregistered(input_dev, _, _, _, _, _);
+	//@ close input_dev_unregistered(input_dev, _, _, _, _, _, _);
 	
 	//@ input_ghost_register_device(input_dev, fracsize);
 	//@ close input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 	//@ close input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
 	//@ close input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
-	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, ?input_register_result);
+	//@ assert input_dev_ghost_registered(_, _, _, _, _, _, _, _, ?input_register_result);
 	/*@
 	if (input_register_result == 0){
 		close userdef_input_drvdata(usb_mouse_open, usb_mouse_close, usb_mouse_event_dummy)(input_dev, false, mouse, fracsize);
 	}
 	@*/
+	//@ assume( true && (void*) 0 != ((void*) mouse->phys));
+	//@ assert chars(mouse->phys, 64, ?phys_text);
+	//@ close maybe_chars(1, mouse->phys, 64, phys_text);
 	error = input_register_device(mouse->dev);
 	if (error != 0) {
+		//@ open maybe_chars(1, _, _, _);
 		//@ open input_open_callback_link(usb_mouse_open)(usb_mouse_close, usb_mouse_event_dummy);
 		//@ open input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
 		//@ open input_event_callback_link(usb_mouse_event_dummy)(usb_mouse_open, usb_mouse_close);
@@ -532,6 +536,7 @@ static void usb_mouse_disconnect(struct usb_interface *intf) //@ : vf_usb_operat
 		usb_free_urb(mouse->irq);
 		struct usb_device *interface_to_usbdev_ret = interface_to_usbdev(intf);
 		usb_free_coherent(interface_to_usbdev_ret/*interface_to_usbdev(intf)*/, 8, mouse->data, mouse->data_dma);
+		//@ open maybe_chars(_, _, _, _);
 		//@ open_struct(mouse);
 		kfree(mouse);
 		//@ open input_close_callback_link(usb_mouse_close)(usb_mouse_open, usb_mouse_event_dummy);
