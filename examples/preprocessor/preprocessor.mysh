@@ -11,3 +11,6 @@ verifast_both -c -disable_overflow_check multiple_include.c
 verifast_both -c  repeated_include.c
 verifast_both -c -disable_overflow_check nested_multiple_include.c
 verifast_both -c -disable_overflow_check -allow_should_fail ghost_macro.c
+verifast_both -c macro_arguments.c
+verifast_both -c -allow_should_fail macro_arguments_bad.c
+

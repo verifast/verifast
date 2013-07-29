@@ -1045,9 +1045,21 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         begin match peek () with
           Some (lx, Ident x) | Some (lx, PreprocessorSymbol x) ->
           junk ();
+          let has_no_whitespace_between location1 location2 =
+            let (start1, stop1) = location1 in
+            let (path1, line1, col1) = stop1 in
+            let (start2, stop2) = location2 in
+            let (path2, line2, col2) = start2 in
+            col1 = col2
+          in
           let params =
             match peek () with
-              Some (_, Kwd "(") ->
+              (* For a macro "#define FIVE (2+3)" there are no parameters
+               * even though there is a open bracket "(", so we must
+               * check whether the open bracket has preceding whitespace,
+               * hence the "when has_no_whitespace_between lx l":
+               *)
+              Some (l, Kwd "(") when has_no_whitespace_between lx l->
               junk ();
               let params =
                 match peek () with
@@ -1063,6 +1075,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
                         Some (_, Ident x) | Some (_, PreprocessorSymbol x) -> junk (); x::params ()
                       | _ -> error "Macro parameter expected"
                       end
+                    | _ -> error "Expected ',' for separating macro parameters or ')' for ending macro parameter list"
                   in
                   x::params ()
                 | _ -> error "Macro definition syntax error"
