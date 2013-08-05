@@ -87,7 +87,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
     | MergeFractionsStmt (l, a) -> []
     | CreateBoxStmt (l, x, bcn, es, handleClauses) -> []
-    | CreateHandleStmt (l, x, hpn, e) -> []
+    | CreateHandleStmt (l, x, fresh, hpn, e) -> []
     | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
     | GotoStmt _ -> []
     | NoopStmt _ -> []
@@ -1027,7 +1027,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         (match eopt with None -> () | Some(e) -> expr_mark_addr_taken e locals); 
         cont locals
     | MergeFractionsStmt(_, a) -> ass_mark_addr_taken a locals;
-    | CreateHandleStmt(_, _, _, e) -> expr_mark_addr_taken e locals; cont locals
+    | CreateHandleStmt(_, _, _, _, e) -> expr_mark_addr_taken e locals; cont locals
     | DisposeBoxStmt(_, _, pats, clauses) -> 
         List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats;
         List.iter (fun (l, s, pats) -> List.iter (fun p -> pat_expr_mark_addr_taken p locals) pats) clauses;

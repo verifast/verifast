@@ -187,6 +187,27 @@ lemma void is_perm_symmetric<t>(list<t> xs, list<t> ys)
   is_perm_symmetric_core(nat_of_int(length(xs)), xs, ys); 
 }
 
+lemma void remove_map_keys(list< pair< handle, void*> > map, handle ha, void* x)
+  requires distinct(keys(map)) == true &*& mem(pair(ha, x), map) == true;
+  ensures keys(remove(pair(ha, x), map)) == remove(ha, keys(map));
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(k, v):
+          if(k == ha && v == x) {
+          } else {
+            remove_map_keys(t, ha, x);
+            if(k == ha) {
+              mem_keys(ha, x, t);
+            }
+          }
+      }
+  }
+}
+  
+
 box_class glist(list<pair<handle, void*> > xs) {
   invariant distinct(keys(xs)) == true &*& foreach(keys(xs), is_handle);
   
@@ -269,6 +290,7 @@ lemma void strong_ghost_list_add(box id, void* x)
   consuming_handle_predicate glist_handle(ha)
   perform_action add(x) {
     handles_unique(keys(mapping), ha);
+    close foreach(cons(ha, keys(mapping)), is_handle);
   }
   producing_box_predicate glist(cons(pair(ha, x), mapping))
   producing_handle_predicate ticket(x);
@@ -346,10 +368,14 @@ lemma void strong_ghost_list_remove(box id, void* x)
   consuming_handle_predicate ticket(ha, x)
   perform_action remove(x) 
   {
+    assert mem(pair(ha, x), mapping) == true;
+    mem_keys(ha, x, mapping);
     distinct_keys_implies_distinct_entries(mapping);
     assert distinct(mapping) == true;
     remove_distinct_keys_preserves_distinct_keys(mapping, ha, x);
     assert distinct(keys(remove(pair(ha, x), mapping))) == true;
+    remove_map_keys(mapping, ha, x);
+    foreach_remove(ha, keys(mapping));
   }
   producing_box_predicate glist(remove(pair(ha, x), mapping))
   producing_handle_predicate glist_handle();
@@ -361,6 +387,7 @@ lemma void strong_ghost_list_remove(box id, void* x)
   is_perm_symmetric(remove(x, xs), values(remove(pair(ha, x), mapping)));
   close strong_ghost_list(id, remove(x, xs));
   leak glist_handle(_, _);
+  leak is_handle(_);
 }
 
 lemma void strong_ghost_list_member_handle_lemma(box id, void* x)

@@ -1189,7 +1189,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       with_context PopSubcontext $. fun () ->
       tcont sizemap ((x, BoxIdType)::tenv) (x::ghostenv) (Chunk ((bcn_symb, true), [], real_unit, boxIdTerm::boxArgs, None)::(handleChunks@h)) ((x, boxIdTerm)::env)
-    | CreateHandleStmt (l, x, hpn, arg) ->
+    | CreateHandleStmt (l, x, is_fresh, hpn, arg) ->
       if not pure then static_error l "Handle creation statements are allowed only in a pure context." None;
       if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
       begin match chop_suffix hpn "_handle" with
@@ -1205,7 +1205,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         None -> static_error l ("No such predicate family: "^hpn) None
       | Some x-> x
       in
-      tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::h) ((x, handleTerm)::env)
+      let is_handle_chunks = if not is_fresh then [] else [Chunk ((get_pred_symb "is_handle", true), [], real_unit, [handleTerm], None)] in
+      tcont sizemap ((x, HandleIdType)::tenv) (x::ghostenv) (Chunk ((hpn_symb, true), [], real_unit, [handleTerm; boxIdTerm], None)::is_handle_chunks@h) ((x, handleTerm)::env)
     | ReturnStmt (l, eo) ->
       verify_return_stmt (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env true l eo [] return_cont econt
     | WhileStmt (l, e, None, dec, ss) ->

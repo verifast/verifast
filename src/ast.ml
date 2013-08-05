@@ -290,6 +290,7 @@ and
   | CreateHandleStmt of
       loc *
       string *
+      bool * (* indicates whether an is_handle chunk is generated *)
       string *
       expr
   | DisposeBoxStmt of
@@ -687,7 +688,7 @@ let stmt_loc s =
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _) -> l
   | CreateBoxStmt (l, _, _, _, _) -> l
-  | CreateHandleStmt (l, _, _, _) -> l
+  | CreateHandleStmt (l, _, _, _, _) -> l
   | DisposeBoxStmt (l, _, _, _) -> l
   | LabelStmt (l, _) -> l
   | GotoStmt (l, _) -> l
