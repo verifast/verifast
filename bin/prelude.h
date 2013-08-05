@@ -322,12 +322,22 @@ lemma void action_permission1_split<t>(predicate(box, list<t>) dispenser, predic
 lemma void action_permission1_split2<t>(predicate(box, list<t>) dispenser, predicate(box, t) p, box id, t x);
   requires is_action_permission1_dispenser(dispenser) == true &*& dispenser(id, ?used) &*& ! mem(x, used) &*& get_action_permission1_for_dispenser(dispenser) == p;
   ensures dispenser(id, append(used, cons(x, nil))) &*& p(id, x);
+
+lemma void action_permission1_merge<t>(predicate(box, list<t>) dispenser, predicate(box, t) p, box id, t x);
+  requires is_action_permission1_dispenser(dispenser) == true &*& dispenser(id, ?used) &*& get_action_permission1_for_dispenser(dispenser) == p &*& p(id, x);
+  ensures dispenser(id, remove(x, used));
   
 fixpoint bool is_action_permission1<t>(predicate(box, t;) p);
 
 lemma void action_permission1_unique<t>(predicate(box, t;) p, box id, t x);
   requires [?f]p(id, x) &*& is_action_permission1<t>(p) == true;
   ensures [f]p(id, x) &*& f <= 1;
+  
+predicate is_handle(handle ha);
+
+lemma void is_handle_unique(handle ha1, handle ha2);
+  requires is_handle(ha1) &*& is_handle(ha2);
+  ensures is_handle(ha1) &*& is_handle(ha2) &*& ha1 != ha2;
 @*/
 
 #endif

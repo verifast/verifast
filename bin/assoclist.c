@@ -121,7 +121,24 @@ lemma_auto(mem(pair(key, value), map)) void mem_keys<t1, t2>(t1 key, t2 value, l
         case pair(key0, value0):
           if(key == key0 && value == value0) {
           } else {
-           mem_keys(key, value, t);
+            mem_keys(key, value, t);
+          }
+      }
+  }
+}
+
+lemma_auto(mem(pair(key, value), map)) void mem_values<t1, t2>(t1 key, t2 value, list<pair<t1, t2> > map)
+  requires mem(pair(key, value), map) == true;
+  ensures mem(value, values(map)) == true;
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          if(key == key0 && value == value0) {
+          } else {
+            mem_values(key, value, t);
           }
       }
   }
@@ -171,6 +188,20 @@ lemma void distinct_keys_implies_distinct_entries<t1, t2>(list<pair<t1, t2> > ma
       switch(h) {
         case pair(key0, value0):
           distinct_keys_implies_distinct_entries(t);
+      }
+  }
+}
+
+lemma void distinct_values_implies_distinct_entries<t1, t2>(list<pair<t1, t2> > map)
+  requires distinct(values(map)) == true;
+  ensures distinct(map) == true;
+{
+  switch(map) {
+    case nil:
+    case cons(h, t):
+      switch(h) {
+        case pair(key0, value0):
+          distinct_values_implies_distinct_entries(t);
       }
   }
 }

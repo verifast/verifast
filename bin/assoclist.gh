@@ -87,6 +87,10 @@ lemma_auto(assoc(otherkey, update_entry(key, f, map))) void update_entry_preserv
 lemma void mem_keys<t1, t2>(t1 key, t2 value, list<pair<t1, t2> > map);
   requires mem(pair(key, value), map) == true;
   ensures mem(key, keys(map)) == true;
+  
+lemma void mem_values<t1, t2>(t1 key, t2 value, list<pair<t1, t2> > map);
+  requires mem(pair(key, value), map) == true;
+  ensures mem(value, values(map)) == true;
 
 lemma_auto(keys(update_entry(key, f, map))) void keys_update_entry<t1, t2>(t1 key, fixpoint(t2, t2) f, list<pair<t1, t2> > map);
   requires true;
