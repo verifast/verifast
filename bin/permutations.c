@@ -133,4 +133,87 @@ lemma void is_perm_symmetric<t>(list<t> xs, list<t> ys)
   is_perm_symmetric_core(nat_of_int(length(xs)), xs, ys); 
 }
 
+
+lemma_auto void count_eq_bounds<t>(list<t> vs, t v) 
+  requires true;
+  ensures 0 <= count_eq(vs, v) && count_eq(vs, v) <= length(vs);
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t): count_eq_bounds(t, v);
+  }
+}
+
+lemma void count_eq_nonzero_implies_mem<t>(list<t> vs, t v) 
+  requires 0 < count_eq(vs, v);
+  ensures mem(v, vs) == true;
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t): if(h != v) count_eq_nonzero_implies_mem(t, v);
+  }
+}
+
+
+lemma void count_eq_remove<t>(list<t> vs, t v, t removed)
+  requires true;
+  ensures count_eq(remove(removed, vs), v) == count_eq(vs, v) - (!mem(removed, vs) || removed != v ? 0 : 1);
+{
+  switch(vs) {
+    case nil:
+    case cons(h, t):
+      count_eq_remove(t, v, removed);
+  }
+}
+
+lemma void permutation_implies_count_eq<t>(list<t> xs, list<t> ys, t v)
+  requires is_permutation(xs, ys) == true;
+  ensures count_eq(xs, v) == count_eq(ys, v);
+{
+  switch(xs) {
+    case nil: switch(ys) { case nil: case cons(hy, ty): }
+    case cons(hx, tx):
+       count_eq_remove<t>(ys, v, hx);
+       permutation_implies_count_eq(tx, remove(hx, ys), v);
+  }
+}
+
+lemma void all_count_eq_implies_permutation<t>(list<t> xs, list<t> ys)
+  requires [_]is_forall_t<t>(?forall_t) &*& forall_t((same_count_eq)(xs, ys)) == true;
+  ensures is_permutation(xs, ys) == true;
+{
+  switch(xs) {
+    case nil: switch(ys) { 
+      case nil: 
+      case cons(hy, ty): 
+        forall_t_elim(forall_t, (same_count_eq)(xs, ys), hy);
+    }
+    case cons(hx, tx):
+      forall_t_elim(forall_t, (same_count_eq)(xs, ys), hx);
+      count_eq_nonzero_implies_mem(ys, hx);
+      if(! forall_t((same_count_eq)(tx, remove(hx, ys)))) {
+        t ex = not_forall_t<t>(forall_t, (same_count_eq)(tx, remove(hx, ys)));
+        forall_t_elim(forall_t, (same_count_eq)(xs, ys), ex);
+        count_eq_remove(ys, ex, hx);
+      }
+      all_count_eq_implies_permutation(tx, remove(hx, ys));
+  } 
+}
+
+lemma void all_count_eq_iff_is_permutation<t>(list<t> xs, list<t> ys)
+  requires [_]is_forall_t<t>(?forall_t);
+  ensures is_permutation(xs, ys) == forall_t((same_count_eq)(xs, ys)) == true;
+{
+  if(is_permutation(xs, ys)) {
+    if(!forall_t((same_count_eq)(xs, ys))) {
+      t ex = not_forall_t<t>(forall_t, (same_count_eq)(xs, ys));
+      permutation_implies_count_eq<t>(xs, ys, ex);
+    }
+  } else {
+    if(forall_t((same_count_eq)(xs, ys))) {
+      all_count_eq_implies_permutation<t>(xs, ys);
+    }
+  }
+}
+
 @*/
