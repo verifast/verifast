@@ -1,0 +1,39 @@
+#ifndef PERMUTATIONS_H
+#define PERMUTATIONS_H
+
+#include "nat.gh"
+
+fixpoint bool is_permutation<t>(list<t> xs, list<t> ys)
+{
+  switch(xs) {
+    case nil: return ys == nil;
+    case cons(h, t):
+      return mem(h, ys) && is_permutation(t, remove(h, ys));
+  }
+}
+
+lemma_auto void is_permutation_reflexive(list<int> xs);
+  requires true;
+  ensures is_permutation(xs, xs) == true;
+
+lemma void is_perm_remove<t>(list<t> xs, list<t> ys, t x);
+  requires is_permutation(xs, ys) == true;
+  ensures is_permutation(remove(x, xs), remove(x, ys)) == true;
+
+lemma void is_perm_mem<t>(list<t> xs, list<t> ys, t x);
+  requires is_permutation(xs, ys) == true;
+  ensures mem(x, xs) == mem(x, ys);
+
+lemma void is_perm_transitive<t>(list<t> xs, list<t> ys, list<t> zs);
+  requires is_permutation(xs, ys) == true &*& is_permutation(ys, zs)== true;
+  ensures is_permutation(xs, zs) == true;
+
+lemma void is_perm_cons_remove<t>(list<t> xs, t x);
+  requires mem(x, xs) == true;
+  ensures is_permutation(xs, cons(x, remove(x, xs))) == true;
+
+lemma void is_perm_symmetric<t>(list<t> xs, list<t> ys);
+  requires is_permutation(xs, ys) == true;
+  ensures is_permutation(ys, xs) == true;
+
+#endif

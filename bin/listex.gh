@@ -33,6 +33,10 @@ lemma void mem_remove_mem<t>(t x, t y, list<t> xs);
     requires mem(x, remove(y, xs)) == true;
     ensures mem(x, xs) == true;
 
+lemma void remove_commutes<t>(list<t> xs, t x, t y);
+  requires true;
+  ensures remove(x, remove(y, xs)) == remove(y, remove(x, xs));
+
 lemma void distinct_mem_remove<t>(t x, list<t> xs);
     requires distinct(xs) == true;
     ensures !mem(x, remove(x, xs));

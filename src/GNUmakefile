@@ -88,7 +88,7 @@ build: env \
        ../bin/vfstrip ../bin/list.vfmanifest \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
        ../bin/arrays.vfmanifest ../bin/quantifiers.vfmanifest \
-       ../bin/assoclist.vfmanifest
+       ../bin/assoclist.vfmanifest ../bin/permutations.vfmanifest
 
 test_plugin: build
 	$(SET_ENV); \
@@ -125,7 +125,8 @@ clean:
 	rm -f *.o *.a
 	cd ../bin; rm -f verifast vfide dlsymtool vfstrip mysh \
          arrays.vfmanifest list.vfmanifest listex.vfmanifest \
-         raw_ghost_lists.vfmanifest quantifiers.vfmanifest
+         raw_ghost_lists.vfmanifest quantifiers.vfmanifest \
+         permutations.vfmanifest
 	rm -f macos/*.cm* macos/*.o
 	rm -f a.out
 	${MAKE} -C linux -f GNUmakefile clean
@@ -154,6 +155,10 @@ debug:
  ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest quantifiers.c
 
+../bin/permutations.vfmanifest: ../bin/permutations.c ../bin/permutations.gh \
+ ../bin/list.vfmanifest
+	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest permutations.c
+	
 ../bin/assoclist.vfmanifest: ../bin/assoclist.c ../bin/assoclist.gh \
  ../bin/list.vfmanifest
 	$(SET_ENV); cd ../bin; ./verifast -c -emit_vfmanifest assoclist.c

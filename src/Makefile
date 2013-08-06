@@ -3,7 +3,7 @@
 PATH=$(MAKEDIR)\..\bin;$(PATH)
 OPT_OPTIONS=-g
 
-test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\java_card_applet.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest ..\bin\quantifiers.vfmanifest ..\bin\assoclist.vfmanifest
+test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe ..\bin\java_card_applet.exe ..\bin\dlsymtool.exe ..\bin\vfstrip.exe ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\listex.vfmanifest ..\bin\arrays.vfmanifest ..\bin\quantifiers.vfmanifest ..\bin\permutations.vfmanifest ..\bin\assoclist.vfmanifest
 	time < nl.txt
 	cd ..
 	cd examples\plugin
@@ -39,6 +39,10 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe
 ..\bin\quantifiers.vfmanifest: ..\bin\quantifiers.gh ..\bin\quantifiers.c
 	cd ..\bin
 	verifast -prover redux -c -emit_vfmanifest quantifiers.c
+
+..\bin\permutations.vfmanifest: ..\bin\permutations.gh ..\bin\permutations.c ..\bin\list.vfmanifest ..\bin\listex.vfmanifest
+	cd ..\bin
+	verifast -prover redux -c -emit_vfmanifest permutations.c
 	cd ..\src
 	
 ..\bin\assoclist.vfmanifest: ..\bin\assoclist.gh ..\bin\assoclist.c

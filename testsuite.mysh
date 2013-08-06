@@ -27,8 +27,13 @@ cd examples
     verifast_both -c threading.o sglock.c
     verifast_both -c threading.o tblock.c
     verifast_both -c strong_ghost_lists.c
-    verifast_both -c ghost_lists.c
+    verifast_both -c listex.o assoclist.o permutations.o ghost_lists.c
     verifast_both -c ticketlock_cap.c
+    ifnotmac verifast -c ticket_lock.c
+    verifast_both -c gotsmanlock.c
+    verifast_both -c spinlock.c
+    ifnotmac verifast -c concurrentqueue.c
+    ifnotmac verifast -c concurrentstackclient.c
     ifnotmac verifast -allow_assume listex.o atomics.o threading.o concurrentqueue.h concurrentqueue.c concurrentqueue_client.c
   cd ..
   ifnotmac verifast listex.o arrays.o stringBuffers.c sockets.o bot.c

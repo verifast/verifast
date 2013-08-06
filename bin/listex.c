@@ -79,6 +79,16 @@ lemma void mem_remove_mem<t>(t x, t y, list<t> xs)
     }
 }
 
+lemma void remove_commutes<t>(list<t> xs, t x, t y)
+  requires true;
+  ensures remove(x, remove(y, xs)) == remove(y, remove(x, xs));
+{
+  switch(xs) {
+    case nil:
+    case cons(h, t): remove_commutes(t, x, y);
+  }
+}
+
 lemma void distinct_mem_remove<t>(t x, list<t> xs)
     requires distinct(xs) == true;
     ensures !mem(x, remove(x, xs));

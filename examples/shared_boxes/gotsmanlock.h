@@ -2,7 +2,7 @@
 #define GOTSMANLOCK_H
 
 /*@
-predicate lock(int* l, predicate() I;); 
+predicate lock(int* l, predicate() I); 
 predicate locked(int* l, predicate() I);  
 @*/
 

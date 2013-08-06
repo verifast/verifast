@@ -883,20 +883,18 @@ and parse_array_braces te = parser
      end;
      '(_, Kwd "]") >] -> te
 | [< >] -> te
+and parse_create_handle_keyword = parser 
+    [< '(l, Kwd "create_handle") >] -> (l, false)
+  | [< '(l, Kwd "create_fresh_handle") >] -> (l, true)
 and
   parse_decl_stmt_rest te lx x = parser
     [< '(l, Kwd "=");
        s = parser
-         [< '(l, Kwd "create_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
+         [< (l, fresh) = parse_create_handle_keyword; '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
          begin
            match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
          end;
-         CreateHandleStmt (l, x, false, hpn, e)
-       | [< '(l, Kwd "create_fresh_handle"); '(_, Ident hpn); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")"); '(_, Kwd ";") >] ->
-         begin
-           match te with ManifestTypeExpr (_, HandleIdType) -> () | _ -> raise (ParseException (l, "Target variable of handle creation statement must have type 'handle'."))
-         end;
-         CreateHandleStmt (l, x, true, hpn, e)
+         CreateHandleStmt (l, x, fresh, hpn, e)
        | [< rhs = parse_declaration_rhs te; ds = comma_rep (parse_declarator te); '(_, Kwd ";") >] ->
          DeclStmt (l, (l, te, x, Some(rhs), ref false)::ds)
     >] -> s

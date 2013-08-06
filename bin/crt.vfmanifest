@@ -61,6 +61,7 @@
 .provides prelude.h#divrem_elim
 .provides prelude.h#pointers_to_chars
 .provides prelude.h#character_limits
+.provides prelude.h#is_handle_unique
 .provides prelude_core.gh#default_value_eq_zero
 .provides quantifiers.gh#get_forall_t
 .provides quantifiers.gh#not_forall_t
