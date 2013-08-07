@@ -22,7 +22,7 @@ let ghost_keywords = [
   "ensures"; "close"; "lemma"; "open"; "emp"; "invariant"; "lemma_auto";
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
-  "create_box"; "and_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
+  "create_box"; "at_level"; "and_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"; "require_module"; ".."; "extends"; "permbased"
 ]
@@ -738,9 +738,10 @@ and
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident hpn); pats = parse_patlist >] -> (l, hpn, pats));
      '(_, Kwd ";") >] -> DisposeBoxStmt (l, bcn, pats, handleClauses)
 | [< '(l, Kwd "create_box"); '(_, Ident x); '(_, Kwd "="); '(_, Ident bcn); args = parse_arglist;
+     level = opt (parser [< '(l, Kwd "at_level"); e = parse_expr >] -> e);
      handleClauses = rep (parser [< '(l, Kwd "and_handle"); '(_, Ident x); '(_, Kwd "="); '(_, Ident hpn); args = parse_arglist >] -> (l, x, hpn, args));
      '(_, Kwd ";")
-     >] -> CreateBoxStmt (l, x, bcn, args, handleClauses)
+     >] -> CreateBoxStmt (l, x, bcn, args, level, handleClauses)
 | [< '(l, Kwd "produce_lemma_function_pointer_chunk"); '(_, Kwd "("); e = parse_expr; '(_, Kwd ")");
      ftclause = begin parser
        [< '(_, Kwd ":");

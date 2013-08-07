@@ -10,9 +10,8 @@ struct lock {
 
 //@ predicate_ctor O(struct lock* l)(int value) = [1/2]l->owner_copy |-> value;
 //@ predicate_ctor N(struct lock* l)(int value) = [1/2]l->next_copy |-> value;
-//@ predicate lock(struct lock* l, predicate() I) = atomic_integer(&l->owner, O(l)) &*& atomic_integer(&l->next, N(l)) &*& tbox(?id, l, I) &*& malloc_block_lock(l);
-//@ predicate locked(struct lock* l, predicate() I, real f) = [f]atomic_integer(&l->owner, O(l)) &*& [f]atomic_integer(&l->next, N(l)) &*& [f]tbox(?id, l, I) &*& [f]malloc_block_lock(l) &*& holds_lock(?ha, id, ?ticket);
-
+//@ predicate lock(struct lock* l, predicate() I) = atomic_integer(&l->owner, ?level, O(l)) &*& atomic_integer(&l->next, level, N(l)) &*& tbox(?id, l, I) &*& malloc_block_lock(l) &*& level < box_level(id);
+//@ predicate locked(struct lock* l, predicate() I, real f) = [f]atomic_integer(&l->owner, ?level, O(l)) &*& [f]atomic_integer(&l->next, level, N(l)) &*& [f]tbox(?id, l, I) &*& [f]malloc_block_lock(l) &*& holds_lock(?ha, id, ?ticket) &*& level < box_level(id);
 
 /*@ predicate range(int from, int to; list<int> vs) =
   from >= to ?
@@ -105,9 +104,10 @@ struct lock* create_lock()
   //@ l->next_copy = 0;
   //@ close O(l)(0);
   //@ close N(l)(0);
-  //@ create_atomic_integer(&l->owner, O(l));
-  //@ create_atomic_integer(&l->next, N(l));
+  //@ create_atomic_integer(&l->owner, 0, O(l));
+  //@ create_atomic_integer(&l->next, 0, N(l));
   //@ create_box id = tbox(l, I);
+  //@ assume (box_level(id) == 1);
   //@ close lock(l, I);
   return l;
 }
@@ -119,14 +119,15 @@ void acquire(struct lock* l)
   int i;
   //@ open [f]lock(l, I);
   //@ assert [f]tbox(?id, l, I);
+  //@ assert [f]atomic_integer(_, ?level, _);
   {
     /*@
     predicate_family_instance atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() = [f]tbox(id, l, I);
     predicate_family_instance atomic_integer_inc_post(my_atomic_integer_inc_lemma)(int old) = [f]tbox(id, l, I) &*& is_ticket(?ha, id, old);
     
     lemma void my_atomic_integer_inc_lemma()
-      requires atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() &*& N(l)(?value);
-      ensures atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value) &*& N(l)(value + 1);
+      requires atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() &*& N(l)(?value) &*& current_box_level(level);
+      ensures atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value) &*& N(l)(value + 1) &*& current_box_level(level);
     {
       open atomic_integer_inc_pre(my_atomic_integer_inc_lemma)();
       open N(l)(value);
@@ -146,21 +147,21 @@ void acquire(struct lock* l)
       close atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value);
     }
     @*/
-    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_inc_lemma) : atomic_integer_inc_lemma(N(l))() { call(); };
+    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_inc_lemma) : atomic_integer_inc_lemma(N(l), level)() { call(); };
     //@ close atomic_integer_inc_pre(my_atomic_integer_inc_lemma)();
     i = atomic_integer_inc(&l->next);
     //@ open atomic_integer_inc_post(my_atomic_integer_inc_lemma)(_);
   }
   while(true)
-    //@ invariant [f]tbox(id, l, I) &*& is_ticket(?ha, id, i) &*& [f]atomic_integer(&l->owner, O(l));
+    //@ invariant [f]tbox(id, l, I) &*& is_ticket(?ha, id, i) &*& [f]atomic_integer(&l->owner, level, O(l));
   {
     /*@
     predicate_family_instance atomic_integer_get_pre(my_atomic_integer_get_lemma)() = [f]tbox(id, l, I) &*& is_ticket(ha, id, i);
     predicate_family_instance atomic_integer_get_post(my_atomic_integer_get_lemma)(int read) = [f]tbox(id, l, I) &*& read == i ? holds_lock(ha, id, i) : is_ticket(ha, id, i);
     
     lemma void my_atomic_integer_get_lemma()
-      requires atomic_integer_get_pre(my_atomic_integer_get_lemma)() &*& O(l)(?value);
-      ensures atomic_integer_get_post(my_atomic_integer_get_lemma)(value) &*& O(l)(value);
+      requires atomic_integer_get_pre(my_atomic_integer_get_lemma)() &*& O(l)(?value) &*& current_box_level(level);
+      ensures atomic_integer_get_post(my_atomic_integer_get_lemma)(value) &*& O(l)(value) &*& current_box_level(level);
     {
       open atomic_integer_get_pre(my_atomic_integer_get_lemma)();
       open O(l)(value);
@@ -174,7 +175,7 @@ void acquire(struct lock* l)
       close atomic_integer_get_post(my_atomic_integer_get_lemma)(value);
     }
     @*/
-    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_get_lemma) : atomic_integer_get_lemma(O(l))() { call(); };
+    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_get_lemma) : atomic_integer_get_lemma(O(l), level)() { call(); };
     //@ close atomic_integer_get_pre(my_atomic_integer_get_lemma)();
     int read = atomic_integer_get(&l->owner);
     //@ open atomic_integer_get_post(my_atomic_integer_get_lemma)(read);
@@ -191,14 +192,15 @@ void release(struct lock* l)
 {
   //@ open locked(l, I, f);
   //@ assert holds_lock(?ha, ?id, ?i);
+  //@ assert [f]atomic_integer(_, ?level, _);
   {
     /*@
     predicate_family_instance atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() = [f]tbox(id, l, I) &*& holds_lock(ha, id, i);
     predicate_family_instance atomic_integer_inc_post(my_atomic_integer_inc_lemma)(int old) = [f]tbox(id, l, I);
     
     lemma void my_atomic_integer_inc_lemma()
-      requires atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() &*& O(l)(?value);
-      ensures atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value) &*& O(l)(value + 1);
+      requires atomic_integer_inc_pre(my_atomic_integer_inc_lemma)() &*& O(l)(?value) &*& current_box_level(level);
+      ensures atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value) &*& O(l)(value + 1) &*& current_box_level(level);
     {
       open atomic_integer_inc_pre(my_atomic_integer_inc_lemma)();
       open O(l)(value);
@@ -215,7 +217,7 @@ void release(struct lock* l)
       leak tbox_next(_, _);
     }
     @*/
-    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_inc_lemma) : atomic_integer_inc_lemma(O(l))() { call(); };
+    //@ produce_lemma_function_pointer_chunk(my_atomic_integer_inc_lemma) : atomic_integer_inc_lemma(O(l), level)() { call(); };
     //@ close atomic_integer_inc_pre(my_atomic_integer_inc_lemma)();
     int old = atomic_integer_inc(&l->owner);
     //@ open atomic_integer_inc_post(my_atomic_integer_inc_lemma)(_);

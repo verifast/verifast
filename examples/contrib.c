@@ -158,7 +158,7 @@ int main()
     producing_handle_predicate contrib_box_handle();
     @*/
     //@ dispose_box contrib_box(box2, _, _);
-    //@ leak contrib_box_handle(_, box2);
+    //@ leak contrib_box_handle(_, _);
     
     int sum = sumObject->sum;
     assert(sum == 2);

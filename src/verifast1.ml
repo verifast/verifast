@@ -4442,6 +4442,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     ctxt#pop;
     result
   
+  let assume_opt t cont =
+    match t with
+      None -> cont ()
+    | Some(t) -> assume t cont
+  
   let assume_eq t1 t2 cont = assume (ctxt#mk_eq t1 t2) cont
   let assume_neq t1 t2 cont = assume (ctxt#mk_not (ctxt#mk_eq t1 t2)) cont
   

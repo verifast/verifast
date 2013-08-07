@@ -338,6 +338,10 @@ predicate is_handle(handle ha);
 lemma void is_handle_unique(handle ha1, handle ha2);
   requires is_handle(ha1) &*& is_handle(ha2);
   ensures is_handle(ha1) &*& is_handle(ha2) &*& ha1 != ha2;
+
+fixpoint int box_level(box id);
+
+predicate current_box_level(int level);
 @*/
 
 #endif

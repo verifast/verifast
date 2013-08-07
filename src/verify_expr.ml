@@ -86,7 +86,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       block_assigned_variables body
     | SplitFractionStmt (l, p, targs, pats, coefopt) -> []
     | MergeFractionsStmt (l, a) -> []
-    | CreateBoxStmt (l, x, bcn, es, handleClauses) -> []
+    | CreateBoxStmt (l, x, bcn, es, level, handleClauses) -> []
     | CreateHandleStmt (l, x, fresh, hpn, e) -> []
     | DisposeBoxStmt (l, bcn, pats, handleClauses) -> []
     | GotoStmt _ -> []

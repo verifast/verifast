@@ -1102,7 +1102,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           tcont sizemap tenv ghostenv h env
         )
       )
-    | CreateBoxStmt (l, x, bcn, args, handleClauses) ->
+    | CreateBoxStmt (l, x, bcn, args, level, handleClauses) ->
       if not pure then static_error l "Box creation statements are allowed only in a pure context." None;
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) bcn boxmap with
@@ -1135,6 +1135,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
       let boxIdTerm = get_unique_var_symb x BoxIdType in
       let boxArgMapWithThis = ("this", boxIdTerm) :: boxArgMap in
+      let wlevel = match level with None -> None | Some(level) -> Some(check_expr_t  (pn,ilist) tparams tenv level IntType) in
       let rec action_permission_chunks amap =
         match amap with
           [] -> []
@@ -1147,6 +1148,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in 
           Chunk((pred_symb, true), [], real_unit, parameters, None) :: (action_permission_chunks rest)
       in
+      assume_opt (match wlevel with None -> None | Some(wlevel) -> Some (ctxt#mk_eq (mk_app (get_pure_func_symb "box_level") [boxIdTerm]) (eval env wlevel))) $. fun () ->
       let h = (action_permission_chunks amap) @ h in
       with_context PushSubcontext $. fun () ->
       consume_asn rules [] h ghostenv boxArgMapWithThis inv true real_unit $. fun _ h _ boxVarMap _ ->
@@ -1513,7 +1515,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | Some pre_bcn -> pre_bcn
       in
       if not (List.mem pre_bcn boxes) then static_error lcb "You cannot perform an action on a box class that has not yet been declared." None;
-      if is_atomic && not (! nonpure_ctxt) then static_error lcb "Atomic perform action statements only allowed at top-level." None;
       let (pre_bcp_pats, tenv) = check_pats (pn,ilist) lcb tparams tenv (BoxIdType::List.map (fun (x, t) -> t) boxpmap) pre_bcp_pats in
       let pre_bcp_pats = srcpats pre_bcp_pats in
       let (_, _, _, _, boxpred_symb, _) = match try_assoc' (pn,ilist) pre_bcn predfammap with 
@@ -1521,8 +1522,25 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | None -> static_error lcb ("Box predicate not found: "^pre_bcn) None
       in
       consume_chunk rules h ghostenv env [] lcb (boxpred_symb, true) [] real_unit dummypat None pre_bcp_pats (fun _ h box_coef ts chunk_size ghostenv env [] ->
-        if not is_atomic && box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1 if action is non-atomic." None;
+        let current_box_level_symb = get_pred_symb "current_box_level" in
+        let box_level_symb = get_pure_func_symb "box_level" in
         let (boxId::pre_boxPredArgs) = ts in
+        let box_level_term = (mk_app (get_pure_func_symb "box_level") [boxId]) in
+        if not is_atomic && box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1 if action is non-atomic." None;
+        let check_level_increasing h cont =
+          if is_atomic && not (! nonpure_ctxt) then
+            consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [dummypat] (fun old_current_box_level_chunk h box_coef ts chunk_size ghostenv env [] ->
+              let [current_level] = ts in
+              if not (ctxt#query (ctxt#mk_lt current_level box_level_term)) then static_error lcb "Level of inner atomic perform action must be higher than level of outer perform actions" None;
+              cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) (Some old_current_box_level_chunk)
+            )
+          else
+            if (! nonpure_ctxt) then (* is top level box entry *)
+              cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) None
+            else
+              cont h None
+        in
+        check_level_increasing h (fun h old_current_box_level_chunk ->
         let (pre_handlePred_parammap,  pre_handlePred_extended, pre_handlePred_inv) =
           if pre_hpn = pre_bcn ^ "_handle" then
             ([], None, EmpAsn lch)
@@ -1612,6 +1630,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandle", handleId)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_expr post_env post h post_env closeBraceLoc "Action postcondition failure." None;
+                 let reset_current_box_level h cont =
+                   match  old_current_box_level_chunk with
+                     None ->
+                       if (! nonpure_ctxt) then
+                         consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
+                           cont h
+                         )
+                       else
+                         cont h
+                   | Some chunk ->
+                      consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
+                        cont (chunk :: h)
+                      )
+                 in
+                 reset_current_box_level h (fun h ->
                  let produce_post_handle lph post_hpn post_hp_args tcont =
                    let (post_handlePred_parammap, post_handlePred_extended, post_handlePred_inv) =
                      if post_hpn = pre_bcn ^ "_handle" then
@@ -1652,10 +1685,11 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle l name args tcont
                  in
                  produce_post_handles posthandles
+                 )
                ) return_cont econt
              )
           )
-      )
+      ))
     | BlockStmt (l, ds, ss, closeBraceLoc, locals_to_free) ->
       let (lems, predinsts, localpreds, localpredinsts) =
         List.fold_left

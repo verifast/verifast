@@ -35,6 +35,9 @@ cd examples
     ifnotmac verifast -c concurrentqueue.c
     ifnotmac verifast -c concurrentstackclient.c
     ifnotmac verifast -allow_assume listex.o atomics.o threading.o concurrentqueue.h concurrentqueue.c concurrentqueue_client.c
+    verifast_both -c atomic_integer.c
+    verifast_both -c spinlock_with_atomic_integer.c
+    verifast_both -c ticketlock_with_atomic_integer.c
   cd ..
   ifnotmac verifast listex.o arrays.o stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c

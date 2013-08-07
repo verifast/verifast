@@ -18,24 +18,24 @@ box_class atomic_integer_box(int* i, predicate(int) I) {
     ensures old_value == old ? value == new : value == old_value;
 }
 
-predicate atomic_integer(int* i, predicate(int) I) =
-  atomic_integer_box(?id, i, I);
+predicate atomic_integer(int* i, int level, predicate(int) I) =
+  atomic_integer_box(?id, i, I) &*& box_level(id) == level;
   
-lemma void create_atomic_integer(int* i, predicate(int) I)
+lemma void create_atomic_integer(int* i, int level, predicate(int) I)
   requires integer(i, ?value) &*& I(value);
-  ensures atomic_integer(i, I);
+  ensures atomic_integer(i, level, I);
 {
-  create_box id = atomic_integer_box(i, I);
-  close atomic_integer(i, I);
+  create_box id = atomic_integer_box(i, I) at_level level;
+  close atomic_integer(i, level, I);
 }
 @*/
 
 void atomic_integer_set(int* i, int v)
-  //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_set_lemma(?lem, v, I)  &*& atomic_integer_set_pre(lem)(v);
-  //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_set_post(lem)(_, v);
+  //@ requires [?f]atomic_integer(i, ?level, ?I) &*& is_atomic_integer_set_lemma(?lem, v, I, level)  &*& atomic_integer_set_pre(lem)(v);
+  //@ ensures [f]atomic_integer(i, level, I) &*& atomic_integer_set_post(lem)(_, v);
 {
   ;
-  //@ open [f]atomic_integer(i, I);
+  //@ open [f]atomic_integer(i, level, I);
   //@ assert [f]atomic_integer_box(?id, i, I);
   //@ handle ha = create_handle atomic_integer_box_handle(id);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
@@ -47,17 +47,17 @@ void atomic_integer_set(int* i, int v)
   }
   producing_handle_predicate atomic_integer_box_handle();
   @*/
-  //@ close [f]atomic_integer(i, I);
+  //@ close [f]atomic_integer(i, level, I);
   //@ leak atomic_integer_box_handle(ha, id);
-  //@ leak is_atomic_integer_set_lemma(lem, v, I);
+  //@ leak is_atomic_integer_set_lemma(lem, v, I, level);
 }
 
 int atomic_integer_get(int* i)
-  //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_get_lemma(?lem, I)  &*& atomic_integer_get_pre(lem)();
-  //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_get_post(lem)(result);
+  //@ requires [?f]atomic_integer(i, ?level, ?I) &*& is_atomic_integer_get_lemma(?lem, I, level)  &*& atomic_integer_get_pre(lem)();
+  //@ ensures [f]atomic_integer(i, level, I) &*& atomic_integer_get_post(lem)(result);
 {
   ;
-  //@ open [f]atomic_integer(i, I);
+  //@ open [f]atomic_integer(i, level, I);
   //@ assert [f]atomic_integer_box(?id, i, I);
   //@ handle ha = create_handle atomic_integer_box_handle(id);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
@@ -69,18 +69,18 @@ int atomic_integer_get(int* i)
   }
   producing_handle_predicate atomic_integer_box_handle();
   @*/
-  //@ close [f]atomic_integer(i, I);
+  //@ close [f]atomic_integer(i, level, I);
   //@ leak atomic_integer_box_handle(ha, id);
-  //@ leak is_atomic_integer_get_lemma(lem, I);
+  //@ leak is_atomic_integer_get_lemma(lem, I, level);
   return res;
 }
 
 bool atomic_integer_cas(int* i, int old, int new)
-  //@ requires [?f]atomic_integer(i, ?I) &*& is_atomic_integer_cas_lemma(?lem, I, old, new)  &*& atomic_integer_cas_pre(lem)(old, new);
-  //@ ensures [f]atomic_integer(i, I) &*& atomic_integer_cas_post(lem)(result, old, new);
+  //@ requires [?f]atomic_integer(i, ?level, ?I) &*& is_atomic_integer_cas_lemma(?lem, I, old, new, level)  &*& atomic_integer_cas_pre(lem)(old, new);
+  //@ ensures [f]atomic_integer(i, level, I) &*& atomic_integer_cas_post(lem)(result, old, new);
 {
   ;
-  //@ open [f]atomic_integer(i, I);
+  //@ open [f]atomic_integer(i, level, I);
   //@ assert [f]atomic_integer_box(?id, i, I);
   //@ handle ha = create_handle atomic_integer_box_handle(id);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
@@ -92,18 +92,18 @@ bool atomic_integer_cas(int* i, int old, int new)
   }
   producing_handle_predicate atomic_integer_box_handle();
   @*/
-  //@ close [f]atomic_integer(i, I);
+  //@ close [f]atomic_integer(i, level, I);
   //@ leak atomic_integer_box_handle(ha, id);
-  //@ leak is_atomic_integer_cas_lemma(lem, I, old, new);
+  //@ leak is_atomic_integer_cas_lemma(lem, I, old, new, level);
   return res == old;
 }
 
 /*@
 lemma void atomic_integer_dispose(int* i)
-  requires atomic_integer(i, ?I);
+  requires atomic_integer(i, ?level, ?I);
   ensures integer(i, ?value) &*& I(value);
 {
-  open atomic_integer(i, I);
+  open atomic_integer(i, level, I);
   assert atomic_integer_box(?id, i, I);
   dispose_box atomic_integer_box(id, i, I);
 }

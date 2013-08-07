@@ -10,9 +10,9 @@ struct spinlock {
   //@ int locked_copy;
 };
 
-//@ predicate spinlock(struct spinlock* s, predicate() I) = atomic_integer(&s->locked, J(s, I)) &*& malloc_block_spinlock(s);
+//@ predicate spinlock(struct spinlock* s, predicate() I) = atomic_integer(&s->locked, ?level, J(s, I)) &*& malloc_block_spinlock(s);
 
-//@ predicate locked(struct spinlock* s, predicate() I, real f) = [f]atomic_integer(&s->locked, J(s, I)) &*& [f]malloc_block_spinlock(s) &*& [1/2]s->locked_copy |-> 1;
+//@ predicate locked(struct spinlock* s, predicate() I, real f) = [f]atomic_integer(&s->locked, ?level, J(s, I)) &*& [f]malloc_block_spinlock(s) &*& [1/2]s->locked_copy |-> 1;
 
 //@ predicate_ctor J(struct spinlock* s, predicate() I)(int state) = [1/2]s->locked_copy |-> state &*& state == 0 ? [1/2]s->locked_copy |-> 0 &*& I() : true;  
 
@@ -25,7 +25,7 @@ struct spinlock* create_spinlock()
   s->locked = 0;
   s->locked_copy = 0;
   //@ close J(s, I)(0);
-  //@ create_atomic_integer(&s->locked, J(s, I));
+  //@ create_atomic_integer(&s->locked, 0, J(s, I));
   return s;
   //@ close spinlock(s, I);
 }
@@ -36,14 +36,14 @@ void spinlock_acquire(struct spinlock* s)
 {
   //@ open [f]spinlock(s, I);
   while(true) 
-    //@ invariant [f]atomic_integer(&s->locked, J(s, I)) &*& [f]malloc_block_spinlock(s);
+    //@ invariant [f]atomic_integer(&s->locked, ?level, J(s, I)) &*& [f]malloc_block_spinlock(s);
   {
     /*@
       predicate_family_instance atomic_integer_cas_pre(my_atomic_integer_cas_lemma)(int old, int new) = true;
       predicate_family_instance atomic_integer_cas_post(my_atomic_integer_cas_lemma)(bool success, int old, int new) = success ? I() &*& [1/2]s->locked_copy |-> 1 : true;
       lemma void my_atomic_integer_cas_lemma()
-        requires atomic_integer_cas_pre(my_atomic_integer_cas_lemma)(0, 1) &*& J(s, I)(?value);
-        ensures atomic_integer_cas_post(my_atomic_integer_cas_lemma)(value == 0, 0, 1) &*& J(s, I)(value == 0 ? 1 : value);
+        requires atomic_integer_cas_pre(my_atomic_integer_cas_lemma)(0, 1) &*& J(s, I)(?value) &*& current_box_level(level);
+        ensures atomic_integer_cas_post(my_atomic_integer_cas_lemma)(value == 0, 0, 1) &*& J(s, I)(value == 0 ? 1 : value) &*& current_box_level(level);
       {
         open atomic_integer_cas_pre(my_atomic_integer_cas_lemma)(0, 1);
         open J(s, I)(value);
@@ -52,7 +52,7 @@ void spinlock_acquire(struct spinlock* s)
         close atomic_integer_cas_post(my_atomic_integer_cas_lemma)(0 == value, 0, 1);
       } 
     @*/
-    //@  produce_lemma_function_pointer_chunk(my_atomic_integer_cas_lemma) : atomic_integer_cas_lemma(J(s, I), 0, 1)() { call(); };
+    //@  produce_lemma_function_pointer_chunk(my_atomic_integer_cas_lemma) : atomic_integer_cas_lemma(J(s, I), 0, 1, level)() { call(); };
     //@ close atomic_integer_cas_pre(my_atomic_integer_cas_lemma)(0, 1);
     bool success = atomic_integer_cas(&s->locked, 0, 1);
     //@ open atomic_integer_cas_post(my_atomic_integer_cas_lemma)(_, 0, 1);
@@ -68,13 +68,14 @@ void spinlock_release(struct spinlock* s)
   //@ ensures [f]spinlock(s, I);
 {
   //@ open locked(s, I, f);
+  //@ assert [f]atomic_integer(_, ?level, _);
   {
     /*@
     predicate_family_instance atomic_integer_set_pre(my_atomic_integer_set_lemma)(int new) = I() &*& [1/2]s->locked_copy |-> 1;
     predicate_family_instance atomic_integer_set_post(my_atomic_integer_set_lemma)(int old, int new) = true;
     lemma void my_atomic_integer_set_lemma()
-      requires atomic_integer_set_pre(my_atomic_integer_set_lemma)(0) &*& J(s, I)(?value);
-      ensures atomic_integer_set_post(my_atomic_integer_set_lemma)(value, 0) &*& J(s, I)(0);
+      requires atomic_integer_set_pre(my_atomic_integer_set_lemma)(0) &*& J(s, I)(?value) &*& current_box_level(level);
+      ensures atomic_integer_set_post(my_atomic_integer_set_lemma)(value, 0) &*& J(s, I)(0) &*& current_box_level(level);
     {
       open atomic_integer_set_pre(my_atomic_integer_set_lemma)(0);
       open J(s, I)(value);
@@ -83,7 +84,7 @@ void spinlock_release(struct spinlock* s)
       close atomic_integer_set_post(my_atomic_integer_set_lemma)(value, 0);
     } 
     @*/
-    //@  produce_lemma_function_pointer_chunk(my_atomic_integer_set_lemma) : atomic_integer_set_lemma(0, J(s, I))() { call(); };
+    //@  produce_lemma_function_pointer_chunk(my_atomic_integer_set_lemma) : atomic_integer_set_lemma(0, J(s, I), level)() { call(); };
     //@ close atomic_integer_set_pre(my_atomic_integer_set_lemma)(0);
     atomic_integer_set(&s->locked, 0);
     //@ open atomic_integer_set_post(my_atomic_integer_set_lemma)(_, 0);
