@@ -2458,9 +2458,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let inherited_methods = flatmap (fun ifn -> get_methods ifn mn) interfs in
       declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
     in
-    let promote_numeric e1 e2 ts =
-      let (w1, t1, _) = check e1 in
-      let (w2, t2, _) = check e2 in
+    (*
+     * Precondition: see "promote_checkdone"
+     *)
+    let promote_numeric_checkdone e1 e2 ts check_e1 check_e2 =
+      let (w1, t1, _) = check_e1 in
+      let (w2, t2, _) = check_e2 in
       match (unfold_inferred_type t1, unfold_inferred_type t2) with
         (IntType, RealType) ->
         let w1 = checkt e1 RealType in
@@ -2481,10 +2484,23 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         ts := Some [t1; t1];
         (w1, w2, t1)
     in
-    let promote l e1 e2 ts =
-      match promote_numeric e1 e2 ts with
+    (*
+     * Precondition: "check e1" has already been executed and its result is
+     *   in check_e1. Analogues for check_e2.
+     *   This precondition avoids having the implementation call "check e2",
+     *   which avoids a quadratic time complexity for typechecking e.g.
+     *   "1+1+1+1+1+...+1".
+     *)
+    let promote_checkdone l e1 e2 ts check_e1 check_e2 =
+      match promote_numeric_checkdone e1 e2 ts check_e1 check_e2 with
         (w1, w2, (Char | ShortType | IntType | RealType | UintPtrType | PtrType _ | UShortType | UChar)) as result -> result
       | _ -> static_error l "Expression of type char, short, int, real, or pointer type expected." None
+    in
+    let promote_numeric e1 e2 ts =
+      promote_numeric_checkdone e1 e2 ts (check e1) (check e2)
+    in
+    let promote l e1 e2 ts =
+      promote_checkdone l e1 e2 ts (check e1) (check e2)
     in
     let check_pure_fun_value_call l w t es =
       if es = [] then static_error l "Zero-argument application of pure function value makes no sense." None;
@@ -2704,7 +2720,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             (Operation (l, operator, [w1; w2], ts), t1, None)
           end
         | IntType | RealType | ShortType | Char | UintPtrType ->
-          let (w1, w2, t) = promote l e1 e2 ts in
+          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
           (Operation (l, operator, [w1; w2], ts), t, if t = IntType then (match (value1, value2) with ((Some value1), (Some value2)) -> begin match operator with Add -> Some(add_big_int value1 value2) | Sub -> Some(sub_big_int value1 value2) end | _-> None) else None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in
@@ -3000,9 +3016,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let w2 = checkt e2 t1 in
       (AssignExpr (l, w1, w2), t1, None)
     | AssignOpExpr(l, e1, (Add | Sub | Mul as operator), e2, postOp, ts, lhs_type) ->
-      let (w1, t1, _) = check e1 in
+      let (w1, t1, value1) = check e1 in
       lhs_type := Some t1;
-      let (w2, t2, _) = check e2 in
+      let (w2, t2, value2) = check e2 in
       begin
         match t1 with
           PtrType pt1 when operator = Add || operator = Sub ->
@@ -3018,7 +3034,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
           end
         | IntType | RealType | ShortType | Char ->
-          let (w1, w2, t) = promote l e1 e2 ts in
+          let (w1, w2, t) = promote_checkdone l e1 e2 ts (w1, t1, value1) (w2, t2, value2) in
           (AssignOpExpr(l, w1, operator, w2, postOp, ts, lhs_type), t1, None)
         | ObjType "java.lang.String" as t when operator = Add ->
           let w2 = checkt e2 t in

@@ -275,6 +275,7 @@ cd tutorial_solutions
   verifast_both listex.o students.c
 cd ..
 cd tests
+  verifast_both stresstest-one-plus-one.c
   cd bugs
 cd ..
 cd errors
