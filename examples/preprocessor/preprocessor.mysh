@@ -2,6 +2,8 @@ let verifast_both
 verifast
 verifast -prover redux
 in
+verifast_both -I headertest -c headertest.c
+verifast_both -c directorytest/main.c
 verifast_both -c -disable_overflow_check preprocessor.c
 verifast_both -c -allow_should_fail bad_include.c
 verifast_both -c -allow_should_fail nested_bad_include.c

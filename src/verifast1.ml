@@ -852,14 +852,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let rellocalpath = concat reldir header_path in
           let includepaths = List.append include_paths [basedir; bindir] in
           let rec find_include_file includepaths =
-            match includepaths with
-              [] -> static_error l (Printf.sprintf "No such file: '%s'" rellocalpath) None
-            | head::body ->
-              let headerpath = concat head rellocalpath in
-              if Sys.file_exists headerpath then
-                (head, rellocalpath)
-              else
-                (find_include_file body)
+            match language with
+              CLang ->
+                (".", total_path)
+            | Java ->
+                match includepaths with
+                  [] -> static_error l (Printf.sprintf "No such file: '%s'" rellocalpath) None
+                | head::body ->
+                  let headerpath = concat head rellocalpath in
+                  if Sys.file_exists headerpath then
+                    (head, rellocalpath)
+                  else
+                    (find_include_file body)
           in
           let (basedir1, relpath) = find_include_file includepaths in
           let relpath = reduce_path relpath in
