@@ -858,10 +858,25 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   let macros = ref [Hashtbl.create 10] in
   let ghost_macros = ref [Hashtbl.create 10] in
   let get_macros () = if !in_ghost_range then !ghost_macros else !macros in
+  let is_defined x =
+    if Hashtbl.mem (List.hd !macros) x then 
+      true
+    else
+      !in_ghost_range && Hashtbl.mem (List.hd !ghost_macros) x
+  in
+  let get_macro x =
+    if is_defined x then
+      if !in_ghost_range && Hashtbl.mem (List.hd !ghost_macros) x then
+        Hashtbl.find (List.hd !ghost_macros) x
+      else
+        Hashtbl.find (List.hd !macros) x
+    else
+      (dummy_loc, None, [])
+  in
   let last_macro_used = ref (dummy_loc, "") in
   let update_last_macro_used x =
-    if Hashtbl.mem (List.hd (get_macros ())) x then begin
-      match Hashtbl.find (List.hd (get_macros ())) x with
+    if is_defined x then begin
+      match get_macro x with
         (l, _, _) -> last_macro_used := (l, x);
     end
   in
@@ -935,7 +950,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Ident "defined") ->
         let check x = 
           let cond = 
-            if Hashtbl.mem (List.hd (get_macros ())) x then begin
+            if is_defined x then begin
               update_last_macro_used x;
               (l, Int unit_big_int) 
             end
@@ -1108,7 +1123,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           Some (_, (Ident x | PreprocessorSymbol x)) ->
           junk ();
           update_last_macro_used x;
-          if Hashtbl.mem (List.hd (get_macros ())) x <> (cond = "ifdef") then
+          if is_defined x <> (cond = "ifdef") then
             skip_branch ();
           next_token ()
         | _ -> syntax_error ()
@@ -1124,10 +1139,10 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd "endif") -> junk (); next_token ()
       | _ -> syntax_error ()
       end
-    | (l, (Ident x|PreprocessorSymbol x)) as t when Hashtbl.mem (List.hd (get_macros ())) x && not (List.mem x (List.hd !callers)) ->
+    | (l, (Ident x|PreprocessorSymbol x)) as t when is_defined x && not (List.mem x (List.hd !callers)) ->
       update_last_macro_used x;
       junk ();
-      let (_,params, body) = Hashtbl.find (List.hd (get_macros ())) x in
+      let (_,params, body) = get_macro x in
       begin match params with
         None -> push_list [x] body; next_token ()
       | Some params ->
