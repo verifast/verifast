@@ -3168,7 +3168,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     match t with
       Bool -> w
-    | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang -> Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
+    | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang ->
+      Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
+    | _ -> expect_type (expr_loc e) t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     begin
