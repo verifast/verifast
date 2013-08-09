@@ -1,12 +1,12 @@
 #ifndef _LINUX_USB_H
 #define _LINUX_USB_H
 
-#include "linux+mod_devicetable.h"
-#include "linux+errno.h"
-#include "linux+usb+ch9.h"
-#include "linux+slab.h"
-#include "linux+types.h"
-#include "linux+device.h"
+#include "mod_devicetable.h"
+#include "errno.h"
+#include "usb/ch9.h"
+#include "slab.h"
+#include "types.h"
+#include "device.h"
 
 	
 #define USB_DEVICE_ID_MATCH_DEVICE  0x0003 // original: (USB_DEVICE_ID_MATCH_VENDOR | USB_DEVICE_ID_MATCH_PRODUCT)

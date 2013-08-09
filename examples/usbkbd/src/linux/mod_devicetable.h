@@ -1,7 +1,7 @@
 #ifndef _LINUX_MOD_DEVICETABLE_H
 #define _LINUX_MOD_DEVICETABLE_H
 
-#include "equals.h"
+#include "../equals.h"
 
 
 #define USB_DEVICE_ID_MATCH_VENDOR              0x0001

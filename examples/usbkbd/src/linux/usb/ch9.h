@@ -1,7 +1,7 @@
 #ifndef _LINUX_USB_CH9_H
 #define _LINUX_USB_CH9_H
 
-#include "linux+types.h"
+#include "../types.h"
 
 /*
  * Device and/or Interface Class codes

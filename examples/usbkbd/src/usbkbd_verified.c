@@ -42,13 +42,12 @@
  * Vojtech Pavlik, Simunkova 1594, Prague 8, 182 00 Czech Republic
  */
 
-// API INCOMPATIBILITY VeriFast does not support header files in subdirectories, so we use "+".
-#include "linux+kernel.h"
-#include "linux+slab.h"
-#include "linux+module.h"
-#include "linux+init.h"
-#include "linux+usb+input.h"
-#include "linux+hid.h"
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/usb/input.h>
+#include <linux/hid.h>
 #include "vf_module_license_gpl.h"
 #include "usbkbd_keycodes.h"
 

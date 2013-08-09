@@ -1,6 +1,6 @@
 #ifndef __GHOST_FACADE_H
 #define __GHOST_FACADE_H
-#include "linux+slab_def.h"
+#include "linux/slab_def.h"
 //@ #include "ghost-fields.gh"
 
 //########################################################################//

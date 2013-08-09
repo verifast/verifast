@@ -1,8 +1,8 @@
 #ifndef _LINUX_USB_INPUT_H
 #define _LINUX_USB_INPUT_H
 
-#include "linux+usb.h"
-#include "linux+input.h"
+#include "../usb.h"
+#include "../input.h"
 
 static /*inline*/ void
 usb_to_input_id(const struct usb_device *dev, struct input_id *id);

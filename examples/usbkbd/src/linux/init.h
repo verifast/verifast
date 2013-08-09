@@ -12,7 +12,7 @@
  */
 
 
-#include "linux+stddef.h"
+#include "stddef.h"
 // Do not fill in here! Make your own definition of this predicate in your own kernel module.
 //@ predicate_family module_state(module_setup_t setup, module_cleanup_t cleanup)();
 
