@@ -1593,7 +1593,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                assume_handle_invs pre_bcn hpmap pre_hpn ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMapWithThis @ inv_env) h $. (fun h ->
                consume_action_permission h $. fun h act_perm_chunks ->
                (* with_context PushSubcontext $. fun () -> *)
-               produce_asn [] h ghostenv  ([("predicateHandle", handleId)] @ pre_hpArgMap @ pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
+               produce_asn [] h ghostenv  (pre_hpArgMap @ pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
                let nonpureStmtCount = ref 0 in
                let ss =
                  List.map
