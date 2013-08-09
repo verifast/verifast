@@ -201,6 +201,9 @@ and
     ConditionalProducingHandlePredicate of loc * expr (* condition *) * string (* handle name *) * (expr list) (* args *) * producing_handle_predicate
   | BasicProducingHandlePredicate of loc * string (* handle name *) * (expr list) (* args *)
 and
+  consuming_handle_predicate = 
+    ConsumingHandlePredicate of loc * string * (pat list)
+and
   stmt = (* ?stmt *)
     PureStmt of (* Statement of the form /*@ ... @*/ *)
         loc *
@@ -259,16 +262,14 @@ and
       bool ref (* in non-pure context *) *
       string *
       pat list *
-      loc *
-      string *
-      pat list *
+      consuming_handle_predicate list *
       loc *
       string *
       expr list *
       stmt list *
       loc (* close brace of body *) *
       (loc * expr list) option *
-      producing_handle_predicate
+      (bool (* indicates whether a fresh handle id should be generated *) * producing_handle_predicate) list
       (*loc *
       string *
       expr list*)
@@ -685,7 +686,7 @@ let stmt_loc s =
   | TryCatch (l, _, _) -> l
   | TryFinally (l, _, _, _) -> l
   | BlockStmt (l, ds, ss, _, _) -> l
-  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _, _, _) -> l
+  | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _) -> l
   | CreateBoxStmt (l, _, _, _, _, _) -> l

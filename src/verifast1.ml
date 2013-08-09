@@ -4006,8 +4006,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         let amap =
         List.map
           (fun (an, (l, action_pred_sym, pmap, pre, post)) ->
-             let pre = check_expr_t (pn,ilist) [] ([("actionHandle", HandleIdType)] @ pmap @ boxvarmap) pre boolt in
-             let post = check_expr_t (pn,ilist) [] ([("actionHandle", HandleIdType)] @ pmap @ boxvarmap @ old_boxvarmap) post boolt in
+             let pre = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap) pre boolt in
+             let post = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap @ old_boxvarmap) post boolt in
              (an, (l, action_pred_sym, pmap, pre, post))
           )
           amap
@@ -4408,6 +4408,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let length_symb = lazy_purefuncsymb "length"
   
   let mk_length l = mk_app !!length_symb [l]
+  
+  let mem_symb = lazy_purefuncsymb "mem"
+  
+  let mk_mem elem_tp e xs = (mk_app !!mem_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive e; xs])
   
   let rec mk_zero_list n =
     assert (0 <= n);

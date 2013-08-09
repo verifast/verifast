@@ -23,7 +23,7 @@ let ghost_keywords = [
   "_"; "@*/"; "predicate_family"; "predicate_family_instance"; "predicate_ctor"; "leak"; "@";
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "at_level"; "and_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
-  "producing_box_predicate"; "producing_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
+  "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
   "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"; "require_module"; ".."; "extends"; "permbased"
 ]
 
@@ -807,7 +807,9 @@ and
   end
 | [< s = parse_block_stmt >] -> s
 | [< '(lcb, Kwd "consuming_box_predicate"); '(_, Ident pre_bpn); pre_bp_args = parse_patlist;
-     '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist;
+     consumed_handle_predicates = rep(parser
+       [< '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist; >] -> ConsumingHandlePredicate(lch, pre_hpn, pre_hp_args)
+     );
      '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; is_atomic = opt (parser [< '(_, Kwd "atomic") >] -> 1);
      '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}");
      post_bp_args =
@@ -818,9 +820,11 @@ and
              if post_bpn <> pre_bpn then raise (ParseException (lpb, "The box predicate name cannot change."));
              (lpb, post_bp_args)
          end;
-     '(_, Kwd "producing_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list;
+     produced_handles = rep(parser
+       [< '(_, Kwd "producing_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list >] -> (false, producing_hp_list)
+     | [< '(_, Kwd "producing_fresh_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list >] -> (true, producing_hp_list));
      '(_, Kwd ";") >] ->
-     PerformActionStmt (lcb, (match is_atomic with None -> false | _ -> true), ref false, pre_bpn, pre_bp_args, lch, pre_hpn, pre_hp_args, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, producing_hp_list)
+     PerformActionStmt (lcb, (match is_atomic with None -> false | _ -> true), ref false, pre_bpn, pre_bp_args, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, produced_handles)
 | [< '(l, Kwd ";") >] -> NoopStmt l
 | [< '(l, Kwd "super"); s = parser 
      [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))
