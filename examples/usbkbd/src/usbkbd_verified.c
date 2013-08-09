@@ -67,10 +67,10 @@
 /*
  * Version Information
  */
-//#define DRIVER_VERSION ""
-//#define DRIVER_AUTHOR "Vojtech Pavlik <vojtech@ucw.cz>"
-//#define DRIVER_DESC "USB HID Boot Protocol keyboard driver"
-//#define DRIVER_LICENSE "GPL"
+#define DRIVER_VERSION ""
+#define DRIVER_AUTHOR "Vojtech Pavlik <vojtech@ucw.cz>"
+#define DRIVER_DESC "USB HID Boot Protocol keyboard driver"
+#define DRIVER_LICENSE "GPL"
 
 //MODULE_AUTHOR(DRIVER_AUTHOR);
 //MODULE_DESCRIPTION(DRIVER_DESC);
@@ -86,13 +86,15 @@
 struct usb_kbd {
 	struct input_dev *dev;
 	struct usb_device *usbdev;
-	/*unsigned char old[8];*/ unsigned char *old;
-	struct urb *irq /*, *led */ ;
-	struct urb *led;
+	unsigned char old[8];
+	struct urb *irq
+	/*, *led */ // <-- original
+	;struct urb *led // <-- non-original
+	;
 	
 	unsigned char newleds;
-	/* char name[128]; */ char *name;
-	/*char phys[64];*/ char *phys;
+	char name[128];
+	char phys[64];
 
 	unsigned char *new;
 	struct usb_ctrlrequest *cr;
@@ -115,23 +117,21 @@ static unsigned char* usb_kbd_keycode;
 // "data back" that the data still has the same value.
 // To prevent the hassle of who owns which fraction of which part of the usb_kbd_struct,
 // we just share the whole struct
-// (except old[8] if it is an array, because it is written in the completion handler,
-// but not if it is not an array yet but a pointer (to an array) while VeriFast does
-// not support arrays-in-structs yet. Analogues for other arrays-in-struct fields of usb_kbd.).
+// (except old[8] because it is written in the completion handler)
 //
 // We choose better names ("dev" turns out to be a bit confusing (usb dev? input dev?). Same for "irq").
 predicate usb_kbd_struct_shared(
 	struct usb_kbd *kbd;
 	struct input_dev *inputdev,
 	struct usb_device *usbdev,
-	unsigned char *old, // unsigned char old[8]
+	unsigned char *old, // @deprecated
 	struct urb *irq_urb,
 	struct urb *led_urb,
 	
 	//unsigned char newleds, // Not shared.
 	
-	char *name, //char name[128]
-	char *phys, //char phys[64]
+	char *name, // @deprecated
+	char *phys, // @deprecated
 
 	unsigned char *new,
 	struct usb_ctrlrequest *cr,
@@ -145,12 +145,9 @@ predicate usb_kbd_struct_shared(
 ) =
 	kbd->dev |-> inputdev
 	&*& kbd->usbdev |-> usbdev
-	&*& kbd->old |-> old
 	&*& kbd->irq |-> irq_urb
 	&*& kbd->led |-> led_urb
 	//&*& kbd->newleds |-> newleds // not shared, protected by spinlock.
-	&*& kbd->name |-> name
-	&*& kbd->phys |-> phys
 	&*& kbd->new |-> new
 	&*& kbd->cr |-> cr
 	&*& kbd->leds |-> leds
@@ -163,10 +160,10 @@ predicate usb_kbd_struct_shared(
 	&*& new != 0
 	&*& kbd != 0
 	
-	// to make sure kfree doesn't want to try to free a nullpointer
-	&*& old != 0
-	&*& name != 0
-	&*& phys != 0
+	// Fix deprecated output parameter (this is a precise predicate so we have to)
+	&*& old == 0 
+	&*& name == 0
+	&*& phys == 0
 	;
 @*/
 
@@ -178,7 +175,15 @@ predicate usb_kbd_struct_shared(
 	
 	&*& [fracsize]probe_disconnect_userdata(usb_kbd_probe, usb_kbd_disconnect)()
 	&*& urb_data_size == 8
-	&*& uchars(old, 8, ?cs);
+	
+	&*& uchars(kbd->old, 8, ?cs)
+	
+	// usb_kbd_irq needs the following because it does "kbd->old + 2", which overflows if it cannot prove that
+	// kbd->old (as in: the address value) is not less than UINTPTR_MAX
+	// Alternatively, usb_kbd_irq can write:
+	//    unsigned char* kbd_old = kbd->old;
+        //    //@ produce_limits(kbd_old); // produce_limits(kbd->old) doesn't work.
+	&*& true == ((void *)0 <= kbd->old) &*& true == (((char*)kbd->old) + 8 <= (char *)UINTPTR_MAX);
 	
 	// reportable is taken from input's precondition, so is not here.
 	// That's why there is both this predicate and complete_t_pred_fam. <-- XXX huh?
@@ -311,7 +316,7 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 
 // Embedded in usb_interface if its data parameter != 0.
 // flow usb_interface (NOT OF USERDEF_USB_...): ->register, (usb)->_probe->, (usb)->disconnect->
-/*@ predicate_family_instance userdef_usb_interface_data(usb_kbd_probe, usb_kbd_disconnect)(struct usb_interface *intf, struct usb_device *usbdev, void *kbd, real fracsize) =
+/*@ predicate_family_instance userdef_usb_interface_data(usb_kbd_probe, usb_kbd_disconnect)(struct usb_interface *intf, struct usb_device *usbdev, struct usb_kbd *kbd, real fracsize) =
 	kbd != 0
 	
 	&*& [1/5]usb_kbd_struct_shared(kbd, ?inputdev, usbdev, ?old, ?irq_urb,
@@ -323,11 +328,8 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 	&*& input_dev_registered(inputdev, _, _, _, 0, _, _, usb_kbd_open, usb_kbd_close, usb_kbd_event, kbd, fracsize)
 	&*& [1/2]input_dev_reportable(inputdev, kbd)
 	
-	&*& chars(name, 128, ?name_chars)
-	&*& chars(phys, 64, ?phys_chars)
-	&*& kmalloc_block(name, 128)
-	&*& kmalloc_block(phys, 64)
-	&*& kmalloc_block(old, 8)
+	&*& chars(kbd->name, 128, ?name_chars)
+	&*& chars(kbd->phys, 64, ?phys_chars)
 	;
 @*/
 
@@ -423,8 +425,6 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 		@*/
 		input_report_key(kbd->dev, usb_kbd_keycode[i + 224], (kbd->new[0] >> i) & 1);
 	
-	//@ assert [1/5]usb_kbd_old(kbd, ?kbd_old);
-	
 	for (i = 2; i < 8; i++)
 		/*@ invariant
 			[1/5]kbd->dev |-> ?kbd_dev	
@@ -434,9 +434,7 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 			&*& [fracsize]uchars(usb_kbd_keycode_ptr, 256, keycodes)
 			&*& i >= 0
 			&*& [1/4]input_dev_reportable(kbd_dev, kbd)
-			
-			&*& [1/5]usb_kbd_old(kbd, kbd_old)
-			&*& uchars(kbd_old, 8, ?kbd_old_contents_in_loop)
+			&*& uchars(kbd->old, 8, ?kbd_old_contents_in_loop)
 			;
 		@*/
 	{
@@ -462,14 +460,14 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 			}
 		}
 		//@ uchars_to_chars(kbd->old);
-		//@ chars_limits((void*)kbd_old);
-		memscan_ret = memscan(kbd->old + 2, kbd->new[i], 6);
+		char *kbd_old = kbd->old;
+		memscan_ret = memscan((void*)kbd->old + 2, kbd->new[i], 6);
 		//@ chars_to_uchars(kbd->old);
 		
 		unsigned char kbd_new_i = kbd->new[i];
 		//@ produce_limits(kbd_new_i);
 		
-		if (kbd->new[i] > 3 && memscan_ret == kbd->old + 8) {
+		if (kbd->new[i] > 3 && memscan_ret == (void*)kbd->old + 8) {
 			if (usb_kbd_keycode[kbd->new[i]]   != 0)
 				input_report_key(kbd->dev, usb_kbd_keycode[kbd->new[i]], 1);
 			else
@@ -1496,20 +1494,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	//@ assert usb_pipeout_ret == 0;  // in fact it is known that it's not a pipeout since we called usb_rcvintpipe (where "rcv" means "in", not "out")
 	maxp = usb_maxpacket(dev, pipe, /*usb_pipeout(pipe)*/usb_pipeout_ret);
 	
-	
-	// --- Alloc kbd: original code --- //
-		kbd = kzalloc(sizeof(struct usb_kbd), GFP_KERNEL);
-		unsigned char *kbd_old  = kzalloc(sizeof(char) * 8  , GFP_KERNEL);
-		char *kbd_name = kzalloc(sizeof(char) * 128, GFP_KERNEL);
-		char *kbd_phys = kzalloc(sizeof(char) * 64 , GFP_KERNEL);
-		if (kbd_old == 0 || kbd_name == 0 || kbd_phys == 0){
-			kfree(kbd);
-			kbd = 0;
-		}
-	
-	// ---- Create ghost fields and counters --- //
-			
-	
+	kbd = kzalloc(sizeof(struct usb_kbd), GFP_KERNEL);
 	
 	input_dev = input_allocate_device();
 	
@@ -1538,9 +1523,6 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		//@ close_struct(kbd);
 		kbd->irq = 0;
 		kbd->new = 0;
-		kbd->old = kbd_old;
-		kbd->name = kbd_name;
-		kbd->phys = kbd_phys;
 		kbd->led = 0;
 		kbd->leds = 0;
 		kbd->cr = 0;
@@ -1828,8 +1810,6 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 
 	//@ close [1/5]usb_kbd_struct_shared(kbd, _, _, _, _, _, _, _, _, _, _, _, _);
 
-	//@ uchars_to_chars(kbd_name);
-	//@ uchars_to_chars(kbd_phys);
 	//@ close userdef_usb_interface_data(usb_kbd_probe, usb_kbd_disconnect)(iface, dev, kbd, fracsize);
 	usb_set_intfdata(iface, kbd);
 	
@@ -1847,9 +1827,6 @@ fail1:
 	input_free_device(input_dev);
 	
 	kfree(kbd);
-	kfree(kbd_old); // not original code
-	kfree(kbd_name); // not original code
-	kfree(kbd_phys); // not original code
 	return error;
 }
 
@@ -1956,12 +1933,6 @@ fail1:
 		usb_kbd_free_mem(/*interface_to_usbdev(intf)*/ interface_to_usbdev_ret, kbd);
 
 		//@ assert interface_to_usbdev_ret == dev;
-		
-		kfree(kbd->old);  // not original code
-		//@ chars_to_uchars(kbd->name);
-		kfree(kbd->name); // not original code
-		//@ chars_to_uchars(kbd->phys);
-		kfree(kbd->phys); // not original code
 		
 		//@ spin_lock_dispose(&kbd->leds_lock);
 		//@ open_struct(kbd);
