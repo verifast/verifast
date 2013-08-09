@@ -1,0 +1,1 @@
+verifast -I dir/ test.c
