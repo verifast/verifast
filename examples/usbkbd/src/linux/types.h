@@ -1,8 +1,13 @@
 #ifndef _LINUX_TYPES_H
 #define _LINUX_TYPES_H
 
-typedef /* unsigned */ int size_t; // XXX must watch out for architecture-related properties.
-typedef size_t __kernel_size_t; // XXX I don't get why they both exist?
+// XXX This should be unsigned, but then we need to have lots of annoying casts in VeriFast.
+// UNSAFE I'm not convinced this is sound (combined with C's auto-casting).
+//        Todo: Replace this with an explanation why it is sound, or fix the unsoundness.
+typedef /*unsigned*/ int    __kernel_size_t; // We verify for x86-32.
+typedef __kernel_size_t         size_t;
+
+#define __bitwise__ 
 
 typedef int dma_addr_t;
 

@@ -2,6 +2,7 @@
 #define _LINUX_USB_CH9_H
 
 #include "../types.h"
+#include "../../compiler.h"
 
 /*
  * Device and/or Interface Class codes
@@ -53,14 +54,7 @@ struct usb_interface_descriptor {
 
 
 #define USB_DIR_OUT                    0              /* to device */
-/*@
-#define USB_DIR_OUT 0
-@*/
 #define USB_DIR_IN                     0x80            /* to host */
-/*@
-#define USB_DIR_IN 0x80
-@*/
-
 
 
 /*
@@ -90,12 +84,6 @@ struct usb_interface_descriptor {
 #define USB_ENDPOINT_XFER_ISOC          1
 #define USB_ENDPOINT_XFER_BULK          2
 #define USB_ENDPOINT_XFER_INT           3
-/*@
-#define USB_ENDPOINT_XFER_CONTROL       0
-#define USB_ENDPOINT_XFER_ISOC          1
-#define USB_ENDPOINT_XFER_BULK          2
-#define USB_ENDPOINT_XFER_INT           3
-@*/
 
 struct usb_endpoint_descriptor {
 	//__u8  bLength;
@@ -122,7 +110,7 @@ struct usb_endpoint_descriptor {
   predicate usb_endpoint_descriptor(struct usb_endpoint_descriptor *epd; int direction, int xfer_type, int pipe);
 @*/
 
-/*static inline*/ int usb_endpoint_is_int_in(/*const*/ struct usb_endpoint_descriptor *epd);
+static inline int usb_endpoint_is_int_in(const struct usb_endpoint_descriptor *epd);
 	//@ requires [?f]usb_endpoint_descriptor(epd, ?dir, ?xfer_type, ?pipe);
 	/*@ ensures
 		[f]usb_endpoint_descriptor(epd, dir, xfer_type, pipe)

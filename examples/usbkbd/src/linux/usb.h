@@ -29,15 +29,6 @@
 #define URB_ZERO_PACKET         0x0040  /* Finish bulk OUT with short packet */
 #define URB_NO_INTERRUPT        0x0080  /* HINT: no non-error interrupt needed */
 #define URB_FREE_BUFFER         0x0100  /* Free transfer buffer with the URB */
-/*@
-#define URB_SHORT_NOT_OK        0x0001  /* report short reads as errors */
-#define URB_ISO_ASAP            0x0002  /* iso-only, urb->start_frame ignored */
-#define URB_NO_TRANSFER_DMA_MAP 0x0004  /* urb->transfer_dma valid on submit */
-#define URB_NO_FSBR             0x0020  /* UHCI-specific */
-#define URB_ZERO_PACKET         0x0040  /* Finish bulk OUT with short packet */
-#define URB_NO_INTERRUPT        0x0080  /* HINT: no non-error interrupt needed */
-#define URB_FREE_BUFFER         0x0100  /* Free transfer buffer with the URB */
-@*/
 
 /*---------------------------------------------------------*
  * Probe-Disconnect                                        *
@@ -818,7 +809,7 @@ predicate_family complete_t_pred_fam_out(usb_complete_t complete)(
 	// consumed when the URB is submitted, not just when it existst.
 @*/
 
-/*static inline*/ void usb_fill_int_urb(struct urb *urb,
+static inline void usb_fill_int_urb(struct urb *urb,
 	struct usb_device *dev,
 	/*unsigned*/ int pipe,
 	void *transfer_buffer,
@@ -944,7 +935,7 @@ void usb_fill_control_urb(struct urb *urb,
  * You might want to set "data != 0" in userdef_usb_interface_data to help preving correctness
  * of your kernel module.
  */
-/*static inline*/ void usb_set_intfdata(struct usb_interface *intf, void *data);
+static inline void usb_set_intfdata(struct usb_interface *intf, void *data);
 /*@ requires
 	not_in_interrupt_context(currentThread) // indirect GFP_KERNEL kmalloc.
 	// The implementation does not do any synchronisation, so we require a full fraction of usb_interface.
@@ -967,7 +958,7 @@ void usb_fill_control_urb(struct urb *urb,
 @*/
 
 
-/*static inline*/ void *usb_get_intfdata(struct usb_interface *intf);
+static inline void *usb_get_intfdata(struct usb_interface *intf);
 /*@ requires usb_interface(?open_cb, ?close_cb, intf, ?dev, ?data, ?hasData, ?fracsize);
 @*/
 /*@ ensures usb_interface(open_cb, close_cb, intf, dev, data, hasData, fracsize) &*& result == data;
@@ -1011,7 +1002,7 @@ int usb_sndctrlpipe (struct usb_device *dev, __u8 endpoint);
 		;
 	@*/
 
-/*static inline __u16*/ int usb_maxpacket(struct usb_device *udev, int pipe, int is_out);
+static inline __u16 usb_maxpacket(struct usb_device *udev, int pipe, int is_out);
 	/*@ requires [?f]usb_device(udev, ?ep0) &*& [?f2]usb_endpoint_descriptor(?desc, ?dir, ?xfer_type, ?pipeOption)
 		&*& pipeOption == pipe
 
@@ -1046,7 +1037,7 @@ int usb_pipeout(int pipe);
 
 
 struct usb_driver {
-	/*const*/ char *name;
+	const char *name;
 
 	// original: int (*probe) (struct usb_interface *intf, const struct usb_device_id *id);
 	vf_usb_operation_probe_t *probe;
@@ -1063,7 +1054,7 @@ struct usb_driver {
 	//int (*pre_reset)(struct usb_interface *intf);
 	//int (*post_reset)(struct usb_interface *intf);
 
-	/*const*/ struct usb_device_id *id_table;
+	const struct usb_device_id *id_table;
 
 	//struct usb_dynids dynids;
 	//struct usbdrv_wrap drvwrap;
@@ -1172,9 +1163,7 @@ struct usb_host_endpoint {
 };
 
 
-
-
-static /*inline*/ int usb_make_path(struct usb_device *dev, char *buf, size_t size);
+static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size);
   //@ requires chars(buf, ?bufsize, ?old_text) &*& size <= bufsize &*& usb_device_private(dev);
   //@ ensures chars(buf, bufsize, ?new_text) &*& usb_device_private(dev) &*& ! mem('\0', old_text) || mem('\0', new_text);
 

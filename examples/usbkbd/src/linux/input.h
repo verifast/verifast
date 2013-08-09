@@ -65,7 +65,7 @@ typedef input_close_t_no_pointer* input_close_t;
 // The input_dev->led fields is written by input_handle_event.
 // So it is safe to read input_dev->led non-atomicly.
 // This callback "must not sleep" (source: input.h). Empirically confirmed with in_interrupt().
-typedef int input_event_t_no_pointer (struct input_dev *dev, /*unsigned*/ int type, /*unsigned*/ int code, int value);
+typedef int input_event_t_no_pointer (struct input_dev *dev, unsigned int type, unsigned int code, int value);
 	// XXX you can't have events on non-opened input devices I guess? Should double-check.
 	/*@ requires userdef_input_drvdata(?open_cb, ?close_cb, this)(dev, true, ?data, ?fracsize)
 		&*& input_event_callback_link(this)(open_cb, close_cb)
@@ -340,7 +340,7 @@ void input_report_key(struct input_dev *dev, /*unsigned*/ int code, int value);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
 
-static /*inline*/ void input_report_rel(struct input_dev *dev, unsigned int code, int value);
+static inline void input_report_rel(struct input_dev *dev, unsigned int code, int value);
 	//@ requires [?f]input_dev_reportable(dev, ?userdata); // XXX hm I thought they synchronize but I should recheck this.
 	//@ ensures [f]input_dev_reportable(dev, userdata);
 

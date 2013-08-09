@@ -345,8 +345,9 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 	
-	//int usb_pipeout_ret = usb_pipeout(pipe);
-	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+	// original: maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+	__u16 usb_maxpacket_ret = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+	maxp = usb_maxpacket_ret;
 
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
 	

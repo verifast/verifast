@@ -13,7 +13,7 @@
 //
 // Comes from asm-generic/bitops/non-atomic.h
 // It is not atomic!
-int test_bit (int nr, /*const volatile*/ void *addr);
+int test_bit (int nr, const /*volatile*/ void *addr);
 /*@ requires
 	[?f]chars(addr, ?length, ?cs)
 	&*& length * 8 >= nr;

@@ -350,7 +350,7 @@ predicate leds_lock(struct usb_kbd *kbd; unit u) =
 
 
 
-/*static*/ void usb_kbd_irq(struct urb *urb) //@ : usb_complete_t_no_pointer
+static void usb_kbd_irq(struct urb *urb) //@ : usb_complete_t_no_pointer
 /*@ requires
 	urb_struct(true,
 		urb, ?usb_dev, ?buffer, ?buffer_dma, ?buffer_alloc_size, ?user_alloc_dma, ?complete, ?context, ?setup
@@ -494,7 +494,7 @@ resubmit:
 	//@ close complete_t_pred_fam(usb_kbd_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	//@ close usb_submit_urb_ghost_arg(true, fracsize);
 	i = usb_submit_urb (urb, GFP_ATOMIC);
-	if (i != 0){
+	if (i){
 		//err_hid ("can't resubmit intr"); // replaced by printk to allow compiling on multiple kernel versions.
 		printk("can't resubmit intr");
 		//@ close complete_t_pred_fam_out(usb_kbd_irq)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
@@ -655,7 +655,7 @@ resubmit:
  * is allocated? (some_predicate() || true) doesn't work, but we can
  * do something similar with a new predicate and wildcards ("_") <-- not a smiley.
  */
-/*static*/ int usb_kbd_alloc_mem(struct usb_device *dev, struct usb_kbd *kbd)
+static int usb_kbd_alloc_mem(struct usb_device *dev, struct usb_kbd *kbd)
 /*@ requires
 	not_in_interrupt_context(currentThread)
 	
@@ -676,58 +676,47 @@ resubmit:
 @*/
 {
 	// --- Stage 0 --- //
-	struct urb *kbd_irq = usb_alloc_urb(0, GFP_KERNEL);
-	kbd->irq = kbd_irq;
-	// original: if (!(kbd->irq = usb_alloc_urb(0, GFP_KERNEL)))
-	if (kbd->irq == 0){
+	if (!(kbd->irq = usb_alloc_urb(0, GFP_KERNEL)))
+	{ // extra "{"
 		//@ close urb_struct_maybe(false, 0, 0, 0, 0, 0, false, 0, 0, 0); // Cannot remove.
 		//@ close urb_struct_maybe(false, 0, 0, 0, 0, 0, false, 0, 0, 0);
 		//@ close usb_kbd_alloc_mem_result(-1, 0, dev, kbd);
 		return -1;
 	}
-	//@ assert urb_struct(false, kbd_irq, ?urb_dev, ?irq_data, ?irq_data_dma, ?irq_data_size, false, 0, 0, 0);
+	//@ assert urb_struct(false, ?kbd_irq, ?urb_dev, ?irq_data, ?irq_data_dma, ?irq_data_size, false, 0, 0, 0);
 	//@ close urb_struct_maybe(false, kbd_irq, urb_dev, irq_data, irq_data_dma, irq_data_size, false, 0, 0, 0); // Cannot remove.
 	
 	// --- Stage 1 --- //
-
-	struct urb *kbd_led = usb_alloc_urb(0, GFP_KERNEL);
-	kbd->led = kbd_led;
-	// original: if (!(kbd->led = usb_alloc_urb(0, GFP_KERNEL)))
-	if (kbd->led == 0){
+	if (!(kbd->led = usb_alloc_urb(0, GFP_KERNEL)))
+	{ // extra "{"
 		//@ close urb_struct_maybe(false, 0, 0, 0, 0, 0, false, 0, 0, 0);
 		//@ close usb_kbd_alloc_mem_result(-1, 1, dev, kbd);
 		return -1;
 	}
-	//@ assert urb_struct(false, kbd_led, ?led_dev, ?led_data, ?led_data_dma, ?led_data_size, false, 0, 0, 0);
+	//@ assert urb_struct(false, ?kbd_led, ?led_dev, ?led_data, ?led_data_dma, ?led_data_size, false, 0, 0, 0);
 	//@ close urb_struct_maybe(false, kbd_led, led_dev, led_data, led_data_dma, led_data_size, false, 0, 0, 0);
 
 	// --- Stage 2 --- //
 	
 	/* "new" is the buffer where the data arrives that the completion callback can read. */
-	// original: if (!(kbd->new = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &kbd->new_dma)))
 	//@ assert kbd->new_dma |-> ?new_dma2;
-	unsigned char *kbd_new = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &kbd->new_dma);
-	kbd->new = kbd_new;
-	if (kbd->new == 0){
+	if (!(kbd->new = usb_alloc_coherent(dev, 8, GFP_ATOMIC, &kbd->new_dma)))
+	{ // extra "{"
 		//@ close usb_kbd_alloc_mem_result(-1, 2, dev, kbd);
 		return -1;
 	}
 	
 	// --- Stage 3 --- //
-	
-	struct usb_ctrlrequest *kbd_cr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL);
-	kbd->cr = kbd_cr;
-	// original: if (!(kbd->cr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL)))
-	if (kbd->cr == 0){
+	// original:
+	if (!(kbd->cr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL)))
+	{ // extra "{"
 		//@ close usb_kbd_alloc_mem_result(-1, 3, dev, kbd);
 		return -1;
 	}
 
 	// --- Stage 4 --- //
-	unsigned char *kbd_leds = usb_alloc_coherent(dev, 1, GFP_ATOMIC, &kbd->leds_dma);
-	kbd->leds = kbd_leds;
-	// original: if (!(kbd->leds = usb_alloc_coherent(dev, 1, GFP_ATOMIC, &kbd->leds_dma)))
-	if (kbd->leds == 0) {
+	if (!(kbd->leds = usb_alloc_coherent(dev, 1, GFP_ATOMIC, &kbd->leds_dma)))
+	{ // extra "{"
 		//@ close usb_kbd_alloc_mem_result(-1, 4, dev, kbd);
 		return -1;
 	}
@@ -738,7 +727,7 @@ resubmit:
 	return 0;
 }
 
-/*static*/ void usb_kbd_free_mem(struct usb_device *dev, struct usb_kbd *kbd)
+static void usb_kbd_free_mem(struct usb_device *dev, struct usb_kbd *kbd)
 /*@ requires
 	usb_kbd_alloc_mem_result(?returncode, ?stage, dev, kbd)
 	&*& not_in_interrupt_context(currentThread);
@@ -803,8 +792,8 @@ predicate_family_instance input_event_callback_link(usb_kbd_event)(input_open_t 
 @*/
 
 
-/*static*/ int usb_kbd_event(struct input_dev *dev, /*unsigned*/ int type,
-			 /*unsigned*/ int code, int value) //@ : input_event_t_no_pointer
+static int usb_kbd_event(struct input_dev *dev, unsigned int type,
+			 unsigned int code, int value) //@ : input_event_t_no_pointer
 	/*@ requires userdef_input_drvdata(?open_cb, ?close_cb, usb_kbd_event)(dev, true, ?data, ?fracsize)
 		&*& input_event_callback_link(usb_kbd_event)(open_cb, close_cb)
 		&*& [?f]dev->led |-> ?led
@@ -869,8 +858,7 @@ predicate_family_instance input_event_callback_link(usb_kbd_event)(input_open_t 
 	kbd->newleds = (unsigned char)tmp_left;
 	
 	// original code:
-	// kbd->newleds = 
-			/*(!!test_bit(LED_KANA,    dev->led) << 3) | (!!test_bit(LED_COMPOSE, dev->led) << 3) |
+	/*kbd->newleds = (!!test_bit(LED_KANA,    dev->led) << 3) | (!!test_bit(LED_COMPOSE, dev->led) << 3) |
 		       (!!test_bit(LED_SCROLLL, dev->led) << 2) | (!!test_bit(LED_CAPSL,   dev->led) << 1) |
 		       (!!test_bit(LED_NUML,    dev->led));*/
 	
@@ -916,8 +904,7 @@ predicate_family_instance input_event_callback_link(usb_kbd_event)(input_open_t 
 	//@ assert ticket(leds_lock, kbd, f_ticket) &*& [f_ticket]leds_lock(kbd, unit);
 	
 	//@ close complete_t_pred_fam(usb_kbd_led)(fracsize, kbd->led, usb_dev, leds, leds_dma, 1, true, usb_kbd_led, kbd, cr);	
-	int usb_submit_urb_ret = usb_submit_urb(kbd->led, GFP_ATOMIC);
-	if (/*usb_submit_urb(kbd->led, GFP_ATOMIC)*/ usb_submit_urb_ret != 0){
+	if (usb_submit_urb(kbd->led, GFP_ATOMIC)){
 		//@ open complete_t_pred_fam(usb_kbd_led)(fracsize, kbd->led, usb_dev, leds, leds_dma, 1, true, usb_kbd_led, kbd, cr);
 		//@ usbkbd_killcount_write(kbd, killcount+1, killcount); // restore.
 		
@@ -983,7 +970,7 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 @*/
 
 
-/*static*/ void usb_kbd_led(struct urb *urb)  //@ : usb_complete_t_no_pointer
+static void usb_kbd_led(struct urb *urb)  //@ : usb_complete_t_no_pointer
 /*@ requires
 	urb_struct(true,
 		urb, ?usb_dev, ?buffer, ?buffer_dma, ?buffer_alloc_size, ?user_alloc_dma, ?complete, ?context, ?setup
@@ -1015,7 +1002,7 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 	
 	struct usb_kbd *kbd = urb->context;
 
-	if (/*urb->status*/ urb->status != 0)
+	if (urb->status)
 		//dev_warn(&urb->dev->dev, "led urb status %d received\n",
 		//	 urb->status);
 		printk ("WARNING: error-status for led urb received\n"); // dev_warn and friends change API too often.
@@ -1069,8 +1056,8 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 	kbd->led->dev = kbd->usbdev;
 	//@ close urb_struct(true, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup); // Cannot remove.
 	//@ close usb_submit_urb_ghost_arg(true, fracsize);
-	int usb_submit_urb_ret = usb_submit_urb(kbd->led, GFP_ATOMIC);
-	if (/*usb_submit_urb(kbd->led, GFP_ATOMIC)*/ usb_submit_urb_ret != 0){
+	//@ bool led_submitted = false;
+	if (usb_submit_urb(kbd->led, GFP_ATOMIC)){
 		//err_hid("usb_submit_urb(leds) failed");
 		printk ("usb_submit_urb(leds) failed");
 		kbd->led_urb_submitted = false;
@@ -1078,6 +1065,7 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 		//@ close leds_lock_data_maybe_submitted(kbd, _); // Cannot remove.
 		//@ close leds_lock_data(kbd)();
 	}else{
+		//@ led_submitted = true;
 		//@ close leds_lock_data_maybe_submitted(kbd, _); // Cannot remove.
 		//@ close leds_lock_data(kbd)();
 	
@@ -1086,7 +1074,7 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 	spin_unlock_irqrestore(&kbd->leds_lock, flags);
 	
 	/*@
-	if(usb_submit_urb_ret != 0){
+	if( ! led_submitted){
 		close complete_t_pred_fam_out(usb_kbd_led)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	}else{
 		close complete_t_pred_fam(usb_kbd_led)(fracsize, urb, usb_dev, buffer, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
@@ -1097,7 +1085,7 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 	
 }
 
-/*static*/ int usb_kbd_open(struct input_dev *dev) //@ : input_open_t_no_pointer
+static int usb_kbd_open(struct input_dev *dev) //@ : input_open_t_no_pointer
 	/*@ requires userdef_input_drvdata(usb_kbd_open, ?close_cb, ?event_cb)(dev, false, ?context, ?fracsize)
 		&*& input_open_callback_link(usb_kbd_open)(close_cb, event_cb)
 		&*& [1/2]input_dev_reportable(dev, context)
@@ -1135,11 +1123,9 @@ predicate_family_instance complete_t_pred_fam_out(usb_kbd_led)(
 	
 	//@ close complete_t_pred_fam(usb_kbd_irq)(fracsize, irq_urb, usb_dev, new, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 	//@ close usb_submit_urb_ghost_arg(false, fracsize);
-	int ret = usb_submit_urb(kbd->irq, GFP_KERNEL);
+	if (usb_submit_urb(kbd->irq, GFP_KERNEL)){
+		//@ close [1/5]usb_kbd_struct_shared(kbd, _, _, _, _, _, _, _, _, _, _, _, _);  // XXX why is complete_data_except_reportable not consumable if this is auto-closed?
 	
-	//@ close [1/5]usb_kbd_struct_shared(kbd, _, _, _, _, _, _, _, _, _, _, _, _);  // XXX why is complete_data_except_reportable not consumable if this is auto-closed?
-	
-	if (ret != 0){
 		//@ assert usb_kbd_close == close_cb;
 		//@ open complete_t_pred_fam(usb_kbd_irq)(fracsize, irq_urb, usb_dev, new, buffer_dma,buffer_alloc_size, user_alloc_dma, complete, context, setup);
 		
@@ -1326,7 +1312,7 @@ lemma void diffcount_tickets_minimum_prove()
 @*/
 
 
-/*static*/ void usb_kbd_close(struct input_dev *dev) //@ : input_close_t_no_pointer
+static void usb_kbd_close(struct input_dev *dev) //@ : input_close_t_no_pointer
 	/*@ requires userdef_input_drvdata(?open_cb, usb_kbd_close, ?event_cb)(dev, true, ?data, ?fracsize)
 		&*& input_close_callback_link(usb_kbd_close)(open_cb, event_cb)
 		&*& not_in_interrupt_context(currentThread);
@@ -1390,8 +1376,8 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 @*/
 
 
-/*static*/ int usb_kbd_probe(struct usb_interface *iface,
-			 /*const*/ struct usb_device_id *id) //@ : vf_usb_operation_probe_t
+static int usb_kbd_probe(struct usb_interface *iface,
+			 const struct usb_device_id *id) //@ : vf_usb_operation_probe_t
 /*@ requires
 	usb_interface(usb_kbd_probe, ?disconnect, iface, _, ?originalData, false, ?fracsize)
 	&*& permission_to_submit_urb(?urbs_submitted, false)
@@ -1475,9 +1461,8 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	//@ assert [_]interface->endpoint |-> ?host_endpoint;
 	//@ open usb_host_endpoint(host_endpoint);
 	
-	// original: if (!usb_endpoint_is_int_in(endpoint))
-	int is_int_in = usb_endpoint_is_int_in(endpoint);
-	if (is_int_in == 0){
+	if (!usb_endpoint_is_int_in(endpoint))
+	{ // extra "{"
 		//@ close usb_host_endpoint(host_endpoint);
 		//@ close [f3]usb_interface_descriptor(desc, bNumEndpoints, _);
 		//@ close [f2]usb_host_interface(interface);
@@ -1492,13 +1477,16 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	
 	int usb_pipeout_ret = usb_pipeout(pipe);
 	//@ assert usb_pipeout_ret == 0;  // in fact it is known that it's not a pipeout since we called usb_rcvintpipe (where "rcv" means "in", not "out")
-	maxp = usb_maxpacket(dev, pipe, /*usb_pipeout(pipe)*/usb_pipeout_ret);
+	
+	// original: maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+	__u16 maxp_ret = usb_maxpacket(dev, pipe, /*usb_pipeout(pipe)*/usb_pipeout_ret);
+	maxp = maxp_ret;
 	
 	kbd = kzalloc(sizeof(struct usb_kbd), GFP_KERNEL);
 	
 	input_dev = input_allocate_device();
 	
-	if (/*!kbd || !input_dev*/ kbd == 0 || input_dev == 0){
+	if (!kbd || !input_dev){
 		//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 		
 		//@ close usb_host_endpoint(host_endpoint);
@@ -1530,9 +1518,8 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	
 	//@ open input_dev_unregistered(input_dev, _, _, _, _, _, _);
 	
-	int usb_kbd_alloc_mem_ret = usb_kbd_alloc_mem(dev, kbd);
-	//@ open usb_kbd_alloc_mem_result(usb_kbd_alloc_mem_ret, ?stage, dev, kbd);
-	if (/*usb_kbd_alloc_mem(dev, kbd)*/ usb_kbd_alloc_mem_ret != 0){
+	if (usb_kbd_alloc_mem(dev, kbd)){
+		//@ open usb_kbd_alloc_mem_result(?usb_kbd_alloc_mem_ret, ?stage, dev, kbd);
 
 		//@ close [1/2]usb_endpoint_descriptor_data(endpoint, bEndpointAddres);
 		
@@ -1545,6 +1532,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		//@ close input_dev_unregistered(input_dev, _, _, _, _, _, _);
 		goto fail2;
 	}
+	//@ open usb_kbd_alloc_mem_result(?usb_kbd_alloc_mem_ret, ?stage, dev, kbd);
 	
 	kbd->usbdev = dev;
 	kbd->dev = input_dev;
@@ -1553,6 +1541,11 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	spin_lock_init(&kbd->leds_lock);
 	
 	// --- Fill input fields --- //
+		// XXX Apparantly this is forgotten. Original code contains at least:
+		// strlcat(kbd->phys, "/input0", sizeof(kbd->phys));
+		// input_dev->name = kbd->name;
+		// input_dev->phys = kbd->phys;
+		
 		input_dev->name = "usbkbd_verified keyboard";
 		//@ string_to_chars(input_dev->name);
 		//@ assert true;
@@ -1568,8 +1561,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	x = x | y;
 	y = BIT_MASK(EV_REP);
 	x = x | y;
-	
-	input_dev->evbit[0] = x; // BIT_MASK(EV_KEY) | BIT_MASK(EV_LED) |  BIT_MASK(EV_REP); 
+	input_dev->evbit[0] = x; // original: BIT_MASK(EV_KEY) | BIT_MASK(EV_LED) |  BIT_MASK(EV_REP); 
 	
 	x = BIT_MASK(LED_NUML);
 	y = BIT_MASK(LED_CAPSL);
@@ -1580,7 +1572,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	x = x | y;
 	y = BIT_MASK(LED_KANA);
 	x = x | y;
-	input_dev->ledbit[0] = x; /* BIT_MASK(LED_NUML) | BIT_MASK(LED_CAPSL) |
+	input_dev->ledbit[0] = x; /* original: BIT_MASK(LED_NUML) | BIT_MASK(LED_CAPSL) |
 		BIT_MASK(LED_SCROLLL) | BIT_MASK(LED_COMPOSE) | 
 		BIT_MASK(LED_KANA);*/
 	
@@ -1592,10 +1584,8 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	for (i = 0; i < 255; i++)
 		/*@ invariant
 			[fracsize]pointer(&usb_kbd_keycode, usb_kbd_keycode_ptr)
-			//&*& [fracsize]array<unsigned char>(usb_kbd_keycode_ptr, 256, sizeof(unsigned char), u_character, _)
 			&*& [fracsize]uchars(usb_kbd_keycode_ptr, 256, _)
 			&*& input_dev->keybit |-> ?keybit
-			//&*& array<int>(keybit, 24, sizeof(int), integer, _)
 			&*& ints(keybit, 24, _)
 			&*& i >= 0;
 		@*/
@@ -1758,7 +1748,7 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 	//@ close maybe_chars(1, somephys, 0, nil);
 	error = input_register_device(kbd->dev);
 	
-	if (/*error*/ error != 0){
+	if (error){
 		
 		// new isn't provable the same since it's not an argument of userdef_input_drvdata.
 		//@ open complete_data_except_reportable(kbd, fracsize, ?_new, 8, inputdev); 
@@ -1768,7 +1758,6 @@ predicate usb_endpoint_descriptor_hide(struct usb_endpoint_descriptor *epd; int 
 		
 		//@ assert [_]usb_kbd_led(kbd, ?led) &*& [_]usb_kbd_leds(kbd, ?leds) &*& [_]usb_kbd_leds_dma(kbd, ?leds_dma);
 		
-		//@ assert urb_struct(true, led, dev, leds, leds_dma, 1, true, usb_kbd_led, kbd, cr); // delme
 		//@ close urb_struct_maybe(true, kbd->led, dev, kbd->leds, kbd->leds_dma, 1, true, usb_kbd_led, kbd, cr);
 		
 		//@ close usb_kbd_alloc_mem_result(0, 11 /* LED is initialized */, kbd->usbdev, kbd);
@@ -1832,7 +1821,7 @@ fail1:
 
 
 
-/*static*/ void usb_kbd_disconnect(struct usb_interface *intf) //@ : vf_usb_operation_disconnect_t
+static void usb_kbd_disconnect(struct usb_interface *intf) //@ : vf_usb_operation_disconnect_t
 	/*@ requires usb_interface(?probe_cb, usb_kbd_disconnect, intf, ?dev, ?data, true, ?fracsize)
 		&*& [?callback_link_f]usb_disconnect_callback_link(usb_kbd_disconnect)(probe_cb)
 		&*& not_in_interrupt_context(currentThread);
@@ -1862,7 +1851,7 @@ fail1:
 	// It is unclear why the driver performs the if since it is not necessary.
 	//@ assert kbd != 0;
 	
-	if (kbd != 0) {
+	if (kbd) {
 		
 		// In fact this is the real kill, and the no-op kill happens when unregistering
 		// the input device. In verification we look at it the other way around.
@@ -1916,7 +1905,7 @@ fail1:
 		
 		//@ assert [_]usb_kbd_usbdev(kbd, dev);
 		
-		struct usb_device *interface_to_usbdev_ret = interface_to_usbdev(intf);
+		struct usb_device *interface_to_usbdev_ret = interface_to_usbdev(intf); // originally inside the next C line.
 		//@ open usb_interface (usb_kbd_probe, usb_kbd_disconnect, intf, dev, 0, false, fracsize);
 		
 		//@ assert urb_struct(true, ?urb, dev, ?new, ?new_dma, 8, true, usb_kbd_irq, ?context, 0);
@@ -1969,7 +1958,7 @@ static struct usb_device_id *usb_kbd_id_table;
 
 
 
-static struct usb_driver *usb_kbd_driver;
+static struct usb_driver usb_kbd_driver; // <-- not original
 // original:
 //static struct usb_driver usb_kbd_driver = {
 //	.name =		"usbkbd",
@@ -1981,16 +1970,13 @@ static struct usb_driver *usb_kbd_driver;
 
 // flow: init->(kernel)->exit
 /*@ predicate_family_instance module_state(usb_kbd_init, usb_kbd_exit)() =
-	pointer(&usb_kbd_driver, ?usb_kbd_driver_ptr)
-	&*& usb_kbd_driver_ptr != 0
-	&*& pointer(&usb_kbd_id_table, ?usb_kbd_id_table_ptr)
+	pointer(&usb_kbd_id_table, ?usb_kbd_id_table_ptr)
 	&*& usb_kbd_id_table_ptr != 0
-	&*& struct_usb_driver_padding(usb_kbd_driver_ptr)
-	&*& kmalloc_block(usb_kbd_driver_ptr,sizeof(struct usb_driver))
+	&*& struct_usb_driver_padding(&usb_kbd_driver)
 	&*& kmalloc_block(usb_kbd_id_table_ptr,2*sizeof(struct usb_device_id))
 	&*& struct_usb_device_id_padding(usb_kbd_id_table_ptr)
 	&*& struct_usb_device_id_padding(usb_kbd_id_table_ptr+sizeof(struct usb_device_id))
-	&*& usb_driver_registered(usb_kbd_driver_ptr, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect)
+	&*& usb_driver_registered((void*)&usb_kbd_driver, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect)
 	;
 @*/
 
@@ -1998,7 +1984,7 @@ static struct usb_driver *usb_kbd_driver;
 // which is unsafe because an unsafe contract for init and exit will be accepted.
 // (but we already know we can do this safe - see helloproc - so we didn't put time in this)
 //
-/*static*/ int /*__init*/ usb_kbd_init(/*void*/) //@ : module_setup_t(usbkbd_verified)
+static int /*__init*/ usb_kbd_init(void) //@ : module_setup_t(usbkbd_verified)
 //@ requires module(usbkbd_verified, true) &*& not_in_interrupt_context(currentThread);
 /*@ ensures
 	not_in_interrupt_context(currentThread)
@@ -2030,24 +2016,16 @@ static struct usb_driver *usb_kbd_driver;
 		return -1; // not original code
 	}
 	
-	// UNSAFE Kernel oops if this struct is kmalloced instead of kzalloced.
+	// UNSAFE Kernel oops if usb_kbd_driver is not properly null-initialized.
 	//        Verification does not catch this.
 	//        
 	//        This is easy to solve by adding constraints that struct fields
 	//        should be zero in the formal API specs. Because this is
 	//        boring and time consuming and is not intresting from
 	//        a research point of view, this was skipped.
-	usb_kbd_driver = kzalloc(sizeof(struct usb_driver), GFP_KERNEL); // not original code
-	if (usb_kbd_driver == 0){         // not original code
-		kfree(usb_kbd_keycode); // not original code
-		kfree(usb_kbd_id_table);  // not original code
-		//@ close_module();
-		return -1; // not original code
-	}
 	
 	
 	//@ assert pointer(&usb_kbd_id_table, ?usb_kbd_id_table_ptr);
-	//@ assert pointer(&usb_kbd_driver, ?usb_kbd_driver_ptr);
 	
 	//@ uchars_to_chars(usb_kbd_id_table);
 	//@ chars_limits((void*)usb_kbd_id_table);
@@ -2086,20 +2064,18 @@ static struct usb_driver *usb_kbd_driver;
 	//@ close usb_device_id_table(0, usb_kbd_id_table+1);
 	//@ close usb_device_id_table(1, usb_kbd_id_table);
 	
-	//@ uchars_to_chars(usb_kbd_driver);
-	//@ close_struct(usb_kbd_driver);
 	// Again writing fields instead of using struct initialization of the form struct something = {.x = y},
-	usb_kbd_driver->name = /*"usbkbd"*/ "usbkbd_verified"; // not original code
-	//@ string_to_chars(usb_kbd_driver->name);
-	usb_kbd_driver->probe =	usb_kbd_probe;             // not original code
-	usb_kbd_driver->disconnect = usb_kbd_disconnect;   // not original code
-	usb_kbd_driver->id_table = usb_kbd_id_table;       // not original code
-	//@ close usb_driver(usb_kbd_driver, usb_kbd_id_table, 1, usb_kbd_probe, usb_kbd_disconnect);
+	usb_kbd_driver.name = "usbkbd"; // not original code
+	//@ string_to_chars(usb_kbd_driver.name);
+	usb_kbd_driver.probe =	usb_kbd_probe;             // not original code
+	usb_kbd_driver.disconnect = usb_kbd_disconnect;   // not original code
+	usb_kbd_driver.id_table = usb_kbd_id_table;       // not original code
+	//@ close usb_driver(&usb_kbd_driver, usb_kbd_id_table, 1, usb_kbd_probe, usb_kbd_disconnect);
 	
 	//@ close probe_disconnect_userdata(usb_kbd_probe, usb_kbd_disconnect)();
 	//@ close usb_probe_callback_link(usb_kbd_probe)(usb_kbd_disconnect);
 	//@ close usb_disconnect_callback_link(usb_kbd_disconnect)(usb_kbd_probe);
-	int result = usb_register(/*&*/usb_kbd_driver);
+	int result = usb_register(&usb_kbd_driver);
 	if (result == 0){
 		printk(/*KERN_INFO KBUILD_MODNAME ": " DRIVER_VERSION ":"
 				DRIVER_DESC "\n"*/ "usbkbd_verified: loaded.\n");
@@ -2107,9 +2083,8 @@ static struct usb_driver *usb_kbd_driver;
 		//@ close module_cleanup_callback_link(usb_kbd_exit)(usb_kbd_init);
 		
 	}else{ // not original code
-		//@ open usb_driver(usb_kbd_driver_ptr, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect);
+		//@ open usb_driver(&usb_kbd_driver, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect);
 		
-		//@ open_struct(usb_kbd_driver);
 		//@ open usb_device_id_table(1, usb_kbd_id_table_ptr);
 		//@ open usb_device_id_table(0, usb_kbd_id_table_ptr+sizeof(struct usb_device_id));
 		//@ open usb_device_id(usb_kbd_id_table_ptr+sizeof(struct usb_device_id), true);
@@ -2118,8 +2093,6 @@ static struct usb_driver *usb_kbd_driver;
 		//@ open_struct(usb_kbd_id_table+1);
 		//@ chars_join((void *)usb_kbd_id_table);
 		//@ chars_to_uchars(usb_kbd_id_table);
-		//@ chars_to_uchars(usb_kbd_driver);
-		kfree(usb_kbd_driver);  // not original code
 		kfree(usb_kbd_id_table);// not original code
 		
 		//@ open probe_disconnect_userdata(usb_kbd_probe, usb_kbd_disconnect)();
@@ -2142,21 +2115,17 @@ predicate_family_instance module_cleanup_callback_link(usb_kbd_exit)(module_setu
 	setup == usb_kbd_init;
 @*/
 
-/*static*/ void /*__exit*/ usb_kbd_exit(/*void*/) //@ : module_cleanup_t(usbkbd_verified)
+static void /*__exit*/ usb_kbd_exit(void) //@ : module_cleanup_t(usbkbd_verified)
 //@ requires module_state(?setup, usb_kbd_exit)() &*& not_in_interrupt_context(currentThread) &*& module_cleanup_callback_link(usb_kbd_exit)(setup);
 //@ ensures module(usbkbd_verified, _)&*& not_in_interrupt_context(currentThread);
 {
 	//@ open module_cleanup_callback_link(usb_kbd_exit)(setup);
 
 	//@ open module_state(usb_kbd_init, usb_kbd_exit)();
-	usb_deregister(/*&*/usb_kbd_driver);
+	usb_deregister(&usb_kbd_driver);
 	
-	//@ assert pointer(&usb_kbd_driver, ?usb_kbd_driver_ptr);
 	//@ assert pointer(&usb_kbd_id_table, ?usb_kbd_id_table_ptr);
-	//@ open usb_driver(usb_kbd_driver_ptr, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect);
-	//@ open_struct(usb_kbd_driver);
-	//@ chars_to_uchars(usb_kbd_driver);
-	kfree(usb_kbd_driver); // not original code
+	//@ open usb_driver(&usb_kbd_driver, usb_kbd_id_table_ptr, 1, usb_kbd_probe, usb_kbd_disconnect);
 	
 	// XXX put all this in a lemma? It's probably both here and in _init.
 	//@ open usb_device_id_table(1, usb_kbd_id_table_ptr);

@@ -28,7 +28,7 @@ void *memscan(void *addr, int c, __kernel_size_t size);
  * 
  */
 // XXX return value.
-void *memcpy(void *dest, /*const*/ void *src, size_t count);
+void *memcpy(void *dest, const void *src, size_t count);
 	/* Dissalowing overlap is enforced by chars(dest, ...)
 	 * and [?frac]chars(src, ...), you can not have
 	 * chars for the same memory location "twice".
