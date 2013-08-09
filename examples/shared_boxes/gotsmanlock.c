@@ -67,7 +67,7 @@ void acquire(int* l)
     { 
       @*/ int read = atomic_compare_and_set_int(l, 0, 1); /*@ 
     }
-    producing_handle_predicate if (read == 0) holds_lock() else gbox_handle();
+    producing_handle_predicate if (read == 0) holds_lock(ha) else gbox_handle(ha);
     @*/  
     if(read == 0) {
       //@ close locked(l, I);
@@ -90,10 +90,8 @@ void release(int* l)
     perform_action  release() atomic
     { 
       @*/ atomic_set_int(l, 0); /*@ 
-    }
-    producing_handle_predicate gbox_handle();
+    };
     @*/
-    //@ leak gbox_handle(ha, id);
 }
 
 void finalize(int* l)
@@ -103,6 +101,10 @@ void finalize(int* l)
   //@ open lock(l, I);
   //@ open locked(l, I);
   //@ assert [_]gbox(?id, l, I) &*& [_]gbox(?id2, l, I);
+  /*@
+  if(id != id2) {
+  }
+  @*/
   //@ assume(id == id2); // use some ghost state to prove this, shouldn't be hard
   //@ dispose_box gbox(id, l, I) and_handle holds_lock(_);
 }

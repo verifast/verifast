@@ -22,11 +22,11 @@ box_class mylock_box(struct mylock *mylock, bool is_locked, real myf, handle own
         requires true;
         ensures (old_is_locked ? 
                     is_locked && owner == old_owner && myf == old_myf : 
-                    owner == actionHandle && is_locked && myf == f) 
+                    cons(owner, nil) == actionHandles && is_locked && myf == f) 
                 && old_p == p;
         
     action release();
-        requires owner == actionHandle && is_locked;
+        requires cons(owner, nil) == actionHandles && is_locked;
         ensures !is_locked && old_p == p;
     
     handle_predicate mylock_handle(bool has_lock, real f) {
@@ -125,13 +125,12 @@ void mylock_acquire(struct mylock *mylock)
                 mylock->is_locked = true;
                 locked = true;
             }
-            ////@ assume (f > 0);
             //@ if(!locked) close mylock_help_hidden(mylock, f);
         }
         /*@
             }
             producing_box_predicate mylock_box(mylock, true, (locked ? f: oldf), (locked ? h : b),  p)
-            producing_handle_predicate mylock_handle(locked, f);
+            producing_handle_predicate mylock_handle(h, locked, f);
         @*/
        
         //@ close mylock_ctor (mylock, mybox, p)();
@@ -168,7 +167,7 @@ void mylock_release(struct mylock *mylock)
     /*@
         }
         producing_box_predicate mylock_box(mylock, false, oldf, h, p)
-        producing_handle_predicate mylock_handle(false, oldf);
+        producing_handle_predicate mylock_handle(h, false, oldf);
     @*/
     //@ close mylock_ctor (mylock, mybox, p)();
     mutex_release(mutex);

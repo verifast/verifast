@@ -14,12 +14,12 @@ box_class glist(list<pair<handle, void*> > xs) {
     ensures xs == old_xs;
   
   action add(void* x);
-    requires ! mem(pair(actionHandle, x), xs);
-    ensures xs == cons(pair(actionHandle, x), old_xs);
+    requires ! mem(pair(head(actionHandles), x), xs);
+    ensures xs == cons(pair(head(actionHandles), x), old_xs);
   
   action remove(void* x);
-    requires true;
-    ensures xs == remove(pair(actionHandle, x), old_xs);
+    requires switch(actionHandles) { case nil: return false; case cons(h, t): return t == nil; };
+    ensures xs == remove(pair(head(actionHandles), x), old_xs);
   
   handle_predicate ticket(void *x) {
     invariant mem(pair(predicateHandle, x), xs) == true;
@@ -31,7 +31,8 @@ box_class glist(list<pair<handle, void*> > xs) {
     }
     
     preserved_by remove(action_x) {
-        neq_mem_remove(pair(predicateHandle, x), pair(actionHandle, action_x), old_xs);
+      switch(actionHandles) { case nil: case cons(h, t): };
+      neq_mem_remove(pair(predicateHandle, x), pair(head(actionHandles), action_x), old_xs);
     }
   }
 }
@@ -76,7 +77,7 @@ lemma void strong_ghost_list_add(box id, void* x)
     not_in_values_implies_not_in_assoc_list(mapping, ha, x);
   }
   producing_box_predicate glist(cons(pair(ha, x), mapping))
-  producing_handle_predicate ticket(x);
+  producing_handle_predicate ticket(ha, x);
   close strong_ghost_list_member_handle(id, x);
   close strong_ghost_list(id, cons(x, xs));
 }
@@ -114,11 +115,8 @@ lemma void strong_ghost_list_remove(box id, void* x)
     remove_pair_from_map_remove_value_from_values(mapping, ha, x);
     distinct_remove(x, xs);
   }
-  producing_box_predicate glist(remove(pair(ha, x), mapping))
-  producing_handle_predicate glist_handle();
-  assert values(remove(pair(ha, x), mapping)) == remove(x, xs);
+  producing_box_predicate glist(remove(pair(ha, x), mapping));
   close strong_ghost_list(id, remove(x, xs));
-  leak glist_handle(_, _);
 }
 
 lemma void strong_ghost_list_member_handle_lemma(box id, void* x)
@@ -134,7 +132,7 @@ lemma void strong_ghost_list_member_handle_lemma(box id, void* x)
     mem_values(ha, x, mapping);
   }
   producing_box_predicate glist(mapping)
-  producing_handle_predicate ticket(x);
+  producing_handle_predicate ticket(ha, x);
   close strong_ghost_list(id, xs);
   close strong_ghost_list_member_handle(id, x);
 }

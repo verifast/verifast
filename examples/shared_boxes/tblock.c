@@ -88,15 +88,15 @@ box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<h
     action get_ticket();
     	requires true;
     	ensures next == old_next + 1 && owner == old_owner && locked == old_locked && 
-    		thandles == snoc(old_thandles, actionHandle) && p == old_p;
+    		thandles == snoc(old_thandles, head(actionHandles)) && p == old_p;
 
     action try_acquire(int ticket);
     	requires owner <= ticket;
         ensures next == old_next && owner == old_owner && p == old_p && thandles == old_thandles &&
-                ( owner == ticket && actionHandle == nth (0, thandles) ? locked : locked == old_locked );
+                ( owner == ticket && actionHandles == cons(nth (0, thandles), nil) ? locked : locked == old_locked );
 
     action release(int ticket);
-        requires locked && owner == ticket && actionHandle == nth (0, thandles);
+        requires locked && owner == ticket && actionHandles == cons(nth (0, thandles), nil);
         ensures next == old_next && owner == old_owner + 1 && p == old_p && 
     		thandles == tail (old_thandles) && !locked;
 
@@ -108,7 +108,7 @@ box_class tlock_box(struct tlock *lock, int next, int owner, bool locked, list<h
                   (ticket == owner ? isLocked == locked : !isLocked);
         
         preserved_by get_ticket() {
-           nth_append(old_thandles, cons(actionHandle, nil), ticket - owner);
+           nth_append(old_thandles, cons(head(actionHandles), nil), ticket - owner);
         }
         preserved_by try_acquire(t) {
         }
@@ -205,7 +205,7 @@ void tlock_acquire(struct tlock *lock)
     /*@
         }
         producing_box_predicate tlock_box(lock, next+1, owner, b_locked, snoc(th, h), p)
-        producing_handle_predicate tlock_ticket(ticket, false);
+        producing_handle_predicate tlock_ticket(h, ticket, false);
     @*/
     //@ close tlock_ctor (lock, boxId, p)();
     mutex_release(mutex);
@@ -235,7 +235,7 @@ void tlock_acquire(struct tlock *lock)
         /*@
             }
             producing_box_predicate tlock_box(lock, next2, owner2, (locked ? true : b_locked2), th2, p)
-            producing_handle_predicate tlock_ticket(ticket, locked);
+            producing_handle_predicate tlock_ticket(h, ticket, locked);
         @*/
 
         //@ close tlock_ctor (lock, boxId, p)();
@@ -253,7 +253,6 @@ void tlock_release(struct tlock *lock)
     //@ box boxId = lock->boxId;
     mutex_acquire(mutex);
     //@ open tlock_ctor (lock, boxId, p)();
-    
     /*@
         consuming_box_predicate tlock_box(boxId, lock, ?next2, ?owner2, ?b_locked2, ?th, p)
         consuming_handle_predicate tlock_ticket(?h, ?ticket, true)
@@ -267,13 +266,11 @@ void tlock_release(struct tlock *lock)
     }
     /*@
         }
-        producing_box_predicate tlock_box(lock, next2, owner2+1, false, tail(th), p)
-        producing_handle_predicate tlock_box_handle();
+        producing_box_predicate tlock_box(lock, next2, owner2+1, false, tail(th), p);
     @*/
     //@ close tlock_ctor (lock, boxId, p)();
     mutex_release(mutex);
     //@ close [f]tlock(lock, p);
-    //@ leak tlock_box_handle(h,boxId);
 }
 
 

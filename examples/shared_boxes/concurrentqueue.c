@@ -337,7 +337,7 @@ void enqueue(struct queue* q, int x)
     {
       @*/ struct node *t = atomic_load_pointer(&q->tail); /*@
     }
-    producing_handle_predicate was_tail(t);
+    producing_handle_predicate was_tail(ha, t);
     @*/
     
     /*@
@@ -367,7 +367,7 @@ void enqueue(struct queue* q, int x)
       }
       lseg_merge(initial, t, 0);
     }
-    producing_handle_predicate was_tail_with_succ(t, n);
+    producing_handle_predicate was_tail_with_succ(ha, t, n);
     @*/
     if(n == 0) {
       //@ close [f]queue(q, I);
@@ -382,11 +382,9 @@ void enqueue(struct queue* q, int x)
     perform_action move_tail() atomic
     {
     @*/ struct node* old = atomic_compare_and_set_pointer(&q->tail, t, n); /*@
-    }
-    producing_handle_predicate msqueue_box_handle();
+    };
     @*/
     //@ close [f]queue(q, I);
-    //@ leak msqueue_box_handle(_, _);
   }
 }
 
@@ -408,7 +406,7 @@ bool try_dequeue(struct queue* q, int* res)
     {
       @*/ struct node *h = atomic_load_pointer(&q->head); /*@
     }
-    producing_handle_predicate was_head(h);
+    producing_handle_predicate was_head(ha, h);
     @*/
     // n = h->next
     /*@
@@ -440,7 +438,7 @@ bool try_dequeue(struct queue* q, int* res)
         leak is_queue_try_dequeue(_, _);
       }
     }
-    producing_handle_predicate if(n == 0) msqueue_box_handle() else was_head_with_succ(h, n);
+    producing_handle_predicate if(n == 0) msqueue_box_handle(ha) else was_head_with_succ(ha, h, n);
     @*/
     if(n == 0) {
       return false;
@@ -462,7 +460,7 @@ bool try_dequeue(struct queue* q, int* res)
           index_of_nth(nodes_, tail_);
           index_of_nth(nodes_, h);
         }
-      } producing_handle_predicate was_head_with_succ_not_tail(h, n); @*/
+      } producing_handle_predicate was_head_with_succ_not_tail(ha, h, n); @*/
       // old = cas(&q->head, h, n)
       /*@
       consuming_box_predicate msqueue_box(id, q, I)
@@ -484,7 +482,7 @@ bool try_dequeue(struct queue* q, int* res)
         } else {
           ret = 0;
         }
-      } producing_handle_predicate if (old == h) is_good_node(n, ret) else msqueue_box_handle(); @*/
+      } producing_handle_predicate if (old == h) is_good_node(ha, n, ret) else msqueue_box_handle(ha); @*/
       if(old == h) {
         // read n->value
         /*@
@@ -507,10 +505,9 @@ bool try_dequeue(struct queue* q, int* res)
           assert value == nth(0, lvs2);
           nth_append_r(lvs1, lvs2, index_of(n, lnodes) - length(lvs1));
           assert value == ret;
-        } producing_handle_predicate msqueue_box_handle(); 
+        }; 
         @*/
         *res = value;
-        //@ leak msqueue_box_handle(ha, _);
         return true;
         //@ close [f]queue(q, I);
       }

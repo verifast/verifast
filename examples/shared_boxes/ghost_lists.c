@@ -20,11 +20,11 @@ box_class glist(list<pair<handle, void*> > xs) {
   
   action add(void* x);
     requires true;
-    ensures xs == cons(pair(actionHandle, x), old_xs);
+    ensures xs == cons(pair(head(actionHandles), x), old_xs);
   
   action remove(void* x);
-    requires true;
-    ensures xs == remove(pair(actionHandle, x), old_xs);
+    requires switch(actionHandles) { case nil: return false; case cons(h, t): return t == nil; };
+    ensures xs == remove(pair(head(actionHandles), x), old_xs);
   
   handle_predicate ticket(void *x) {
     invariant mem(pair(predicateHandle, x), xs) == true;
@@ -36,7 +36,8 @@ box_class glist(list<pair<handle, void*> > xs) {
     }
     
     preserved_by remove(action_x) {
-      neq_mem_remove(pair(predicateHandle, x), pair(actionHandle, action_x), old_xs);
+      switch(actionHandles) { case nil: case cons(h, t): }
+      neq_mem_remove(pair(predicateHandle, x), pair(head(actionHandles), action_x), old_xs);
     }
   }
 }
@@ -179,7 +180,7 @@ lemma void ghost_list_add(box id, void* x)
     close foreach(cons(ha, keys(mapping)), is_handle);
   }
   producing_box_predicate glist(cons(pair(ha, x), mapping))
-  producing_handle_predicate ticket(x);
+  producing_handle_predicate ticket(ha, x);
   close ghost_list_member_handle(id, x);
   close ghost_list(id, cons(x, xs));
 }
@@ -202,8 +203,7 @@ lemma void ghost_list_remove(box id, void* x)
     remove_map_keys(mapping, ha, x);
     foreach_remove(ha, keys(mapping));
   }
-  producing_box_predicate glist(remove(pair(ha, x), mapping))
-  producing_handle_predicate glist_handle();
+  producing_box_predicate glist(remove(pair(ha, x), mapping));
   is_perm_remove(values(mapping), xs, x);
   is_perm_symmetric(values(mapping), xs);
   is_perm_remove(xs, values(mapping), x);
@@ -211,7 +211,6 @@ lemma void ghost_list_remove(box id, void* x)
   is_perm_transitive(remove(x, xs), remove(x, values(mapping)), values(remove(pair(ha, x), mapping)));
   is_perm_symmetric(remove(x, xs), values(remove(pair(ha, x), mapping)));
   close ghost_list(id, remove(x, xs));
-  leak glist_handle(_, _);
   leak is_handle(_);
 }
 
@@ -229,7 +228,7 @@ lemma void ghost_list_member_handle_lemma(box id, void* x)
     mem_values(ha, x, mapping);
   }
   producing_box_predicate glist(mapping)
-  producing_handle_predicate ticket(x);
+  producing_handle_predicate ticket(ha, x);
   close ghost_list(id, xs);
   close ghost_list_member_handle(id, x);
 }

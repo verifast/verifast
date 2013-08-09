@@ -15,7 +15,7 @@ box_class contrib_box(int contrib, handle owner) {
     invariant emp;
 
     action set_value(int contrib0);
-        requires actionHandle == owner;
+        requires actionHandles == cons(owner, nil);
         ensures contrib == contrib0 && owner == old_owner;
 
     handle_predicate contrib_handle(int handleContrib) {
@@ -81,7 +81,7 @@ void contribute(void *data) //@ : thread_run_joinable
         /*@
     }
     producing_box_predicate contrib_box(1, thisBox == box1 ? handle1 : handle2)
-    producing_handle_predicate contrib_handle(1);
+    producing_handle_predicate contrib_handle(thisBox == box1 ? handle1 : handle2, 1);
     @*/
     //@ close sum(sumObject, box1, handle1, box2, handle2)();
     lock_release(lock);
@@ -144,7 +144,7 @@ int main()
     consuming_handle_predicate contrib_handle(?box1handle, _)
     perform_action set_value(1) {}
     producing_box_predicate contrib_box(1, owner1)
-    producing_handle_predicate contrib_box_handle();
+    producing_handle_predicate contrib_box_handle(box1handle);
     @*/
     //@ dispose_box contrib_box(box1, _, _);
     //@ leak contrib_box_handle(_, box1);
@@ -155,7 +155,7 @@ int main()
     consuming_handle_predicate contrib_handle(?box2handle, _)
     perform_action set_value(1) {}
     producing_box_predicate contrib_box(1, owner2)
-    producing_handle_predicate contrib_box_handle();
+    producing_handle_predicate contrib_box_handle(box2handle);
     @*/
     //@ dispose_box contrib_box(box2, _, _);
     //@ leak contrib_box_handle(_, _);

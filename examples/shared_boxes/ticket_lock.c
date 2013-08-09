@@ -20,14 +20,14 @@ box_class ticket_lock_box(struct ticket_lock* l, predicate() I) {
   
   action get_ticket();
     requires true;
-    ensures owner == old_owner && next == old_next + 1 && acquiringFrac == old_acquiringFrac && thandles == append(old_thandles, cons(actionHandle, nil));
+    ensures owner == old_owner && next == old_next + 1 && acquiringFrac == old_acquiringFrac && thandles == append(old_thandles, actionHandles);
   
   action acquire(int ticket, real f);
-    requires owner <= ticket && 0 < f;
-    ensures next == old_next && owner == old_owner && (old_owner == ticket && actionHandle == head(thandles) ? old_acquiringFrac == 0 && acquiringFrac == f : acquiringFrac == old_acquiringFrac) && thandles == old_thandles; 
+    requires owner <= ticket && 0 < f && switch(actionHandles) { case nil: return false; case cons(h, t): return t == nil; };
+    ensures next == old_next && owner == old_owner && (old_owner == ticket && head(actionHandles) == head(thandles) ? old_acquiringFrac == 0 && acquiringFrac == f : acquiringFrac == old_acquiringFrac) && thandles == old_thandles; 
     
   action release(int ticket);
-    requires acquiringFrac != 0 && owner == ticket && head(thandles) == actionHandle;
+    requires acquiringFrac != 0 && owner == ticket && cons(head(thandles), nil) == actionHandles;
     ensures owner == old_owner + 1 && next == old_next && acquiringFrac == 0 && thandles == tail(old_thandles);
   
   handle_predicate holds_lock(int ticket, real f) {
@@ -51,10 +51,11 @@ box_class ticket_lock_box(struct ticket_lock* l, predicate() I) {
               length(thandles) >= ticket - owner + 1;
         
     preserved_by get_ticket() {
-     nth_append(old_thandles, cons(actionHandle, nil), ticket - owner);
+     nth_append(old_thandles, actionHandles, ticket - owner);
     }
     
     preserved_by acquire(action_ticket, action_f) {
+      switch(actionHandles) { case nil: case cons(h, t): }
       switch(thandles) {
         case nil:
         case cons(h, t):
@@ -114,7 +115,7 @@ void ticket_lock_lock(struct ticket_lock* l)
     assert length(thandles) == n - own;
     nth_append_r(thandles, cons(h, nil), 0); 
   }
-  producing_handle_predicate is_ticket(i);
+  producing_handle_predicate is_ticket(h, i);
   @*/
   while(true)
     //@ invariant [f]ticket_lock_box(id, l, I) &*& [f]l->help |-> _ &*& is_ticket(h, id, i);
@@ -137,7 +138,7 @@ void ticket_lock_lock(struct ticket_lock* l)
         l->acquiringFrac = f;
       }
     }
-    producing_handle_predicate if(i == o) holds_lock(i, f) else is_ticket(i);
+    producing_handle_predicate if(i == o) holds_lock(h, i, f) else is_ticket(h, i);
     @*/
     if(i == o) {
       //@ close is_locked(l, f, I);
@@ -168,11 +169,9 @@ void ticket_lock_unlock(struct ticket_lock* l)
       case cons(h_, t_):
     }
     l->acquiringFrac = 0;
-  }
-  producing_handle_predicate ticket_lock_box_handle();
+  };
   @*/
   //@ close [f]ticket_lock(l, I);
-  //@ leak ticket_lock_box_handle(_, _);
 }
 
 void ticket_lock_dispose(struct ticket_lock* l)

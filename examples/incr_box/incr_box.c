@@ -65,7 +65,7 @@ void incrementor(void *data) //@ : thread_run
         /*@
     }
     producing_box_predicate counter_box(counter, count0 + 1)
-    producing_handle_predicate counter_box_handle();
+    producing_handle_predicate counter_box_handle(h);
     @*/
     //@ leak counter_box_handle(h, boxId);
     //@ close counter(counter, boxId)();
@@ -103,7 +103,7 @@ int main() //@ : main
         @*/ int count0 = counter->count; /*@
     }
     producing_box_predicate counter_box(counter, count0)
-    producing_handle_predicate count_handle(count0);
+    producing_handle_predicate count_handle(h, count0);
     @*/
     //@ close counter(counter, boxId)();
     lock_release(lock);
@@ -116,10 +116,8 @@ int main() //@ : main
     perform_action increase() {
         @*/ int count1 = counter->count; /*@
     }
-    producing_box_predicate counter_box(counter, count1)
-    producing_handle_predicate counter_box_handle();
+    producing_box_predicate counter_box(counter, count1);
     @*/
-    //@ leak counter_box_handle(h, boxId);
     //@ close counter(counter, boxId)();
     lock_release(lock);
     

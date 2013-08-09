@@ -130,7 +130,7 @@ void ticket_lock_lock(struct ticketlock* l)
     action_permission1_split2(ticketlock_box_next_dispenser, ticketlock_box_next, id, i);
     close ticketlock_next(l, n + 1);
   }
-  producing_handle_predicate is_ticket(i);
+  producing_handle_predicate is_ticket(h, i);
   @*/
   while(true)
     //@ invariant [f]ticketlock_box(id, l) &*& is_ticket(h, id, i);
@@ -144,7 +144,7 @@ void ticket_lock_lock(struct ticketlock* l)
       int o = atomic_load_int(&l->owner);
       /*@
     }
-    producing_handle_predicate if(i == o) holds_lock(i) else is_ticket(i);
+    producing_handle_predicate if(i == o) holds_lock(h, i) else is_ticket(h, i);
     @*/
     if(i == o) {
       //@ close is_locked(l, f);
@@ -169,10 +169,8 @@ void ticket_lock_unlock(struct ticketlock* l)
     int i = atomic_increment(&l->owner);    
     /*@
     close ticketlock_owner(l, _);
-  }
-  producing_handle_predicate ticketlock_box_handle();
+  };
   @*/
   //@close [f]ticketlock(l);
-  //@ leak ticketlock_box_handle(_, _);
   //@ leak ticketlock_box_next(id, _);
 }

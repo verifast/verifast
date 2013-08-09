@@ -64,7 +64,7 @@ void consumer(struct stack* s, struct stack_client* client)
         
       } 
       producing_box_predicate incr_box(all, tail(vs))
-      producing_handle_predicate not_contains(vs != nil, vs == nil ? (void*)0 : head(vs));
+      producing_handle_predicate not_contains(ha, vs != nil, vs == nil ? (void*)0 : head(vs));
       close myi(id)(tail(vs));
       close stack_pop_post(my_pop_lemma)(vs != nil, vs == nil ? (void*)0 : head(vs));
     }
@@ -100,7 +100,7 @@ void consumer(struct stack* s, struct stack_client* client)
         
       } 
       producing_box_predicate incr_box(all, tail(vs))
-      producing_handle_predicate not_contains(vs != nil, vs == nil ? (void*)0 : head(vs));
+      producing_handle_predicate not_contains(ha, vs != nil, vs == nil ? (void*)0 : head(vs));
       close myi(id)(tail(vs));
       close stack_pop_post(my_pop_lemma2)(vs != nil, vs == nil ? (void*)0 : head(vs));
       leak not_contains(_, _, _, _);

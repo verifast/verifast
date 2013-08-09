@@ -142,7 +142,7 @@ void acquire(struct lock* l)
         range_append(0, value, value + 1);
         action_permission1_split2(tbox_next_dispenser, tbox_next, id, value);
       }
-      producing_handle_predicate is_ticket(value);
+      producing_handle_predicate is_ticket(ha, value);
       close N(l)(value + 1);
       close atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value);
     }
@@ -170,7 +170,7 @@ void acquire(struct lock* l)
       perform_action dummy() atomic // this is weird, perform an atomic perform_action while inside an atomic perform_action (the one of atomic_integer?)
       {
       }
-      producing_handle_predicate if(value == i) holds_lock(i) else is_ticket(i);
+      producing_handle_predicate if(value == i) holds_lock(ha, i) else is_ticket(ha, i);
       close O(l)(value);
       close atomic_integer_get_post(my_atomic_integer_get_lemma)(value);
     }
@@ -209,11 +209,9 @@ void release(struct lock* l)
       perform_action next(i) atomic // this is weird, perform an atomic perform_action while inside an atomic perform_action (the one of atomic_integer?)
       {
         l->owner_copy = l->owner_copy + 1;
-      }
-      producing_handle_predicate tbox_handle();
+      };
       close O(l)(value + 1);
       close atomic_integer_inc_post(my_atomic_integer_inc_lemma)(value);
-      leak tbox_handle(_, _);
       leak tbox_next(_, _);
     }
     @*/

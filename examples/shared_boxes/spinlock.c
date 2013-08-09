@@ -20,10 +20,10 @@ box_class spinlock_box(struct spinlock* l, predicate() I)
   
   action acquire(real f);
     requires true;
-    ensures old_is_locked == 0 ? is_locked == 1 && owner == actionHandle && myf == f: is_locked == old_is_locked && owner == old_owner && myf == old_myf;
+    ensures old_is_locked == 0 ? is_locked == 1 && cons(owner, nil) == actionHandles && myf == f: is_locked == old_is_locked && owner == old_owner && myf == old_myf;
   
   action release();
-    requires is_locked == 1 && owner == actionHandle;
+    requires is_locked == 1 && cons(owner, nil) == actionHandles;
     ensures is_locked == 0;
     
   handle_predicate locked_handle(real f) {
@@ -80,7 +80,7 @@ void spinlock_acquire(struct spinlock* l)
         open exists<handle>(_); close exists<handle>(ha);       
       }
     }
-    producing_handle_predicate if (old != 0) spinlock_box_handle() else locked_handle(f);
+    producing_handle_predicate if (old != 0) spinlock_box_handle(ha) else locked_handle(ha, f);
     @*/
     if(old == 0) {
       //@ close locked(l, I, f);
@@ -103,11 +103,9 @@ void spinlock_release(struct spinlock* l)
   perform_action release() atomic
   {
     @*/ atomic_set_int(&l->is_locked, 0); /*@
-  }
-  producing_handle_predicate spinlock_box_handle();
+  };
   @*/
   //@ close [f]spinlock(l, I);
-  //@ leak spinlock_box_handle(_, _);
 }
 
 void spinlock_dispose(struct spinlock* l)
@@ -134,10 +132,8 @@ lemma void change_invariant(struct spinlock* l, predicate() J)
   perform_action noop()
   {
   }
-  producing_box_predicate spinlock_box(l, J)
-  producing_handle_predicate spinlock_box_handle();
+  producing_box_predicate spinlock_box(l, J);
   close spinlock(l, J);
-  leak spinlock_box_handle(_, _);
 }
 @*/
 
