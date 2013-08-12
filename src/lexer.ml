@@ -171,8 +171,16 @@ type token = (* ?token *)
   | String of string
   | CharToken of char
   | PreprocessorSymbol of string
-  | BeginInclude of string * string
-  | SecondaryInclude of string * string
+  | BeginInclude of
+      (** string of file included as written in the sourcecode, e.g. "../test.h" *)
+      string
+      (** resolved filename of included file, e.g. "/home/jack/verifast-0.0/bin/stdio.h" *)
+      * string
+  | SecondaryInclude of
+      (** Same as first string of BeginInclude *)
+      string
+      (** Same as first second string of BeginInclude *)
+      * string
   | EndInclude
   | Eol
   | ErrorToken
@@ -1210,7 +1218,11 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     ts
   in
   (next_token, fun _ -> !last_macro_used)
-  
+
+(**
+ *
+ * basePath, relPath: see make_preprocessor
+ *)
 let make_sound_preprocessor make_lexer basePath relPath include_paths =
   let tlexers = ref [] in
   let curr_tlexer = ref (new tentative_lexer (fun () -> dummy_loc) (ref false) (Stream.of_list [])) in
@@ -1270,12 +1282,12 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           let rec find_include_file includepaths =
             match includepaths with
               [] -> error (current_loc()) (Printf.sprintf "No such file: '%s'" rellocalpath)
-            | head::body ->
+            | head::tail ->
               let headerpath = concat head rellocalpath in
               if Sys.file_exists headerpath then
-                (head, rellocalpath)
+                ((Filename.dirname headerpath), (Filename.basename headerpath))
               else
-                (find_include_file body)
+                (find_include_file tail)
           in
           let (basePath, relPath) = find_include_file includepaths in push_tlexer basePath relPath;
           let path = reduce_path (concat basePath relPath) in
@@ -1310,5 +1322,11 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
   in
   ((fun () -> current_loc()), ref true, Stream.from (fun _ -> next_token ()))
 
+(**
+ * 
+ * basePath: path of the current .h or .c file. e.g. if "/dir1/a.c" includes
+ *   "/dir2/b.h", then, when including "c.h", basePath will be "/dir2/".
+ * relPath: the filename we want to include, e.g. "stdio.h".
+ *)
 let make_preprocessor make_lexer basePath relPath include_paths =
   make_sound_preprocessor make_lexer basePath relPath include_paths
