@@ -18,15 +18,15 @@ box_class atomic_integer_box(int* i, predicate(int) I) {
     ensures old_value == old ? value == new : value == old_value;
 }
 
-predicate atomic_integer(int* i, int level, predicate(int) I) =
+predicate atomic_integer(int* i, real level, predicate(int) I) =
   atomic_integer_box(?id, i, I) &*& box_level(id) == level;
   
-lemma void create_atomic_integer(int* i, int level, predicate(int) I)
+lemma void create_atomic_integer(int* i, real upper_bound, predicate(int) I)
   requires integer(i, ?value) &*& I(value);
-  ensures atomic_integer(i, level, I);
+  ensures atomic_integer(i, ?new_level, I) &*& new_level < upper_bound;
 {
-  create_box id = atomic_integer_box(i, I) at_level level;
-  close atomic_integer(i, level, I);
+  create_box id = atomic_integer_box(i, I) below upper_bound;
+  close atomic_integer(i, box_level(id), I);
 }
 @*/
 

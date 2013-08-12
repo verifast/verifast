@@ -13,16 +13,23 @@ box_class gbox(int* l, predicate() I)
 {
   invariant [1/2]integer(l, ?locked) &*& locked == 0 ? I() &*& [1/2]integer(l, 0) &*& [1/2]gbox(this, l, I) : true;
   
+  action noop();
+    requires true;
+    ensures l == old_l && I == old_I && locked == old_locked;
+  
   action acquire();
     requires true;
     ensures l == old_l && (old_locked == 0 ? locked != 0 : locked == old_locked);
-    
+  
   action release();
     requires locked != 0;
     ensures l == old_l && locked == 0;
   
   handle_predicate holds_lock() {
     invariant [1/2]integer(l, locked) &*& locked != 0;
+    
+    preserved_by noop() {
+    }
     
     preserved_by acquire() {
     }
@@ -58,7 +65,7 @@ void acquire(int* l)
   //@ assert [_]gbox(?id, l, I);
   //@ handle ha = create_handle gbox_handle(id);
   while(true)
-    //@ invariant [f/2]gbox(id, l, I) &*& gbox_handle(ha, id);//&*& [f]gbox_acquire(id);
+    //@ invariant [f/2]gbox(id, l, I) &*& gbox_handle(ha, id);
   {
     /*@
     consuming_box_predicate gbox(id, l, I)
@@ -94,17 +101,59 @@ void release(int* l)
     @*/
 }
 
+/*@
+box_class b() {
+  invariant true;
+  
+  action noop();
+    requires true;
+    ensures true;
+}
+@*/
+
 void finalize(int* l)
   //@ requires lock(l, ?I) &*& locked(l, I);
   //@ ensures integer(l, _);
 {
   //@ open lock(l, I);
   //@ open locked(l, I);
-  //@ assert [_]gbox(?id, l, I) &*& [_]gbox(?id2, l, I);
+  //@ assert [_]gbox(?id1, l, I) &*& [_]gbox(?id2, l, I) &*& holds_lock(?ha, id1);
+  //@ box first, second;
+  //@ create_box id0 = b() below box_level(id1), box_level(id2); 
+  ;
   /*@
-  if(id != id2) {
-  }
+    consuming_box_predicate b(id0) 
+    perform_action noop() atomic
+    {
+      if(id1 != id2) {
+        box_level_unique(id1, id2);
+        if(box_level(id1) < box_level(id2)) {
+          consuming_box_predicate gbox(id1, l, I)
+          consuming_handle_predicate holds_lock(ha)
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id2, l, I)
+            perform_action noop() atomic
+             {
+              integer_unique(l);
+            };
+          };
+        } else {
+          consuming_box_predicate gbox(id2, l, I)
+        
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id1, l, I)
+            consuming_handle_predicate holds_lock(ha)
+            perform_action noop() atomic
+            {
+              integer_unique(l);
+            };
+          };
+        } 
+      }
+    };
   @*/
-  //@ assume(id == id2); // use some ghost state to prove this, shouldn't be hard
-  //@ dispose_box gbox(id, l, I) and_handle holds_lock(_);
+  //@ dispose_box gbox(id1, l, I) and_handle holds_lock(_);
+  //@ dispose_box b(id0);
 }

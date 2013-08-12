@@ -1,6 +1,6 @@
 #include "stdlib.h"
 
-//@ #include "ghost_lists.gh"
+//@ #include "strong_ghost_lists.gh"
 #include "gotsmanlock.h"
 
 struct lock;
@@ -19,23 +19,52 @@ struct set {
 predicate_ctor H(struct node* head, box id, box gl, predicate(list<int>) I)() = 
   head != 0 &*& [1/2]head->value |-> -1000 &*& head->next |-> ?next &*& next != 0 &*&
   lock(&next->lock, N(next, id, gl, I)) &*& [1/2]next->value |-> ?nvalue &*& -1000 < nvalue &*&
-  malloc_block_node(head) &*& [_]setbox(id, gl, I);
+  malloc_block_node(head) &*& [_]setbox(id, gl, I) &*& nonmembers(gl, interval(-999, nvalue));
   
 predicate_ctor N(struct node* n, box id, box gl, predicate(list<int>) I)() = 
   n != 0 &*& [1/2]n->value |-> ?value &*& -1000 < value &*& n->next |-> ?next &*&  [_]setbox(id, gl, I) &*&
-  (next == 0 ? value == 1000 : lock(&next->lock, N(next, id, gl, I)) &*& [1/2]next->value |-> ?nvalue &*& value < nvalue &*& value < 1000 &*& ghost_list_member_handle(gl, value)) &*&
+  (next == 0 ? value == 1000 : lock(&next->lock, N(next, id, gl, I)) &*& [1/2]next->value |-> ?nvalue &*& value < nvalue &*& value < 1000 &*& 
+  member(gl, value) &*& nonmembers(gl, interval(value + 1, nvalue))) &*&
   malloc_block_node(n);
 
 predicate set(struct set* set, predicate(list<int>) I) =
   set->head |-> ?head &*& head != 0 &*& [1/2]head->value |-> -1000 &*& [_]setbox(?id, ?gl, I) &*& lock(&head->lock, H(head, id, gl, I)) &*& malloc_block_set(set);
 
 box_class setbox(box gl, predicate(list<int>) I) {
-  invariant ghost_list(gl, ?values) &*& I(values);
+  invariant strong_ghost_list(gl, ?values) &*& I(values);
   
   action act();
     requires true;
     ensures true;
 }
+@*/
+
+/*@
+fixpoint list<int> interval(int lower, int upper);
+
+lemma_auto void distinct_interval(int lower, int upper);
+  requires true;
+  ensures distinct(interval(lower, upper)) == true;
+
+lemma_auto void mem_interval(int x, int lower, int upper);
+  requires true;
+  ensures mem(x, interval(lower, upper)) == (lower <= x && x < upper);
+
+lemma void interval_split(int x, int lower, int upper);
+  requires lower <= x && x <= upper;
+  ensures interval(lower, upper) == append(interval(lower, x), interval(x, upper));
+
+lemma void empty_interval(int lower);
+  requires true;
+  ensures interval(lower, lower) == nil;
+  
+lemma void cons_interval(int lower, int upper);
+  requires lower < upper;
+  ensures interval(lower, upper) == cons(lower, interval(lower+1, upper));
+  
+lemma void remove_first_interval(int lower, int upper);
+  requires lower < upper;
+  ensures remove(lower, interval(lower, upper)) == interval(lower + 1, upper);
 @*/
 
 struct set* create_set()
@@ -60,7 +89,7 @@ struct set* create_set()
   last->next = 0;
   first->value = -1000;
   set->head = first;
-  //@ box gl = create_ghost_list();
+  //@ box gl = create_ghost_list(interval(-999, 1000));
   //@ create_box id = setbox(gl, I);
   //@ leak setbox(_, gl, I);
   //@ close N(last, id, gl, I)();
@@ -84,8 +113,8 @@ void locate(struct node* head, int x, struct node** prev_result, struct node** c
               prev != 0 &*& curr != 0 &*& curr != head &*& 
               [1/2]prev->value |-> ?pvalue &*& pvalue < 1000 &*& prev->next |-> curr &*& curr->value |-> ?cvalue &*& pvalue < cvalue &*& -1000 < cvalue &*& 
               curr->next |-> ?cnext &*& cnext != head &*& pvalue < x &*& x <= cvalue &*&
-              (cnext == 0 ? cvalue == 1000 : ghost_list_member_handle(gl, cvalue) &*& lock(&cnext->lock, N(cnext, id, gl, I)) &*& [1/2]cnext->value |-> ?nvalue &*& cvalue < nvalue &*& cvalue < 1000) &*&
-              (prev == head ? locked(&head->lock, H(head, id, gl, I)) &*& pvalue == -1000 : ghost_list_member_handle(gl, pvalue) &*& locked(&prev->lock, N(prev, id, gl, I)) &*& -1000 < pvalue) &*&
+              (cnext == 0 ? cvalue == 1000 : member(gl, cvalue) &*& lock(&cnext->lock, N(cnext, id, gl, I)) &*& [1/2]cnext->value |-> ?nvalue &*& nonmembers(gl, interval(cvalue + 1, nvalue)) &*& cvalue < nvalue &*& cvalue < 1000) &*&
+              (prev == head ? locked(&head->lock, H(head, id, gl, I)) &*& pvalue == -1000 &*& nonmembers(gl, interval(-999, cvalue)) : member(gl, pvalue)  &*& nonmembers(gl, interval(pvalue + 1, cvalue)) &*& locked(&prev->lock, N(prev, id, gl, I)) &*& -1000 < pvalue) &*&
               malloc_block_node(prev) &*& malloc_block_node(curr) &*& [1/2*f]head->value |-> -1000 &*& [_]setbox(id, gl, I);
   @*/
 {
@@ -105,8 +134,8 @@ void locate(struct node* head, int x, struct node** prev_result, struct node** c
                   prev != 0 &*& curr != 0 &*& curr != head &*& 
                   [1/2]prev->value |-> ?pvalue &*& pvalue < 1000 &*& prev->next |-> curr &*& curr->value |-> ?cvalue &*& pvalue < cvalue &*& -1000 < cvalue &*& 
                   curr->next |-> ?cnext &*& cnext != head &*& pvalue < x &*&
-                  (cnext == 0 ? cvalue == 1000 : ghost_list_member_handle(gl, cvalue) &*& lock(&cnext->lock, N(cnext, id, gl, I)) &*& [1/2]cnext->value |-> ?nvalue &*& cvalue < nvalue &*& cvalue < 1000) &*&
-                  (prev == head ? locked(&head->lock, H(head, id, gl, I)) &*& pvalue == -1000 : ghost_list_member_handle(gl, pvalue) &*& locked(&prev->lock, N(prev, id, gl, I)) &*& -1000 < pvalue) &*&
+                  (cnext == 0 ? cvalue == 1000 : member(gl, cvalue) &*& lock(&cnext->lock, N(cnext, id, gl, I)) &*& [1/2]cnext->value |-> ?nvalue &*& nonmembers(gl, interval(cvalue + 1, nvalue))  &*& cvalue < nvalue &*& cvalue < 1000) &*&
+                  (prev == head ? locked(&head->lock, H(head, id, gl, I)) &*& pvalue == -1000 &*& nonmembers(gl, interval(-999, cvalue)) : member(gl, pvalue) &*& nonmembers(gl, interval(pvalue + 1, cvalue)) &*& locked(&prev->lock, N(prev, id, gl, I)) &*& -1000 < pvalue) &*&
                   malloc_block_node(prev) &*& malloc_block_node(curr) &*& [1/2*f]head->value |-> -1000;
     @*/
   {
@@ -134,7 +163,10 @@ predicate_family set_add_post(void* index)(int x, list<int> old_set);
 
 typedef lemma void set_add_lemma(int x, predicate(list<int>) I)();
   requires set_add_pre(this)(x) &*& I(?values);
-  ensures set_add_post(this)(x, values) &*& I(cons(x, values));
+  ensures set_add_post(this)(x, values) &*& I(mem(x, values) ? values : cons(x, values));
+
+predicate hider(box id, list<int> set) = 
+  nonmembers(id, set);
 @*/
 
 bool add(struct set* s, int x)
@@ -150,7 +182,17 @@ bool add(struct set* s, int x)
   //@ close exists(id);
   //@ close exists(I);
   locate(s->head, x, &prev, &curr);
+  //@ int pvalue = prev->value;
+  //@ int cvalue = curr->value;
+  //@ struct node* cnext = curr->next;
+  //@ int nvalue;
   //@ handle ha = create_handle setbox_handle(id);
+  /*@
+  if(cnext != 0) {
+    nvalue = cnext->value;
+    close hider(gl, interval(cvalue + 1, nvalue));
+  }
+  @*/
   assert x <= curr->value;
   if(curr->value != x) {
     struct node* new_node = malloc(sizeof(struct node));
@@ -165,10 +207,15 @@ bool add(struct set* s, int x)
     consuming_handle_predicate setbox_handle(ha)
     perform_action act() atomic
     {
-      ghost_list_add(gl, x);
+      assert I(?values);
+      strong_ghost_list_nonmember_handle_lemma(gl, x);
+      interval_split(x, pvalue + 1, cvalue);
+      strong_ghost_list_nonmember_split(gl, interval(pvalue + 1, x), interval(x, cvalue));
+      strong_ghost_list_add(gl, x);
       lem();
+      remove_first_interval(x, cvalue);
     }
-    producing_handle_predicate setbox_handle();
+    producing_handle_predicate setbox_handle(ha);
     @*/
     //@ close N(new_node, id, gl, I)();
     release(&new_node->lock);
@@ -179,12 +226,11 @@ bool add(struct set* s, int x)
     consuming_handle_predicate setbox_handle(ha)
     perform_action act() atomic
     {
-      ghost_list_add(gl, x);
+      strong_ghost_list_member_handle_lemma(gl, x);
       lem();
     }
-    producing_handle_predicate setbox_handle();
+    producing_handle_predicate setbox_handle(ha);
     @*/
-    //@ leak ghost_list_member_handle(gl, x);
     result = false;
   }
   /*@
@@ -194,6 +240,9 @@ bool add(struct set* s, int x)
     close N(prev, id, gl, I)();
   } @*/
   release(&prev->lock);
+  /*@
+  if(cnext != 0) { open hider(gl, _); }
+  @*/
   //@ close N(curr, id, gl, I)();
   release(&curr->lock);
   //@ close [f]set(s, I);
@@ -207,8 +256,8 @@ predicate_family set_contains_pre(void* index)(int x);
 predicate_family set_contains_post(void* index)(int x, list<int> elements, bool result);
 
 typedef lemma void set_contains_lemma(int x, predicate(list<int>) I)(bool result);
-  requires set_contains_pre(this)(x) &*& I(?values);
-  ensures set_contains_post(this)(x, values, result) &*& I(values) &*& !result || mem(x, values);
+  requires set_contains_pre(this)(x) &*& I(?values) &*& result == mem(x, values);
+  ensures set_contains_post(this)(x, values, result) &*& I(values);
 @*/
 
 bool contains(struct set* s, int x)
@@ -224,22 +273,30 @@ bool contains(struct set* s, int x)
   //@ close exists(id);
   //@ close exists(I);
   locate(s->head, x, &prev, &curr);
+  /*@
+  if(curr->next != 0) {
+    int nvalue = curr->next->value;
+    close hider(gl, interval(curr->value + 1, nvalue));
+  }
+  @*/
   result = x == curr->value;
-  //@ handle ha = create_handle setbox_handle(id);
   /*@
     consuming_box_predicate setbox(id, gl, I)
-    consuming_handle_predicate setbox_handle(ha)
     perform_action act() atomic
     {
       if(result) {
-      	ghost_list_member_handle_lemma(gl, x);
+      	strong_ghost_list_member_handle_lemma(gl, x);
+      } else {
+        strong_ghost_list_nonmember_handle_lemma(gl, x);
       }
       lem(result);
-    }
-    producing_handle_predicate setbox_handle();
+    };
     @*/
-    /*@
-  if(prev == s->head) {
+  /*@ if(curr->next != 0) {
+    int nvalue = curr->next->value;
+    open hider(gl, interval(curr->value + 1, nvalue));
+  } @*/
+  /*@ if(prev == s->head) {
     close H(s->head, id, gl, I)();
   } else {
     close N(prev, id, gl, I)();
@@ -249,7 +306,74 @@ bool contains(struct set* s, int x)
   release(&curr->lock);
   //@ close [f]set(s, I);
   //@ leak is_set_contains_lemma(lem, x, _);
-  //@ leak setbox_handle(_, _);
+  return result;
+}
+
+/*@
+predicate_family set_remove_pre(void* index)(int x);
+predicate_family set_remove_post(void* index)(int x, list<int> elements, bool result);
+
+typedef lemma void set_remove_lemma(int x, predicate(list<int>) I)(bool result);
+  requires set_remove_pre(this)(x) &*& I(?values) &*& result == mem(x, values);
+  ensures set_remove_post(this)(x, values, result) &*& I(result ? remove(x, values) : values);
+@*/
+
+bool remove(struct set* s, int x)
+  //@ requires [?f]set(s, ?I) &*& -1000 < x &*& x < 1000 &*& is_set_remove_lemma(?lem, x, I) &*& set_remove_pre(lem)(x);
+  //@ ensures [f]set(s, I) &*& set_remove_post(lem)(x, ?values, result);
+{
+  struct node* prev;
+  struct node* curr;
+  bool result;
+  //@ open [f]set(s, I);
+  //@ assert [_]setbox(?id, ?gl, I);
+  //@ close exists(gl);
+  //@ close exists(id);
+  //@ close exists(I);
+  locate(s->head, x, &prev, &curr);
+  if(curr->value == x) {
+    /*@ consuming_box_predicate setbox(id, gl, I)
+    perform_action act() atomic
+    {
+      strong_ghost_list_member_handle_lemma(gl, x);
+      strong_ghost_list_remove(gl, x);
+      strong_ghost_list_nonmember_merge(gl, cons(x, nil), interval(x + 1, curr->next->value));
+      cons_interval(x, curr->next->value);
+      strong_ghost_list_nonmember_merge(gl, interval(prev->value + 1, x), interval(x, curr->next->value));
+      interval_split(x, prev->value + 1, curr->next->value);
+      lem(true);
+    }; @*/
+    prev->next = curr->next;
+    finalize(&curr->lock);
+    free(curr);
+    result = true;
+  } else {
+    /*@ if(curr->next != 0) {
+      int nvalue = curr->next->value;
+      close hider(gl, interval(curr->value + 1, nvalue));
+    } @*/
+    /*@ consuming_box_predicate setbox(id, gl, I)
+    perform_action act() atomic
+    {
+      strong_ghost_list_nonmember_handle_lemma(gl, x);
+      lem(false);
+    }; @*/
+    /*@ if(curr->next != 0) {
+      int nvalue = curr->next->value;
+      open hider(gl, interval(curr->value + 1, nvalue));
+    } @*/
+    //@ close N(curr, id, gl, I)();
+    release(&curr->lock);
+    result = false;
+  }
+  /*@ if(prev == s->head) {
+    close H(s->head, id, gl, I)();
+  } else {
+    close N(prev, id, gl, I)();
+  } @*/
+  release(&prev->lock);
+  //@ close [f]set(s, I);
+  //@ leak is_set_remove_lemma(_, _, _);
   return result;
 }
 

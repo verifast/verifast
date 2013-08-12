@@ -1,0 +1,35 @@
+#ifndef STRONG_GHOST_LISTS
+#define STRONG_GHOST_LISTS
+
+predicate strong_ghost_list(box id, list<int> xs);
+predicate member(box id, int x);
+predicate nonmembers(box id, list<int> xs);
+
+lemma box create_ghost_list<t>(list<int> initial_out);
+    requires distinct(initial_out) == true;
+    ensures strong_ghost_list(result, nil) &*& nonmembers(result, initial_out);
+    
+lemma void strong_ghost_list_add(box id, int x);
+    requires strong_ghost_list(id, ?xs) &*& nonmembers(id, ?set) &*& mem(x, set) == true;
+    ensures strong_ghost_list(id, cons(x, xs)) &*& nonmembers(id, remove(x, set)) &*& member(id, x);
+
+lemma void strong_ghost_list_remove(box id, int x);
+    requires strong_ghost_list(id, ?xs) &*& member(id, x);
+    ensures strong_ghost_list(id, remove(x, xs)) &*& nonmembers(id, cons(x, nil));
+
+lemma void strong_ghost_list_member_handle_lemma(box id, int x);
+    requires strong_ghost_list(id, ?xs) &*& member(id, x);
+    ensures strong_ghost_list(id, xs) &*& member(id, x) &*& mem(x, xs) == true;
+
+lemma void strong_ghost_list_nonmember_handle_lemma(box id, int x);
+    requires strong_ghost_list(id, ?xs) &*& nonmembers(id, ?nonmembers) &*& mem(x, nonmembers) == true;
+    ensures strong_ghost_list(id, xs) &*& nonmembers(id, nonmembers) &*& ! mem(x, xs);
+
+lemma void strong_ghost_list_nonmember_split(box id, list<int> l1, list<int> l2);
+    requires strong_ghost_list(id, ?xs) &*& nonmembers(id, ?nonmembers) &*& append(l1, l2) == nonmembers;
+    ensures strong_ghost_list(id, xs)  &*& nonmembers(id, l2) &*& nonmembers(id, l1);
+
+lemma void strong_ghost_list_nonmember_merge(box id, list<int> l1, list<int> l2);
+    requires strong_ghost_list(id, ?xs) &*& nonmembers(id, l1) &*& nonmembers(id, l2);
+    ensures strong_ghost_list(id, xs)  &*& nonmembers(id, append(l1, l2));
+#endif

@@ -4409,6 +4409,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   
   let mk_length l = mk_app !!length_symb [l]
   
+  let distinct_symb = lazy_purefuncsymb "distinct"
+  
+  let mk_distinct l = mk_app !!distinct_symb [l]
+  
   let mem_symb = lazy_purefuncsymb "mem"
   
   let mk_mem elem_tp e xs = (mk_app !!mem_symb [apply_conversion (provertype_of_type elem_tp) ProverInductive e; xs])

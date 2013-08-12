@@ -1,0 +1,42 @@
+#ifndef INTERVAL_H
+#define INTERVAL_H
+
+#include "nat.gh"
+
+fixpoint list<int> interval_core(int lower, int upper, nat diff) {
+  switch(diff) {
+    case zero: return nil;
+    case succ(diff0):
+      return cons(lower, interval_core(lower + 1, upper, diff0));
+  }
+}
+
+fixpoint list<int> interval(int lower, int upper) {
+  return lower >= upper ? nil : interval_core(lower, upper, nat_of_int(upper - lower));
+}
+
+lemma_auto void distinct_interval(int lower, int upper);
+  requires true;
+  ensures distinct(interval(lower, upper)) == true;
+
+lemma_auto void mem_interval(int x, int lower, int upper);
+  requires true;
+  ensures mem(x, interval(lower, upper)) == (lower <= x && x < upper);
+
+lemma void interval_split(int x, int lower, int upper);
+  requires lower <= x && x <= upper;
+  ensures interval(lower, upper) == append(interval(lower, x), interval(x, upper));
+
+lemma void empty_interval(int lower);
+  requires true;
+  ensures interval(lower, lower) == nil;
+  
+lemma void cons_interval(int lower, int upper);
+  requires lower < upper;
+  ensures interval(lower, upper) == cons(lower, interval(lower+1, upper));
+  
+lemma void remove_first_interval(int lower, int upper);
+  requires lower < upper;
+  ensures remove(lower, interval(lower, upper)) == interval(lower + 1, upper);
+
+#endif

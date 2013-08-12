@@ -1102,7 +1102,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           tcont sizemap tenv ghostenv h env
         )
       )
-    | CreateBoxStmt (l, x, bcn, args, level, handleClauses) ->
+    | CreateBoxStmt (l, x, bcn, args, lower_bounds, upper_bounds, handleClauses) ->
       if not pure then static_error l "Box creation statements are allowed only in a pure context." None;
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) bcn boxmap with
@@ -1134,8 +1134,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       let boxArgs = List.map (fun (x, t) -> t) boxArgMap in
       let boxIdTerm = get_unique_var_symb x BoxIdType in
+      let boxLevelTerm = (mk_app (get_pure_func_symb "box_level") [boxIdTerm]) in
       let boxArgMapWithThis = ("this", boxIdTerm) :: boxArgMap in
-      let wlevel = match level with None -> None | Some(level) -> Some(check_expr_t  (pn,ilist) tparams tenv level IntType) in
       let rec action_permission_chunks amap =
         match amap with
           [] -> []
@@ -1148,7 +1148,23 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           in 
           Chunk((pred_symb, true), [], real_unit, parameters, None) :: (action_permission_chunks rest)
       in
-      assume_opt (match wlevel with None -> None | Some(wlevel) -> Some (ctxt#mk_eq (mk_app (get_pure_func_symb "box_level") [boxIdTerm]) (eval env wlevel))) $. fun () ->
+      let lower_bound_terms = List.map (fun e -> eval env (check_expr_t  (pn,ilist) tparams tenv e RealType)) lower_bounds in
+      let upper_bounds_terms = List.map (fun e -> eval env (check_expr_t  (pn,ilist) tparams tenv e RealType)) upper_bounds in
+      List.iter (fun lower_bound -> List.iter (fun upper_bound ->
+        if not (ctxt#query (ctxt#mk_lt lower_bound upper_bound)) then 
+          static_error l "All lower bounds must be less than all upper bounds" None;
+        ) upper_bounds_terms;
+      ) lower_bound_terms;
+      let rec assume_bounds lower upper cont =
+        match lower with
+         [] -> begin 
+               match upper with 
+                 [] -> cont ()
+               | first :: rest -> assume (ctxt#mk_lt boxLevelTerm first) (fun () -> assume_bounds [] rest cont)
+               end
+          | first :: rest -> assume (ctxt#mk_lt first boxLevelTerm) (fun () -> assume_bounds rest upper cont)
+      in
+      assume_bounds lower_bound_terms upper_bounds_terms $. fun () ->
       let h = (action_permission_chunks amap) @ h in
       with_context PushSubcontext $. fun () ->
       consume_asn rules [] h ghostenv boxArgMapWithThis inv true real_unit $. fun _ h _ boxVarMap _ ->
@@ -1622,7 +1638,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    ss
                in
                let consumed_handle_id_list = List.map (fun (id, _) -> id) already_consumed_handles_info in
-               let consumed_handles_ids = List.fold_left (fun l (id, _) -> mk_cons HandleIdType id l) (mk_nil ()) already_consumed_handles_info in
+               let consumed_handles_ids = List.fold_right (fun (id, _) l -> mk_cons HandleIdType id l) already_consumed_handles_info (mk_nil ()) in
+               assume (mk_distinct consumed_handles_ids) (fun _ ->
                verify_cont (pn,ilist) blocks_done lblenv tparams boxes true leminfo funcmap predinstmap sizemap tenv ghostenv h env ss (fun sizemap tenv ghostenv h env ->
                  let h = act_perm_chunks @ h in
                  with_context (Executing (h, env, closeBraceLoc, "Closing box")) $. fun () ->
@@ -1664,7 +1681,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  in
                  reset_current_box_level h (fun h ->
                  
-                 let produce_post_handle used_handle_ids fresh lph post_hpn post_hp_args cont =
+                 let produce_post_handle h used_handle_ids fresh lph post_hpn post_hp_args cont =
                    let (post_handlePred_parammap, post_handlePred_extended, post_handlePred_inv) =
                      if post_hpn = pre_bcn ^ "_handle" then
                        ([], None, EmpAsn l)
@@ -1698,26 +1715,26 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    cont h (handleId :: used_handle_ids)
                  in
                  let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-                 let rec produce_handle used_handle_ids fresh phandles cont =
+                 let rec produce_handle h used_handle_ids fresh phandles cont =
                    match phandles with
                      ConditionalProducingHandlePredicate(l, condition, name, args, rest) ->
                        let e = check_expr_t (pn,ilist) tparams tenv condition boolt in
                        let condition_term = eval env e in
                        branch
-                         (fun _ -> assume condition_term (fun _ -> produce_post_handle used_handle_ids fresh l name args cont))
-                         (fun _ -> assume (ctxt#mk_not condition_term) (fun _ -> produce_handle used_handle_ids fresh rest cont))
-                   | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle used_handle_ids fresh l name args cont
+                         (fun _ -> assume condition_term (fun _ -> produce_post_handle h used_handle_ids fresh l name args cont))
+                         (fun _ -> assume (ctxt#mk_not condition_term) (fun _ -> produce_handle h used_handle_ids fresh rest cont))
+                   | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle h used_handle_ids fresh l name args cont
                  in
                  let rec produce_all_post_handles used_handle_ids posts h cont =
                    match posts with
                      [] -> cont h
-                   | (fresh, producing_expr) :: rest ->  produce_handle used_handle_ids fresh producing_expr (fun h used_handle_ids -> produce_all_post_handles used_handle_ids rest h cont)
+                   | (fresh, producing_expr) :: rest ->  produce_handle h used_handle_ids fresh producing_expr (fun h used_handle_ids -> produce_all_post_handles used_handle_ids rest h cont)
                  in
                  produce_all_post_handles [] produced_handle_predicates h (fun h -> tcont sizemap tenv ghostenv h env)
              )
            ) (fun _ _ _ _ -> static_error lcb "Returning from inside perform_action not allowed." None) (fun _ _ _ _ _ -> static_error lcb "Exception from inside perform_action not allowed." None)
           )
-        )
+        ))
       ))
     | BlockStmt (l, ds, ss, closeBraceLoc, locals_to_free) ->
       let (lems, predinsts, localpreds, localpredinsts) =

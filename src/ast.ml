@@ -287,7 +287,8 @@ and
       string *
       string *
       expr list *
-      expr option * (* level *)
+      expr list * (* lower bounds *)
+      expr list * (* upper bounds *)
       (loc * string * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of
       loc *
@@ -689,7 +690,7 @@ let stmt_loc s =
   | PerformActionStmt (l, _, _, _, _, _, _, _, _, _, _, _, _) -> l
   | SplitFractionStmt (l, _, _, _, _) -> l
   | MergeFractionsStmt (l, _) -> l
-  | CreateBoxStmt (l, _, _, _, _, _) -> l
+  | CreateBoxStmt (l, _, _, _, _, _, _) -> l
   | CreateHandleStmt (l, _, _, _, _) -> l
   | DisposeBoxStmt (l, _, _, _) -> l
   | LabelStmt (l, _) -> l
