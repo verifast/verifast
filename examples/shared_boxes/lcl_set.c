@@ -1,5 +1,6 @@
 #include "stdlib.h"
 
+//@ #include "interval.gh"
 //@ #include "strong_ghost_lists.gh"
 #include "gotsmanlock.h"
 
@@ -37,34 +38,6 @@ box_class setbox(box gl, predicate(list<int>) I) {
     requires true;
     ensures true;
 }
-@*/
-
-/*@
-fixpoint list<int> interval(int lower, int upper);
-
-lemma_auto void distinct_interval(int lower, int upper);
-  requires true;
-  ensures distinct(interval(lower, upper)) == true;
-
-lemma_auto void mem_interval(int x, int lower, int upper);
-  requires true;
-  ensures mem(x, interval(lower, upper)) == (lower <= x && x < upper);
-
-lemma void interval_split(int x, int lower, int upper);
-  requires lower <= x && x <= upper;
-  ensures interval(lower, upper) == append(interval(lower, x), interval(x, upper));
-
-lemma void empty_interval(int lower);
-  requires true;
-  ensures interval(lower, lower) == nil;
-  
-lemma void cons_interval(int lower, int upper);
-  requires lower < upper;
-  ensures interval(lower, upper) == cons(lower, interval(lower+1, upper));
-  
-lemma void remove_first_interval(int lower, int upper);
-  requires lower < upper;
-  ensures remove(lower, interval(lower, upper)) == interval(lower + 1, upper);
 @*/
 
 struct set* create_set()
