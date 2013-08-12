@@ -146,7 +146,7 @@ cd examples
   cd ..
   cd usbkbd
     cd src
-    #  verifast -c -prover redux usbkbd_verified.c # /ch9.h(5,10-28): Parse error: No such file: 'linux/usb/../usb/../../compiler.h'
+    verifast -c -prover redux usbkbd_verified.c
     cd ..
   cd ..
   cd generic_functypedef

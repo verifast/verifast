@@ -28,6 +28,7 @@
 /bin/java_card_applet
 /bin/main_class
 /bin/quantifiers.vfmanifest
+/bin/permutations.vfmanifest
 /src/a.out
 /src/pa_verifast.cmo
 
@@ -57,7 +58,7 @@ test
 /src/tabhunter
 
 #
-# Express {src,examples}/**/*.{cmx,cmi,o,a,cmxa,cmxs,annot}. But the syntax isn't
+# Express {src,examples}/**/*.{cmx,cmi,o,a,cmxa,cmxs,annot,cmo,cma}. But the syntax isn't
 # powerful enough.
 # Normally we would put .gitignore files in the right directory structure
 # and with a good directory structure everything would be solved,
@@ -70,6 +71,8 @@ src/*.a
 src/*.cmxa
 src/*.cmxs
 src/*.annot
+src/*.cmo
+src/*.cma
 src/*/*.cmx
 src/*/*.cmi
 src/*/*.o
@@ -77,6 +80,8 @@ src/*/*.a
 src/*/*.cmxa
 src/*/*.cmxs
 src/*/*.annot
+src/*/*.cmo
+src/*/*.cma
 examples/*/*.cmx
 examples/*/*.cmi
 examples/*/*.o
@@ -84,5 +89,15 @@ examples/*/*.a
 examples/*/*.cmxa
 examples/*/*.cmxs
 examples/*/*.annot
+examples/*/*.cmo
+examples/*/*.cma
+
+# LaTeX temp files and output
+doc/*/*.aux
+doc/*/*.log
+doc/*/*.out
+doc/*/*.toc
+doc/*/*.pdf
+
 
 
