@@ -22,4 +22,8 @@ void finalize(int* l);
   //@ requires lock(l, ?I) &*& locked(l, I);
   //@ ensures integer(l, _);
 
+
+/*lemma*/ void merge_locks(int* l); // todo: change to lemma
+  //@ requires [?f1]lock(l, ?I) &*& [?f2]lock(l, I) &*& locked(l, I);
+  //@ ensures [f1 + f2]lock(l, I) &*& locked(l, I);
 #endif

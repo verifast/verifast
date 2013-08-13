@@ -118,7 +118,6 @@ void finalize(int* l)
   //@ open lock(l, I);
   //@ open locked(l, I);
   //@ assert [_]gbox(?id1, l, I) &*& [_]gbox(?id2, l, I) &*& holds_lock(?ha, id1);
-  //@ box first, second;
   //@ create_box id0 = b() below box_level(id1), box_level(id2); 
   ;
   /*@
@@ -140,7 +139,6 @@ void finalize(int* l)
           };
         } else {
           consuming_box_predicate gbox(id2, l, I)
-        
           perform_action noop() atomic
           {
             consuming_box_predicate gbox(id1, l, I)
@@ -157,3 +155,83 @@ void finalize(int* l)
   //@ dispose_box gbox(id1, l, I) and_handle holds_lock(_);
   //@ dispose_box b(id0);
 }
+
+ void merge_locks(int* l)
+  //@ requires [?f1]lock(l, ?I) &*& [?f2]lock(l, I) &*& locked(l, I);
+  //@ ensures [f1 + f2]lock(l, I) &*& locked(l, I);
+{
+  //@ open [f1]lock(l, I);
+  //@ open [f2]lock(l , I);
+  //@ open locked(l, I);
+  //@ assert [f1/2]gbox(?id1, l, I) &*& [f2/2]gbox(?id2, l, I) &*& [1/2]gbox(?id3, l, I);
+ //@ create_box id0 = b() below box_level(id1), box_level(id2), box_level(id3); 
+  ;
+  /*@  consuming_box_predicate b(id0) 
+    perform_action noop()
+    {
+      if(id1 != id3) {
+        box_level_unique(id1, id3);
+        if(box_level(id1) < box_level(id3)) {
+          consuming_box_predicate gbox(id1, l, I)
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id3, l, I)
+            consuming_handle_predicate holds_lock(_)
+            perform_action noop() atomic
+             {
+              integer_unique(l);
+            };
+          };
+        } else {
+          consuming_box_predicate gbox(id3, l, I)
+          consuming_handle_predicate holds_lock(_)
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id1, l, I)
+            
+            perform_action noop() atomic
+            {
+              integer_unique(l);
+            };
+          };
+        } 
+      }
+   };@*/
+   /*@  consuming_box_predicate b(id0) 
+    perform_action noop()
+    {
+      if(id2 != id3) {
+        box_level_unique(id2, id3);
+        if(box_level(id2) < box_level(id3)) {
+          consuming_box_predicate gbox(id2, l, I)
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id3, l, I)
+            consuming_handle_predicate holds_lock(_)
+            perform_action noop() atomic
+             {
+              integer_unique(l);
+            };
+          };
+        } else {
+          consuming_box_predicate gbox(id3, l, I)
+          consuming_handle_predicate holds_lock(_)
+          perform_action noop() atomic
+          {
+            consuming_box_predicate gbox(id2, l, I)
+            
+            perform_action noop() atomic
+            {
+              integer_unique(l);
+            };
+          };
+        } 
+      }
+   };@*/
+  //@ assert id1 == id3;
+  //@ close locked(l, I);
+  //@ merge_fractions gbox(id1, _, _);
+  //@ close [f1 + f2]lock(l, I);
+  //@ dispose_box b(id0);
+}
+
