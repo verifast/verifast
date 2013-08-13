@@ -289,7 +289,7 @@ and
       expr list *
       expr list * (* lower bounds *)
       expr list * (* upper bounds *)
-      (loc * string * string * expr list) list (* and_handle clauses *)
+      (loc * string * bool (* indicates whether an is_handle chunk is generated *) * string * expr list) list (* and_handle clauses *)
   | CreateHandleStmt of
       loc *
       string *

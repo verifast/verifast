@@ -41,6 +41,8 @@ cd examples
     verifast_both -c ticketlock_with_atomic_integer.c
     verifast -prover redux -c interval.c
     verifast_both -c lcl_set.c
+    verifast_both -c cell_refcounted.c
+    ifnotmac verifast -c cowl.c
   cd ..
   ifnotmac verifast listex.o arrays.o stringBuffers.c sockets.o bot.c
   verifast_both -disable_overflow_check cat.c

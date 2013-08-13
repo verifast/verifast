@@ -35,43 +35,6 @@ lemma void rsum_remove_assoc<t1>(t1 key, list<pair<t1, real> > map)
     case cons(h, t): switch(h) { case pair(k, v): if(k != key) rsum_remove_assoc(key, t); }
   }
 }
-
-fixpoint list<pair<t1, t2> > remove_assoc<t1, t2>(t1 key, list<pair<t1, t2> > map) {
-  switch(map) {
-    case nil: return nil;
-    case cons(h, t): return switch(h) { case pair(k, v): return k == key ? t : cons(h, remove_assoc(key, t)); };
-  }
-}
-
-lemma_auto void keys_remove_assoc<t1, t2>(t1 key, list<pair<t1, t2> > map) 
-  requires true;
-  ensures keys(remove_assoc(key, map)) == remove(key, keys(map));
-{
-  switch(map) {
-    case nil: 
-    case cons(h, t): switch(h) { case pair(k, v): if(k!=key) keys_remove_assoc(key, t); }
-  }
-}
-
-lemma void remove_assoc_preserves_other_entries<t1, t2>(t1 key, t1 removed, list<pair<t1, t2> > map) 
-  requires mem(key, keys(map)) == true && key != removed;
-  ensures mem(key, keys(remove_assoc(removed, map))) == true &*& assoc(key, remove_assoc(removed, map)) == assoc(key, map);
-{
-  switch(map) {
-    case nil: 
-    case cons(h, t): switch(h) { case pair(k, v): if(k!=removed && k != key) remove_assoc_preserves_other_entries(key, removed, t); }
-  }
-}
-
-lemma_auto void length_remove_assoc<t1, t2>(t1 key, list<pair<t1, t2> > map)
-  requires true;
-  ensures length(remove_assoc(key, map)) == (mem(key, keys(map)) ? length(map) - 1 : length(map));
-{
-  switch(map) {
-    case nil: 
-    case cons(h, t): switch(h) { case pair(k, v): if( k != key) length_remove_assoc(key, t); }
-  }
-}
   
 box_class rcbox(int value, int refcount, list<pair<handle, real> > owners) {
   invariant distinct(keys(owners)) == true &*& refcount == length(owners);

@@ -1113,7 +1113,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec iter tenv ghostenv env handleClauses =
           match handleClauses with
             [] -> (tenv, ghostenv, env)
-          | (l, x, hpn, args)::handleClauses ->
+          | (l, x, fresh, hpn, args)::handleClauses ->
             if List.mem_assoc x tenv then static_error l "Declaration hides existing variable." None;
             iter ((x, HandleIdType)::tenv) (x::ghostenv) ((x, get_unique_var_symb x HandleIdType)::env) handleClauses
         in
@@ -1171,7 +1171,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin fun cont ->
         let rec iter handleChunks handleClauses h =
           match handleClauses with
-            (l, x, hpn, args)::handleClauses ->
+            (l, x, is_fresh, hpn, args)::handleClauses ->
             begin
             match try_assoc hpn hpmap with
               None -> static_error l "No such handle predicate" None
@@ -1195,7 +1195,8 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 None-> static_error l ("No such predicate family: "^hpn) None
               | Some x -> x
               in
-              iter (Chunk ((hpn_symb, true), [], real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::handleChunks) handleClauses h
+              let is_handle_chunks = if not is_fresh then [] else [Chunk ((get_pred_symb "is_handle", true), [], real_unit, [handleIdTerm], None)] in
+              iter (Chunk ((hpn_symb, true), [], real_unit, handleIdTerm::boxIdTerm::List.map (fun (x, t) -> t) hpArgMap, None)::(is_handle_chunks @ handleChunks)) handleClauses h
             end
           | [] -> cont (handleChunks, h)
         in
