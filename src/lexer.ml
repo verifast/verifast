@@ -1279,15 +1279,68 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
           let basePath0, relPath0 = List.hd !paths in
           let rellocalpath = concat (Filename.dirname relPath0) i in
           let includepaths = List.append include_paths [basePath0; bindir] in
-          let rec find_include_file includepaths =
-            match includepaths with
-              [] -> error (current_loc()) (Printf.sprintf "No such file: '%s'" rellocalpath)
-            | head::tail ->
-              let headerpath = concat head rellocalpath in
-              if Sys.file_exists headerpath then
-                ((Filename.dirname headerpath), (Filename.basename headerpath))
-              else
-                (find_include_file tail)
+          
+          (** Searches the directory in includepaths that contains the
+           * file rellocalpath. rellocalpath can contain
+           * directory names. Returns the (dirname, basename) pair
+           * in canonical form of filename, e.g. ("some/dir", "somefile.h").
+           * 
+           * Precondition: includepaths contains the directory of the includer.
+           *
+           * What to do in case of multiple matches?
+           *
+           * ISO/IEC 9899:TC2 says:
+           *  A preprocessing directive of the form
+           *     # include "q-char-sequence" new-line
+           *   causes the replacement of that directive by the entire contents of the source file identified
+           *   by the specified sequence between the " delimiters. The named source file is searched
+           *   for in an implementation-defined manner. If this search is not supported, or if the search
+           *   fails, the directive is reprocessed as if it read
+           *     # include <h-char-sequence> new-line
+           *   with the identical contained sequence (including > characters, if any) from the original
+           *   directive.
+           * 
+           * So it does not even says that 'include "..."' should search in the current directory.
+           * So when writing '#include "stdio.h"', it's up to the compiler whether it includes
+           * ./stdio.h or /usr/include/stdio.h. Making an assumption about this would thus
+           * be unsound (unless we make more assumptions about the behaviour of the compiler).
+           * Furthermore, currently the information whether it is an ""-include or an <>-include
+           * is not kept and all includes are thus handled as if they are ""-includes,
+           * so even if the behaviour of the compiler is known, it would
+           * still be unsound to give priority to "./" as include path because it might
+           * be an <>-include.
+           *
+           * We could avoid all this messy problems by just disallowing including files 
+           * that can have multiple candidates of physical files to be included.
+           * (but this breaks examples and VeriFast does not distinguish between
+           * verifast-standard library (e.g. list.gh, ...) and C standard library
+           * (e.g. stdio.h), they're both in bin/, which is a problem if one but not
+           * the other is to be used in an example).
+           * Alternatively, we could add a compiler assumption and track whether it's an
+           * <>-include or an ""-include instead of throwing that info away.
+           *
+           * The current (and previous) implementation(s) just took the first
+           * match. This is thus unsound.
+           *
+           * " <-- this line is only here because ocaml insists that quotes in comments are closed.
+           *)
+          let find_include_file includepaths =
+            (* build all possible filenames for the file we want to #include: *)
+            let possiblepaths = List.map (fun d -> concat d rellocalpath) includepaths in
+            (* Rewrite all filenames in canonical form: *)
+            let possiblepaths = List.map reduce_path possiblepaths in
+            (* Remove duplicates: *)
+            let possiblepaths = list_remove_dups possiblepaths in
+            (* Remove filenames that don't exist: *)
+            let possiblepaths = List.filter Sys.file_exists possiblepaths in
+            match possiblepaths with
+              [] -> error (current_loc()) (Printf.sprintf "Cannot include file '%s' because the file is not found in any of the include paths and in the directory of the includer." rellocalpath)
+            | [p] -> ((Filename.dirname p),(Filename.basename p))
+            | h::t ->
+              (* The unsound version that does not break examples: *)
+              ((Filename.dirname h),(Filename.basename h))
+              (* The sound version: *)
+              (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." rellocalpath) *)
           in
           let (basePath, relPath) = find_include_file includepaths in push_tlexer basePath relPath;
           let path = reduce_path (concat basePath relPath) in
