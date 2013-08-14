@@ -1,9 +1,9 @@
 #ifndef _LINUX_INPUT_H
 #define _LINUX_INPUT_H
 
-#include "stddef.h" // for not_in_interrupt_context predicate
-#include "types.h"
-#include "device.h"
+#include <linux/stddef.h> // for not_in_interrupt_context predicate
+#include <linux/types.h>
+#include <linux/device.h>
 
 // "Calls to both callbacks [open, close] are serialized." -- input-programming.txt
 // Calls to event are serialized ("The call [to @event] is protected by @event_lock and must not sleep" -- input.h)

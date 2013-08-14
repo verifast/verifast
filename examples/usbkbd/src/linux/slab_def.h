@@ -2,8 +2,8 @@
 #define _LINUX_SLAB_DEF_H
 
 #include "../equals.h"
-#include "gfp.h"
-#include "stddef.h"
+#include <linux/gfp.h>
+#include <linux/stddef.h>
 
 //@ predicate kmalloc_block(void *ptr; int size);
 

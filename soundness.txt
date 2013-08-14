@@ -33,8 +33,7 @@ void foo()
     assert(false);
 }
 
-- -run_preprocessor:
-  - Preprocessor macros defined inside annotations are applied both inside and outside annotations.
+- When including files using double quotes (e.g. 'include "xyz.h"', in contrast to 'include <xyz.h>'), VeriFast assumes the compiler searches first in the directory of the file in which the include statement is written. This is the behaviour of GCC. This is not enforced by the C standard.
 
 Java Programs
 =============

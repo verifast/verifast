@@ -1,7 +1,7 @@
 #ifndef _LINUX_STRING_H
 #define _LINUX_STRING_H
 
-#include "types.h"
+#include <linux/types.h>
 
 void *memscan(void *addr, int c, __kernel_size_t size);
 /*@ requires

@@ -1311,25 +1311,20 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
            * 
            * So it does not even says that 'include "..."' should search in the current directory.
            * So when writing '#include "stdio.h"', it's up to the compiler whether it includes
-           * ./stdio.h or /usr/include/stdio.h. Making an assumption about this would thus
-           * be unsound (unless we make more assumptions about the behaviour of the compiler).
-           * Furthermore, currently the information whether it is an ""-include or an <>-include
-           * is not kept and all includes are thus handled as if they are ""-includes,
-           * so even if the behaviour of the compiler is known, it would
-           * still be unsound to give priority to "./" as include path because it might
-           * be an <>-include.
+           * ./stdio.h or /usr/include/stdio.h.
            *
-           * We could avoid all this messy problems by just disallowing including files 
+           * To keep things practical, we make the assumption that the
+           * compiler searches in the directory of the includer for an
+           * ""-include, and does not search in the directory of the
+           * includer for an <>-include. This is the behaviour of GCC.
+           * VeriFast thus has the same behaviour.
+           *
+           * Alternatively, we could try to avoid all this messy problems by just disallowing including files 
            * that can have multiple candidates of physical files to be included.
            * (but this breaks examples and VeriFast does not distinguish between
            * verifast-standard library (e.g. list.gh, ...) and C standard library
            * (e.g. stdio.h), they're both in bin/, which is a problem if one but not
            * the other is to be used in an example).
-           * Alternatively, we could add a compiler assumption and track whether it's an
-           * <>-include or an ""-include instead of throwing that info away.
-           *
-           * The current (and previous) implementation(s) just took the first
-           * match.
            *
            * " <-- this line is only here because ocaml insists that quotes in comments are closed.
            *)

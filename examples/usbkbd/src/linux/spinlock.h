@@ -1,7 +1,7 @@
 #ifndef __LINUX_SPINLOCK_H
 #define __LINUX_SPINLOCK_H
 
-#include "spinlock_types.h"
+#include <linux/spinlock_types.h>
 
 /*
  * Specs for Linux's spinlocks.

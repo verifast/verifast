@@ -1,9 +1,9 @@
 #ifndef _LINUX_KERNEL_H
 #define _LINUX_KERNEL_H
 
-#include "printk.h"
-#include "stddef.h"
-#include "spinlock.h" // XXX not directly included from here, should look up the include path.
+#include <linux/printk.h>
+#include <linux/stddef.h>
+#include <linux/spinlock.h> // XXX not directly included from here, should look up the include path.
 
 // XXX I don't know what the include path is until linux/string.h
 // is included, so we just include it here for now.

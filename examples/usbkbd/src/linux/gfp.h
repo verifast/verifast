@@ -1,7 +1,7 @@
 #ifndef _LINUX_GFP_H
 #define _LINUX_GFP_H
 
-#include "types.h"
+#include <linux/types.h>
 
 // original: typedef unsigned __bitwise__ gfp_t;
 typedef unsigned int __bitwise__ gfp_t;

@@ -23,7 +23,7 @@ This project verified Linux's USB Boot Protocol Keyboard Driver (usbkbd), shippe
 <li><a href="http://people.cs.kuleuven.be/~bart.jacobs/verifast/">VeriFast webpage</a> (including download-link of VeriFast)</li>
 <li>All sources and annotations of usbkbd are shipped with VeriFast, in the directory <tt>examples/usbkbd</tt> (starting from the VeriFast after and different from version 12.12)</li>
 <li>If you want a really old outdated version of the verified usbkbd, you can find it at <a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/usbkbd-verified-release2.tar.gz">here (OUTDATED)</a>. This version is closer to the version the paper describes.</li>
-<li><a href="https://lirias.kuleuven.be/handle/123456789/336725">Paper</a> (with public download) <span style="background-color: #ffff00;">(you're probably looking for this)</span></li>
+<li><a href="https://lirias.kuleuven.be/bitstream/123456789/336725/3/nfm2012.pdf">Paper</a> <span style="background-color: #ffff00;">(you're probably looking for this)</span></li>
 <li>10-minutes presentation (made for NASA Formal Methods 2012):
 	<ul>
 		<li><a href="http://people.cs.kuleuven.be/~willem.penninckx/usbkbd/presentation/presentation-expanded-animations-pdfexport.pdf">[PDF, animations expanded to multiple slides]</a> (only high-level overview)</li>
@@ -46,7 +46,7 @@ This project verified Linux's USB Boot Protocol Keyboard Driver (usbkbd), shippe
 if $DIR is the directory where <tt>usbkbd_verified.c</tt> is located, execute
 <pre>
 prompt$ cd $DIR
-prompt$ verifast -prover redux -c usbkbd_verified.c
+prompt$ verifast -prover redux -c -I . usbkbd_verified.c
 </pre>
 
 <h2>How to build and load the kernel module</h2>

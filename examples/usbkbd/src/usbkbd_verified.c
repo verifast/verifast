@@ -7,7 +7,8 @@
  *                                                                                *
  * Please read ../readme.html                                                     *
  *                                                                                *
- * If vfide is slow, please use "vfide -prover redux".                            *
+ * If vfide is slow, please use redux instead of Z3, e.g. launch with             *
+ *   vfide -prover redux -I . usbkbd_verified.c                                   *
  *                                                                                *
  **********************************************************************************/
  
