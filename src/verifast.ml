@@ -2720,13 +2720,13 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             if Filename.check_suffix path ".jarsrc" then
               let (jars, javas, provides) = parse_jarsrc_file_core path in
               let specPath = Filename.chop_extension path ^ ".jarspec" in
-              let jarspecs = List.map (fun path -> (l, (path ^ "spec",""), [], [])) jars in (* Include the location where the jar is referenced *)
+              let jarspecs = List.map (fun path -> (l, (DoubleQuoteInclude, path ^ "spec",""), [], [])) jars in (* Include the location where the jar is referenced *)
               let pathDir = Filename.dirname path in
               let javas = List.map (concat pathDir) javas in
               if Sys.file_exists specPath then begin
                 let (specJars, _) = parse_jarspec_file_core specPath in
                 jardeps := specJars @ jars;
-                ((l, (Filename.basename specPath,""), [], []) :: jarspecs, javas, provides)
+                ((l, (DoubleQuoteInclude, Filename.basename specPath,""), [], []) :: jarspecs, javas, provides)
               end else
                 (jarspecs, javas, provides)
             else

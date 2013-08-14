@@ -162,6 +162,10 @@ let readFile path =
   iter2 chunks 0;
   file_to_utf8 s
 
+type include_kind =
+  DoubleQuoteInclude
+| AngleBracketInclude
+
 type token = (* ?token *)
   | Kwd of string
   | Ident of string
@@ -169,11 +173,13 @@ type token = (* ?token *)
   | RealToken of big_int
   | Float of float
   | String of string
+  | AngleBracketString of string
   | CharToken of char
   | PreprocessorSymbol of string
   | BeginInclude of
+      include_kind
       (** string of file included as written in the sourcecode, e.g. "../test.h" *)
-      string
+      * string
       (** resolved filename of included file, e.g. "/home/jack/verifast-0.0/bin/stdio.h" *)
       * string
   | SecondaryInclude of
@@ -185,6 +191,10 @@ type token = (* ?token *)
   | Eol
   | ErrorToken
 
+let string_of_include_kind = function
+  DoubleQuoteInclude -> "DoubleQuoteInclude"
+| AngleBracketInclude -> "AngleBracketInclude"
+
 let string_of_token t =
   begin match t with
     Kwd(s) -> "Keyword:" ^ s
@@ -195,7 +205,7 @@ let string_of_token t =
   | String(s) -> "String: " ^ s
   | CharToken(ch) -> "Char: " ^ (Char.escaped ch)
   | PreprocessorSymbol(s) -> "PPSymbol: " ^ s
-  | BeginInclude(s, _) -> "BeginInclude: " ^ s
+  | BeginInclude(kind, s, _) -> "BeginInclude(" ^ string_of_include_kind kind ^ "): " ^ s
   | SecondaryInclude(s, _) -> "SecondaryInclude: " ^ s
   | EndInclude -> "EndInclude"
   | Eol -> "Eol"
@@ -514,7 +524,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
         start_token();
         text_junk ();
         if !in_include_directive then
-         ( reset_buffer (); Some (String (string ())) )
+         ( reset_buffer (); Some (AngleBracketString (string ())) )
          else
          ( reset_buffer (); store c; ident2 () )
     | '!' ->
@@ -1045,7 +1055,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       | Some (l, Kwd "include") ->
         junk ();
         begin match peek () with
-        | Some (l, String s) ->
+        | Some (l, (String s | AngleBracketString s as ss)) ->
           junk ();
           if List.mem s ["bool.h"; "assert.h"; "limits.h"] then 
             next_token () 
@@ -1059,7 +1069,8 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             macros := (plugin_begin_include (List.hd !macros))::!macros;
             ghost_macros := (plugin_begin_include (List.hd !ghost_macros))::!ghost_macros; 
             next_at_start_of_line := true;
-            Some (!tlexer#loc(), BeginInclude(s,""))
+            let includeKind = match ss with String _ -> DoubleQuoteInclude | AngleBracketString _ -> AngleBracketInclude in
+            Some (!tlexer#loc(), BeginInclude(includeKind, s, ""))
           end
         | _ -> error "Filename expected"
         end
@@ -1275,18 +1286,16 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
     !curr_tlexer#commit();
     if (compare_tokens p_t cfp_t) && (!(List.hd !p_in_ghost_range) = !(List.hd !cfp_in_ghost_range)) then begin
       begin match p_t with
-        Some (l,BeginInclude(i, _)) ->    
+        Some (l,BeginInclude(kind, i, _)) ->    
           let basePath0, relPath0 = List.hd !paths in
           let rellocalpath = concat (Filename.dirname relPath0) i in
-          let includepaths = List.append include_paths [basePath0; bindir] in
+          let includepaths = (match kind with DoubleQuoteInclude -> [basePath0] | AngleBracketInclude -> []) @ include_paths @ [bindir] in
           
           (** Searches the directory in includepaths that contains the
            * file rellocalpath. rellocalpath can contain
            * directory names. Returns the (dirname, basename) pair
            * in canonical form of filename, e.g. ("some/dir", "somefile.h").
            * 
-           * Precondition: includepaths contains the directory of the includer.
-           *
            * What to do in case of multiple matches?
            *
            * ISO/IEC 9899:TC2 says:
@@ -1320,7 +1329,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
            * <>-include or an ""-include instead of throwing that info away.
            *
            * The current (and previous) implementation(s) just took the first
-           * match. This is thus unsound.
+           * match.
            *
            * " <-- this line is only here because ocaml insists that quotes in comments are closed.
            *)
@@ -1334,12 +1343,12 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
             (* Remove filenames that don't exist: *)
             let possiblepaths = List.filter Sys.file_exists possiblepaths in
             match possiblepaths with
-              [] -> error (current_loc()) (Printf.sprintf "Cannot include file '%s' because the file is not found in any of the include paths and in the directory of the includer." rellocalpath)
+              [] -> error (current_loc()) (Printf.sprintf "No such file '%s'." rellocalpath)
             | [p] -> ((Filename.dirname p),(Filename.basename p))
             | h::t ->
-              (* The unsound version that does not break examples: *)
+              (* The aggressive version that does not break examples: *)
               ((Filename.dirname h),(Filename.basename h))
-              (* The sound version: *)
+              (* The safest version: *)
               (* error (current_loc()) (Printf.sprintf "Cannot include file '%s' because multiple possible include paths are found." rellocalpath) *)
           in
           let (basePath, relPath) = find_include_file includepaths in push_tlexer basePath relPath;
@@ -1359,7 +1368,7 @@ let make_sound_preprocessor make_lexer basePath relPath include_paths =
                 (pop_tlexer(); Some(l, SecondaryInclude(i, path)))
           end else begin
             included_files := path::!included_files;
-            Some (l,BeginInclude(i, path))
+            Some (l,BeginInclude(kind, i, path))
           end;  
       | None -> if List.length !tlexers > 1 then begin 
                   let l = current_loc () in pop_tlexer(); Some (l, EndInclude) 

@@ -1338,7 +1338,7 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
 
 type 'result parser_ = (loc * token) Stream.t -> 'result
 
-let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (string * string) * string list * package list) list * string list) parser_ =
+let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (include_kind * string * string) * string list * package list) list * string list) parser_ =
   let active_headers = ref [] in
   let test_include_cycle l totalPath =
     if List.mem totalPath !active_headers then raise (ParseException (l, "Include cycles (even with header guards) are not supported"));
@@ -1352,22 +1352,22 @@ let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (string * stri
     parser
       [< '(l, SecondaryInclude(h, totalPath)) >] -> test_include_cycle l totalPath; ([], totalPath)
     | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, SecondaryInclude(h, p)) >] -> (l,h,p) end; '(_, Kwd "@*/") >] -> test_include_cycle l totalPath; ([], totalPath)
-    | [< '(l, BeginInclude(h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
+    | [< '(l, BeginInclude(kind, h, totalPath)); (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
                                            ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude) >] -> 
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
-                                                        (List.append headers [(l, (h, totalPath), header_names, ps)], totalPath)
-    | [< (l,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(h, p)) >] -> (l,h,p) end; 
+                                                        (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
+    | [< (l,kind,h,totalPath) = peek_in_ghost_range begin parser [< '(l, BeginInclude(kind, h, p)) >] -> (l,kind,h,p) end; 
                                                 (headers, header_names) = (active_headers := totalPath::!active_headers; parse_include_directives_core []); 
                                                 ds = parse_decls CLang ~inGhostHeader:(isGhostHeader h); '(_, EndInclude); '(_, Kwd "@*/") >] -> 
                                                         active_headers := List.filter (fun h -> h <> totalPath) !active_headers;
                                                         let ps = [PackageDecl(dummy_loc,"",[],ds)] in
-                                                        (List.append headers [(l, (h, totalPath), header_names, ps)], totalPath)
+                                                        (List.append headers [(l, (kind, h, totalPath), header_names, ps)], totalPath)
   in
   parse_include_directives_core []
 
   let parse_c_file (path: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) (include_paths: string list): 
-                                              ((loc * (string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
+                                              ((loc * (include_kind * string * string) * string list * package list) list * package list) = (* ?parse_c_file *)
   Stopwatch.start parsing_stopwatch;
   let result =
     let make_lexer basePath relPath include_paths ~inGhostRange =
@@ -1390,7 +1390,7 @@ let rec parse_include_directives (ignore_eol: bool ref) : ((loc * (string * stri
   result
 
 let parse_header_file (basePath: string) (relPath: string) (reportRange: range_kind -> loc -> unit) (reportShouldFail: loc -> unit) 
-         (include_paths: string list): ((loc * (string * string) * string list * package list) list * package list) =
+         (include_paths: string list): ((loc * (include_kind * string * string) * string list * package list) list * package list) =
   Stopwatch.start parsing_stopwatch;
   let isGhostHeader = Filename.check_suffix relPath ".gh" in
   let result =

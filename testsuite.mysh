@@ -150,7 +150,7 @@ cd examples
   cd ..
   cd usbkbd
     cd src
-    verifast -c -prover redux usbkbd_verified.c
+    verifast -I . -c -prover redux usbkbd_verified.c
     cd ..
   cd ..
   cd generic_functypedef
