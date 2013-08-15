@@ -929,7 +929,7 @@ struct stack_client* create_client(struct stack* s)
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate stack_box_handle(ha)
-  perform_action add_client(new_client, ha, f/ 2) atomic
+  perform_action add_client(new_client, ha, f/ 2)
   {
     open myclients(_, _, _);
     assert clients(?head, 0,  s, ?junk, ?states);
@@ -970,7 +970,7 @@ struct stack_client* create_client(struct stack* s)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate is_client(ha, prev)
-    perform_action add_client(new_client, ha, f / 2) atomic
+    perform_action add_client(new_client, ha, f / 2)
     {
       open myclients(s, _, _);
       assert foreach(?junk_, is_node);
@@ -1030,7 +1030,7 @@ void deactivate_client(struct stack* s, struct stack_client* client)
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate basic_client_handle(ha, client, retired)
-  perform_action set_hazard_pointer(client, 0) atomic
+  perform_action set_hazard_pointer(client, 0)
   {
     open myclients(_, _, _);
     assert clients(?head_, 0, s, ?junk, ?states_);
@@ -1051,7 +1051,7 @@ void deactivate_client(struct stack* s, struct stack_client* client)
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate hazard_pointer_set(ha, client, retired, 0)
-  perform_action deactivate(client) atomic
+  perform_action deactivate(client)
   {
     open myclients(_, _, _);
     assert clients(?head__, 0, s, _, ?states__);
@@ -1091,7 +1091,7 @@ void stack_push(struct stack* s, struct stack_client* client, void* data)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate basic_client_handle(ha, client, retired)
-    perform_action noop() atomic
+    perform_action noop()
     {
       @*/ struct node* t = atomic_load_pointer(&s->top); /*@
     } 
@@ -1101,7 +1101,7 @@ void stack_push(struct stack* s, struct stack_client* client, void* data)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate basic_client_handle(ha, client, retired)
-    perform_action push(new_node, data) atomic
+    perform_action push(new_node, data)
     {
       assert lseg(?hd, ?lst, ?nds, _);
       assert foreach(?junk, _);
@@ -1130,7 +1130,7 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate basic_client_handle(ha, client, retired)
-  perform_action noop() atomic
+  perform_action noop()
   { 
     open myclients(_, _, _);
     open clients(_, _, s, _, ?client_states);
@@ -1150,7 +1150,7 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate phase1_handle(ha, client, retired, curr, i, true, hps)
-    perform_action noop() atomic
+    perform_action noop()
     {
       open myclients(_, _, _);
       assert clients(?head, 0, s, _, ?states);
@@ -1189,7 +1189,7 @@ void phase1(struct stack* s, struct stack_client* client, struct list* plist)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate phase1_handle(ha, client, retired, curr, i + 1, false, hp == 0 ? hps : cons(hp, hps))
-    perform_action noop() atomic
+    perform_action noop()
     {
       open myclients(_, _, _);
       assert clients(?head_, _, s, ?junk_, ?states_);
@@ -1313,7 +1313,7 @@ void phase2(struct stack* s, struct stack_client* client, struct list* plist)
       /*@
       consuming_box_predicate stack_box(id, s, I)
       consuming_handle_predicate phase2_handle(ha, client, append(newretired, todos), newretired, todos, hazards)
-      perform_action noop() atomic
+      perform_action noop()
       {
         assert foreach(?junk, _);
         if(! forall(append(cons(curr, newretired), tail(todos)), (is_good_retired)(junk, client))) {
@@ -1333,7 +1333,7 @@ void phase2(struct stack* s, struct stack_client* client, struct list* plist)
       /*@
       consuming_box_predicate stack_box(id, s, I)
       consuming_handle_predicate phase2_handle(ha, client, append(newretired, todos), newretired, todos, hazards)
-      perform_action release_node(client, curr) atomic
+      perform_action release_node(client, curr)
       {
         open myclients(_, _, _);
         assert clients(?firstclient, _, s, ?junk, ?client_states);
@@ -1385,7 +1385,7 @@ void phase2(struct stack* s, struct stack_client* client, struct list* plist)
   /*@
   consuming_box_predicate stack_box(id, s, I)
   consuming_handle_predicate phase2_handle(ha, client, append(newretired, nil), newretired, nil, hazards)
-  perform_action noop() atomic
+  perform_action noop()
   {
     
   }
@@ -1429,7 +1429,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
     /*@
     consuming_box_predicate stack_box(?id, s, I)
     consuming_handle_predicate basic_client_handle(?ha, client, ?retired)
-    perform_action noop() atomic
+    perform_action noop()
     {
       @*/ t = atomic_load_pointer(&s->top); /*@
       if(t == 0) {
@@ -1447,7 +1447,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate basic_client_handle(ha, client, retired)
-    perform_action set_hazard_pointer(client, t) atomic
+    perform_action set_hazard_pointer(client, t)
     {
       open myclients(_, _, ?states);
       assert clients(?head, 0, s, ?junk0, states);
@@ -1468,7 +1468,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
     /*@
     consuming_box_predicate stack_box(id, s, I)
     consuming_handle_predicate hazard_pointer_set(ha, client, retired, t)
-    perform_action validate_hazard_pointer(client) atomic
+    perform_action validate_hazard_pointer(client)
     {
       open lseg(_, _, _, _);
       @*/ tmp = atomic_load_pointer(&s->top); /*@
@@ -1495,7 +1495,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
       /*@
       consuming_box_predicate stack_box(id, s, I)
       consuming_handle_predicate was_top(ha, client, retired, t)
-      perform_action noop() atomic
+      perform_action noop()
       {
         assert s->top |-> ?top;
         assert foreach(?junk, is_node);
@@ -1528,7 +1528,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
       /*@
       consuming_box_predicate stack_box(id, s, I)
       consuming_handle_predicate was_top_with_next(ha, client, retired, t, n)
-      perform_action pop(client) atomic
+      perform_action pop(client)
       {
         open lseg(_, _, ?thenodes, _);
         open myclients(s, ?thejunk, _);
@@ -1559,7 +1559,7 @@ bool stack_pop(struct stack* s, struct stack_client* client, void** out)
         /*@
         consuming_box_predicate stack_box(id, s, I)
         consuming_handle_predicate basic_client_handle(ha, client, cons(t, retired))
-        perform_action noop() atomic
+        perform_action noop()
         {
           assert foreach(?junk__, _);
           foreach_remove(pair(t, client), junk__);

@@ -108,7 +108,7 @@ predicate list(struct list* l, list<int> values) =
   head == 0 ? values == nil : is_client_wrapper(head, ?ha, ?id, ?f) &*& [f]head->values |-> values;
 @*/
 
-struct list* create_list() 
+struct list* create_cow_list() 
   //@ requires true;
   //@ ensures result == 0 ? true : list(result, nil);
 {
@@ -119,7 +119,7 @@ struct list* create_list()
   return l;
 }
 
-struct list* copy_list(struct list* src)
+struct list* copy_cow_list(struct list* src)
   //@ requires list(src, ?values);
   //@ ensures list(src, values) &*& result == 0 ? true : list(result, values);
 {
@@ -163,7 +163,7 @@ struct list* copy_list(struct list* src)
 
 //@ predicate is_client_wrapper(struct node* n, handle ha, box id, real f) = is_client(ha, id, f) &*& [f]lock(&n->lock, I(n, id));
 
-void insert(struct list* l, int x)
+void cow_list_insert(struct list* l, int x)
   //@ requires list(l, ?values);
   //@ ensures list(l, cons(x, values));
 {
@@ -199,7 +199,7 @@ void insert(struct list* l, int x)
 
 //@ predicate node_set_copy_ghost_args(struct node* n, handle ha, box id, real f) = true;
 
-void node_set_copy(struct node* n, int index, int x, struct node* new_node)
+void cow_list_node_set_copy(struct node* n, int index, int x, struct node* new_node)
   /*@ requires node_set_copy_ghost_args(n, ?ha, ?id, ?f) &*& 0 < f && f < 1 &*& nbox(id, ?owners) &*& [1-rsum(values(owners))]lock(&n->lock, I(n, id)) &*& locked(&n->lock, I(n, id)) &*&
                n->refcount |-> length(owners) &*& n->value |-> ?value &*& n->next |-> ?next &*& 
                [1-rsum(values(owners))]n->values |-> ?values &*& head(values) == value &*&
@@ -265,7 +265,7 @@ void node_set_copy(struct node* n, int index, int x, struct node* new_node)
       new_node->next = new_node2;
       //@ close is_client_wrapper(nxt, _, _, _);
       //@ close node_set_copy_ghost_args(nxt, nxt_handle, nxt_id, nxt_f); 
-      node_set_copy(nxt, index - 1, x, new_node2);
+      cow_list_node_set_copy(nxt, index - 1, x, new_node2);
     } else {
       new_node->next = 0;
     }
@@ -279,7 +279,7 @@ void node_set_copy(struct node* n, int index, int x, struct node* new_node)
 
 //@ predicate node_set_ghost_args(list<int> values, handle ha, box id, real f) = true;
 
-void node_set(struct node* n, int index, int x)
+void cow_list_node_set(struct node* n, int index, int x)
   /*@ requires node_set_ghost_args(?values, ?ha, ?id, ?f) &*& 0 < f && f < 1 &*& [1 -f]lock(&n->lock, I(n, id)) &*& locked(&n->lock, I(n, id)) &*& 
                nbox(id, cons(pair(ha, f), nil)) &*& 
                n->refcount |-> 1 &*& n->value |-> ?value &*& n->next |-> ?next &*& 
@@ -317,7 +317,7 @@ void node_set(struct node* n, int index, int x)
       //@ close I(n, id)();
       release(&n->lock);
       //@ close node_set_ghost_args(old_values, nha, nid, nf);
-      node_set(nxt, index - 1, x);
+      cow_list_node_set(nxt, index - 1, x);
     } else {
       nxt->refcount = nxt->refcount - 1;
       /*@
@@ -337,14 +337,14 @@ void node_set(struct node* n, int index, int x)
       n->next = new_node;
       //@ close node_set_copy_ghost_args(nxt, nha, nid, nf);
       merge_locks(&nxt->lock);
-      node_set_copy(nxt, index - 1, x, new_node);
+      cow_list_node_set_copy(nxt, index - 1, x, new_node);
       //@ close I(n, id)();
       release(&n->lock);
     }
   }
 }
 
-void set(struct list* l, int i, int x)
+void cow_list_set(struct list* l, int i, int x)
   //@ requires list(l, ?values) &*& 0 <= i &*& i < length(values);
   //@ ensures list(l, update(i, x, values));
 {
@@ -366,7 +366,7 @@ void set(struct list* l, int i, int x)
     merge_locks(&head->lock);
     //@ head->values = update(i, x, head->values);
     //@ close node_set_ghost_args(values, ha, id, f);
-    node_set(head, i, x);
+    cow_list_node_set(head, i, x);
     //@ close is_client_wrapper(head, ha, id, f);
     //@ close list(l, update(i, x, values));
   } else {
@@ -387,8 +387,52 @@ void set(struct list* l, int i, int x)
     l->head = new_node;
     merge_locks(&head->lock);
     //@ close node_set_copy_ghost_args(head, ha, id, f);
-    node_set_copy(head, i, x, new_node);
+    cow_list_node_set_copy(head, i, x, new_node);
     //@ close list(l, update(i, x, values));
   }
 }
-  
+
+void cow_list_dispose(struct list* l)
+  //@ requires list(l, ?values);
+  //@ ensures true;
+{
+  //@ open list(l, values);
+  struct node* curr = l->head;
+  while(curr != 0) 
+    //@ invariant curr == 0 ? true : is_client_wrapper(curr, ?ha, ?id, ?f) &*& [f]curr->values |-> _;
+  {
+    //@ assert is_client_wrapper(curr, ?ha, ?id, ?f);
+    //@ open is_client_wrapper(curr, ha, id, f);
+    acquire(&curr->lock);
+    //@ open I(curr, id)();
+    curr->refcount--;
+    if(curr->refcount == 0) {
+      struct node* next = curr->next;
+      //@ dispose_box nbox(id, ?owners) and_handle is_client(ha, f);
+      //@ switch(owners) { case nil: case cons(h, t): switch(h) { case pair(k, v): assert k == ha; } switch(t) { case nil: case cons(hh, tt): } }
+      //@ assert length(owners) == 1;
+      merge_locks(&curr->lock);
+      finalize(&curr->lock);
+      free(curr);
+      //@ leak foreach(_, _);
+      curr = next;
+    } else {
+       /*@
+      consuming_box_predicate nbox(id, ?owners)
+      consuming_handle_predicate is_client(ha, f)
+      perform_action release() {
+        distinct_remove(ha, keys(owners));
+      }
+      producing_box_predicate nbox(remove_assoc(ha, owners));
+      @*/
+      //@ foreach_remove(ha, keys(owners));
+      //@ leak is_handle(ha);
+      //@ rsum_remove_assoc(ha, owners);
+      merge_locks(&curr->lock);
+      //@ close I(curr, id)();
+      release(&curr->lock);
+      break;
+    }
+  }
+  free(l);
+}

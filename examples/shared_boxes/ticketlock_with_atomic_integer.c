@@ -133,7 +133,7 @@ void acquire(struct lock* l)
       handle ha = create_handle tbox_handle(id);
       consuming_box_predicate tbox(id, l, I)
       consuming_handle_predicate tbox_handle(ha)
-      perform_action take() atomic // this is weird, perform an atomic perform_action while inside an atomic perform_action (the one of atomic_integer?)
+      perform_action take()
       {
         l->next_copy = l->next_copy + 1;
         range_mem(0, value);
@@ -166,7 +166,7 @@ void acquire(struct lock* l)
       open O(l)(value);
       consuming_box_predicate tbox(id, l, I)
       consuming_handle_predicate is_ticket(ha, i)
-      perform_action dummy() atomic // this is weird, perform an atomic perform_action while inside an atomic perform_action (the one of atomic_integer?)
+      perform_action dummy()
       {
       }
       producing_handle_predicate if(value == i) holds_lock(ha, i) else is_ticket(ha, i);
@@ -205,7 +205,7 @@ void release(struct lock* l)
       open O(l)(value);
       consuming_box_predicate tbox(id, l, I)
       consuming_handle_predicate holds_lock(ha, i)
-      perform_action next(i) atomic // this is weird, perform an atomic perform_action while inside an atomic perform_action (the one of atomic_integer?)
+      perform_action next(i)
       {
         l->owner_copy = l->owner_copy + 1;
       };

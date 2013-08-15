@@ -333,7 +333,7 @@ void enqueue(struct queue* q, int x)
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
     consuming_handle_predicate msqueue_box_handle(ha)
-    perform_action noop() atomic
+    perform_action noop()
     {
       @*/ struct node *t = atomic_load_pointer(&q->tail); /*@
     }
@@ -343,7 +343,7 @@ void enqueue(struct queue* q, int x)
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
     consuming_handle_predicate was_tail(ha, t)
-    perform_action enqueue(new_node, x) atomic
+    perform_action enqueue(new_node, x)
     {
       assert lseg(?initial, 0, ?nodes, ?vs);
       lseg_distinct(initial, 0);
@@ -379,7 +379,7 @@ void enqueue(struct queue* q, int x)
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
     consuming_handle_predicate was_tail_with_succ(ha, t, n)
-    perform_action move_tail() atomic
+    perform_action move_tail()
     {
     @*/ struct node* old = atomic_compare_and_set_pointer(&q->tail, t, n); /*@
     };
@@ -402,7 +402,7 @@ bool try_dequeue(struct queue* q, int* res)
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
     consuming_handle_predicate msqueue_box_handle(ha)
-    perform_action noop() atomic
+    perform_action noop()
     {
       @*/ struct node *h = atomic_load_pointer(&q->head); /*@
     }
@@ -412,7 +412,7 @@ bool try_dequeue(struct queue* q, int* res)
     /*@
     consuming_box_predicate msqueue_box(id, q, I)
     consuming_handle_predicate was_head(ha, h)
-    perform_action noop() atomic
+    perform_action noop()
     {
       assert q->initial |-> ?initial;
       assert q->head |-> ?head;
@@ -449,7 +449,7 @@ bool try_dequeue(struct queue* q, int* res)
           /*@
       consuming_box_predicate msqueue_box(id, q, I)
       consuming_handle_predicate was_head_with_succ(ha, h, n)
-      perform_action move_tail() atomic
+      perform_action move_tail()
       { 
         assert q->initial |-> ?initial_;
         assert q->head |-> ?head_;
@@ -465,7 +465,7 @@ bool try_dequeue(struct queue* q, int* res)
       /*@
       consuming_box_predicate msqueue_box(id, q, I)
       consuming_handle_predicate was_head_with_succ_not_tail(ha, h, n)
-      perform_action dequeue() atomic
+      perform_action dequeue()
       {
         assert lseg(?theinitial, 0, ?thenodes, ?thevalues);
         @*/ struct node* old = atomic_compare_and_set_pointer(&q->head, h, n); /*@
@@ -488,7 +488,7 @@ bool try_dequeue(struct queue* q, int* res)
         /*@
         consuming_box_predicate msqueue_box(id, q, I)
         consuming_handle_predicate is_good_node(ha, n, ret)
-        perform_action noop() atomic
+        perform_action noop()
         {
           assert q->initial |-> ?initial__;
           assert q->head |-> ?head__;

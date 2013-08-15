@@ -40,7 +40,7 @@ void atomic_integer_set(int* i, int v)
   //@ handle ha = create_handle atomic_integer_box_handle(id);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
   consuming_handle_predicate atomic_integer_box_handle(ha)
-  perform_action set(v) atomic
+  perform_action set(v)
   {
     @*/ atomic_set_int(i, v); /*@
     lem();
@@ -58,7 +58,7 @@ int atomic_integer_get(int* i)
   //@ open [f]atomic_integer(i, level, I);
   //@ assert [f]atomic_integer_box(?id, i, I);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
-  perform_action get() atomic
+  perform_action get()
   {
     @*/ int res = atomic_load_int(i); /*@
     lem();
@@ -77,7 +77,7 @@ bool atomic_integer_cas(int* i, int old, int new)
   //@ open [f]atomic_integer(i, level, I);
   //@ assert [f]atomic_integer_box(?id, i, I);
   /*@ consuming_box_predicate atomic_integer_box(id, i, I)
-  perform_action cas(old, new) atomic
+  perform_action cas(old, new)
   {
     @*/ int res = atomic_compare_and_set_int(i, old, new); /*@
     lem();

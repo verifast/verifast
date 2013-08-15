@@ -102,7 +102,7 @@ void ticket_lock_lock(struct ticket_lock* l)
   /*@
   consuming_box_predicate ticket_lock_box(id, l, I)
   consuming_handle_predicate ticket_lock_box_handle(h)
-  perform_action get_ticket() atomic
+  perform_action get_ticket()
   { 
     assert l->next |-> ?n;
     assert l->owner |-> ?own;
@@ -123,7 +123,7 @@ void ticket_lock_lock(struct ticket_lock* l)
     /*@
     consuming_box_predicate ticket_lock_box(id, l, I)
     consuming_handle_predicate is_ticket(h, i)
-    perform_action acquire(i, f) atomic
+    perform_action acquire(i, f)
     { 
       assert l->acquiringFrac |-> ?myf;
       assert exists<list<handle> >(?hndls);
@@ -157,7 +157,7 @@ void ticket_lock_unlock(struct ticket_lock* l)
   /*@
   consuming_box_predicate ticket_lock_box(id, l, I)
   consuming_handle_predicate holds_lock(ha, ticket, f)
-  perform_action release(ticket) atomic
+  perform_action release(ticket)
   {
     @*/
     int i = atomic_increment(&l->owner);    

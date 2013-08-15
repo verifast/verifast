@@ -72,7 +72,7 @@ void spinlock_acquire(struct spinlock* l)
     /*@
     consuming_box_predicate spinlock_box(id, l, I)
     consuming_handle_predicate spinlock_box_handle(ha)
-    perform_action acquire(f) atomic
+    perform_action acquire(f)
     {
       @*/ int old = atomic_compare_and_set_int(&l->is_locked, 0, 1); /*@
       if(old == 0) {
@@ -100,7 +100,7 @@ void spinlock_release(struct spinlock* l)
   /*@
   consuming_box_predicate spinlock_box(id, l, I)
   consuming_handle_predicate locked_handle(owner, f)
-  perform_action release() atomic
+  perform_action release()
   {
     @*/ atomic_set_int(&l->is_locked, 0); /*@
   };

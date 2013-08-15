@@ -24,7 +24,7 @@ let ghost_keywords = [
   "box_class"; "action"; "handle_predicate"; "preserved_by"; "consuming_box_predicate"; "consuming_handle_predicate"; "perform_action"; "nonghost_callers_only";
   "create_box"; "above"; "below"; "and_handle"; "and_fresh_handle"; "create_handle"; "create_fresh_handle"; "dispose_box"; "produce_lemma_function_pointer_chunk"; "produce_function_pointer_chunk";
   "producing_box_predicate"; "producing_handle_predicate"; "producing_fresh_handle_predicate"; "box"; "handle"; "any"; "real"; "split_fraction"; "by"; "merge_fractions";
-  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "atomic"; "import_module"; "require_module"; ".."; "extends"; "permbased"
+  "unloadable_module"; "decreases"; "load_plugin"; "forall_"; "import_module"; "require_module"; ".."; "extends"; "permbased"
 ]
 
 let c_keywords = [
@@ -814,7 +814,7 @@ and
      consumed_handle_predicates = rep(parser
        [< '(lch, Kwd "consuming_handle_predicate"); '(_, Ident pre_hpn); pre_hp_args = parse_patlist; >] -> ConsumingHandlePredicate(lch, pre_hpn, pre_hp_args)
      );
-     '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist; is_atomic = opt (parser [< '(_, Kwd "atomic") >] -> 1);
+     '(lpa, Kwd "perform_action"); '(_, Ident an); aargs = parse_arglist;
      '(_, Kwd "{"); ss = parse_stmts; '(closeBraceLoc, Kwd "}");
      post_bp_args =
        opt
@@ -828,7 +828,7 @@ and
        [< '(_, Kwd "producing_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list >] -> (false, producing_hp_list)
      | [< '(_, Kwd "producing_fresh_handle_predicate"); producing_hp_list = parse_producing_handle_predicate_list >] -> (true, producing_hp_list));
      '(_, Kwd ";") >] ->
-     PerformActionStmt (lcb, (match is_atomic with None -> false | _ -> true), ref false, pre_bpn, pre_bp_args, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, produced_handles)
+     PerformActionStmt (lcb, ref false, pre_bpn, pre_bp_args, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bp_args, produced_handles)
 | [< '(l, Kwd ";") >] -> NoopStmt l
 | [< '(l, Kwd "super"); s = parser 
      [< '(_, Kwd "."); '(l2, Ident n); '(_, Kwd "("); es = rep_comma parse_expr; '(_, Kwd ")") >] -> ExprStmt(SuperMethodCall (l, n, es))

@@ -178,7 +178,7 @@ bool add(struct set* s, int x)
     /*@
     consuming_box_predicate setbox(id, gl, I)
     consuming_handle_predicate setbox_handle(ha)
-    perform_action act() atomic
+    perform_action act()
     {
       assert I(?values);
       strong_ghost_list_nonmember_handle_lemma(gl, x);
@@ -197,7 +197,7 @@ bool add(struct set* s, int x)
     /*@
     consuming_box_predicate setbox(id, gl, I)
     consuming_handle_predicate setbox_handle(ha)
-    perform_action act() atomic
+    perform_action act()
     {
       strong_ghost_list_member_handle_lemma(gl, x);
       lem();
@@ -255,7 +255,7 @@ bool contains(struct set* s, int x)
   result = x == curr->value;
   /*@
     consuming_box_predicate setbox(id, gl, I)
-    perform_action act() atomic
+    perform_action act()
     {
       if(result) {
       	strong_ghost_list_member_handle_lemma(gl, x);
@@ -306,7 +306,7 @@ bool remove(struct set* s, int x)
   locate(s->head, x, &prev, &curr);
   if(curr->value == x) {
     /*@ consuming_box_predicate setbox(id, gl, I)
-    perform_action act() atomic
+    perform_action act()
     {
       strong_ghost_list_member_handle_lemma(gl, x);
       strong_ghost_list_remove(gl, x);
@@ -326,7 +326,7 @@ bool remove(struct set* s, int x)
       close hider(gl, interval(curr->value + 1, nvalue));
     } @*/
     /*@ consuming_box_predicate setbox(id, gl, I)
-    perform_action act() atomic
+    perform_action act()
     {
       strong_ghost_list_nonmember_handle_lemma(gl, x);
       lem(false);
@@ -349,5 +349,3 @@ bool remove(struct set* s, int x)
   //@ leak is_set_remove_lemma(_, _, _);
   return result;
 }
-
-

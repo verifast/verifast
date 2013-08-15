@@ -1519,7 +1519,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let tcont _ _ _ _ _ = success() in
           verify_block (pn,ilist) blocks_done lblenv tparams boxes pure leminfo funcmap predinstmap sizemap tenv ghostenv h env body tcont return_cont econt
         end
-    | PerformActionStmt (lcb, is_atomic, nonpure_ctxt, pre_bcn, pre_bcp_pats, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, produced_handle_predicates) ->
+    | PerformActionStmt (lcb, nonpure_ctxt, pre_bcn, pre_bcp_pats, consumed_handle_predicates, lpa, an, aargs, ss, closeBraceLoc, post_bcp_args_opt, produced_handle_predicates) ->
       let (_, boxpmap, inv, boxvarmap, amap, hpmap) =
         match try_assoc' (pn,ilist) pre_bcn boxmap with
           None -> static_error lcb "No such box class." None
@@ -1543,19 +1543,21 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let box_level_symb = get_pure_func_symb "box_level" in
         let (boxId::pre_boxPredArgs) = ts in
         let box_level_term = (mk_app (get_pure_func_symb "box_level") [boxId]) in
-        if not is_atomic && box_coef != real_unit then assert_false h env lcb "Box predicate coefficient must be 1 if action is non-atomic." None;
+        let is_box_coef_real_unit = definitely_equal box_coef real_unit in
         let check_level_increasing h cont =
-          if is_atomic && not (! nonpure_ctxt) then
-            consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [dummypat] (fun old_current_box_level_chunk h box_coef ts chunk_size ghostenv env [] ->
-              let [current_level] = ts in
-              if not (ctxt#query (ctxt#mk_lt current_level box_level_term)) then static_error lcb "Level of inner atomic perform action must be higher than level of outer perform actions" None;
-              cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) (Some old_current_box_level_chunk)
-            )
-          else
-            if (! nonpure_ctxt) then (* is top level box entry *)
-              cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) None
-            else
+          if (! nonpure_ctxt) then (* top level call *)
+            (* TODO: if toplevel and boxcoef != 1 then C code in body must be a single atomic C operation *) 
+            cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) None
+          else begin
+            if is_box_coef_real_unit then
               cont h None
+            else
+              consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [dummypat] (fun old_current_box_level_chunk h box_coef ts chunk_size ghostenv env [] ->
+                let [current_level] = ts in
+                if not (ctxt#query (ctxt#mk_lt current_level box_level_term)) then static_error lcb "Level of inner atomic perform action must be higher than level of outer perform actions" None;
+                cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) (Some old_current_box_level_chunk)
+             )
+          end
         in
         let Some pre_boxargbs = zip boxpmap pre_boxPredArgs in
         let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
@@ -1623,7 +1625,6 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   [] -> cont h
                 | (handle_id, assume_func) :: rest -> assume_func h (fun h -> assume_all_handle_invs rest h cont)
              in
-             
                assume_all_handle_invs already_consumed_handles_info h (fun h ->
                consume_action_permission h $. fun h act_perm_chunks ->
                produce_asn [] h ghostenv  ((*pre_hpArgMap @*) pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
@@ -1651,7 +1652,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                    match post_bcp_args_opt with
                      None -> pre_boxArgMap
                    | Some (lpb, post_bcp_args) ->
-                     if is_atomic then assert_false h env lpb "Changing the parameters of the box predicate is not allowed for atomic perform_action statements." None;
+                     if not (is_box_coef_real_unit) then assert_false h env lpb "Changing the parameters of the box predicate is not allowed unless consumed fraction of box predicate equals 1." None;
                      begin
                        match zip boxpmap post_bcp_args with
                          None -> static_error lpb "Incorrect number of post-state box arguments." None
@@ -1667,18 +1668,18 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  let post_env = [("actionHandles", consumed_handles_ids)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_expr post_env post h post_env closeBraceLoc "Action postcondition failure." None;
                  let reset_current_box_level h cont =
-                   match  old_current_box_level_chunk with
-                     None ->
-                       if (! nonpure_ctxt) then
-                         consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
+                   if (! nonpure_ctxt) then
+                     consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
                            cont h
-                         )
-                       else
-                         cont h
-                   | Some chunk ->
-                      consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
+                     )
+                   else begin
+                     match old_current_box_level_chunk with
+                       None -> cont h
+                     | Some chunk -> 
+                       consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
                         cont (chunk :: h)
                       )
+                   end
                  in
                  reset_current_box_level h (fun h ->
                  
@@ -1841,7 +1842,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | PureStmt (l, s) ->
       begin
         match s with
-          PerformActionStmt (_, _, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _) ->
+          PerformActionStmt (_, nonpure_ctxt, _, _, _, _, _, _, _, _, _, _) ->
           nonpure_ctxt := not pure
         | _ -> ()
       end;
