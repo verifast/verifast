@@ -72,7 +72,7 @@ ifeq ($(OS), win)
   OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/win -lflags -I,$(SRCDIR)/win
 endif
 ifeq ($(OS), mac)
-  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux
+  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux,-I,$(SRCDIR)/mac -lflags -I,$(SRCDIR)/linux,-I,$(SRCDIR)/mac
 endif
 
 default: all
@@ -89,6 +89,7 @@ linux: linux_or_mac
 
 mac: linux_or_mac
 	cp $(SRCDIR)/Fonts_mac.ml $(SRCDIR)/Fonts.ml
+	cd $(SRCDIR)/mac; ${OCAMLOPT} -c -I +lablgtk2 GSourceView2.ml
 
 OCAMLBUILDFLAGS+= -j 32 -no-hygiene -lflags -I,$(SRCDIR)/$(OS) -pp camlp4o.opt
 OCAMLBUILDFLAGS_vfide_and_verifast+= -libs Perf,nums,dynlink
@@ -107,7 +108,7 @@ verifast: SRCNAME=vfconsole.ml
 verifast: OCAMLBUILDFLAGS+=$(OCAMLBUILDFLAGS_vfide_and_verifast)
 OCAMLBUILDSUBTARGETS+=verifast
 
-$(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS)): clean_external linux
+$(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS)): clean_external $(OS)
 	cat $(INCLUDECODE) $(SRCDIR)/$(SRCNAME) > $(SRCDIR)/buildcat_$(BINNAME).ml ;\
 	mkdir -p $(BUILDDIR) ;\
 	cd $(SRCDIR) ;\
