@@ -67,6 +67,7 @@ endif
 
 ifeq ($(OS), linux)
   OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux
+  OCAMLBUILDFLAGS_VFIDE+= -lib lablgtksourceview2
 endif
 ifeq ($(OS), win)
   OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/win -lflags -I,$(SRCDIR)/win
@@ -93,7 +94,7 @@ macos: linux_or_mac
 OCAMLBUILDFLAGS+= -j 32 -no-hygiene -pp camlp4o.opt
 OCAMLBUILDFLAGS_vfide_and_verifast+= -libs Perf,nums,dynlink
 
-vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 -libs unix $(OCAMLBUILDFLAGS_vfide_and_verifast)
+vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 -lib unix $(OCAMLBUILDFLAGS_vfide_and_verifast) $(OCAMLBUILDFLAGS_VFIDE)
 vfide: run_ocamlbuild_vfide
 vfide: BINNAME=vfide
 vfide: SRCNAME=vfide.ml
