@@ -34,7 +34,7 @@ ifeq ($(shell uname -s), Linux)
 	OS ?= linux
 endif
 ifeq ($(shell uname -s), Darwin)
-	OS ?= mac
+	OS ?= macos
 endif
 ifeq ($(OS),)
   ifeq ($(shell uname -o), Cygwin)
@@ -53,8 +53,8 @@ OCAMLBUILDFLAGS+= -cflags -warn-error,F,-w,-A
 
 
 # BEGIN Checks----------------------------------------------------------
-ifeq ($(findstring $(OS), linux mac win),)
-  $(error Cannot autodetect your system. Please set the environment var OS to linux mac or win in lowercase)
+ifeq ($(findstring $(OS), linux macos win),)
+  $(error Cannot autodetect your system. Please set the environment var OS to linux macos or win in lowercase)
 endif
 ifeq ($(wildcard $(OCAMLOPT)),)
   $(error Cannot find ocamlopt. Just add its path to the PATH environment variable.)
@@ -71,8 +71,8 @@ endif
 ifeq ($(OS), win)
   OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/win -lflags -I,$(SRCDIR)/win
 endif
-ifeq ($(OS), mac)
-  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux,-I,$(SRCDIR)/mac -lflags -I,$(SRCDIR)/linux,-I,$(SRCDIR)/mac
+ifeq ($(OS), macos)
+  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux -I macos
 endif
 
 default: all
@@ -87,18 +87,20 @@ linux_or_mac:
 linux: linux_or_mac
 	cp $(SRCDIR)/Fonts_default.ml $(SRCDIR)/Fonts.ml
 
-mac: linux_or_mac
+macos: linux_or_mac
 	cp $(SRCDIR)/Fonts_mac.ml $(SRCDIR)/Fonts.ml
-	cd $(SRCDIR)/mac; ${OCAMLOPT} -c -I +lablgtk2 GSourceView2.ml
 
-OCAMLBUILDFLAGS+= -j 32 -no-hygiene -lflags -I,$(SRCDIR)/$(OS) -pp camlp4o.opt
+OCAMLBUILDFLAGS+= -j 32 -no-hygiene -pp camlp4o.opt
 OCAMLBUILDFLAGS_vfide_and_verifast+= -libs Perf,nums,dynlink
 
-vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 -libs unix,lablgtksourceview2 $(OCAMLBUILDFLAGS_vfide_and_verifast)
+vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 -libs unix $(OCAMLBUILDFLAGS_vfide_and_verifast)
 vfide: run_ocamlbuild_vfide
 vfide: BINNAME=vfide
 vfide: SRCNAME=vfide.ml
 vfide: INCLUDECODE+=$(SRCDIR)/verifastPluginRedux.ml
+#ifeq ($(OS), macos)
+#  OCAMLBUILDFLAGS+= 
+#endif
 OCAMLBUILDSUBTARGETS+=vfide
 
 verifast: run_ocamlbuild_verifast
@@ -124,8 +126,8 @@ clean:
 	rm -f $(BINDIR)/verifast
 	rm -f $(SRCDIR)/buildcat_*.ml
 	rm -f $(addprefix $(BINDIR)/, $(STDLIB_FILES_VFMANIFEST))
-	
-.PHONY: default clean_external linux_or_mac linux mac mysh vfide verifast run_ocamlbuild
+
+.PHONY: default clean_external linux_or_mac linux macos mysh vfide verifast run_ocamlbuild
 
 # BEGIN stdlib----------------------------------------------------------
 STDLIB_FILES:=list listex arrays raw_ghost_lists quantifiers permutations assoclist
