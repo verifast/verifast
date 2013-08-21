@@ -100,5 +100,5 @@ doc/*/*.toc
 doc/*/*.pdf
 
 
-/buildsystems/ocamlbuild/_ocamlbuild
+/buildsystems/ocamlbuild/_tempbuildfiles
 
