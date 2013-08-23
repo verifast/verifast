@@ -1,3 +1,9 @@
+#
+# Executing VeriFast on the implementation/proofs of VeriFast's standard library.
+# This generates .vfmanifest files, which tells further invocations of
+# VeriFast that the lemmas are proven.
+#
+
 ifndef STDLIB_MAKE_INCLUDED
   STDLIB_MAKE_INCLUDED = yes
 

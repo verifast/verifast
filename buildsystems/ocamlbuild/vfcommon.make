@@ -1,36 +1,48 @@
+#
+# Things common for building all VeriFast frontends (vfconsole, vfide)
+# The make files for building these frontends can include this file.
+# Basically, this file is to avoid code duplication.
+#
+
 ifndef VFCOMMON_MAKE_INCLUDED
   VFCOMMON_MAKE_INCLUDED = yes
 
 include init.make
+include run_ocamlbuild.make
+include z3dependency.make
+
+INCLUDECODE_VFCOMMON += $(SRCDIR)/verifastPluginRedux.ml
+
+ifndef NOZ3
+  run_ocamlbuild_vfcommon: z3maybe
+  INCLUDECODE_VFCOMMON += $(INCLUDECODE_Z3)
+  OCAMLBUILDFLAGS_VFCOMMON += $(OCAMLBUILDFLAGS_Z3)
+endif
 
 ifeq ($(OS), linux)
-  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux
+  OCAMLBUILDFLAGS_VFCOMMON+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux
 endif
 ifeq ($(OS), win)
-  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/win -lflags -I,$(SRCDIR)/win
+  OCAMLBUILDFLAGS_VFCOMMON+= -cflags -I,$(SRCDIR)/win -lflags -I,$(SRCDIR)/win
 endif
 ifeq ($(OS), macos)
-  OCAMLBUILDFLAGS+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux -I macos
+  OCAMLBUILDFLAGS_VFCOMMON+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux -I macos
 endif
 
-OCAMLBUILDFLAGS+= -j 16 -no-hygiene -pp camlp4o.opt -libs Perf,nums,dynlink
+OCAMLBUILDFLAGS_VFCOMMON+= -pp camlp4o.opt -libs Perf,nums,dynlink
 
-$(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS)): clean_external $(OS) ocamlbuild ocamlfind
-	cat $(INCLUDECODE) $(SRCDIR)/$(SRCNAME) > $(SRCDIR)/buildcat_$(BINNAME).ml ;\
-	mkdir -p $(BUILDDIR) ;\
-	cd $(SRCDIR) ;\
-	$(OCAMLBUILD) $(OCAMLBUILDFLAGS) -build-dir $(BUILDDIR)/$(BINNAME) buildcat_$(BINNAME).native;\
-	cp $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).native $(BINDIR)/$(BINNAME)
-.PHONY: $(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS))
+run_ocamlbuild_vfcommon: $(OS)
 
-run_ocamlbuild:
-	$(error Internal error: target run_ocamlbuild must not be used, use run_ocamlbuild_SUBTARGETNAME)
-
-clean_external:
-	rm -f $(wildcard $(addprefix $(SRCDIR)/, *.cmx *.o *.a))
-
+ifdef BYTECODE
+  OCAMLOPTOPT=$(OCAMLC)
+  linux_or_mac: ocamlc
+else
+  OCAMLOPTOPT=$(OCAMLOPT)
+  linux_or_mac: ocamlopt
+endif
 linux_or_macos: make
-	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLOPT)
+	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLC) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
+
 
 linux: linux_or_macos
 	cp $(SRCDIR)/Fonts_default.ml $(SRCDIR)/Fonts.ml
@@ -38,9 +50,13 @@ linux: linux_or_macos
 macos: linux_or_macos
 	cp $(SRCDIR)/Fonts_mac.ml $(SRCDIR)/Fonts.ml
 
+win: ocamlopt
+	cd $(SRCDIR)/win ;\
+	export CYGWIN=nodosfilewarning ;\
+	$(OCAMLOPT) -a -o Perf.cmxa caml_perf.c Perf.mli Perf.ml Stopwatch.mli caml_stopwatch.c
+	
 clean::
 	rm -fr $(BUILDDIR)
-	rm -f $(SRCDIR)/buildcat_*.ml
 	rm -f $(SRCDIR)/linux/*.o
 	rm -f $(SRCDIR)/linux/*.a
 	rm -f $(SRCDIR)/linux/*.cm*

@@ -22,8 +22,11 @@ struct stopwatch {
     unsigned __int64 startTimestamp;
 };
 
+#ifdef __MINGW32__
+#define NO_TIMESTAMP (0x0100000000000000LLU)
+#else
 #define NO_TIMESTAMP (0x0100000000000000i64)
-
+#endif
 value caml_stopwatch_create() {
     struct stopwatch *block = (void *)caml_alloc_small(4, Abstract_tag);
     block->counter = 0;

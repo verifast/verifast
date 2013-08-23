@@ -1,9 +1,15 @@
+#
+# Launches VeriFast's testsuite.
+#
+
 include init.make
 include verifast.make
 include mysh.make
 include stdlib.make
 
 test: verifast mysh stdlib
-	cd $(SRCDIR)/.. ; mysh -numcpu 8 < testsuite.mysh ; echo Note: because of a bug of mysh the tests fails.
+	cd $(SRCDIR)/.. &&\
+	export PATH=$PATH:$(BINDIR) &&\
+	mysh -numcpu 8 < testsuite.mysh
 .PHONY: test
 	

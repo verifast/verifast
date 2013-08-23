@@ -1,17 +1,22 @@
+#
+# Configuration for the user of the buildsystem.
+#
+
 ifndef CONFIG_MAKE_INCLUDED
   CONFIG_MAKE_INCLUDED = yes
 
-# You're not supposed to put your config in here. If you install
-# your stuff properly, everything is autodetected. If you did not
-# install properly, the solution is to install properly, not to mess
-# up the build system :)
-#
-# i.e. this is config for the developers of the buildsystem,
-# not for the user of the buildsystem!
-#
-BUILDSCRIPTDIR := $(CURDIR)
-SRCDIR    := $(BUILDSCRIPTDIR)/../../src
-BINDIR    := $(BUILDSCRIPTDIR)/../../bin
-BUILDDIR  := $(BUILDSCRIPTDIR)/_tempbuildfiles
+ifdef VERBOSE
+  # makes ocamlbuild print the commands it executes
+  OCAMLBUILDFLAGS+=-classic-display
+endif
+
+ifndef VERBOSE
+  # makes make not print the commands it executes
+  .SILENT:
+endif
+
+# All warnings are errors, except a few that we hide.
+OCAMLBUILDFLAGS+= -cflags -warn-error,A,-w,-8,-w,-28,-w,-26,-w,-10
+
 
 endif
