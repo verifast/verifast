@@ -150,6 +150,7 @@ cd examples
   cd ..
   cd usbkbd
     cd src
+    verifast -I . -c -prover redux usbmouse.c
     verifast -I . -c -prover redux usbkbd_verified.c
     verifast_both -I . -c usbmouse.c
     cd ..
