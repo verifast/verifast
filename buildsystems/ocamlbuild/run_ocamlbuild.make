@@ -36,7 +36,7 @@ $(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbui
 	mkdir -p $(BUILDDIR) &&\
 	cd $(SRCDIR) &&\
 	export CYGWIN=nodosfilewarning &&\
-	export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":"$LDPATH" &&\
+	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(LDLPATH) &&\
 	$(OCAMLBUILD) $(OCAMLBUILDFLAGS) -build-dir $(BUILDDIR)/$(BINNAME) buildcat_$(BINNAME).$(OCAMLBUILD_KIND) &&\
 	cp $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).$(OCAMLBUILD_KIND) $(BINDIR)/$(BINNAME)$(DOTEXE) &&\
 	chmod +x $(BINDIR)/$(BINNAME)$(DOTEXE)

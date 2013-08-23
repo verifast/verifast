@@ -12,6 +12,7 @@ OCAMLOPT  ?= ocamlopt
 OCAMLC    ?= ocamlc
 OCAMLBUILD?= ocamlbuild
 OCAMLLIB  ?= $(shell ${OCAMLC} -where)
+OCAML     ?= ocaml
 
 include internalconfig.make
 include osdetect.make

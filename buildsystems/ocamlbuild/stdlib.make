@@ -9,6 +9,7 @@ ifndef STDLIB_MAKE_INCLUDED
 
 include init.make
 include verifast.make
+include z3dependency.make
 
 STDLIB_FILES:=list listex arrays raw_ghost_lists quantifiers permutations assoclist
 STDLIB_FILES_VFMANIFEST:=$(addsuffix .vfmanifest,$(STDLIB_FILES))
@@ -18,7 +19,10 @@ $(STDLIB_FILES_C): %.c: $(BINDIR)/%.c
 .PHONY: $(STDLIB_FILES_C)
 
 $(STDLIB_FILES_VFMANIFEST): %.vfmanifest: %.c verifast
-	cd $(BINDIR) ; ./verifast -c -emit_vfmanifest $<
+	cd $(BINDIR) &&\
+	export PATH=$(PATH):$(BINDIR) &&\
+	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(LDLPATH) &&\
+	./verifast -c -emit_vfmanifest $<
 .PHONY: $(STDLIB_FILES_VFMANIFEST)
 
 

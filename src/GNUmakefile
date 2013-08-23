@@ -202,7 +202,6 @@ reduxtest: verifastredux.opt
 	cd ..
 
 Printexc_proxy.cmx:
-	cp Printexc_proxy_310.ml Printexc_proxy.ml
 	${OCAMLOPT} -c Printexc_proxy.ml
 
 ifdef MAC

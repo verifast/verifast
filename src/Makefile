@@ -97,11 +97,9 @@ pa_verifast.cmo: pa_verifast.ml
 	ocamlc -I +camlp4 dynlink.cma camlp4lib.cma -pp "camlp4o pa_extend.cmo q_MLast.cmo" pa_verifast.ml
 
 Printexc_proxy.cmo:
-	copy Printexc_proxy_311.ml Printexc_proxy.ml
 	ocamlc -c Printexc_proxy.ml
 
 Printexc_proxy.cmx:
-	copy Printexc_proxy_311.ml Printexc_proxy.ml
 	ocamlopt.opt -c Printexc_proxy.ml
 
 record_backtrace.cmo: record_backtrace.ml

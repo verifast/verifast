@@ -31,7 +31,7 @@ endif
 
 OCAMLBUILDFLAGS_VFCOMMON+= -pp camlp4o.opt -libs Perf,nums,dynlink
 
-run_ocamlbuild_vfcommon: $(OS)
+run_ocamlbuild_vfcommon: $(OS) vfversion
 
 ifdef BYTECODE
   OCAMLOPTOPT=$(OCAMLC)
@@ -43,6 +43,8 @@ endif
 linux_or_macos: make
 	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLOPTOPT) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
 
+vfversion: ocaml
+	cd $(SRCDIR) ; ${OCAML} generate_vfversion.ml
 
 linux: linux_or_macos
 	cp $(SRCDIR)/Fonts_default.ml $(SRCDIR)/Fonts.ml

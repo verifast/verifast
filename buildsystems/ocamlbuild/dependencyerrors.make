@@ -11,7 +11,7 @@
 ifndef DEPENDENCYERRORS_MAKE_INCLUDED
   DEPENDENCYERRORS_MAKE_INCLUDED = yes
 
-TOOLS = ocamlopt ocamlbuild make ocamlfind ocamlc
+TOOLS = ocamlopt ocamlbuild make ocamlfind ocamlc ocaml
 LIBS = lablgtk2 lablgtk2.sourceview2
 $(TOOLS):
 	which "$@" >/dev/null || echo "Install $@ first" ; which "$@" >/dev/null
