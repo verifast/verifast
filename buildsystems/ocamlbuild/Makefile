@@ -28,4 +28,7 @@ include vfcommon.make
 include stdlib.make
 include mysh.make
 include test.make
+include dlsymtool.make
+include main_class.make
+include java_card_applet.make
 

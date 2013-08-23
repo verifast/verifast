@@ -35,13 +35,13 @@ run_ocamlbuild_vfcommon: $(OS)
 
 ifdef BYTECODE
   OCAMLOPTOPT=$(OCAMLC)
-  linux_or_mac: ocamlc
+  linux_or_macos: ocamlc
 else
   OCAMLOPTOPT=$(OCAMLOPT)
-  linux_or_mac: ocamlopt
+  linux_or_macos: ocamlopt
 endif
 linux_or_macos: make
-	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLC) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
+	make -C $(SRCDIR)/linux OCAMLOPTOPT=$(OCAMLOPTOPT) BYTECODE=$(BYTECODE) DEBUG=$(DEBUG)
 
 
 linux: linux_or_macos

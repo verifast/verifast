@@ -10,7 +10,7 @@ include init.make
 # For readability we just put the list of users here. From a design
 # point of view we should do this distributed but that would require
 # makefile magic and I want people to easily read the makefiles.
-OCAMLBUILD_SUPERTARGETS = vfide verifast mysh
+OCAMLBUILD_SUPERTARGETS = vfide verifast mysh dlsymtool main_class java_card_applet
 
 OCAMLBUILDFLAGS += -j 16 -no-hygiene
 
@@ -29,7 +29,7 @@ endif
 # executable on Linux) if the SRCDIR directory contains building
 # output files. Other build tools sometimes put their garbage there.
 clean_external:
-	rm -f $(wildcard $(addprefix $(SRCDIR)/, *.cmx *.o *.a))
+	rm -f $(wildcard $(addprefix $(SRCDIR)/, *.cm* *.o *.a))
 
 $(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbuild
 	cat $(INCLUDECODE) $(SRCDIR)/$(SRCNAME) > $(SRCDIR)/buildcat_$(BINNAME).ml &&\
@@ -38,8 +38,11 @@ $(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbui
 	export CYGWIN=nodosfilewarning &&\
 	export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":"$LDPATH" &&\
 	$(OCAMLBUILD) $(OCAMLBUILDFLAGS) -build-dir $(BUILDDIR)/$(BINNAME) buildcat_$(BINNAME).$(OCAMLBUILD_KIND) &&\
-	cp $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).$(OCAMLBUILD_KIND) $(BINDIR)/$(BINNAME)$(DOTEXE)
-.PHONY: $(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS))
+	cp $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).$(OCAMLBUILD_KIND) $(BINDIR)/$(BINNAME)$(DOTEXE) &&\
+	chmod +x $(BINDIR)/$(BINNAME)$(DOTEXE)
+	
+	
+.PHONY: $(addprefix run_ocamlbuild_,$(OCAMLBUILDSUBTARGETS)) &&\
 
 
 run_ocamlbuild:

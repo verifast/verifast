@@ -38,11 +38,17 @@ ifdef Z3
   OCAMLBUILDFLAGS_Z3 += -lflags -cclib,-lz3-gmp,-cclib,-lz3stubs,$(OCAMLLIB)/libcamlidl.a
   
   # Actually this should also include the 
-  FILES_MUSTBEFOUND = $(Z3)/lib/libz3.so $(Z3)/lib/libz3-gmp.so $(Z3)/ocaml/z3.cmxa $(Z3)/ocaml/z3.cmi
-  FILES_FOUND = $(wildcard $(FILES_MUSTBEFOUND))
-  FILES_NOT_FOUND=$(filter-out $(FILES_FOUND),$(FILES_MUSTBEFOUND))
+  FILES_MUST_BE_FOUND = $(Z3)/lib/libz3.so $(Z3)/lib/libz3-gmp.so
+  FILES_MUST_BE_FOUND += $(Z3)/ocaml/libz3stubs.a $(Z3)/ocaml/z3.cmi $(Z3)/ocaml/z3.a
+  ifndef BYTECODE
+    FILES_MUST_BE_FOUND += $(Z3)/ocaml/z3.cmxa 
+  else
+    FILES_MUST_BE_FOUND += $(Z3)/ocaml/z3.cma
+  endif
+  FILES_FOUND = $(wildcard $(FILES_MUST_BE_FOUND))
+  FILES_NOT_FOUND=$(filter-out $(FILES_FOUND),$(FILES_MUST_BE_FOUND))
   ifneq ($(FILES_NOT_FOUND),)
-    $(error You set an incorrect Z3 path or forgot to combine the Z3 bindings. Files I expected but could not find: $(FILES_NOT_FOUND))
+    $(error You set an incorrect Z3 path or forgot to compile the Z3 bindings. Files I expected but could not find: $(FILES_NOT_FOUND))
   endif
   z3maybe:
 endif
