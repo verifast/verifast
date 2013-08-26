@@ -8,9 +8,10 @@ ifndef VFIDE_MAKE_INCLUDED
 include init.make
 include vfcommon.make
 
-ifeq ($(OS), linux)
+ifneq ($(OS), macos)
   vfide: OCAMLBUILDFLAGS += -lib lablgtksourceview2
   vfide: OCAMLBUILD_SUBTARGETS += lablgtk2.sourceview2
+  run_ocamlbuild_vfide: lablgtk2.sourceview2
 endif
 
 vfide: run_ocamlbuild_vfide

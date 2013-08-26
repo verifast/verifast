@@ -1,26 +1,48 @@
 #
 # Entry point for when user types "make".
 #
-# 
-# Usage: make [target] [PARAMETERS]
-#
-# Parameters:
-#     DEBUG=1   : enables debug build
-#     VERBOSE=1 : see more info scrolling by while building.
-#     BYTECODE=1: compile to bytecode instead of to native code
-#                 (note: migt result in a file containing also the
-#                        runtime system. On e.g. Linux this will
-#                        thus be an ELF file but it contains bytecode)
-#     Z3=<path> : Z3 path
-#     Z3v2
-#     Z3v4
-#     NOZ3      : Do not build with Z3
-#
-# Example:
-#   make verifast DEBUG=1 VERBOSE=1 Z3=$HOME/compiledstuff/z3
-#
+default:
+help:
+	@echo 'Usage: make [TARGET]... [PARAMETER]...'
+	@echo 'Compiles VeriFast, vfide, mysh, etc.'
+	@echo 'Does not build dependencies like ocaml or lablgtk.'
+	@echo ''
+	@echo 'Most important targets:'
+	@echo '  verifast  : Builds console frontend'
+	@echo '  vfide     : Builds lablgtk frontend'
+	@echo '  test      : Launches testsuite'
+	@echo '  clean     : Removes comiler output'
+	@echo '  The default target launches verifast, vfide and test.'
+	@echo ''
+	@echo 'Parameters:'
+	@echo '  DEBUG=1   : Enables debug build'
+	@echo '  VERBOSE=1 : Shows more info scrolling by while building.'
+	@echo '  BYTECODE=1: Compile to bytecode instead of to native code.'
+	@echo '              Note: might result in a file containing also'
+	@echo '                the runtime system. On e.g. Linux this will'
+	@echo '                thus be an ELF file but it contains bytecode.'
+	@echo '  Z3=<path> : Sets path to Z3 bindings.'
+	@echo '  Z3v2=<path>'
+	@echo '  Z3v4=<path>'
+	@echo '  NOZ3=1    : Do not include Z3 plugin.'
+	@echo ''
+	@echo 'You can save parameters by creating a file "settings.make"'
+	@echo '  and populating it with lines like "NOZ3=1".'
+	@echo '  See settings.make.example for an example.'
+	@echo ''
+	@echo 'Usage examples:'
+	@echo '   make'
+	@echo '   make verifast'
+	@echo '   make verifast DEBUG=1 VERBOSE=1 Z3=/home/john/compiled/z3'
+	@echo '   make test'
 
-default: verifast vfide test
+ifneq ($(OS),win)
+  default:
+	make -j 8 verifast vfide test
+else
+  # concurrent make does not seem to work in Windows.
+  default: verifast vfide test
+endif
 
 include verifast.make
 include vfide.make

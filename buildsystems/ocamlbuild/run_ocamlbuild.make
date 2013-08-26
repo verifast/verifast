@@ -14,6 +14,14 @@ OCAMLBUILD_SUPERTARGETS = vfide verifast mysh dlsymtool main_class java_card_app
 
 OCAMLBUILDFLAGS += -j 16 -no-hygiene
 
+ifdef VERBOSE
+  # makes ocamlbuild print the commands it executes
+  OCAMLBUILDFLAGS+=-classic-display
+endif
+
+# All warnings are errors, except a few that we hide.
+OCAMLBUILDFLAGS+= -cflags -warn-error,A,-w,-8,-w,-28,-w,-26,-w,-10
+
 ifdef DEBUG
 OCAMLBUILDFLAGS += -cflags -g
 endif

@@ -14,9 +14,23 @@
 ifndef INTERNALCONFIG_MAKE_INCLUDED
   INTERNALCONFIG_MAKE_INCLUDED = yes
 
+-include settings.make
+
 BUILDSCRIPTDIR := $(CURDIR)
 SRCDIR    := $(BUILDSCRIPTDIR)/../../src
 BINDIR    := $(BUILDSCRIPTDIR)/../../bin
 BUILDDIR  := $(BUILDSCRIPTDIR)/_tempbuildfiles
+
+OCAMLOPT  ?= ocamlopt
+OCAMLC    ?= ocamlc
+OCAMLBUILD?= ocamlbuild
+OCAMLLIB  ?= $(shell ${OCAMLC} -where)
+OCAML     ?= ocaml
+
+ifndef VERBOSE
+  # makes make not print the commands it executes.
+  # This does not really belong to "internalconfig.make" but it does not belong anywhere else either...
+  .SILENT:
+endif
 
 endif

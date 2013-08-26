@@ -19,8 +19,12 @@ else ifdef Z3V4
   INCLUDECODE_Z3 += $(SRCDIR)/verifastPluginZ3v4.ml
 else ifdef NOZ3
 else
-z3maybe:
-	$(error Please define NOZ3,Z3,Z3V2 or Z3V4 (e.g. make NOZ3=1))
+  ifeq ($(OS), macos)
+    NOZ3=1
+  else
+    z3maybe:
+	$(error Please define NOZ3, Z3, Z3V2 or Z3V4. Type "make help" to know how)
+  endif
 endif
 
 ifdef NOZ3
@@ -37,7 +41,6 @@ ifdef Z3
   OCAMLBUILDFLAGS_Z3 += -lflags -ccopt,-I$(Z3)/ocaml,-ccopt,-L$(Z3)/bin,-ccopt,-L$(Z3)/lib
   OCAMLBUILDFLAGS_Z3 += -lflags -cclib,-lz3-gmp,-cclib,-lz3stubs,$(OCAMLLIB)/libcamlidl.a
   
-  # Actually this should also include the 
   FILES_MUST_BE_FOUND = $(Z3)/lib/libz3.so $(Z3)/lib/libz3-gmp.so
   FILES_MUST_BE_FOUND += $(Z3)/ocaml/libz3stubs.a $(Z3)/ocaml/z3.cmi $(Z3)/ocaml/z3.a
   ifndef BYTECODE

@@ -101,4 +101,5 @@ doc/*/*.pdf
 
 
 /buildsystems/ocamlbuild/_tempbuildfiles
+/buildsystems/ocamlbuild/settings.make
 
