@@ -1544,7 +1544,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let (boxId::pre_boxPredArgs) = ts in
         let box_level_term = (mk_app (get_pure_func_symb "box_level") [boxId]) in
         let is_box_coef_real_unit = definitely_equal box_coef real_unit in
-        let check_level_increasing h cont =
+        let check_deadlock_freedom h cont =
           if (! nonpure_ctxt) then (* top level call *)
             (* TODO: if toplevel and boxcoef != 1 then C code in body must be a single atomic C operation *) 
             cont ((Chunk ((current_box_level_symb, true), [], real_unit, [mk_app box_level_symb [boxId]], None)) :: h) None
@@ -1563,7 +1563,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let pre_boxArgMap = List.map (fun ((x, _), t) -> (x, t)) pre_boxargbs in
         let pre_boxArgMapWithThis = ("this", boxId) :: pre_boxArgMap in
         let inv_env = List.map (fun (x, tp) -> (x, get_unique_var_symb_ x tp true)) inv_variables in 
-        check_level_increasing h (fun h old_current_box_level_chunk ->
+        check_deadlock_freedom h (fun h old_current_box_level_chunk ->
         let rec consume_handle_predicates to_be_consumed already_consumed_handles_info h tenv ghostenv env cont =
           match to_be_consumed with
             [] -> cont h tenv ghostenv env already_consumed_handles_info
@@ -1627,7 +1627,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
              in
                assume_all_handle_invs already_consumed_handles_info h (fun h ->
                consume_action_permission h $. fun h act_perm_chunks ->
-               produce_asn [] h ghostenv  ((*pre_hpArgMap @*) pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
+               produce_asn [] h ghostenv  (pre_boxArgMapWithThis @ inv_env) inv real_unit None None $. fun h _ pre_boxVarMap ->
                let nonpureStmtCount = ref 0 in
                let ss =
                  List.map
@@ -1663,76 +1663,72 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                  let post_boxArgMapWithThis = ("this", boxId) :: post_boxArgMap in 
                  let boxChunk = Chunk ((boxpred_symb, true), [], box_coef, boxId::List.map (fun (x, t) -> t) post_boxArgMap, None) in
                  let h = boxChunk :: h in
+                 (* TODO: consume_asn on the next line cannot use spatial auto lemmas that make use of boxChunk (i.e. do a perform_action) as this is box reentry *)
                  consume_asn rules [] h ghostenv post_boxArgMapWithThis inv true real_unit $. fun _ h _ post_boxVarMap _ ->
                  let old_boxVarMap = List.map (fun (x, t) -> ("old_" ^ x, t)) pre_boxVarMap in
                  let post_env = [("actionHandles", consumed_handles_ids)] @ old_boxVarMap @ post_boxVarMap @ aargbs in
                  assert_expr post_env post h post_env closeBraceLoc "Action postcondition failure." None;
                  let reset_current_box_level h cont =
                    if (! nonpure_ctxt) then
-                     consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
-                           cont h
-                     )
+                     consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] -> cont h)
                    else begin
                      match old_current_box_level_chunk with
                        None -> cont h
                      | Some chunk -> 
-                       consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] ->
-                        cont (chunk :: h)
-                      )
+                       consume_chunk rules h ghostenv env [] lcb (current_box_level_symb, true) [] real_unit dummypat None [TermPat(box_level_term)] (fun _ h box_coef ts chunk_size ghostenv env [] -> cont (chunk :: h))
                    end
                  in
                  reset_current_box_level h (fun h ->
-                 
-                 let produce_post_handle h used_handle_ids fresh lph post_hpn post_hp_args cont =
-                   let (post_handlePred_parammap, post_handlePred_extended, post_handlePred_inv) =
-                     if post_hpn = pre_bcn ^ "_handle" then
-                       ([], None, EmpAsn l)
-                     else
-                       match try_assoc post_hpn hpmap with
-                         None -> static_error lph "Post-state handle predicate: No such handle predicate in box class." None
-                       | Some (_, hppmap, extended, inv, _) ->
-                         (hppmap, extended, inv)
+                   let produce_post_handle h used_handle_ids fresh lph post_hpn post_hp_args cont =
+                     let (post_handlePred_parammap, post_handlePred_extended, post_handlePred_inv) =
+                       if post_hpn = pre_bcn ^ "_handle" then
+                         ([], None, EmpAsn l)
+                       else
+                         match try_assoc post_hpn hpmap with
+                           None -> static_error lph "Post-state handle predicate: No such handle predicate in box class." None
+                         | Some (_, hppmap, extended, inv, _) ->
+                           (hppmap, extended, inv)
+                     in
+                     let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
+                       None-> static_error lph ("No such predicate family: "^post_hpn) None
+                     | Some x-> x
+                     in
+                     let real_post_hp_args = if fresh then post_hp_args else begin (if (List.length post_hp_args) == 0 then static_error lph "Post-state handle predicate: Incorrect number of arguments." None); List.tl post_hp_args end in
+                     let post_hpargs =
+                       match zip post_handlePred_parammap real_post_hp_args with
+                         None -> static_error lph "Post-state handle predicate: Incorrect number of arguments." None
+                       | Some bs ->
+                         List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
+                     in
+                     let handleId = if fresh then get_unique_var_symb "ha" HandleIdType else eval env (check_expr_t (pn,ilist) tparams tenv (List.hd post_hp_args) HandleIdType) in
+                     let _ = begin
+                     (if not fresh && List.exists (fun id -> (ctxt#query (ctxt#mk_eq handleId id))) used_handle_ids then assert_false h env lph "Handle id already in use." None;);
+                     (if not fresh && not (List.exists (fun id -> (ctxt#query (ctxt#mk_eq handleId id))) consumed_handle_id_list) then assert_false h env lph "Handle id must belong to handle that was consumed when entering this box." None;);
+                     end
+                     in
+                     let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
+                     assert_handle_invs pre_bcn hpmap post_hpn post_hpinv_env h $. fun h ->
+                     let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
+                     let h = hpChunk :: h  in
+                     cont h (handleId :: used_handle_ids)
                    in
-                   let (_, _, _, _, post_handlePred_symb, _) = match try_assoc' (pn,ilist) post_hpn predfammap with 
-                     None-> static_error lph ("No such predicate family: "^post_hpn) None
-                   | Some x-> x
+                   let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
+                   let rec produce_handle h used_handle_ids fresh phandles cont =
+                     match phandles with
+                       ConditionalProducingHandlePredicate(l, condition, name, args, rest) ->
+                         let e = check_expr_t (pn,ilist) tparams tenv condition boolt in
+                         let condition_term = eval env e in
+                         branch
+                           (fun _ -> assume condition_term (fun _ -> produce_post_handle h used_handle_ids fresh l name args cont))
+                           (fun _ -> assume (ctxt#mk_not condition_term) (fun _ -> produce_handle h used_handle_ids fresh rest cont))
+                     | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle h used_handle_ids fresh l name args cont
                    in
-                   let real_post_hp_args = if fresh then post_hp_args else begin (if (List.length post_hp_args) == 0 then static_error lph "Post-state handle predicate: Incorrect number of arguments." None); List.tl post_hp_args end in
-                   let post_hpargs =
-                     match zip post_handlePred_parammap real_post_hp_args with
-                       None -> static_error lph "Post-state handle predicate: Incorrect number of arguments." None
-                     | Some bs ->
-                       List.map (fun ((x, t), e) -> let e = check_expr_t (pn,ilist) tparams tenv e t in (x, eval env e)) bs
+                   let rec produce_all_post_handles used_handle_ids posts h cont =
+                     match posts with
+                       [] -> cont h
+                     | (fresh, producing_expr) :: rest ->  produce_handle h used_handle_ids fresh producing_expr (fun h used_handle_ids -> produce_all_post_handles used_handle_ids rest h cont)
                    in
-                   let handleId = if fresh then get_unique_var_symb "ha" HandleIdType else eval env (check_expr_t (pn,ilist) tparams tenv (List.hd post_hp_args) HandleIdType) in
-                   let _ = begin
-                   (if not fresh && List.exists (fun id -> (ctxt#query (ctxt#mk_eq handleId id))) used_handle_ids then assert_false h env lph "Handle id already in use." None;);
-                   (if not fresh && not (List.exists (fun id -> (ctxt#query (ctxt#mk_eq handleId id))) consumed_handle_id_list) then assert_false h env lph "Handle id must belong to handle that was consumed when entering this box." None;);
-                   end
-                   in
-                   let post_hpinv_env = [("predicateHandle", handleId)] @ post_hpargs @ post_boxVarMap in
-                   assert_handle_invs pre_bcn hpmap post_hpn post_hpinv_env h $. fun h ->
-                   let hpChunk = Chunk ((post_handlePred_symb, true), [], real_unit, handleId::boxId::List.map (fun (x, t) -> t) post_hpargs, None) in
-                   let h = hpChunk :: h  in
-                   cont h (handleId :: used_handle_ids)
-                 in
-                 let tcont _ _ _ h env = tcont sizemap tenv ghostenv h (List.filter (fun (x, _) -> List.mem_assoc x tenv) env) in
-                 let rec produce_handle h used_handle_ids fresh phandles cont =
-                   match phandles with
-                     ConditionalProducingHandlePredicate(l, condition, name, args, rest) ->
-                       let e = check_expr_t (pn,ilist) tparams tenv condition boolt in
-                       let condition_term = eval env e in
-                       branch
-                         (fun _ -> assume condition_term (fun _ -> produce_post_handle h used_handle_ids fresh l name args cont))
-                         (fun _ -> assume (ctxt#mk_not condition_term) (fun _ -> produce_handle h used_handle_ids fresh rest cont))
-                   | BasicProducingHandlePredicate(l, name, args) -> produce_post_handle h used_handle_ids fresh l name args cont
-                 in
-                 let rec produce_all_post_handles used_handle_ids posts h cont =
-                   match posts with
-                     [] -> cont h
-                   | (fresh, producing_expr) :: rest ->  produce_handle h used_handle_ids fresh producing_expr (fun h used_handle_ids -> produce_all_post_handles used_handle_ids rest h cont)
-                 in
-                 produce_all_post_handles [] produced_handle_predicates h (fun h -> tcont sizemap tenv ghostenv h env)
+                   produce_all_post_handles [] produced_handle_predicates h (fun h -> tcont sizemap tenv ghostenv h env)
              )
            ) (fun _ _ _ _ -> static_error lcb "Returning from inside perform_action not allowed." None) (fun _ _ _ _ _ -> static_error lcb "Exception from inside perform_action not allowed." None)
           )
