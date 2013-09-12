@@ -12,6 +12,24 @@ class LimitsTest {
 
 class AutoSliceUpcastTest {
     static void foo(Object[] xs)
+        //@ requires [?f]array_slice(xs, 0, xs.length, ?elems);
+        //@ ensures [f]array_slice(xs, 0, xs.length, elems);
+    {
+    }
+    
+    static void bar(Integer[] xs)
+        //@ requires [_]xs[..] |-> ?elems;
+        //@ ensures [_]xs[..] |-> elems;
+    {
+        // Here, an auto-upcast of the array_slice chunk happens.
+        // This leaks half of the fraction (to prevent assignment, which may raise ArrayStoreException).
+        // Only makes sense for read-only arrays.
+        foo(xs);
+    }
+}
+    
+class AutoSliceUpcastTest1 {
+    static void foo(Object[] xs)
         //@ requires [?f]xs[..] |-> ?elems;
         //@ ensures [f]xs[..] |-> elems;
     {
@@ -27,7 +45,6 @@ class AutoSliceUpcastTest {
         foo(xs);
     }
 }
-    
 
 class InitTest {
     static void test()

@@ -1729,7 +1729,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               cont (Some h)
       in
       let get_slice_upcast_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
-        match elem_tp with
+        match unfold_inferred_type elem_tp with
           ObjType _ | ArrayType _ ->
           begin match extract
             begin function
