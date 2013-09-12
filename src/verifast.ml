@@ -2062,7 +2062,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   (* Region: verification of function bodies *)
   and add_rule_for_lemma lemma_name l pre post ps frac q_ref q_input_args unbound =
     let (_, _, _, _, q_symb, Some q_inputParamCount) = List.assoc q_ref#name predfammap in
-    let rule h targs terms_are_well_typed coef coefpat ts cont =
+    let rule l h targs terms_are_well_typed coef coefpat ts cont =
       let rec f input_args ts unbound env =
         if unbound = [] then
           env

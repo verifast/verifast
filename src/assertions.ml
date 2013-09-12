@@ -760,7 +760,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match rules with
                  [] -> cont ()
                 | rule::rules ->
-                  rule h targs terms_are_well_typed coef coefpat ts $. fun h ->
+                  rule l h targs terms_are_well_typed coef coefpat ts $. fun h ->
                   match h with
                     None -> iter rules
                   | Some h ->
@@ -1338,7 +1338,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* transitive auto-close rules for precise predicates and predicate families *)
     List.iter
       (fun (from_symb, indices, to_symb, path) ->
-        let transitive_auto_close_rule h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let transitive_auto_close_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-close:" ^ (ctxt#pprint from_symb)) in*)
           let rec can_apply_rule current_this_opt current_targs current_indices current_input_args path =
             match path with
@@ -1480,7 +1480,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     (* transitive auto-open rules for precise predicates and predicate families *)
     List.iter 
       (fun (from_symb, indices, to_symb, path) ->
-        let transitive_auto_open_rule h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
+        let transitive_auto_open_rule l h wanted_targs terms_are_well_typed wanted_coef wanted_coefpat wanted_indices_and_input_ts cont =
           (*let _ = print_endline ("trying to auto-open : " ^ (ctxt#pprint from_symb)) in *)
           let rec try_apply_rule_core actual_this_opt actual_targs actual_indices actual_input_args path = 
             match path with
@@ -1645,7 +1645,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             with_context (Executing (h, [], l, "Producing auto-closed chunk")) $. fun () ->
             cont (Chunk (g, targs, coef, inputArgs @ outputArgs, None)::h)
           in
-          let rule h targs terms_are_well_typed coef coefpat ts cont =
+          let rule l h targs terms_are_well_typed coef coefpat ts cont =
             (*let _ = print_endline "trying to close empty predicate" in*)
             if terms_are_well_typed && match_func h targs ts then exec_func h targs coef coefpat ts (fun h -> cont (Some h)) else cont None
           in
@@ -1659,7 +1659,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let array_element_symb = array_element_symb () in
       let array_slice_symb = array_slice_symb () in
       let array_slice_deep_symb = array_slice_deep_symb () in
-      let get_element_rule h [elem_tp] terms_are_well_typed coef coefpat [arr; index] cont =
+      let get_element_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; index] cont =
         match extract
           begin function
             (Chunk ((g, is_symb), elem_tp'::targs_rest, coef, arr'::istart'::iend'::args_rest, _)) when
@@ -1728,7 +1728,32 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               produce_asn tpenv h ghostenv env wbody coef None None $. fun h _ _ ->
               cont (Some h)
       in
-      let get_slice_rule h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
+      let get_slice_upcast_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
+        match elem_tp with
+          ObjType _ | ArrayType _ ->
+          begin match extract
+            begin function
+              Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _) when
+                g' == array_slice_symb && definitely_equal arr' arr && definitely_equal istart' istart && definitely_equal iend' iend &&
+                is_assignable_to elem_tp' elem_tp ->
+              Some (elem_tp', coef', elems')
+            | _ -> None
+            end
+            h
+          with
+            None -> cont None
+          | Some ((elem_tp', coef', elems'), h') ->
+            let f1 = get_unique_var_symb "f" RealType in
+            let f2 = get_unique_var_symb "f" RealType in
+            let c1 = Chunk ((array_slice_symb, true), [elem_tp], f1, [arr; istart; iend; elems'], None) in
+            let c2 = Chunk ((array_slice_symb, true), [elem_tp'], f2, [arr; istart; iend; elems'], None) in
+            with_context (Executing (h, [], l, "Auto-upcasting array slice (leaking a fraction)")) $. fun () ->
+            cont (Some (c1::c2::h'))
+          end
+        | _ ->
+          cont None
+      in
+      let get_slice_rule l h [elem_tp] terms_are_well_typed coef coefpat [arr; istart; iend] cont =
         let extract_slice h cond cont' =
           match extract
             begin function
@@ -1798,7 +1823,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let chunks_after = mk_chunk iend iend_last elems_last_after true in
           cont (Some (target_chunk @ chunks_before @ chunks_after @ h))
       in
-      let get_slice_deep_rule h [elem_tp; a_tp; v_tp] terms_are_well_typed coef coefpat [arr; istart; iend; p; info] cont = 
+      let get_slice_deep_rule l h [elem_tp; a_tp; v_tp] terms_are_well_typed coef coefpat [arr; istart; iend; p; info] cont = 
         let extract_slice_deep h cond cont' =
           let consume_array_element coef' index elem h =
             (* Close a unit array_slice_deep chunk *)
@@ -1912,6 +1937,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       in
       begin
       add_rule array_element_symb get_element_rule;
+      add_rule array_slice_symb get_slice_upcast_rule;
       add_rule array_slice_symb get_slice_rule;
       add_rule array_slice_deep_symb get_slice_deep_rule
       end

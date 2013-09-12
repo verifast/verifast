@@ -1550,6 +1550,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
+    | (ArrayType et, ArrayType et0) -> expect_type_core l msg et et0
     | (StaticArrayType _, PtrType _) -> ()
     | (UChar, IntType) -> ()
     | (UChar, ShortType) -> ()
