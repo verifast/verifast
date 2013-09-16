@@ -2848,25 +2848,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             (WMethodCall (l, tn', g, sign, es, fb), rt, None)
         in
         begin match ms with
-          [] -> static_error l "No matching method3" None
+          [] -> static_error l "No matching method" None
         | [m] -> make_well_typed_method m
-        | ms when language = Java -> 
+        | ms -> 
           begin
-            let rec look_for_function_with_exact_param_types ms =
-              match ms with
-                ((sign, _) as m)::rest ->
-                  let check_param_type pt at = 
-                    pt = at 
-                  in
-                  if List.for_all2 check_param_type sign argtps then
-                    make_well_typed_method m
-                  else
-                    look_for_function_with_exact_param_types rest
-              | [] -> static_error l "Multiple matching overloads_foo" None
-            in
-            look_for_function_with_exact_param_types ms
+            match try_assoc0 argtps ms with
+              None -> static_error l "Multiple matching overloads" None
+            | Some m -> make_well_typed_method m
           end
-        | _ -> static_error l "Multiple matching overloads" None
         end
       in
       begin match fb with

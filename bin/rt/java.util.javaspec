@@ -203,8 +203,8 @@ public class ArrayList implements List {
 public class Arrays {
     
     static List asList(Object[] a);
-        //@ requires [?f]array_slice(a, ?start, ?end, ?es);
-        //@ ensures [f]array_slice(a, start, end, es) &*& result.List(es);
+        //@ requires [?f]a[..] |-> ?es;
+        //@ ensures [f]a[..] |-> es;
     
 }
 
