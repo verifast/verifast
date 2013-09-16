@@ -123,6 +123,9 @@ endif
 # For building Java frontend prototype
 java_front: lexer.cmx parser.cmx
 	${MAKE} -C java_frontend OCAMLOPTOPT=${OCAMLOPTOPT} CAMLP4O=${CAMLP4O}
+test_java_front: build test_plugin 
+	$(SET_ENV); \
+	cd ..; bin/mysh -cpus $(NUMCPU) < examples/java/frontend/frontend.mysh
 
 JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx  communication.cmx \
                 annotation_type_checker.cmx java_frontend.cmx ast_translator.cmx

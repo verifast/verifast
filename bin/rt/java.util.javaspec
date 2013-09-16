@@ -204,7 +204,7 @@ public class Arrays {
     
     static List asList(Object[] a);
         //@ requires [?f]a[..] |-> ?es;
-        //@ ensures [f]a[..] |-> es;
+        //@ ensures [f]a[..] |-> es &*& result.List(es);
     
 }
 
