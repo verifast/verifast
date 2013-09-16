@@ -1213,7 +1213,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_keep_provide_files = true;
                 option_include_paths = !include_paths;
                 option_safe_mode = false;
-                option_header_whitelist = []
+                option_header_whitelist = [];
+                option_use_java_frontend = false
               }
               in
               let reportExecutionForest =
