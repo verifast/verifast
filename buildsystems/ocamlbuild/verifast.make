@@ -12,7 +12,7 @@ verifast: run_ocamlbuild_verifast
 verifast: INCLUDECODE+=$(INCLUDECODE_VFCOMMON)
 verifast: BINNAME=verifast
 verifast: SRCNAME=vfconsole.ml
-verifast: OCAMLBUILDFLAGS+=$(OCAMLBUILDFLAGS_VFCOMMON)
+verifast: OCAMLBUILDFLAGS+=$(OCAMLBUILDFLAGS_VFCOMMON) -lib unix
 run_ocamlbuild_verifast: run_ocamlbuild_vfcommon
 
 .PHONY: verifast

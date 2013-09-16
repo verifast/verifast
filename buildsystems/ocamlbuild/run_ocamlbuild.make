@@ -38,6 +38,7 @@ endif
 # output files. Other build tools sometimes put their garbage there.
 clean_external:
 	rm -f $(wildcard $(addprefix $(SRCDIR)/, *.cm* *.o *.a))
+	rm -f $(wildcard $(addprefix $(SRCDIR)/java_frontend/, *.cm* *.o *.a))
 
 $(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbuild
 	cat $(INCLUDECODE) $(SRCDIR)/$(SRCNAME) > $(SRCDIR)/buildcat_$(BINNAME).ml &&\
@@ -46,7 +47,7 @@ $(addprefix run_ocamlbuild_,$(OCAMLBUILD_SUPERTARGETS)): clean_external ocamlbui
 	export CYGWIN=nodosfilewarning &&\
 	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(LDLPATH) &&\
 	$(OCAMLBUILD) $(OCAMLBUILDFLAGS) -build-dir $(BUILDDIR)/$(BINNAME) buildcat_$(BINNAME).$(OCAMLBUILD_KIND) &&\
-	cp $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).$(OCAMLBUILD_KIND) $(BINDIR)/$(BINNAME)$(DOTEXE) &&\
+	cp -f $(BUILDDIR)/$(BINNAME)/buildcat_$(BINNAME).$(OCAMLBUILD_KIND) $(BINDIR)/$(BINNAME)$(DOTEXE) &&\
 	chmod +x $(BINDIR)/$(BINNAME)$(DOTEXE)
 	
 	

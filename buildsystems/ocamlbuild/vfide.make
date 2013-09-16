@@ -15,7 +15,7 @@ ifneq ($(OS), macos)
 endif
 
 vfide: run_ocamlbuild_vfide
-vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 -lib unix $(OCAMLBUILDFLAGS_VFCOMMON)
+vfide: OCAMLBUILDFLAGS+=-use-ocamlfind -pkgs lablgtk2 $(OCAMLBUILDFLAGS_VFCOMMON)
 run_ocamlbuild_vfide: lablgtk2 ocamlfind run_ocamlbuild_vfcommon
 vfide: BINNAME=vfide
 vfide: SRCNAME=vfide.ml
