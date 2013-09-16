@@ -367,12 +367,18 @@ let string_of_range_kind = function
     @param reportShouldFail Function that will be called whenever a should-fail directive is found in the source code.
       Should-fail directives are of the form //~ and are used for writing negative VeriFast test inputs. See tests/errors.
   *)
-let make_lexer_core keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
+let make_lexer_core keywords ghostKeywords startpos text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
   let textlength = String.length text in
   let textpos = ref 0 in
   let line = ref 1 in
   let linepos = ref 0 in
-  
+  let path =
+    match startpos with
+      (p, l, c) ->
+        line := l;
+        linepos := c;
+        p
+  in
   let new_loc_line () =
       line := !line + 1;
       linepos := !textpos
@@ -424,7 +430,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
   in
 
   let tokenpos = ref 0 in
-  let token_srcpos = ref (path, 1, 1) in
+  let token_srcpos = ref (path, !line, !linepos + 1) in
 
   let current_srcpos() = (path, !line, !textpos - !linepos + 1) in
   let current_loc() = (!token_srcpos, current_srcpos()) in
@@ -479,7 +485,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
       if n > 2 && id.[n - 2] = '_' && id.[n - 1] = 'H' then PreprocessorSymbol id else Ident id
   and keyword_or_error s =
     try Hashtbl.find (get_kwd_table()) s with
-      Not_found -> error "Illegal character"
+      Not_found -> error ("Illegal character: " ^ s)
   in
   let start_token() =
     tokenpos := !textpos;
@@ -584,7 +590,7 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
     | c -> start_token(); text_junk (); Some (keyword_or_error (String.make 1 c))
   and ident () =
     match text_peek () with
-      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'') as c ->
+      ('A'..'Z' | 'a'..'z' | '\128'..'\255' | '0'..'9' | '_' | '\'' | '$') as c ->
       text_junk (); store c; ident ()
     | _ -> Some (ident_or_keyword (get_string ()) true)
   and ident2 () =
@@ -797,9 +803,13 @@ let make_lexer_core keywords ghostKeywords path text reportRange inComment inGho
    in_comment,
    in_ghost_range)
 
+let make_lexer_helper keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
+  let startpos = (path, 1, 0) in
+  make_lexer_core keywords ghostKeywords startpos text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar
+
 let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange reportShouldFail =
   let {file_opt_annot_char=annotChar} = get_file_options text in
-  let (loc, ignore_eol, token_stream, _, _) = make_lexer_core keywords ghostKeywords path text reportRange false (match inGhostRange with None -> false | Some b -> b) true reportShouldFail annotChar in
+  let (loc, ignore_eol, token_stream, _, _) = make_lexer_helper keywords ghostKeywords path text reportRange false (match inGhostRange with None -> false | Some b -> b) true reportShouldFail annotChar in
   (loc, ignore_eol, token_stream)
 
 (* The preprocessor *)

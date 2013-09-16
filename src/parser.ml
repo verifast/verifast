@@ -852,6 +852,12 @@ and
      Match_failure _ -> s2 )
 and
   parse_loop_core = parser [<
+    (inv, dec) = parse_loop_core0;
+    body = parse_stmt
+  >] -> (inv, dec, [body])
+and
+  parse_loop_core0 = parser [<
+  
     inv =
       opt
         begin parser
@@ -865,8 +871,7 @@ and
         | [< '(_, Kwd "invariant"); p = parse_pred; '(_, Kwd ";"); >] -> LoopInv p
         end;
     dec = opt (parser [< '(_, Kwd "/*@"); '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); '(_, Kwd "@*/") >] -> decr | [< '(_, Kwd "decreases"); decr = parse_expr; '(_, Kwd ";"); >] -> decr );(* only allows decreases if invariant provided *)
-    body = parse_stmt;
-  >] -> (inv, dec, [body])
+  >] -> (inv, dec)
 and
   packagename_of_read l e =
   match e with

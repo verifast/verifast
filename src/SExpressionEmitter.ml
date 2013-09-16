@@ -79,7 +79,7 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | ArrayType _             -> unsupported "ArrayType"
     | BoxIdType _             -> unsupported "BoxIdType"
     | HandleIdType _          -> unsupported "HandleIdType"
-    | AnyType _               -> unsupported "AnyType"
+    | AnyType                 -> aux "AnyType"
     | TypeParam _             -> unsupported "TypeParam"
     | InferredType _          -> unsupported "InferredType"
     | ClassOrInterfaceName _  -> unsupported "ClassOrInterfaceName"
@@ -87,17 +87,30 @@ let rec sexpr_of_type_ (t : type_) : sexpression =
     | RefType _               -> unsupported "RefType"
 
 let rec sexpr_of_type_expr : type_expr -> sexpression = function
-  | StructTypeExpr (_, name)   -> List [ Symbol "type-expr-struct"
-                                       ; Symbol name ]
-  | PtrTypeExpr (_, te)        -> List [ Symbol "type-expr-pointer-to"
-                                       ; sexpr_of_type_expr te ]
-  | ManifestTypeExpr (_, t)    -> List [ Symbol "type-expr-manifest"
-                                       ; sexpr_of_type_ t ]
-  | ArrayTypeExpr _            -> unsupported "ArrayTypeExpr"
-  | IdentTypeExpr _            -> unsupported "IdentTypeExpr"
-  | ConstructedTypeExpr _      -> unsupported "ConstructedTypeExpr"
+  | StructTypeExpr (_, name)  -> 
+    List [ Symbol "type-expr-struct"
+         ; Symbol name ]
+  | PtrTypeExpr (_, te) -> 
+    List [ Symbol "type-expr-pointer-to"
+         ; sexpr_of_type_expr te ]
+  | ManifestTypeExpr (_, t) -> 
+    List [ Symbol "type-expr-manifest"
+         ; sexpr_of_type_ t ]
+  | ArrayTypeExpr (_, te) ->
+    List [ Symbol "type-expr-array-type"
+         ; sexpr_of_type_expr te ]
+  | IdentTypeExpr (_, package, name) -> 
+    build_list [ Symbol "type-expr-ident" ]
+               [ "package", Symbol (match package with None -> "" | Some x -> x)
+               ; "name", Symbol name ]
+  | ConstructedTypeExpr (_, x, targs) -> 
+    build_list [ Symbol "type-expr-constructed" ]
+               [ "gen-type", Symbol x
+               ; "type-args", sexpr_of_list sexpr_of_type_expr targs ]
   | PredTypeExpr _             -> unsupported "PredTypeExpr"
-  | PureFuncTypeExpr _         -> unsupported "PureFuncTypeExpr"
+  | PureFuncTypeExpr (_, exprs) -> 
+    build_list [ Symbol "type-expr-pure-func" ]
+               [ "type-exprs", sexpr_of_list sexpr_of_type_expr exprs ]
 
 let sexpr_of_type_expr_option : type_expr option -> sexpression = function
   | Some t -> sexpr_of_type_expr t
@@ -210,35 +223,57 @@ let rec sexpr_of_expr (expr : expr) : sexpression =
                  ; "op", sexpr_of_operator op
                  ; "post", sexpr_of_bool post ]
     | StringLit _               -> unsupported "StringLit"
-    | ClassLit _                -> unsupported "ClassLit"
+    | ClassLit (_, cn) -> List [ Symbol "expr-class-lit"; Symbol cn ]
     | ArrayLengthExpr _         -> unsupported "ArrayLengthExpr"
     | WRead _                   -> unsupported "WRead"
     | ReadArray _               -> unsupported "ReadArray"
     | WReadArray _              -> unsupported "WReadArray"
     | Deref _                   -> unsupported "Deref"
-    | ExprCallExpr _            -> unsupported "ExprCallExpr"
+    | ExprCallExpr (_, expr, args) ->
+      build_list [ Symbol "expr-call-expr" ]
+                 [ "expr", sexpr_of_expr expr
+                 ; "args", sexpr_of_list sexpr_of_expr args ]
     | WFunPtrCall _             -> unsupported "WFunPtrCall"
     | WPureFunCall _            -> unsupported "WPureFunCall"
     | WPureFunValueCall _       -> unsupported "WPureFunValueCall"
     | WFunCall _                -> unsupported "WFunCall"
     | WMethodCall _             -> unsupported "WMethodCall"
     | NewArray _                -> unsupported "NewArray"
-    | NewObject _               -> unsupported "NewObject"
-    | NewArrayWithInitializer _ -> unsupported "NewArrayWithInitializer"
+    | NewObject (l, cn, args) ->
+      build_list [ Symbol "expr-new-obj"; Symbol cn ]
+                 [ "args", sexpr_of_list sexpr_of_expr args ]
+    | NewArrayWithInitializer (l, texpr, args) -> 
+      build_list [ Symbol "expr-array-init" ]
+                 [ "type", sexpr_of_type_expr texpr
+                 ; "init", sexpr_of_list sexpr_of_expr args ]
     | IfExpr _                  -> unsupported "IfExpr"
     | SwitchExpr _              -> unsupported "SwitchExpr"
     | PredNameExpr _            -> unsupported "PredNameExpr"
-    | CastExpr _                -> unsupported "CastExpr"
+    | CastExpr (_, trunc, texpr, expr) ->
+      build_list [ Symbol "expr-cast" ]
+                 [ "typ", sexpr_of_type_expr texpr 
+                 ; "expr", sexpr_of_expr expr ]
     | AddressOf _               -> unsupported "AddressOf"
     | ProverTypeConversion _    -> unsupported "ProverTypeConversion"
     | ArrayTypeExpr' _          -> unsupported "ArrayTypeExpr'"
     | InstanceOfExpr _          -> unsupported "InstanceOfExpr"
+    | RealLit _                 -> unsupported "RealLit"
+    | Upcast _                  -> unsupported "Upcast"
+    | WidenedParameterArgument _-> unsupported "WidenedParameterArgument"
+    | SuperMethodCall _         -> unsupported "SuperMethodCall"
+    | WSuperMethodCall _        -> unsupported "WSuperMethodCall"
+    | InitializerList (_, exprs) -> 
+      build_list [ Symbol "expr-init-list" ]
+                 [ "exprs", sexpr_of_list sexpr_of_expr exprs ]
+    | SliceExpr _               -> unsupported "SliceExpr"
 
 and sexpr_of_pat (pat : pat) : sexpression =
   match pat with
-    | LitPat expr     -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
-    | VarPat (l, str) -> List [ Symbol "pat-variable"; Symbol str ]
-    | DummyPat        -> List [ Symbol "pat-dummy" ]
+    | LitPat expr            -> List [ Symbol "pat-literal"; sexpr_of_expr expr ]
+    | VarPat (l, str)        -> List [ Symbol "pat-variable"; Symbol str ]
+    | DummyPat               -> List [ Symbol "pat-dummy" ]
+    | CtorPat (l, str, pats) -> build_list [ Symbol "pat-constructor"; Symbol str ]
+                                           [ "pats", sexpr_of_list sexpr_of_pat pats ]
 
 let rec sexpr_of_pred (asn : asn) : sexpression =
   match asn with
@@ -268,18 +303,14 @@ let rec sexpr_of_pred (asn : asn) : sexpression =
            ; sexpr_of_expr expr ]
     | WPointsTo _       -> unsupported "WAccess"
     | WPredAsn _     -> unsupported "WCallPred"
-    | InstPredAsn _  -> unsupported "InstCallPred"
+    | InstPredAsn (_, expr1, name, expr2, pats)  ->
+      build_list [ Symbol "pred-inst-pred"; Symbol name ]
+                 [ "expr", sexpr_of_expr expr1
+                 ; "init", sexpr_of_expr expr2
+                 ; "pats", sexpr_of_list sexpr_of_pat pats]
     | WInstPredAsn _ -> unsupported "WInstCallPred"
     | SwitchAsn _    -> unsupported "SwitchPred"
     | CoefAsn _      -> unsupported "CoefPred"
-
-let sexpr_of_loop_spec (spec : loop_spec) : sexpression =
-  match spec with
-    | LoopInv asn     -> List [ Symbol "loop-invariant"
-                               ; sexpr_of_pred asn ]
-    | LoopSpec (p, q)  -> List [ Symbol "loop-spec"
-                               ; sexpr_of_pred p
-                               ; sexpr_of_pred q ]
 
 let rec sexpr_of_stmt (stmt : stmt) : sexpression =
   match stmt with
@@ -357,7 +388,10 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
       List [ Symbol "stmt-assert"
            ; sexpr_of_pred asn ]
     | NonpureStmt _                          -> unsupported "stmt-NonpureStmt"
-    | SwitchStmt _                           -> unsupported "stmt-SwitchStmt"
+    | SwitchStmt (loc, switch, cases) ->
+      build_list [ Symbol "stmt-switch" ]
+                 [ "switch", sexpr_of_expr switch
+                 ; "cases", sexpr_of_list sexpr_of_stmt_clause cases ]
     | Leak _                                 -> unsupported "stmt-Leak"
     | PerformActionStmt _                    -> unsupported "stmt-PerformActionStmt"
     | SplitFractionStmt _                    -> unsupported "stmt-SplitFractionStmt"
@@ -456,14 +490,112 @@ and sexpr_of_decl (decl : decl) : sexpression =
         List [ Symbol "declare-import-module"
              ; Symbol name ]
     | Inductive _                 -> unsupported "Inductive"
-    | Class _                     -> unsupported "Class"
-    | Interface _                 -> unsupported "Interface"
+    | Interface (_, id, inters, fields, meths, preds) ->
+      build_list [ Symbol "declare-interface"
+                 ; Symbol id ]
+                 [ "super-interfaces", List (List.map symbol inters)
+                 ; "fields", sexpr_of_list sexpr_of_field fields
+                 ; "methods", sexpr_of_list sexpr_of_meths meths 
+                 ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
+    | Class (_, abs, final, id, meths, fields, cons, super, inters, preds) ->
+      build_list [ Symbol "declare-class"
+                 ; Symbol id ]
+                 [ "super-class", symbol super
+                 ; "super-interfaces", List (List.map symbol inters)
+                 ; "methods", sexpr_of_list sexpr_of_meths meths 
+                 ; "fields", sexpr_of_list sexpr_of_field fields
+                 ; "construcors", sexpr_of_list (sexpr_of_constructor id) cons 
+                 ; "instance-preds", sexpr_of_list sexpr_of_instance_pred preds ]
     | PredCtorDecl _              -> unsupported "PredCtorDecl"
     | FuncTypeDecl _              -> unsupported "FuncTypeDecl"
     | BoxClassDecl _              -> unsupported "BoxClassDecl"
     | EnumDecl _                  -> unsupported "EnumDecl"
     | Global _                    -> unsupported "Global"
     | UnloadableModuleDecl _      -> unsupported "UnloadableModuleDecl"
+
+and sexpr_of_meths (meth : meth) : sexpression =
+  match meth with
+  | Meth (loc, ghost, rtype, name, params, contract, body, bind, vis, abs) ->
+    let sexpr_of_arg (t, id) =
+      List [ Symbol id; sexpr_of_type_expr t ]
+    in
+    let body =
+      match body with
+        | None           -> [ ]
+        | Some (body, _) -> [ "body", List (List.map sexpr_of_stmt body) ]
+    in
+    let contract =
+      match contract with
+        | None -> []
+        | Some (pre, post,_) -> [ "precondition", sexpr_of_pred pre
+                                ; "postcondition", sexpr_of_pred post ] 
+    in        
+    let kw = List.concat [ [ "ghos", sexpr_of_ghostness ghost
+                            ; "return-type", sexpr_of_type_expr_option rtype
+                            ; "parameters", List (List.map sexpr_of_arg params) ]
+                          ; body
+                          ; contract ]
+    in
+      build_list [ Symbol "declare-method"; Symbol name ] kw
+
+and sexpr_of_constructor (name : string) (cons : cons) : sexpression =
+  match cons with
+  | Cons (loc, params, contract, body, vis) ->
+    let sexpr_of_arg (t, id) =
+      List [ Symbol id; sexpr_of_type_expr t ]
+    in
+    let body =
+      match body with
+        | None           -> [ ]
+        | Some (body, _) -> [ "body", List (List.map sexpr_of_stmt body) ]
+    in
+    let contract =
+      match contract with
+        | None -> []
+        | Some (pre, post,_) -> [ "precondition", sexpr_of_pred pre
+                                ; "postcondition", sexpr_of_pred post ] 
+    in        
+    let kw = List.concat [ [ "parameters", List (List.map sexpr_of_arg params) ]
+                          ; body
+                          ; contract ]
+    in
+      build_list [ Symbol "declare-cons"; Symbol name ] kw
+
+and sexpr_of_loop_spec (spec : loop_spec) : sexpression =
+  match spec with
+    | LoopInv asn     -> List [ Symbol "loop-invariant"
+                               ; sexpr_of_pred asn ]
+    | LoopSpec (p, q)  -> List [ Symbol "loop-spec"
+                               ; sexpr_of_pred p
+                               ; sexpr_of_pred q ]
+
+and sexpr_of_instance_pred (pred : instance_pred_decl) : sexpression =
+  match pred with
+    | InstancePredDecl (_, name, params, body) ->
+      let sexpr_of_arg (t, id) =
+        List [ Symbol id; sexpr_of_type_expr t ]
+      in
+      let body =
+        match body with
+          | None     -> [ ]
+          | Some asn -> ["body", sexpr_of_pred asn ]
+      in  
+      let kw = List.concat [ ["parameters", List (List.map sexpr_of_arg params)]
+                           ; body ]
+      in
+      build_list [ Symbol "declare-instance-predicate"
+                 ; Symbol name ]
+                 kw
+    
+and sexpr_of_stmt_clause (clause : switch_stmt_clause) : sexpression =
+  match clause with
+  | SwitchStmtClause (loc, expr, stmts) ->
+    build_list [ Symbol "clause-case" ]
+               [ "match", sexpr_of_expr expr
+               ; "statements", sexpr_of_list sexpr_of_stmt stmts ]
+  | SwitchStmtDefaultClause (loc, stmts) ->
+    build_list [ Symbol "clause-default" ]
+               [ "statements", sexpr_of_list sexpr_of_stmt stmts ]
 
 let sexpr_of_import (Import (loc, name, entry)) : sexpression =
   List [ Symbol "import"

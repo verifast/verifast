@@ -1284,7 +1284,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       end
     | StructTypeExpr (l, sn) ->
       if not (List.mem_assoc sn structmap0 || List.mem_assoc sn structdeclmap) then
-        static_error l "No such struct." None
+        static_error l ("No such struct: \"" ^ sn ^ "\".") None
       else
         StructType sn
     | PtrTypeExpr (l, te) -> PtrType (check te)
@@ -2638,7 +2638,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         scope := Some PureFuncName; (Var (l, x, scope), List.fold_right (fun t1 t2 -> PureFuncType (t1, t2)) pts t, None)
       | None ->
       if language = Java then
-        static_error l "No such variable, field, class, interface, package, inductive datatype constructor, or predicate" None
+        static_error l ("No such variable, field, class, interface, package, inductive datatype constructor, or predicate: " ^ x) None
       else
         static_error l ("No such variable, constructor, regular function, predicate, enum element, global variable, or module: " ^ x) None
       end
@@ -2808,7 +2808,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | _ ->
         match (g, es) with
           ("malloc", [SizeofExpr (ls, StructTypeExpr (lt, tn))]) ->
-          if not (List.mem_assoc tn structmap) then static_error lt "No such struct" None;
+          if not (List.mem_assoc tn structmap) then static_error lt ("No such struct: " ^ tn) None;
           (WFunCall (l, g, [], es), PtrType (StructType tn), None)
         | _ ->
         match resolve (pn,ilist) l g funcmap with
@@ -2838,13 +2838,33 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
         let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
+        let make_well_typed_method m =
+          match m with
+          (sign, (tn', lm, gh, rt, xmap, pre, post, epost, fb', v, abstract)) ->
+            let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
+            if fb <> fb' then static_error l "Instance method requires target object" None;
+            let rt = match rt with None -> Void | Some rt -> rt in
+            (WMethodCall (l, tn', g, sign, es, fb), rt, None)
+        in
         begin match ms with
-          [] -> static_error l "No matching method" None
-        | [(sign, (tn', lm, gh, rt, xmap, pre, post, epost, fb', v, abstract))] ->
-          let (fb, es) = if fb = Instance && fb' = Static then (Static, List.tl es) else (fb, es) in
-          if fb <> fb' then static_error l "Instance method requires target object" None;
-          let rt = match rt with None -> Void | Some rt -> rt in
-          (WMethodCall (l, tn', g, sign, es, fb), rt, None)
+          [] -> static_error l "No matching method3" None
+        | [m] -> make_well_typed_method m
+        | ms when language = Java -> 
+          begin
+            let rec look_for_function_with_exact_param_types ms =
+              match ms with
+                ((sign, _) as m)::rest ->
+                  let check_param_type pt at = 
+                    pt = at 
+                  in
+                  if List.for_all2 check_param_type sign argtps then
+                    make_well_typed_method m
+                  else
+                    look_for_function_with_exact_param_types rest
+              | [] -> static_error l "Multiple matching overloads_foo" None
+            in
+            look_for_function_with_exact_param_types ms
+          end
         | _ -> static_error l "Multiple matching overloads" None
         end
       in

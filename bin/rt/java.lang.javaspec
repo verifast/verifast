@@ -224,15 +224,28 @@ public class Short {
     
 }
 
+//@ fixpoint int Integer_intValue(Integer i);
+
 public class Integer {
-    
+
+    public Integer(int v);
+        //@ requires emp;
+        //@ ensures Integer_intValue(this) == v;
+
     public static final int MAX_VALUE = 0x7fffffff;
     public static final int MIN_VALUE = -0x80000000;
-    
+ 
     public static int parseInt(String s);
         //@ requires s != null;
         //@ ensures true;
-    
+
+    public static Integer valueOf(int v);
+        //@ requires emp;
+        //@ ensures result != null &*& Integer_intValue(result) == v;
+
+    public int intValue();
+        //@ requires true;
+        //@ ensures result == Integer_intValue(this);
 }
 
 /*@

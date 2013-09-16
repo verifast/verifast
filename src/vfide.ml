@@ -444,7 +444,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
     let text = start#get_text ~stop:stop in
     let highlight keywords =
       let (loc, ignore_eol, tokenStream, in_comment, in_ghost_range) =
-        make_lexer_core keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
+        make_lexer_helper keywords ghost_keywords ("<bufferBase>", "<buffer>") text reportRange startIsInComment startIsInGhostRange false (fun _ -> ()) annotChar in
       Stream.iter (fun _ -> ()) tokenStream;
       (* Printf.printf "!in_comment: %B; !in_ghost_range: %B\n" !in_comment !in_ghost_range; flush stdout; *)
       if not (stop#is_end) && (!in_comment, !in_ghost_range) <> (stopIsInComment, stopIsInGhostRange) then

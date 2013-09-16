@@ -181,6 +181,10 @@ interface List {
     boolean add(Object e);
         //@ requires List(?es);
         //@ ensures List(append(es, cons(e, nil))) &*& result;
+
+    boolean addAll(List other);
+        //@ requires List(?es) &*& other.List(?other_es);
+        //@ ensures List(append(es, other_es)) &*& other.List(other_es);
     
     Object remove(int index);
         //@ requires List(?es) &*& 0 <= index &*& index < length(es);
@@ -193,6 +197,14 @@ public class ArrayList implements List {
     ArrayList();
         //@ requires emp;
         //@ ensures List(nil);
+    
+}
+
+public class Arrays {
+    
+    static List asList(Object[] a);
+        //@ requires [?f]array_slice(a, ?start, ?end, ?es);
+        //@ ensures [f]array_slice(a, start, end, es) &*& result.List(es);
     
 }
 
