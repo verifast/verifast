@@ -135,10 +135,23 @@ type options = {
   option_keep_provide_files: bool;
   option_include_paths: string list;
   option_safe_mode: bool; (* for invocation through web interface *)
-  option_header_whitelist: string list
+  option_header_whitelist: string list;
+  option_use_java_frontend : bool
 } (* ?options *)
 
 (* Region: verify_program_core: the toplevel function *)
 
 (* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
 type symexec_result = SymExecSuccess
+
+let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail use_java_frontend: package =
+  if (Filename.check_suffix path ".javaspec") || not (use_java_frontend) then
+    Parser.parse_java_spec_file path reportRange reportShouldFail
+  else begin
+    Java_frontend.attatch(Util.bindir ^ "/ast_server.jar");
+    let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
+    let options = [Java_frontend.ast_option_desugar; Java_frontend.ast_option_empty_methods] in
+    let package = Java_frontend.ast_from_java_file path options ann_checker in
+    let annotations = ann_checker#retrieve_annotations () in
+    Ast_translator.translate_ast package annotations
+  end

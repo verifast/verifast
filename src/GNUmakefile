@@ -83,7 +83,7 @@ SET_ENV = export PATH=$(CWD)/../bin/:$(OCAMLBIN):$$PATH; \
 
 all: build test
 
-build: env \
+build: env java_front \
        ../bin/mysh ../bin/verifast ../bin/vfide ../bin/main_class ../bin/java_card_applet ../bin/dlsymtool \
        ../bin/vfstrip ../bin/list.vfmanifest \
        ../bin/raw_ghost_lists.vfmanifest ../bin/listex.vfmanifest \
@@ -120,6 +120,13 @@ endif
 	@echo "GTKSOURCEVIEW      $(GTKSOURCEVIEW)"
 	@echo "GTKSOURCEVIEW_LIBS ${GTKSOURCEVIEW_LIBS}"
 
+# For building Java frontend prototype
+java_front: lexer.cmx parser.cmx
+	${MAKE} -C java_frontend OCAMLOPTOPT=${OCAMLOPTOPT} CAMLP4O=${CAMLP4O}
+
+JAVA_FE_INCLS = -thread threads.cmxa misc.cmx general_ast.cmx ast_reader.cmx  communication.cmx \
+                annotation_type_checker.cmx java_frontend.cmx ast_translator.cmx
+
 clean:
 	rm -f *.cm*
 	rm -f *.o *.a
@@ -130,6 +137,7 @@ clean:
 	rm -f macos/*.cm* macos/*.o
 	rm -f a.out
 	${MAKE} -C linux -f GNUmakefile clean
+	${MAKE} -C java_frontend -f GNUmakefile clean
 
 distclean: clean
 
@@ -229,7 +237,7 @@ vfversion_cmx: vfversion.cmi
 	${OCAMLOPT} -c vfversion.ml
 
 verifastRedux: vfversion_cmo proverapi.cmo simplex.cmo redux.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
-	${OCAMLC} -warn-error F -w p -g -pp ${CAMLP4O} -o verifastRedux unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
+	${OCAMLC} -warn-error F -w p -g -pp ${CAMLP4O} -o verifastRedux -I java_frontend ${JAVA_FE_INCLS} unix.cma proverapi.cmo nums.cma simplex.cmo redux.cmo vfversion.cmo verifast.ml verifastPluginRedux.ml vfconsole.ml
 
 verifastZ3: vfversion_cmo proverapi.cmo z3prover.cmo verifast.cmo verifastPluginZ3.ml vfconsole.ml
 ifdef Z3V2
@@ -256,7 +264,7 @@ endif
 
 ../bin/vfide: Printexc_proxy.cmx vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) Fonts.cmx $(GTKSOURCEVIEW_DEPS) vfide.ml
 ifndef WITHOUT_LABLGTK
-	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml
+	$(SET_LDD); ${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/vfide -I +lablgtk2 lablgtk.cmxa $(GTKSOURCEVIEW) gtkInit.cmx unix.cmxa nums.cmxa -I ./linux -I java_frontend Perf.cmxa proverapi.cmx Printexc_proxy.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) Fonts.cmx vfide.ml 
 endif
 
 vfideredux.opt: vfversion_cmx proverapi.cmx simplex.cmx redux.cmx verifast.cmx verifastPluginRedux.ml vfide.ml
@@ -313,8 +321,8 @@ ast.cmx: lexer.cmx ast.ml
 parser.cmx: ast.cmx parser.ml
 	${OCAMLOPTOPT} -w p -warn-error FSU -pp ${CAMLP4O} -c -I ./linux parser.ml
 
-verifast0.cmx: parser.cmx verifast0.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast0.ml
+verifast0.cmx: parser.cmx verifast0.ml java_frontend
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast0.ml
 
 verifast1.cmx: verifast0.cmx verifast1.ml
 	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast1.ml
@@ -374,7 +382,7 @@ SExpressionEmitter.cmx: verifast.cmx SExpressionEmitter.cmi SExpressions.cmx SEx
 	${OCAMLOPTOPT} -c nums.cmxa SExpressionEmitter.ml
 
 ../bin/verifast: tabhunt vfversion_cmx proverapi.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3DEPS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
-	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
+	${OCAMLOPTOPT} -warn-error F -pp ${CAMLP4O} -o ../bin/verifast unix.cmxa nums.cmxa -I ./linux -I ./java_frontend Perf.cmxa proverapi.cmx vfversion.cmx dynlink.cmxa DynType.cmx plugins.cmx plugins_private.cmx plugins2.cmx util.cmx stats.cmx lexer.cmx ast.cmx parser.cmx ${JAVA_FE_INCLS} verifast0.cmx verifast1.cmx assertions.cmx verify_expr.cmx verifast.cmx simplex.cmx redux.cmx verifastPluginRedux.ml $(Z3ARGS) SExpressions.cmx SExpressionEmitter.cmx vfconsole.ml
 
 proverapi.cmx: proverapi.ml
 	${OCAMLOPTOPT} -warn-error F -c proverapi.ml

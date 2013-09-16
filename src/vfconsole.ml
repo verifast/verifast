@@ -14,7 +14,8 @@ let _ =
     try
       let use_site_callback declKind declLoc useSiteLoc = () in
       verify_program ~emitter_callback:emitter_callback prover stats options path range_callback use_site_callback (fun _ -> ()) None None;
-      print_endline "0 errors found"
+      print_endline "0 errors found";
+      Java_frontend.detatch()
     with
       PreprocessorDivergence (l, msg) -> print_msg l msg; exit 1
     | ParseException (l, msg) -> print_msg l ("Parse error" ^ (if msg = "" then "." else ": " ^ msg)); exit 1
@@ -158,6 +159,7 @@ let _ =
   let safe_mode = ref false in
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
+  let useJavaFrontend = ref false in
   let cla = [ "-stats", Set stats, ""
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
             ; "-disable_overflow_check", Set disable_overflow_check, ""
@@ -189,6 +191,7 @@ let _ =
             ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)"
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
+            ; "-javac", Set useJavaFrontend, ""
             ]
   in
   let process_file filename =
@@ -207,7 +210,8 @@ let _ =
           option_keep_provide_files = !keepProvideFiles;
           option_include_paths = !include_paths;
           option_safe_mode = !safe_mode;
-          option_header_whitelist = !header_whitelist
+          option_header_whitelist = !header_whitelist;
+          option_use_java_frontend = !useJavaFrontend
         } in
         print_endline filename;
         let emitter_callback (packages : package list) =

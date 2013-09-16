@@ -171,19 +171,31 @@ end
 
 type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityModifier of visibility
 
-let parse_decls language ?inGhostHeader =
-let rec
-  parse_decls = parser
-  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls >] -> ds @ ds'
+(* 
+   To make parsing functions accessible from elsewhere, 
+   without adding the argument 'language' to every function.
+   TODO: find a better solution
+*)
+let language = ref CLang
+
+let rec parse_decls lang ?inGhostHeader =
+  language := lang;
+  if match inGhostHeader with None -> false | Some b -> b then
+    parse_pure_decls
+  else
+    parse_decls_core
+and
+  parse_decls_core = parser
+  [< '((p1, _), Kwd "/*@"); ds = parse_pure_decls; '((_, p2), Kwd "@*/"); ds' = parse_decls_core >] -> ds @ ds'
 | [< _ = opt (parser [< '(_, Kwd "public") >] -> ());
      abstract = (parser [< '(_, Kwd "abstract") >] -> true | [< >] -> false); 
      final = (parser [< '(_, Kwd "final") >] -> FinalClass | [< >] -> ExtensibleClass);
      ds = begin parser
-       [< '(l, Kwd "class"); '(_, Ident s); super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls >]
+       [< '(l, Kwd "class"); '(_, Ident s); super = parse_super_class; il = parse_interfaces; mem = parse_java_members s; ds = parse_decls_core >]
        -> Class (l, abstract, final, s, methods s mem, fields mem, constr mem, super, il, instance_preds mem)::ds
-     | [< '(l, Kwd "interface"); '(_, Ident cn); il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls >]
+     | [< '(l, Kwd "interface"); '(_, Ident cn); il = parse_extended_interfaces;  mem = parse_java_members cn; ds = parse_decls_core >]
        -> Interface (l, cn, il, fields mem, methods cn mem, instance_preds mem)::ds
-     | [< d = parse_decl; ds = parse_decls >] -> d@ds
+     | [< d = parse_decl; ds = parse_decls_core >] -> d@ds
      | [< >] -> []
      end
   >] -> ds
@@ -857,7 +869,6 @@ and
   >] -> (inv, dec, [body])
 and
   parse_loop_core0 = parser [<
-  
     inv =
       opt
         begin parser
@@ -956,7 +967,7 @@ and
     [< '(l, Kwd "|->"); rhs = parse_pattern >] -> 
     (match e with
        ReadArray (_, _, SliceExpr (_, _, _)) -> PointsTo (l, e, rhs)
-     | ReadArray (lr, e0, e1) when language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1], ref None), ref None), rhs) 
+     | ReadArray (lr, e0, e1) when !language = CLang -> PointsTo (l, Deref(lr, Operation(lr, Add, [e0; e1], ref None), ref None), rhs) 
      | _ -> PointsTo (l, e, rhs)
     )
   | [< '(l, Kwd "?"); p1 = parse_pred; '(_, Kwd ":"); p2 = parse_pred >] -> IfAsn (l, e, p1, p2)
@@ -1070,7 +1081,7 @@ and
         | [< >] -> CallExpr (lx, x, [], [], args0,Static)
       >] -> e
     | [<
-        '(ldot, Kwd ".") when language = Java;
+        '(ldot, Kwd ".") when !language = Java;
         r = parser
           [<'(lc, Kwd "class")>] -> ClassLit(ldot,x)
         | [<
@@ -1146,7 +1157,7 @@ and
 and
   parse_expr_suffix_rest e0 = parser
   [< '(l, Kwd "->"); '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
-| [< '(l, Kwd ".") when language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
+| [< '(l, Kwd ".") when !language = CLang; '(_, Ident f); e = parse_expr_suffix_rest (Read (l, AddressOf(l, e0), f)) >] -> e
 | [< '(l, Kwd ".");
      e = begin parser
        [< '(_, Ident f); e = parse_expr_suffix_rest (Read (l, e0, f)) >] -> e
@@ -1275,11 +1286,6 @@ and
   parse_patlist_rest = parser
   [< '(_, Kwd ","); pat0 = parse_pattern; pats = parse_patlist_rest >] -> pat0::pats
 | [< '(_, Kwd ")") >] -> []
-in
-  if match inGhostHeader with None -> false | Some b -> b then
-    parse_pure_decls
-  else
-    parse_decls
 
 let rec parse_package_name= parser
   [<'(_, Ident n);x=parser
@@ -1323,7 +1329,11 @@ let parse_scala_file (path: string) (reportRange: range_kind -> loc -> unit): pa
     Stream.Error msg -> raise (ParseException (loc(), msg))
   | Stream.Failure -> raise (ParseException (loc(), "Parse error"))
 
-let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
+(* 
+  renamed from parse_java_spec_file to still support spec files, 
+  normal java files are now handled by frontend
+*)
+let parse_java_spec_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail: package =
   Stopwatch.start parsing_stopwatch;
   let result =
   if Filename.check_suffix (Filename.basename path) ".scala" then

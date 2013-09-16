@@ -31,6 +31,9 @@ endif
 
 OCAMLBUILDFLAGS_VFCOMMON+= -pp camlp4o.opt -libs Perf,nums,dynlink
 
+# For building Java frontend prototype
+OCAMLBUILDFLAGS_VFCOMMON+= -I java_frontend -lib unix -tag thread
+
 run_ocamlbuild_vfcommon: $(OS) vfversion
 
 ifdef BYTECODE

@@ -37,7 +37,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     option_disable_overflow_check=disable_overflow_check;
     option_allow_should_fail=allow_should_fail;
     option_emit_manifest=emit_manifest;
-    option_include_paths=include_paths
+    option_include_paths=include_paths;
+    option_use_java_frontend=option_use_java_frontend
   } = options
   
   let verbosity = ref 0
@@ -889,7 +890,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   | Java ->
                     let (jars, javaspecs) = parse_jarspec_file_core path in
                     let pathDir = Filename.dirname path in
-                    let ds = List.map (fun javaspec -> parse_java_file (concat pathDir javaspec) reportRange reportShouldFail) javaspecs in
+                    let ds = List.map (fun javaspec -> parse_java_file (concat pathDir javaspec) reportRange reportShouldFail option_use_java_frontend) javaspecs in
                     if not header_is_import_spec then begin
                       let (classes, lemmas) = extract_specs ds in
                       spec_classes := classes;
@@ -924,7 +925,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let javaspecs =
                   if options.option_allow_assume then "_assume.javaspec"::javaspecs else javaspecs
                 in
-                let ds = List.map (fun x -> parse_java_file (concat rtdir x) reportRange reportShouldFail) javaspecs in
+                let ds = List.map (fun x -> parse_java_file (concat rtdir x) reportRange reportShouldFail option_use_java_frontend) javaspecs in
                 let (_, maps0) = check_file rtpath true false bindir "" [] ds in
                 headermap := (rtpath, ([], maps0))::!headermap;
                 (maps0, [])
