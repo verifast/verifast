@@ -1,6 +1,6 @@
 (*
 
-Copyright (C) 2013 KULeuven, Department of Computer Science, Gijs Vanspauwen
+Copyright (C) 2013 Katholieke Universiteit Leuven
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -36,23 +36,23 @@ exception JavaFrontendException of string
      arg1:   path to the ast_server.jar file
      result: _
 *)
-val attatch : string -> unit
+val attach : string -> unit
 
 (* notify and unload the AstServer 
      arg1:   _
      result: _
 *)
-val detatch : unit -> unit
+val detach : unit -> unit
 
 (* possoble options for generating an ast *)
   (* Perform desugaring before generating ast,  
      this includes extraction of inner classes and 
      instantiation of generics. *)
   val ast_option_desugar : string
-  (* Add the annotations following a interface method
+  (* Add the annotations following an interface method
      or an abstract method, to that method and not treat
      them as class level declarations. *)
-  val ast_option_empty_methods : string
+  val bodyless_methods_own_trailing_annotations : string
 
 (* Create a desugared ast from the specified file
      arg1:   path of the file to create a desugared ast from

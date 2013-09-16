@@ -1,6 +1,6 @@
 (*
 
-Copyright (C) 2013 KULeuven, Department of Computer Science, Gijs Vanspauwen
+Copyright (C) 2013 Katholieke Universiteit Leuven
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@ let _ =
   end;
   let ast_server_url = List.hd arguments in
   let javas = List.tl arguments in
-  Java_frontend.attatch ast_server_url;
+  Java_frontend.attach ast_server_url;
   let asts = 
     try
       let achecker = new Annotation_type_checker.dummy_ann_type_checker () in
@@ -61,9 +61,9 @@ let _ =
     with 
     | Java_frontend.JavaFrontendException(m) ->
         debug_print ("JavaFrontendException in main: \n" ^ m);
-        Java_frontend.detatch ();
+        Java_frontend.detach ();
         exit 2
   in
   List.iter (fun x -> (Ast_writer.write_ast x)) asts;
-  Java_frontend.detatch ();
+  Java_frontend.detach ();
   

@@ -1,6 +1,6 @@
 (*
 
-Copyright (C) 2013 KULeuven, Department of Computer Science, Gijs Vanspauwen
+Copyright (C) 2013 Katholieke Universiteit Leuven
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -42,15 +42,15 @@ let catch_exceptions f =
       raise (JavaFrontendException ("AST reading Failure: " ^ m ^ " - "  ^ (General_ast.string_of_loc l)))
 
 let ast_option_desugar        = "DESUGAR"
-let ast_option_empty_methods  = "EMPTY_METHODS"
+let bodyless_methods_own_trailing_annotations  = "EMPTY_METHODS"
 
 let communication = 
   catch_exceptions get_communication_channel
 
-let attatch ast_server_url = 
+let attach ast_server_url = 
   catch_exceptions (fun _ -> communication#load(ast_server_url))
 
-let detatch () =
+let detach () =
   catch_exceptions (fun _ -> communication#unload())
 
 (* method to send a FILE request with corresponding options and parse the response message *)

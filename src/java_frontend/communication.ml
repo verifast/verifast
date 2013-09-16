@@ -1,6 +1,6 @@
 (*
 
-Copyright (C) 2013 KULeuven, Department of Computer Science, Gijs Vanspauwen
+Copyright (C) 2013 Katholieke Universiteit Leuven
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -179,7 +179,7 @@ object (this)
 
   method private send_message(message) =
     if (Thread.id thread = id_self) then
-      this#error ("ASTServer is not attatched");
+      this#error ("ASTServer is not attached");
     let m = begin_of_message ^ "\n" ^ message ^ "\n" ^ end_of_message ^ "\n" in
     output_string out_channel m;
     flush out_channel;
@@ -187,7 +187,7 @@ object (this)
 
   method private receive_message() =
     if (Thread.id thread = id_self) then
-      this#error ("ASTServer is not attatched");
+      this#error ("ASTServer is not attached");
     let message = ref [] in
     let finished = ref false in
     while (not !finished) do

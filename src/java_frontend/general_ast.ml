@@ -1,6 +1,6 @@
 (*
 
-Copyright (C) 2013 KULeuven, Department of Computer Science, Gijs Vanspauwen
+Copyright (C) 2013 Katholieke Universiteit Leuven
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

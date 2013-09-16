@@ -148,9 +148,9 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
   if (Filename.check_suffix path ".javaspec") || not (use_java_frontend) then
     Parser.parse_java_spec_file path reportRange reportShouldFail
   else begin
-    Java_frontend.attatch(Util.bindir ^ "/ast_server.jar");
+    Java_frontend.attach(Util.bindir ^ "/ast_server.jar");
     let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
-    let options = [Java_frontend.ast_option_desugar; Java_frontend.ast_option_empty_methods] in
+    let options = [Java_frontend.ast_option_desugar; Java_frontend.bodyless_methods_own_trailing_annotations] in
     let package = Java_frontend.ast_from_java_file path options ann_checker in
     let annotations = ann_checker#retrieve_annotations () in
     Ast_translator.translate_ast package annotations
