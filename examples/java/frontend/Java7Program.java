@@ -5,7 +5,16 @@
 // - varargs (variable-length argument lists)
 // - boxing and unboxing of primitive types
 // - enhanced for loops (a.k.a. foreach loops)
-// This support is enabled through the STANCE Java frontend, which is derived from OpenJDK.
+// This support is enabled through VeriFast's use of the STANCE Java frontend,
+// which is derived from OpenJDK.
+//
+// Furthermore, the example illustrates VeriFast's support for the following Java features:
+// - classes
+// - interfaces
+// - arrays
+// - class methods that implement interface methods
+// - checked and unchecked exceptions
+// - Java Collections API usage, including types List and Iterator
 
 package mypackage;
 
