@@ -1,4 +1,4 @@
-package desugared.goal;
+package mypackage;
 
 import java.util.*;
 
@@ -35,13 +35,13 @@ class EmptyException extends Exception
 
 /*@
   
-predicate_family_instance FoldFunc(DesugaredGoal$1.class)(FoldFunc f, list<Integer> in, Integer acc, list<Integer> info) =
+predicate_family_instance FoldFunc(Java7Program$1.class)(FoldFunc f, list<Integer> in, Integer acc, list<Integer> info) =
          not_null(in) == true &*& acc != null &*&
          sumize(map(Integer_intValue, info)) == sumize(map(Integer_intValue, in)) + Integer_intValue(acc); 
   
 @*/
 
-public class DesugaredGoal 
+public class Java7Program 
 {
   public static void addAll(List l, Object[] xs) throws EmptyException /*@ ensures xs.length == 0; @*/
     //@ requires l.List(?l_es) &*& [?f]xs[..] |-> ?xs_es;
@@ -102,12 +102,12 @@ public class DesugaredGoal
     }
     //@ list<Integer> exs = {i1, i2, i3};
     
-    FoldFunc func = new DesugaredGoal$1();
+    FoldFunc func = new Java7Program$1();
     Integer acc = Integer.valueOf(2);
-    //@ close FoldFunc(DesugaredGoal$1.class)(func, exs, acc, cons(acc, exs));
+    //@ close FoldFunc(Java7Program$1.class)(func, exs, acc, cons(acc, exs));
     Object vo = fold(func, xs, acc);
     Integer vi = (Integer) vo;
-    //@ open FoldFunc(DesugaredGoal$1.class)(_, _, _, _);
+    //@ open FoldFunc(Java7Program$1.class)(_, _, _, _);
     int v = vi.intValue();
     
     //@ assert v == 17;
@@ -140,21 +140,21 @@ public class DesugaredGoal
   }
 }
 
-class DesugaredGoal$1 implements FoldFunc 
+class Java7Program$1 implements FoldFunc 
 {
   public Integer fold(Integer acc, Integer x)
-    //@ requires FoldFunc(DesugaredGoal$1.class)(this, cons(?o, ?r), acc, ?info) &*& o == x;
-    //@ ensures FoldFunc(DesugaredGoal$1.class)(this, r, result, info);
+    //@ requires FoldFunc(Java7Program$1.class)(this, cons(?o, ?r), acc, ?info) &*& o == x;
+    //@ ensures FoldFunc(Java7Program$1.class)(this, r, result, info);
   {
-    //@ open FoldFunc(DesugaredGoal$1.class)(this, cons(?_o, ?_r), acc, ?_info);
+    //@ open FoldFunc(Java7Program$1.class)(this, cons(?_o, ?_r), acc, ?_info);
     Integer res = Integer.valueOf(acc.intValue() + x.intValue());
     return res;
-    //@ close FoldFunc(DesugaredGoal$1.class)(this, _r, res, _info);
+    //@ close FoldFunc(Java7Program$1.class)(this, _r, res, _info);
   }  
 
   public Object fold(Object x0, Object x1)
-    //@ requires FoldFunc(DesugaredGoal$1.class)(this, cons(?o, ?r), x0, ?info) &*& o == x1;
-    //@ ensures FoldFunc(DesugaredGoal$1.class)(this, r, result, info);
+    //@ requires FoldFunc(Java7Program$1.class)(this, cons(?o, ?r), x0, ?info) &*& o == x1;
+    //@ ensures FoldFunc(Java7Program$1.class)(this, r, result, info);
   {
     return this.fold((Integer) x0, (Integer) x1);
   }

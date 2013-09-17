@@ -1,4 +1,13 @@
-package original.goal;
+// This example Java 7 program illustrates the support added to VeriFast
+// as part of the STANCE EU project for many Java 7 features, including:
+// - generics
+// - anonymous inner classes
+// - varargs (variable-length argument lists)
+// - boxing and unboxing of primitive types
+// - enhanced for loops (a.k.a. foreach loops)
+// This support is enabled through the STANCE Java frontend, which is derived from OpenJDK.
+
+package mypackage;
 
 import java.util.*;
 
@@ -35,13 +44,13 @@ class EmptyException extends Exception
 
 /*@
   
-predicate_family_instance FoldFunc(OriginalGoal$1.class)(FoldFunc f, list<Integer> in, Integer acc, list<Integer> info) =
+predicate_family_instance FoldFunc(Java7Program$1.class)(FoldFunc f, list<Integer> in, Integer acc, list<Integer> info) =
          not_null(in) == true &*& acc != null &*&
          sum(map(Integer_intValue, info)) == sum(map(Integer_intValue, in)) + Integer_intValue(acc); 
   
 @*/
 
-public class OriginalGoal
+public class Java7Program
 {
   public static <T> void addAll(List<T> l, T... xs) throws EmptyException /*@ ensures xs.length == 0; @*/
     //@ requires l.List(?l_es) &*& [?f]xs[..] |-> ?xs_es;
@@ -100,19 +109,19 @@ public class OriginalGoal
     FoldFunc func = new FoldFunc<Integer, Integer>() 
     {
       public Integer fold(Integer x0, Integer x1) 
-        //@ requires FoldFunc(OriginalGoal$1.class)(this, cons(x1, ?r), x0, ?info);
-        //@ ensures FoldFunc(OriginalGoal$1.class)(this, r, result, info);
+        //@ requires FoldFunc(Java7Program$1.class)(this, cons(x1, ?r), x0, ?info);
+        //@ ensures FoldFunc(Java7Program$1.class)(this, r, result, info);
       { 
-        //@ open FoldFunc(OriginalGoal$1.class)(this, cons(?_o, ?_r), x0, ?_info);
+        //@ open FoldFunc(Java7Program$1.class)(this, cons(?_o, ?_r), x0, ?_info);
         Integer res = x0 + x1;
         return res;
-         //@ close FoldFunc(OriginalGoal$1.class)(this, _r, res, _info);
+         //@ close FoldFunc(Java7Program$1.class)(this, _r, res, _info);
       }
     }; 
     Integer acc = 2;
-    //@ close FoldFunc(OriginalGoal$1.class)(func, exs, acc, cons(acc, exs));
+    //@ close FoldFunc(Java7Program$1.class)(func, exs, acc, cons(acc, exs));
     Integer vi = fold(func, xs, acc);
-    //@ open FoldFunc(OriginalGoal$1.class)(_, _, _, _);
+    //@ open FoldFunc(Java7Program$1.class)(_, _, _, _);
     int v = vi;
     
     //@ assert v == 17;

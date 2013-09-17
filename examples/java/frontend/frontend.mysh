@@ -2,5 +2,4 @@ let verifast_both
 ifnotmac verifast
 verifast -prover redux
 in
-verifast_both -c -javac -disable_overflow_check OriginalGoal.java
-
+verifast_both -c -javac -disable_overflow_check Java7Program.java

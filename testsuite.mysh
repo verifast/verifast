@@ -168,6 +168,11 @@ cd examples
     cd chatbot
       verifast_both -disable_overflow_check -c -provides "main_class chatbot.Bot" Bot.java
     cd ..
+    cd frontend
+      cd desugared
+        verifast_both -disable_overflow_check -c Java7Program.java
+      cd ..
+    cd ..
     cd Iterator
       verifast_both -c it.jarsrc
       verifast_both -c prog.jarsrc
