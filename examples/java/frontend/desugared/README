@@ -1,0 +1,9 @@
+To verify the (not desugared) file Java7Program.java,
+you need to retrieve the file ast_server.jar from:
+
+  https://bitbucket.org/gijsv/stance-java-frontend
+
+Then you must set the environment variable 
+VERIFAST_JAVA_AST_SERVER as follows:
+  
+  export VERIFAST_JAVA_AST_SERVER="java -jar path_to_ast_server_jar" 

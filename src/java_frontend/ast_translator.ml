@@ -610,10 +610,6 @@ and translate_expression expr =
       let typ' = translate_type typ in
       let expr' = translate_expression expr in
       VF.CastExpr(l, false, typ', expr')
-  | GEN.Select(l, expr, name) ->
-      let expr' = translate_expression expr in
-      let name' = translate_name name in
-      VF.Read(l, expr', name')
   | GEN.Literal(l, typ, value) ->
       translate_literal l typ value 
   (* TODO: finish implementation *)

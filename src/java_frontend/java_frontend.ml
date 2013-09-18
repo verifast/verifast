@@ -41,14 +41,17 @@ let catch_exceptions f =
   | Ast_reader.AstReaderException(l, m) -> 
       raise (JavaFrontendException ("AST reading Failure: " ^ m ^ " - "  ^ (General_ast.string_of_loc l)))
 
-let ast_option_desugar        = "DESUGAR"
-let bodyless_methods_own_trailing_annotations  = "EMPTY_METHODS"
+type ast_option = string
+
+let desugar : ast_option = "DESUGAR"
+let bodyless_methods_own_trailing_annotations : ast_option = "EMPTY_METHODS"
 
 let communication = 
   catch_exceptions get_communication_channel
 
-let attach ast_server_url = 
-  catch_exceptions (fun _ -> communication#load(ast_server_url))
+(** @param ast_server_launch   command to launch the ast_server *)
+let attach ast_server_launch = 
+  catch_exceptions (fun _ -> communication#load(ast_server_launch))
 
 let detach () =
   catch_exceptions (fun _ -> communication#unload())

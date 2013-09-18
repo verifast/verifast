@@ -27,37 +27,50 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *)
 
-(* All functions in this file may raise JavaFrontendExceptions 
-    arg1: error message
+(* This file specifies the interface of the Java frontend.
+   Using this interface a type checked AST can be retrieved 
+   from a specific Java source file.
+*)
+
+(* Exception that indicates that an error occurred while generating
+   an AST. All functions in this file may raise an JavaFrontendException
 *)
 exception JavaFrontendException of string
 
-(* load the AstServer jar-file 
-     arg1:   path to the ast_server.jar file
-     result: _
+(* Load the AstServer: 
+    @param1        command string to launch the AstServer  
+    @return        ()
+    @raise         JavaFrontendException If the AstServer could not be launched
 *)
 val attach : string -> unit
 
-(* notify and unload the AstServer 
-     arg1:   _
-     result: _
+(*  Notify and unload the AstServer 
+    @param1        ()
+    @return        ()
+    @raise         JavaFrontendException If the AstServer could not be stopped
 *)
 val detach : unit -> unit
 
-(* possoble options for generating an ast *)
-  (* Perform desugaring before generating ast,  
+
+(* possible options for generating an AST *)
+
+  type ast_option
+  
+  (* Perform desugaring before generating AST,  
      this includes extraction of inner classes and 
      instantiation of generics. *)
-  val ast_option_desugar : string
-  (* Add the annotations following an interface method
+  val desugar : ast_option
+
+  (* Add the annotations following a interface method
      or an abstract method, to that method and not treat
      them as class level declarations. *)
-  val bodyless_methods_own_trailing_annotations : string
+  val bodyless_methods_own_trailing_annotations : ast_option
 
-(* Create a desugared ast from the specified file
-     arg1:   path of the file to create a desugared ast from
-     arg2:   options for creating the ast 
-     arg3:   annotation checker to parse and type check the encountered annotations while creating the ast
-     result: the ast generated from the specified file
+(* Create a desugared AST from the specified file
+     @param1        path of the file to create a desugared AST from
+     @param2        options options for creating the AST 
+     @param3        annotation checker to parse and type check the encountered annotations while creating the AST
+     @return        the AST generated from the specified file
+     @raise         JavaFrontendException If the AstServer could not generated an AST from the speci
 *)
-val ast_from_java_file : string -> string list -> Annotation_type_checker.ann_type_checker -> General_ast.package
+val ast_from_java_file : string -> ast_option list -> Annotation_type_checker.ann_type_checker -> General_ast.package

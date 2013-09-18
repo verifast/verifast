@@ -53,11 +53,11 @@ let _ =
   end;
   let ast_server_url = List.hd arguments in
   let javas = List.tl arguments in
-  Java_frontend.attach ast_server_url;
+  Java_frontend.attach ("java -jar " ^ ast_server_url);
   let asts = 
     try
       let achecker = new Annotation_type_checker.dummy_ann_type_checker () in
-      List.map (fun x -> Java_frontend.ast_from_java_file x [ast_option_desugar] achecker) javas 
+      List.map (fun x -> Java_frontend.ast_from_java_file x [Java_frontend.desugar; Java_frontend.bodyless_methods_own_trailing_annotations] achecker) javas 
     with 
     | Java_frontend.JavaFrontendException(m) ->
         debug_print ("JavaFrontendException in main: \n" ^ m);

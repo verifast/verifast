@@ -65,22 +65,23 @@ let responses = [response_success;
 (* Communication Interface  *)
 (* ------------------------ *)
 
-(* 
+(** 
  -interface for communication with the ASTServer (i.e. java part of java frontend)
  -different implentations possible but implemenation must correspond to the one used in Java part 
  
  -currently only one implentation using sockets: socket_communication
- -SOLUTION Replace sockets by communication via communicating functions send and recieve:
-           Java -> JNI -> C -> OCaml 
-           (was not feasable for entire interface, but is for two simple functions)
+ -SOLUTION1 Use stdin en stdout
+ -SOLUTION2 Replace sockets by communication via communicating functions send and recieve:
+            Java -> JNI -> C -> OCaml 
+            (was not feasable for entire interface, but is for two simple functions)
   
   -to change the implementation write your own instance of a t_frontend_communication and 
    modify the function get_communication_channel in the bottom of this file
 *)
-  
+
 class type t_frontend_communication =
 object
-  (* expects a string representing the relative path to the ASTServer jar-file  *)
+  (* expects a string representing of the command to launch the ASTServer  *)
   method load             : string -> unit
   method unload           : unit -> unit
   
@@ -112,7 +113,7 @@ object (this)
   method private error m =
     raise (CommunicationException m)
 
-  method load ast_server =
+  method load ast_server_launch =
     if (Thread.id thread = id_self) then
       try begin
         let finished = ref false in
@@ -122,7 +123,7 @@ object (this)
            as command line arg to ASTserver, in the meantime this 
            port could be occupied, but this situation is ignored (FOR NOW!)
            TODO: -let server choose port and pass port through stdout
-                 -run ast_server in simple separate process (in stead off thread + process)
+                 -run ast_server_launch in simple separate process (in stead off thread + process)
         *)
         while(not !finished) do
           try begin
@@ -138,7 +139,7 @@ object (this)
           end
         done;
         thread <- Thread.create (fun _ -> 
-          Sys.command("java -jar " ^ ast_server ^ " " ^ (string_of_int !server_port))) ();
+          Sys.command(ast_server_launch ^ " " ^ (string_of_int !server_port))) ();
         finished := false;
         while (not !finished) do
           let i = ref 0 in
@@ -151,13 +152,13 @@ object (this)
           with e -> begin
             i := !i + 1;
             if (!i > connection_attempts) then
-              this#error ("Failed to connect to ASTServer (" ^ ast_server ^ ") module of Java frontend, to many connection attempts");
+              this#error ("Failed to connect to ASTServer ( command " ^ ast_server_launch ^ ") module of Java frontend, to many connection attempts");
             Thread.delay connection_timeout
           end
         done
       end
       with Unix.Unix_error(_, s1, s2) -> begin
-        this#error ("Failed to connect to ASTServer (" ^ ast_server ^ ") module of Java frontend")
+        this#error ("Failed to connect to ASTServer ( command " ^ ast_server_launch ^ ") module of Java frontend")
       end
 
   method unload() =

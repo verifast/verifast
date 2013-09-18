@@ -221,7 +221,7 @@ and write_var_decl var =
       in
       print_block_node header (string_of_identifier id) true l;
       write_type typ;
-      (*match init with
+(*      match init with
           Some e -> write_expression e
         | _ -> ();*)
       print_block_node_end ()
@@ -246,15 +246,3 @@ end
 (* End                        *)
 (* -------------------------- *)
 
-(*
-and write_block block =
-  match block with
-    Block(l, stats) -> 
-      print_block_node "Block" "" true l;
-      List.iter write_statement stats;
-      print_block_node_end ()
-and write_expression _ =
-  print_line_node "Expression" "Foo" false dummy_loc
-and write_statement _ =
-  print_line_node "Expression" "Foo" false dummy_loc
-end*)
