@@ -23,16 +23,16 @@ ast_writer.cmx: ast_writer.ml general_ast.cmx
 ast_reader.cmx: ast_reader.ml general_ast.cmx
 	${OCAMLOPTOPT} -pp ${CAMLP4O} -c ast_reader.ml
 
-annotation_type_checker.cmxa: annotation_type_checker.mli communication.cmx
+annotation_type_checker.cmi: annotation_type_checker.mli communication.cmx
 	${OCAMLOPTOPT} -c annotation_type_checker.mli
 
-annotation_type_checker.cmx: annotation_type_checker.ml annotation_type_checker.cmxa general_ast.cmx
+annotation_type_checker.cmx: annotation_type_checker.ml annotation_type_checker.cmi general_ast.cmx
 	${OCAMLOPTOPT} -c annotation_type_checker.ml
 
-java_frontend.cmxa: java_frontend.mli annotation_type_checker.cmx general_ast.cmx
+java_frontend.cmi: java_frontend.mli annotation_type_checker.cmx general_ast.cmx
 	${OCAMLOPTOPT} -c java_frontend.mli
 
-java_frontend.cmx: java_frontend.ml java_frontend.cmxa ast_reader.cmx communication.cmx
+java_frontend.cmx: java_frontend.ml java_frontend.cmi ast_reader.cmx communication.cmx
 	${OCAMLOPTOPT} -c java_frontend.ml
 
 ast_translator.cmx: ast_translator.ml general_ast.cmx
