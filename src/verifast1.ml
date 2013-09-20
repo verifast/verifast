@@ -4177,6 +4177,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                   let pref = new predref "integer" in
                   pref#set_domain [PtrType IntType; IntType];
                   [predinst pref]
+                | Char ->
+                  let pref = new predref "character" in
+                  pref#set_domain [PtrType Char; Char];
+                  [predinst pref]
+                | UChar ->
+                  let pref = new predref "u_character" in
+                  pref#set_domain [PtrType UChar; UChar];
+                  [predinst pref]
                 | _ -> []
                 end
               | _ -> []
