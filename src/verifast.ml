@@ -564,7 +564,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let rec iter ptenv xterms xenv pats pts =
                 match (pats, pts) with
                   ([], []) -> (List.rev ptenv, List.rev xterms, List.rev xenv)
-                | (pat::pats, tp::pts) ->
+                | (pat::pats, (name, tp)::pts) ->
                   if List.mem_assoc pat tenv then static_error lc ("Pattern variable '" ^ pat ^ "' hides existing local variable '" ^ pat ^ "'.") None;
                   if List.mem_assoc pat ptenv then static_error lc "Duplicate pattern variable." None;
                   let tp' = instantiate_type tpenv tp in

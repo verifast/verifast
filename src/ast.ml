@@ -113,6 +113,16 @@ and
       bool (* static *) *
       constant_value option option ref *
       ghostness
+  (* Expression which returns the value of a field of an instance of an
+   * inductive data type. *)
+  | WReadInductiveField of
+      loc *
+      expr (* The expression which results an instance of the inductive
+            * data type. (usually just a variable) *) *
+      string (* inductive data type name *) *
+      string (* constructor name *) *
+      string (* field name *) *
+      type_ list (* type arguments *)
   | ReadArray of loc * expr * expr
   | WReadArray of loc * expr * type_ * expr
   | Deref of loc * expr * type_ option ref (* pointee type *) (* pointer dereference *)
@@ -172,7 +182,11 @@ and
   | WCtorPat of loc * string * type_ list * string * type_ list * type_ list * pat list
 and
   switch_expr_clause = (* ?switch_expr_clause *)
-    SwitchExprClause of loc * string * string list * expr (* switch uitdrukking *)
+    SwitchExprClause of
+      loc *
+      string (* constructor name *) *
+      string list (* argument names *) *
+      expr (* body *)
 and
   language = (* ?language *)
     Java
@@ -577,7 +591,10 @@ and
       expr option
 and
   ctor = (* ?ctor *)
-  | Ctor of loc * string * type_expr list (* constructor met regel-naam-lijst v types v args*)
+  | Ctor of
+    loc *
+    string * (* name of the constructor *)
+    (string * type_expr) list (* name and type-expression of the arguments *)
 and
   member = (* ?member *)
   | FieldMember of field list
@@ -616,6 +633,7 @@ let rec expr_loc e =
   | Read (l, e, f) -> l
   | ArrayLengthExpr (l, e) -> l
   | WRead (l, _, _, _, _, _, _, _) -> l
+  | WReadInductiveField(l, _, _, _, _, _) -> l
   | ReadArray (l, _, _) -> l
   | WReadArray (l, _, _, _) -> l
   | Deref (l, e, t) -> l
@@ -645,7 +663,7 @@ let rec expr_loc e =
   | SuperMethodCall(l, _, _) -> l
   | WSuperMethodCall(l, _, _, _) -> l
   | InitializerList (l, _) -> l
-
+  
 let asn_loc p =
   match p with
     PointsTo (l, e, rhs) -> l

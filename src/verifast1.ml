@@ -522,7 +522,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         loc
       * string list (* type parameters *)
       * type_ (* return type *)
-      * type_ list (* parameter types *)
+      * (string * type_) list (* parameter names (can be empty string) and types *)
       * func_symbol
     type inductive_ctor_info =
         string (* fully qualified constructor name *)
@@ -1405,7 +1405,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let isfuncname = "is_" ^ ftn in
         let domain = [ProverInt] in
         let symb = mk_func_symbol isfuncname domain ProverBool Uninterp in
-        [(isfuncname, (dummy_loc, [], Bool, [PtrType Void], symb))]
+        [(isfuncname, (dummy_loc, [], Bool, [("", PtrType Void)], symb))]
       | _ -> []
     ) functypenames
   
@@ -1613,18 +1613,19 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         let rec citer j ctormap pfm ctors =
           match ctors with
             [] -> iter (pn,ilist) ((i, (l, tparams, List.rev ctormap))::imap) pfm fpm ds
-          | Ctor (lc, cn, tes)::ctors ->
+          | Ctor (lc, cn, name_and_type_exprs)::ctors ->
+            let (argument_names, argument_type_expressions) = List.split(name_and_type_exprs) in
             let full_cn = full_name pn cn in
             if List.mem_assoc full_cn pfm || List.mem_assoc full_cn purefuncmap0 then
               static_error lc ("Duplicate pure function name: " ^ full_cn) None
-            else (
-              let ts = List.map (check_pure_type (pn,ilist) tparams) tes in
+            else begin
+              let ts = List.map (check_pure_type (pn,ilist) tparams) argument_type_expressions in
               let csym =
                 mk_func_symbol full_cn (List.map provertype_of_type ts) ProverInductive (Proverapi.Ctor (CtorByOrdinal j))
               in
-              let purefunc = (full_cn, (lc, tparams, InductiveType (i, List.map (fun x -> TypeParam x) tparams), ts, csym)) in
+              let purefunc = (full_cn, (lc, tparams, InductiveType (i, List.map (fun x -> TypeParam x) tparams), (List.combine argument_names ts), csym)) in
               citer (j + 1) ((cn, purefunc)::ctormap) (purefunc::pfm) ctors
-            )
+            end
         in
         citer 0 [] pfm ctors
       | Func (l, Fixpoint, tparams, rto, g, ps, nonghost_callers_only, functype, contract, body_opt,Static,Public)::ds ->
@@ -1662,13 +1663,13 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             | _ -> static_error l "Fixpoint function must switch on a parameter." None
           in
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) (Proverapi.Fixpoint index) in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, Some index, body, pn, ilist, fst fsym))::fpm) ds
         | Some ([ReturnStmt (lr, Some e) as body], _) ->
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) ((g, (l, tparams, rt, pmap, None, body, pn, ilist, fst fsym))::fpm) ds
         | None ->
           let fsym = mk_func_symbol g (List.map (fun (p, t) -> provertype_of_type t) pmap) (provertype_of_type rt) Proverapi.Uninterp in
-          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> t) pmap, fsym))::pfm) fpm ds
+          iter (pn,ilist) imap ((g, (l, tparams, rt, List.map (fun (p, t) -> p, t) pmap, fsym))::pfm) fpm ds
         | _ -> static_error l "Body of fixpoint function must be switch statement or return statement." None
         end
       | _::ds -> iter (pn,ilist) imap pfm fpm ds
@@ -1710,7 +1711,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       begin
         assert (ecrank = 0 && match ecmems with [ptr'] when ptr' == ptr -> true | _ -> false);
         ec := `EqClass (rank, ecmems);
-        let rec check_ctor (ctorname, (_, (_, _, _, pts, _))) =
+        let rec check_ctor (ctorname, (_, (_, _, _, parameter_names_and_types, _))) =
           let rec check_type negative pt =
             match pt with
             | Bool | Void | IntType | UShortType | ShortType | UintPtrType | RealType | UChar | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> ()
@@ -1747,7 +1748,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               check_type true t1; check_type negative t2
             | t -> static_error l (Printf.sprintf "Type '%s' is not supported as an inductive constructor parameter type." (string_of_type t)) None
           in
-          List.iter (check_type false) pts
+          let (_, parameter_types) = List.split parameter_names_and_types in
+          List.iter (check_type false) parameter_types
         in
         List.iter check_ctor ctors;
         (* If this node is the leader of an equivalence class, then this equivalence class has now been proven to be well-defined. *)
@@ -1772,6 +1774,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           match ctors with
             [] -> static_error l "Inductive datatype is not inhabited." None
           | (_, (_, (_, _, _, pts, _)))::ctors ->
+            let (_, pts) = List.split pts in
             let rec type_is_inhabited tp =
               match tp with
                 Bool | IntType | ShortType | UintPtrType | RealType | Char | PtrType _ | ObjType _ | ArrayType _ | BoxIdType | HandleIdType | AnyType -> true
@@ -1843,6 +1846,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 end
               end
           in
+          let (_, pts) = List.split pts in
           fold_cond [] type_is_infinite pts
         in
         match fold_cond [] ctor_is_infinite ctors with
@@ -2317,7 +2321,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           iter ps1 [] ps2
         in
         let funcsym = mk_func_symbol p (List.map (fun (x, t) -> provertype_of_type t) ps1) ProverInductive Proverapi.Uninterp in
-        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount), List.map (fun (x, t) -> t) ps1, funcsym)) in
+        let pf = (p, (l, [], PredType ([], List.map (fun (x, t) -> t) ps2, inputParamCount), List.map (fun (x, t) -> (x, t)) ps1, funcsym)) in
         iter (pn,ilist) ((p, (l, ps1, ps2, inputParamCount, body, funcsym, pn, ilist))::pcm) (pf::pfm) ds
       | [] -> (pcm, pfm)
       | _::ds -> iter (pn,ilist) pcm pfm ds
@@ -2628,7 +2632,8 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some _ when language <> Java -> scope := Some ModuleName; (e, IntType, None)
       | _ ->
       match resolve (pn,ilist) l x purefuncmap with
-        Some (x, (_, tparams, t, pts, _)) ->
+        Some (x, (_, tparams, t, param_names_types, _)) ->
+        let (_, pts) = List.split param_names_types in
         let (pts, t) =
           if tparams = [] then
             (pts, t)
@@ -2820,7 +2825,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           (WFunCall (l, g, targs, es), rt, None)
         | None ->
         match resolve (pn,ilist) l g purefuncmap with
-          Some (g, (_, callee_tparams, t0, ts, _)) ->
+          Some (g, (_, callee_tparams, t0, param_names_types, _)) ->
+          let (_, ts) = List.split param_names_types in
           let (targs, tpenv) = process_targes callee_tparams in
           let pts =
             match zip es ts with
@@ -2950,7 +2956,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                   match try_assoc cn ctormap with
                     None ->
                     static_error lc ("Not a constructor of inductive type '" ^ i ^ "'.") None
-                  | Some (_, (_, _, _, ts, _)) ->
+                  | Some (_, (_, _, _, param_names_types, _)) ->
+                    let (_, ts) = List.split param_names_types in
                     if not (List.mem_assoc cn ctors) then static_error lc "Duplicate clause." None;
                     let xenv =
                       let rec iter2 ts xs xenv =
@@ -3186,6 +3193,23 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
     begin
     match unfold_inferred_type t with
+    | InductiveType(inductive_name, targs) -> begin
+        let (_, _, constructors, _) = List.assoc inductive_name inductivemap in
+        match constructors with
+        | [constructor_name, (_, (_, _, _, param_names_types, _))] -> begin
+          let params_with_correct_name = List.filter (fun (name,type_) -> name = f) param_names_types in
+          match params_with_correct_name with
+          | [(name, type_)] -> 
+            let (_, _, ctormap, _) = List.assoc inductive_name inductivemap in
+            let [(cn, (_, (_, tparams, _, parameter_names_and_types, (_, _))) : (string * inductive_ctor_info) )] = ctormap in
+            let Some tpenv = zip tparams targs in
+            let type_instantiated = instantiate_type tpenv type_ in
+            (WReadInductiveField(l, w, inductive_name, constructor_name, f, targs), type_instantiated, None)
+          | [] -> static_error l ("The constructor of the inductive data type '" ^ inductive_name ^ "' does not have any field with name '" ^ f ^ "'.") None
+          | _ -> static_error l ("The constructor of the inductive data type '" ^ inductive_name ^ "' has multiple fields with name '" ^ f ^ "'.") None
+          end
+        | _ -> static_error l ("For field access of inductive data type values, the inductive data type must have exactly one constructor, found " ^ (string_of_int (List.length constructors)) ^ ".") None
+      end
     | PtrType (StructType sn) ->
       begin
       match List.assoc sn structmap with
@@ -3265,7 +3289,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         in
         let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
         let (Some tpenv) = zip inductive_tparams targs in
-        let rec check_cs ctormap wcs cs =
+        let rec check_cs (ctormap : (string * (inductive_ctor_info)) list) wcs cs =
           match cs with
             [] ->
             begin match ctormap with
@@ -3286,7 +3310,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             let ts =
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor." None
-              | Some (_, (_, _, _, ts, _)) -> ts
+              | Some (_, (_, _, _, param_names_types, _)) -> 
+                let (_, types) = List.split param_names_types in
+                types
             in
             let xmap =
               let rec iter xmap ts xs =
@@ -3589,7 +3615,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           InductiveType (i, _) ->
           let (_, inductive_tparams, ctormap, _) = List.assoc i inductivemap in
           begin match try_assoc g ctormap with
-            Some (_, (_, _, _, ts0, symb)) ->
+            Some (_, (_, _, _, param_names_types, symb)) ->
+            let (_, ts0) = List.split param_names_types in
             let targs = List.map (fun _ -> InferredType (ref None)) inductive_tparams in
             let Some tpenv = zip inductive_tparams targs in
             let ts = List.map (instantiate_type tpenv) ts0 in
@@ -3907,7 +3934,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           None -> static_error l "Switch operand is not an inductive value." None
         | Some (_, inductive_tparams, ctormap, _) ->
           let (Some tpenv) = zip inductive_tparams targs in
-          let rec iter wcs ctormap cs infTps =
+          let rec iter wcs (ctormap: (string * inductive_ctor_info) list) cs infTps =
             match cs with
               [] ->
               let _ = 
@@ -3920,7 +3947,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
               begin
               match try_assoc cn ctormap with
                 None -> static_error lc "No such constructor." None
-              | Some (_, (_, _, _, ts, _)) ->
+              | Some (_, (_, _, _, param_names_types, _)) ->
+                let (_, ts) = List.split param_names_types in
                 let (xmap, xsInfo) =
                   let rec iter xmap xsInfo ts xs =
                     match (ts, xs) with
@@ -4863,6 +4891,45 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
             None -> static_error l "Cannot use field dereference in this context." None
           | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_field l v fparent fname)
         end
+    | WReadInductiveField(l, e, data_type_name, constructor_name, field_name, targs) ->
+      ev state e $. fun state t ->
+      let (_, _, ctormap, _) = List.assoc data_type_name inductivemap in
+      
+      (* Note: this does enforce that there is only one constructor:
+       * otherwise pattern matching will fail. *)
+      let [(_, (_, (_, tparams, _, parameter_names_and_types, (_, _))))] = ctormap in
+      
+      let (Some tpenv) = zip tparams targs in
+      let rec terms_terms_instantiated parameter_names_and_types : (termnode * termnode) list =
+        match parameter_names_and_types with
+        | (parameter_name, parameter_type) :: tail ->
+          let typ = parameter_type in
+          let typ_uninstantiated = typ in
+          let typ = instantiate_type tpenv typ in
+          (* For readable error messages, use variable name if possible.
+           * If the expression is complex (e.g. function call), we stick
+           * to the constructor name for now. *)
+          let var_symb_name = 
+            match e with
+            | Var(_, varname, _) -> varname ^ "." ^ parameter_name
+            | _ -> constructor_name ^ "#" ^ parameter_name
+          in
+          let term = get_unique_var_symb var_symb_name typ in
+          let term_converted =
+            match unfold_inferred_type typ_uninstantiated with
+            | TypeParam x -> convert_provertype term (provertype_of_type typ) ProverInductive
+            | x -> term
+          in
+          (term, term_converted) :: (terms_terms_instantiated tail)
+        | [] -> []
+      in
+      let (terms, terms_converted) = List.split (terms_terms_instantiated parameter_names_and_types) in
+      let (parameter_names, _) = List.split parameter_names_and_types in
+      let Some(index_of_field) = index_of field_name parameter_names 0 in
+      let term = List.nth terms index_of_field in
+      let constructor_function_symbol = get_pure_func_symb constructor_name in
+      ignore $. ctxt#assume (ctxt#mk_eq t (mk_app constructor_function_symbol terms_converted));
+      cont state term
     | WReadArray(l, arr, tp, i) ->
       evs state [arr; i] $. fun state [arr; i] ->
       begin
@@ -4915,7 +4982,8 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
       let (_, _, ctormap, _) = List.assoc i inductivemap in
       let fpclauses =
         List.map
-          begin fun (cn, (_, (_, tparams, _, pts, (csym, _)))) ->
+          begin fun (cn, (_, (_, tparams, _, parameter_names_and_types, (csym, _)))) ->
+            let (_, pts) = List.split parameter_names_and_types in
             match try_assoc cn case_clauses with
               Some (ps, e) ->
               let apply (_::gvs) cvs =
@@ -4992,7 +5060,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
                   let Some tpenv = zip tparams targs in
                   let Some patenv = zip patenv ts in
                   List.map
-                    (fun ((x, term), typ) ->
+                    (fun ((x, term), (name, typ)) ->
                      let term =
                      match unfold_inferred_type typ with
                        TypeParam x -> convert_provertype term ProverInductive (provertype_of_type (List.assoc x tpenv))

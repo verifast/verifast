@@ -349,12 +349,12 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                let Some pts = zip pats tps in
                let xts =
                  if tparams = [] then
-                   List.map (fun (x, tp) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
+                   List.map (fun (x, (name, (tp: type_))) -> let term = get_unique_var_symb x tp in (x, term, term)) pts
                  else
                    let Some patsInfo = !patsInfo in
                    let Some pts = zip pts patsInfo in
                    List.map
-                     (fun ((x, tp), info) ->
+                     (fun ((x, (name, tp)), info) ->
                       match info with
                         None -> let term = get_unique_var_symb x tp in (x, term, term)
                       | Some proverType ->
@@ -454,10 +454,11 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           push_undo_item (fun () -> pop_context (); ctxt#pop);
           result
       in
-      let rec check_not_other_ctors cs =
+      let rec check_not_other_ctors (cs : (string * (inductive_ctor_info)) list) =
         match cs with
           [] -> cont ()
-        | (g', (_, (_, _, _, ts0, (symb, _))))::cs ->
+        | (g', (_, (_, _, _, param_names_and_types, (symb, _))))::cs ->
+          let (_, ts0) = List.split param_names_and_types in
           if
             g' = g ||
             in_temporary_context begin fun () ->
@@ -981,7 +982,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let Some pts = zip pats tps in
           let (xs, xenv) =
             if tparams = [] then
-              let xts = List.map (fun (x, tp) -> (x, get_unique_var_symb x tp)) pts in
+              let xts = List.map (fun (x, (name, tp)) -> (x, get_unique_var_symb x tp)) pts in
               let xs = List.map (fun (x, t) -> t) xts in
               (xs, xts)
             else
@@ -989,7 +990,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               let Some pts = zip pts patsInfo in
               let xts =
                 List.map
-                  (fun ((x, tp), info) ->
+                  (fun ((x, (name, tp)), info) ->
                    match info with
                      None -> let term = get_unique_var_symb x tp in (x, term, term)
                    | Some proverType ->

@@ -143,6 +143,7 @@ cd examples
   verifast_both -c typedefs.c
   verifast_both -disable_overflow_check wc.c
   verifast_both -c -allow_should_fail carrays.c
+  verifast_both -c -allow_should_fail inductive_value_field_access.c
   cd helloproc
     # Helloproc.mysh is not parallelizable.  mysh does not guarantee that 1 will be
     # the default number of cpus forever, so we explicitly specify it to be 1.  

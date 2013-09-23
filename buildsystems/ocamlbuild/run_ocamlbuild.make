@@ -23,7 +23,7 @@ endif
 OCAMLBUILDFLAGS+= -cflags -warn-error,A,-w,-8,-w,-28,-w,-26,-w,-10
 
 ifdef DEBUG
-OCAMLBUILDFLAGS += -cflags -g
+OCAMLBUILDFLAGS += -cflag -g -lflag -g
 endif
 
 ifdef BYTECODE
@@ -31,6 +31,10 @@ OCAMLBUILD_KIND=byte
 OCAMLBUILDFLAGS += -lflags -custom
 else
 OCAMLBUILD_KIND=native
+endif
+
+ifdef ANNOT
+OCAMLBUILDFLAGS += -tag annot
 endif
 
 # ocamlbuild has the weirdest behaviour (e.g. creating a Windows

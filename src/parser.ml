@@ -520,8 +520,28 @@ and
   parse_ctors_suffix = parser
   [< '(_, Kwd "|"); cs = parse_ctors >] -> cs
 | [< >] -> []
-and parse_ctors = parser
-  [< '(l, Ident cn); ts = (parser [< '(_, Kwd "("); ts = rep_comma parse_paramtype; '(_, Kwd ")") >] -> ts | [< >] -> []); cs = parse_ctors_suffix >] -> Ctor (l, cn, ts)::cs
+and
+  parse_ctors = parser
+  [< '(l, Ident cn);
+     ts = begin
+       parser
+         [< '(_, Kwd "(");
+             ts = rep_comma parse_paramtype_and_name;
+             '(_, Kwd ")")
+         >] -> ts
+       | [< >] -> []
+     end;
+     cs = parse_ctors_suffix
+  >] -> Ctor (l, cn, ts)::cs
+and
+  parse_paramtype_and_name = parser
+  [< t = parse_type;
+     paramname_opt = opt (parser
+       [< '(_, Ident paramname) >] -> paramname
+     )
+  >] ->
+    let paramname = match paramname_opt with None -> "" | Some(x) -> x in
+    (paramname, t)
 and
   parse_paramtype = parser [< t = parse_type; _ = opt (parser [< '(_, Ident _) >] -> ()) >] -> t
 and
