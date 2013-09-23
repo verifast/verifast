@@ -189,6 +189,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
+      a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
+      a "Find file (bottom window)" ~label:"Find _file (bottom window)..." ~stock:`FIND ~accel:"F7";
       a "VerifyProgram" ~label:"Verify program" ~stock:`MEDIA_PLAY ~accel:"F5" ~tooltip:"Verify";
       a "RunToCursor" ~label:"_Run to cursor" ~stock:`JUMP_TO ~accel:"<Ctrl>F5" ~tooltip:"Run to cursor";
       a "TopWindow" ~label:"Window(_Top)";
@@ -229,6 +231,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <separator />
           <menuitem action='ShowLineNumbers' />
           <menuitem action='ShowWhitespace' />
+          <menuitem action='Find file (top window)' />
+          <menuitem action='Find file (bottom window)' />
         </menu>
         <menu action='Verify'>
           <menuitem action='VerifyProgram' />
@@ -1172,6 +1176,8 @@ let show_ide initialPath prover codeFont traceFont runtime =
     end
   in
   let verifyProgram runToCursor targetPath () =
+    msg := Some("Verifying...");
+    updateMessageEntry();
     clearTrace();
     match !buffers with
       [] -> ()
@@ -1354,11 +1360,112 @@ let show_ide initialPath prover codeFont traceFont runtime =
     ignore $. cancelButton#connect#clicked (fun () -> dialog#response `DELETE_EVENT);
     ignore $. dialog#run();
     dialog#destroy()
-  in  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
+  in
+  
+  (** Dialog that allows the user to select a tab of the notebook by simply typing (part of) the name.
+   *  This is sometimes faster than searching visually. *)
+  let showFindFileDialog notebook () =
+    let dialog = GWindow.dialog ~title:"Find file" ~parent:root () in
+    dialog#add_button_stock `OK `OK;
+    dialog#add_button_stock `CANCEL `CANCEL;
+    dialog#set_default_response `OK;
+    let vbox = dialog#vbox in
+    let entry = GEdit.entry ~text:"" ~max_length:500 ~packing:(vbox#pack ~from:`START ~expand: true) ~activates_default:true () in
+    let label = GMisc.label ~text:"(no search results yet)" ~packing:(vbox#pack ~expand:true) () in
+    
+    
+    let google (haystack: string list) (needle: string) : string option = 
+      
+      let rec get_first_filter_match (filters : ('a -> bool) list) (haystack : 'a list) : 'a option =
+        match filters with
+        | [] -> None
+        | filter::tail ->
+          try
+            Some(List.find filter haystack)
+          with
+          Not_found -> get_first_filter_match tail haystack
+      in
+      
+      (* This is probably a bit inefficient. *)
+      let contains (haystack: string) (needle: string) : bool =
+        let rec iter i =
+          if i < 0 then
+            false
+          else begin
+            if String.sub haystack i (String.length needle) = needle then
+              true
+            else
+              iter (i - 1)
+          end
+        in
+        iter ((String.length haystack) - (String.length needle))
+      in
+      
+      let filters = [
+        
+        (* Find a file that starts with what the user types *)
+        (startswith needle);
+        
+        (* Find matches of the form "x/yz" for a search "y" *)
+        (fun bigstring -> contains bigstring ("/" ^ needle));
+        
+        (* Find matches that just contain what the user types*)
+        (fun bigstring -> contains bigstring needle)
+      ] in
+      
+      if needle = "" then
+        None
+      else
+        get_first_filter_match filters haystack
+    in
+    
+    (* Gets the list of names of tabs and tabs. *)
+    let search_tabs () =
+      let items = !buffers |> List.map (fun tab -> (match !(tab#path) with None -> "(Untitled)" | Some (path, mtime) -> path), tab) in
+      let items = List.sort (fun (name1, _) (name2, _) -> compare name1 name2) items in
+      let (item_strings, _) = List.split items in
+      (item_strings, items)
+    in
+    
+    (* Jump to the tab that matches the best with the entry's text *)
+    let jump_to_tab () =
+      (* If you do this somewhere else, you will sooner or later
+       * end up using outdated data. *)
+      let (item_strings, items) = search_tabs() in
+      
+      begin match google item_strings entry#text with
+        | None -> ()
+        | Some(match_) ->
+          let tab = List.assoc match_ items in
+          goto_tab tab notebook
+      end
+    in
+    
+    (* Performs search and updates the search results in the GUI *)
+    let show_finds () =
+      let (item_strings, items) = search_tabs() in
+      let text = match google item_strings entry#text with
+          None -> "(no results)"
+          | Some(match_) -> match_
+      in
+      label#set_text text
+    in
+    
+    entry#connect#changed ~callback:show_finds;
+    match dialog#run () with
+      `OK ->
+        jump_to_tab ();
+        dialog#destroy()
+      | `DELETE_EVENT | `CANCEL -> dialog#destroy()
+  in
+  
+  ignore $. (actionGroup#get_action "ClearTrace")#connect#activate clearTrace;
   ignore $. (actionGroup#get_action "Preferences")#connect#activate showPreferencesDialog;
   ignore $. (actionGroup#get_action "VerifyProgram")#connect#activate (verifyProgram false None);
   ignore $. (actionGroup#get_action "RunToCursor")#connect#activate (verifyProgram true None);
   ignore $. (actionGroup#get_action "Include paths")#connect#activate showIncludesDialog;
+  ignore $. (actionGroup#get_action "Find file (top window)")#connect#activate (showFindFileDialog subNotebook);
+  ignore $. (actionGroup#get_action "Find file (bottom window)")#connect#activate (showFindFileDialog textNotebook);
   ignore $. undoAction#connect#activate undo;
   ignore $. redoAction#connect#activate redo;
   ignore $. root#event#connect#focus_in begin fun _ ->
