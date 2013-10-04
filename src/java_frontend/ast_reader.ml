@@ -80,14 +80,13 @@ let keywords = [
   "AST_While"; 
   "AST_For"; 
   "AST_Foreach"; 
-  "AST_Labelled"; 
+  "AST_Labeled"; 
   "AST_Label"; 
   "AST_Switch"; 
   "AST_Case"; 
   "AST_Synchronized"; 
   "AST_Try"; 
   "AST_Catch"; 
-  "AST_Cond"; 
   "AST_If"; 
   "AST_Break"; 
   "AST_Continue"; 
@@ -102,6 +101,7 @@ let keywords = [
   "AST_AssignOp";  
   "AST_Unary"; 
   "AST_Binary"; 
+  "AST_Ternary";
   "AST_TypeCast"; 
   "AST_TypeTest"; 
   "AST_ArrayAccess";
@@ -719,15 +719,62 @@ and
       debug_print "parse_statement (Foreach) done";
       Foreach(l, anns, var, iter, stmts)
   | [< 
+       '(Kwd "AST_Labeled"); 
+       (l, _) = parse_block_node_begin;
+       id = parse_identifier;
+       stmt = parse_statement;
+       _ = parse_block_node_end 
+    >] ->
+      debug_print "parse_statement (Labeled) done";
+      Labeled(l, id, stmt)
+  | [< 
+       '(Kwd "AST_Switch"); 
+       (l, _) = parse_block_node_begin;
+       sel = parse_expression;
+       cases = parse_wrapped parse_case;
+       _ = parse_block_node_end 
+    >] ->
+      let (cases, default) =
+        let (cases, d) = 
+          List.partition (fun x -> match x with Case(_, None, _) -> false | Case(_, Some _, _) -> true) cases
+        in
+        let default =
+          if List.length d > 0 then
+            Some (List.hd d)
+          else
+            None
+        in
+        (cases, default)
+      in
+      debug_print "parse_statement (Switch) done";
+      Switch(l, sel, cases, default)
+  | [< 
        '(Kwd "AST_If"); 
        (l, _) = parse_block_node_begin;
        cond = parse_expression;
        if_ = parse_statement;
-       else_ = parse_statement;
+       else_ = parse_opt parse_statement;
        _ = parse_block_node_end 
     >] ->
       debug_print "parse_statement (If) done";
-      If(l, cond, if_, else_)
+      let else_' =
+        match else_ with
+          None -> Block(dummy_loc, [])
+        | Some x -> x
+      in
+      If(l, cond, if_, else_')
+  | [< 
+       '(Kwd "AST_Break"); 
+       (l, _) = parse_line_node 
+    >] ->
+      debug_print "parse_statement (Break) done";
+      Break(l)
+  | [< 
+       '(Kwd "AST_Continue"); 
+       (l, _) = parse_line_node 
+    >] ->
+      debug_print "parse_statement (Continue) done";
+      Continue(l)
   | [< 
        '(Kwd "AST_Return"); 
        (l, _) = parse_block_node_begin;
@@ -744,7 +791,25 @@ and
     >] ->
       debug_print "parse_statement (Throw) done";
       Throw(l, expr)
-  
+  | [< 
+       '(Kwd "AST_Assert"); 
+       (l, _) = parse_block_node_begin;
+       expr1 = parse_expression;
+       expr2 = parse_expression;
+       _ = parse_block_node_end 
+    >] ->
+      debug_print "parse_statement (Assert) done";
+      Assert(l, expr1, expr2)
+and parse_case = parser
+  | [< 
+       '(Kwd "AST_Case"); 
+       (l, _) = parse_block_node_begin; 
+       matched = parse_opt parse_expression;
+       stmts = parse_wrapped parse_statement;
+       _ = parse_block_node_end 
+    >] -> 
+       debug_print "parse_catch_block";
+       Case(l, matched, stmts)
 and parse_catch_block = parser
   | [< 
        '(Kwd "AST_Catch"); 
@@ -794,24 +859,37 @@ and
   | [< 
        '(Kwd "AST_NewArray"); 
        (l, _) = parse_block_node_begin; 
-       typ   = parse_type;
+       typ = parse_opt parse_type;
        (* TODO: fix correct parsing of dimentions*)
        _ = parse_wrapped parse_expression;
        elem  = parse_wrapped parse_expression;
        _ = parse_block_node_end 
     >] -> debug_print "AST_NewArray";
-          NewArray(l, typ, elem)
+          let typ' =
+            match typ with 
+              Some x -> x
+            | None -> RefType(SimpleRef(Name(l, [Identifier(l, "Object")])))
+          in
+          NewArray(l, typ', elem)
           
   | [< 
        '(Kwd "AST_Assign"); 
        (l, _) = parse_block_node_begin;
-       (* TODO:parse possible bin operator *)
        lhs = parse_expression;
        rhs = parse_expression;
        _ = parse_block_node_end 
     >] ->
       debug_print "parse_expression (Assign) done";
       Assign(l, None, lhs, rhs)
+  | [< 
+       '(Kwd "AST_AssignOp"); 
+       (l, op) = parse_block_node_begin;
+       lhs = parse_expression;
+       rhs = parse_expression;
+       _ = parse_block_node_end 
+    >] ->
+      debug_print "parse_expression (Assign) done";
+      Assign(l, Some (a_operator_of_string op), lhs, rhs)
   | [< 
        '(Kwd "AST_Unary"); 
        (l,op) = parse_block_node_begin; 
@@ -829,6 +907,25 @@ and
     >] -> 
       debug_print ("parse_expression (Unary) done: " ^ op);
       Binary(l, (b_operator_of_string op), lhs, rhs)
+  | [< 
+       '(Kwd "AST_Ternary"); 
+       (l, _) = parse_block_node_begin;
+       cond = parse_expression;
+       true_ = parse_expression;
+       false_ = parse_expression;
+       _ = parse_block_node_end 
+    >] ->
+      debug_print "parse_statement (Ternary) done";
+      Ternary(l, cond, true_, false_)
+  | [< 
+       '(Kwd "AST_ArrayAccess"); 
+       (l, _) = parse_block_node_begin;
+       array_ = parse_expression;
+       index = parse_expression;
+       _ = parse_block_node_end 
+    >] ->
+      debug_print "parse_statement (ArrayAccess) done";
+      ArrayAccess(l, array_, index)
   | [< 
        '(Kwd "AST_Literal"); 
        (l,typ) = parse_block_node_begin; 

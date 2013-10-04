@@ -288,27 +288,24 @@ and
       variable_decl *   (* Variable declaration for the loop variable *)
       expression *      (* Container to loop over as an expression *)
       statement list    (* Body of this loop *)
-
-(*  | Labelled of
+  | Labeled of
       loc *
-      identifier * (* The name of the label of this labelled statement *)  
-      statement    (* Body of this labelled statement *)
+      identifier * (* The name of the label of this labeled statement *)  
+      statement    (* Body of this labeled statement *)
   | Switch of
       loc *
       expression * (* Selector of this switch statement *)  
-      case list    (* List of cases in this switch statement *)*)
-
+      case list *  (* List of cases in this switch statement *)
+      case option  (* Possible default case of this switch statement *)
   | If of
       loc *
-      expression * (* Branching condition for this conditional *)
-      statement *  (* If branch of this conditional *)
-      statement    (* Else branch of this conditional *)
-
-(*  | Break of 
+      expression * (* Branching condition for this if statment *)
+      statement *  (* If branch of this if statment *)
+      statement    (* Else branch of this if statment *)
+  | Break of 
       loc
   | Continue of 
-      loc*)
-
+      loc
   | Return of
       loc *
       expression (* Expression that is returned by this return statement *)
@@ -316,21 +313,19 @@ and
       loc *
       expression (* Expression (which should be Throwable) that is thrown 
                     by this throw statement *)
-
-(*  | Assert of
+  | Assert of
       loc *
       expression * (* Failing condition for this assert *)
       expression   (* Detailed information (implicit String conversion when 
-                      evaluated) associated with this assert *)
+                      evaluated) associated with this assert *) 
 and
   case =
   | Case of 
       loc *
-      expression *   (* Pattern matched by this case from a switch 
-                        statment *)
-      statement list (* List of statements in this case from a switch 
-                        statment *)*)
-
+      expression option * (* Pattern matched by this case from a switch 
+                             statment *)
+      statement list      (* List of statements in this case from a switch 
+                            statment *)
 and
   catch =
   | Catch of 
@@ -338,6 +333,7 @@ and
       variable_decl * (* Declaration of Throwable object that is catched by 
                          this catch block *)
       statement list  (* Body of this catch block *)
+
 
 (* expressions *)
 and
@@ -385,12 +381,15 @@ and
       bin_operator * (* Operator in this binary expression  *)
       expression *   (* Left hand side argument to this binary operator *)
       expression     (* Right hand side argument to this binary operator *)
+  | Ternary of
+      loc *
+      expression * (* Branching condition for this ternary operator *)
+      expression * (* True branch of this ternary operator *)
+      expression   (* False branch of this ternary operator *)
   | TypeCast of
       loc *
       type_ *    (* Type to cast the given expression to *)
-      expression (* Expression which is cast do the speciefied type *)
-
- (*
+      expression (* Expression which is cast do the speciefied type *) 
   | TypeTest of
       loc *
       type_ *    (* Type to check the given expression's type against *)
@@ -398,8 +397,7 @@ and
   | ArrayAccess of
       loc *
       expression * (* Array that is indexed *)
-      expression   (* Index of array access *)*)
-
+      expression   (* Index of array access *)
   | Literal of
       loc *                            
       type_ * (* Type of this literal:
@@ -407,38 +405,39 @@ and
                   -If type_ is a reftype ten it must be a String literal,
                    otherwise it is considered as the "null" literal *)
       string  (* Value of this literal as a string *)
+
+
 and 
   bin_operator =
-  | O_Plus   (* + *)
-  | O_Min    (* - *)
-  | O_Mul    (* * *)
-  | O_Div    (* / *)
-  | O_Mod    (* % *)
-  | O_Or     (* || *)
-  | O_And    (* && *)
-  | O_Eq     (* == *)
-  | O_NotEq  (* != *)
-  | O_Lt     (* < *)
-  | O_Gt     (* > *)
-  | O_LtEq   (* <= *)
-  | O_GtEq   (* >= *)
-  | O_BitOr  (* | *)
-  | O_BitXor (* ^ *)
-  | O_BitAnd (* & *)
+  | O_Plus    (* "+" *)
+  | O_Min     (* "-" *)
+  | O_Mul     (* "*" *)
+  | O_Div     (* "/" *)
+  | O_Mod     (* "%" *)
+  | O_Or      (* "||" *)
+  | O_And     (* "&&" *)
+  | O_Eq      (* "==" *)
+  | O_NotEq   (* "!=" *)
+  | O_Lt      (* "<" *)
+  | O_Gt      (* ">" *)
+  | O_LtEq    (* "<=" *)
+  | O_GtEq    (* ">=" *)
+  | O_BitOr   (* "|" *)
+  | O_BitXor  (* "^" *)
+  | O_BitAnd  (* "&" *)
+  | O_ShiftL  (* "<<" *)
+  | O_ShiftR  (* ">>" *)
+  | O_UShiftR (* ">>>" *)
 and
   uni_operator=
-  | O_Pos     (* + *)
-  | O_Neg     (* - *)
-  | O_Not     (* ! *)
-  | O_Compl   (* ~ *)
-  | O_PreInc  (* ++var *)
-  | O_PreDec  (* --var *) 
-  | O_PostInc (* var++ *)
-  | O_PostDec (* var-- *)
-  | O_ShiftL  (* << *)
-  | O_ShiftR  (* >> *)
-  | O_UShiftR (* >>> *)
-
+  | O_Pos     (* "+" *)
+  | O_Neg     (* "-" *)
+  | O_Not     (* "!" *)
+  | O_Compl   (* "~" *)
+  | O_PreInc  (* "++var" *)
+  | O_PreDec  (* "--var" *) 
+  | O_PostInc (* "var++" *)
+  | O_PostDec (* "var--" *)
 
 (* -------------------------- *)
 (* AST construction functions *)
@@ -467,7 +466,7 @@ let prim_type_of_string l t =
   else if (t = "double") then DoubleType(l)
   else assert(false)    
 let u_operator_of_string o =
-  if (o = "+") then O_Pos
+       if (o = "+") then O_Pos
   else if (o = "-") then O_Neg
   else if (o = "!") then O_Not
   else if (o = "~") then O_Compl
@@ -475,12 +474,9 @@ let u_operator_of_string o =
   else if (o = "--x") then O_PreDec
   else if (o = "x++") then O_PostInc
   else if (o = "x--") then O_PreDec
-  else if (o = "<<") then O_ShiftL
-(*   else if (o = ">>") then O_ShiftR *)
-  else if (o = ">>>") then O_UShiftR 
   else assert(false)    
 let b_operator_of_string o =
-  if (o = "+") then O_Plus
+       if (o = "+") then O_Plus
   else if (o = "-") then O_Min
   else if (o = "*") then O_Mul
   else if (o = "/") then O_Div
@@ -496,6 +492,22 @@ let b_operator_of_string o =
   else if (o = "|") then O_BitOr
   else if (o = "^") then O_BitXor
   else if (o = "&") then O_BitAnd
+  else if (o = "<<") then O_ShiftL
+  else if (o = ">>") then O_ShiftR
+  else if (o = ">>>") then O_UShiftR 
+  else assert(false)
+let a_operator_of_string o =
+       if (o = "|=") then O_BitOr
+  else if (o = "^=") then O_BitXor
+  else if (o = "&=") then O_BitAnd
+  else if (o = "<<=") then O_ShiftL
+  else if (o = ">>=") then O_ShiftR
+  else if (o = ">>>=") then O_UShiftR
+  else if (o = "+=") then O_Plus
+  else if (o = "-=") then O_Min
+  else if (o = "*=") then O_Mul
+  else if (o = "/=") then O_Div
+  else if (o = "%=") then O_Mod
   else assert(false)
 
 (* -------------------------- *)
@@ -578,6 +590,7 @@ let remove_last_id name=
         (Name((l1,l2'), remove_last parts), id)
       else
         (name, Identifier(dummy_loc, ""))
+
 
 (* -------------------------- *)
 (* End                        *)
