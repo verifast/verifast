@@ -144,10 +144,30 @@ type options = {
 (* result of symbolic execution; used instead of unit to detect branches not guarded by push and pop calls *)
 type symexec_result = SymExecSuccess
 
+
+
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+
+(* To be moved to other location *)
+
+(*let compare_packages p1 p2 =
+  let write_to_file p name =
+    let sexpr = SExpressions.string_of_sexpression ~margin:4 (SExpressionEmitter.sexpr_of_package p) in
+    let file = open_out name in
+    Printf.fprintf file "AST:\n%s" sexpr;
+    close_out file
+  in
+  write_to_file p1 "sexpr1.txt";
+  write_to_file p2 "sexpr2.txt";
+  Sys.command "diff sexpr1.txt sexpr2.txt"*)
+
 let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) reportShouldFail use_java_frontend: package =
   if (Filename.check_suffix path ".javaspec") || not (use_java_frontend) then
     Parser.parse_java_spec_file path reportRange reportShouldFail
   else begin
+(*     let original = Parser.parse_java_spec_file path reportRange reportShouldFail in *)
     let ast_server_launch =
       try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
       with Not_found ->
@@ -159,12 +179,25 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
               "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path_to_ast_server_jar\" \n"
         in
         Printf.printf "%s" error_message;
-        Pervasives.failwith ""
+        failwith error_message
     in
-    Java_frontend.attach(ast_server_launch);
     let ann_checker = new Annotation_type_checker.dummy_ann_type_checker () in
-    let options = [Java_frontend.desugar; Java_frontend.bodyless_methods_own_trailing_annotations] in
-    let package = Java_frontend.ast_from_java_file path options ann_checker in
+    let package = 
+      try
+        Java_frontend.attach(ast_server_launch);
+        let options = [Java_frontend.desugar; Java_frontend.bodyless_methods_own_trailing_annotations] in
+        Java_frontend.ast_from_java_file path options ann_checker
+      with
+        Java_frontend.JavaFrontendException(l, m) -> 
+          let message = 
+            String.concat "  ||" (Misc.split_string '\n' m)
+          in
+          match l with
+            Some l -> raise (Lexer.ParseException(l, message))
+          | None -> raise (Parser.CompilationError message)
+    in
     let annotations = ann_checker#retrieve_annotations () in
-    Ast_translator.translate_ast package annotations
+    let result = Ast_translator.translate_ast package annotations in
+(* compare_packages original result; *)
+    result
   end

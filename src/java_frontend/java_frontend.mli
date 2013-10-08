@@ -33,9 +33,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *)
 
 (* Exception that indicates that an error occurred while generating
-   an AST. All functions in this file may raise an JavaFrontendException
+   an AST. If a location makes sense for the error a location is also
+   specified. All functions in this file may raise a JavaFrontendException
 *)
-exception JavaFrontendException of string
+exception JavaFrontendException of (General_ast.loc option * string)
 
 (* Load the AstServer: 
     @param1        command string to launch the AstServer  

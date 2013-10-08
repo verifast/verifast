@@ -35,7 +35,7 @@ open General_ast
 
 module Ast_reader = struct
 
-exception AstReaderException of loc * string
+exception AstReaderException of loc option * string
 let error l s = raise (AstReaderException(l, s))
 (* debug print *)
 let debug_print x = 
@@ -156,7 +156,7 @@ let make_lexer keywords text =
             junk (); append c; make_ident_or_key ()
     | (' ' | '\009' | '\010'| '\012'| '\013' | '\026') -> 
             ident_or_key ()
-    | _ as c -> error dummy_loc ("Internal Error!\n" ^
+    | _ as c -> error None ("Internal Error!\n" ^
                 "AST Lexer encountered unexpected character while scanning identifier/keyword: " ^ 
                 (String.make 1 c))
   in
@@ -217,9 +217,9 @@ let make_lexer keywords text =
         Printf.printf "<token>%s\n" s;
         t*)
       with
-        Stream.Failure -> error dummy_loc ("Internal Failure!\n" ^
+        Stream.Failure -> error None ("Internal Failure!\n" ^
                           "AST Lexer aborted with failure")
-      | Stream.Error m -> error dummy_loc ("Internal Error!\n" ^
+      | Stream.Error m -> error None ("Internal Error!\n" ^
                           "AST Lexer aborted with failure (" ^ m ^ ")")
   )
 
@@ -276,15 +276,15 @@ let parse_wrapped wrapped = parser
 let filter_mods l mods =
   let filter m =
     if (m = "strictfp") then
-      error l "Currentrly unsupported modifier: strictfp"
+      error (Some l) "Currentrly unsupported modifier: strictfp"
     else if (m = "volatile") then
-      error l "Currentrly unsupported modifier: volatile"
+      error (Some l) "Currentrly unsupported modifier: volatile"
     else if (m = "transient") then
-      error l "Currentrly unsupported modifier: transient"
+      error (Some l) "Currentrly unsupported modifier: transient"
     else if (m = "synchronized") then
-      error l "Currentrly unsupported modifier: synchronized"
+      error (Some l) "Currentrly unsupported modifier: synchronized"
     else if (m = "native") then
-      error l "Currentrly unsupported modifier: native"
+      error (Some l) "Currentrly unsupported modifier: native"
   in
   List.iter filter mods 
     
@@ -306,19 +306,21 @@ let retrieve_static mods =
 (* Parse functions          *)
 (* ------------------------ *)
 
-(* main parse function *)
-let rec read_ast s =
+let parse_with p s =
   try
-(*     Printf.printf "%s" s; *)
-    parse_package (make_lexer keywords s)
+    p (make_lexer keywords s)
   with
     Stream.Error m -> 
       let m = 
         "Parsing failed" ^
         (if m <> "" then (": " ^ m) else "")
       in
-      raise (AstReaderException(dummy_loc, m))
+      raise (AstReaderException(None, m))
 
+(* main parse function *)
+let rec read_ast s =
+(*   Printf.printf "read_ast:\n%s" s; *)
+  parse_with parse_package s
 
 (* verifier annotations *)
 and
@@ -520,9 +522,9 @@ and
        _ = parse_block_node_end 
     >] -> 
       if (List.length tparams > 0) then 
-        error l "Enums with type params are currently not supported by Java frontend";
+        error (Some l) "Enums with type params are currently not supported by Java frontend";
       if (List.length inters > 0) then 
-        error l ("Enums that implement an interface are currently not supported by Java frontend");
+        error (Some l) ("Enums that implement an interface are currently not supported by Java frontend");
       debug_print "parse_enum done"; 
       Enum(l, anns, id, retrieve_accessibility mods, List.concat decls)
 and
@@ -532,18 +534,18 @@ and
         match var with 
           Variable(l, vid, access, prot, final, stat, typ, init) -> 
             if (access <> PublicAccess) then 
-              error l "Enumerators should be public";
+              error (Some l) "Enumerators should be public";
             if (prot) then 
-              error l "Enumerators should not be protected";
+              error (Some l) "Enumerators should not be protected";
             if (not final) then 
-              error l "Enumerators should be final";
+              error (Some l) "Enumerators should be final";
             if (not stat) then 
-              error l "Enumerators should be static";
+              error (Some l) "Enumerators should be static";
             if (string_of_type typ <> string_of_identifier id) then 
-              error l "Enumerators should have the type of their enumeration";
+              error (Some l) "Enumerators should have the type of their enumeration";
             (match init with 
               Some(NewClass(_, [], _, [])) -> vid
-            | _ -> error l ("Enumerators cannot have an initializing expression" ^
+            | _ -> error (Some l) ("Enumerators cannot have an initializing expression" ^
                                       "(except invocation of the default constructor)"));
       in
       debug_print ("parse_enum_value done: " ^ (string_of_identifier vid)); [vid]
@@ -551,7 +553,7 @@ and
       match decl with
         C_Method(Constructor(_, _, id, [], _, _, [], [], _, _)) 
           when string_of_identifier id = "<init>"-> []
-      | _ -> error l ("Enums that contain method (including constructors) or instance" ^ 
+      | _ -> error (Some l) ("Enums that contain method (including constructors) or instance" ^ 
                       "variable declarations are currently not supported by Java frontend")
 and
   parse_class_decl = parser

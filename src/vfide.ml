@@ -137,6 +137,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   let scaledTraceFont = ref !traceFont in
   let actionGroup = GAction.action_group ~name:"Actions" () in
   let disableOverflowCheck = ref false in
+  let useJavaFrontend = ref false in
   let simplifyTerms = ref false in
   let current_tab = ref None in
   let showLineNumbers enable =
@@ -187,6 +188,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       (fun group -> group#add_action showWhitespaceAction);
       a "Verify" ~label:"_Verify";
       GAction.add_toggle_action "CheckOverflow" ~label:"Check arithmetic overflow" ~active:true ~callback:(fun toggleAction -> disableOverflowCheck := not toggleAction#get_active);
+      GAction.add_toggle_action "UseJavaFrontend" ~label:"Use the Java frontend" ~active:false ~callback:(fun toggleAction -> useJavaFrontend := toggleAction#get_active);
       GAction.add_toggle_action "SimplifyTerms" ~label:"Simplify Terms" ~active:true ~callback:(fun toggleAction -> simplifyTerms := toggleAction#get_active);
       a "Include paths" ~label:"_Include paths...";
       a "Find file (top window)" ~label:"Find file (_top window)..." ~stock:`FIND ~accel:"<Shift>F7";
@@ -239,6 +241,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
           <menuitem action='RunToCursor' />
           <separator />
           <menuitem action='CheckOverflow' />
+          <menuitem action='UseJavaFrontend' />
           <menuitem action='SimplifyTerms' />
           <menuitem action='Include paths' />
         </menu>
@@ -414,6 +417,13 @@ let show_ide initialPath prover codeFont traceFont runtime =
   (* let string_of_iter it = string_of_int it#line ^ ":" ^ string_of_int it#line_offset in *)
   let apply_tag_by_name tab tagName ~start ~stop =
     tab#apply_tag_enabled := true;
+    (* to make error visible when start and stop are same location *)
+    let start =
+      if (start#offset = stop#offset && start#line = stop#line && start#offset > 0) then
+        start#set_offset (start#offset - 1)
+      else
+        start
+    in
     tab#buffer#apply_tag_by_name tagName ~start ~stop;
     tab#apply_tag_enabled := false
   in
@@ -1210,6 +1220,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
               let options = {
                 option_verbose = 0;
                 option_disable_overflow_check = !disableOverflowCheck;
+                option_use_java_frontend = !useJavaFrontend;
                 option_allow_should_fail = true;
                 option_emit_manifest = false;
                 option_allow_assume = true;
@@ -1220,7 +1231,6 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 option_include_paths = !include_paths;
                 option_safe_mode = false;
                 option_header_whitelist = [];
-                option_use_java_frontend = false
               }
               in
               let reportExecutionForest =
@@ -1229,6 +1239,9 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 else
                   (fun forest -> postProcess := (fun () -> reportExecutionForest !forest))
               in
+              if options.option_use_java_frontend then begin
+                perform_syntax_highlighting tab tab#buffer#start_iter tab#buffer#end_iter
+              end;
               verify_program prover false options path reportRange reportUseSite reportExecutionForest breakpoint targetPath;
               msg := Some (if targetPath <> None then "0 errors found (target path not reached)" else if runToCursor then "0 errors found (cursor is unreachable)" else "0 errors found");
               updateMessageEntry()
@@ -1259,7 +1272,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
                 handleStaticError l emsg eurl
               end
             | e ->
-              prerr_endline ("VeriFast internal error: " ^ Printexc.to_string e);
+              prerr_endline ("VeriFast internal error: \n" ^ Printexc.to_string e ^ "\n");
               Printexc_proxy.print_backtrace stderr;
               flush stderr;
               GToolbox.message_box "VeriFast IDE" "Verification failed due to an internal error. See the console window for details."

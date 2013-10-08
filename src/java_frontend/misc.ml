@@ -50,7 +50,7 @@ let concat path1 path2 =
 let split_path path =
   let parts = split_string (String.get Filename.dir_sep 0) path in
   if (List.length parts) > 2 then
-    (String.concat Filename.dir_sep parts, List.hd (List.rev parts))
+    (String.concat Filename.dir_sep (List.rev (List.tl (List.rev parts))), List.hd (List.rev parts))
   else
     ("", path)
 

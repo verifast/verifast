@@ -177,9 +177,11 @@ type modifier = StaticModifier | FinalModifier | AbstractModifier | VisibilityMo
    TODO: find a better solution
 *)
 let language = ref CLang
+let set_language lang =
+  language := lang
 
 let rec parse_decls lang ?inGhostHeader =
-  language := lang;
+  set_language lang;
   if match inGhostHeader with None -> false | Some b -> b then
     parse_pure_decls
   else

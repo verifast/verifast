@@ -30,16 +30,19 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 open Communication
 open Ast_reader
 
-exception JavaFrontendException of string
+exception JavaFrontendException of (General_ast.loc option * string)
+
+let frontend_error l m =
+  raise (JavaFrontendException (l, m))
 
 let catch_exceptions f =
   try
     f ()
   with
-  | Communication.CommunicationException (e) -> 
-      raise (JavaFrontendException ("Communucation Failure: " ^ e))
+  | Communication.CommunicationException (m) -> 
+      frontend_error None ("Communucation Failure: " ^ m)
   | Ast_reader.AstReaderException(l, m) -> 
-      raise (JavaFrontendException ("AST reading Failure: " ^ m ^ " - "  ^ (General_ast.string_of_loc l)))
+      frontend_error l m
 
 type ast_option = string
 
@@ -71,8 +74,9 @@ let ast_from_java_file_core f opts achecker =
     recieve ();
     while(!kind <> SUCCESS) do
       if (!kind <> CALLBACK) then
-        raise (JavaFrontendException ("Callback failure: expected " ^ (string_of_response_kind CALLBACK) ^ 
-                                      " message, but got " ^ (string_of_response_kind !kind) ^ " message"));
+        frontend_error None 
+          ("Callback failure: expected " ^ (string_of_response_kind CALLBACK) ^ 
+           " message, but got " ^ (string_of_response_kind !kind) ^ " message");
       achecker#check_annotation !response communication;
       communication#send_command(command_continue);
       recieve ();

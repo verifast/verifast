@@ -29,7 +29,7 @@ ifeq ($(OS), macos)
   OCAMLBUILDFLAGS_VFCOMMON+= -cflags -I,$(SRCDIR)/linux -lflags -I,$(SRCDIR)/linux -I macos
 endif
 
-OCAMLBUILDFLAGS_VFCOMMON+= -pp camlp4o.opt -libs Perf,nums,dynlink
+OCAMLBUILDFLAGS_VFCOMMON+= -pp camlp4o.opt -libs Perf,nums,str,dynlink
 
 # For building Java frontend prototype
 OCAMLBUILDFLAGS_VFCOMMON+= -I java_frontend -tag thread

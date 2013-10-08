@@ -27,6 +27,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *)
 
+open Ast_reader
+
 exception CommunicationException of string
 
 (* ------------------------ *)
@@ -92,8 +94,9 @@ object
 end
 
 (* debug print *)
+let debug_print x =
+  Printf.printf "<OCaml debug> communication.ml - %s\n" x
 let debug_print x = ()
-(*   Printf.printf "<OCaml debug> communication.ml - %s\n" x *)
 
 (* ------------------------ *)
 (* Socket implementation    *)
@@ -139,7 +142,9 @@ object (this)
           end
         done;
         thread <- Thread.create (fun _ -> 
-          Sys.command(ast_server_launch ^ " " ^ (string_of_int !server_port))) ();
+          let result = Sys.command(ast_server_launch ^ " " ^ (string_of_int !server_port)) in
+          if result <> 0 then exit result
+        ) ();
         finished := false;
         while (not !finished) do
           let i = ref 0 in
@@ -231,8 +236,14 @@ object (this)
       this#unload ();
       this#error ("ASTServer aborted while exetuting command: \n" ^ message)
     end;
-    if kind = response_failure then
-      this#error ("ASTServer could not execute command correctely: \n" ^ message);   
+    if kind = response_failure then begin
+      let parts = List.tl lines in
+      if (List.length parts < 2) then
+        this#error ("Received an incomprehensible error message from the ASTServer: \n" ^ message);
+      let l = Ast_reader.parse_with (Ast_reader.parse_opt Ast_reader.parse_loc) (List.hd parts) in
+      let m = String.concat "\n" (List.tl parts) in
+      raise (Ast_reader.AstReaderException(l, m))
+    end;
     let kind =
       if kind = response_success then SUCCESS
       else if kind = response_callback then CALLBACK

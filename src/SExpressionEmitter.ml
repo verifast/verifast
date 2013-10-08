@@ -409,6 +409,9 @@ let rec sexpr_of_stmt (stmt : stmt) : sexpression =
     | TryCatch _                             -> unsupported "stmt-TryCatch"
     | TryFinally _                           -> unsupported "stmt-TryFinally"
     | Break _                                -> unsupported "stmt-Break"
+    | SuperConstructorCall (loc, args) ->
+      build_list [ Symbol "stmt-supercall" ]
+                 [ "arguments", List (List.map sexpr_of_expr args) ]
 
 and sexpr_of_decl (decl : decl) : sexpression =
   let symbol s = Symbol s

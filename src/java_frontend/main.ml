@@ -32,6 +32,7 @@ open Sys
 open Java_frontend
 open Annotation_type_checker
 open Ast_writer
+open General_ast
 
 (* debug print *)
 let debug_print x = 
@@ -59,8 +60,12 @@ let _ =
       let achecker = new Annotation_type_checker.dummy_ann_type_checker () in
       List.map (fun x -> Java_frontend.ast_from_java_file x [Java_frontend.desugar; Java_frontend.bodyless_methods_own_trailing_annotations] achecker) javas 
     with 
-    | Java_frontend.JavaFrontendException(m) ->
-        debug_print ("JavaFrontendException in main: \n" ^ m);
+    | Java_frontend.JavaFrontendException(None, m) ->
+        debug_print ("JavaFrontendException in main:\n" ^ m);
+        Java_frontend.detach ();
+        exit 1
+    | Java_frontend.JavaFrontendException(Some l, m) ->
+        debug_print ("JavaFrontendException in main @" ^ (General_ast.string_of_loc l) ^ ": \n" ^ m);
         Java_frontend.detach ();
         exit 2
   in

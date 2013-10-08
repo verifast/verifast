@@ -70,6 +70,7 @@ let annotations : (string, string) Hashtbl.t ref = ref (Hashtbl.create 1)
    the annotations and composes them before
    passing the resulting stream to the parser *)
 let parse_pure_decls_core used_parser anns autogen =
+  Parser.set_language Java;
   if (List.length anns < 1) then
     raise (Lexer.ParseException (dummy_loc, "Composing of lexers for parsing annotations failed (empty list of annotations)"));
   let (loc, token_stream) =
@@ -112,7 +113,7 @@ let parse_pure_decls_core used_parser anns autogen =
     let rec next_token () =
       match List.nth lexers !index with (_, stream) ->
         match Lexer.Stream.peek stream with 
-          Some _ as t -> Lexer.Stream.junk stream; t
+          Some (_, p) as t -> Lexer.Stream.junk stream; t
         | None ->
             if (!index < List.length lexers - 1) then
               (index := !index + 1; next_token ())
@@ -143,13 +144,7 @@ let parse_postcondition anns autogen =
   parse_pure_decls_core parser_postcondition_eof anns autogen
 
 let parse_contract anns autogen =
-  let parser_contract_eof = parser 
-    [< '(_, Lexer.Kwd "requires"); pre = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
-       '(_, Lexer.Kwd "ensures"); post = Parser.parse_pred; '(_, Lexer.Kwd ";"); 
-       _ = Lexer.Stream.empty >] -> (pre, post)
-  in
-  let (pre, post) = parse_pure_decls_core parser_contract_eof anns autogen in
-  (pre, post)
+  parse_pure_decls_core Parser.parse_spec anns autogen
   
 let parse_instance_preds classname ann autogen =
   parse_pure_decls_core (Parser.parse_ghost_java_members classname) [ann] autogen
@@ -479,9 +474,7 @@ and translate_ref_type typ =
   match typ with
   (* TODO check correctness + fix loc *)
   | GEN.SimpleRef(Name(l, ids)) ->
-      (* TODO: reinstate expression below, this was for mimicing 100% the VeriFast ast *)
-      VF.IdentTypeExpr(l, None, GEN.string_of_identifier (List.hd (List.rev ids)))
-      (* VF.IdentTypeExpr(l, retrieve_package_name (Name(l, ids)), GEN.string_of_identifier (List.hd (List.rev ids))) *)
+      VF.IdentTypeExpr(l, retrieve_package_name (Name(l, ids)), GEN.string_of_identifier (List.hd (List.rev ids)))
   | GEN.TypeApply(l, name, typs) -> 
       let typs' = List.map translate_ref_type typs in
       VF.ConstructedTypeExpr(l, GEN.string_of_name name, typs')
@@ -499,7 +492,14 @@ and translate_statement stmt =
       let init' = Misc.apply_option translate_expression init in
       VF.DeclStmt (l, [(l, typ', id', init', ref false)])
   | GEN.S_Expression(e) ->
-      VF.ExprStmt (translate_expression e)
+      begin
+        match e with
+        | GEN.Apply(l, tparams, GEN.E_Identifier(GEN.Identifier(l_id, "super")), exprs) ->
+            let exprs' = List.map translate_expression exprs in
+            VF.SuperConstructorCall(l, exprs')
+        | _ -> 
+            VF.ExprStmt (translate_expression e)
+      end
   | GEN.Block(l, stmts) ->
       (* TODO: findout meaning of all arguments to this constructor*)
       VF.BlockStmt(l, [], List.map translate_statement stmts, dummy_loc, ref [])
@@ -518,6 +518,19 @@ and translate_statement stmt =
           parse_loop_invar anns false
       in
       VF.WhileStmt(l, expr', inv, dec, stmts')
+  | GEN.DoWhile(l, anns, expr, stmt) ->
+      let expr' = translate_expression expr in
+      let stmts' = List.map translate_statement stmt in
+      let (inv, dec) = 
+        if List.length anns = 0 then begin
+          warning l ("While loop does not have a valid invariant");
+          (None, None)
+        end else
+          parse_loop_invar anns false
+      in
+      let body = VF.BlockStmt(l, [], stmts', dummy_loc, ref []) in
+      let while_ = VF.WhileStmt(l, expr', inv, dec, stmts') in
+      VF.BlockStmt(l, [], [body; while_], dummy_loc, ref [])
   | GEN.For(l, anns, init, expr, update, stmt) ->
       let (inv, dec) = 
         if List.length anns = 0 then begin
@@ -543,7 +556,6 @@ and translate_statement stmt =
       let expr' = translate_expression expr in
       VF.Throw(l, expr')
   (* TODO: finish implementation *)
-  | GEN.DoWhile(l, _, _, _) -> error l "DoWhile statements are not supported yet by the VeriFast ast" 
   | GEN.Foreach(l, _, _, _, _) -> error l "Foreach statements are not supported yet by the VeriFast ast" 
 (*   | _ -> error dummy_loc "statement not supported yet" *)
 
@@ -558,7 +570,7 @@ and translate_catch catch =
 and translate_expression expr =
   debug_print "translate_expression";
   match expr with
-  | GEN.E_Identifier(Identifier(l, id)) -> 
+    GEN.E_Identifier(Identifier(l, id)) -> 
       VF.Var(l, id, ref None)
   | GEN.Access(l, expr, id) ->
       let expr' = translate_expression expr in
@@ -571,7 +583,7 @@ and translate_expression expr =
       let pats' = List.map (fun e -> VF.LitPat e) exprs' in
       begin
         match expr with
-          GEN.E_Identifier(GEN.Identifier(l_id, id)) -> 
+        | GEN.E_Identifier(GEN.Identifier(l_id, id)) -> 
             VF.CallExpr(l, id, [], [], pats', VF.Static)
         | GEN.Access(l_a, expr, Identifier(l_id, id)) ->
             let expr' = translate_expression expr in

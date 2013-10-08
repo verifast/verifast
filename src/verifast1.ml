@@ -2837,7 +2837,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           let t = instantiate_type tpenv t0 in
           (unbox (WPureFunCall (l, g, targs, args)) t0 t, t, None)
         | None ->
-          static_error l (match language with CLang -> "No such function" | Java -> "No such method or function") None
+          static_error l (match language with CLang -> "No such function: " ^ g | Java -> "No such method or function: " ^ g) None
       in
       if language = CLang || classmap = [] then func_call () else
       let try_qualified_call tn es args fb on_fail =

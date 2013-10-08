@@ -14,14 +14,14 @@ misc.cmx: misc.ml
 general_ast.cmx: general_ast.ml misc.cmx
 	${OCAMLOPTOPT} -c general_ast.ml
 
-communication.cmx: communication.ml
-	${OCAMLOPTOPT} -thread -c communication.ml
-
 ast_writer.cmx: ast_writer.ml general_ast.cmx
 	${OCAMLOPTOPT} -c ast_writer.ml
 
 ast_reader.cmx: ast_reader.ml general_ast.cmx
 	${OCAMLOPTOPT} -pp ${CAMLP4O} -c ast_reader.ml
+
+communication.cmx: communication.ml ast_reader.cmx
+	${OCAMLOPTOPT} -thread -c communication.ml
 
 annotation_type_checker.cmi: annotation_type_checker.mli communication.cmx
 	${OCAMLOPTOPT} -c annotation_type_checker.mli
