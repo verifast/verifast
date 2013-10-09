@@ -57,7 +57,7 @@ let attach ast_server_launch =
   catch_exceptions (fun _ -> communication#load(ast_server_launch))
 
 let detach () =
-  catch_exceptions (fun _ -> communication#unload())
+  catch_exceptions (fun _ -> communication#unload)
 
 (* method to send a FILE request with corresponding options and parse the response message *)
 let ast_from_java_file_core f opts achecker =
@@ -67,7 +67,7 @@ let ast_from_java_file_core f opts achecker =
     let kind = ref CALLBACK in
     let response = ref "" in
     let recieve _ =
-      let (k, r) = communication#receive_response () in
+      let (k, r) = communication#receive_response in
       kind := k;
       response := r;
     in
