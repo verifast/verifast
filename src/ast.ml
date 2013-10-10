@@ -766,6 +766,7 @@ let expr_fold_open iter state e =
   | Read (l, e0, f) -> iter state e0
   | ArrayLengthExpr (l, e0) -> iter state e0
   | WRead (l, e0, fparent, fname, frange, fstatic, fvalue, fghost) -> if fstatic then state else iter state e0
+  | WReadInductiveField (l, e0, ind_name, constr_name, field_name, targs) -> iter state e0
   | ReadArray (l, a, i) -> let state = iter state a in let state = iter state i in state
   | WReadArray (l, a, tp, i) -> let state = iter state a in let state = iter state i in state
   | Deref (l, e0, tp) -> iter state e0
