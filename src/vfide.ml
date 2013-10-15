@@ -1464,7 +1464,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
       label#set_text text
     in
     
-    entry#connect#changed ~callback:show_finds;
+    ignore $. entry#connect#changed ~callback:show_finds;
     match dialog#run () with
       `OK ->
         jump_to_tab ();

@@ -27,6 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 *)
 
+open Misc
 open General_ast
 
 module Ast_writer = struct
@@ -63,7 +64,7 @@ let print_constructor name args =
           arg ();
           if i < nb_of_args - 1 then print ",\n"
         in
-        List.iteri print_arg args;  
+        iteri print_arg args;  
       in
       print_wrapped (name ^ "(") middle ")"
 
@@ -116,7 +117,7 @@ and write_list l () =
           e ();
           if i < nb_of_elems - 1 then print ";\n"
         in
-        List.iteri print_elem l;  
+        iteri print_elem l;  
       in
       print_wrapped "[" middle "]"
 and write_option : 'a . ('a -> unit -> unit) -> ('a option) -> unit -> unit =

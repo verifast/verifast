@@ -251,7 +251,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           begin match try_assoc g#name predfammap with
             Some (_, _, _, declared_paramtypes, symb, _) -> ((symb, true), pats0, pats, g#domain, Some (g#name, declared_paramtypes))
           | None ->
-            let PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function LitPat e -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in
@@ -885,7 +885,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
            match try_assoc g#name predfammap with
             Some (_, _, _, _, symb, _) -> ((symb, true), pats0, pats, g#domain)
           | None -> 
-            let PredCtorInfo (l, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
+            let PredCtorInfo (_, ps1, ps2, inputParamCount, body, funcsym) = List.assoc g#name predctormap in
             let ctorargs = List.map (function SrcPat (LitPat e) -> ev e | _ -> static_error l "Patterns are not supported in predicate constructor argument positions." None) pats0 in
             let g_symb = mk_app funcsym ctorargs in
             let (symbol, symbol_term) = funcsym in

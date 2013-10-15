@@ -32,6 +32,13 @@ let remove_last lst =
   List.rev (List.tl (List.rev lst))
 let get_last lst =
   List.hd (List.rev lst)
+let iteri f xs =
+  let rec iter i xs =
+    match xs with
+      [] -> ()
+    | x::xs -> f i x; iter (i + 1) xs
+  in
+  iter 0 xs
 
 (*  Strings *)
 let rec split_string c s =
