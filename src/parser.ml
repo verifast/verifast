@@ -14,7 +14,8 @@ let common_keywords = [
   "}"; ";"; "int"; "true"; "false"; "("; ")"; ","; "="; "|"; "+"; "-"; "=="; "?"; "%"; 
 (* Note: it's important for soundness that currentCodeFractions, currentThread, and varargs be considered keywords both inside and outside of annotations. *)
   "*"; "/"; "&"; "^"; "~"; "assert"; "currentCodeFraction"; "currentThread"; "varargs"; "short"; ">>"; "<<";
-  "truncating"; "typedef"; "do"
+  "truncating"; "typedef"; "do";
+  "->" (* Used for inductive value field access (e.g. "my_ind_value->my_param_name") in ghostcode, and struct field access in C and C-ghostcode. *)
 ]
 
 let ghost_keywords = [
@@ -28,7 +29,7 @@ let ghost_keywords = [
 ]
 
 let c_keywords = [
-  "struct"; "bool"; "char"; "->"; "sizeof"; "#"; "include"; "ifndef";
+  "struct"; "bool"; "char"; "sizeof"; "#"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";
