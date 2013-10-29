@@ -213,7 +213,7 @@ parser.cmx: ast.cmx parser.ml
 
 java_frontend\java_frontend.cmx: java_frontend\java_frontend.ml
 	cd java_frontend
-	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp camlp4o -c -thread -I .. misc.ml annotation_type_checker.mli general_ast.ml ast_reader.ml communication.ml ast_translator.ml ast_writer.ml annotation_type_checker.ml java_frontend.mli java_frontend.ml
+	ocamlopt.opt $(OPT_OPTIONS) -w p -warn-error FSU -pp camlp4o -c -thread -I .. misc.ml general_ast.ml ast_reader.ml communication.ml annotation_type_checker.mli ast_translator.ml ast_writer.ml annotation_type_checker.ml java_frontend.mli java_frontend.ml
 	cd ..
 
 verifast0.cmx: java_frontend\java_frontend.cmx parser.cmx verifast0.ml
