@@ -1436,15 +1436,16 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                           let outputParams = drop (List.length outer_formal_input_args) outer_formal_args in
                           let outputArgs = List.map (fun (x, tp0) -> let tp = instantiate_type tpenv tp0 in (prover_convert_term (List.assoc x env2) tp0 tp)) outputParams in
                           with_context (Executing (h, [], outer_l, "Producing auto-closed chunk")) $. fun () ->
-                            let input_param_count = match current_this_opt with Some _ -> Some 2 | None -> Some((List.length current_indices) + (List.length current_input_args)) in
-                            let (symb, args) = begin match outer_fun_sym with
+                            let input_param_count = match current_this_opt with Some _ -> 2 | None -> List.length current_indices + List.length current_input_args in
+                            let (input_param_count, symb, args) = begin match outer_fun_sym with
                               None ->
-                              (outer_symb, ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs))
+                              (input_param_count, outer_symb, ((match current_this_opt with None -> [] | Some t -> [t]) @ current_indices @ current_input_args @ outputArgs))
                             | Some(funsym) ->
                               assert (List.length current_indices = 0);
-                              ((ctxt#mk_app funsym (take outer_nb_curried (current_input_args @ outputArgs)), false) , drop outer_nb_curried (current_input_args @ outputArgs))
+                              let ctor_args, chunk_args = take_drop outer_nb_curried (current_input_args @ outputArgs) in
+                              (input_param_count - outer_nb_curried, (ctxt#mk_app funsym ctor_args, false), chunk_args)
                             end in
-                            produce_chunk h symb current_targs new_coef input_param_count args None (fun h -> 
+                            produce_chunk h symb current_targs new_coef (Some input_param_count) args None (fun h -> 
                             cont h new_coef) (* todo: properly set the size *)
                     )
                   )
