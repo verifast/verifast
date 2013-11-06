@@ -10,7 +10,7 @@ include init.make
 # For readability we just put the list of users here. From a design
 # point of view we should do this distributed but that would require
 # makefile magic and I want people to easily read the makefiles.
-OCAMLBUILD_SUPERTARGETS = vfide verifast mysh dlsymtool main_class java_card_applet
+OCAMLBUILD_SUPERTARGETS = vfide verifast mysh dlsymtool main_class java_card_applet vfstrip
 
 OCAMLBUILDFLAGS += -j 16 -no-hygiene
 

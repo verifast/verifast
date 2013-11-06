@@ -41,11 +41,13 @@ help:
 
 ifneq ($(OS),win)
   default:
-	make -j 8 verifast vfide test
+	make -j 8 all
 else
   # concurrent make does not seem to work in Windows.
-  default: verifast vfide test
+  default: all
 endif
+
+all: verifast vfide test stdlib mysh dlsymtool main_class java_card_applet vfstrip
 
 include verifast.make
 include vfide.make
@@ -56,4 +58,5 @@ include test.make
 include dlsymtool.make
 include main_class.make
 include java_card_applet.make
+include vfstrip.make
 
