@@ -329,7 +329,7 @@ verifast0.cmx: parser.cmx verifast0.ml java_frontend
 	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast0.ml
 
 verifast1.cmx: verifast0.cmx verifast1.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast1.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast1.ml
 
 assertions.cmx: verifast1.cmx assertions.ml
 	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux assertions.ml
@@ -338,7 +338,7 @@ verify_expr.cmx: assertions.cmx verify_expr.ml
 	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verify_expr.ml
 
 verifast.cmx: verify_expr.cmx verifast.ml
-	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux verifast.ml
+	${OCAMLOPTOPT} -annot -w p -warn-error FSU -c -I ./linux -I ./java_frontend verifast.ml
 
 verifast.cmo: vfversion.cmi proverapi.cmo verifast.ml
 	${OCAMLCOPT} -annot -warn-error F -g -pp ${CAMLP4O} -I ./linux -c verifast.ml
