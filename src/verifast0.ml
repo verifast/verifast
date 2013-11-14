@@ -171,12 +171,14 @@ let parse_java_file (path: string) (reportRange: range_kind -> loc -> unit) repo
     let ast_server_launch =
       try Sys.getenv "VERIFAST_JAVA_AST_SERVER"  
       with Not_found ->
+        let ast_server_filename = "ast_server-fe655c5.jar" in
+        let open Printf in
         let error_message =
-          "\nYou specified the option -javac to use the Java frontend. " ^
-          "However, to use the Java frontend, you need to retrieve the file ast_server.jar from: \n" ^
+          "\nYou specified the option -javac to use the STANCE Java frontend. " ^
+          sprintf "However, to use the STANCE Java frontend, you need to retrieve the file %s from: \n" ast_server_filename ^
               "\t https://bitbucket.org/gijsv/stance-java-frontend \n" ^
-           "Then you must set the environment variable VERIFAST_JAVA_AST_SERVER as follows: \n" ^
-              "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path_to_ast_server_jar\" \n"
+          "Then you must set the environment variable VERIFAST_JAVA_AST_SERVER as follows: \n" ^
+              sprintf "\t export VERIFAST_JAVA_AST_SERVER=\"java -jar path/to/%s\" \n" ast_server_filename
         in
         Printf.printf "%s" error_message;
         failwith error_message
