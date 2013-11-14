@@ -376,7 +376,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
     match startpos with
       (p, l, c) ->
         line := l;
-        linepos := c;
+        linepos := -c + 1;
         p
   in
   let new_loc_line () =
@@ -430,7 +430,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
   in
 
   let tokenpos = ref 0 in
-  let token_srcpos = ref (path, !line, !linepos + 1) in
+  let token_srcpos = ref (path, !line, !textpos - !linepos + 1) in
 
   let current_srcpos() = (path, !line, !textpos - !linepos + 1) in
   let current_loc() = (!token_srcpos, current_srcpos()) in
@@ -804,7 +804,7 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
    in_ghost_range)
 
 let make_lexer_helper keywords ghostKeywords path text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar =
-  let startpos = (path, 1, 0) in
+  let startpos = (path, 1, 1) in
   make_lexer_core keywords ghostKeywords startpos text reportRange inComment inGhostRange exceptionOnError reportShouldFail annotChar
 
 let make_lexer keywords ghostKeywords path text reportRange ?inGhostRange reportShouldFail =
