@@ -295,6 +295,7 @@ cd tests
   cd test-includepath
     mysh < runthistest.mysh
   cd ..
+  verifast_both -c test-pattern-match-constructor-subtyping.c
   cd bugs
   cd ..
   cd errors

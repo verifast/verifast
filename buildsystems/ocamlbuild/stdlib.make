@@ -20,8 +20,8 @@ $(STDLIB_FILES_C): %.c: $(BINDIR)/%.c
 
 $(STDLIB_FILES_VFMANIFEST): %.vfmanifest: %.c verifast
 	cd $(BINDIR) &&\
-	export PATH=$(PATH):$(BINDIR) &&\
-	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(LDLPATH) &&\
+	export PATH="$(PATH):$(BINDIR)" &&\
+	export LD_LIBRARY_PATH="$(LD_LIBRARY_PATH):$(LDPATH)" &&\
 	./verifast -c -emit_vfmanifest $<
 .PHONY: $(STDLIB_FILES_VFMANIFEST)
 

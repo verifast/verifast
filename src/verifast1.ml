@@ -3622,7 +3622,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             let Some tpenv = zip inductive_tparams targs in
             let ts = List.map (instantiate_type tpenv) ts0 in
             let t0 = InductiveType (i, targs) in
-            expect_type l t t0;
+            expect_type l t0 t;
             let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
             (WCtorPat (l, i, targs, g, ts0, ts, pats), tenv')
           | None ->
