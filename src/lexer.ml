@@ -342,6 +342,17 @@ let big_int_of_hex_string s =
   in
   iter (String.length s - 1) unit_big_int zero_big_int
 
+let big_int_of_octal_string s =
+  let rec iter k weight sum =
+    if k < 0 then
+      sum
+    else
+      let c = int_of_char (s.[k]) in
+      let digit = c - (int_of_char '0') in
+      iter (k - 1) (mult_int_big_int 8 weight) (add_big_int sum (mult_int_big_int digit weight))
+  in
+  iter (String.length s - 1) unit_big_int zero_big_int
+
 (** For syntax highlighting. *)
 
 type decl_kind =
@@ -619,7 +630,14 @@ let make_lexer_core keywords ghostKeywords startpos text reportRange inComment i
         text_junk (); store 'E'; exponent_part ()
     | ('r') ->
         text_junk (); Some (RealToken (big_int_of_string (get_string ())))
-    | _ -> Some (Int (big_int_of_string (get_string ())))
+    | _ ->
+        begin
+          let str = get_string () in
+          if (str.[0] = '0') then
+            Some (Int (big_int_of_octal_string str))
+          else
+            Some (Int (big_int_of_string str))
+        end
   and hex_number () =
     match text_peek () with
       ('0'..'9' | 'A'..'F' | 'a'..'f') as c -> text_junk (); store c; hex_number ()

@@ -296,6 +296,7 @@ cd tests
     mysh < runthistest.mysh
   cd ..
   verifast_both -c test-pattern-match-constructor-subtyping.c
+  verifast_both -c test-octal-number.c
   cd bugs
   cd ..
   cd errors
