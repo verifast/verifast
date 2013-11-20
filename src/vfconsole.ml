@@ -164,38 +164,44 @@ let _ =
   let header_whitelist: string list ref = ref [] in
   let linkShouldFail = ref false in
   let useJavaFrontend = ref false in
-  let cla = [ "-stats", Set stats, ""
+  
+  (* Explanations that are an empty string ("") become hidden in the
+   * "--help" output. When adding options, you can consider writing an
+   * explanation or just " " to prevent this, or document why the
+   * new option should be hidden.
+   *)
+  let cla = [ "-stats", Set stats, " "
             ; "-verbose", Set_int verbose, "1 = statement executions; 2 = produce/consume steps; 4 = prover queries."
-            ; "-disable_overflow_check", Set disable_overflow_check, ""
-            ; "-prover", String (fun str -> prover := Some str), ""
-            ; "-c", Set compileOnly, ""
-            ; "-shared", Set isLibrary, ""
-            ; "-allow_assume", Set allowAssume, ""
-            ; "-runtime", String (fun path -> runtime := Some path), ""
-            ; "-allow_should_fail", Set allowShouldFail, ""
-            ; "-emit_vfmanifest", Set emitManifest, ""
-            ; "-emit_dll_vfmanifest", Set emitDllManifest, ""
-            ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, ""
-            ; "-provides", String (fun path -> provides := !provides @ [path]), ""
-            ; "-keep_provide_files", Set keepProvideFiles, ""
+            ; "-disable_overflow_check", Set disable_overflow_check, " "
+            ; "-prover", String (fun str -> prover := Some str), "Set SMT prover (e.g. redux, z3)."
+            ; "-c", Set compileOnly, "Compile only, do not perform link checking."
+            ; "-shared", Set isLibrary, "The file is a library (i.e. no main function required)."
+            ; "-allow_assume", Set allowAssume, "Allow assume(expr) annotations."
+            ; "-runtime", String (fun path -> runtime := Some path), " "
+            ; "-allow_should_fail", Set allowShouldFail, "Allow '//~' annotations that specify the line should fail."
+            ; "-emit_vfmanifest", Set emitManifest, " "
+            ; "-emit_dll_vfmanifest", Set emitDllManifest, " "
+            ; "-emit_highlighted_source_files", Set emitHighlightedSourceFiles, " "
+            ; "-provides", String (fun path -> provides := !provides @ [path]), " "
+            ; "-keep_provide_files", Set keepProvideFiles, " "
             ; "-emit_sexpr",
               String begin fun str ->
                 outputSExpressions := Some str;
                 SExpressionEmitter.unsupported_exception := false
               end,
-              "Emits the ast as an s-expression to the specified file"
+              "Emits the AST as an s-expression to the specified file."
             ; "-emit_sexpr_fail",
               String begin fun str ->
                 outputSExpressions := Some str;
                 SExpressionEmitter.unsupported_exception := true
               end,
-              "Emits the ast as an s-expression to the specified file; raises exception on unsupported constructs"
-            ; "-export", String (fun str -> exports := str :: !exports), ""
+              "Emits the AST as an s-expression to the specified file; raises exception on unsupported constructs."
+            ; "-export", String (fun str -> exports := str :: !exports), " "
             ; "-I", String (fun str -> include_paths := str :: !include_paths), "Add a directory to the list of directories to be searched for header files."
-            ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)"
+            ; "-safe_mode", Set safe_mode, "Safe mode (for use in CGI scripts)."
             ; "-allow_header", String (fun str -> header_whitelist := str::!header_whitelist), "Add the specified header to the whitelist."
             ; "-link_should_fail", Set linkShouldFail, "Specify that the linking phase is expected to fail."
-            ; "-javac", Set useJavaFrontend, ""
+            ; "-javac", Set useJavaFrontend, " "
             ]
   in
   let process_file filename =
