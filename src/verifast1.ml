@@ -323,6 +323,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let truncate_int8_symbol = mk_symbol "truncate_int8" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_uint8_symbol = mk_symbol "truncate_uint8" [ctxt#type_int] ctxt#type_int Uninterp
   let truncate_int16_symbol = mk_symbol "truncate_int16" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_uint16_symbol = mk_symbol "truncate_uint16" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_int32_symbol = mk_symbol "truncate_int32" [ctxt#type_int] ctxt#type_int Uninterp
+  let truncate_uint32_symbol = mk_symbol "truncate_uint32" [ctxt#type_int] ctxt#type_int Uninterp
   
   let () = ignore $. ctxt#assume (ctxt#mk_eq (ctxt#mk_unboxed_bool (ctxt#mk_boxed_int (ctxt#mk_intlit 0))) ctxt#mk_false) (* This allows us to use 0 as a default value for all types; see the treatment of array creation. *)
 
@@ -1551,7 +1554,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
-    | (ArrayType et, ArrayType et0) -> expect_type_core l msg inAnnotation et et0
+    (* Note that in Java short[] is not assignable to int[] *)
+    | (ArrayType et, ArrayType et0) when et = et0 -> ()
+    | (ArrayType (ObjType objtype), ArrayType (ObjType objtype0)) -> expect_type_core l msg None (ObjType objtype) (ObjType objtype0)
     | (StaticArrayType _, PtrType _) -> ()
     | (UChar, IntType) -> ()
     | (UChar, ShortType) -> ()
@@ -3444,7 +3449,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           List.map
             begin function
               (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
-                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] None e ft in
+                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] (Some true) e ft in
                 check_static_field_initializer e;
                 (f, {fd with finit=Some e})
             | fd -> fd
@@ -4750,6 +4755,17 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, ShortType, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int16_symbol [t])
+        | (e, UShortType, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_uint16_symbol [t])
+        | (e, IntType, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_int32_symbol [t])
+        | (e, UintPtrType, true) ->
+          ev state e $. fun state t ->
+          cont state (ctxt#mk_app truncate_uint32_symbol [t])
+        | (e_, _, true) ->
+          static_error l "Unsupported truncating cast" None
         | (_, (ObjType _|ArrayType _), _) when ass_term = None -> static_error l "Class casts are not allowed in annotations." None
         | _ -> ev state e cont (* No other cast allowed by the type checker changes the value *)
       end

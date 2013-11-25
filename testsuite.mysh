@@ -323,6 +323,8 @@ cd tests
   verifast_both -c -allow_should_fail autoclose_bad_downcast.c
   verifast_both -c -allow_should_fail unsigned_int_cast.c
   verifast_both -allow_should_fail sizeof_signedness.c
+  verifast -c -allow_should_fail java_typing_array_assignment/Test1.java
+  verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
   cd ..
 cd ..
 

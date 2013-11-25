@@ -156,7 +156,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end;
               begin match (rt, rt1) with
                 (None, _) -> ()
-              | (Some t, Some t1) -> expect_type_core l "Function return type: " (Some true) t1 t
+              | (Some t, Some t1) -> expect_type_core l "Function return type: " (Some (stmt_ghostness = Ghost)) t1 t
               | _ -> static_error l "Return type mismatch: Function does not return a value" None
               end;
               let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
@@ -172,7 +172,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   List.map
                     begin fun ((x, tp0), (x1, tp1)) ->
                       let tp = instantiate_type tpenv tp0 in
-                      expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) (Some true) tp tp1;
+                      expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) (Some (stmt_ghostness = Ghost)) tp tp1;
                       (x, tp, tp0, x1, tp1)
                     end
                   bs
@@ -2434,7 +2434,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (argtypes, args) = match explicitsupercall with
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
-                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv None e in tp) es), es)
+                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv (Some true) e in tp) es), es)
                 in
                 match try_assoc argtypes superctors with
                   None ->
