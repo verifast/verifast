@@ -3147,6 +3147,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       else
         e  
     | _ ->
+      (* Note: if you add a cast here, i.e. let the typechecker allow
+       * a cast, and that cast can change value (e.g. casting a signed int
+       * to an unsigned), be sure to check whether you also have to modify
+       * eval_core_cps0 (search for "No other cast allowed by the type
+       * checker changes the value").
+       *)
       let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
       let check () = begin match (t, t0) with
           (ObjType _, ObjType _) when isCast -> w
@@ -4728,6 +4734,9 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
         | (e, IntType, false) ->
           ev state e $. fun state t ->
           cont state (check_overflow l min_int_term t max_int_term)
+        | (e, UintPtrType, false) ->
+          ev state e $. fun state t ->
+          cont state (check_overflow l min_uint_term t max_uint_term)
         | (e, Char, true) ->
           ev state e $. fun state t ->
           cont state (ctxt#mk_app truncate_int8_symbol [t])
