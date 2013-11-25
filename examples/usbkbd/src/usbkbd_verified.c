@@ -2000,7 +2000,7 @@ static int /*__init*/ usb_kbd_init(void) //@ : module_setup_t(usbkbd_verified)
 	//@ open_module();
 	
 	// --- Load keycodes --- //
-		usb_kbd_keycode = kzalloc(256 * sizeof(char), GFP_KERNEL);
+		usb_kbd_keycode = kzalloc((unsigned int) 256 * sizeof(char), GFP_KERNEL);
 		if (usb_kbd_keycode == 0) {
 			//@ close_module();
 			return -1;
@@ -2010,7 +2010,7 @@ static int /*__init*/ usb_kbd_init(void) //@ : module_setup_t(usbkbd_verified)
 		load_keycodes(usb_kbd_keycode);
 	
 	//@ sizeof_of_usb_device_id_is_low();
- 	usb_kbd_id_table = kzalloc(2*sizeof(struct usb_device_id), GFP_KERNEL); // not original code
+ 	usb_kbd_id_table = kzalloc((unsigned int)2*sizeof(struct usb_device_id), GFP_KERNEL); // not original code
 	if (usb_kbd_id_table == 0){ // not original code
 		kfree(usb_kbd_keycode);
 		//@ close_module();

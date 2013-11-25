@@ -185,14 +185,14 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     begin
       match (rt, rt0) with
         (None, None) -> ()
-      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") (instantiate_type tpenv rt) rt0
+      | (Some rt, Some rt0) -> expect_type_core l (msg ^ "Return types: ") None (instantiate_type tpenv rt) rt0
       | _ -> static_error l (msg ^ "Return types do not match.") None
     end;
     begin
       (if (List.length xmap) > (List.length xmap0) then static_error l (msg ^ "Implementation has more parameters than prototype.") None);
       List.iter 
         (fun ((x, t), (x0, t0)) ->
-           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") t0 (instantiate_type tpenv t);
+           expect_type_core l (msg ^ "Parameter '" ^ x ^ "': ") None t0 (instantiate_type tpenv t);
         )
         (zip2 xmap xmap0)
     end;
@@ -328,7 +328,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                         end, PtrType Void
                       | Some term -> term, IntType
                     in
-                    expect_type larg type_ (instantiate_type fttpenv tp);
+                    expect_type larg None type_ (instantiate_type fttpenv tp);
                     (x, value)
                   end
                   bs
@@ -811,7 +811,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           List.map
             begin function
               (f, ({ft; fbinding=Instance; finit=Some e} as fd)) ->
-              let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+              let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e tp in
               let tenv = [(current_class, ClassOrInterfaceName cn); ("this", ObjType cn); (current_thread_name, current_thread_type)] in
               let w = check_expr_t (pn,ilist) [] tenv e ft in
               (f, {fd with finit=Some w})
@@ -1322,7 +1322,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let mk_vararg_pointer t = mk_app (Lazy.force vararg_pointer_symb) [t]
   
   let verify_call funcmap eval_h l (pn, ilist) xo g targs pats (callee_tparams, tr, ps, funenv, pre, post, epost, v) pure leminfo sizemap h tparams tenv ghostenv env cont econt =
-    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let eval_h h env pat cont =
       match pat with
         SrcPat (LitPat e) -> if not pure then check_ghost ghostenv l e; eval_h h env e cont
@@ -1347,7 +1347,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           let rec mk_varargs h env args pats =
             match pats with
               SrcPat (LitPat e) ::pats ->
-              let (w, tp) = check_expr (pn,ilist) tparams tenv e in
+              let (w, tp) = check_expr (pn,ilist) tparams tenv (Some pure) e in
               eval_h h env (SrcPat (LitPat w)) $. fun h env t ->
               let arg =
                 match tp with
@@ -1508,8 +1508,8 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   let rec verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e cont econt =
     let (envReadonly, heapReadonly) = readonly in
     let verify_expr readonly h env xo e cont = verify_expr readonly (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env xo e (fun h env v -> cont h env v) econt in
-    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
+    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let l = expr_loc e in
     let has_env_effects () = if language = CLang && envReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
     let has_heap_effects () = if language = CLang && heapReadonly then static_error l "This potentially side-effecting expression is not supported in this position, because of C's unspecified evaluation order" (Some "illegalsideeffectingexpression") in
@@ -1672,7 +1672,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     match e with
     | CastExpr (lc, false, ManifestTypeExpr (_, tp), (WFunCall (l, "malloc", [], [SizeofExpr (ls, StructTypeExpr (lt, tn))]) as e)) ->
-      expect_type lc (PtrType (StructType tn)) tp;
+      expect_type lc (Some pure) (PtrType (StructType tn)) tp;
       verify_expr readonly h env xo e cont
     | WFunCall (l, "malloc", [], [Operation (lmul, Mul, ([e; SizeofExpr (ls, te)] | [SizeofExpr (ls, te); e]), _)]) ->
       if pure then static_error l "Cannot call a non-pure function from a pure context." None;
@@ -1766,7 +1766,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       let {cctors} = List.assoc cn classmap in
       let args' = List.map (fun e -> check_expr (pn,ilist) tparams tenv e) args in
       let argtps = List.map snd args' in
-      let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) cctors in
+      let consmap' = List.filter (fun (sign, _) -> is_assignable_to_sign (Some pure) argtps sign) cctors in
       begin match consmap' with
         [] -> static_error l "No matching constructor" None
       | [(sign, (lm, xmap, pre, pre_tenv, post, epost, ss, v))] ->

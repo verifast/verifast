@@ -87,9 +87,9 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     in
     if !verbosity >= 1 then printff "%10.6fs: %s: Executing statement\n" (Perf.time ()) (string_of_loc l);
     check_breakpoint h env l;
-    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-    let check_condition (pn,ilist) tparams tenv e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+    let check_expr (pn,ilist) tparams tenv e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
+    let check_condition (pn,ilist) tparams tenv e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e in
+    let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
     let eval env e = if not pure then check_ghost ghostenv l e; eval_non_pure pure h env e in
     let eval_h_core sideeffectfree pure h env e cont =
       if not pure then check_ghost ghostenv l e;
@@ -156,7 +156,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               end;
               begin match (rt, rt1) with
                 (None, _) -> ()
-              | (Some t, Some t1) -> expect_type_core l "Function return type: " t1 t
+              | (Some t, Some t1) -> expect_type_core l "Function return type: " (Some true) t1 t
               | _ -> static_error l "Return type mismatch: Function does not return a value" None
               end;
               let fttargs = List.map (check_pure_type (pn,ilist) tparams) fttargs in
@@ -172,7 +172,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                   List.map
                     begin fun ((x, tp0), (x1, tp1)) ->
                       let tp = instantiate_type tpenv tp0 in
-                      expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) tp tp1;
+                      expect_type_core l (Printf.sprintf "The types of function parameter '%s' and function type parameter '%s' do not match: " x1 x) (Some true) tp tp1;
                       (x, tp, tp0, x1, tp1)
                     end
                   bs
@@ -212,7 +212,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                     begin match rt1 with
                       None -> static_error ld "Function does not return a value" None
                     | Some rt1 ->
-                      expect_type ld rt1 t;
+                      expect_type ld (Some true) rt1 t;
                       (List.rev ss_before, lc, Some (x, t), ss_after)
                     end
                   | s::ss_after -> iter (s::ss_before) ss_after
@@ -1903,7 +1903,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       | Some e ->
         if not pure then check_ghost ghostenv l e;
         let tp = match try_assoc "#result" tenv with None -> static_error l "Void function cannot return a value: " None | Some tp -> tp in
-        let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e tp in
+        let w = check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (Some pure) e tp in
         verify_expr false (pn,ilist) tparams pure leminfo funcmap sizemap tenv ghostenv h env None w (fun h env v ->
         cont h (Some v)) econt
     end $. fun h retval ->
@@ -2157,7 +2157,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       match trigger with
         None -> []
       | Some(trigger) -> 
-          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv trigger in
+          let (trigger, tp) = check_expr (pn,ilist) tparams' pre_tenv (Some true) trigger in
           [eval None env trigger]
       ) in
       let body = ctxt#mk_implies t_pre t_post in
@@ -2434,7 +2434,7 @@ module VerifyProgram(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 let (argtypes, args) = match explicitsupercall with
                   None -> ([], [])
                 | Some(SuperConstructorCall(l, es)) -> 
-                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv e in tp) es), es)
+                  ((List.map (fun e -> let (w, tp) = check_expr (pn,ilist) [] tenv None e in tp) es), es)
                 in
                 match try_assoc argtypes superctors with
                   None ->

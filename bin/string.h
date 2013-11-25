@@ -1,11 +1,13 @@
 #ifndef STRING_H
 #define STRING_H
 
-void memcpy(void *array, void *array0, int count);
+#include <stddef.h>
+
+void memcpy(void *array, void *array0, size_t count);
     //@ requires chars(array, count, ?cs) &*& [?f]chars(array0, count, ?cs0);
     //@ ensures chars(array, count, cs0) &*& [f]chars(array0, count, cs0);
 
-void memmove(void *dest, void *src, int count);
+void memmove(void *dest, void *src, size_t count);
     /*@
     requires
         chars(src, count, ?cs) &*&
@@ -27,7 +29,7 @@ int strlen(char *string);
     //@ requires [?f]string(string, ?cs);
     //@ ensures [f]string(string, cs) &*& result == length(cs);
 
-int memcmp(char *array, char *array0, int count);
+int memcmp(char *array, char *array0, size_t count);
     //@ requires [?f]chars(array, ?n, ?cs) &*& [?f0]chars(array0, ?n0, ?cs0) &*& n <= length(cs) &*& n0 <= length(cs0);
     //@ ensures [f]chars(array, n, cs) &*& [f0]chars(array0, n0, cs0) &*& true == ((result == 0) == (take(count, cs) == take(count, cs0)));
 
@@ -35,11 +37,11 @@ int strcmp(char *s1, char *s2);
     //@ requires [?f1]string(s1, ?cs1) &*& [?f2]string(s2, ?cs2);
     //@ ensures [f1]string(s1, cs1) &*& [f2]string(s2, cs2) &*& true == ((result == 0) == (cs1 == cs2));
 
-char *memchr(char *array, char c, int count);
+char *memchr(char *array, char c, size_t count);
     //@ requires [?f]chars(array, count, ?cs);
     //@ ensures [f]chars(array, count, cs) &*& result == 0 ? mem(c, cs) == false : mem(c, cs) == true &*& result == array + index_of(c, cs);
 
-void memset(void *array, char value, int size);
+void memset(void *array, char value, size_t size);
     //@ requires chars(array, size, ?cs);
     //@ ensures chars(array, size, ?cs1) &*& all_eq(cs1, value) == true;
 

@@ -297,6 +297,7 @@ cd tests
   cd ..
   verifast_both -c test-pattern-match-constructor-subtyping.c
   verifast_both -c test-octal-number.c
+  verifast_both -c integral-ghost-types.c
   cd bugs
   cd ..
   cd errors
@@ -321,6 +322,7 @@ cd tests
 	verifast -c -allow_should_fail erasure3.c
 	verifast_both -c -allow_should_fail autoclose_bad_downcast.c
 	verifast_both -c -allow_should_fail unsigned_int_cast.c
+	verifast_both -allow_should_fail sizeof_signedness.c
   cd ..
 cd ..
 

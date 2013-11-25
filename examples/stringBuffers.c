@@ -100,7 +100,7 @@ void string_buffer_ensure_capacity(struct string_buffer *buffer, int newCapacity
         char *newChars = malloc(newCapacity);
         if (newChars == 0) abort();
         buffer->capacity = newCapacity;
-        memcpy(newChars, buffer->chars, buffer->length);
+        memcpy(newChars, buffer->chars, (size_t) buffer->length);
         free((void *)buffer->chars);
         buffer->chars = newChars;
     }
@@ -116,7 +116,7 @@ void string_buffer_append_chars(struct string_buffer *buffer, char *chars, int c
     newLength = buffer->length + count;
     string_buffer_ensure_capacity(buffer, newLength);
     //@ malloc_block_limits(buffer->chars);
-    memcpy(buffer->chars + buffer->length, chars, count);
+    memcpy(buffer->chars + buffer->length, chars, (unsigned int) count);
     buffer->length = newLength;
 }
 
@@ -144,7 +144,7 @@ struct string_buffer *string_buffer_copy(struct string_buffer *buffer)
     if (copy == 0 || chars == 0) abort();
     copy->length = buffer->length;
     copy->capacity = buffer->length;
-    memcpy(chars, buffer->chars, buffer->length);
+    memcpy(chars, buffer->chars, (size_t) buffer->length);
     copy->chars = chars;
     return copy;
 }
@@ -155,7 +155,7 @@ bool string_buffer_equals(struct string_buffer *buffer, struct string_buffer *bu
 {
     bool result = false;
     if (buffer->length == buffer0->length) {
-        int result0 = memcmp(buffer->chars, buffer0->chars, buffer->length);
+        int result0 = memcmp(buffer->chars, buffer0->chars, (size_t) buffer->length);
         result = result0 == 0;
     }
     return result;
@@ -169,7 +169,7 @@ bool string_buffer_equals_string(struct string_buffer *buffer, char *string)
     int length = strlen(string);
     if (length == buffer->length) {
         //@ string_to_body_chars(string);
-        int result0 = memcmp(buffer->chars, string, length);
+        int result0 = memcmp(buffer->chars, string, (size_t) length);
         result = result0 == 0;
     }
     return result;
@@ -204,14 +204,14 @@ int chars_index_of_string(char *chars, int length, char *string)
         //@ chars_split(p, n);
         //@ string_to_body_chars(string);
         {
-            int cmp = memcmp(p, string, n);
+            int cmp = memcmp(p, string, (size_t) n);
             //@ chars_join(p);
             //@ chars_join(chars);
             if (cmp == 0) return p - chars;
             p++;
             //@ open string(string, stringChars);
-            //@ chars_split(chars, p - chars);      
-            p = memchr(p, *string, end - p);
+            //@ chars_split(chars, p - chars);
+            p = memchr(p, *string, (size_t)end - (size_t)p);
             if (p == 0) return -1;
         }
     }

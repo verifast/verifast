@@ -57,7 +57,7 @@ void list_add(struct arraylist *a, void *v)
     void** newData = malloc((capacity + 100) * sizeof(void*));
     if(newData == 0) abort();
     //@ pointers_split(newData, size);
-    memcpy(newData, data, size * sizeof(void*));
+    memcpy(newData, data, (unsigned int) size * sizeof(void*));
     //@ chars_to_pointers(newData, size);
     a->data = newData;
     a->capacity = capacity + 100;
@@ -78,7 +78,7 @@ void list_remove_nth(struct arraylist *a, int n)
   int size = a->size;
   //@ pointers_split(data, n);
   //@ open pointers(data + n, _, _);
-  memmove(data + n, data + n + 1, (size - n - 1) * sizeof(void *));
+  memmove(data + n, data + n + 1, (unsigned int) (size - n - 1) * sizeof(void *));
   //@ chars_to_pointers(data + n, size - n - 1);
   a->size = a->size - 1;
 }

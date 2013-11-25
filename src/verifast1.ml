@@ -1546,12 +1546,12 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (PtrType t1, PtrType t2) -> compatible_pointees t1 t2
     | (t1, t2) -> t1 = t2
   
-  let rec expect_type_core l msg t t0 =
+  let rec expect_type_core l msg (inAnnotation: bool option) t t0 =
     match (unfold_inferred_type t, unfold_inferred_type t0) with
       (ObjType "null", ObjType _) -> ()
     | (ObjType "null", ArrayType _) -> ()
     | (ArrayType _, ObjType "java.lang.Object") -> ()
-    | (ArrayType et, ArrayType et0) -> expect_type_core l msg et et0
+    | (ArrayType et, ArrayType et0) -> expect_type_core l msg inAnnotation et et0
     | (StaticArrayType _, PtrType _) -> ()
     | (UChar, IntType) -> ()
     | (UChar, ShortType) -> ()
@@ -1562,6 +1562,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
     | (UShortType, IntType) -> ()
     | (UShortType, UintPtrType) -> ()
     | (ShortType, IntType) -> ()
+    | ((Char|UChar|ShortType|UShortType|IntType|UintPtrType), (Char|UChar|ShortType|UShortType|IntType|UintPtrType)) when inAnnotation = Some true -> ()
     | (ObjType x, ObjType y) when is_subtype_of x y -> ()
     | (PredType ([], ts, inputParamCount), PredType ([], ts0, inputParamCount0)) ->
       begin
@@ -1569,18 +1570,18 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
           Some tpairs when List.for_all (fun (t, t0) -> unify t t0) tpairs && (inputParamCount0 = None || inputParamCount = inputParamCount0) -> ()
         | _ -> static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
       end
-    | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg t10 t1; expect_type_core l msg t2 t20
+    | (PureFuncType (t1, t2), PureFuncType (t10, t20)) -> expect_type_core l msg inAnnotation t10 t1; expect_type_core l msg inAnnotation t2 t20
     | (InductiveType _, AnyType) -> ()
     | (InductiveType (i1, args1), InductiveType (i2, args2)) when i1 = i2 ->
-      List.iter2 (expect_type_core l msg) args1 args2
+      List.iter2 (expect_type_core l msg inAnnotation) args1 args2
     | _ -> if unify t t0 then () else static_error l (msg ^ "Type mismatch. Actual: " ^ string_of_type t ^ ". Expected: " ^ string_of_type t0 ^ ".") None
   
-  let expect_type l t t0 = expect_type_core l "" t t0
+  let expect_type l (inAnnotation: bool option) t t0 = expect_type_core l "" inAnnotation t t0
   
-  let is_assignable_to t t0 =
-    try expect_type dummy_loc t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
+  let is_assignable_to (inAnnotation: bool option) t t0 =
+    try expect_type dummy_loc inAnnotation t t0; true with StaticError (l, msg, url) -> false (* TODO: Consider eliminating this hack *)
   
-  let is_assignable_to_sign sign sign0 = for_all2 is_assignable_to sign sign0
+  let is_assignable_to_sign (inAnnotation: bool option) sign sign0 = for_all2 (is_assignable_to inAnnotation) sign sign0
   
   let convert_provertype_expr e proverType proverType0 =
     if proverType = proverType0 then e else ProverTypeConversion (proverType, proverType0, e)
@@ -2191,7 +2192,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match flatmap preds_in_itf interfs with
                 [] -> (tn, get_unique_var_symb (tn ^ "#" ^ g) (PredType ([], [], None)))
               | [(family, pmap0, symb)] ->
-                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
+                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" (Some true) t t0; true) pmap pmap0) then
                   static_error l "Predicate override check: parameter count mismatch" None;
                 (family, symb)
               | _ -> static_error l "Ambiguous override: multiple overridden predicates" None
@@ -2265,7 +2266,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
               match preds_in_class super @ flatmap preds_in_itf interfs with
                 [] -> (cn, get_unique_var_symb (cn ^ "#" ^ g) (PredType ([], [], None)))
               | [(family, pmap0, symb)] ->
-                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" t t0; true) pmap pmap0) then
+                if not (for_all2 (fun (x, t) (x0, t0) -> expect_type_core l "Predicate parameter covariance check" (Some true) t t0; true) pmap pmap0) then
                   static_error l "Predicate override check: parameter count mismatch" None;
                 (family, symb)
               | _ -> static_error l "Ambiguous override: multiple overridden predicates" None
@@ -2423,10 +2424,10 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
   
   let current_class = "#currentClass"
   
-  let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
-    let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-    let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
-    let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 false in
+  let rec check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e: (expr (* typechecked expression *) * type_ (* expression type *) * big_int option (* constant integer expression => value*)) =
+    let check e = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+    let checkcon e = check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
+    let checkt e t0 = check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e t0 false in
     let checkt_cast e t0 = 
       (*if (file_type path = Java) then
         let (w, et) = check e in
@@ -2437,7 +2438,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
         | (ObjType(_), ObjType(_)) -> w
         | _ -> static_error (expr_loc e) (sprintf "illegal cast to %s from %s" (string_of_type t0) (string_of_type et)))
       else *)
-        check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 true in
+        check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e t0 true in
     let rec get_methods tn mn =
       if tn = "" then [] else
       match try_assoc tn classmap with
@@ -2465,7 +2466,7 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
       declared_methods @ List.filter (fun (sign, info) -> not (List.mem_assoc sign declared_methods)) inherited_methods
     in
     (*
-     * Precondition: see "promote_checkdone"
+     * Docs: see "promote_checkdone"
      *)
     let promote_numeric_checkdone e1 e2 ts check_e1 check_e2 =
       let (w1, t1, _) = check_e1 in
@@ -2496,6 +2497,9 @@ module VerifyProgram1(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
      *   This precondition avoids having the implementation call "check e2",
      *   which avoids a quadratic time complexity for typechecking e.g.
      *   "1+1+1+1+1+...+1".
+     *
+     * If you add support for promoting to unsigned int, be sure to
+     * insert a cast to enable overflow/underflow-checking.
      *)
     let promote_checkdone l e1 e2 ts check_e1 check_e2 =
       match promote_numeric_checkdone e1 e2 ts check_e1 check_e2 with
@@ -2780,7 +2784,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let t = unfold_inferred_type t in
       begin match (t, es) with
         (PureFuncType (_, _), _) -> check_pure_fun_value_call l w t es
-      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (CastExpr(l, false, IdentTypeExpr(expr_loc e, None, cn), e2))
+      | (ClassOrInterfaceName(cn), [e2]) -> check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation (CastExpr(l, false, IdentTypeExpr(expr_loc e, None, cn), e2))
       | _ -> static_error l "The callee of a call of this form must be a pure function value." None
       end 
     | CallExpr (l, g, targes, [], pats, fb) ->
@@ -2845,7 +2849,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         let ms = get_methods tn g in
         if ms = [] then on_fail () else
         let argtps = List.map (fun e -> let (_, tp, _) = (check e) in tp) args in
-        let ms = List.filter (fun (sign, _) -> is_assignable_to_sign argtps sign) ms in
+        let ms = List.filter (fun (sign, _) -> is_assignable_to_sign inAnnotation argtps sign) ms in
         let make_well_typed_method m =
           match m with
           (sign, (tn', lm, gh, rt, xmap, pre, post, epost, fb', v, abstract)) ->
@@ -2939,11 +2943,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                     (t0, None)
                   | Some (lcdef, edef) ->
                     if ctors = [] then static_error lcdef "Superfluous default clause" None;
-                    let (wdef, tdef, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv edef in
+                    let (wdef, tdef, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation edef in
                     let t0 =
                       match t0 with
                         None -> Some tdef
-                      | Some t0 -> expect_type (expr_loc edef) tdef t0; Some t0
+                      | Some t0 -> expect_type (expr_loc edef) inAnnotation tdef t0; Some t0
                     in
                     (t0, Some (lcdef, wdef))
                 in
@@ -2973,11 +2977,11 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                       in
                       iter2 ts xs []
                     in
-                    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (xenv@tenv) e in
+                    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams (xenv@tenv) inAnnotation e in
                     let t0 =
                       match t0 with
                         None -> Some t
-                      | Some t0 -> expect_type (expr_loc e) t t0; Some t0
+                      | Some t0 -> expect_type (expr_loc e) inAnnotation t t0; Some t0
                     in
                     let ctors = List.filter (fun (ctorname, _) -> ctorname <> cn) ctors in
                     iter t0 (SwitchExprClause (lc, cn, xs, w)::wcs) ctors cs
@@ -2989,7 +2993,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       end
     | SizeofExpr(l, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
-      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), IntType, None)
+      (SizeofExpr (l, ManifestTypeExpr (type_expr_loc te, t)), UintPtrType, None)
     | InstanceOfExpr(l, e, te) ->
       let t = check_pure_type (pn,ilist) tparams te in
       let w = checkt e (ObjType "java.lang.Object") in
@@ -3003,7 +3007,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             let m =
               List.find
                 begin fun ((mn', sign), (lm, gh, rt, xmap, pre, pre_tenv, post, epost, pre_dyn, post_dyn, epost_dyn, ss, fb, v, is_override, abstract)) ->
-                  mn = mn' &&  is_assignable_to_sign argtps sign && not abstract
+                  mn = mn' &&  is_assignable_to_sign inAnnotation argtps sign && not abstract
                 end
                 cmeths
             in
@@ -3087,9 +3091,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       in
       check (to_list_expr es)
     | e -> static_error (expr_loc e) "Expression form not allowed here." None
-  and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 =
-    check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv e t0 false
-  and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e t0 isCast =
+  and check_expr_t_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 =
+    check_expr_t_core_core functypemap funcmap classmap interfmap (pn, ilist) tparams tenv inAnnotation e t0 false
+  and check_expr_t_core_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e t0 isCast =
     match (e, unfold_inferred_type t0) with
       (Operation(l, Div, [IntLit(_, i1, _); IntLit(_, i2, _)], _), RealType) -> RealLit(l, (num_of_big_int i1) // (num_of_big_int i2))
     | (IntLit (l, n, t), PtrType _) when isCast || eq_big_int n zero_big_int -> t:=Some t0; e
@@ -3153,7 +3157,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
        * eval_core_cps0 (search for "No other cast allowed by the type
        * checker changes the value").
        *)
-      let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+      let (w, t, value) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
       let check () = begin match (t, t0) with
           (ObjType _, ObjType _) when isCast -> w
         | (PtrType _, UintPtrType) when isCast -> w
@@ -3178,8 +3182,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         | (UChar, Char) when isCast -> w
         | (ObjType ("java.lang.Object"), ArrayType _) when isCast -> w
         | _ ->
-          expect_type (expr_loc e) t t0;
-          if try expect_type dummy_loc t0 t; false with StaticError _ -> true then
+          expect_type (expr_loc e) inAnnotation t t0;
+          if try expect_type dummy_loc inAnnotation t0 t; false with StaticError _ -> true then
             Upcast (w, t, t0)
           else
             w
@@ -3189,15 +3193,15 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         (Some(value), IntType, Char) when le_big_int min_char_big_int value && le_big_int value max_char_big_int -> w 
       | (Some(value), IntType, ShortType) when le_big_int min_short_big_int value && le_big_int value max_short_big_int -> w
       | _ -> check ()
-  and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
-    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+  and check_condition_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
+    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
     match t with
       Bool -> w
     | Char | UChar | ShortType | UShortType | IntType | UintPtrType | PtrType _ when language = CLang ->
       Operation(expr_loc e, Neq, [w; IntLit(expr_loc e, big_int_of_int 0, ref (Some t))], ref (Some [t;t]))
-    | _ -> expect_type (expr_loc e) t Bool; w
+    | _ -> expect_type (expr_loc e) inAnnotation t Bool; w
   and check_deref_core functypemap funcmap classmap interfmap (pn,ilist) l tparams tenv e f =
-    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+    let (w, t, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv None e in
     begin
     match unfold_inferred_type t with
     | InductiveType(inductive_name, targs) -> begin
@@ -3272,13 +3276,13 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     | _ -> static_error l "Target expression of field dereference should be of type pointer-to-struct." None
     end
   
-  let check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e =
-   let (w, tp, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv e in
+  let check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv (inAnnotation: bool option) e =
+   let (w, tp, _) = check_expr_core functypemap funcmap classmap interfmap (pn,ilist) tparams tenv inAnnotation e in
    (w, tp)
   
-  let check_expr (pn,ilist) tparams tenv e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv e
-  let check_condition (pn,ilist) tparams tenv e = check_condition_core [] [] [] [] (pn,ilist) tparams tenv e
-  let check_expr_t (pn,ilist) tparams tenv e tp = check_expr_t_core [] [] [] [] (pn,ilist) tparams tenv e tp
+  let check_expr (pn,ilist) tparams tenv (inAnnotation: bool option) e = check_expr_core [] [] [] [] (pn,ilist) tparams tenv inAnnotation e
+  let check_condition (pn,ilist) tparams tenv (inAnnotation: bool option) e = check_condition_core [] [] [] [] (pn,ilist) tparams tenv inAnnotation e
+  let check_expr_t (pn,ilist) tparams tenv (inAnnotation: bool option) e tp = check_expr_t_core [] [] [] [] (pn,ilist) tparams tenv inAnnotation e tp
   
   (* Region: Type checking of fixpoint function bodies *)
 
@@ -3340,7 +3344,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                 [ReturnStmt (lret, Some e)] -> (lret, e)
               | _ -> static_error lc "Body of switch clause must be a return statement with a result expression." None
             in
-            let wbody = check_expr_t (pn,ilist) tparams tenv body rt in
+            let wbody = check_expr_t (pn,ilist) tparams tenv (Some true) body rt in
             let rec iter0 components e =
               let rec iter () e =
                 let iter1 e = iter () e in
@@ -3372,7 +3376,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
                 [ReturnStmt (lret, Some e)] -> (lret, e)
               | _ -> static_error lc "Body of switch clause must be a return statement with a result expression." None
             in
-            let wbody = check_expr_t (pn,ilist) tparams pmap body rt in
+            let wbody = check_expr_t (pn,ilist) tparams pmap (Some true) body rt in
             let expr_is_ok e =
               match e with
                 WPureFunCall (l, g', targs, args) ->
@@ -3395,7 +3399,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         iter ((g, (l, rt, pmap, Some index, SwitchExpr (ls, Var (lx, x, ref None), wcs, None, ref None), pn, ilist, fsym))::fpm_done) fpm_todo
       | (None, ReturnStmt (lr, Some e)) ->
         let tenv = pmap in
-        let w = check_expr_t (pn,ilist) tparams tenv e rt in
+        let w = check_expr_t (pn,ilist) tparams tenv (Some true) e rt in
         let rec iter0 e =
           let rec iter () e =
             let iter1 e = iter () e in
@@ -3440,7 +3444,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           List.map
             begin function
               (f, ({ft; fbinding=Static; finit=Some e} as fd)) ->
-                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] e ft in
+                let e = check_expr_t (pn,ilist) [] [current_class, ClassOrInterfaceName cn] None e ft in
                 check_static_field_initializer e;
                 (f, {fd with finit=Some e})
             | fd -> fd
@@ -3485,7 +3489,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       in
       InitializerList (ll, iter fds es)
     | tp, e ->
-      check_expr_t ("", []) [] [] e tp
+      check_expr_t ("", []) [] [] None e tp
   
   let () =
     globalmap1 |> List.iter begin fun (x, (lg, tp, symb, ref_init)) ->
@@ -3607,10 +3611,10 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
   let rec check_pat_core (pn,ilist) tparams tenv t p =
     match p with
       LitPat (WidenedParameterArgument e) ->
-      let (w, tp) = check_expr (pn,ilist) tparams tenv e in
-      expect_type (expr_loc e) t tp;
+      let (w, tp) = check_expr (pn,ilist) tparams tenv (Some true) e in
+      expect_type (expr_loc e) (Some true) t tp;
       (LitPat (WidenedParameterArgument w), [])
-    | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv e t in (LitPat w, [])
+    | LitPat e -> let w = check_expr_t (pn,ilist) tparams tenv (Some true) e t in (LitPat w, [])
     | VarPat (l, x) ->
       if List.mem_assoc x tenv then static_error l ("Pattern variable '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
       (p, [(x, t)])
@@ -3628,7 +3632,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
             let Some tpenv = zip inductive_tparams targs in
             let ts = List.map (instantiate_type tpenv) ts0 in
             let t0 = InductiveType (i, targs) in
-            expect_type l t0 t;
+            expect_type l (Some true) t0 t;
             let (pats, tenv') = check_pats_core (pn,ilist) l tparams tenv ts pats in
             (WCtorPat (l, i, targs, g, ts0, ts, pats), tenv')
           | None ->
@@ -3766,7 +3770,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
     let check_asn = check_asn_core in
     match p with
     | PointsTo (l, ReadArray (lread, earray, SliceExpr (lslice, pstart, pend)), rhs) ->
-      let (warray, tarray) = check_expr (pn,ilist) tparams tenv earray in
+      let (warray, tarray) = check_expr (pn,ilist) tparams tenv (Some true) earray in
       let (wstart, tenv) =
         match pstart with
           None -> (None, tenv)
@@ -3823,7 +3827,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         (WPredAsn (l, p, true, [elemtype], [], args), tenv, [])
       end
     | PointsTo (l, lhs, v) ->
-      let (wlhs, t) = check_expr (pn,ilist) tparams tenv lhs in
+      let (wlhs, t) = check_expr (pn,ilist) tparams tenv (Some true) lhs in
       begin match wlhs with
         WRead (_, _, _, _, _, _, _, _) | WReadArray (_, _, _, _) -> ()
       | Var (_, _, scope) when !scope = Some GlobalName -> ()
@@ -3904,12 +3908,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         (WPredAsn (l, p, is_global_predref, targs, wps0, wps), tenv, inferredTypes)
       end
     | InstPredAsn (l, e, g, index, pats) ->
-      let (w, t) = check_expr (pn,ilist) tparams tenv e in
+      let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin match unfold_inferred_type t with
         ObjType cn ->
         let check_call family pmap =
           let (wpats, tenv) = check_pats (pn,ilist) l tparams tenv (List.map snd pmap) pats in
-          let index = check_expr_t (pn,ilist) tparams tenv index (ObjType "java.lang.Class") in
+          let index = check_expr_t (pn,ilist) tparams tenv (Some true) index (ObjType "java.lang.Class") in
           (WInstPredAsn (l, Some w, cn, get_class_finality cn, family, g, index, wpats), tenv, [])
         in
         let error () = static_error l (Printf.sprintf "Type '%s' does not declare such a predicate" cn) None in
@@ -3917,9 +3921,9 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | _ -> static_error l "Target of instance predicate assertion must be of class type" None
       end
     | ExprAsn (l, e) ->
-      let w = check_expr_t (pn,ilist) tparams tenv e boolt in (ExprAsn (l, w), tenv, [])
+      let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in (ExprAsn (l, w), tenv, [])
     | MatchAsn (l, e1, pat) ->
-      let (w1, t) = check_expr (pn,ilist) tparams tenv e1 in
+      let (w1, t) = check_expr (pn,ilist) tparams tenv (Some true) e1 in
       let (wpat, tenv) = check_pat (pn,ilist) tparams tenv t pat in
       (WMatchAsn (l, w1, wpat, t), tenv, [])
     | Sep (l, p1, p2) ->
@@ -3927,12 +3931,12 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       let (p2, tenv, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (Sep (l, p1, p2), tenv, infTps1 @ infTps2)
     | IfAsn (l, e, p1, p2) ->
-      let w = check_expr_t (pn,ilist) tparams tenv e boolt in
+      let w = check_expr_t (pn,ilist) tparams tenv (Some true) e boolt in
       let (wp1, _, infTps1) = check_asn (pn,ilist) tparams tenv p1 in
       let (wp2, _, infTps2) = check_asn (pn,ilist) tparams tenv p2 in
       (IfAsn (l, w, wp1, wp2), tenv, infTps1 @ infTps2)
     | SwitchAsn (l, e, cs) ->
-      let (w, t) = check_expr (pn,ilist) tparams tenv e in
+      let (w, t) = check_expr (pn,ilist) tparams tenv (Some true) e in
       begin
       match unfold_inferred_type t with
       | InductiveType (i, targs) ->
@@ -3985,7 +3989,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       begin match try_assoc i tenv with
         None -> 
           let t = check_pure_type (pn,ilist) tparams te in
-          let w = check_expr_t (pn,ilist) tparams ((i, t) :: tenv) e boolt in
+          let w = check_expr_t (pn,ilist) tparams ((i, t) :: tenv) (Some true) e boolt in
           (ForallAsn(l, ManifestTypeExpr(l, t), i, w), tenv, [])
       | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
       end
@@ -4052,8 +4056,8 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
         let amap =
         List.map
           (fun (an, (l, action_pred_sym, pmap, pre, post)) ->
-             let pre = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap) pre boolt in
-             let post = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap @ old_boxvarmap) post boolt in
+             let pre = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap) None pre boolt in
+             let post = check_expr_t (pn,ilist) [] ([("actionHandles", list_type HandleIdType)] @ pmap @ boxvarmap @ old_boxvarmap) None post boolt in
              (an, (l, action_pred_sym, pmap, pre, post))
           )
           amap
@@ -4249,7 +4253,7 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
           [] -> List.rev xm
         | (t0, (te, x))::xs -> 
           let t = check_pure_type (pn,ilist) tparams' te in
-          expect_type l t (instantiate_type tpenv t0);
+          expect_type l (Some true) t (instantiate_type tpenv t0);
           if List.mem_assoc x tenv then static_error l ("Parameter '" ^ x ^ "' hides existing local variable '" ^ x ^ "'.") None;
           if List.mem_assoc x xm then static_error l "Duplicate parameter name." None;
           iter2 ((x, t)::xm) xs

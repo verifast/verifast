@@ -1737,7 +1737,7 @@ module Assertions(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
             begin function
               Chunk ((g', is_symb), [elem_tp'], coef', [arr'; istart'; iend'; elems'], _) when
                 g' == array_slice_symb && definitely_equal arr' arr && definitely_equal istart' istart && definitely_equal iend' iend &&
-                is_assignable_to elem_tp' elem_tp ->
+                is_assignable_to None elem_tp' elem_tp ->
               Some (elem_tp', coef', elems')
             | _ -> None
             end

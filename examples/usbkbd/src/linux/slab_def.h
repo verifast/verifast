@@ -20,7 +20,7 @@ void kfree(void *ptr);
 	//@ ensures true;
 
 
-void *kzalloc(int size, gfp_t flags);
+void *kzalloc(size_t size, gfp_t flags);
 	/*@ requires size >= 0
 		&*& flags != GFP_ATOMIC ?
 			not_in_interrupt_context(currentThread)
@@ -46,7 +46,7 @@ void *kzalloc(int size, gfp_t flags);
 		;
 	@*/
 
-void *kmalloc(int size, gfp_t flags);
+void *kmalloc(size_t size, gfp_t flags);
 	/*@ requires size >= 0
 		&*& flags != GFP_ATOMIC ?
 			not_in_interrupt_context(currentThread)
