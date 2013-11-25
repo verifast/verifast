@@ -52,6 +52,10 @@ test
 
 /examples/helloproc/lnxmod_proxy_autogen
 
+/examples/java/Java Card/NewEidCard/EidCard-with-auto_provide0_*.java
+/examples/java/Java Card/NewEidCard/EidCard_provide0_*.java
+
+
 # Backup files
 *~
 
@@ -91,6 +95,8 @@ examples/*/*.cmxs
 examples/*/*.annot
 examples/*/*.cmo
 examples/*/*.cma
+
+/src/buildcat_*.ml
 
 # LaTeX temp files and output
 doc/*/*.aux

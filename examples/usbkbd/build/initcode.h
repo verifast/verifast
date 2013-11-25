@@ -6,8 +6,8 @@
  * So we introduce extra functions usb_kbd_init_wrap and usb_kbd_exit_wrap.
  */
 
-int /*__init*/ usb_kbd_init(/*void*/);
-void /*__exit*/ usb_kbd_exit(/*void*/);
+static int /*__init*/ usb_kbd_init(/*void*/);
+static void /*__exit*/ usb_kbd_exit(/*void*/);
 
 int __init usb_kbd_init_wrap(void){
 	return usb_kbd_init();
