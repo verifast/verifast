@@ -65,6 +65,7 @@ cd examples
   cd crypto
     verifast_both -c dolevyao.c
     verifast_both -c dolevyao_nsl.c
+    verifast -c dolevyao_nss.c
     verifast_both -c dolevyao_rpc.c
   cd ..
   verifast_both -shared doubly_linked_list.c
