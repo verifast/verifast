@@ -10,6 +10,8 @@ open Pervasives
 
 type platform = Windows | Linux | MacOS
 
+type layout = FourThree | Widescreen
+
 let platform = if Sys.os_type = "Win32" then Windows else if Fonts.is_macos then MacOS else Linux
 
 let include_paths: string list ref = ref []
@@ -115,12 +117,16 @@ module TreeMetrics = struct
   let cw = dotWidth + 2 * padding
 end
 
-let show_ide initialPath prover codeFont traceFont runtime =
+let show_ide initialPath prover codeFont traceFont runtime layout =
   let ctxts_lifo = ref None in
   let msg = ref None in
   let url = ref None in
   let appTitle = "VeriFast " ^ Vfversion.version ^ " IDE" in
-  let root = GWindow.window ~width:800 ~height:600 ~title:appTitle ~allow_shrink:true () in
+  let root = GWindow.window
+    ~width:(match layout with FourThree -> 800 | Widescreen -> 1024)
+    ~height:(match layout with FourThree -> 600 | Widescreen -> 640)
+    ~title:appTitle ~allow_shrink:true ()
+  in
   let fontScalePower = ref 0 in
   let getScaledFont fontName =
     if !fontScalePower = 0 then fontName else
@@ -313,7 +319,7 @@ let show_ide initialPath prover codeFont traceFont runtime =
   in
   let treeScroll = GBin.scrolled_window ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC ~shadow_type:`IN ~packing:(treeVbox#pack ~expand:true) () in
   let treeDrawingArea = GMisc.drawing_area ~packing:treeScroll#add_with_viewport () in
-  treeSeparator#set_position 800;
+  treeSeparator#set_position (match layout with FourThree -> 800 | Widescreen -> 1024);
   let executionForest = ref [] in
   let reportExecutionForest forest =
     let rec findFork (Node (msg, p, ns) as n) =
@@ -351,14 +357,24 @@ let show_ide initialPath prover codeFont traceFont runtime =
     end;
     treeDrawingArea#misc#draw None
   end;
-  let rootTable = GPack.paned `VERTICAL ~border_width:3 ~packing:(treeSeparator#pack1) () in
-  rootTable#set_position 400;
-  let textPaned = GPack.paned `VERTICAL ~packing:(rootTable#pack1 ~resize:true ~shrink:true) () in
+  let rootTable = GPack.paned (match layout with FourThree -> `VERTICAL | Widescreen -> `HORIZONTAL) ~border_width:3 ~packing:(treeSeparator#pack1) () in
+  rootTable#set_position (match layout with FourThree -> 400 | Widescreen -> 200);
+  let textPaned = GPack.paned `VERTICAL () in
+  begin match layout with
+  | FourThree  -> rootTable#pack1 ~resize:true ~shrink:true textPaned#coerce
+  | Widescreen -> rootTable#pack2 ~resize:true ~shrink:true textPaned#coerce
+  end;
   textPaned#set_position 0;
   let srcPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack2 ~resize:true ~shrink:true) () in
-  srcPaned#set_position 650;
   let subPaned = GPack.paned `HORIZONTAL ~packing:(textPaned#pack1 ~resize:true ~shrink:true) () in
-  subPaned#set_position 650;
+  begin match layout with
+  | FourThree  ->
+    srcPaned#set_position 650;
+    subPaned#set_position 650
+  | Widescreen ->
+    srcPaned#set_position 674;
+    subPaned#set_position 674
+  end;
   let textNotebook = GPack.notebook ~scrollable:true ~packing:(srcPaned#pack1 ~resize:true ~shrink:true) () in
   let subNotebook = GPack.notebook ~scrollable:true ~packing:(subPaned#pack1 ~resize:true ~shrink:true) () in
   let buffers = ref [] in
@@ -719,10 +735,10 @@ let show_ide initialPath prover codeFont traceFont runtime =
     | Some (thePath, mtime) ->
       save_core tab thePath mtime
   in
-  let bottomTable = GPack.paned `HORIZONTAL () in
-  let bottomTable2 = GPack.paned `HORIZONTAL () in
+  let bottomTable = GPack.paned (match layout with FourThree -> `HORIZONTAL | Widescreen -> `VERTICAL) () in
+  let bottomTable2 = GPack.paned (match layout with FourThree -> `HORIZONTAL | Widescreen -> `VERTICAL) () in
   let _ = bottomTable#pack2 ~resize:true ~shrink:true (bottomTable2#coerce) in
-  let _ = rootTable#pack2 ~resize:true ~shrink:true (bottomTable#coerce) in
+  let () = (match layout with FourThree -> rootTable#pack2 | Widescreen -> rootTable#pack1) ~resize:true ~shrink:true (bottomTable#coerce) in
   let create_steplistbox =
     let collist = new GTree.column_list in
     let col_k = collist#add Gobject.Data.int in
@@ -1503,6 +1519,7 @@ let () =
   let codeFont = ref Fonts.code_font in
   let traceFont = ref Fonts.trace_font in
   let runtime = ref None in
+  let layout = ref FourThree in
   let rec iter args =
     match args with
       "-prover"::arg::args -> prover := Some arg; iter args
@@ -1512,9 +1529,16 @@ let () =
     | "-I"::arg::args -> ( match (Some arg) with
        None -> ( ) | Some arg -> include_paths := arg :: !include_paths);
        iter args
+    | "-layout"::"fourthree"::args -> layout := FourThree; iter args
+    | "-layout"::"widescreen"::args -> layout := Widescreen; iter args
     | arg::args when not (startswith arg "-") -> path := Some arg; iter args
-    | [] -> show_ide !path !prover !codeFont !traceFont !runtime
-    | _ -> GToolbox.message_box "VeriFast IDE" "Invalid command line.\n\nUsage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] [-traceFont fontSpec] [-I IncludeDir]"
+    | [] -> show_ide !path !prover !codeFont !traceFont !runtime !layout
+    | _ ->
+      GToolbox.message_box "VeriFast IDE" begin
+        "Invalid command line.\n\n" ^ 
+        "Usage: vfide [filepath] [-prover z3|redux] [-codeFont fontSpec] " ^
+        "[-traceFont fontSpec] [-I IncludeDir] [-layout fourthree|widescreen]"
+      end
   in
   let _::args = Array.to_list (Sys.argv) in
   iter args
