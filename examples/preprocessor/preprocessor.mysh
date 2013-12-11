@@ -16,4 +16,4 @@ verifast_both -c -disable_overflow_check -allow_should_fail ghost_macro.c
 verifast_both -c -allow_should_fail mixed_macros.c 
 verifast_both -c macro_arguments.c
 verifast_both -c -allow_should_fail macro_arguments_bad.c
-
+verifast_both -c macro_concatenation.c

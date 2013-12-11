@@ -29,7 +29,7 @@ let ghost_keywords = [
 ]
 
 let c_keywords = [
-  "struct"; "bool"; "char"; "sizeof"; "#"; "include"; "ifndef";
+  "struct"; "bool"; "char"; "sizeof"; "#"; "##"; "include"; "ifndef";
   "define"; "endif"; "&"; "goto"; "uintptr_t"; "INT_MIN"; "INT_MAX";
   "UINTPTR_MAX"; "enum"; "static"; "signed"; "unsigned"; "long";
   "const"; "volatile"; "register"; "ifdef"; "elif"; "undef";

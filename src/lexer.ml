@@ -927,6 +927,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
     end
   in
   let expanding_macro = ref false in
+  let defining_macro = ref false in
   let streams = ref [] in
   let callers = ref [[]] in
   let push_list newCallers body =
@@ -1076,6 +1077,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         if !tlexer#isGhostHeader() then raise (ParseException (l, "Ghost range delimiters are not allowed inside ghost headers."));
         junk (); in_ghost_range := false; 
         next_at_start_of_line := true; Some t
+    | (l, Kwd "##") when !defining_macro -> Some t
     | (l, Kwd "#") when at_start_of_line ->
       junk ();
       begin match peek () with
@@ -1103,6 +1105,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
         | _ -> error "Filename expected"
         end
       | Some (l, Kwd "define") ->
+        defining_macro := true;
         junk ();
         begin match peek () with
           Some (lx, Ident x) | Some (lx, PreprocessorSymbol x) ->
@@ -1149,9 +1152,10 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             match peek () with
               None | Some (_, Eol) -> []
             | Some t -> junk (); t::body ()
-          in
+          in 
           let body = body () in
           Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
+          defining_macro := false;
           next_token ()
         | _ -> error "Macro definition syntax error"
         end
@@ -1190,8 +1194,49 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       update_last_macro_used x;
       junk ();
       let (_,params, body) = get_macro x in
+      let is_concatenation_token t =
+        match t with (_, Kwd "##") -> true | _ -> false
+      in
+      let concat_tokens first second =
+        let add_leading_zeros ((_, _, c1), (_, _, c2)) i = 
+          (String.make (c2 - c1 - 1) '0') ^ (string_of_big_int i)
+        in
+        match first with
+        | (l1, Ident id1) -> 
+            begin
+              match second with
+              | (l2, Ident id2) -> (l2, Ident (id1 ^ id2));
+              | (l2, Int i) -> (l2, Ident (id1 ^ (add_leading_zeros l2 i)));
+              | _ -> error "Invalid use of concatenation operator in macro";
+            end
+        | (l1, Int i1) ->
+            begin
+              match second with
+              | (l2, Int i2) -> (l1, Int (big_int_of_string((add_leading_zeros l1 i1) ^ (add_leading_zeros l2 i2))));
+              | _ -> error "Invalid use of concatenation operator in macro";
+            end
+        | _ -> error "Invalid use of concatenation operator in macro";
+      in
+      let concatenate tokens =
+        let reduce_reversed_head tokens =
+          match tokens with
+          | second::(_, Kwd "##")::first::rest -> (concat_tokens first second)::rest
+          | _ -> tokens
+        in
+        let rec concat_core tokens result =
+          match tokens with
+          | t::rest -> 
+              let acc = reduce_reversed_head (t::result) in
+              concat_core rest acc
+          | [] -> result
+        in
+        let result = List.rev (concat_core tokens []) in
+        if List.exists is_concatenation_token result
+          then error "Invalid use of concatenation operator in macro";
+        result
+      in
       begin match params with
-        None -> push_list [x] body; next_token ()
+        None -> push_list [x] (concatenate body); next_token ()
       | Some params ->
         match peek () with
           Some (_, Kwd "(") ->
@@ -1236,7 +1281,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             | t -> [t]
             end
           in
-          push_list [x] body; next_token ()
+          push_list [x] (concatenate body); next_token ()
         | _ -> Some t
       end
     | t -> junk (); Some t
