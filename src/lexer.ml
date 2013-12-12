@@ -928,6 +928,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
   in
   let expanding_macro = ref false in
   let defining_macro = ref false in
+  let is_concatenation_token t =
+    match t with (_, Kwd "##") -> true | _ -> false
+  in
   let streams = ref [] in
   let callers = ref [[]] in
   let push_list newCallers body =
@@ -1156,6 +1159,10 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
           let body = body () in
           Hashtbl.replace (List.hd (get_macros ())) x (lx, params, body);
           defining_macro := false;
+          if ((List.length body) > 0) && 
+               ((is_concatenation_token (List.hd body)) || 
+                (is_concatenation_token (List.hd (List.rev body)))) then
+            error "'##'-operator cannot appear at either end of a macro";
           next_token ()
         | _ -> error "Macro definition syntax error"
         end
@@ -1194,49 +1201,65 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
       update_last_macro_used x;
       junk ();
       let (_,params, body) = get_macro x in
-      let is_concatenation_token t =
-        match t with (_, Kwd "##") -> true | _ -> false
-      in
-      let concat_tokens first second =
-        let add_leading_zeros ((_, _, c1), (_, _, c2)) i = 
-          (String.make (c2 - c1 - 1) '0') ^ (string_of_big_int i)
+      let concatenate tokens params args =
+        let concat_tokens first second =
+          let check_number ((_, _, c1), (_, _, c2)) i = 
+            let number = (string_of_big_int i) in
+            if lt_big_int i (big_int_of_int 0) || gt_big_int i (big_int_of_int 99) || 
+                ((c2 - c1 - (String.length number)) <> 0) then
+              (* This is necessary because the preceeding lexing fase translates literals like
+                 0xFFFF way to decimal format, so we can not differentiate anymore. To ensure we 
+                 are dealing wit a decimal literal without preceeding zeros, a very strict condition
+                 is enforced here.
+              *)
+              error ("Unsupported use of concatenation operator in macro " ^
+                     "(only decimal numbers i (0 <= i < 100) without leading zeros " ^ 
+                     "are allowed for technical reasons)");
+            number
+          in
+          let check_identifier x =
+            if List.mem x params then
+              let rec find_arg params args =
+                match (params,args) with
+                | (p::params, a::args) ->
+                  begin
+                    if p = x then
+                      match a with
+                      | [(l1, Ident id1)] as t -> id1;
+                      | [(l1, Int i1)] as t -> string_of_big_int i1;
+                      | _ -> error "Unsupported use of concatenation operator in macro";
+                    else
+                      find_arg params args
+                  end
+                | _ -> error "Incorrect number of macro arguments"
+              in
+              find_arg params args
+            else
+              x
+          in
+          match first with
+          | (l1, Ident id1) -> 
+              begin
+                match second with
+                | (l2, Ident id2) -> (l2, Ident ((check_identifier id1) ^ (check_identifier id2)));
+                | (l2, Int i) -> (l2, Ident ((check_identifier id1) ^ (check_number l2 i)))
+                | _ -> error "Unsupported use of concatenation operator in macro";
+              end
+          | _ -> error "Unsupported use of concatenation operator in macro";
         in
-        match first with
-        | (l1, Ident id1) -> 
-            begin
-              match second with
-              | (l2, Ident id2) -> (l2, Ident (id1 ^ id2));
-              | (l2, Int i) -> (l2, Ident (id1 ^ (add_leading_zeros l2 i)));
-              | _ -> error "Invalid use of concatenation operator in macro";
-            end
-        | (l1, Int i1) ->
-            begin
-              match second with
-              | (l2, Int i2) -> (l1, Int (big_int_of_string((add_leading_zeros l1 i1) ^ (add_leading_zeros l2 i2))));
-              | _ -> error "Invalid use of concatenation operator in macro";
-            end
-        | _ -> error "Invalid use of concatenation operator in macro";
-      in
-      let concatenate tokens =
-        let reduce_reversed_head tokens =
+        let rec concat_core tokens =
           match tokens with
-          | second::(_, Kwd "##")::first::rest -> (concat_tokens first second)::rest
-          | _ -> tokens
+          | t1::(_, Kwd "##")::t2::rest -> concat_core ((concat_tokens t1 t2)::rest)
+          | t::rest -> t::(concat_core rest)
+          | [] -> []
         in
-        let rec concat_core tokens result =
-          match tokens with
-          | t::rest -> 
-              let acc = reduce_reversed_head (t::result) in
-              concat_core rest acc
-          | [] -> result
-        in
-        let result = List.rev (concat_core tokens []) in
+        let result = concat_core tokens in
         if List.exists is_concatenation_token result
           then error "Invalid use of concatenation operator in macro";
         result
       in
       begin match params with
-        None -> push_list [x] (concatenate body); next_token ()
+        None -> push_list [x] (concatenate body [] []); next_token ()
       | Some params ->
         match peek () with
           Some (_, Kwd "(") ->
@@ -1262,6 +1285,9 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             in
             let arg = arg () in arg::args ()
           in
+          let body =
+            concatenate body params args
+          in
           let args = List.map (macro_expand []) args in
           let bindings =
             match params, args with
@@ -1281,7 +1307,7 @@ let make_plugin_preprocessor plugin_begin_include plugin_end_include tlexer in_g
             | t -> [t]
             end
           in
-          push_list [x] (concatenate body); next_token ()
+          push_list [x] body; next_token ()
         | _ -> Some t
       end
     | t -> junk (); Some t
