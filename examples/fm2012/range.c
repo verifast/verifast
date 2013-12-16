@@ -1,38 +1,29 @@
-// implementation of range.gh
 //@ #include "nat.gh"
+//@ #include "range.gh"
 
 /*@
-fixpoint list<int> range_diff(int x, nat diff) {
-  switch(diff) {
-    case zero: return nil;
-    case succ(diff0): return cons(x, range_diff(x + 1, diff0));
-  }
-}
 
-fixpoint list<int> range(int x, int y) {
-  return 0 <= x && x <= y ? range_diff(x, nat_of_int(y - x)) : nil;
-}
-
-lemma void range_empty(int x)
+lemma void mem_range_(int start, nat count, int x)
   requires true;
-  ensures range(x, x) == nil;
+  ensures mem(x, range_(start, count)) == (start <= x && x < start + int_of_nat(count));
 {
-}
-
-lemma void mem_range_diff(int x, nat diff, int z)
-  requires 0 <= x;
-  ensures mem(z, range_diff(x, diff)) == (x <= z && z < x + int_of_nat(diff));
-{
-  switch(diff) {
+  switch (count) {
     case zero:
-    case succ(diff0): mem_range_diff(x + 1, diff0, z);
+    case succ(count0): mem_range_(start + 1, count0, x);
   }
 }
 
 lemma void mem_range(int x, int y, int z)
-  requires 0 <= x && x <= y;
+  requires true;
   ensures mem(z, range(x, y)) == (x <= z && z < y);
 {
-  mem_range_diff(x, nat_of_int(y - x), z);
+  mem_range_(x, nat_of_int(y - x), z);
+  if (x <= y) {
+    assert mem(z, range(x, y)) == mem(z, range_(x, nat_of_int(y - x)));
+    int_of_nat_of_int(y - x);
+    assert y == x + int_of_nat(nat_of_int(y - x));
+  } else {
+  }
 }
+
 @*/
