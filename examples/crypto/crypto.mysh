@@ -1,0 +1,10 @@
+let verifast_both
+verifast
+verifast -prover redux
+in
+verifast_both -c dolevyao_secure_storage.c
+verifast_both -c dolevyao_rpc.c
+verifast_both -c dolevyao_nsl.c
+verifast      -c dolevyao_yahalom.c
+verifast_both -c dolevyao_rpc.c
+#verifast_both -c dolevyao_nss.c

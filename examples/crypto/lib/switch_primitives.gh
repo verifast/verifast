@@ -1,0 +1,396 @@
+#ifndef SWITCH_PRIMITIVES_GH
+#define SWITCH_PRIMITIVES_GH
+
+
+#define SWITCH_CRYPTO_PRIMITIVES(ITEM, DUMMY, DEPTH) \
+  assert item(ITEM, ?item_##DUMMY) &*& \
+  SWITCH_CRYPTO_PRIMITIVES_##DEPTH(item_##DUMMY) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_I(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, payload_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_1(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_I(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE) \
+  INDUCTIVE == INDUCTIVE \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_2(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_II(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_II(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_I(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_I(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE) \
+  switch (firstI) \
+  { \
+    case nonce_item(s_ddummyII, c_ddummyII, i_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case key_item(p_ddummyII, c_ddummyII, k_ddummyII, i_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case data_item(d_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case hmac_item(p_ddummyII, c_ddummyII, i_dummy_II, pay_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case encrypted_item(s_ddummyII, c_ddummyII, k_ddummyII, i_ddummyII, p_ddummyII, e_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+    case pair_item(f_ddummyII, s_ddummyII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_I(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_3(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_III(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_III(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_II(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_II(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE) \
+  switch (firstII) \
+  { \
+    case nonce_item(s_ddummyIII, c_ddummyIII, i_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case key_item(p_ddummyIII, c_ddummyIII, k_ddummyIII, i_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case data_item(d_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case hmac_item(p_ddummyIII, c_ddummyIII, i_dummy_III, pay_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case encrypted_item(s_ddummyIII, c_ddummyIII, k_ddummyIII, i_ddummyIII, p_ddummyIII, e_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+    case pair_item(f_ddummyIII, s_ddummyIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_II(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_4(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_III(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_III(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE) \
+  switch (firstIII) \
+  { \
+    case nonce_item(s_ddummyIIII, c_ddummyIIII, i_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case key_item(p_ddummyIIII, c_ddummyIIII, k_ddummyIIII, i_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case data_item(d_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case hmac_item(p_ddummyIIII, c_ddummyIIII, i_dummy_IIII, pay_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIII, c_ddummyIIII, k_ddummyIIII, i_ddummyIIII, p_ddummyIIII, e_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+    case pair_item(f_ddummyIIII, s_ddummyIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_III(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_5(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE) \
+  switch (firstIIII) \
+  { \
+    case nonce_item(s_ddummyIIIII, c_ddummyIIIII, i_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIII, c_ddummyIIIII, k_ddummyIIIII, i_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIII, c_ddummyIIIII, i_dummy_IIIII, pay_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIII, c_ddummyIIIII, k_ddummyIIIII, i_ddummyIIIII, p_ddummyIIIII, e_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIII, s_ddummyIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIII(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_6(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE) \
+  switch (firstIIIII) \
+  { \
+    case nonce_item(s_ddummyIIIIII, c_ddummyIIIIII, i_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIIII, c_ddummyIIIIII, k_ddummyIIIIII, i_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIIII, c_ddummyIIIIII, i_dummy_IIIIII, pay_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIIII, c_ddummyIIIIII, k_ddummyIIIIII, i_ddummyIIIIII, p_ddummyIIIIII, e_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIIII, s_ddummyIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIII(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_7(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE) \
+  switch (firstIIIIII) \
+  { \
+    case nonce_item(s_ddummyIIIIIII, c_ddummyIIIIIII, i_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIIIII, c_ddummyIIIIIII, k_ddummyIIIIIII, i_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIIIII, c_ddummyIIIIIII, i_dummy_IIIIIII, pay_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIIIII, c_ddummyIIIIIII, k_ddummyIIIIIII, i_ddummyIIIIIII, p_ddummyIIIIIII, e_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIIIII, s_ddummyIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIII(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_8(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE) \
+  switch (firstIIIIIII) \
+  { \
+    case nonce_item(s_ddummyIIIIIIII, c_ddummyIIIIIIII, i_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIIIIII, c_ddummyIIIIIIII, k_ddummyIIIIIIII, i_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIIIIII, c_ddummyIIIIIIII, i_dummy_IIIIIIII, pay_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIIIIII, c_ddummyIIIIIIII, k_ddummyIIIIIIII, i_ddummyIIIIIIII, p_ddummyIIIIIIII, e_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIIIIII, s_ddummyIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIII(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_9(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE) \
+  switch (firstIIIIIIII) \
+  { \
+    case nonce_item(s_ddummyIIIIIIIII, c_ddummyIIIIIIIII, i_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIIIIIII, c_ddummyIIIIIIIII, k_ddummyIIIIIIIII, i_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIIIIIII, c_ddummyIIIIIIIII, i_dummy_IIIIIIIII, pay_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIIIIIII, c_ddummyIIIIIIIII, k_ddummyIIIIIIIII, i_ddummyIIIIIIIII, p_ddummyIIIIIIIII, e_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIIIIIII, s_ddummyIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIII(INDUCTIVE); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_10(INDUCTIVE) \
+  SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIIII(INDUCTIVE, I, I) \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIIII(INDUCTIVE, LEVEL, NESTED) \
+  switch (INDUCTIVE) \
+  { \
+    case nonce_item(s_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case key_item(p_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case data_item(d_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case hmac_item(p_dummy##LEVEL, c_dummy##LEVEL, i_dummy##LEVEL, pay_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_##NESTED(INDUCTIVE); \
+    case encrypted_item(s_dummy##LEVEL, c_dummy##LEVEL, k_dummy##LEVEL, i_dummy##LEVEL, p_dummy##LEVEL, e_dummy##LEVEL): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIII(p_dummy##LEVEL, LEVEL ## I, NESTED); \
+    case pair_item(first##NESTED, second##NESTED): return \
+      SWITCH_CRYPTO_PRIMITIVES_DOWN_IIIIIIIII(second##NESTED, LEVEL ## I, NESTED ## I); \
+  } \
+
+
+#define SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIIII(INDUCTIVE) \
+  switch (firstIIIIIIIII) \
+  { \
+    case nonce_item(s_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII, i_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case key_item(p_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII, k_ddummyIIIIIIIIII, i_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case data_item(d_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case hmac_item(p_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII, i_dummy_IIIIIIIIII, pay_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case encrypted_item(s_ddummyIIIIIIIIII, c_ddummyIIIIIIIIII, k_ddummyIIIIIIIIII, i_ddummyIIIIIIIIII, p_ddummyIIIIIIIIII, e_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+    case pair_item(f_ddummyIIIIIIIIII, s_ddummyIIIIIIIIII): return \
+      SWITCH_CRYPTO_PRIMITIVES_UP_IIIIIIIII(INDUCTIVE); \
+  } \
+
+
+#endif
