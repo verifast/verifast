@@ -77,8 +77,8 @@ endif
 
 # Shorthands to set up environments
 SET_LDD = export CAML_LD_LIBRARY_PATH=$$CAML_LD_LIBRARY_PATH:GTKSOURCEVIEW_LIBS
-SET_ENV = export PATH=$(CWD)/../bin/:$(OCAMLBIN):$$PATH; \
-          export LD_LIBRARY_PATH=$(LDLPATH):$$LD_LIBRARY_PATH
+SET_ENV = export PATH="$(CWD)/../bin/:$(OCAMLBIN):$$PATH"; \
+          export LD_LIBRARY_PATH="$(LDLPATH):$$LD_LIBRARY_PATH"
 
 
 all: build test

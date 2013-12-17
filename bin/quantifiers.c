@@ -84,4 +84,17 @@ lemma void forall_nth_elim<t>(list<t> vs, fixpoint (list<t>, int, bool) p, int i
     case cons(h, t): forall_nth_elim_nat(vs, p, nat_of_int(length(vs) - 1), i);
   }
 }
+
+
+
+lemma void apply_forall_proof<t>(forall_proof_t *forall_proof, fixpoint(t, bool) p, predicate() pred)
+  requires is_forall_proof_t<t>(forall_proof, p, pred) &*& pred();
+  ensures [_]is_forall_t<t>(?f) &*& true == f(p) &*& is_forall_proof_t<t>(forall_proof, p, pred) &*& pred();
+{
+  fixpoint(fixpoint(t, bool),bool) f = get_forall_t<t>();
+  if (! f(p)){
+    t witness = not_forall_t(f, p);
+    forall_proof(witness);
+  }
+}
 @*/

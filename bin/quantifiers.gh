@@ -78,17 +78,48 @@ lemma void absurd()
 
 predicate is_forall_t<t>(; fixpoint(fixpoint(t, bool), bool) f);
 
+/**
+ * Returns a fixpoint f such that f(p) is true iff p(x) is true for all x.
+ */
 lemma fixpoint(fixpoint(t, bool), bool) get_forall_t<t>();
     requires true;
     ensures [_]is_forall_t<t>(result);
 
+/**
+ * Given p(x) is not true for all x, returns a witness w such that p(w) is not true.
+ */
 lemma t not_forall_t<t>(fixpoint(fixpoint(t, bool), bool) f, fixpoint(t, bool) p);
     requires [_]is_forall_t<t>(f) &*& !f(p);
     ensures !p(result);
 
+/**
+ * Given p(x) is true for all x, ensures it is also true for the given x.
+ */
 lemma void forall_t_elim<t>(fixpoint(fixpoint(t, bool), bool) f, fixpoint(t, bool) p, t x);
     requires [_]is_forall_t<t>(f) &*& f(p) == true;
     ensures p(x) == true;
+
+/**
+ * An implementation of this typedef proofs that p(x) is true. Note that x is not constrained.
+ *
+ * In case the proof requires [_]is_forall_t<t3>(?p3) &*& p3(f3)==true for some t3,p3,f3,
+ * you can pass this in the predicate pred.
+ */
+typedef lemma void forall_proof_t<t>(fixpoint(t, bool) p, predicate() pred)(t x);
+    requires pred();
+    ensures p(x) == true &*& pred();
+
+/**
+ * Ensures p(x) is true for all x,
+ * given a lemma forall_proof that proofs p(x) is true for an unconstrained x.
+ *
+ * Note: it might be easyer to use not_forall_t instead because it does not require
+ * creating a lemma function pointer chunk. See the implementation of apply_forall_proof
+ * in quantifiers.c to see how not_forall_t can be used instead.
+ */
+lemma void apply_forall_proof<t>(forall_proof_t *forall_proof, fixpoint(t, bool) p, predicate() pred);
+    requires is_forall_proof_t<t>(forall_proof, p, pred) &*& pred();
+    ensures [_]is_forall_t<t>(?f) &*& true == f(p) &*& is_forall_proof_t<t>(forall_proof, p, pred) &*& pred();
 
 // Instantiation for int (for convenience)
 
