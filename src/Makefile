@@ -51,7 +51,7 @@ test: ..\bin\verifast.exe ..\bin\vfide.exe ..\bin\mysh.exe ..\bin\main_class.exe
 	cd ..\src
 
 clean:
-	del *.cm* *.obj ..\bin\*.exe win\*.cm* win\*.obj ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\lstex.vfmanifest ..\bin\arrays.vfmanifest
+	del *.cm* *.obj ..\bin\*.exe win\*.cm* win\*.obj ..\bin\list.vfmanifest ..\bin\raw_ghost_lists.vfmanifest ..\bin\lstex.vfmanifest ..\bin\arrays.vfmanifest java_frontend\*.cm* java_frontend\*.obj
 
 refman:
 	cd ..\doc\refman

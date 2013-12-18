@@ -662,7 +662,7 @@ module VerifyExpr(VerifyProgramArgs: VERIFY_PROGRAM_ARGS) = struct
                 match co with
                   None -> static_error lm "Constructor must have contract" None
                 | Some (pre, post, epost) ->
-                  let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::xmap) pre in
+                  let (wpre, tenv) = check_asn (pn,ilist) [] ((current_class, ClassOrInterfaceName cn)::(current_thread_name, current_thread_type)::xmap) pre in
                   let postmap = ("this", ObjType(cn))::tenv in
                   let (wpost, _) = check_asn (pn,ilist) [] postmap post in
                   let wepost = List.map (fun (tp, epost) -> 
