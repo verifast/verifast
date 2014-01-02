@@ -4922,44 +4922,7 @@ le_big_int n max_ptr_big_int) then static_error l "CastExpr: Int literal is out 
           | Some (read_field, read_static_field, deref_pointer, read_array) -> cont state (read_field l v fparent fname)
         end
     | WReadInductiveField(l, e, data_type_name, constructor_name, field_name, targs) ->
-      ev state e $. fun state t ->
-      let (_, _, ctormap, _) = List.assoc data_type_name inductivemap in
-      
-      (* Note: this does enforce that there is only one constructor:
-       * otherwise pattern matching will fail. *)
-      let [(_, (_, (_, tparams, _, parameter_names_and_types, (_, _))))] = ctormap in
-      
-      let (Some tpenv) = zip tparams targs in
-      let rec terms_terms_instantiated parameter_names_and_types : (termnode * termnode) list =
-        match parameter_names_and_types with
-        | (parameter_name, parameter_type) :: tail ->
-          let typ = parameter_type in
-          let typ_uninstantiated = typ in
-          let typ = instantiate_type tpenv typ in
-          (* For readable error messages, use variable name if possible.
-           * If the expression is complex (e.g. function call), we stick
-           * to the constructor name for now. *)
-          let var_symb_name = 
-            match e with
-            | Var(_, varname, _) -> varname ^ "." ^ parameter_name
-            | _ -> constructor_name ^ "#" ^ parameter_name
-          in
-          let term = get_unique_var_symb var_symb_name typ in
-          let term_converted =
-            match unfold_inferred_type typ_uninstantiated with
-            | TypeParam x -> convert_provertype term (provertype_of_type typ) ProverInductive
-            | x -> term
-          in
-          (term, term_converted) :: (terms_terms_instantiated tail)
-        | [] -> []
-      in
-      let (terms, terms_converted) = List.split (terms_terms_instantiated parameter_names_and_types) in
-      let (parameter_names, _) = List.split parameter_names_and_types in
-      let Some(index_of_field) = index_of field_name parameter_names 0 in
-      let term = List.nth terms index_of_field in
-      let constructor_function_symbol = get_pure_func_symb constructor_name in
-      ignore $. ctxt#assume (ctxt#mk_eq t (mk_app constructor_function_symbol terms_converted));
-      cont state term
+      static_error l "Inductive value field access is currently not supported." None
     | WReadArray(l, arr, tp, i) ->
       evs state [arr; i] $. fun state [arr; i] ->
       begin
