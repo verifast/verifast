@@ -150,9 +150,8 @@ cd examples
   cd ..
   cd usbkbd
     cd src
-    verifast -I . -c -prover redux usbmouse.c
-    verifast -I . -c -prover redux usbkbd_verified.c
-    verifast_both -I . -c usbmouse.c
+      verifast_both -I . -c usbmouse.c
+      verifast -I . -c -prover redux usbkbd_verified.c
     cd ..
   cd ..
   cd generic_functypedef
@@ -300,30 +299,32 @@ cd tests
   cd bugs
   cd ..
   cd errors
-  verifast_both -c -allow_should_fail basics.c
-  verifast_both -c -allow_should_fail typecheck1.c
-  verifast_both -c -allow_should_fail ghost_field.c
-  verifast_both -c -allow_should_fail inhabited.c
-  verifast_both -c -allow_should_fail lemmafuncptr.c
-  verifast_both -c -allow_should_fail redux.c redux2.c redux3.c redux4.c redux5.c redux6.c redux7.c redux8.c redux9.c redux10.c
-  verifast_both -c -allow_should_fail switch.c
-  verifast_both -c -allow_should_fail override.java
-  verifast_both -c -allow_should_fail override2.java
-  verifast_both -c -allow_should_fail override3.java
-  verifast_both -c -allow_should_fail superctor.java
-  verifast_both -c -allow_should_fail inhabited_tparams.c
-  verifast_both -c -allow_should_fail inductive_welldefined.c
-  verifast_both -c -allow_should_fail predtype_contra.c
-  verifast_both -c -allow_should_fail fixpoint_recursive_value.c
-  verifast_both -c -allow_should_fail if_while_component_pure.c
-  verifast -c -allow_should_fail erasure.c
-  verifast -c -allow_should_fail erasure2.c
-  verifast -c -allow_should_fail erasure3.c
-  verifast_both -c -allow_should_fail autoclose_bad_downcast.c
-  verifast_both -c -allow_should_fail unsigned_int_cast.c
-  verifast_both -allow_should_fail sizeof_signedness.c
-  verifast -c -allow_should_fail java_typing_array_assignment/Test1.java
-  verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
+    verifast_both -c -allow_should_fail basics.c
+    verifast_both -c -allow_should_fail typecheck1.c
+    verifast_both -c -allow_should_fail ghost_field.c
+    verifast_both -c -allow_should_fail inhabited.c
+    verifast_both -c -allow_should_fail lemmafuncptr.c
+    verifast_both -c -allow_should_fail redux.c redux2.c redux3.c redux4.c redux5.c redux6.c redux7.c redux8.c redux9.c redux10.c
+    verifast_both -c -allow_should_fail switch.c
+    verifast_both -c -allow_should_fail override.java
+    verifast_both -c -allow_should_fail override2.java
+    verifast_both -c -allow_should_fail override3.java
+    verifast_both -c -allow_should_fail superctor.java
+    verifast_both -c -allow_should_fail inhabited_tparams.c
+    verifast_both -c -allow_should_fail inductive_welldefined.c
+    verifast_both -c -allow_should_fail predtype_contra.c
+    verifast_both -c -allow_should_fail fixpoint_recursive_value.c
+    verifast_both -c -allow_should_fail if_while_component_pure.c
+    verifast -c -allow_should_fail erasure.c
+    verifast -c -allow_should_fail erasure2.c
+    verifast -c -allow_should_fail erasure3.c
+    verifast_both -c -allow_should_fail autoclose_bad_downcast.c
+    verifast_both -c -allow_should_fail unsigned_int_cast.c
+    verifast_both -allow_should_fail sizeof_signedness.c
+    verifast -c -allow_should_fail java_typing_array_assignment/Test1.java
+    verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
+    verifast -c -allow_should_fail java_typing_array_assignment/Test2.java
+    verifast_both -c -allow_should_fail fraction-of-fraction.c
   cd ..
 cd ..
 

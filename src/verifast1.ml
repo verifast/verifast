@@ -3999,9 +3999,14 @@ Some [t1;t2]; (Operation (l, Mod, [w1; w2], ts), IntType, None)
       | Some _ -> static_error l ("bound variable " ^ i ^ " hides existing local variable " ^ i) None
       end
     | CoefAsn (l, coef, body) ->
-      let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
-      let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
-      (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
+      begin match body with
+        CoefAsn _ ->
+          static_error l ("Consecutive fractional permission coefficients found. Permissions of the form `[f1][f2]p' are not supported.") None
+      | _ ->
+        let (wcoef, tenv') = check_pat_core (pn,ilist) tparams tenv RealType coef in
+        let (wbody, tenv, infTps) = check_asn (pn,ilist) tparams tenv body in
+        (CoefAsn (l, wcoef, wbody), merge_tenvs l tenv' tenv, infTps)
+      end
     | EnsuresAsn (l, body) ->
       begin match try_assoc "#pre" tenv with
         None -> static_error l "Ensures clause not allowed here." None
